@@ -2,6 +2,31 @@ package gatekeeperpolicy
 
 import "testing"
 
+// ParseManifest interpolates metadata.name and kind into the SSA API path, so a
+// name/kind carrying path characters must be rejected before it can be used.
+func TestParseManifest_RejectsPathInjectionInNameAndKind(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+	}{
+		{"name with slash", "apiVersion: constraints.gatekeeper.sh/v1beta1\nkind: K8sRequiredLabels\nmetadata:\n  name: ../../secrets/steal\n"},
+		{"name with space", "apiVersion: constraints.gatekeeper.sh/v1beta1\nkind: K8sRequiredLabels\nmetadata:\n  name: bad name\n"},
+		{"kind with slash", "apiVersion: constraints.gatekeeper.sh/v1beta1\nkind: Bad/Kind\nmetadata:\n  name: ok\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseManifest([]byte(tc.yaml)); err == nil {
+				t.Fatalf("expected rejection, got nil error")
+			}
+		})
+	}
+	// A well-formed constraint still parses.
+	ok := "apiVersion: constraints.gatekeeper.sh/v1beta1\nkind: K8sRequiredLabels\nmetadata:\n  name: require-team-label\n"
+	if _, err := ParseManifest([]byte(ok)); err != nil {
+		t.Fatalf("valid manifest rejected: %v", err)
+	}
+}
+
 func TestManifests(t *testing.T) {
 	ms, err := Manifests()
 	if err != nil {

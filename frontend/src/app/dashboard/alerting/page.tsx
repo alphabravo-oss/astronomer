@@ -20,6 +20,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { OverlayShell } from '@/components/ui/overlay-shell';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { InhibitionPanel } from './inhibition-panel';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type {
   AlertRule,
@@ -48,17 +49,19 @@ import {
   Mail,
   Webhook,
   MessageSquare,
+  Ban,
 } from 'lucide-react';
 
-type TabKey = 'rules' | 'active' | 'channels' | 'silences';
+type TabKey = 'rules' | 'active' | 'channels' | 'silences' | 'inhibitions';
 
-const TAB_KEYS = ['rules', 'active', 'channels', 'silences'] as const;
+const TAB_KEYS = ['rules', 'active', 'channels', 'silences', 'inhibitions'] as const;
 
 const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'rules', label: 'Alert Rules', icon: Shield },
   { key: 'active', label: 'Active Alerts', icon: AlertTriangle },
   { key: 'channels', label: 'Notification Channels', icon: Bell },
   { key: 'silences', label: 'Silences', icon: VolumeX },
+  { key: 'inhibitions', label: 'Inhibitions', icon: Ban },
 ];
 
 const severityColors: Record<string, string> = {
@@ -484,6 +487,8 @@ export default function AlertingPage() {
             emptyMessage="No active silences"
           />
         )}
+
+        {activeTab === 'inhibitions' && <InhibitionPanel />}
       </div>
 
       {/* Alert Rule Modal */}

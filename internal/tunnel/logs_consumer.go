@@ -89,12 +89,14 @@ func (lc *LogsConsumer) SetAuthorization(engine *rbac.Engine, querier middleware
 	lc.rbacQuerier = querier
 }
 
-// authorizeCluster reports whether userID holds clusters:read on clusterID.
-// Pod logs frequently contain secrets, so streaming them requires the same
-// clusters:read gate the stream-ticket issuance path
-// (internal/handler/stream_tickets.go) enforces for logs tickets. When the
-// RBAC engine/querier are not wired the check is skipped.
-func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID) bool {
+// authorizeCluster reports whether userID holds clusters:read on clusterID
+// within namespace. Pod logs frequently contain secrets, so streaming them
+// requires the same clusters:read gate the stream-ticket issuance path
+// (internal/handler/stream_tickets.go) enforces for logs tickets. The concrete
+// namespace is threaded through so a namespace-scoped binding grants access in
+// the pod's namespace; cluster-wide bindings still pass for any namespace. When
+// the RBAC engine/querier are not wired the check is skipped.
+func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID, namespace string) bool {
 	if lc.rbacEngine == nil || lc.rbacQuerier == nil {
 		return true
 	}
@@ -102,7 +104,7 @@ func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID 
 	if err != nil {
 		return false
 	}
-	return lc.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbRead, clusterID, uuid.Nil)
+	return lc.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbRead, clusterID, uuid.Nil, namespace)
 }
 
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent
@@ -140,7 +142,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 	// any authenticated user could stream logs (often containing secrets) from
 	// pods on ANY cluster regardless of their RBAC bindings.
 	clusterUUID, err := uuid.Parse(clusterID)
-	if err != nil || !lc.authorizeCluster(r.Context(), userID, clusterUUID) {
+	if err != nil || !lc.authorizeCluster(r.Context(), userID, clusterUUID, namespace) {
 		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
 		return
 	}

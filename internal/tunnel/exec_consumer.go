@@ -97,12 +97,15 @@ func (ec *ExecConsumer) SetAuthorization(engine *rbac.Engine, querier appmiddlew
 	ec.rbacQuerier = querier
 }
 
-// authorizeCluster reports whether userID holds clusters:update on clusterID.
-// An interactive exec session is a cluster write / RCE-equivalent action, so
-// it mirrors the clusters:update gate the stream-ticket issuance path
-// (internal/handler/stream_tickets.go) and the kubectl shell front door
-// enforce. When the RBAC engine/querier are not wired the check is skipped.
-func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID) bool {
+// authorizeCluster reports whether userID holds clusters:update on clusterID
+// within namespace. An interactive exec session is a cluster write /
+// RCE-equivalent action, so it mirrors the clusters:update gate the
+// stream-ticket issuance path (internal/handler/stream_tickets.go) and the
+// kubectl shell front door enforce. The concrete namespace is threaded through
+// so a namespace-scoped binding grants access in the pod's namespace;
+// cluster-wide bindings still pass for any namespace. When the RBAC
+// engine/querier are not wired the check is skipped.
+func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID, namespace string) bool {
 	if ec.rbacEngine == nil || ec.rbacQuerier == nil {
 		return true
 	}
@@ -110,7 +113,7 @@ func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID 
 	if err != nil {
 		return false
 	}
-	return ec.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil)
+	return ec.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil, namespace)
 }
 
 // HandleExec upgrades to WebSocket and relays exec I/O between the frontend
@@ -155,7 +158,7 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 	// without this an authenticated user could exec into a pod on ANY cluster
 	// regardless of their RBAC bindings.
 	clusterUUID, err := uuid.Parse(clusterID)
-	if err != nil || !ec.authorizeCluster(r.Context(), userID, clusterUUID) {
+	if err != nil || !ec.authorizeCluster(r.Context(), userID, clusterUUID, namespace) {
 		http.Error(w, `{"error":"you do not have permission to perform this action"}`, http.StatusForbidden)
 		return
 	}

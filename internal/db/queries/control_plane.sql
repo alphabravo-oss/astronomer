@@ -111,3 +111,46 @@ ORDER BY ends_at ASC;
 
 -- name: DeleteControlPlaneSilence :exec
 DELETE FROM control_plane_silences WHERE id = $1;
+
+-- name: ListAlertInhibitions :many
+SELECT * FROM alert_inhibitions
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: ListEnabledAlertInhibitions :many
+SELECT * FROM alert_inhibitions
+WHERE enabled = true
+ORDER BY created_at DESC;
+
+-- name: GetAlertInhibitionByID :one
+SELECT * FROM alert_inhibitions WHERE id = $1 LIMIT 1;
+
+-- name: CreateAlertInhibition :one
+INSERT INTO alert_inhibitions (
+    name,
+    source_matchers,
+    target_matchers,
+    equal_labels,
+    enabled,
+    created_by_id
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateAlertInhibition :one
+UPDATE alert_inhibitions
+SET
+    name = $2,
+    source_matchers = $3,
+    target_matchers = $4,
+    equal_labels = $5,
+    enabled = $6,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteAlertInhibition :exec
+DELETE FROM alert_inhibitions WHERE id = $1;
+
+-- name: CountAlertInhibitions :one
+SELECT count(*) FROM alert_inhibitions;

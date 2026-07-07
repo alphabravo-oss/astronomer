@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -84,68 +83,24 @@ func (a *emailNotifierAdapter) EnqueueAndLog(ctx context.Context, req handler.Em
 // sslmode at all — Postgres treats omission as `prefer` which silently
 // downgrades to plaintext if the server allows it) returns false.
 func dsnEnforcesTLS(dsn string) bool {
-	d := strings.ToLower(dsn)
-	return strings.Contains(d, "sslmode=require") ||
-		strings.Contains(d, "sslmode=verify-ca") ||
-		strings.Contains(d, "sslmode=verify-full")
+	return config.DSNEnforcesTLS(dsn)
 }
 
+// devSecretKey / devEncryptionKey mirror the sentinels in internal/config so the
+// server package (and its tests) keep their existing names. The authoritative
+// production fail-fast lives in config.ValidateProductionSecurity, which both the
+// server and the worker call (C-01).
 const (
 	devSecretKey     = "local-dev-secret-key-change-in-production"
 	devEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
 )
 
 func isProductionConfig(cfg *config.Config) bool {
-	if cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.Env), "production") {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_ENV")), "production") {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("ENV")), "production")
+	return config.IsProduction(cfg)
 }
 
 func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryptor) error {
-	if !isProductionConfig(cfg) {
-		return nil
-	}
-	var errs []string
-	if cfg == nil {
-		errs = append(errs, "config is nil")
-	} else {
-		secretKey := strings.TrimSpace(cfg.SecretKey)
-		switch secretKey {
-		case "":
-			errs = append(errs, "secret_key is empty")
-		case devSecretKey:
-			errs = append(errs, "secret_key is still the known development value")
-		}
-		encryptionKey := strings.TrimSpace(cfg.EncryptionKey)
-		switch {
-		case encryptionKey == "":
-			errs = append(errs, "astronomer_encryption_key is empty")
-		case encryptionKey == devEncryptionKey:
-			errs = append(errs, "astronomer_encryption_key is still the known development value")
-		case encryptor == nil:
-			errs = append(errs, "astronomer_encryption_key could not initialize encryptor")
-		}
-		if !dsnEnforcesTLS(cfg.DatabaseURL) {
-			errs = append(errs, "database_url does not enforce TLS")
-		}
-		if !cfg.DexBundledEnabled && !cfg.AuthLocalPasswordOnly {
-			errs = append(errs, "dex_bundled_enabled is false and auth_local_password_only is not acknowledged")
-		}
-		serverURL := strings.TrimSpace(cfg.ServerURL)
-		if serverURL == "" {
-			errs = append(errs, "server_url is empty")
-		} else if u, err := url.Parse(serverURL); err != nil || u.Scheme != "https" || u.Host == "" {
-			errs = append(errs, "server_url must be an external https URL")
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("production security config invalid: %s", strings.Join(errs, "; "))
-	}
-	return nil
+	return config.ValidateProductionSecurity(cfg, encryptor != nil)
 }
 
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
@@ -1044,21 +999,27 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
 
 	deps := RouterDependencies{
-		JWT:                   jwtManager,
-		Encryptor:             encryptor,
-		AuthQueries:           queries,
-		AuditWriter:           queries,
-		ArgoCDProxyTokens:     queries,
-		StreamTickets:         streamTicketHandler,
-		StreamTicketStore:     streamTickets,
-		Auth:                  authHandler,
-		TOTP:                  totpHandler,
-		SSO:                   ssoHandler,
-		Clusters:              clusterHandler,
-		ClusterTemplates:      clusterTemplateHandler,
-		ClusterRegistration:   clusterRegistrationHandler,
-		ClusterRegistries:     clusterRegistriesHandler,
-		NetworkPolicies:       networkPoliciesHandler,
+		JWT:                 jwtManager,
+		Encryptor:           encryptor,
+		AuthQueries:         queries,
+		AuditWriter:         queries,
+		ArgoCDProxyTokens:   queries,
+		StreamTickets:       streamTicketHandler,
+		StreamTicketStore:   streamTickets,
+		Auth:                authHandler,
+		TOTP:                totpHandler,
+		SSO:                 ssoHandler,
+		Clusters:            clusterHandler,
+		ClusterTemplates:    clusterTemplateHandler,
+		ClusterRegistration: clusterRegistrationHandler,
+		ClusterRegistries:   clusterRegistriesHandler,
+		NetworkPolicies:     networkPoliciesHandler,
+		Gatekeeper: func() *handler.GatekeeperConstraintsHandler {
+			h := handler.NewGatekeeperConstraintsHandler(queries, requester)
+			h.SetAuthorization(rbacEngine, rbacQuerier)
+			h.SetAuditWriter(queries)
+			return h
+		}(),
 		ClusterSnapshots:      clusterSnapshotsHandler,
 		ControlPlaneSnapshots: controlPlaneSnapshotHandler,
 		FleetOperations:       fleetOperationsHandler,

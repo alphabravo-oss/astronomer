@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -99,6 +100,65 @@ func (q *Queries) ListActiveConnections(ctx context.Context) ([]AgentConnection,
 			&i.AgentVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterConnectionStatus = `-- name: ListClusterConnectionStatus :many
+SELECT
+    c.id   AS cluster_id,
+    c.name AS cluster_name,
+    COALESCE(lc.status, 'never') AS status,
+    -- c.created_at is the guaranteed-non-null final fallback so a never-connected
+    -- cluster still scans (sqlc types this column non-null); its age is harmless
+    -- because such a cluster reports connections=0 anyway.
+    COALESCE(lc.last_ping, lc.disconnected_at, lc.connected_at, c.created_at) AS last_activity
+FROM clusters c
+LEFT JOIN LATERAL (
+    SELECT ac.status, ac.connected_at, ac.last_ping, ac.disconnected_at
+    FROM agent_connections ac
+    WHERE ac.cluster_id = c.id
+    ORDER BY ac.connected_at DESC
+    LIMIT 1
+) lc ON true
+WHERE c.decommissioned_at IS NULL
+`
+
+type ListClusterConnectionStatusRow struct {
+	ClusterID    uuid.UUID `json:"cluster_id"`
+	ClusterName  string    `json:"cluster_name"`
+	Status       string    `json:"status"`
+	LastActivity time.Time `json:"last_activity"`
+}
+
+// One row per non-decommissioned cluster with the status + last-activity time of
+// its most-recent agent connection ('never' / NULL when it has never connected).
+// Drives the always-present per-cluster agent_connections gauge so the metric
+// series SURVIVES disconnect (O-03): a disconnected cluster still emits a
+// 0-valued sample instead of the series vanishing (which a threshold alert
+// can never fire on). COALESCE keeps the non-timestamp columns non-null so the
+// LEFT JOIN never yields a NULL into a non-nullable scan target.
+func (q *Queries) ListClusterConnectionStatus(ctx context.Context) ([]ListClusterConnectionStatusRow, error) {
+	rows, err := q.db.Query(ctx, listClusterConnectionStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClusterConnectionStatusRow{}
+	for rows.Next() {
+		var i ListClusterConnectionStatusRow
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.ClusterName,
+			&i.Status,
+			&i.LastActivity,
 		); err != nil {
 			return nil, err
 		}

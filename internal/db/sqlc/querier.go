@@ -99,6 +99,7 @@ type Querier interface {
 	// Total matching the same status/severity/cluster filters as
 	// ListAlertEventsFiltered, so pagination reports a correct total.
 	CountAlertEventsFiltered(ctx context.Context, arg CountAlertEventsFilteredParams) (int64, error)
+	CountAlertInhibitions(ctx context.Context) (int64, error)
 	CountAlertRules(ctx context.Context) (int64, error)
 	CountAlertSilences(ctx context.Context) (int64, error)
 	CountAnomalyBaselines(ctx context.Context) (int64, error)
@@ -215,6 +216,7 @@ type Querier interface {
 	CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error)
 	CreateAgentConnection(ctx context.Context, arg CreateAgentConnectionParams) (AgentConnection, error)
 	CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) (AlertEvent, error)
+	CreateAlertInhibition(ctx context.Context, arg CreateAlertInhibitionParams) (AlertInhibition, error)
 	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error)
 	CreateAlertSilence(ctx context.Context, arg CreateAlertSilenceParams) (AlertSilence, error)
 	CreateArgoCDInstance(ctx context.Context, arg CreateArgoCDInstanceParams) (ArgocdInstance, error)
@@ -389,6 +391,7 @@ type Querier interface {
 	// Deletes alert events older than the supplied cutoff. Used by the scheduled
 	// cleanup_old_alert_events worker.
 	DeleteAlertEventsOlderThan(ctx context.Context, firedAt time.Time) (int64, error)
+	DeleteAlertInhibition(ctx context.Context, id uuid.UUID) error
 	DeleteAlertRule(ctx context.Context, id uuid.UUID) error
 	DeleteAlertRulesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
@@ -412,6 +415,7 @@ type Querier interface {
 	// Run AFTER ArchiveAuditLogsForCluster; removes the now-archived rows from
 	// the live audit_log partition tree.
 	DeleteAuditLogsForCluster(ctx context.Context, clusterIDText string) (int64, error)
+	DeleteAuthoredConstraint(ctx context.Context, arg DeleteAuthoredConstraintParams) error
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
@@ -599,6 +603,7 @@ type Querier interface {
 	GetActiveSchedules(ctx context.Context) ([]BackupSchedule, error)
 	// Alert Events
 	GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEvent, error)
+	GetAlertInhibitionByID(ctx context.Context, id uuid.UUID) (AlertInhibition, error)
 	// Alert Rules
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule, error)
 	GetAlertSilenceByID(ctx context.Context, id uuid.UUID) (AlertSilence, error)
@@ -619,6 +624,7 @@ type Querier interface {
 	GetArgoCDInstanceByName(ctx context.Context, name string) (ArgocdInstance, error)
 	GetArgoCDManagedCluster(ctx context.Context, arg GetArgoCDManagedClusterParams) (ArgocdManagedCluster, error)
 	GetArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
+	GetAuthoredConstraintByName(ctx context.Context, arg GetAuthoredConstraintByNameParams) (AuthoredConstraint, error)
 	// Backups
 	GetBackupByID(ctx context.Context, id uuid.UUID) (Backup, error)
 	// Backup Schedules
@@ -940,6 +946,7 @@ type Querier interface {
 	// into SQL (severity lives on the rule). Any filter is optional; a NULL
 	// narg disables that predicate.
 	ListAlertEventsFiltered(ctx context.Context, arg ListAlertEventsFilteredParams) ([]AlertEvent, error)
+	ListAlertInhibitions(ctx context.Context, arg ListAlertInhibitionsParams) ([]AlertInhibition, error)
 	// Bulk fetch of rule<->channel links for a set of rules, so the
 	// alertmanager renderer and rule list can build a rule_id->channel map
 	// in Go instead of issuing one ListChannelsForAlertRule per rule (N+1).
@@ -1023,6 +1030,8 @@ type Querier interface {
 	// inserts (the existing ListAuditLogV1 sorts DESC, fine for the UI
 	// but wrong for an export of millions of rows).
 	ListAuditLogV1ForRange(ctx context.Context, arg ListAuditLogV1ForRangeParams) ([]ListAuditLogV1ForRangeRow, error)
+	// P-04 Custom Gatekeeper constraint authoring (migration 133).
+	ListAuthoredConstraintsForCluster(ctx context.Context, clusterID uuid.UUID) ([]AuthoredConstraint, error)
 	// Paginated history for the admin UI.
 	ListBackupDrillResults(ctx context.Context, arg ListBackupDrillResultsParams) ([]BackupDrillResult, error)
 	ListBackupSchedules(ctx context.Context, arg ListBackupSchedulesParams) ([]BackupSchedule, error)
@@ -1078,6 +1087,14 @@ type Querier interface {
 	// clusters because their conditions are about to be deleted by the
 	// decommission reconciler anyway.
 	ListClusterConditionsByStatus(ctx context.Context, status string) ([]ClusterCondition, error)
+	// One row per non-decommissioned cluster with the status + last-activity time of
+	// its most-recent agent connection ('never' / NULL when it has never connected).
+	// Drives the always-present per-cluster agent_connections gauge so the metric
+	// series SURVIVES disconnect (O-03): a disconnected cluster still emits a
+	// 0-valued sample instead of the series vanishing (which a threshold alert
+	// can never fire on). COALESCE keeps the non-timestamp columns non-null so the
+	// LEFT JOIN never yields a NULL into a non-nullable scan target.
+	ListClusterConnectionStatus(ctx context.Context) ([]ListClusterConnectionStatusRow, error)
 	// Single grouped rollup replacing the per-node CountClustersInGroup +
 	// CountClustersInGroupTree pair (2 queries, one recursive, per node). Returns
 	// one row per enabled group with its direct cluster count and its subtree
@@ -1172,6 +1189,7 @@ type Querier interface {
 	// body_text/body_html before returning the rows so a sensitive reset
 	// link or recovery-code email doesn't appear in the admin UI.
 	ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error)
+	ListEnabledAlertInhibitions(ctx context.Context) ([]AlertInhibition, error)
 	ListEnabledDexConnectors(ctx context.Context) ([]DexConnector, error)
 	ListEnabledGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
 	ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error)
@@ -1776,6 +1794,7 @@ type Querier interface {
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 	UpdateAgentConnectionStatus(ctx context.Context, arg UpdateAgentConnectionStatusParams) error
 	UpdateAlertEventStatus(ctx context.Context, arg UpdateAlertEventStatusParams) error
+	UpdateAlertInhibition(ctx context.Context, arg UpdateAlertInhibitionParams) (AlertInhibition, error)
 	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (AlertRule, error)
 	// Stamps the per-tick outcome — provider, sync_status, last_error,
 	// effective_cidrs snapshot, last_reconciled_at. Called by the reconciler.
@@ -1822,6 +1841,15 @@ type Querier interface {
 	// and would otherwise flip 'decommissioned' back to 'disconnected' or
 	// 'active', producing the half-deleted "ghost" rows observed on .247.
 	UpdateClusterStatus(ctx context.Context, arg UpdateClusterStatusParams) error
+	// Health-sweep-safe status write (H-02). The full-fleet sweep snapshots every
+	// cluster then writes a snapshot-derived status; a reconnect landing mid-sweep
+	// could otherwise be clobbered back to 'disconnected' for one cycle. This write
+	// only lands the computed status when the CURRENT last_heartbeat still agrees
+	// with it — atomically re-checking the 2m liveness window at write time — so a
+	// stale 'disconnected' matches zero rows once the agent is back, and a stale
+	// 'active' matches zero rows once it's really gone. Keeps the decommissioned
+	// guard. Callers pass only 'active' or 'disconnected'.
+	UpdateClusterStatusOnHeartbeat(ctx context.Context, arg UpdateClusterStatusOnHeartbeatParams) (int64, error)
 	// The handler always passes the full body; we don't try to do partial
 	// merges in SQL — JSONB merge semantics are surprising enough that we'd
 	// rather keep them in Go where the validator lives.
@@ -1887,6 +1915,7 @@ type Querier interface {
 	UpsertAnomalyBaseline(ctx context.Context, arg UpsertAnomalyBaselineParams) (AnomalyBaseline, error)
 	UpsertApiserverAllowlist(ctx context.Context, arg UpsertApiserverAllowlistParams) (ApiserverAllowlist, error)
 	UpsertArgoCDClusterProxyToken(ctx context.Context, arg UpsertArgoCDClusterProxyTokenParams) (ArgocdClusterProxyToken, error)
+	UpsertAuthoredConstraint(ctx context.Context, arg UpsertAuthoredConstraintParams) (AuthoredConstraint, error)
 	UpsertCloudCredentialMaterialization(ctx context.Context, arg UpsertCloudCredentialMaterializationParams) (CloudCredentialMaterialization, error)
 	UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error)
 	// Match metav1.Condition semantics: when status flips, bump

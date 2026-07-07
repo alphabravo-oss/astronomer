@@ -4,11 +4,45 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
+
+// repoRoot returns the repository root relative to this test file
+// (deploy/ sits directly under the root).
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	_, here, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	return filepath.Dir(filepath.Dir(here))
+}
+
+// productionWiringSets is the minimal --set list that satisfies every
+// production preflight/schema gate EXCEPT management backups, so individual
+// tests can toggle the backup knobs. Mirrors TestValuesSchemaAcceptsProductionWiring.
+var productionWiringSets = []string{
+	"config.serverURL=https://astronomer.example.com",
+	"gateway.hosts[0]=astronomer.example.com",
+	"tls.source=secret",
+	"tls.secretName=astronomer-tls",
+	"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
+	"redis.external.address=redis.astronomer.svc.cluster.local:6379",
+	"secrets.secretKey=prod-jwt-signing-key",
+	"secrets.encryptionKey=prod-fernet-key",
+	"bootstrap.email=admin@example.com",
+	"dex.clientSecret=prod-dex-client-secret",
+	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
+	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+}
 
 type renderedDoc map[string]any
 
@@ -298,4 +332,192 @@ func stringValue(v any) string {
 		return s
 	}
 	return ""
+}
+
+// O-02: the encryption-key Secret must survive `helm uninstall` or a rebuild
+// makes every encrypted column undecryptable (see the DR runbook).
+func TestSecretsCarryResourcePolicyKeep(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	secret := findRenderedDoc(t, docs, "Secret", "astronomer-secrets")
+	annotations := nestedMap(secret, "metadata", "annotations")
+	if annotations == nil {
+		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the Fernet/JWT keys survive helm uninstall")
+	}
+	if got := stringValue(annotations["helm.sh/resource-policy"]); got != "keep" {
+		t.Fatalf("astronomer-secrets helm.sh/resource-policy = %q, want keep", got)
+	}
+}
+
+// O-04: production must not silently render without management-plane backups.
+func TestProductionRequiresBackupsWired(t *testing.T) {
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+
+	// Backup enabled (default) but S3 target unset → render must fail and the
+	// failure must call out the backup wiring.
+	errOut := helmTemplateExpectError(t, []string{prodValues}, productionWiringSets...)
+	if !strings.Contains(errOut, "managementBackup") {
+		t.Fatalf("production render with unwired backups did not mention managementBackup:\n%s", errOut)
+	}
+
+	// Explicit opt-out via enabled=false → render must succeed.
+	optOut := append([]string{}, productionWiringSets...)
+	optOut = append(optOut, "managementBackup.enabled=false")
+	out := helmTemplateWithValueFiles(t, []string{prodValues}, optOut...)
+	if strings.Contains(out, "name: astronomer-management-backup") {
+		t.Fatalf("managementBackup.enabled=false should not render the backup CronJob:\n%s", out)
+	}
+}
+
+// O-06: the restore-drill schema floor must track the real max migration so a
+// stale backup can't pass the drill. Fail if values.yaml is >10 versions behind.
+func TestSchemaFloorTracksMaxMigration(t *testing.T) {
+	root := repoRoot(t)
+	migDir := filepath.Join(root, "internal", "db", "migrations")
+	entries, err := os.ReadDir(migDir)
+	if err != nil {
+		t.Fatalf("read migrations dir: %v", err)
+	}
+	verRe := regexp.MustCompile(`^0*(\d+)_.*\.up\.sql$`)
+	maxVer := 0
+	for _, e := range entries {
+		m := verRe.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		v, _ := strconv.Atoi(m[1])
+		if v > maxVer {
+			maxVer = v
+		}
+	}
+	if maxVer == 0 {
+		t.Fatal("no *.up.sql migrations found")
+	}
+
+	values, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "values.yaml"))
+	if err != nil {
+		t.Fatalf("read values.yaml: %v", err)
+	}
+	floorRe := regexp.MustCompile(`(?m)^\s*expectedMinSchemaVersion:\s*(\d+)`)
+	fm := floorRe.FindStringSubmatch(string(values))
+	if fm == nil {
+		t.Fatal("expectedMinSchemaVersion not found in values.yaml")
+	}
+	floor, _ := strconv.Atoi(fm[1])
+
+	const maxLag = 10
+	if maxVer-floor > maxLag {
+		t.Fatalf("expectedMinSchemaVersion=%d is %d behind the max migration %d (allowed lag %d); bump it in deploy/chart/values.yaml",
+			floor, maxVer-floor, maxVer, maxLag)
+	}
+	if floor > maxVer {
+		t.Fatalf("expectedMinSchemaVersion=%d is ahead of the max migration %d", floor, maxVer)
+	}
+}
+
+// O-01 / R-03 / C-11 / C-05: the encryption-key env var is ASTRONOMER_ENCRYPTION_KEY
+// everywhere. Guard against the bare-ENCRYPTION_KEY drift that silently breaks
+// decryption (the DR runbook, raw manifests, and docker-compose must not use it;
+// keyrotate must accept the canonical name).
+func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
+	root := repoRoot(t)
+
+	// The chart renders the canonical name.
+	chartSecret, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "secret.yaml"))
+	if err != nil {
+		t.Fatalf("read chart secret.yaml: %v", err)
+	}
+	if !strings.Contains(string(chartSecret), "ASTRONOMER_ENCRYPTION_KEY:") {
+		t.Fatal("chart templates/secret.yaml no longer renders ASTRONOMER_ENCRYPTION_KEY")
+	}
+
+	// The DR runbook must not read/recreate the key under the bare name.
+	runbook, err := os.ReadFile(filepath.Join(root, "docs", "management-plane-dr-runbook.md"))
+	if err != nil {
+		t.Fatalf("read DR runbook: %v", err)
+	}
+	for _, bad := range []string{"data.ENCRYPTION_KEY", "from-literal=ENCRYPTION_KEY="} {
+		if strings.Contains(string(runbook), bad) {
+			t.Fatalf("DR runbook still uses bare %q — server/worker read ASTRONOMER_ENCRYPTION_KEY, so this silently no-ops during a real restore", bad)
+		}
+	}
+
+	// Raw manifests and docker-compose must not assign the bare key.
+	bareAssign := regexp.MustCompile(`(?m)^\s+ENCRYPTION_KEY\s*:`)
+	for _, rel := range []string{
+		filepath.Join("deploy", "k8s", "03-secret.yaml"),
+		filepath.Join("deploy", "docker-compose.yml"),
+	} {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if bareAssign.Match(b) {
+			t.Fatalf("%s assigns bare ENCRYPTION_KEY; rename to ASTRONOMER_ENCRYPTION_KEY", rel)
+		}
+		if !strings.Contains(string(b), "ASTRONOMER_ENCRYPTION_KEY") {
+			t.Fatalf("%s does not set ASTRONOMER_ENCRYPTION_KEY", rel)
+		}
+	}
+
+	// keyrotate must accept the canonical name (fallback).
+	kr, err := os.ReadFile(filepath.Join(root, "cmd", "keyrotate", "main.go"))
+	if err != nil {
+		t.Fatalf("read keyrotate main.go: %v", err)
+	}
+	if !strings.Contains(string(kr), "ASTRONOMER_ENCRYPTION_KEY") {
+		t.Fatal("cmd/keyrotate/main.go does not read ASTRONOMER_ENCRYPTION_KEY")
+	}
+}
+
+// C-02: the worker Deployment must ship liveness + readiness probes hitting
+// /healthz so a wedged consumer is restarted and rollouts gate on health.
+func TestWorkerDeploymentHasProbes(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	worker := findRenderedDoc(t, docs, "Deployment", "astronomer-worker")
+	container := findContainer(t, podSpecFor(worker), "containers", "worker")
+	for _, probe := range []string{"livenessProbe", "readinessProbe"} {
+		httpGet := nestedMap(container, probe, "httpGet")
+		if httpGet == nil {
+			t.Fatalf("worker container has no %s.httpGet", probe)
+		}
+		if got := stringValue(httpGet["path"]); got != "/healthz" {
+			t.Fatalf("worker %s path = %q, want /healthz", probe, got)
+		}
+	}
+
+	// Gated behind worker.probes.enabled.
+	docsOff := parseRenderedDocs(t, helmTemplate(t, "worker.probes.enabled=false"))
+	workerOff := findRenderedDoc(t, docsOff, "Deployment", "astronomer-worker")
+	containerOff := findContainer(t, podSpecFor(workerOff), "containers", "worker")
+	if _, ok := containerOff["livenessProbe"]; ok {
+		t.Fatal("worker.probes.enabled=false should omit the livenessProbe")
+	}
+}
+
+// O-05 / O-09: every runbook_url the PrometheusRule references must resolve to a
+// file under docs/runbooks/, so an alert never points an operator at a 404.
+func TestPrometheusRunbookURLsResolve(t *testing.T) {
+	root := repoRoot(t)
+	rules, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "prometheus-rules.yaml"))
+	if err != nil {
+		t.Fatalf("read prometheus-rules.yaml: %v", err)
+	}
+	// runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/<basename>
+	re := regexp.MustCompile(`runbookBaseURL\s*}}/([A-Za-z0-9._-]+)`)
+	matches := re.FindAllStringSubmatch(string(rules), -1)
+	if len(matches) == 0 {
+		t.Fatal("no runbook_url references found in prometheus-rules.yaml")
+	}
+	seen := map[string]bool{}
+	for _, m := range matches {
+		base := m[1]
+		if seen[base] {
+			continue
+		}
+		seen[base] = true
+		p := filepath.Join(root, "docs", "runbooks", base)
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("runbook_url references %q but docs/runbooks/%s does not exist", base, base)
+		}
+	}
 }

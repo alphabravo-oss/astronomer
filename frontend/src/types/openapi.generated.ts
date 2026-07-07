@@ -461,6 +461,16 @@ export interface OpenAPIComponents {
     ClusterResponse: Record<string, unknown>;
     ClusterTemplateApplicationResponse: Record<string, unknown>;
     ClusterTemplateResponse: Record<string, unknown>;
+    ConstraintValidationResponse: {
+          "valid"?: boolean;
+          "errors"?: string[];
+          "applied"?: boolean;
+          "name"?: string;
+          "kind"?: string;
+        };
+    ConstraintYAMLRequest: {
+          "yaml": string;
+        };
     CreateClusterGroupRequest: Record<string, unknown>;
     CreateClusterRequest: {
           "name": string;
@@ -655,6 +665,18 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
           "owner_project_id"?: string | null;
+        };
+    InhibitionMatcher: {
+          "label": string;
+          "value": string;
+          "is_regex"?: boolean;
+        };
+    InhibitionRequest: {
+          "name": string;
+          "source_matchers"?: OpenAPIComponents['schemas']['InhibitionMatcher'][];
+          "target_matchers"?: OpenAPIComponents['schemas']['InhibitionMatcher'][];
+          "equal_labels"?: string[];
+          "enabled"?: boolean;
         };
     InstalledAppEnriched: {
           "id"?: string;
@@ -1522,6 +1544,8 @@ export type ClusterRegistryTestResponse = OpenAPIComponents['schemas']['ClusterR
 export type ClusterResponse = OpenAPIComponents['schemas']['ClusterResponse'];
 export type ClusterTemplateApplicationResponse = OpenAPIComponents['schemas']['ClusterTemplateApplicationResponse'];
 export type ClusterTemplateResponse = OpenAPIComponents['schemas']['ClusterTemplateResponse'];
+export type ConstraintValidationResponse = OpenAPIComponents['schemas']['ConstraintValidationResponse'];
+export type ConstraintYAMLRequest = OpenAPIComponents['schemas']['ConstraintYAMLRequest'];
 export type CreateClusterGroupRequest = OpenAPIComponents['schemas']['CreateClusterGroupRequest'];
 export type CreateClusterRequest = OpenAPIComponents['schemas']['CreateClusterRequest'];
 export type CreateClusterTemplateRequest = OpenAPIComponents['schemas']['CreateClusterTemplateRequest'];
@@ -1550,6 +1574,8 @@ export type FleetOperationTargetResponse = OpenAPIComponents['schemas']['FleetOp
 export type HelmChart = OpenAPIComponents['schemas']['HelmChart'];
 export type HelmChartVersion = OpenAPIComponents['schemas']['HelmChartVersion'];
 export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];
+export type InhibitionMatcher = OpenAPIComponents['schemas']['InhibitionMatcher'];
+export type InhibitionRequest = OpenAPIComponents['schemas']['InhibitionRequest'];
 export type InstalledAppEnriched = OpenAPIComponents['schemas']['InstalledAppEnriched'];
 export type InstalledChart = OpenAPIComponents['schemas']['InstalledChart'];
 export type KubectlSession = OpenAPIComponents['schemas']['KubectlSession'];

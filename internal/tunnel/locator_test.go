@@ -50,6 +50,66 @@ func TestLocatorDelete_CAS_DoesNotClobberNewOwner(t *testing.T) {
 	}
 }
 
+// TestLocatorRefresh_SupersededDoesNotClobber is the H-01 fix: after an agent
+// moves pod A -> B (B claims the entry on connect), A's periodic refresh loop
+// must NOT rewrite the key back to A's dead address. The owner-checked refresh
+// reports B as the owner, leaves redis pointing at B, and A self-cancels its
+// refresh loop so it stops fighting B (split-brain routing guard).
+func TestLocatorRefresh_SupersededDoesNotClobber(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	ctx := context.Background()
+
+	locA := newTestLocator(rdb, "10.0.0.1:8000")
+	locB := newTestLocator(rdb, "10.0.0.2:8000")
+	const cid = "cluster-move"
+
+	// A owns initially, then the agent moves to B (connect-time unconditional
+	// claim, newest-owner-wins).
+	if err := locA.write(ctx, cid); err != nil {
+		t.Fatalf("A write: %v", err)
+	}
+	if err := locB.write(ctx, cid); err != nil {
+		t.Fatalf("B write: %v", err)
+	}
+
+	// Register A's refresh-loop cancel so refreshTick can drop it on supersede.
+	loopCtx, cancel := context.WithCancel(ctx)
+	locA.cancels[cid] = cancel
+
+	// A's refresh tick observes B as the owner: must self-cancel, must NOT
+	// clobber B's entry.
+	if superseded := locA.refreshTick(loopCtx, cid); !superseded {
+		t.Fatal("H-01: A's refresh should have detected it was superseded by B")
+	}
+	got, err := rdb.Get(ctx, locatorKeyPrefix+cid).Result()
+	if err != nil {
+		t.Fatalf("locator entry missing after A refresh: %v", err)
+	}
+	if got != "10.0.0.2:8000" {
+		t.Fatalf("H-01: A's refresh CLOBBERED B; entry = %q, want B 10.0.0.2:8000", got)
+	}
+	// A dropped its loop bookkeeping and cancelled the loop context.
+	if _, ok := locA.cancels[cid]; ok {
+		t.Fatal("A should have dropped its refresh-loop cancel after being superseded")
+	}
+	select {
+	case <-loopCtx.Done():
+	default:
+		t.Fatal("A's refresh-loop context should have been cancelled")
+	}
+
+	// B's own refresh keeps ownership and extends the TTL.
+	owner, err := locB.refresh(ctx, cid)
+	if err != nil {
+		t.Fatalf("B refresh: %v", err)
+	}
+	if owner != "10.0.0.2:8000" {
+		t.Fatalf("B refresh reported owner %q, want B's own address", owner)
+	}
+}
+
 // TestLocatorDelete_CAS_OwnerDeletes confirms the happy path: the owning pod's
 // delete removes its own entry.
 func TestLocatorDelete_CAS_OwnerDeletes(t *testing.T) {

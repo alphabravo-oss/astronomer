@@ -49,10 +49,17 @@ type effectiveBinding struct {
 }
 
 type effectivePermissionGrant struct {
-	Resource         string                      `json:"resource"`
-	Verb             string                      `json:"verb"`
-	AppliesToContext bool                        `json:"applies_to_context"`
-	Sources          []effectivePermissionSource `json:"sources"`
+	Resource         string `json:"resource"`
+	Verb             string `json:"verb"`
+	AppliesToContext bool   `json:"applies_to_context"`
+	// Inherited distinguishes a permission a role template contributes through
+	// its Inherits chain from one it declares directly; InheritedFrom names the
+	// template that declared it. Both are zero-valued (and omitted) for direct
+	// grants and for binding-derived permissions, so the response shape is
+	// unchanged for callers that never touched template inheritance.
+	Inherited     bool                        `json:"inherited,omitempty"`
+	InheritedFrom string                      `json:"inherited_from,omitempty"`
+	Sources       []effectivePermissionSource `json:"sources"`
 }
 
 type effectivePermissionSource struct {
@@ -135,10 +142,18 @@ func (h *RBACHandler) PermissionPreview(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	rules, roleName, err := h.previewRules(r.Context(), req, scope)
+	rules, roleName, grants, err := h.previewRules(r.Context(), req, scope)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.PreviewError, err.Error())
 		return
+	}
+	source := effectivePermissionSource{Scope: scope, RoleID: req.RoleID, RoleName: roleName}
+	// A template preview returns provenance-annotated grants (so the UI can flag
+	// inherited permissions); role/raw-rule previews have no inheritance and
+	// fall back to the flat rule expansion.
+	permissions := grantsFromRules(rules, source)
+	if grants != nil {
+		permissions = grantsFromEffective(grants, source)
 	}
 	warnings := previewWarnings(scope, req, rules)
 	RespondJSON(w, http.StatusOK, permissionPreviewResponse{
@@ -148,7 +163,7 @@ func (h *RBACHandler) PermissionPreview(w http.ResponseWriter, r *http.Request) 
 		TemplateName:   req.TemplateName,
 		RiskLevel:      rbac.RiskLevelForRules(rules),
 		Warnings:       warnings,
-		Permissions:    grantsFromRules(rules, effectivePermissionSource{Scope: scope, RoleID: req.RoleID, RoleName: roleName}),
+		Permissions:    permissions,
 		SensitiveFlags: sensitiveFlagsForRules(rules),
 	})
 }
@@ -229,40 +244,49 @@ func effectivePermissionContextFromRequest(r *http.Request) (effectivePermission
 	return out, nil
 }
 
-func (h *RBACHandler) previewRules(ctx context.Context, req permissionPreviewRequest, scope string) ([]rbac.Rule, string, error) {
+// previewRules resolves the rule set to preview. The third return value is the
+// flattened, provenance-annotated grant list; it is non-nil only for template
+// previews (where inheritance can contribute grants) and lets the caller render
+// direct vs inherited permissions. Role and raw-rule previews return nil grants
+// and the caller expands their flat rules instead.
+func (h *RBACHandler) previewRules(ctx context.Context, req permissionPreviewRequest, scope string) ([]rbac.Rule, string, []rbac.EffectiveGrant, error) {
 	switch {
 	case req.TemplateName != "":
 		if h.templates == nil {
-			return nil, "", errString("RBAC template catalog not loaded")
+			return nil, "", nil, errString("RBAC template catalog not loaded")
 		}
 		tmpl, ok := h.templates.Get(req.TemplateName)
 		if !ok {
-			return nil, "", errString("template not found")
+			return nil, "", nil, errString("template not found")
 		}
 		if string(tmpl.Scope) != scope {
-			return nil, "", errString("template scope does not match requested scope")
+			return nil, "", nil, errString("template scope does not match requested scope")
 		}
-		return tmpl.Rules, tmpl.DisplayName, nil
+		// EffectiveRules flattens the Inherits chain so risk/flags reflect the
+		// full permission set; EffectiveGrants carries the direct/inherited
+		// provenance for the rendered permissions.
+		return tmpl.EffectiveRules(), tmpl.DisplayName, tmpl.EffectiveGrants(), nil
 	case req.RoleID != "":
 		if h.queries == nil {
-			return nil, "", errString("RBAC role lookup is not configured")
+			return nil, "", nil, errString("RBAC role lookup is not configured")
 		}
 		id, err := uuid.Parse(req.RoleID)
 		if err != nil {
-			return nil, "", errString("invalid role_id")
+			return nil, "", nil, errString("invalid role_id")
 		}
-		return h.rulesForRoleID(ctx, scope, id)
+		rules, name, err := h.rulesForRoleID(ctx, scope, id)
+		return rules, name, nil, err
 	case len(req.Rules) > 0:
 		var rules []rbac.Rule
 		if err := json.Unmarshal(req.Rules, &rules); err != nil {
-			return nil, "", errString("invalid rules")
+			return nil, "", nil, errString("invalid rules")
 		}
 		if len(rules) == 0 {
-			return nil, "", errString("rules must contain at least one entry")
+			return nil, "", nil, errString("rules must contain at least one entry")
 		}
-		return rules, "", nil
+		return rules, "", nil, nil
 	default:
-		return nil, "", errString("template_name, role_id, or rules is required")
+		return nil, "", nil, errString("template_name, role_id, or rules is required")
 	}
 }
 
@@ -313,6 +337,26 @@ func grantsFromRules(rules []rbac.Rule, source effectivePermissionSource) []effe
 	}
 	sortEffectivePermissions(grants)
 	return grants
+}
+
+// grantsFromEffective renders a template's flattened, provenance-annotated
+// grant set into the preview response, preserving the direct/inherited
+// distinction so the UI can tell which permissions come from an inherited
+// template.
+func grantsFromEffective(grants []rbac.EffectiveGrant, source effectivePermissionSource) []effectivePermissionGrant {
+	out := make([]effectivePermissionGrant, 0, len(grants))
+	for _, g := range grants {
+		out = append(out, effectivePermissionGrant{
+			Resource:         g.Resource,
+			Verb:             g.Verb,
+			AppliesToContext: true,
+			Inherited:        g.Inherited,
+			InheritedFrom:    g.InheritedFrom,
+			Sources:          []effectivePermissionSource{source},
+		})
+	}
+	sortEffectivePermissions(out)
+	return out
 }
 
 func mergeGrants(existing, incoming []effectivePermissionGrant) []effectivePermissionGrant {

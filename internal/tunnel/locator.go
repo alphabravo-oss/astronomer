@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -213,6 +214,12 @@ func (l *Locator) Drain(ctx context.Context) {
 	}
 }
 
+// write claims the directory entry for THIS pod at connect time. It is an
+// unconditional SET (newest-owner-wins): when an agent moves A→B, B's connect
+// must overwrite A's stale entry, and nobody but the pod holding the WS ever
+// calls Set for a given cluster_id. The periodic TTL extension does NOT use
+// this path — see refresh() — because a superseded pod's ticker must not
+// re-claim a cluster that has already moved on.
 func (l *Locator) write(ctx context.Context, clusterID string) error {
 	if l.rdb == nil {
 		return nil
@@ -220,6 +227,69 @@ func (l *Locator) write(ctx context.Context, clusterID string) error {
 	setCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	return l.rdb.Set(setCtx, locatorKeyPrefix+clusterID, l.address, locatorEntryTTL).Err()
+}
+
+// locatorOwnerRefresh extends the TTL ONLY while this pod still owns the entry
+// (value == ARGV[1]) or the entry is absent — an owner-checked SET (H-01). It
+// returns the address that owns the entry after the call: this pod's address
+// when we (re)claimed/kept it, or the SUPERSEDING pod's address when ownership
+// has already moved. That return lets refreshLoop notice it has been superseded
+// on a fast A→B move and stop rewriting the key back to its dead address
+// (split-brain routing), instead of the old unconditional SET that clobbered
+// the new owner every 25s until A's read/write pumps returned (~30s).
+var locatorOwnerRefresh = redis.NewScript(`
+local cur = redis.call('GET', KEYS[1])
+if cur == false or cur == ARGV[1] then
+	redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+	return ARGV[1]
+end
+return cur
+`)
+
+// refresh runs the owner-checked TTL extension and reports the current owner.
+// A redis error returns "" so the caller keeps trying on the next tick.
+func (l *Locator) refresh(ctx context.Context, clusterID string) (owner string, err error) {
+	if l.rdb == nil {
+		return l.address, nil
+	}
+	setCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ttlMS := strconv.FormatInt(locatorEntryTTL.Milliseconds(), 10)
+	owner, err = locatorOwnerRefresh.Run(setCtx, l.rdb, []string{locatorKeyPrefix + clusterID}, l.address, ttlMS).Text()
+	if err != nil {
+		return "", err
+	}
+	return owner, nil
+}
+
+// refreshTick performs one owner-checked refresh. It returns true when this pod
+// has been superseded (a different pod owns the entry), in which case it cancels
+// and drops this cluster's refresh loop so we stop fighting the new owner.
+func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded bool) {
+	owner, err := l.refresh(ctx, clusterID)
+	if err != nil {
+		if l.log != nil {
+			l.log.Warn("tunnel locator: refresh failed",
+				slog.String("cluster_id", clusterID), slog.String("error", err.Error()))
+		}
+		return false
+	}
+	if owner != "" && owner != l.address {
+		if l.log != nil {
+			l.log.Info("tunnel locator: superseded by another pod; stopping refresh",
+				slog.String("cluster_id", clusterID),
+				slog.String("owner", owner),
+				slog.String("self", l.address))
+		}
+		l.mu.Lock()
+		if cancel, ok := l.cancels[clusterID]; ok {
+			cancel()
+			delete(l.cancels, clusterID)
+		}
+		l.mu.Unlock()
+		return true
+	}
+	return false
 }
 
 func (l *Locator) refreshLoop(ctx context.Context, clusterID string) {
@@ -230,9 +300,8 @@ func (l *Locator) refreshLoop(ctx context.Context, clusterID string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := l.write(ctx, clusterID); err != nil && l.log != nil {
-				l.log.Warn("tunnel locator: refresh failed",
-					slog.String("cluster_id", clusterID), slog.String("error", err.Error()))
+			if l.refreshTick(ctx, clusterID) {
+				return
 			}
 		}
 	}

@@ -49,6 +49,63 @@ func (q *Queries) AcknowledgeControlPlaneAlert(ctx context.Context, arg Acknowle
 	return i, err
 }
 
+const countAlertInhibitions = `-- name: CountAlertInhibitions :one
+SELECT count(*) FROM alert_inhibitions
+`
+
+func (q *Queries) CountAlertInhibitions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlertInhibitions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createAlertInhibition = `-- name: CreateAlertInhibition :one
+INSERT INTO alert_inhibitions (
+    name,
+    source_matchers,
+    target_matchers,
+    equal_labels,
+    enabled,
+    created_by_id
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, source_matchers, target_matchers, equal_labels, enabled, created_by_id, created_at, updated_at
+`
+
+type CreateAlertInhibitionParams struct {
+	Name           string          `json:"name"`
+	SourceMatchers json.RawMessage `json:"source_matchers"`
+	TargetMatchers json.RawMessage `json:"target_matchers"`
+	EqualLabels    json.RawMessage `json:"equal_labels"`
+	Enabled        bool            `json:"enabled"`
+	CreatedByID    pgtype.UUID     `json:"created_by_id"`
+}
+
+func (q *Queries) CreateAlertInhibition(ctx context.Context, arg CreateAlertInhibitionParams) (AlertInhibition, error) {
+	row := q.db.QueryRow(ctx, createAlertInhibition,
+		arg.Name,
+		arg.SourceMatchers,
+		arg.TargetMatchers,
+		arg.EqualLabels,
+		arg.Enabled,
+		arg.CreatedByID,
+	)
+	var i AlertInhibition
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SourceMatchers,
+		&i.TargetMatchers,
+		&i.EqualLabels,
+		&i.Enabled,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createControlPlaneAlert = `-- name: CreateControlPlaneAlert :one
 INSERT INTO control_plane_alerts (
     controller,
@@ -141,6 +198,15 @@ func (q *Queries) CreateControlPlaneSilence(ctx context.Context, arg CreateContr
 	return i, err
 }
 
+const deleteAlertInhibition = `-- name: DeleteAlertInhibition :exec
+DELETE FROM alert_inhibitions WHERE id = $1
+`
+
+func (q *Queries) DeleteAlertInhibition(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAlertInhibition, id)
+	return err
+}
+
 const deleteControlPlaneSilence = `-- name: DeleteControlPlaneSilence :exec
 DELETE FROM control_plane_silences WHERE id = $1
 `
@@ -217,6 +283,27 @@ func (q *Queries) GetActiveControlPlaneSilences(ctx context.Context) ([]ControlP
 	return items, nil
 }
 
+const getAlertInhibitionByID = `-- name: GetAlertInhibitionByID :one
+SELECT id, name, source_matchers, target_matchers, equal_labels, enabled, created_by_id, created_at, updated_at FROM alert_inhibitions WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetAlertInhibitionByID(ctx context.Context, id uuid.UUID) (AlertInhibition, error) {
+	row := q.db.QueryRow(ctx, getAlertInhibitionByID, id)
+	var i AlertInhibition
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SourceMatchers,
+		&i.TargetMatchers,
+		&i.EqualLabels,
+		&i.Enabled,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getDefaultControlPlanePolicy = `-- name: GetDefaultControlPlanePolicy :one
 SELECT id, name, monitoring_queue_depth_threshold, argocd_queue_depth_threshold, tools_queue_depth_threshold, catalog_queue_depth_threshold, monitoring_stale_running_threshold, argocd_stale_running_threshold, tools_stale_running_threshold, catalog_stale_running_threshold, monitoring_recent_failure_threshold, argocd_recent_failure_threshold, tools_recent_failure_threshold, catalog_recent_failure_threshold, recent_failure_window_minutes, created_at, updated_at FROM control_plane_policies WHERE name = 'default' LIMIT 1
 `
@@ -244,6 +331,47 @@ func (q *Queries) GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlan
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listAlertInhibitions = `-- name: ListAlertInhibitions :many
+SELECT id, name, source_matchers, target_matchers, equal_labels, enabled, created_by_id, created_at, updated_at FROM alert_inhibitions
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAlertInhibitionsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListAlertInhibitions(ctx context.Context, arg ListAlertInhibitionsParams) ([]AlertInhibition, error) {
+	rows, err := q.db.Query(ctx, listAlertInhibitions, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlertInhibition{}
+	for rows.Next() {
+		var i AlertInhibition
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.SourceMatchers,
+			&i.TargetMatchers,
+			&i.EqualLabels,
+			&i.Enabled,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listControlPlaneAlerts = `-- name: ListControlPlaneAlerts :many
@@ -343,6 +471,42 @@ func (q *Queries) ListControlPlaneSilences(ctx context.Context, arg ListControlP
 	return items, nil
 }
 
+const listEnabledAlertInhibitions = `-- name: ListEnabledAlertInhibitions :many
+SELECT id, name, source_matchers, target_matchers, equal_labels, enabled, created_by_id, created_at, updated_at FROM alert_inhibitions
+WHERE enabled = true
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListEnabledAlertInhibitions(ctx context.Context) ([]AlertInhibition, error) {
+	rows, err := q.db.Query(ctx, listEnabledAlertInhibitions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlertInhibition{}
+	for rows.Next() {
+		var i AlertInhibition
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.SourceMatchers,
+			&i.TargetMatchers,
+			&i.EqualLabels,
+			&i.Enabled,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveControlPlaneAlert = `-- name: ResolveControlPlaneAlert :one
 UPDATE control_plane_alerts
 SET
@@ -375,6 +539,52 @@ func (q *Queries) ResolveControlPlaneAlert(ctx context.Context, arg ResolveContr
 		&i.UpdatedAt,
 		&i.AcknowledgedByID,
 		&i.AcknowledgedAt,
+	)
+	return i, err
+}
+
+const updateAlertInhibition = `-- name: UpdateAlertInhibition :one
+UPDATE alert_inhibitions
+SET
+    name = $2,
+    source_matchers = $3,
+    target_matchers = $4,
+    equal_labels = $5,
+    enabled = $6,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, source_matchers, target_matchers, equal_labels, enabled, created_by_id, created_at, updated_at
+`
+
+type UpdateAlertInhibitionParams struct {
+	ID             uuid.UUID       `json:"id"`
+	Name           string          `json:"name"`
+	SourceMatchers json.RawMessage `json:"source_matchers"`
+	TargetMatchers json.RawMessage `json:"target_matchers"`
+	EqualLabels    json.RawMessage `json:"equal_labels"`
+	Enabled        bool            `json:"enabled"`
+}
+
+func (q *Queries) UpdateAlertInhibition(ctx context.Context, arg UpdateAlertInhibitionParams) (AlertInhibition, error) {
+	row := q.db.QueryRow(ctx, updateAlertInhibition,
+		arg.ID,
+		arg.Name,
+		arg.SourceMatchers,
+		arg.TargetMatchers,
+		arg.EqualLabels,
+		arg.Enabled,
+	)
+	var i AlertInhibition
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.SourceMatchers,
+		&i.TargetMatchers,
+		&i.EqualLabels,
+		&i.Enabled,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

@@ -334,21 +334,27 @@
             "required": ["email"]
           },
           "managementBackup": {
-            "properties": {
-              "s3": {
-                "properties": {
-                  "bucket": { "type": "string", "minLength": 1 },
-                  "credentialsSecretRef": {
-                    "required": ["name"],
-                    "properties": {
-                      "name": { "type": "string", "minLength": 1 }
-                    }
-                  }
-                },
-                "required": ["bucket", "credentialsSecretRef"]
-              }
+            "if": {
+              "properties": { "enabled": { "const": true } },
+              "required": ["enabled"]
             },
-            "required": ["s3"]
+            "then": {
+              "properties": {
+                "s3": {
+                  "properties": {
+                    "bucket": { "type": "string", "minLength": 1 },
+                    "credentialsSecretRef": {
+                      "required": ["name"],
+                      "properties": {
+                        "name": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  },
+                  "required": ["bucket", "credentialsSecretRef"]
+                }
+              },
+              "required": ["s3"]
+            }
           },
           "networkPolicy": {
             "properties": {

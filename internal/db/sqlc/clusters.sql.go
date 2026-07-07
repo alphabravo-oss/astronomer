@@ -1317,6 +1317,41 @@ func (q *Queries) UpdateClusterStatus(ctx context.Context, arg UpdateClusterStat
 	return err
 }
 
+const updateClusterStatusOnHeartbeat = `-- name: UpdateClusterStatusOnHeartbeat :execrows
+UPDATE clusters SET status = $1
+WHERE id = $2
+  AND decommissioned_at IS NULL
+  AND (
+    ($1 = 'active'
+      AND last_heartbeat IS NOT NULL
+      AND last_heartbeat >= now() - interval '2 minutes')
+    OR
+    ($1 = 'disconnected'
+      AND (last_heartbeat IS NULL OR last_heartbeat < now() - interval '2 minutes'))
+  )
+`
+
+type UpdateClusterStatusOnHeartbeatParams struct {
+	Status string    `json:"status"`
+	ID     uuid.UUID `json:"id"`
+}
+
+// Health-sweep-safe status write (H-02). The full-fleet sweep snapshots every
+// cluster then writes a snapshot-derived status; a reconnect landing mid-sweep
+// could otherwise be clobbered back to 'disconnected' for one cycle. This write
+// only lands the computed status when the CURRENT last_heartbeat still agrees
+// with it — atomically re-checking the 2m liveness window at write time — so a
+// stale 'disconnected' matches zero rows once the agent is back, and a stale
+// 'active' matches zero rows once it's really gone. Keeps the decommissioned
+// guard. Callers pass only 'active' or 'disconnected'.
+func (q *Queries) UpdateClusterStatusOnHeartbeat(ctx context.Context, arg UpdateClusterStatusOnHeartbeatParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateClusterStatusOnHeartbeat, arg.Status, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertClusterAgentToken = `-- name: UpsertClusterAgentToken :one
 INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
 VALUES (

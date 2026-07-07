@@ -11,9 +11,37 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
-// StartMetricsServer exposes Prometheus metrics for the worker process on a
-// dedicated listener so scrape traffic stays off the task-processing path.
-func StartMetricsServer(ctx context.Context, addr string, log *slog.Logger) error {
+// HealthPinger reports whether the worker's Redis dependency is reachable.
+// *asynq.Client and *asynq.Server both satisfy it (Ping() error), so callers
+// can pass whichever handle they already hold.
+type HealthPinger interface {
+	Ping() error
+}
+
+// newWorkerMux builds the worker's HTTP surface: Prometheus /metrics plus a
+// /healthz liveness probe (C-02). /healthz pings Redis through the asynq handle;
+// a queue consumer that can't reach Redis can neither process nor enqueue work,
+// so an unreachable Redis is a real liveness failure worth restarting on.
+func newWorkerMux(pinger HealthPinger) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if pinger != nil {
+			if err := pinger.Ping(); err != nil {
+				http.Error(w, "redis unreachable: "+err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	return mux
+}
+
+// StartMetricsServer exposes Prometheus metrics and a /healthz probe for the
+// worker process on a dedicated listener so scrape/probe traffic stays off the
+// task-processing path.
+func StartMetricsServer(ctx context.Context, addr string, pinger HealthPinger, log *slog.Logger) error {
 	if addr == "" {
 		observability.WithEvent(log, "worker_metrics_listener_disabled").Info("worker metrics server disabled")
 		return nil
@@ -21,7 +49,7 @@ func StartMetricsServer(ctx context.Context, addr string, log *slog.Logger) erro
 
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: promhttp.Handler(),
+		Handler: newWorkerMux(pinger),
 	}
 
 	go func() {

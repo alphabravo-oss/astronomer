@@ -143,7 +143,14 @@ func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
 		status = "active"
 		connected = true
 	}
-	if err := runtimeDeps.Queries.UpdateClusterStatus(ctx, sqlc.UpdateClusterStatusParams{
+	// H-02: the status is computed from a full-fleet SNAPSHOT taken at the start
+	// of the sweep, so by the time we write it a cluster may have (re)connected or
+	// dropped. UpdateClusterStatusOnHeartbeat re-checks the same 2m liveness window
+	// atomically at write time, so a stale 'disconnected' can't clobber a cluster
+	// that reconnected mid-sweep (and vice-versa). A zero-row result just means the
+	// snapshot status no longer matches reality — the next sweep/publisher pass
+	// converges, so it is not an error.
+	if _, err := runtimeDeps.Queries.UpdateClusterStatusOnHeartbeat(ctx, sqlc.UpdateClusterStatusOnHeartbeatParams{
 		ID:     cluster.ID,
 		Status: status,
 	}); err != nil {

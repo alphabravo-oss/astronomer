@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { KeyStatusPanel } from '@/components/settings/key-status-panel';
 import { toastInfo } from '@/lib/toast';
 import {
   usePlatformSettings,
@@ -503,6 +504,7 @@ export default function PlatformSettingsPage() {
           </p>
         </div>
         <PlatformSettingsForm />
+        <KeyStatusPanel />
       </div>
     </SettingsAuthGate>
   );

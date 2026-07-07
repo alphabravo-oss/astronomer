@@ -149,6 +149,20 @@ const (
 	ExtensionManifestApiVersionExtensionsAstronomerIov1alpha1 ExtensionManifestApiVersion = "extensions.astronomer.io/v1alpha1"
 )
 
+// Defines values for ExtensionMountPoint.
+const (
+	ExtensionMountPointClusterTab      ExtensionMountPoint = "clusterTab"
+	ExtensionMountPointDashboardWidget ExtensionMountPoint = "dashboardWidget"
+	ExtensionMountPointSettingsPage    ExtensionMountPoint = "settingsPage"
+	ExtensionMountPointSidebar         ExtensionMountPoint = "sidebar"
+)
+
+// Defines values for ExtensionMountTier.
+const (
+	ExtensionMountTierN1 ExtensionMountTier = 1
+	ExtensionMountTierN2 ExtensionMountTier = 2
+)
+
 // Defines values for ExtensionValidationCompatibilityStatus.
 const (
 	ExtensionValidationCompatibilityStatusCompatible   ExtensionValidationCompatibilityStatus = "compatible"
@@ -1021,6 +1035,21 @@ type ClusterTemplateApplicationResponse map[string]interface{}
 // ClusterTemplateResponse Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type ClusterTemplateResponse map[string]interface{}
 
+// ConstraintValidationResponse Result of validating (and optionally applying) a constraint (P-04).
+type ConstraintValidationResponse struct {
+	Applied *bool     `json:"applied,omitempty"`
+	Errors  *[]string `json:"errors,omitempty"`
+	Kind    *string   `json:"kind,omitempty"`
+	Name    *string   `json:"name,omitempty"`
+	Valid   *bool     `json:"valid,omitempty"`
+}
+
+// ConstraintYAMLRequest Gatekeeper constraint authoring body (P-04).
+type ConstraintYAMLRequest struct {
+	// Yaml A ConstraintTemplate or Gatekeeper Constraint YAML document.
+	Yaml string `json:"yaml"`
+}
+
 // CreateClusterGroupRequest Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type CreateClusterGroupRequest map[string]interface{}
 
@@ -1168,6 +1197,37 @@ type ExtensionManifest struct {
 // ExtensionManifestApiVersion defines model for ExtensionManifest.ApiVersion.
 type ExtensionManifestApiVersion string
 
+// ExtensionMount Render-only projection of one enabled extension point for the host loader. Upstream dataSource paths/methods/rbac are NOT exposed; only the dataSource id + shape cross to the browser.
+type ExtensionMount struct {
+	DataSources *[]struct {
+		Id    *string `json:"id,omitempty"`
+		Shape *string `json:"shape,omitempty"`
+	} `json:"dataSources,omitempty"`
+	DisplayName *string                 `json:"displayName,omitempty"`
+	Extension   *string                 `json:"extension,omitempty"`
+	Point       *ExtensionMountPoint    `json:"point,omitempty"`
+	PointId     *string                 `json:"pointId,omitempty"`
+	Render      *map[string]interface{} `json:"render,omitempty"`
+
+	// Tier 1 = declarative (Tier 1), 2 = signed bundle (Tier 2).
+	Tier  *ExtensionMountTier `json:"tier,omitempty"`
+	Title *string             `json:"title,omitempty"`
+}
+
+// ExtensionMountPoint defines model for ExtensionMount.Point.
+type ExtensionMountPoint string
+
+// ExtensionMountTier 1 = declarative (Tier 1), 2 = signed bundle (Tier 2).
+type ExtensionMountTier int
+
+// ExtensionMountsResponse Enabled-extensions surface (§HostMounts), indexed by mount point. Only enabled, compatible extensions appear; Tier-2 points additionally require a verified bundle.
+type ExtensionMountsResponse struct {
+	ClusterTabs      *[]ExtensionMount `json:"clusterTabs,omitempty"`
+	DashboardWidgets *[]ExtensionMount `json:"dashboardWidgets,omitempty"`
+	Settings         *[]ExtensionMount `json:"settings,omitempty"`
+	Sidebar          *[]ExtensionMount `json:"sidebar,omitempty"`
+}
+
 // ExtensionRecord defines model for ExtensionRecord.
 type ExtensionRecord struct {
 	Checksum            *string             `json:"checksum,omitempty"`
@@ -1261,6 +1321,22 @@ type HelmRepository struct {
 	RepoType       *string                 `json:"repo_type,omitempty"`
 	UpdatedAt      *time.Time              `json:"updated_at,omitempty"`
 	Url            *string                 `json:"url,omitempty"`
+}
+
+// InhibitionMatcher defines model for InhibitionMatcher.
+type InhibitionMatcher struct {
+	IsRegex *bool  `json:"is_regex,omitempty"`
+	Label   string `json:"label"`
+	Value   string `json:"value"`
+}
+
+// InhibitionRequest Alert inhibition rule create/update body (P-03).
+type InhibitionRequest struct {
+	Enabled        *bool                `json:"enabled,omitempty"`
+	EqualLabels    *[]string            `json:"equal_labels,omitempty"`
+	Name           string               `json:"name"`
+	SourceMatchers *[]InhibitionMatcher `json:"source_matchers,omitempty"`
+	TargetMatchers *[]InhibitionMatcher `json:"target_matchers,omitempty"`
 }
 
 // InstalledAppEnriched defines model for InstalledAppEnriched.
@@ -1609,18 +1685,24 @@ type RBACBindingRequest struct {
 
 // RBACClusterBindingRequest defines model for RBACClusterBindingRequest.
 type RBACClusterBindingRequest struct {
-	ClusterId openapi_types.UUID  `json:"cluster_id"`
-	Group     *string             `json:"group,omitempty"`
+	ClusterId openapi_types.UUID `json:"cluster_id"`
+	Group     *string            `json:"group,omitempty"`
+
+	// Namespace Optional Kubernetes namespace to scope the binding to. Empty or omitted means the binding applies to the full cluster scope.
+	Namespace *string             `json:"namespace,omitempty"`
 	RoleId    openapi_types.UUID  `json:"role_id"`
 	UserId    *openapi_types.UUID `json:"user_id,omitempty"`
 }
 
 // RBACClusterRoleBinding defines model for RBACClusterRoleBinding.
 type RBACClusterRoleBinding struct {
-	ClusterId            *openapi_types.UUID    `json:"cluster_id,omitempty"`
-	CreatedAt            *time.Time             `json:"created_at,omitempty"`
-	Group                *string                `json:"group,omitempty"`
-	Id                   *openapi_types.UUID    `json:"id,omitempty"`
+	ClusterId *openapi_types.UUID `json:"cluster_id,omitempty"`
+	CreatedAt *time.Time          `json:"created_at,omitempty"`
+	Group     *string             `json:"group,omitempty"`
+	Id        *openapi_types.UUID `json:"id,omitempty"`
+
+	// Namespace Optional Kubernetes namespace this binding is scoped to. Empty string means the binding applies to the full cluster scope.
+	Namespace            *string                `json:"namespace,omitempty"`
 	RoleId               *openapi_types.UUID    `json:"role_id,omitempty"`
 	UserId               *openapi_types.UUID    `json:"user_id"`
 	AdditionalProperties map[string]interface{} `json:"-"`
@@ -2407,6 +2489,12 @@ type GetApiV1AdminNetworkPolicyTemplatesParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// PostApiV1AdminScimTokensJSONBody defines parameters for PostApiV1AdminScimTokens.
+type PostApiV1AdminScimTokensJSONBody struct {
+	// Name Operator-facing label for the token.
+	Name string `json:"name"`
+}
+
 // AdminSmtpUpdateJSONBody defines parameters for AdminSmtpUpdate.
 type AdminSmtpUpdateJSONBody struct {
 	AuthMechanism *AdminSmtpUpdateJSONBodyAuthMechanism `json:"auth_mechanism,omitempty"`
@@ -2804,6 +2892,17 @@ type GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetApiV1ClustersClusterIdApiserverAuditParams defines parameters for GetApiV1ClustersClusterIdApiserverAudit.
+type GetApiV1ClustersClusterIdApiserverAuditParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostApiV1ClustersClusterIdApiserverAuditJSONBody defines parameters for PostApiV1ClustersClusterIdApiserverAudit.
+type PostApiV1ClustersClusterIdApiserverAuditJSONBody struct {
+	Events *[]map[string]interface{} `json:"events,omitempty"`
+}
+
 // GetApiV1ClustersClusterIdAppsParams defines parameters for GetApiV1ClustersClusterIdApps.
 type GetApiV1ClustersClusterIdAppsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2844,6 +2943,15 @@ type K8sProxyTraceJSONBody = interface{}
 type GetApiV1ClustersClusterIdPodsParams struct {
 	// Namespace Restrict to a single namespace.
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
+// GetApiV1ClustersClusterIdPodsWatchParams defines parameters for GetApiV1ClustersClusterIdPodsWatch.
+type GetApiV1ClustersClusterIdPodsWatchParams struct {
+	// Namespace Restrict the watch to a single namespace.
+	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Ticket One-use stream ticket (scoped to this cluster).
+	Ticket *string `form:"ticket,omitempty" json:"ticket,omitempty"`
 }
 
 // GetApiV1ClustersClusterIdProjectsParams defines parameters for GetApiV1ClustersClusterIdProjects.
@@ -2996,6 +3104,58 @@ type PostApiV1ExtensionsValidateJSONBody struct {
 	Manifest *ExtensionManifest `json:"manifest,omitempty"`
 }
 
+// PostApiV1ExtensionsVerifyBundleJSONBody defines parameters for PostApiV1ExtensionsVerifyBundle.
+type PostApiV1ExtensionsVerifyBundleJSONBody struct {
+	// Bundle Base64 (std) encoded executable bundle bytes.
+	Bundle string `json:"bundle"`
+
+	// Checksum Optional expected "sha256:<hex>" digest of the bundle.
+	Checksum *string `json:"checksum,omitempty"`
+
+	// Name Optional installed-extension name. When supplied and the verified checksum matches a bundle descriptor in that extension's stored manifest, the §HostMounts Tier-2 gate is lifted (bundle_verified set true) so the descriptor may mount. Omit to verify without touching any stored row.
+	Name *string `json:"name,omitempty"`
+
+	// Signature Base64 (std) encoded Ed25519 signature over the bundle bytes.
+	Signature string `json:"signature"`
+}
+
+// PostApiV1ExtensionsNameDataDataSourceIdJSONBody defines parameters for PostApiV1ExtensionsNameDataDataSourceId.
+type PostApiV1ExtensionsNameDataDataSourceIdJSONBody struct {
+	// Body POST form-submit body only, against the declared input schema.
+	Body *map[string]interface{} `json:"body,omitempty"`
+
+	// Context Cluster/project/namespace ids bound per the dataSource scope.
+	Context *struct {
+		ClusterId *openapi_types.UUID `json:"clusterId,omitempty"`
+		Namespace *string             `json:"namespace,omitempty"`
+		ProjectId *openapi_types.UUID `json:"projectId,omitempty"`
+	} `json:"context,omitempty"`
+
+	// PathParams Path-template placeholder values, validated against the template's allowed placeholders only.
+	PathParams *map[string]string `json:"pathParams,omitempty"`
+
+	// Query Overrides for declared query keys only; undeclared keys are dropped.
+	Query *map[string]string `json:"query,omitempty"`
+}
+
+// PostApiV1ExtensionsNameDataDataSourceIdParams defines parameters for PostApiV1ExtensionsNameDataDataSourceId.
+type PostApiV1ExtensionsNameDataDataSourceIdParams struct {
+	// XExtensionTicket Tier-2 single-use, ≤60s, scope-checked data ticket (§BridgeProtocol). Present only for sandboxed-iframe bridge calls; browser sessions use the normal session cookie instead.
+	XExtensionTicket *string `json:"X-Extension-Ticket,omitempty"`
+}
+
+// PostApiV1ExtensionsNameTokenJSONBody defines parameters for PostApiV1ExtensionsNameToken.
+type PostApiV1ExtensionsNameTokenJSONBody struct {
+	Context *struct {
+		ClusterId *openapi_types.UUID `json:"clusterId,omitempty"`
+		Namespace *string             `json:"namespace,omitempty"`
+		ProjectId *openapi_types.UUID `json:"projectId,omitempty"`
+	} `json:"context,omitempty"`
+
+	// DataSource A Tier-2 bundle dataSource id declared in the manifest.
+	DataSource string `json:"dataSource"`
+}
+
 // GetApiV1FleetOperationsParams defines parameters for GetApiV1FleetOperations.
 type GetApiV1FleetOperationsParams struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty"`
@@ -3117,6 +3277,15 @@ type GetApiV1RbacProjectRoleBindingsParams struct {
 type GetApiV1RbacProjectRolesParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetApiV1RegisterSignedClusterIdParams defines parameters for GetApiV1RegisterSignedClusterId.
+type GetApiV1RegisterSignedClusterIdParams struct {
+	// Expires Unix-seconds expiry the signature was computed over.
+	Expires int64 `form:"expires" json:"expires"`
+
+	// Sig Hex-encoded HMAC-SHA256 over "cluster_id|expires".
+	Sig string `form:"sig" json:"sig"`
 }
 
 // SearchResourcesAcrossClustersParams defines parameters for SearchResourcesAcrossClusters.
@@ -3355,11 +3524,30 @@ type InternalTunnelK8sParams struct {
 // InternalTunnelK8sParamsXAstronomerInternalSource defines parameters for InternalTunnelK8s.
 type InternalTunnelK8sParamsXAstronomerInternalSource string
 
+// PatchScimV2UsersIdApplicationScimPlusJSONBody defines parameters for PatchScimV2UsersId.
+type PatchScimV2UsersIdApplicationScimPlusJSONBody struct {
+	Operations *[]struct {
+		Op    *string     `json:"op,omitempty"`
+		Path  *string     `json:"path,omitempty"`
+		Value interface{} `json:"value,omitempty"`
+	} `json:"Operations,omitempty"`
+	Schemas *[]string `json:"schemas,omitempty"`
+}
+
+// PostApiV1AdminAlertingInhibitionsJSONRequestBody defines body for PostApiV1AdminAlertingInhibitions for application/json ContentType.
+type PostApiV1AdminAlertingInhibitionsJSONRequestBody = InhibitionRequest
+
+// PutApiV1AdminAlertingInhibitionsIdJSONRequestBody defines body for PutApiV1AdminAlertingInhibitionsId for application/json ContentType.
+type PutApiV1AdminAlertingInhibitionsIdJSONRequestBody = InhibitionRequest
+
 // PostApiV1AdminNetworkPolicyTemplatesJSONRequestBody defines body for PostApiV1AdminNetworkPolicyTemplates for application/json ContentType.
 type PostApiV1AdminNetworkPolicyTemplatesJSONRequestBody = CreateNetworkPolicyTemplateRequest
 
 // PutApiV1AdminNetworkPolicyTemplatesIdJSONRequestBody defines body for PutApiV1AdminNetworkPolicyTemplatesId for application/json ContentType.
 type PutApiV1AdminNetworkPolicyTemplatesIdJSONRequestBody = CreateNetworkPolicyTemplateRequest
+
+// PostApiV1AdminScimTokensJSONRequestBody defines body for PostApiV1AdminScimTokens for application/json ContentType.
+type PostApiV1AdminScimTokensJSONRequestBody PostApiV1AdminScimTokensJSONBody
 
 // AdminSmtpUpdateJSONRequestBody defines body for AdminSmtpUpdate for application/json ContentType.
 type AdminSmtpUpdateJSONRequestBody AdminSmtpUpdateJSONBody
@@ -3493,6 +3681,9 @@ type PostApiV1ClustersJSONRequestBody = CreateClusterRequest
 // PutApiV1ClustersClusterIdApiserverAllowlistJSONRequestBody defines body for PutApiV1ClustersClusterIdApiserverAllowlist for application/json ContentType.
 type PutApiV1ClustersClusterIdApiserverAllowlistJSONRequestBody = AllowlistUpdateRequest
 
+// PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody defines body for PostApiV1ClustersClusterIdApiserverAudit for application/json ContentType.
+type PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody PostApiV1ClustersClusterIdApiserverAuditJSONBody
+
 // K8sProxyDeleteJSONRequestBody defines body for K8sProxyDelete for application/json ContentType.
 type K8sProxyDeleteJSONRequestBody = K8sProxyDeleteJSONBody
 
@@ -3604,6 +3795,12 @@ type PatchApiV1ClustersIdJSONRequestBody = UpdateClusterRequest
 // PutApiV1ClustersIdJSONRequestBody defines body for PutApiV1ClustersId for application/json ContentType.
 type PutApiV1ClustersIdJSONRequestBody = UpdateClusterRequest
 
+// PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody defines body for PostApiV1ClustersIdGatekeeperConstraints for application/json ContentType.
+type PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody = ConstraintYAMLRequest
+
+// PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody defines body for PostApiV1ClustersIdGatekeeperConstraintsValidate for application/json ContentType.
+type PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody = ConstraintYAMLRequest
+
 // PutApiV1ClustersIdRegistrationOptionsJSONRequestBody defines body for PutApiV1ClustersIdRegistrationOptions for application/json ContentType.
 type PutApiV1ClustersIdRegistrationOptionsJSONRequestBody = SetOptionsRequest
 
@@ -3615,6 +3812,15 @@ type PostApiV1ExtensionsJSONRequestBody PostApiV1ExtensionsJSONBody
 
 // PostApiV1ExtensionsValidateJSONRequestBody defines body for PostApiV1ExtensionsValidate for application/json ContentType.
 type PostApiV1ExtensionsValidateJSONRequestBody PostApiV1ExtensionsValidateJSONBody
+
+// PostApiV1ExtensionsVerifyBundleJSONRequestBody defines body for PostApiV1ExtensionsVerifyBundle for application/json ContentType.
+type PostApiV1ExtensionsVerifyBundleJSONRequestBody PostApiV1ExtensionsVerifyBundleJSONBody
+
+// PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody defines body for PostApiV1ExtensionsNameDataDataSourceId for application/json ContentType.
+type PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody PostApiV1ExtensionsNameDataDataSourceIdJSONBody
+
+// PostApiV1ExtensionsNameTokenJSONRequestBody defines body for PostApiV1ExtensionsNameToken for application/json ContentType.
+type PostApiV1ExtensionsNameTokenJSONRequestBody PostApiV1ExtensionsNameTokenJSONBody
 
 // PostApiV1FleetOperationsJSONRequestBody defines body for PostApiV1FleetOperations for application/json ContentType.
 type PostApiV1FleetOperationsJSONRequestBody = CreateFleetOperationRequest
@@ -3768,6 +3974,9 @@ type InternalTunnelHelmJSONRequestBody InternalTunnelHelmJSONBody
 
 // InternalTunnelK8sJSONRequestBody defines body for InternalTunnelK8s for application/json ContentType.
 type InternalTunnelK8sJSONRequestBody InternalTunnelK8sJSONBody
+
+// PatchScimV2UsersIdApplicationScimPlusJSONRequestBody defines body for PatchScimV2UsersId for application/scim+json ContentType.
+type PatchScimV2UsersIdApplicationScimPlusJSONRequestBody PatchScimV2UsersIdApplicationScimPlusJSONBody
 
 // Getter for additional properties for CreateNamedClusterResourceJSONBody. Returns the specified
 // element and whether it was found
@@ -6428,6 +6637,14 @@ func (a *RBACClusterRoleBinding) UnmarshalJSON(b []byte) error {
 		delete(object, "id")
 	}
 
+	if raw, found := object["namespace"]; found {
+		err = json.Unmarshal(raw, &a.Namespace)
+		if err != nil {
+			return fmt.Errorf("error reading 'namespace': %w", err)
+		}
+		delete(object, "namespace")
+	}
+
 	if raw, found := object["role_id"]; found {
 		err = json.Unmarshal(raw, &a.RoleId)
 		if err != nil {
@@ -6488,6 +6705,13 @@ func (a RBACClusterRoleBinding) MarshalJSON() ([]byte, error) {
 		object["id"], err = json.Marshal(a.Id)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'id': %w", err)
+		}
+	}
+
+	if a.Namespace != nil {
+		object["namespace"], err = json.Marshal(a.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'namespace': %w", err)
 		}
 	}
 
@@ -8364,6 +8588,25 @@ type ClientInterface interface {
 	// AdminAgentsClusterAdminPosture request
 	AdminAgentsClusterAdminPosture(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1AdminAlertingInhibitions request
+	GetApiV1AdminAlertingInhibitions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1AdminAlertingInhibitionsWithBody request with any body
+	PostApiV1AdminAlertingInhibitionsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1AdminAlertingInhibitions(ctx context.Context, body PostApiV1AdminAlertingInhibitionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1AdminAlertingInhibitionsId request
+	DeleteApiV1AdminAlertingInhibitionsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1AdminAlertingInhibitionsId request
+	GetApiV1AdminAlertingInhibitionsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutApiV1AdminAlertingInhibitionsIdWithBody request with any body
+	PutApiV1AdminAlertingInhibitionsIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutApiV1AdminAlertingInhibitionsId(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminAlertingInhibitionsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1AdminBackupDrill request
 	GetApiV1AdminBackupDrill(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -8391,6 +8634,17 @@ type ClientInterface interface {
 	PutApiV1AdminNetworkPolicyTemplatesIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PutApiV1AdminNetworkPolicyTemplatesId(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminNetworkPolicyTemplatesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1AdminScimTokens request
+	GetApiV1AdminScimTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1AdminScimTokensWithBody request with any body
+	PostApiV1AdminScimTokensWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1AdminScimTokens(ctx context.Context, body PostApiV1AdminScimTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1AdminScimTokensId request
+	DeleteApiV1AdminScimTokensId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminShellSessionsList request
 	AdminShellSessionsList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -8888,6 +9142,14 @@ type ClientInterface interface {
 	// GetApiV1ClustersClusterIdApiserverAllowlistSnapshots request
 	GetApiV1ClustersClusterIdApiserverAllowlistSnapshots(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1ClustersClusterIdApiserverAudit request
+	GetApiV1ClustersClusterIdApiserverAudit(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClustersClusterIdApiserverAuditWithBody request with any body
+	PostApiV1ClustersClusterIdApiserverAuditWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClustersClusterIdApiserverAudit(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1ClustersClusterIdApps request
 	GetApiV1ClustersClusterIdApps(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdAppsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -8962,6 +9224,9 @@ type ClientInterface interface {
 
 	// GetApiV1ClustersClusterIdPods request
 	GetApiV1ClustersClusterIdPods(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClustersClusterIdPodsWatch request
+	GetApiV1ClustersClusterIdPodsWatch(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsWatchParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1ClustersClusterIdProjects request
 	GetApiV1ClustersClusterIdProjects(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdProjectsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9202,6 +9467,12 @@ type ClientInterface interface {
 	// GetApiV1ClustersId request
 	GetApiV1ClustersId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1ClustersIdAgentTokenRevoke request
+	PostApiV1ClustersIdAgentTokenRevoke(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClustersIdAgentTokenRotate request
+	PostApiV1ClustersIdAgentTokenRotate(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1ClustersIdConditionRemediation request
 	GetApiV1ClustersIdConditionRemediation(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -9210,6 +9481,22 @@ type ClientInterface interface {
 
 	// GetApiV1ClustersIdDecommission request
 	GetApiV1ClustersIdDecommission(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ClustersIdGatekeeperConstraints request
+	GetApiV1ClustersIdGatekeeperConstraints(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClustersIdGatekeeperConstraintsWithBody request with any body
+	PostApiV1ClustersIdGatekeeperConstraintsWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClustersIdGatekeeperConstraints(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ClustersIdGatekeeperConstraintsValidateWithBody request with any body
+	PostApiV1ClustersIdGatekeeperConstraintsValidateWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ClustersIdGatekeeperConstraintsValidate(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiV1ClustersIdGatekeeperConstraintsName request
+	DeleteApiV1ClustersIdGatekeeperConstraintsName(ctx context.Context, id openapi_types.UUID, name string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ClustersIdGenerateKubeconfig request
 	PostApiV1ClustersIdGenerateKubeconfig(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9322,6 +9609,9 @@ type ClientInterface interface {
 
 	PostApiV1Extensions(ctx context.Context, body PostApiV1ExtensionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1ExtensionsMounts request
+	GetApiV1ExtensionsMounts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1ExtensionsSampleManifest request
 	GetApiV1ExtensionsSampleManifest(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -9330,11 +9620,26 @@ type ClientInterface interface {
 
 	PostApiV1ExtensionsValidate(ctx context.Context, body PostApiV1ExtensionsValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1ExtensionsVerifyBundleWithBody request with any body
+	PostApiV1ExtensionsVerifyBundleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ExtensionsVerifyBundle(ctx context.Context, body PostApiV1ExtensionsVerifyBundleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ExtensionsNameDataDataSourceIdWithBody request with any body
+	PostApiV1ExtensionsNameDataDataSourceIdWithBody(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ExtensionsNameDataDataSourceId(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, body PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostApiV1ExtensionsNameDisable request
 	PostApiV1ExtensionsNameDisable(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostApiV1ExtensionsNameEnable request
 	PostApiV1ExtensionsNameEnable(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostApiV1ExtensionsNameTokenWithBody request with any body
+	PostApiV1ExtensionsNameTokenWithBody(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ExtensionsNameToken(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1FleetOperations request
 	GetApiV1FleetOperations(ctx context.Context, params *GetApiV1FleetOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9685,6 +9990,9 @@ type ClientInterface interface {
 	// GetApiV1RegisterCaCrt request
 	GetApiV1RegisterCaCrt(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetApiV1RegisterSignedClusterId request
+	GetApiV1RegisterSignedClusterId(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1RegisterSignedClusterIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1RegisterToken request
 	GetApiV1RegisterToken(ctx context.Context, token string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -9872,6 +10180,41 @@ type ClientInterface interface {
 	InternalTunnelK8sWithBody(ctx context.Context, clusterId openapi_types.UUID, params *InternalTunnelK8sParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	InternalTunnelK8s(ctx context.Context, clusterId openapi_types.UUID, params *InternalTunnelK8sParams, body InternalTunnelK8sJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2Groups request
+	GetScimV2Groups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2GroupsId request
+	GetScimV2GroupsId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2ResourceTypes request
+	GetScimV2ResourceTypes(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2Schemas request
+	GetScimV2Schemas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2ServiceProviderConfig request
+	GetScimV2ServiceProviderConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2Users request
+	GetScimV2Users(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostScimV2Users request
+	PostScimV2Users(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteScimV2UsersId request
+	DeleteScimV2UsersId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScimV2UsersId request
+	GetScimV2UsersId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchScimV2UsersIdWithBody request with any body
+	PatchScimV2UsersIdWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchScimV2UsersIdWithApplicationScimPlusJSONBody(ctx context.Context, id string, body PatchScimV2UsersIdApplicationScimPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutScimV2UsersId request
+	PutScimV2UsersId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) GetApiV1Activity(ctx context.Context, params *GetApiV1ActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -9900,6 +10243,90 @@ func (c *Client) GetActivityFeedLegacy(ctx context.Context, reqEditors ...Reques
 
 func (c *Client) AdminAgentsClusterAdminPosture(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminAgentsClusterAdminPostureRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1AdminAlertingInhibitions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1AdminAlertingInhibitionsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1AdminAlertingInhibitionsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AdminAlertingInhibitionsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1AdminAlertingInhibitions(ctx context.Context, body PostApiV1AdminAlertingInhibitionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AdminAlertingInhibitionsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1AdminAlertingInhibitionsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1AdminAlertingInhibitionsIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1AdminAlertingInhibitionsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1AdminAlertingInhibitionsIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutApiV1AdminAlertingInhibitionsIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiV1AdminAlertingInhibitionsIdRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutApiV1AdminAlertingInhibitionsId(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminAlertingInhibitionsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutApiV1AdminAlertingInhibitionsIdRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -10020,6 +10447,54 @@ func (c *Client) PutApiV1AdminNetworkPolicyTemplatesIdWithBody(ctx context.Conte
 
 func (c *Client) PutApiV1AdminNetworkPolicyTemplatesId(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminNetworkPolicyTemplatesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutApiV1AdminNetworkPolicyTemplatesIdRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1AdminScimTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1AdminScimTokensRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1AdminScimTokensWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AdminScimTokensRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1AdminScimTokens(ctx context.Context, body PostApiV1AdminScimTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1AdminScimTokensRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1AdminScimTokensId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1AdminScimTokensIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -12190,6 +12665,42 @@ func (c *Client) GetApiV1ClustersClusterIdApiserverAllowlistSnapshots(ctx contex
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiV1ClustersClusterIdApiserverAudit(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAuditParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClustersClusterIdApiserverAuditRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersClusterIdApiserverAuditWithBody(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersClusterIdApiserverAuditRequestWithBody(c.Server, clusterId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersClusterIdApiserverAudit(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersClusterIdApiserverAuditRequest(c.Server, clusterId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1ClustersClusterIdApps(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdAppsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ClustersClusterIdAppsRequest(c.Server, clusterId, params)
 	if err != nil {
@@ -12516,6 +13027,18 @@ func (c *Client) GetApiV1ClustersClusterIdNodesNodeName(ctx context.Context, clu
 
 func (c *Client) GetApiV1ClustersClusterIdPods(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ClustersClusterIdPodsRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClustersClusterIdPodsWatch(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsWatchParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClustersClusterIdPodsWatchRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -13594,6 +14117,30 @@ func (c *Client) GetApiV1ClustersId(ctx context.Context, id openapi_types.UUID, 
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostApiV1ClustersIdAgentTokenRevoke(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersIdAgentTokenRevokeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersIdAgentTokenRotate(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersIdAgentTokenRotateRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1ClustersIdConditionRemediation(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ClustersIdConditionRemediationRequest(c.Server, id)
 	if err != nil {
@@ -13620,6 +14167,78 @@ func (c *Client) GetApiV1ClustersIdConditions(ctx context.Context, id openapi_ty
 
 func (c *Client) GetApiV1ClustersIdDecommission(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ClustersIdDecommissionRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ClustersIdGatekeeperConstraints(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ClustersIdGatekeeperConstraintsRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersIdGatekeeperConstraintsWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersIdGatekeeperConstraintsRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersIdGatekeeperConstraints(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersIdGatekeeperConstraintsRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersIdGatekeeperConstraintsValidateWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ClustersIdGatekeeperConstraintsValidate(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteApiV1ClustersIdGatekeeperConstraintsName(ctx context.Context, id openapi_types.UUID, name string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiV1ClustersIdGatekeeperConstraintsNameRequest(c.Server, id, name)
 	if err != nil {
 		return nil, err
 	}
@@ -14086,6 +14705,18 @@ func (c *Client) PostApiV1Extensions(ctx context.Context, body PostApiV1Extensio
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiV1ExtensionsMounts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ExtensionsMountsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1ExtensionsSampleManifest(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ExtensionsSampleManifestRequest(c.Server)
 	if err != nil {
@@ -14122,6 +14753,54 @@ func (c *Client) PostApiV1ExtensionsValidate(ctx context.Context, body PostApiV1
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostApiV1ExtensionsVerifyBundleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ExtensionsVerifyBundleRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ExtensionsVerifyBundle(ctx context.Context, body PostApiV1ExtensionsVerifyBundleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ExtensionsVerifyBundleRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ExtensionsNameDataDataSourceIdWithBody(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ExtensionsNameDataDataSourceIdRequestWithBody(c.Server, name, dataSourceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ExtensionsNameDataDataSourceId(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, body PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ExtensionsNameDataDataSourceIdRequest(c.Server, name, dataSourceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostApiV1ExtensionsNameDisable(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1ExtensionsNameDisableRequest(c.Server, name)
 	if err != nil {
@@ -14136,6 +14815,30 @@ func (c *Client) PostApiV1ExtensionsNameDisable(ctx context.Context, name string
 
 func (c *Client) PostApiV1ExtensionsNameEnable(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1ExtensionsNameEnableRequest(c.Server, name)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ExtensionsNameTokenWithBody(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ExtensionsNameTokenRequestWithBody(c.Server, name, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ExtensionsNameToken(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ExtensionsNameTokenRequest(c.Server, name, body)
 	if err != nil {
 		return nil, err
 	}
@@ -15682,6 +16385,18 @@ func (c *Client) GetApiV1RegisterCaCrt(ctx context.Context, reqEditors ...Reques
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetApiV1RegisterSignedClusterId(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1RegisterSignedClusterIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1RegisterSignedClusterIdRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1RegisterToken(ctx context.Context, token string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1RegisterTokenRequest(c.Server, token)
 	if err != nil {
@@ -16498,6 +17213,150 @@ func (c *Client) InternalTunnelK8s(ctx context.Context, clusterId openapi_types.
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetScimV2Groups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2GroupsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetScimV2GroupsId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2GroupsIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetScimV2ResourceTypes(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2ResourceTypesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetScimV2Schemas(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2SchemasRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetScimV2ServiceProviderConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2ServiceProviderConfigRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetScimV2Users(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2UsersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostScimV2Users(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostScimV2UsersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteScimV2UsersId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteScimV2UsersIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetScimV2UsersId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScimV2UsersIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchScimV2UsersIdWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchScimV2UsersIdRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchScimV2UsersIdWithApplicationScimPlusJSONBody(ctx context.Context, id string, body PatchScimV2UsersIdApplicationScimPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchScimV2UsersIdRequestWithApplicationScimPlusJSONBody(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutScimV2UsersId(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutScimV2UsersIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // NewGetApiV1ActivityRequest generates requests for GetApiV1Activity
 func NewGetApiV1ActivityRequest(server string, params *GetApiV1ActivityParams) (*http.Request, error) {
 	var err error
@@ -16597,6 +17456,188 @@ func NewAdminAgentsClusterAdminPostureRequest(server string) (*http.Request, err
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetApiV1AdminAlertingInhibitionsRequest generates requests for GetApiV1AdminAlertingInhibitions
+func NewGetApiV1AdminAlertingInhibitionsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/alerting/inhibitions/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1AdminAlertingInhibitionsRequest calls the generic PostApiV1AdminAlertingInhibitions builder with application/json body
+func NewPostApiV1AdminAlertingInhibitionsRequest(server string, body PostApiV1AdminAlertingInhibitionsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1AdminAlertingInhibitionsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiV1AdminAlertingInhibitionsRequestWithBody generates requests for PostApiV1AdminAlertingInhibitions with any type of body
+func NewPostApiV1AdminAlertingInhibitionsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/alerting/inhibitions/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1AdminAlertingInhibitionsIdRequest generates requests for DeleteApiV1AdminAlertingInhibitionsId
+func NewDeleteApiV1AdminAlertingInhibitionsIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/alerting/inhibitions/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1AdminAlertingInhibitionsIdRequest generates requests for GetApiV1AdminAlertingInhibitionsId
+func NewGetApiV1AdminAlertingInhibitionsIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/alerting/inhibitions/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutApiV1AdminAlertingInhibitionsIdRequest calls the generic PutApiV1AdminAlertingInhibitionsId builder with application/json body
+func NewPutApiV1AdminAlertingInhibitionsIdRequest(server string, id openapi_types.UUID, body PutApiV1AdminAlertingInhibitionsIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutApiV1AdminAlertingInhibitionsIdRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPutApiV1AdminAlertingInhibitionsIdRequestWithBody generates requests for PutApiV1AdminAlertingInhibitionsId with any type of body
+func NewPutApiV1AdminAlertingInhibitionsIdRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/alerting/inhibitions/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -16936,6 +17977,107 @@ func NewPutApiV1AdminNetworkPolicyTemplatesIdRequestWithBody(server string, id o
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetApiV1AdminScimTokensRequest generates requests for GetApiV1AdminScimTokens
+func NewGetApiV1AdminScimTokensRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/scim-tokens/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1AdminScimTokensRequest calls the generic PostApiV1AdminScimTokens builder with application/json body
+func NewPostApiV1AdminScimTokensRequest(server string, body PostApiV1AdminScimTokensJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1AdminScimTokensRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiV1AdminScimTokensRequestWithBody generates requests for PostApiV1AdminScimTokens with any type of body
+func NewPostApiV1AdminScimTokensRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/scim-tokens/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1AdminScimTokensIdRequest generates requests for DeleteApiV1AdminScimTokensId
+func NewDeleteApiV1AdminScimTokensIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/scim-tokens/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -23200,6 +24342,125 @@ func NewGetApiV1ClustersClusterIdApiserverAllowlistSnapshotsRequest(server strin
 	return req, nil
 }
 
+// NewGetApiV1ClustersClusterIdApiserverAuditRequest generates requests for GetApiV1ClustersClusterIdApiserverAudit
+func NewGetApiV1ClustersClusterIdApiserverAuditRequest(server string, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAuditParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/apiserver-audit/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClustersClusterIdApiserverAuditRequest calls the generic PostApiV1ClustersClusterIdApiserverAudit builder with application/json body
+func NewPostApiV1ClustersClusterIdApiserverAuditRequest(server string, clusterId openapi_types.UUID, body PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClustersClusterIdApiserverAuditRequestWithBody(server, clusterId, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClustersClusterIdApiserverAuditRequestWithBody generates requests for PostApiV1ClustersClusterIdApiserverAudit with any type of body
+func NewPostApiV1ClustersClusterIdApiserverAuditRequestWithBody(server string, clusterId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/apiserver-audit/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetApiV1ClustersClusterIdAppsRequest generates requests for GetApiV1ClustersClusterIdApps
 func NewGetApiV1ClustersClusterIdAppsRequest(server string, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdAppsParams) (*http.Request, error) {
 	var err error
@@ -24098,6 +25359,78 @@ func NewGetApiV1ClustersClusterIdPodsRequest(server string, clusterId openapi_ty
 		if params.Namespace != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClustersClusterIdPodsWatchRequest generates requests for GetApiV1ClustersClusterIdPodsWatch
+func NewGetApiV1ClustersClusterIdPodsWatchRequest(server string, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsWatchParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/pods/watch/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Namespace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Ticket != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "ticket", runtime.ParamLocationQuery, *params.Ticket); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -27273,6 +28606,74 @@ func NewGetApiV1ClustersIdRequest(server string, id openapi_types.UUID) (*http.R
 	return req, nil
 }
 
+// NewPostApiV1ClustersIdAgentTokenRevokeRequest generates requests for PostApiV1ClustersIdAgentTokenRevoke
+func NewPostApiV1ClustersIdAgentTokenRevokeRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/agent-token/revoke/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClustersIdAgentTokenRotateRequest generates requests for PostApiV1ClustersIdAgentTokenRotate
+func NewPostApiV1ClustersIdAgentTokenRotateRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/agent-token/rotate/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ClustersIdConditionRemediationRequest generates requests for GetApiV1ClustersIdConditionRemediation
 func NewGetApiV1ClustersIdConditionRemediationRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -27368,6 +28769,175 @@ func NewGetApiV1ClustersIdDecommissionRequest(server string, id openapi_types.UU
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ClustersIdGatekeeperConstraintsRequest generates requests for GetApiV1ClustersIdGatekeeperConstraints
+func NewGetApiV1ClustersIdGatekeeperConstraintsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/gatekeeper/constraints/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostApiV1ClustersIdGatekeeperConstraintsRequest calls the generic PostApiV1ClustersIdGatekeeperConstraints builder with application/json body
+func NewPostApiV1ClustersIdGatekeeperConstraintsRequest(server string, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClustersIdGatekeeperConstraintsRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClustersIdGatekeeperConstraintsRequestWithBody generates requests for PostApiV1ClustersIdGatekeeperConstraints with any type of body
+func NewPostApiV1ClustersIdGatekeeperConstraintsRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/gatekeeper/constraints/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequest calls the generic PostApiV1ClustersIdGatekeeperConstraintsValidate builder with application/json body
+func NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequest(server string, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequestWithBody generates requests for PostApiV1ClustersIdGatekeeperConstraintsValidate with any type of body
+func NewPostApiV1ClustersIdGatekeeperConstraintsValidateRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/gatekeeper/constraints/validate/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteApiV1ClustersIdGatekeeperConstraintsNameRequest generates requests for DeleteApiV1ClustersIdGatekeeperConstraintsName
+func NewDeleteApiV1ClustersIdGatekeeperConstraintsNameRequest(server string, id openapi_types.UUID, name string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/gatekeeper/constraints/%s/", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -28626,6 +30196,33 @@ func NewPostApiV1ExtensionsRequestWithBody(server string, contentType string, bo
 	return req, nil
 }
 
+// NewGetApiV1ExtensionsMountsRequest generates requests for GetApiV1ExtensionsMounts
+func NewGetApiV1ExtensionsMountsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/extensions/mounts/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1ExtensionsSampleManifestRequest generates requests for GetApiV1ExtensionsSampleManifest
 func NewGetApiV1ExtensionsSampleManifestRequest(server string) (*http.Request, error) {
 	var err error
@@ -28689,6 +30286,115 @@ func NewPostApiV1ExtensionsValidateRequestWithBody(server string, contentType st
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostApiV1ExtensionsVerifyBundleRequest calls the generic PostApiV1ExtensionsVerifyBundle builder with application/json body
+func NewPostApiV1ExtensionsVerifyBundleRequest(server string, body PostApiV1ExtensionsVerifyBundleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ExtensionsVerifyBundleRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostApiV1ExtensionsVerifyBundleRequestWithBody generates requests for PostApiV1ExtensionsVerifyBundle with any type of body
+func NewPostApiV1ExtensionsVerifyBundleRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/extensions/verify-bundle/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostApiV1ExtensionsNameDataDataSourceIdRequest calls the generic PostApiV1ExtensionsNameDataDataSourceId builder with application/json body
+func NewPostApiV1ExtensionsNameDataDataSourceIdRequest(server string, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, body PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ExtensionsNameDataDataSourceIdRequestWithBody(server, name, dataSourceId, params, "application/json", bodyReader)
+}
+
+// NewPostApiV1ExtensionsNameDataDataSourceIdRequestWithBody generates requests for PostApiV1ExtensionsNameDataDataSourceId with any type of body
+func NewPostApiV1ExtensionsNameDataDataSourceIdRequestWithBody(server string, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "dataSourceId", runtime.ParamLocationPath, dataSourceId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/extensions/%s/data/%s/", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XExtensionTicket != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-Extension-Ticket", runtime.ParamLocationHeader, *params.XExtensionTicket)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-Extension-Ticket", headerParam0)
+		}
+
+	}
 
 	return req, nil
 }
@@ -28757,6 +30463,53 @@ func NewPostApiV1ExtensionsNameEnableRequest(server string, name string) (*http.
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPostApiV1ExtensionsNameTokenRequest calls the generic PostApiV1ExtensionsNameToken builder with application/json body
+func NewPostApiV1ExtensionsNameTokenRequest(server string, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ExtensionsNameTokenRequestWithBody(server, name, "application/json", bodyReader)
+}
+
+// NewPostApiV1ExtensionsNameTokenRequestWithBody generates requests for PostApiV1ExtensionsNameToken with any type of body
+func NewPostApiV1ExtensionsNameTokenRequestWithBody(server string, name string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/extensions/%s/token/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -33101,6 +34854,70 @@ func NewGetApiV1RegisterCaCrtRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetApiV1RegisterSignedClusterIdRequest generates requests for GetApiV1RegisterSignedClusterId
+func NewGetApiV1RegisterSignedClusterIdRequest(server string, clusterId openapi_types.UUID, params *GetApiV1RegisterSignedClusterIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/register/signed/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "expires", runtime.ParamLocationQuery, params.Expires); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sig", runtime.ParamLocationQuery, params.Sig); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetApiV1RegisterTokenRequest generates requests for GetApiV1RegisterToken
 func NewGetApiV1RegisterTokenRequest(server string, token string) (*http.Request, error) {
 	var err error
@@ -35597,6 +37414,351 @@ func NewInternalTunnelK8sRequestWithBody(server string, clusterId openapi_types.
 	return req, nil
 }
 
+// NewGetScimV2GroupsRequest generates requests for GetScimV2Groups
+func NewGetScimV2GroupsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Groups")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetScimV2GroupsIdRequest generates requests for GetScimV2GroupsId
+func NewGetScimV2GroupsIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Groups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetScimV2ResourceTypesRequest generates requests for GetScimV2ResourceTypes
+func NewGetScimV2ResourceTypesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/ResourceTypes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetScimV2SchemasRequest generates requests for GetScimV2Schemas
+func NewGetScimV2SchemasRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Schemas")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetScimV2ServiceProviderConfigRequest generates requests for GetScimV2ServiceProviderConfig
+func NewGetScimV2ServiceProviderConfigRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/ServiceProviderConfig")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetScimV2UsersRequest generates requests for GetScimV2Users
+func NewGetScimV2UsersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostScimV2UsersRequest generates requests for PostScimV2Users
+func NewPostScimV2UsersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteScimV2UsersIdRequest generates requests for DeleteScimV2UsersId
+func NewDeleteScimV2UsersIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Users/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetScimV2UsersIdRequest generates requests for GetScimV2UsersId
+func NewGetScimV2UsersIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Users/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchScimV2UsersIdRequestWithApplicationScimPlusJSONBody calls the generic PatchScimV2UsersId builder with application/scim+json body
+func NewPatchScimV2UsersIdRequestWithApplicationScimPlusJSONBody(server string, id string, body PatchScimV2UsersIdApplicationScimPlusJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchScimV2UsersIdRequestWithBody(server, id, "application/scim+json", bodyReader)
+}
+
+// NewPatchScimV2UsersIdRequestWithBody generates requests for PatchScimV2UsersId with any type of body
+func NewPatchScimV2UsersIdRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Users/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutScimV2UsersIdRequest generates requests for PutScimV2UsersId
+func NewPutScimV2UsersIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/scim/v2/Users/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -35649,6 +37811,25 @@ type ClientWithResponsesInterface interface {
 	// AdminAgentsClusterAdminPostureWithResponse request
 	AdminAgentsClusterAdminPostureWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminAgentsClusterAdminPostureResponse, error)
 
+	// GetApiV1AdminAlertingInhibitionsWithResponse request
+	GetApiV1AdminAlertingInhibitionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AdminAlertingInhibitionsResponse, error)
+
+	// PostApiV1AdminAlertingInhibitionsWithBodyWithResponse request with any body
+	PostApiV1AdminAlertingInhibitionsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AdminAlertingInhibitionsResponse, error)
+
+	PostApiV1AdminAlertingInhibitionsWithResponse(ctx context.Context, body PostApiV1AdminAlertingInhibitionsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AdminAlertingInhibitionsResponse, error)
+
+	// DeleteApiV1AdminAlertingInhibitionsIdWithResponse request
+	DeleteApiV1AdminAlertingInhibitionsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiV1AdminAlertingInhibitionsIdResponse, error)
+
+	// GetApiV1AdminAlertingInhibitionsIdWithResponse request
+	GetApiV1AdminAlertingInhibitionsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1AdminAlertingInhibitionsIdResponse, error)
+
+	// PutApiV1AdminAlertingInhibitionsIdWithBodyWithResponse request with any body
+	PutApiV1AdminAlertingInhibitionsIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1AdminAlertingInhibitionsIdResponse, error)
+
+	PutApiV1AdminAlertingInhibitionsIdWithResponse(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminAlertingInhibitionsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1AdminAlertingInhibitionsIdResponse, error)
+
 	// GetApiV1AdminBackupDrillWithResponse request
 	GetApiV1AdminBackupDrillWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AdminBackupDrillResponse, error)
 
@@ -35676,6 +37857,17 @@ type ClientWithResponsesInterface interface {
 	PutApiV1AdminNetworkPolicyTemplatesIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1AdminNetworkPolicyTemplatesIdResponse, error)
 
 	PutApiV1AdminNetworkPolicyTemplatesIdWithResponse(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminNetworkPolicyTemplatesIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1AdminNetworkPolicyTemplatesIdResponse, error)
+
+	// GetApiV1AdminScimTokensWithResponse request
+	GetApiV1AdminScimTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AdminScimTokensResponse, error)
+
+	// PostApiV1AdminScimTokensWithBodyWithResponse request with any body
+	PostApiV1AdminScimTokensWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AdminScimTokensResponse, error)
+
+	PostApiV1AdminScimTokensWithResponse(ctx context.Context, body PostApiV1AdminScimTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AdminScimTokensResponse, error)
+
+	// DeleteApiV1AdminScimTokensIdWithResponse request
+	DeleteApiV1AdminScimTokensIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiV1AdminScimTokensIdResponse, error)
 
 	// AdminShellSessionsListWithResponse request
 	AdminShellSessionsListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminShellSessionsListResponse, error)
@@ -36173,6 +38365,14 @@ type ClientWithResponsesInterface interface {
 	// GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsWithResponse request
 	GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsResponse, error)
 
+	// GetApiV1ClustersClusterIdApiserverAuditWithResponse request
+	GetApiV1ClustersClusterIdApiserverAuditWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAuditParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdApiserverAuditResponse, error)
+
+	// PostApiV1ClustersClusterIdApiserverAuditWithBodyWithResponse request with any body
+	PostApiV1ClustersClusterIdApiserverAuditWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClustersClusterIdApiserverAuditResponse, error)
+
+	PostApiV1ClustersClusterIdApiserverAuditWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClustersClusterIdApiserverAuditResponse, error)
+
 	// GetApiV1ClustersClusterIdAppsWithResponse request
 	GetApiV1ClustersClusterIdAppsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdAppsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdAppsResponse, error)
 
@@ -36247,6 +38447,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiV1ClustersClusterIdPodsWithResponse request
 	GetApiV1ClustersClusterIdPodsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdPodsResponse, error)
+
+	// GetApiV1ClustersClusterIdPodsWatchWithResponse request
+	GetApiV1ClustersClusterIdPodsWatchWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsWatchParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdPodsWatchResponse, error)
 
 	// GetApiV1ClustersClusterIdProjectsWithResponse request
 	GetApiV1ClustersClusterIdProjectsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdProjectsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdProjectsResponse, error)
@@ -36487,6 +38690,12 @@ type ClientWithResponsesInterface interface {
 	// GetApiV1ClustersIdWithResponse request
 	GetApiV1ClustersIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdResponse, error)
 
+	// PostApiV1ClustersIdAgentTokenRevokeWithResponse request
+	PostApiV1ClustersIdAgentTokenRevokeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdAgentTokenRevokeResponse, error)
+
+	// PostApiV1ClustersIdAgentTokenRotateWithResponse request
+	PostApiV1ClustersIdAgentTokenRotateWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdAgentTokenRotateResponse, error)
+
 	// GetApiV1ClustersIdConditionRemediationWithResponse request
 	GetApiV1ClustersIdConditionRemediationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdConditionRemediationResponse, error)
 
@@ -36495,6 +38704,22 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiV1ClustersIdDecommissionWithResponse request
 	GetApiV1ClustersIdDecommissionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdDecommissionResponse, error)
+
+	// GetApiV1ClustersIdGatekeeperConstraintsWithResponse request
+	GetApiV1ClustersIdGatekeeperConstraintsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdGatekeeperConstraintsResponse, error)
+
+	// PostApiV1ClustersIdGatekeeperConstraintsWithBodyWithResponse request with any body
+	PostApiV1ClustersIdGatekeeperConstraintsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsResponse, error)
+
+	PostApiV1ClustersIdGatekeeperConstraintsWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsResponse, error)
+
+	// PostApiV1ClustersIdGatekeeperConstraintsValidateWithBodyWithResponse request with any body
+	PostApiV1ClustersIdGatekeeperConstraintsValidateWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsValidateResponse, error)
+
+	PostApiV1ClustersIdGatekeeperConstraintsValidateWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsValidateResponse, error)
+
+	// DeleteApiV1ClustersIdGatekeeperConstraintsNameWithResponse request
+	DeleteApiV1ClustersIdGatekeeperConstraintsNameWithResponse(ctx context.Context, id openapi_types.UUID, name string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse, error)
 
 	// PostApiV1ClustersIdGenerateKubeconfigWithResponse request
 	PostApiV1ClustersIdGenerateKubeconfigWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGenerateKubeconfigResponse, error)
@@ -36607,6 +38832,9 @@ type ClientWithResponsesInterface interface {
 
 	PostApiV1ExtensionsWithResponse(ctx context.Context, body PostApiV1ExtensionsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsResponse, error)
 
+	// GetApiV1ExtensionsMountsWithResponse request
+	GetApiV1ExtensionsMountsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ExtensionsMountsResponse, error)
+
 	// GetApiV1ExtensionsSampleManifestWithResponse request
 	GetApiV1ExtensionsSampleManifestWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ExtensionsSampleManifestResponse, error)
 
@@ -36615,11 +38843,26 @@ type ClientWithResponsesInterface interface {
 
 	PostApiV1ExtensionsValidateWithResponse(ctx context.Context, body PostApiV1ExtensionsValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsValidateResponse, error)
 
+	// PostApiV1ExtensionsVerifyBundleWithBodyWithResponse request with any body
+	PostApiV1ExtensionsVerifyBundleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsVerifyBundleResponse, error)
+
+	PostApiV1ExtensionsVerifyBundleWithResponse(ctx context.Context, body PostApiV1ExtensionsVerifyBundleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsVerifyBundleResponse, error)
+
+	// PostApiV1ExtensionsNameDataDataSourceIdWithBodyWithResponse request with any body
+	PostApiV1ExtensionsNameDataDataSourceIdWithBodyWithResponse(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameDataDataSourceIdResponse, error)
+
+	PostApiV1ExtensionsNameDataDataSourceIdWithResponse(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, body PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameDataDataSourceIdResponse, error)
+
 	// PostApiV1ExtensionsNameDisableWithResponse request
 	PostApiV1ExtensionsNameDisableWithResponse(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameDisableResponse, error)
 
 	// PostApiV1ExtensionsNameEnableWithResponse request
 	PostApiV1ExtensionsNameEnableWithResponse(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameEnableResponse, error)
+
+	// PostApiV1ExtensionsNameTokenWithBodyWithResponse request with any body
+	PostApiV1ExtensionsNameTokenWithBodyWithResponse(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameTokenResponse, error)
+
+	PostApiV1ExtensionsNameTokenWithResponse(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameTokenResponse, error)
 
 	// GetApiV1FleetOperationsWithResponse request
 	GetApiV1FleetOperationsWithResponse(ctx context.Context, params *GetApiV1FleetOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1FleetOperationsResponse, error)
@@ -36970,6 +39213,9 @@ type ClientWithResponsesInterface interface {
 	// GetApiV1RegisterCaCrtWithResponse request
 	GetApiV1RegisterCaCrtWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1RegisterCaCrtResponse, error)
 
+	// GetApiV1RegisterSignedClusterIdWithResponse request
+	GetApiV1RegisterSignedClusterIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1RegisterSignedClusterIdParams, reqEditors ...RequestEditorFn) (*GetApiV1RegisterSignedClusterIdResponse, error)
+
 	// GetApiV1RegisterTokenWithResponse request
 	GetApiV1RegisterTokenWithResponse(ctx context.Context, token string, reqEditors ...RequestEditorFn) (*GetApiV1RegisterTokenResponse, error)
 
@@ -37157,6 +39403,41 @@ type ClientWithResponsesInterface interface {
 	InternalTunnelK8sWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *InternalTunnelK8sParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalTunnelK8sResponse, error)
 
 	InternalTunnelK8sWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *InternalTunnelK8sParams, body InternalTunnelK8sJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalTunnelK8sResponse, error)
+
+	// GetScimV2GroupsWithResponse request
+	GetScimV2GroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2GroupsResponse, error)
+
+	// GetScimV2GroupsIdWithResponse request
+	GetScimV2GroupsIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetScimV2GroupsIdResponse, error)
+
+	// GetScimV2ResourceTypesWithResponse request
+	GetScimV2ResourceTypesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2ResourceTypesResponse, error)
+
+	// GetScimV2SchemasWithResponse request
+	GetScimV2SchemasWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2SchemasResponse, error)
+
+	// GetScimV2ServiceProviderConfigWithResponse request
+	GetScimV2ServiceProviderConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2ServiceProviderConfigResponse, error)
+
+	// GetScimV2UsersWithResponse request
+	GetScimV2UsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2UsersResponse, error)
+
+	// PostScimV2UsersWithResponse request
+	PostScimV2UsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostScimV2UsersResponse, error)
+
+	// DeleteScimV2UsersIdWithResponse request
+	DeleteScimV2UsersIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteScimV2UsersIdResponse, error)
+
+	// GetScimV2UsersIdWithResponse request
+	GetScimV2UsersIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetScimV2UsersIdResponse, error)
+
+	// PatchScimV2UsersIdWithBodyWithResponse request with any body
+	PatchScimV2UsersIdWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchScimV2UsersIdResponse, error)
+
+	PatchScimV2UsersIdWithApplicationScimPlusJSONBodyWithResponse(ctx context.Context, id string, body PatchScimV2UsersIdApplicationScimPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchScimV2UsersIdResponse, error)
+
+	// PutScimV2UsersIdWithResponse request
+	PutScimV2UsersIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PutScimV2UsersIdResponse, error)
 }
 
 type GetApiV1ActivityResponse struct {
@@ -37241,6 +39522,111 @@ func (r AdminAgentsClusterAdminPostureResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminAgentsClusterAdminPostureResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1AdminAlertingInhibitionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1AdminAlertingInhibitionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1AdminAlertingInhibitionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1AdminAlertingInhibitionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1AdminAlertingInhibitionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1AdminAlertingInhibitionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1AdminAlertingInhibitionsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1AdminAlertingInhibitionsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1AdminAlertingInhibitionsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1AdminAlertingInhibitionsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1AdminAlertingInhibitionsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1AdminAlertingInhibitionsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutApiV1AdminAlertingInhibitionsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PutApiV1AdminAlertingInhibitionsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutApiV1AdminAlertingInhibitionsIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -37466,6 +39852,93 @@ func (r PutApiV1AdminNetworkPolicyTemplatesIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PutApiV1AdminNetworkPolicyTemplatesIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1AdminScimTokensResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Tokens *[]struct {
+			CreatedAt  *string             `json:"created_at,omitempty"`
+			Id         *openapi_types.UUID `json:"id,omitempty"`
+			LastUsedAt *string             `json:"last_used_at"`
+			Name       *string             `json:"name,omitempty"`
+			Prefix     *string             `json:"prefix,omitempty"`
+		} `json:"tokens,omitempty"`
+	}
+	JSON403 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1AdminScimTokensResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1AdminScimTokensResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1AdminScimTokensResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *struct {
+		CreatedAt  *string             `json:"created_at,omitempty"`
+		Id         *openapi_types.UUID `json:"id,omitempty"`
+		LastUsedAt *string             `json:"last_used_at"`
+		Name       *string             `json:"name,omitempty"`
+		Prefix     *string             `json:"prefix,omitempty"`
+
+		// Token Plaintext bearer token, returned only on create.
+		Token *string `json:"token,omitempty"`
+	}
+	JSON400 *ErrorEnvelope
+	JSON403 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1AdminScimTokensResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1AdminScimTokensResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1AdminScimTokensIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorEnvelope
+	JSON403      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1AdminScimTokensIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1AdminScimTokensIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -41211,6 +43684,56 @@ func (r GetApiV1ClustersClusterIdApiserverAllowlistSnapshotsResponse) StatusCode
 	return 0
 }
 
+type GetApiV1ClustersClusterIdApiserverAuditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data  *[]map[string]interface{} `json:"data,omitempty"`
+		Total *int                      `json:"total,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClustersClusterIdApiserverAuditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClustersClusterIdApiserverAuditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClustersClusterIdApiserverAuditResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *struct {
+		Accepted *int `json:"accepted,omitempty"`
+		Skipped  *int `json:"skipped,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClustersClusterIdApiserverAuditResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClustersClusterIdApiserverAuditResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1ClustersClusterIdAppsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -41722,6 +44245,31 @@ func (r GetApiV1ClustersClusterIdPodsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1ClustersClusterIdPodsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClustersClusterIdPodsWatchResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON501      *Error
+	JSON503      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClustersClusterIdPodsWatchResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClustersClusterIdPodsWatchResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -43374,6 +45922,53 @@ func (r GetApiV1ClustersIdResponse) StatusCode() int {
 	return 0
 }
 
+type PostApiV1ClustersIdAgentTokenRevokeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DataEnvelope
+	JSON404      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClustersIdAgentTokenRevokeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClustersIdAgentTokenRevokeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClustersIdAgentTokenRotateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *DataEnvelope
+	JSON404      *ErrorEnvelope
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClustersIdAgentTokenRotateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClustersIdAgentTokenRotateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1ClustersIdConditionRemediationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -43444,6 +46039,98 @@ func (r GetApiV1ClustersIdDecommissionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1ClustersIdDecommissionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ClustersIdGatekeeperConstraintsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ClustersIdGatekeeperConstraintsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ClustersIdGatekeeperConstraintsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClustersIdGatekeeperConstraintsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *struct {
+		// Data Result of validating (and optionally applying) a constraint (P-04).
+		Data ConstraintValidationResponse `json:"data"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClustersIdGatekeeperConstraintsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClustersIdGatekeeperConstraintsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ClustersIdGatekeeperConstraintsValidateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		// Data Result of validating (and optionally applying) a constraint (P-04).
+		Data ConstraintValidationResponse `json:"data"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ClustersIdGatekeeperConstraintsValidateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ClustersIdGatekeeperConstraintsValidateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -44305,6 +46992,31 @@ func (r PostApiV1ExtensionsResponse) StatusCode() int {
 	return 0
 }
 
+type GetApiV1ExtensionsMountsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		// Data Enabled-extensions surface (§HostMounts), indexed by mount point. Only enabled, compatible extensions appear; Tier-2 points additionally require a verified bundle.
+		Data *ExtensionMountsResponse `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ExtensionsMountsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ExtensionsMountsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1ExtensionsSampleManifestResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -44353,6 +47065,66 @@ func (r PostApiV1ExtensionsValidateResponse) StatusCode() int {
 	return 0
 }
 
+type PostApiV1ExtensionsVerifyBundleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *struct {
+			Checksum *string `json:"checksum,omitempty"`
+
+			// Gated Whether the named extension's Tier-2 mount gate was lifted (bundle_verified set true) by this verification.
+			Gated    *bool `json:"gated,omitempty"`
+			Verified *bool `json:"verified,omitempty"`
+		} `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ExtensionsVerifyBundleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ExtensionsVerifyBundleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ExtensionsNameDataDataSourceIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *struct {
+			// Data rows (list), value (object/series).
+			Data  *map[string]interface{}                              `json:"data,omitempty"`
+			Meta  *map[string]interface{}                              `json:"meta,omitempty"`
+			Shape *PostApiV1ExtensionsNameDataDataSourceId200DataShape `json:"shape,omitempty"`
+		} `json:"data,omitempty"`
+	}
+}
+type PostApiV1ExtensionsNameDataDataSourceId200DataShape string
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ExtensionsNameDataDataSourceIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ExtensionsNameDataDataSourceIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostApiV1ExtensionsNameDisableResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -44395,6 +47167,35 @@ func (r PostApiV1ExtensionsNameEnableResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiV1ExtensionsNameEnableResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ExtensionsNameTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *struct {
+		Data *struct {
+			DataSource *string    `json:"dataSource,omitempty"`
+			ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+			Scope      *string    `json:"scope,omitempty"`
+			Token      *string    `json:"token,omitempty"`
+		} `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ExtensionsNameTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ExtensionsNameTokenResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -47009,6 +49810,30 @@ func (r GetApiV1RegisterCaCrtResponse) StatusCode() int {
 	return 0
 }
 
+type GetApiV1RegisterSignedClusterIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	YAML200      *string
+	JSON400      *ErrorEnvelope
+	JSON404      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1RegisterSignedClusterIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1RegisterSignedClusterIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1RegisterTokenResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -48350,6 +51175,237 @@ func (r InternalTunnelK8sResponse) StatusCode() int {
 	return 0
 }
 
+type GetScimV2GroupsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2GroupsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2GroupsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetScimV2GroupsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2GroupsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2GroupsIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetScimV2ResourceTypesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2ResourceTypesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2ResourceTypesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetScimV2SchemasResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2SchemasResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2SchemasResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetScimV2ServiceProviderConfigResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2ServiceProviderConfigResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2ServiceProviderConfigResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetScimV2UsersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2UsersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2UsersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostScimV2UsersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PostScimV2UsersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostScimV2UsersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteScimV2UsersIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteScimV2UsersIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteScimV2UsersIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetScimV2UsersIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScimV2UsersIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScimV2UsersIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchScimV2UsersIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchScimV2UsersIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchScimV2UsersIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutScimV2UsersIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PutScimV2UsersIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutScimV2UsersIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // GetApiV1ActivityWithResponse request returning *GetApiV1ActivityResponse
 func (c *ClientWithResponses) GetApiV1ActivityWithResponse(ctx context.Context, params *GetApiV1ActivityParams, reqEditors ...RequestEditorFn) (*GetApiV1ActivityResponse, error) {
 	rsp, err := c.GetApiV1Activity(ctx, params, reqEditors...)
@@ -48375,6 +51431,67 @@ func (c *ClientWithResponses) AdminAgentsClusterAdminPostureWithResponse(ctx con
 		return nil, err
 	}
 	return ParseAdminAgentsClusterAdminPostureResponse(rsp)
+}
+
+// GetApiV1AdminAlertingInhibitionsWithResponse request returning *GetApiV1AdminAlertingInhibitionsResponse
+func (c *ClientWithResponses) GetApiV1AdminAlertingInhibitionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AdminAlertingInhibitionsResponse, error) {
+	rsp, err := c.GetApiV1AdminAlertingInhibitions(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1AdminAlertingInhibitionsResponse(rsp)
+}
+
+// PostApiV1AdminAlertingInhibitionsWithBodyWithResponse request with arbitrary body returning *PostApiV1AdminAlertingInhibitionsResponse
+func (c *ClientWithResponses) PostApiV1AdminAlertingInhibitionsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AdminAlertingInhibitionsResponse, error) {
+	rsp, err := c.PostApiV1AdminAlertingInhibitionsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AdminAlertingInhibitionsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1AdminAlertingInhibitionsWithResponse(ctx context.Context, body PostApiV1AdminAlertingInhibitionsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AdminAlertingInhibitionsResponse, error) {
+	rsp, err := c.PostApiV1AdminAlertingInhibitions(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AdminAlertingInhibitionsResponse(rsp)
+}
+
+// DeleteApiV1AdminAlertingInhibitionsIdWithResponse request returning *DeleteApiV1AdminAlertingInhibitionsIdResponse
+func (c *ClientWithResponses) DeleteApiV1AdminAlertingInhibitionsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiV1AdminAlertingInhibitionsIdResponse, error) {
+	rsp, err := c.DeleteApiV1AdminAlertingInhibitionsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1AdminAlertingInhibitionsIdResponse(rsp)
+}
+
+// GetApiV1AdminAlertingInhibitionsIdWithResponse request returning *GetApiV1AdminAlertingInhibitionsIdResponse
+func (c *ClientWithResponses) GetApiV1AdminAlertingInhibitionsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1AdminAlertingInhibitionsIdResponse, error) {
+	rsp, err := c.GetApiV1AdminAlertingInhibitionsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1AdminAlertingInhibitionsIdResponse(rsp)
+}
+
+// PutApiV1AdminAlertingInhibitionsIdWithBodyWithResponse request with arbitrary body returning *PutApiV1AdminAlertingInhibitionsIdResponse
+func (c *ClientWithResponses) PutApiV1AdminAlertingInhibitionsIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1AdminAlertingInhibitionsIdResponse, error) {
+	rsp, err := c.PutApiV1AdminAlertingInhibitionsIdWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutApiV1AdminAlertingInhibitionsIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutApiV1AdminAlertingInhibitionsIdWithResponse(ctx context.Context, id openapi_types.UUID, body PutApiV1AdminAlertingInhibitionsIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutApiV1AdminAlertingInhibitionsIdResponse, error) {
+	rsp, err := c.PutApiV1AdminAlertingInhibitionsId(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutApiV1AdminAlertingInhibitionsIdResponse(rsp)
 }
 
 // GetApiV1AdminBackupDrillWithResponse request returning *GetApiV1AdminBackupDrillResponse
@@ -48463,6 +51580,41 @@ func (c *ClientWithResponses) PutApiV1AdminNetworkPolicyTemplatesIdWithResponse(
 		return nil, err
 	}
 	return ParsePutApiV1AdminNetworkPolicyTemplatesIdResponse(rsp)
+}
+
+// GetApiV1AdminScimTokensWithResponse request returning *GetApiV1AdminScimTokensResponse
+func (c *ClientWithResponses) GetApiV1AdminScimTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AdminScimTokensResponse, error) {
+	rsp, err := c.GetApiV1AdminScimTokens(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1AdminScimTokensResponse(rsp)
+}
+
+// PostApiV1AdminScimTokensWithBodyWithResponse request with arbitrary body returning *PostApiV1AdminScimTokensResponse
+func (c *ClientWithResponses) PostApiV1AdminScimTokensWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1AdminScimTokensResponse, error) {
+	rsp, err := c.PostApiV1AdminScimTokensWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AdminScimTokensResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1AdminScimTokensWithResponse(ctx context.Context, body PostApiV1AdminScimTokensJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1AdminScimTokensResponse, error) {
+	rsp, err := c.PostApiV1AdminScimTokens(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1AdminScimTokensResponse(rsp)
+}
+
+// DeleteApiV1AdminScimTokensIdWithResponse request returning *DeleteApiV1AdminScimTokensIdResponse
+func (c *ClientWithResponses) DeleteApiV1AdminScimTokensIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiV1AdminScimTokensIdResponse, error) {
+	rsp, err := c.DeleteApiV1AdminScimTokensId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1AdminScimTokensIdResponse(rsp)
 }
 
 // AdminShellSessionsListWithResponse request returning *AdminShellSessionsListResponse
@@ -50041,6 +53193,32 @@ func (c *ClientWithResponses) GetApiV1ClustersClusterIdApiserverAllowlistSnapsho
 	return ParseGetApiV1ClustersClusterIdApiserverAllowlistSnapshotsResponse(rsp)
 }
 
+// GetApiV1ClustersClusterIdApiserverAuditWithResponse request returning *GetApiV1ClustersClusterIdApiserverAuditResponse
+func (c *ClientWithResponses) GetApiV1ClustersClusterIdApiserverAuditWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdApiserverAuditParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdApiserverAuditResponse, error) {
+	rsp, err := c.GetApiV1ClustersClusterIdApiserverAudit(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClustersClusterIdApiserverAuditResponse(rsp)
+}
+
+// PostApiV1ClustersClusterIdApiserverAuditWithBodyWithResponse request with arbitrary body returning *PostApiV1ClustersClusterIdApiserverAuditResponse
+func (c *ClientWithResponses) PostApiV1ClustersClusterIdApiserverAuditWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClustersClusterIdApiserverAuditResponse, error) {
+	rsp, err := c.PostApiV1ClustersClusterIdApiserverAuditWithBody(ctx, clusterId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersClusterIdApiserverAuditResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClustersClusterIdApiserverAuditWithResponse(ctx context.Context, clusterId openapi_types.UUID, body PostApiV1ClustersClusterIdApiserverAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClustersClusterIdApiserverAuditResponse, error) {
+	rsp, err := c.PostApiV1ClustersClusterIdApiserverAudit(ctx, clusterId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersClusterIdApiserverAuditResponse(rsp)
+}
+
 // GetApiV1ClustersClusterIdAppsWithResponse request returning *GetApiV1ClustersClusterIdAppsResponse
 func (c *ClientWithResponses) GetApiV1ClustersClusterIdAppsWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdAppsParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdAppsResponse, error) {
 	rsp, err := c.GetApiV1ClustersClusterIdApps(ctx, clusterId, params, reqEditors...)
@@ -50282,6 +53460,15 @@ func (c *ClientWithResponses) GetApiV1ClustersClusterIdPodsWithResponse(ctx cont
 		return nil, err
 	}
 	return ParseGetApiV1ClustersClusterIdPodsResponse(rsp)
+}
+
+// GetApiV1ClustersClusterIdPodsWatchWithResponse request returning *GetApiV1ClustersClusterIdPodsWatchResponse
+func (c *ClientWithResponses) GetApiV1ClustersClusterIdPodsWatchWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1ClustersClusterIdPodsWatchParams, reqEditors ...RequestEditorFn) (*GetApiV1ClustersClusterIdPodsWatchResponse, error) {
+	rsp, err := c.GetApiV1ClustersClusterIdPodsWatch(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClustersClusterIdPodsWatchResponse(rsp)
 }
 
 // GetApiV1ClustersClusterIdProjectsWithResponse request returning *GetApiV1ClustersClusterIdProjectsResponse
@@ -51057,6 +54244,24 @@ func (c *ClientWithResponses) GetApiV1ClustersIdWithResponse(ctx context.Context
 	return ParseGetApiV1ClustersIdResponse(rsp)
 }
 
+// PostApiV1ClustersIdAgentTokenRevokeWithResponse request returning *PostApiV1ClustersIdAgentTokenRevokeResponse
+func (c *ClientWithResponses) PostApiV1ClustersIdAgentTokenRevokeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdAgentTokenRevokeResponse, error) {
+	rsp, err := c.PostApiV1ClustersIdAgentTokenRevoke(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersIdAgentTokenRevokeResponse(rsp)
+}
+
+// PostApiV1ClustersIdAgentTokenRotateWithResponse request returning *PostApiV1ClustersIdAgentTokenRotateResponse
+func (c *ClientWithResponses) PostApiV1ClustersIdAgentTokenRotateWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdAgentTokenRotateResponse, error) {
+	rsp, err := c.PostApiV1ClustersIdAgentTokenRotate(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersIdAgentTokenRotateResponse(rsp)
+}
+
 // GetApiV1ClustersIdConditionRemediationWithResponse request returning *GetApiV1ClustersIdConditionRemediationResponse
 func (c *ClientWithResponses) GetApiV1ClustersIdConditionRemediationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdConditionRemediationResponse, error) {
 	rsp, err := c.GetApiV1ClustersIdConditionRemediation(ctx, id, reqEditors...)
@@ -51082,6 +54287,58 @@ func (c *ClientWithResponses) GetApiV1ClustersIdDecommissionWithResponse(ctx con
 		return nil, err
 	}
 	return ParseGetApiV1ClustersIdDecommissionResponse(rsp)
+}
+
+// GetApiV1ClustersIdGatekeeperConstraintsWithResponse request returning *GetApiV1ClustersIdGatekeeperConstraintsResponse
+func (c *ClientWithResponses) GetApiV1ClustersIdGatekeeperConstraintsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdGatekeeperConstraintsResponse, error) {
+	rsp, err := c.GetApiV1ClustersIdGatekeeperConstraints(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ClustersIdGatekeeperConstraintsResponse(rsp)
+}
+
+// PostApiV1ClustersIdGatekeeperConstraintsWithBodyWithResponse request with arbitrary body returning *PostApiV1ClustersIdGatekeeperConstraintsResponse
+func (c *ClientWithResponses) PostApiV1ClustersIdGatekeeperConstraintsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsResponse, error) {
+	rsp, err := c.PostApiV1ClustersIdGatekeeperConstraintsWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersIdGatekeeperConstraintsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClustersIdGatekeeperConstraintsWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsResponse, error) {
+	rsp, err := c.PostApiV1ClustersIdGatekeeperConstraints(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersIdGatekeeperConstraintsResponse(rsp)
+}
+
+// PostApiV1ClustersIdGatekeeperConstraintsValidateWithBodyWithResponse request with arbitrary body returning *PostApiV1ClustersIdGatekeeperConstraintsValidateResponse
+func (c *ClientWithResponses) PostApiV1ClustersIdGatekeeperConstraintsValidateWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsValidateResponse, error) {
+	rsp, err := c.PostApiV1ClustersIdGatekeeperConstraintsValidateWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersIdGatekeeperConstraintsValidateResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ClustersIdGatekeeperConstraintsValidateWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ClustersIdGatekeeperConstraintsValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdGatekeeperConstraintsValidateResponse, error) {
+	rsp, err := c.PostApiV1ClustersIdGatekeeperConstraintsValidate(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ClustersIdGatekeeperConstraintsValidateResponse(rsp)
+}
+
+// DeleteApiV1ClustersIdGatekeeperConstraintsNameWithResponse request returning *DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse
+func (c *ClientWithResponses) DeleteApiV1ClustersIdGatekeeperConstraintsNameWithResponse(ctx context.Context, id openapi_types.UUID, name string, reqEditors ...RequestEditorFn) (*DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse, error) {
+	rsp, err := c.DeleteApiV1ClustersIdGatekeeperConstraintsName(ctx, id, name, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiV1ClustersIdGatekeeperConstraintsNameResponse(rsp)
 }
 
 // PostApiV1ClustersIdGenerateKubeconfigWithResponse request returning *PostApiV1ClustersIdGenerateKubeconfigResponse
@@ -51423,6 +54680,15 @@ func (c *ClientWithResponses) PostApiV1ExtensionsWithResponse(ctx context.Contex
 	return ParsePostApiV1ExtensionsResponse(rsp)
 }
 
+// GetApiV1ExtensionsMountsWithResponse request returning *GetApiV1ExtensionsMountsResponse
+func (c *ClientWithResponses) GetApiV1ExtensionsMountsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ExtensionsMountsResponse, error) {
+	rsp, err := c.GetApiV1ExtensionsMounts(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ExtensionsMountsResponse(rsp)
+}
+
 // GetApiV1ExtensionsSampleManifestWithResponse request returning *GetApiV1ExtensionsSampleManifestResponse
 func (c *ClientWithResponses) GetApiV1ExtensionsSampleManifestWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ExtensionsSampleManifestResponse, error) {
 	rsp, err := c.GetApiV1ExtensionsSampleManifest(ctx, reqEditors...)
@@ -51449,6 +54715,40 @@ func (c *ClientWithResponses) PostApiV1ExtensionsValidateWithResponse(ctx contex
 	return ParsePostApiV1ExtensionsValidateResponse(rsp)
 }
 
+// PostApiV1ExtensionsVerifyBundleWithBodyWithResponse request with arbitrary body returning *PostApiV1ExtensionsVerifyBundleResponse
+func (c *ClientWithResponses) PostApiV1ExtensionsVerifyBundleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsVerifyBundleResponse, error) {
+	rsp, err := c.PostApiV1ExtensionsVerifyBundleWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ExtensionsVerifyBundleResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ExtensionsVerifyBundleWithResponse(ctx context.Context, body PostApiV1ExtensionsVerifyBundleJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsVerifyBundleResponse, error) {
+	rsp, err := c.PostApiV1ExtensionsVerifyBundle(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ExtensionsVerifyBundleResponse(rsp)
+}
+
+// PostApiV1ExtensionsNameDataDataSourceIdWithBodyWithResponse request with arbitrary body returning *PostApiV1ExtensionsNameDataDataSourceIdResponse
+func (c *ClientWithResponses) PostApiV1ExtensionsNameDataDataSourceIdWithBodyWithResponse(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameDataDataSourceIdResponse, error) {
+	rsp, err := c.PostApiV1ExtensionsNameDataDataSourceIdWithBody(ctx, name, dataSourceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ExtensionsNameDataDataSourceIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ExtensionsNameDataDataSourceIdWithResponse(ctx context.Context, name string, dataSourceId string, params *PostApiV1ExtensionsNameDataDataSourceIdParams, body PostApiV1ExtensionsNameDataDataSourceIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameDataDataSourceIdResponse, error) {
+	rsp, err := c.PostApiV1ExtensionsNameDataDataSourceId(ctx, name, dataSourceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ExtensionsNameDataDataSourceIdResponse(rsp)
+}
+
 // PostApiV1ExtensionsNameDisableWithResponse request returning *PostApiV1ExtensionsNameDisableResponse
 func (c *ClientWithResponses) PostApiV1ExtensionsNameDisableWithResponse(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameDisableResponse, error) {
 	rsp, err := c.PostApiV1ExtensionsNameDisable(ctx, name, reqEditors...)
@@ -51465,6 +54765,23 @@ func (c *ClientWithResponses) PostApiV1ExtensionsNameEnableWithResponse(ctx cont
 		return nil, err
 	}
 	return ParsePostApiV1ExtensionsNameEnableResponse(rsp)
+}
+
+// PostApiV1ExtensionsNameTokenWithBodyWithResponse request with arbitrary body returning *PostApiV1ExtensionsNameTokenResponse
+func (c *ClientWithResponses) PostApiV1ExtensionsNameTokenWithBodyWithResponse(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameTokenResponse, error) {
+	rsp, err := c.PostApiV1ExtensionsNameTokenWithBody(ctx, name, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ExtensionsNameTokenResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ExtensionsNameTokenWithResponse(ctx context.Context, name string, body PostApiV1ExtensionsNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ExtensionsNameTokenResponse, error) {
+	rsp, err := c.PostApiV1ExtensionsNameToken(ctx, name, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ExtensionsNameTokenResponse(rsp)
 }
 
 // GetApiV1FleetOperationsWithResponse request returning *GetApiV1FleetOperationsResponse
@@ -52584,6 +55901,15 @@ func (c *ClientWithResponses) GetApiV1RegisterCaCrtWithResponse(ctx context.Cont
 	return ParseGetApiV1RegisterCaCrtResponse(rsp)
 }
 
+// GetApiV1RegisterSignedClusterIdWithResponse request returning *GetApiV1RegisterSignedClusterIdResponse
+func (c *ClientWithResponses) GetApiV1RegisterSignedClusterIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetApiV1RegisterSignedClusterIdParams, reqEditors ...RequestEditorFn) (*GetApiV1RegisterSignedClusterIdResponse, error) {
+	rsp, err := c.GetApiV1RegisterSignedClusterId(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1RegisterSignedClusterIdResponse(rsp)
+}
+
 // GetApiV1RegisterTokenWithResponse request returning *GetApiV1RegisterTokenResponse
 func (c *ClientWithResponses) GetApiV1RegisterTokenWithResponse(ctx context.Context, token string, reqEditors ...RequestEditorFn) (*GetApiV1RegisterTokenResponse, error) {
 	rsp, err := c.GetApiV1RegisterToken(ctx, token, reqEditors...)
@@ -53180,6 +56506,113 @@ func (c *ClientWithResponses) InternalTunnelK8sWithResponse(ctx context.Context,
 	return ParseInternalTunnelK8sResponse(rsp)
 }
 
+// GetScimV2GroupsWithResponse request returning *GetScimV2GroupsResponse
+func (c *ClientWithResponses) GetScimV2GroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2GroupsResponse, error) {
+	rsp, err := c.GetScimV2Groups(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2GroupsResponse(rsp)
+}
+
+// GetScimV2GroupsIdWithResponse request returning *GetScimV2GroupsIdResponse
+func (c *ClientWithResponses) GetScimV2GroupsIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetScimV2GroupsIdResponse, error) {
+	rsp, err := c.GetScimV2GroupsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2GroupsIdResponse(rsp)
+}
+
+// GetScimV2ResourceTypesWithResponse request returning *GetScimV2ResourceTypesResponse
+func (c *ClientWithResponses) GetScimV2ResourceTypesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2ResourceTypesResponse, error) {
+	rsp, err := c.GetScimV2ResourceTypes(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2ResourceTypesResponse(rsp)
+}
+
+// GetScimV2SchemasWithResponse request returning *GetScimV2SchemasResponse
+func (c *ClientWithResponses) GetScimV2SchemasWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2SchemasResponse, error) {
+	rsp, err := c.GetScimV2Schemas(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2SchemasResponse(rsp)
+}
+
+// GetScimV2ServiceProviderConfigWithResponse request returning *GetScimV2ServiceProviderConfigResponse
+func (c *ClientWithResponses) GetScimV2ServiceProviderConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2ServiceProviderConfigResponse, error) {
+	rsp, err := c.GetScimV2ServiceProviderConfig(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2ServiceProviderConfigResponse(rsp)
+}
+
+// GetScimV2UsersWithResponse request returning *GetScimV2UsersResponse
+func (c *ClientWithResponses) GetScimV2UsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimV2UsersResponse, error) {
+	rsp, err := c.GetScimV2Users(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2UsersResponse(rsp)
+}
+
+// PostScimV2UsersWithResponse request returning *PostScimV2UsersResponse
+func (c *ClientWithResponses) PostScimV2UsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostScimV2UsersResponse, error) {
+	rsp, err := c.PostScimV2Users(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostScimV2UsersResponse(rsp)
+}
+
+// DeleteScimV2UsersIdWithResponse request returning *DeleteScimV2UsersIdResponse
+func (c *ClientWithResponses) DeleteScimV2UsersIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteScimV2UsersIdResponse, error) {
+	rsp, err := c.DeleteScimV2UsersId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteScimV2UsersIdResponse(rsp)
+}
+
+// GetScimV2UsersIdWithResponse request returning *GetScimV2UsersIdResponse
+func (c *ClientWithResponses) GetScimV2UsersIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetScimV2UsersIdResponse, error) {
+	rsp, err := c.GetScimV2UsersId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScimV2UsersIdResponse(rsp)
+}
+
+// PatchScimV2UsersIdWithBodyWithResponse request with arbitrary body returning *PatchScimV2UsersIdResponse
+func (c *ClientWithResponses) PatchScimV2UsersIdWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchScimV2UsersIdResponse, error) {
+	rsp, err := c.PatchScimV2UsersIdWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchScimV2UsersIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchScimV2UsersIdWithApplicationScimPlusJSONBodyWithResponse(ctx context.Context, id string, body PatchScimV2UsersIdApplicationScimPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchScimV2UsersIdResponse, error) {
+	rsp, err := c.PatchScimV2UsersIdWithApplicationScimPlusJSONBody(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchScimV2UsersIdResponse(rsp)
+}
+
+// PutScimV2UsersIdWithResponse request returning *PutScimV2UsersIdResponse
+func (c *ClientWithResponses) PutScimV2UsersIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PutScimV2UsersIdResponse, error) {
+	rsp, err := c.PutScimV2UsersId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutScimV2UsersIdResponse(rsp)
+}
+
 // ParseGetApiV1ActivityResponse parses an HTTP response from a GetApiV1ActivityWithResponse call
 func ParseGetApiV1ActivityResponse(rsp *http.Response) (*GetApiV1ActivityResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -53293,6 +56726,86 @@ func ParseAdminAgentsClusterAdminPostureResponse(rsp *http.Response) (*AdminAgen
 		}
 		response.JSON503 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1AdminAlertingInhibitionsResponse parses an HTTP response from a GetApiV1AdminAlertingInhibitionsWithResponse call
+func ParseGetApiV1AdminAlertingInhibitionsResponse(rsp *http.Response) (*GetApiV1AdminAlertingInhibitionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1AdminAlertingInhibitionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1AdminAlertingInhibitionsResponse parses an HTTP response from a PostApiV1AdminAlertingInhibitionsWithResponse call
+func ParsePostApiV1AdminAlertingInhibitionsResponse(rsp *http.Response) (*PostApiV1AdminAlertingInhibitionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1AdminAlertingInhibitionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1AdminAlertingInhibitionsIdResponse parses an HTTP response from a DeleteApiV1AdminAlertingInhibitionsIdWithResponse call
+func ParseDeleteApiV1AdminAlertingInhibitionsIdResponse(rsp *http.Response) (*DeleteApiV1AdminAlertingInhibitionsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1AdminAlertingInhibitionsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1AdminAlertingInhibitionsIdResponse parses an HTTP response from a GetApiV1AdminAlertingInhibitionsIdWithResponse call
+func ParseGetApiV1AdminAlertingInhibitionsIdResponse(rsp *http.Response) (*GetApiV1AdminAlertingInhibitionsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1AdminAlertingInhibitionsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePutApiV1AdminAlertingInhibitionsIdResponse parses an HTTP response from a PutApiV1AdminAlertingInhibitionsIdWithResponse call
+func ParsePutApiV1AdminAlertingInhibitionsIdResponse(rsp *http.Response) (*PutApiV1AdminAlertingInhibitionsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutApiV1AdminAlertingInhibitionsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
@@ -53597,6 +57110,129 @@ func ParsePutApiV1AdminNetworkPolicyTemplatesIdResponse(rsp *http.Response) (*Pu
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1AdminScimTokensResponse parses an HTTP response from a GetApiV1AdminScimTokensWithResponse call
+func ParseGetApiV1AdminScimTokensResponse(rsp *http.Response) (*GetApiV1AdminScimTokensResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1AdminScimTokensResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Tokens *[]struct {
+				CreatedAt  *string             `json:"created_at,omitempty"`
+				Id         *openapi_types.UUID `json:"id,omitempty"`
+				LastUsedAt *string             `json:"last_used_at"`
+				Name       *string             `json:"name,omitempty"`
+				Prefix     *string             `json:"prefix,omitempty"`
+			} `json:"tokens,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1AdminScimTokensResponse parses an HTTP response from a PostApiV1AdminScimTokensWithResponse call
+func ParsePostApiV1AdminScimTokensResponse(rsp *http.Response) (*PostApiV1AdminScimTokensResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1AdminScimTokensResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			CreatedAt  *string             `json:"created_at,omitempty"`
+			Id         *openapi_types.UUID `json:"id,omitempty"`
+			LastUsedAt *string             `json:"last_used_at"`
+			Name       *string             `json:"name,omitempty"`
+			Prefix     *string             `json:"prefix,omitempty"`
+
+			// Token Plaintext bearer token, returned only on create.
+			Token *string `json:"token,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1AdminScimTokensIdResponse parses an HTTP response from a DeleteApiV1AdminScimTokensIdWithResponse call
+func ParseDeleteApiV1AdminScimTokensIdResponse(rsp *http.Response) (*DeleteApiV1AdminScimTokensIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1AdminScimTokensIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
@@ -59584,6 +63220,64 @@ func ParseGetApiV1ClustersClusterIdApiserverAllowlistSnapshotsResponse(rsp *http
 	return response, nil
 }
 
+// ParseGetApiV1ClustersClusterIdApiserverAuditResponse parses an HTTP response from a GetApiV1ClustersClusterIdApiserverAuditWithResponse call
+func ParseGetApiV1ClustersClusterIdApiserverAuditResponse(rsp *http.Response) (*GetApiV1ClustersClusterIdApiserverAuditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClustersClusterIdApiserverAuditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data  *[]map[string]interface{} `json:"data,omitempty"`
+			Total *int                      `json:"total,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClustersClusterIdApiserverAuditResponse parses an HTTP response from a PostApiV1ClustersClusterIdApiserverAuditWithResponse call
+func ParsePostApiV1ClustersClusterIdApiserverAuditResponse(rsp *http.Response) (*PostApiV1ClustersClusterIdApiserverAuditResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClustersClusterIdApiserverAuditResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Accepted *int `json:"accepted,omitempty"`
+			Skipped  *int `json:"skipped,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ClustersClusterIdAppsResponse parses an HTTP response from a GetApiV1ClustersClusterIdAppsWithResponse call
 func ParseGetApiV1ClustersClusterIdAppsResponse(rsp *http.Response) (*GetApiV1ClustersClusterIdAppsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -60608,6 +64302,53 @@ func ParseGetApiV1ClustersClusterIdPodsResponse(rsp *http.Response) (*GetApiV1Cl
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClustersClusterIdPodsWatchResponse parses an HTTP response from a GetApiV1ClustersClusterIdPodsWatchWithResponse call
+func ParseGetApiV1ClustersClusterIdPodsWatchResponse(rsp *http.Response) (*GetApiV1ClustersClusterIdPodsWatchResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClustersClusterIdPodsWatchResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Error
@@ -63579,6 +67320,79 @@ func ParseGetApiV1ClustersIdResponse(rsp *http.Response) (*GetApiV1ClustersIdRes
 	return response, nil
 }
 
+// ParsePostApiV1ClustersIdAgentTokenRevokeResponse parses an HTTP response from a PostApiV1ClustersIdAgentTokenRevokeWithResponse call
+func ParsePostApiV1ClustersIdAgentTokenRevokeResponse(rsp *http.Response) (*PostApiV1ClustersIdAgentTokenRevokeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClustersIdAgentTokenRevokeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DataEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClustersIdAgentTokenRotateResponse parses an HTTP response from a PostApiV1ClustersIdAgentTokenRotateWithResponse call
+func ParsePostApiV1ClustersIdAgentTokenRotateResponse(rsp *http.Response) (*PostApiV1ClustersIdAgentTokenRotateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClustersIdAgentTokenRotateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest DataEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ClustersIdConditionRemediationResponse parses an HTTP response from a GetApiV1ClustersIdConditionRemediationWithResponse call
 func ParseGetApiV1ClustersIdConditionRemediationResponse(rsp *http.Response) (*GetApiV1ClustersIdConditionRemediationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -63680,6 +67494,96 @@ func ParseGetApiV1ClustersIdDecommissionResponse(rsp *http.Response) (*GetApiV1C
 		}
 		response.JSON404 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ClustersIdGatekeeperConstraintsResponse parses an HTTP response from a GetApiV1ClustersIdGatekeeperConstraintsWithResponse call
+func ParseGetApiV1ClustersIdGatekeeperConstraintsResponse(rsp *http.Response) (*GetApiV1ClustersIdGatekeeperConstraintsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ClustersIdGatekeeperConstraintsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClustersIdGatekeeperConstraintsResponse parses an HTTP response from a PostApiV1ClustersIdGatekeeperConstraintsWithResponse call
+func ParsePostApiV1ClustersIdGatekeeperConstraintsResponse(rsp *http.Response) (*PostApiV1ClustersIdGatekeeperConstraintsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClustersIdGatekeeperConstraintsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			// Data Result of validating (and optionally applying) a constraint (P-04).
+			Data ConstraintValidationResponse `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ClustersIdGatekeeperConstraintsValidateResponse parses an HTTP response from a PostApiV1ClustersIdGatekeeperConstraintsValidateWithResponse call
+func ParsePostApiV1ClustersIdGatekeeperConstraintsValidateResponse(rsp *http.Response) (*PostApiV1ClustersIdGatekeeperConstraintsValidateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ClustersIdGatekeeperConstraintsValidateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Data Result of validating (and optionally applying) a constraint (P-04).
+			Data ConstraintValidationResponse `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiV1ClustersIdGatekeeperConstraintsNameResponse parses an HTTP response from a DeleteApiV1ClustersIdGatekeeperConstraintsNameWithResponse call
+func ParseDeleteApiV1ClustersIdGatekeeperConstraintsNameResponse(rsp *http.Response) (*DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiV1ClustersIdGatekeeperConstraintsNameResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
@@ -64779,6 +68683,35 @@ func ParsePostApiV1ExtensionsResponse(rsp *http.Response) (*PostApiV1ExtensionsR
 	return response, nil
 }
 
+// ParseGetApiV1ExtensionsMountsResponse parses an HTTP response from a GetApiV1ExtensionsMountsWithResponse call
+func ParseGetApiV1ExtensionsMountsResponse(rsp *http.Response) (*GetApiV1ExtensionsMountsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ExtensionsMountsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Data Enabled-extensions surface (§HostMounts), indexed by mount point. Only enabled, compatible extensions appear; Tier-2 points additionally require a verified bundle.
+			Data *ExtensionMountsResponse `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ExtensionsSampleManifestResponse parses an HTTP response from a GetApiV1ExtensionsSampleManifestWithResponse call
 func ParseGetApiV1ExtensionsSampleManifestResponse(rsp *http.Response) (*GetApiV1ExtensionsSampleManifestResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -64824,6 +68757,73 @@ func ParsePostApiV1ExtensionsValidateResponse(rsp *http.Response) (*PostApiV1Ext
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Data *ExtensionValidation `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ExtensionsVerifyBundleResponse parses an HTTP response from a PostApiV1ExtensionsVerifyBundleWithResponse call
+func ParsePostApiV1ExtensionsVerifyBundleResponse(rsp *http.Response) (*PostApiV1ExtensionsVerifyBundleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ExtensionsVerifyBundleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *struct {
+				Checksum *string `json:"checksum,omitempty"`
+
+				// Gated Whether the named extension's Tier-2 mount gate was lifted (bundle_verified set true) by this verification.
+				Gated    *bool `json:"gated,omitempty"`
+				Verified *bool `json:"verified,omitempty"`
+			} `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ExtensionsNameDataDataSourceIdResponse parses an HTTP response from a PostApiV1ExtensionsNameDataDataSourceIdWithResponse call
+func ParsePostApiV1ExtensionsNameDataDataSourceIdResponse(rsp *http.Response) (*PostApiV1ExtensionsNameDataDataSourceIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ExtensionsNameDataDataSourceIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *struct {
+				// Data rows (list), value (object/series).
+				Data  *map[string]interface{}                              `json:"data,omitempty"`
+				Meta  *map[string]interface{}                              `json:"meta,omitempty"`
+				Shape *PostApiV1ExtensionsNameDataDataSourceId200DataShape `json:"shape,omitempty"`
+			} `json:"data,omitempty"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -64885,6 +68885,39 @@ func ParsePostApiV1ExtensionsNameEnableResponse(rsp *http.Response) (*PostApiV1E
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ExtensionsNameTokenResponse parses an HTTP response from a PostApiV1ExtensionsNameTokenWithResponse call
+func ParsePostApiV1ExtensionsNameTokenResponse(rsp *http.Response) (*PostApiV1ExtensionsNameTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ExtensionsNameTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			Data *struct {
+				DataSource *string    `json:"dataSource,omitempty"`
+				ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+				Scope      *string    `json:"scope,omitempty"`
+				Token      *string    `json:"token,omitempty"`
+			} `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	}
 
@@ -69538,6 +73571,46 @@ func ParseGetApiV1RegisterCaCrtResponse(rsp *http.Response) (*GetApiV1RegisterCa
 	return response, nil
 }
 
+// ParseGetApiV1RegisterSignedClusterIdResponse parses an HTTP response from a GetApiV1RegisterSignedClusterIdWithResponse call
+func ParseGetApiV1RegisterSignedClusterIdResponse(rsp *http.Response) (*GetApiV1RegisterSignedClusterIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1RegisterSignedClusterIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
+		var dest string
+		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.YAML200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1RegisterTokenResponse parses an HTTP response from a GetApiV1RegisterTokenWithResponse call
 func ParseGetApiV1RegisterTokenResponse(rsp *http.Response) (*GetApiV1RegisterTokenResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -71623,6 +75696,182 @@ func ParseInternalTunnelK8sResponse(rsp *http.Response) (*InternalTunnelK8sRespo
 		}
 		response.JSON504 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2GroupsResponse parses an HTTP response from a GetScimV2GroupsWithResponse call
+func ParseGetScimV2GroupsResponse(rsp *http.Response) (*GetScimV2GroupsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2GroupsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2GroupsIdResponse parses an HTTP response from a GetScimV2GroupsIdWithResponse call
+func ParseGetScimV2GroupsIdResponse(rsp *http.Response) (*GetScimV2GroupsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2GroupsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2ResourceTypesResponse parses an HTTP response from a GetScimV2ResourceTypesWithResponse call
+func ParseGetScimV2ResourceTypesResponse(rsp *http.Response) (*GetScimV2ResourceTypesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2ResourceTypesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2SchemasResponse parses an HTTP response from a GetScimV2SchemasWithResponse call
+func ParseGetScimV2SchemasResponse(rsp *http.Response) (*GetScimV2SchemasResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2SchemasResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2ServiceProviderConfigResponse parses an HTTP response from a GetScimV2ServiceProviderConfigWithResponse call
+func ParseGetScimV2ServiceProviderConfigResponse(rsp *http.Response) (*GetScimV2ServiceProviderConfigResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2ServiceProviderConfigResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2UsersResponse parses an HTTP response from a GetScimV2UsersWithResponse call
+func ParseGetScimV2UsersResponse(rsp *http.Response) (*GetScimV2UsersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2UsersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePostScimV2UsersResponse parses an HTTP response from a PostScimV2UsersWithResponse call
+func ParsePostScimV2UsersResponse(rsp *http.Response) (*PostScimV2UsersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostScimV2UsersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDeleteScimV2UsersIdResponse parses an HTTP response from a DeleteScimV2UsersIdWithResponse call
+func ParseDeleteScimV2UsersIdResponse(rsp *http.Response) (*DeleteScimV2UsersIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteScimV2UsersIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetScimV2UsersIdResponse parses an HTTP response from a GetScimV2UsersIdWithResponse call
+func ParseGetScimV2UsersIdResponse(rsp *http.Response) (*GetScimV2UsersIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScimV2UsersIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePatchScimV2UsersIdResponse parses an HTTP response from a PatchScimV2UsersIdWithResponse call
+func ParsePatchScimV2UsersIdResponse(rsp *http.Response) (*PatchScimV2UsersIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchScimV2UsersIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePutScimV2UsersIdResponse parses an HTTP response from a PutScimV2UsersIdWithResponse call
+func ParsePutScimV2UsersIdResponse(rsp *http.Response) (*PutScimV2UsersIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutScimV2UsersIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

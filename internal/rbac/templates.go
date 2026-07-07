@@ -72,6 +72,44 @@ type Template struct {
 	// checks.
 	Category string `yaml:"category" json:"category"`
 	Rules    []Rule `yaml:"rules" json:"rules"`
+
+	// effectiveGrants is the flattened, provenance-annotated permission set
+	// computed by resolveInherited at load time: this template's own grants
+	// plus everything reachable through Inherits. Unexported so the catalog
+	// JSON shape is unchanged; read it through EffectiveGrants / EffectiveRules.
+	effectiveGrants []EffectiveGrant
+}
+
+// EffectiveGrants returns the flattened (resource, verb) permission set the
+// template confers, including permissions contributed transitively via
+// Inherits. Each grant records whether it is a direct declaration or an
+// inherited one (and which template declared it). Computed once at load; the
+// slice is sorted by resource then verb.
+func (t Template) EffectiveGrants() []EffectiveGrant {
+	return t.effectiveGrants
+}
+
+// EffectiveRules groups EffectiveGrants back into the []Rule shape (one rule
+// per resource). It is the flattened rule set an apply/preview should evaluate
+// so inherited permissions are honored. When a template declares no Inherits
+// this equals its own Rules.
+func (t Template) EffectiveRules() []Rule {
+	if len(t.effectiveGrants) == 0 {
+		return append([]Rule(nil), t.Rules...)
+	}
+	byResource := map[string][]string{}
+	order := make([]string, 0)
+	for _, g := range t.effectiveGrants {
+		if _, ok := byResource[g.Resource]; !ok {
+			order = append(order, g.Resource)
+		}
+		byResource[g.Resource] = append(byResource[g.Resource], g.Verb)
+	}
+	rules := make([]Rule, 0, len(order))
+	for _, res := range order {
+		rules = append(rules, Rule{Resource: res, Verbs: byResource[res]})
+	}
+	return rules
 }
 
 // Catalog is the immutable, indexed registry of templates loaded at
@@ -183,6 +221,12 @@ func loadCatalogFrom(fsys fs.FS, dir string) (*Catalog, error) {
 	}
 	if len(cat.byName) == 0 {
 		return nil, fmt.Errorf("no templates loaded from %q", dir)
+	}
+	// Flatten role-template inheritance before the catalog is frozen. This
+	// validates every Inherits reference (fail closed on unknown/cross-scope),
+	// rejects cycles, and stores each template's flattened permission set.
+	if err := resolveInherited(cat.byName); err != nil {
+		return nil, err
 	}
 	cat.ordered = make([]Template, 0, len(cat.byName))
 	for _, t := range cat.byName {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -122,14 +123,18 @@ type RouterDependencies struct {
 	// and /api/v1/clusters/{cluster_id}/network-policies/applications/*
 	// (per-cluster apply/list/delete) — migration 068. Nil-safe.
 	NetworkPolicies *handler.NetworkPolicyHandler
-	Projects        *handler.ProjectHandler
-	Tools           *handler.ToolHandler
-	Audit           *handler.AuditHandler
-	Alerting        *handler.AlertingHandler
-	Anomaly         *handler.AnomalyHandler
-	ArgoCD          *handler.ArgoCDHandler
-	Backups         *handler.BackupHandler
-	Catalog         *handler.CatalogHandler
+	// Gatekeeper owns /api/v1/clusters/{id}/gatekeeper/constraints/* (P-04):
+	// custom ConstraintTemplate/Constraint authoring, validate + server-side
+	// apply through the tunnel, and authored-record CRUD.
+	Gatekeeper *handler.GatekeeperConstraintsHandler
+	Projects   *handler.ProjectHandler
+	Tools      *handler.ToolHandler
+	Audit      *handler.AuditHandler
+	Alerting   *handler.AlertingHandler
+	Anomaly    *handler.AnomalyHandler
+	ArgoCD     *handler.ArgoCDHandler
+	Backups    *handler.BackupHandler
+	Catalog    *handler.CatalogHandler
 	// ChartRatings owns /api/v1/charts/{chart_id}/ratings/* and
 	// /api/v1/catalog/recommendations/{popular,similar}/* — the
 	// migration-055 catalog rating surface. Nil-safe: routes are
@@ -424,8 +429,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		if deps.JWT != nil {
 			argoAuth = appmiddleware.AuthBrowserOrBearer(deps.JWT, deps.AuthQueries, "/auth/login")
 		}
-		r.With(argoAuth).Handle("/argocd", deps.ArgoCDUIProxy)
-		r.With(argoAuth).Handle("/argocd/*", deps.ArgoCDUIProxy)
+		// Authorization gate (R-01): authentication alone is not enough — the
+		// proxy injects the shared upstream ArgoCD admin token, so without an
+		// RBAC check any authenticated viewer would be logged into ArgoCD as
+		// admin. ArgoCDAuthz fails closed when the RBAC engine/querier are nil,
+		// so it's safe to mount unconditionally after argoAuth.
+		argoAuthz := appmiddleware.ArgoCDAuthz(deps.RBACEngine, deps.RBACQueries, newLocalClusterResolver(deps.RemoteQueries))
+		r.With(argoAuth, argoAuthz).Handle("/argocd", deps.ArgoCDUIProxy)
+		r.With(argoAuth, argoAuthz).Handle("/argocd/*", deps.ArgoCDUIProxy)
 	}
 
 	// SCIM 2.0 provisioning (migration 114). Mounted at top-level
@@ -1964,6 +1975,8 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerDashboardRoutes(r, deps)
 	registerToolsControlPlaneRoutes(r, deps)
 	registerRBACAuditAgentRoutes(r, deps)
+	registerAlertInhibitionRoutes(r, deps)
+	registerGatekeeperConstraintRoutes(r, deps)
 	registerMonitoringRoutes(r, deps)
 	registerResourcesWorkloadsRoutes(r, deps)
 	registerSecurityRoutes(r, cfg, deps, rateLimit)
@@ -2072,5 +2085,45 @@ func keyStatusHandler(deps RouterDependencies) http.HandlerFunc {
 			"jwt_keys":        jwtKeys,
 			"as_of":           time.Now().UTC().Format(time.RFC3339),
 		})
+	}
+}
+
+// newLocalClusterResolver returns an appmiddleware.LocalClusterResolver that
+// finds the management ("local") cluster id the same way
+// localClusterArgoCDTokenSource does — by scanning the cluster list for the
+// is_local row. The id never changes once bootstrapped, so the first non-nil
+// result is cached for the process lifetime; until then each call re-queries
+// (the local-cluster row is created after the router is built). Returns nil
+// when no querier is wired, which leaves the ArgoCD authz check at global
+// scope (only global/superuser grants pass — still fail-closed).
+func newLocalClusterResolver(queries *sqlc.Queries) appmiddleware.LocalClusterResolver {
+	if queries == nil {
+		return nil
+	}
+	var (
+		mu     sync.Mutex
+		cached uuid.UUID
+	)
+	return func(ctx context.Context) (uuid.UUID, error) {
+		mu.Lock()
+		if cached != uuid.Nil {
+			id := cached
+			mu.Unlock()
+			return id, nil
+		}
+		mu.Unlock()
+		clusters, err := queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 200, Offset: 0})
+		if err != nil {
+			return uuid.Nil, err
+		}
+		for _, c := range clusters {
+			if c.IsLocal {
+				mu.Lock()
+				cached = c.ID
+				mu.Unlock()
+				return c.ID, nil
+			}
+		}
+		return uuid.Nil, nil
 	}
 }

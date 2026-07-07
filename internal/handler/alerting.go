@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -68,6 +69,13 @@ type AlertingQuerier interface {
 	CreateAlertSilence(ctx context.Context, arg sqlc.CreateAlertSilenceParams) (sqlc.AlertSilence, error)
 	DeleteAlertSilence(ctx context.Context, id uuid.UUID) error
 	CountAlertSilences(ctx context.Context) (int64, error)
+	// Inhibitions (P-03) — Alertmanager-style inhibition rules.
+	ListAlertInhibitions(ctx context.Context, arg sqlc.ListAlertInhibitionsParams) ([]sqlc.AlertInhibition, error)
+	GetAlertInhibitionByID(ctx context.Context, id uuid.UUID) (sqlc.AlertInhibition, error)
+	CreateAlertInhibition(ctx context.Context, arg sqlc.CreateAlertInhibitionParams) (sqlc.AlertInhibition, error)
+	UpdateAlertInhibition(ctx context.Context, arg sqlc.UpdateAlertInhibitionParams) (sqlc.AlertInhibition, error)
+	DeleteAlertInhibition(ctx context.Context, id uuid.UUID) error
+	CountAlertInhibitions(ctx context.Context) (int64, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.Cluster, error)
 	GetDefaultMonitoringBackend(ctx context.Context) (sqlc.MonitoringBackend, error)
@@ -151,6 +159,24 @@ type CreateSilenceRequest struct {
 	EndsAt    time.Time         `json:"ends_at"`
 	Duration  string            `json:"duration"`
 	Matchers  map[string]string `json:"matchers"`
+}
+
+// InhibitionMatcher is one label matcher in a source/target matcher set.
+// is_regex selects full-string regex matching (anchored) instead of exact
+// string equality. Mirrors the Alertmanager inhibit_rule matcher shape.
+type InhibitionMatcher struct {
+	Label   string `json:"label"`
+	Value   string `json:"value"`
+	IsRegex bool   `json:"is_regex"`
+}
+
+// InhibitionRequest is the create/update body for an inhibition rule (P-03).
+type InhibitionRequest struct {
+	Name           string              `json:"name" validate:"required"`
+	SourceMatchers []InhibitionMatcher `json:"source_matchers"`
+	TargetMatchers []InhibitionMatcher `json:"target_matchers"`
+	EqualLabels    []string            `json:"equal_labels"`
+	Enabled        *bool               `json:"enabled"`
 }
 
 // --- Channel Endpoints ---
@@ -852,6 +878,211 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 
 	recordAudit(r, h.queries, "alert.silence.delete", "alert_silence", id.String(), match.Reason, nil)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Inhibition Endpoints (P-03) ---
+
+// ListInhibitions handles GET /api/v1/admin/alerting/inhibitions/.
+func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request) {
+	limit := int32(queryInt(r, "limit", 50))
+	offset := int32(queryInt(r, "offset", 0))
+
+	inhibitions, err := h.queries.ListAlertInhibitions(r.Context(), sqlc.ListAlertInhibitionsParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list inhibitions")
+		return
+	}
+	items := make([]map[string]any, 0, len(inhibitions))
+	for _, inhibition := range inhibitions {
+		items = append(items, alertInhibitionResponse(inhibition))
+	}
+	total, _ := h.queries.CountAlertInhibitions(r.Context())
+	RespondList(w, items, NewPagination(int(total), int(limit), int(offset), len(items)))
+}
+
+// GetInhibition handles GET /api/v1/admin/alerting/inhibitions/{id}/.
+func (h *AlertingHandler) GetInhibition(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid inhibition ID")
+		return
+	}
+	inhibition, err := h.queries.GetAlertInhibitionByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, alertInhibitionResponse(inhibition))
+}
+
+// CreateInhibition handles POST /api/v1/admin/alerting/inhibitions/.
+func (h *AlertingHandler) CreateInhibition(w http.ResponseWriter, r *http.Request) {
+	var req InhibitionRequest
+	if !decodeAndValidate(w, r, &req) {
+		return
+	}
+	if msg := validateInhibition(req); msg != "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, msg)
+		return
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	inhibition, err := h.queries.CreateAlertInhibition(r.Context(), sqlc.CreateAlertInhibitionParams{
+		Name:           req.Name,
+		SourceMatchers: marshalMatchers(req.SourceMatchers),
+		TargetMatchers: marshalMatchers(req.TargetMatchers),
+		EqualLabels:    marshalEqualLabels(req.EqualLabels),
+		Enabled:        enabled,
+		CreatedByID:    currentUserUUID(r),
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create inhibition")
+		return
+	}
+	recordAudit(r, h.queries, "alert.inhibition.create", "alert_inhibition", inhibition.ID.String(), inhibition.Name, map[string]any{
+		"enabled": enabled,
+	})
+	w.Header().Set("Location", "/api/v1/admin/alerting/inhibitions/"+inhibition.ID.String()+"/")
+	RespondJSON(w, http.StatusCreated, alertInhibitionResponse(inhibition))
+}
+
+// UpdateInhibition handles PUT /api/v1/admin/alerting/inhibitions/{id}/.
+func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid inhibition ID")
+		return
+	}
+	if _, err := h.queries.GetAlertInhibitionByID(r.Context(), id); err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
+		return
+	}
+	var req InhibitionRequest
+	if !decodeAndValidate(w, r, &req) {
+		return
+	}
+	if msg := validateInhibition(req); msg != "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, msg)
+		return
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	inhibition, err := h.queries.UpdateAlertInhibition(r.Context(), sqlc.UpdateAlertInhibitionParams{
+		ID:             id,
+		Name:           req.Name,
+		SourceMatchers: marshalMatchers(req.SourceMatchers),
+		TargetMatchers: marshalMatchers(req.TargetMatchers),
+		EqualLabels:    marshalEqualLabels(req.EqualLabels),
+		Enabled:        enabled,
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update inhibition")
+		return
+	}
+	recordAudit(r, h.queries, "alert.inhibition.update", "alert_inhibition", inhibition.ID.String(), inhibition.Name, map[string]any{
+		"enabled": enabled,
+	})
+	RespondJSON(w, http.StatusOK, alertInhibitionResponse(inhibition))
+}
+
+// DeleteInhibition handles DELETE /api/v1/admin/alerting/inhibitions/{id}/.
+func (h *AlertingHandler) DeleteInhibition(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid inhibition ID")
+		return
+	}
+	match, err := h.queries.GetAlertInhibitionByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
+		return
+	}
+	if err := h.queries.DeleteAlertInhibition(r.Context(), id); err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete inhibition")
+		return
+	}
+	recordAudit(r, h.queries, "alert.inhibition.delete", "alert_inhibition", id.String(), match.Name, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// validateInhibition rejects rules that can never match usefully: a rule with
+// no source and no target matcher would suppress nothing (or everything), and
+// a regex matcher whose pattern does not compile would fail closed at eval
+// time. Return an empty string when the rule is acceptable.
+func validateInhibition(req InhibitionRequest) string {
+	if len(req.SourceMatchers) == 0 {
+		return "At least one source matcher is required"
+	}
+	if len(req.TargetMatchers) == 0 {
+		return "At least one target matcher is required"
+	}
+	for _, m := range append(append([]InhibitionMatcher{}, req.SourceMatchers...), req.TargetMatchers...) {
+		if strings.TrimSpace(m.Label) == "" {
+			return "Every matcher requires a label"
+		}
+		if m.IsRegex {
+			if _, err := regexp.Compile(m.Value); err != nil {
+				return fmt.Sprintf("Invalid regex for label %q: %v", m.Label, err)
+			}
+		}
+	}
+	return ""
+}
+
+func marshalMatchers(matchers []InhibitionMatcher) json.RawMessage {
+	if matchers == nil {
+		matchers = []InhibitionMatcher{}
+	}
+	raw, err := json.Marshal(matchers)
+	if err != nil {
+		return json.RawMessage("[]")
+	}
+	return raw
+}
+
+func marshalEqualLabels(labels []string) json.RawMessage {
+	if labels == nil {
+		labels = []string{}
+	}
+	raw, err := json.Marshal(labels)
+	if err != nil {
+		return json.RawMessage("[]")
+	}
+	return raw
+}
+
+func alertInhibitionResponse(inhibition sqlc.AlertInhibition) map[string]any {
+	var source, target []InhibitionMatcher
+	var equal []string
+	_ = json.Unmarshal(inhibition.SourceMatchers, &source)
+	_ = json.Unmarshal(inhibition.TargetMatchers, &target)
+	_ = json.Unmarshal(inhibition.EqualLabels, &equal)
+	if source == nil {
+		source = []InhibitionMatcher{}
+	}
+	if target == nil {
+		target = []InhibitionMatcher{}
+	}
+	if equal == nil {
+		equal = []string{}
+	}
+	return map[string]any{
+		"id":              inhibition.ID.String(),
+		"name":            inhibition.Name,
+		"source_matchers": source,
+		"target_matchers": target,
+		"equal_labels":    equal,
+		"enabled":         inhibition.Enabled,
+		"created_at":      inhibition.CreatedAt.UTC().Format(time.RFC3339),
+		"updated_at":      inhibition.UpdatedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 func (h *AlertingHandler) syncSharedAlertingAssets(ctx context.Context) error {

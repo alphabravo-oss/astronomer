@@ -223,21 +223,25 @@ spec:
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/postgres-failover.md
 
         # ── Agent disconnected ──────────────────────────────────────────
-        # 120s = 4× the default heartbeat interval — small enough to
-        # catch real failures, large enough to ride out a single missed
-        # tick.
+        # astronomer_agent_connections is emitted as 0/1 for EVERY
+        # non-decommissioned cluster, so the series survives a disconnect
+        # (an old `last_seen > threshold` rule could never fire — the
+        # disconnected series simply vanished). A value of 0 means the
+        # agent's tunnel is down; the cluster_id/cluster_name labels
+        # identify which. `for: 3m` rides out a single WS blip / pod roll.
         - alert: AstronomerAgentDisconnected
-          expr: astronomer_agent_last_seen_seconds > 120
-          for: 2m
+          expr: astronomer_agent_connections == 0
+          for: 3m
           labels:
             severity: warning
             component: tunnel
           annotations:
-            summary: "Cluster agent has not pinged in {{ "{{" }} $value | humanizeDuration {{ "}}" }}"
+            summary: "Cluster agent {{ "{{" }} $labels.cluster_name {{ "}}" }} has no active tunnel"
             description: |
-              The tunnel between the server and a cluster agent has gone
-              quiet. The cluster id is in the metric label; check the
-              agent pod's logs and connectivity in that cluster.
+              The tunnel between the server and a cluster agent has been
+              down for 3+ minutes (astronomer_agent_connections == 0). The
+              cluster id/name are in the metric labels; check the agent
+              pod's logs and connectivity in that cluster.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/agent-disconnected.md
 
         # ── Backup restore drill: staleness ─────────────────────────────
@@ -335,6 +339,58 @@ spec:
               state may not be protected until the next successful backup.
               Inspect the failed Job's pod logs and verify S3 credentials.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/backup-restore-drill-failed.md
+
+        # ── Audit trail loss ────────────────────────────────────────────
+        # The audit pipeline is best-effort-buffered: when the buffer is
+        # full or DB writes fail past their retry budget, events are
+        # dropped. On a platform that sells compliance, a single dropped
+        # audit event is a page — the counter only increments on real loss.
+        - alert: AstronomerAuditEventsDropped
+          expr: rate(astronomer_audit_dropped_total[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: audit
+          annotations:
+            summary: "Astronomer is dropping audit-log events"
+            description: |
+              astronomer_audit_dropped_total is increasing — audit events
+              are being discarded because the buffer is full or the sink is
+              backpressured. The audit trail has gaps. Inspect the server
+              logs and DB/audit-sink health.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/audit-events-dropped.md
+
+        - alert: AstronomerAuditWriteFailures
+          expr: rate(astronomer_audit_write_failures_total[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: audit
+          annotations:
+            summary: "Astronomer audit-log writes are failing"
+            description: |
+              astronomer_audit_write_failures_total is increasing — audit
+              events are failing to persist (DB connectivity, constraint,
+              or disk). Events may be retried or dropped; correlate with
+              AstronomerAuditEventsDropped. Inspect Postgres and server logs.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/audit-events-dropped.md
+
+        # ── SIEM forwarding loss ────────────────────────────────────────
+        - alert: AstronomerSIEMEventsDropped
+          expr: rate(astronomer_siem_dropped_total[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: siem
+          annotations:
+            summary: "Astronomer is dropping SIEM-forwarded events"
+            description: |
+              astronomer_siem_dropped_total is increasing — events destined
+              for an external SIEM forwarder are being discarded (queue full,
+              retries exhausted, or the forwarder is unreachable). Downstream
+              security tooling has a blind spot. Check the forwarder config
+              and destination reachability via GET /api/v1/admin/siem-forwarders/.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/siem-events-dropped.md
 
         # ── Management-plane log forwarder down ─────────────────────────
         # FEATURES-051226 T03 — the chart-side Fluent Bit DaemonSet (off

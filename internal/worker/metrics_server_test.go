@@ -2,10 +2,12 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,41 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
+
+type fakePinger struct{ err error }
+
+func (f fakePinger) Ping() error { return f.err }
+
+// TestWorkerHealthz_C02 covers the /healthz probe the chart's worker liveness/
+// readiness checks hit: 200 when Redis is reachable, 503 when the asynq ping
+// fails.
+func TestWorkerHealthz_C02(t *testing.T) {
+	t.Run("healthy", func(t *testing.T) {
+		srv := httptest.NewServer(newWorkerMux(fakePinger{}))
+		defer srv.Close()
+		resp, err := http.Get(srv.URL + "/healthz")
+		if err != nil {
+			t.Fatalf("get /healthz: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("healthy /healthz = %d, want 200", resp.StatusCode)
+		}
+	})
+
+	t.Run("redis_down", func(t *testing.T) {
+		srv := httptest.NewServer(newWorkerMux(fakePinger{err: errors.New("dial tcp: connection refused")}))
+		defer srv.Close()
+		resp, err := http.Get(srv.URL + "/healthz")
+		if err != nil {
+			t.Fatalf("get /healthz: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("redis-down /healthz = %d, want 503", resp.StatusCode)
+		}
+	})
+}
 
 func TestStartMetricsServerServesMetrics(t *testing.T) {
 	oldInstanceID := observability.InstanceID()
@@ -51,12 +88,12 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- StartMetricsServer(ctx, addr, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		errCh <- StartMetricsServer(ctx, addr, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}()
 
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		resp, err := http.Get("http://" + addr)
+		resp, err := http.Get("http://" + addr + "/metrics")
 		if err == nil {
 			body, readErr := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()

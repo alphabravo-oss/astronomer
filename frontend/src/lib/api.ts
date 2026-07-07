@@ -2687,6 +2687,36 @@ export * from './api/project-detail';
 export * from './api/account-security';
 
 // ============================================================
+// Admin security diagnostics (F-05): key-status + shell-session
+// audit views. See lib/api/admin-security.ts.
+// ============================================================
+export * from './api/admin-security';
+
+// ============================================================
+// SIEM forwarders (F-05): external syslog / Splunk HEC / NDJSON
+// destinations + per-forwarder status. See lib/api/siem-forwarders.ts.
+// ============================================================
+export * from './api/siem-forwarders';
+
+// ============================================================
+// SCIM provisioning tokens (F-05): mint / list / revoke. See
+// lib/api/scim-tokens.ts.
+// ============================================================
+export * from './api/scim-tokens';
+
+// ============================================================
+// Alertmanager-style inhibition rules (P-03). See
+// lib/api/alerting-inhibitions.ts.
+// ============================================================
+export * from './api/alerting-inhibitions';
+
+// ============================================================
+// Gatekeeper / OPA constraint authoring (P-04). See
+// lib/api/gatekeeper-constraints.ts.
+// ============================================================
+export * from './api/gatekeeper-constraints';
+
+// ============================================================
 // Cluster groups (migration 066) — operator-defined folder
 // hierarchy over clusters. See lib/api/cluster-groups.ts.
 // ============================================================

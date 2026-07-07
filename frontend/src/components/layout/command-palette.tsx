@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useRouter } from '@/lib/navigation';
+import { useRouter, usePathname } from '@/lib/navigation';
 import { Command } from 'cmdk';
 import {
   LayoutDashboard,
@@ -17,6 +17,11 @@ import {
   Rocket,
   BookOpen,
   Box,
+  Boxes,
+  Camera,
+  Route,
+  Waypoints,
+  Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -37,6 +42,26 @@ const pages = [
   { name: 'RBAC', href: '/dashboard/rbac', icon: Shield },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
+
+// Per-cluster destinations that are otherwise only reachable from the cluster
+// sidebar. Surfaced in the palette when the user is inside a cluster context so
+// keyboard users can jump straight to them.
+const clusterPages: Array<{ name: string; suffix: string; icon: LucideIcon; description: string }> = [
+  { name: 'Registries', suffix: '/registries', icon: Boxes, description: 'Private image-pull credentials' },
+  { name: 'Snapshots', suffix: '/snapshots', icon: Camera, description: 'Velero workload snapshots' },
+  { name: 'Network & Access', suffix: '/network-access', icon: Route, description: 'Apiserver allow-list' },
+  { name: 'Service Mesh', suffix: '/service-mesh', icon: Waypoints, description: 'mTLS + mesh status' },
+  { name: 'Mirrored Resources', suffix: '/resources', icon: Layers, description: 'Read-only CRD mirror' },
+  { name: 'Gatekeeper', suffix: '/gatekeeper', icon: Shield, description: 'OPA constraint authoring' },
+];
+
+// Extract the cluster id from a /dashboard/clusters/<id>/... path, skipping the
+// static sub-routes that aren't real cluster ids (mirrors the sidebar logic).
+function clusterIdFromPath(pathname: string): string | undefined {
+  const match = pathname.match(/^\/dashboard\/clusters\/([^/]+)/);
+  const seg = match?.[1];
+  return seg && seg !== 'new' && seg !== 'register' ? seg : undefined;
+}
 
 const resourceSearches: Array<{ name: string; type: SearchableResourceType; description: string }> = [
   { name: 'Search pods', type: 'pods', description: 'Across connected clusters' },
@@ -109,6 +134,8 @@ function CommandRow({
 
 export function CommandPalette() {
   const router = useRouter();
+  const pathname = usePathname();
+  const currentClusterId = clusterIdFromPath(pathname);
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: projectsData } = useProjects({ pageSize: 25 });
@@ -226,6 +253,21 @@ export function CommandPalette() {
                 );
               })}
             </Command.Group>
+
+            {currentClusterId && (
+              <Command.Group heading="Cluster Pages" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
+                {clusterPages.map((page) => (
+                  <CommandRow
+                    key={page.suffix}
+                    value={`${page.name} ${page.description} cluster`}
+                    icon={page.icon}
+                    title={page.name}
+                    description={page.description}
+                    onSelect={() => navigate(`/dashboard/clusters/${currentClusterId}${page.suffix}`)}
+                  />
+                ))}
+              </Command.Group>
+            )}
 
             <Command.Group heading="Resource Search" className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2">
               {resourceSearches.map((item) => (

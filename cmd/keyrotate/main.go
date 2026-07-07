@@ -45,9 +45,17 @@ type stats struct {
 
 func main() {
 	startedAt := time.Now()
+	// The server/worker read the Fernet key from ASTRONOMER_ENCRYPTION_KEY; older
+	// tooling used bare ENCRYPTION_KEY. Prefer ENCRYPTION_KEY when set (explicit
+	// override for a rotation run), else fall back to the canonical name so an
+	// operator whose Secret only sets ASTRONOMER_ENCRYPTION_KEY isn't stuck.
+	envKey := os.Getenv("ENCRYPTION_KEY")
+	if envKey == "" {
+		envKey = os.Getenv("ASTRONOMER_ENCRYPTION_KEY")
+	}
 	var (
 		dbURL     = flag.String("database-url", os.Getenv("DATABASE_URL"), "Postgres connection string (env: DATABASE_URL)")
-		keyFlag   = flag.String("encryption-key", os.Getenv("ENCRYPTION_KEY"), "comma-separated Fernet keys, new primary FIRST")
+		keyFlag   = flag.String("encryption-key", envKey, "comma-separated Fernet keys, new primary FIRST (env: ENCRYPTION_KEY or ASTRONOMER_ENCRYPTION_KEY)")
 		dryRun    = flag.Bool("dry-run", false, "report what would be re-encrypted; write nothing")
 		batchSize = flag.Int("batch-size", 100, "rows per transaction (default 100)")
 	)
@@ -60,7 +68,7 @@ func main() {
 		os.Exit(2)
 	}
 	if *keyFlag == "" {
-		log.Error("--encryption-key or env ENCRYPTION_KEY is required")
+		log.Error("--encryption-key or env ENCRYPTION_KEY / ASTRONOMER_ENCRYPTION_KEY is required")
 		os.Exit(2)
 	}
 

@@ -64,7 +64,7 @@ services:
       DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: local-dev-secret-key-change-in-production
-      ENCRYPTION_KEY: local-dev-encryption-key-change-in-prod-32b
+      ASTRONOMER_ENCRYPTION_KEY: RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=
       ENV: development
       DEBUG: "true"
       ALLOWED_HOSTS: "*"
@@ -95,7 +95,7 @@ services:
       DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: local-dev-secret-key-change-in-production
-      ENCRYPTION_KEY: local-dev-encryption-key-change-in-prod-32b
+      ASTRONOMER_ENCRYPTION_KEY: RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=
       ENV: development
       LOG_LEVEL: debug
       AGENT_IMAGE_REPOSITORY: astronomer-go-agent

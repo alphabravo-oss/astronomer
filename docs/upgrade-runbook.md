@@ -16,8 +16,13 @@ shape of the chart (`deploy/chart/`).
 ## TL;DR
 
 ```bash
-# Pre-upgrade
-./scripts/preflight.sh                            # see "Pre-upgrade checklist"
+# Pre-upgrade: render-time preflight (catches missing/invalid values before
+# anything is applied). The chart also runs a pre-upgrade preflight Job on the
+# real cluster (see "Pre-upgrade checklist" and step 2 below).
+helm upgrade astronomer ./deploy/chart --dry-run \
+  -f deploy/chart/values.yaml \
+  -f deploy/chart/values-production.yaml \
+  -f /tmp/astronomer-values.yaml
 helm get values astronomer -n astronomer > /tmp/astronomer-values.yaml
 
 # Upgrade
@@ -82,7 +87,7 @@ saves the round trip.
 
 ```bash
 # Backups: confirm last good nightly pg_dump landed
-kubectl -n astronomer logs -l app.kubernetes.io/component=managementBackup \
+kubectl -n astronomer logs -l app.kubernetes.io/component=management-backup \
   --tail=200 | grep -i 'completed\|error' | tail -10
 
 # Schema state: should be clean (dirty=false)

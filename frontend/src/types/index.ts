@@ -656,6 +656,12 @@ export interface User {
   enabled: boolean;
   lastLogin: string;
   createdAt: string;
+  // Set (to a future RFC3339 timestamp) while the account is locked out —
+  // brute-force lock or MFA lockout. Surfaced as a "Locked" badge in the RBAC
+  // users table so admins can find who needs unlocking. Backend emits
+  // `locked_until`; the axios interceptor camelizes it to `lockedUntil`.
+  lockedUntil?: string | null;
+  locked_until?: string | null;
   // True when an admin has forced a password rotation. The dashboard
   // middleware redirects any other route to /auth/change-password while this
   // is set. Backend emits the field as `must_change_password` (snake_case);
@@ -1126,6 +1132,110 @@ export interface AlertSilence {
   duration: string;
   createdBy: string;
   createdAt: string;
+}
+
+// --- Alertmanager-style inhibition rules (P-03) ---
+//
+// Mirrors the control_plane_silences model. A firing SOURCE alert (matching
+// source_matchers) suppresses dispatch of any TARGET alert (matching
+// target_matchers) that shares an equal value on every label in equal_labels.
+// The wire format is snake_case; the axios interceptor camelizes reads, so
+// nested `is_regex` reads back as `isRegex`. Write payloads re-serialize the
+// snake_case keys the Go handler expects (handled in the API client).
+export interface InhibitionMatcher {
+  label: string;
+  value: string;
+  isRegex: boolean;
+}
+
+export interface AlertInhibition {
+  id: string;
+  name: string;
+  sourceMatchers: InhibitionMatcher[];
+  targetMatchers: InhibitionMatcher[];
+  equalLabels: string[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- SIEM forwarders (F-05) ---
+//
+// External SIEM destinations (syslog / Splunk HEC / NDJSON-HTTPS). The auth
+// blob is write-only; reads return the `<encrypted>` sentinel and
+// `authConfigured` reflects whether one is stored.
+export type SIEMTransport =
+  | 'syslog_udp'
+  | 'syslog_tcp'
+  | 'syslog_tls'
+  | 'splunk_hec'
+  | 'ndjson_https';
+
+export interface SIEMForwarder {
+  id: string;
+  name: string;
+  transport: SIEMTransport | string;
+  endpoint: string;
+  auth: string;
+  authConfigured: boolean;
+  eventFilters: string[];
+  format: string;
+  tlsSkipVerify: boolean;
+  caCertConfigured: boolean;
+  batchSize: number;
+  flushIntervalMs: number;
+  timeoutSeconds: number;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SIEMForwarderStatus {
+  forwarderId: string;
+  lastSentAt: string | null;
+  lastError: string;
+  queueDepth: number;
+  droppedTotal: number;
+  dispatchedTotal: number;
+  updatedAt: string;
+}
+
+// --- SCIM provisioning tokens (F-05) ---
+//
+// The plaintext token is returned exactly once at creation time; list rows
+// only ever carry metadata.
+export interface SCIMToken {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface SCIMTokenCreated extends SCIMToken {
+  token: string;
+}
+
+// --- Gatekeeper / OPA constraint authoring (P-04) ---
+export interface GatekeeperConstraint {
+  name: string;
+  kind: string;
+  apiVersion: string;
+  // 'bundle' = shipped by the built-in policy bundle; 'custom' = operator-authored.
+  source: 'bundle' | 'custom';
+  enforcementAction: string;
+  violationCount: number;
+  // Present for authored (custom) constraints so the editor can re-open them.
+  yaml?: string;
+}
+
+export interface ConstraintValidateResult {
+  valid: boolean;
+  errors: string[];
+  applied: boolean;
+  name: string;
+  kind: string;
 }
 
 // --- Logging Types ---

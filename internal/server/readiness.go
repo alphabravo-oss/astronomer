@@ -3,12 +3,23 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db"
 )
 
 type dbHealthChecker interface {
 	Health(ctx context.Context) error
+}
+
+// schemaVersionChecker is an optional add-on to dbHealthChecker: when the db
+// dependency implements it, /readyz fails until the applied schema reaches the
+// binary's embedded ExpectedSchemaVersion (C-03). *db.DB implements it; the test
+// fakes don't, so the gate only runs against the real database.
+type schemaVersionChecker interface {
+	SchemaVersion(ctx context.Context) (int64, error)
 }
 
 // dbPoolSaturationReporter is an optional add-on to dbHealthChecker so the
@@ -46,15 +57,19 @@ type readinessHandler struct {
 	// ASTRONOMER_POD_IP missing → cross-pod proxy silently off → 503s). Static, so
 	// no lock needed.
 	locatorError string
+	// expectedSchemaVersion is the migration floor /readyz requires (C-03).
+	// 0 disables the check.
+	expectedSchemaVersion int64
 }
 
-func newReadinessHandler(db dbHealthChecker, queue queuePinger, hub hubStatusProvider) *readinessHandler {
+func newReadinessHandler(dbChecker dbHealthChecker, queue queuePinger, hub hubStatusProvider) *readinessHandler {
 	return &readinessHandler{
-		db:      db,
-		queue:   queue,
-		hub:     hub,
-		timeout: 2 * time.Second,
-		now:     time.Now,
+		db:                    dbChecker,
+		queue:                 queue,
+		hub:                   hub,
+		timeout:               2 * time.Second,
+		now:                   time.Now,
+		expectedSchemaVersion: db.ExpectedSchemaVersion,
 	}
 }
 
@@ -94,6 +109,29 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Error: "pgx pool exhausted: callers queueing for connections",
 			}
 			statusCode = http.StatusServiceUnavailable
+		}
+		// Schema-version floor (C-03). During an upgrade, migrations run
+		// post-upgrade, so a new pod can pass every other check while still
+		// pointed at the OLD schema. Hold the pod out of Service rotation until
+		// schema_migrations.version >= the version this binary was built against.
+		if sv, ok := h.db.(schemaVersionChecker); ok && h.expectedSchemaVersion > 0 {
+			ctx, cancel := context.WithTimeout(r.Context(), h.timeout)
+			got, err := sv.SchemaVersion(ctx)
+			cancel()
+			switch {
+			case err != nil:
+				checks["schema_version"] = readinessCheck{OK: false, Error: err.Error()}
+				statusCode = http.StatusServiceUnavailable
+			case got < h.expectedSchemaVersion:
+				checks["schema_version"] = readinessCheck{
+					OK: false,
+					Error: fmt.Sprintf("applied schema version %d < required %d (migrations not yet applied)",
+						got, h.expectedSchemaVersion),
+				}
+				statusCode = http.StatusServiceUnavailable
+			default:
+				checks["schema_version"] = readinessCheck{OK: true}
+			}
 		}
 	}
 

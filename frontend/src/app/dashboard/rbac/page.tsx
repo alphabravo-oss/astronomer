@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from '@/lib/navigation';
 import { useTabParam } from '@/lib/use-tab-param';
 import {
   useGlobalRoles,
@@ -69,7 +70,21 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: 'effective', label: 'Effective', icon: ListChecks },
 ];
 
+/** In-app route for the admin user-security detail (unlock, force-logout, ...). */
+export function adminUserHref(userId: string): string {
+  return `/dashboard/admin/users/${userId}`;
+}
+
+/** True while the account is locked out (locked_until is a future timestamp). */
+export function isUserLocked(user: Pick<User, 'lockedUntil' | 'locked_until'>): boolean {
+  const raw = user.lockedUntil ?? user.locked_until;
+  if (!raw) return false;
+  const until = Date.parse(raw);
+  return Number.isFinite(until) && until > Date.now();
+}
+
 export default function RBACPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'global-roles');
   const [showRoleEditor, setShowRoleEditor] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -280,7 +295,20 @@ export default function RBACPage() {
     {
       key: 'enabled',
       header: 'Status',
-      accessor: (row) => <StatusBadge status={row.enabled ? 'active' : 'disconnected'} label={row.enabled ? 'Enabled' : 'Disabled'} />,
+      accessor: (row) => (
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={row.enabled ? 'active' : 'disconnected'} label={row.enabled ? 'Enabled' : 'Disabled'} />
+          {isUserLocked(row) && (
+            <span
+              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-status-error/10 text-status-error"
+              title="Account is locked out — open the user to unlock"
+            >
+              <Lock className="h-3 w-3" />
+              Locked
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'lastLogin',
@@ -466,6 +494,7 @@ export default function RBACPage() {
             loading={usersLoading}
             isError={usersError}
             onRetry={() => refetchUsers()}
+            onRowClick={(row) => router.push(adminUserHref(row.id))}
             emptyMessage="No users found"
           />
         )}

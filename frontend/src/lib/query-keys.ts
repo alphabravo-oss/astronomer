@@ -162,7 +162,21 @@ export const queryKeys = {
     events: (params?: Record<string, unknown>) => ['alerting', 'events', params] as const,
     channels: ['alerting', 'channels'] as const,
     silences: ['alerting', 'silences'] as const,
+    // P-03 — Alertmanager-style inhibition rules.
+    inhibitions: ['alerting', 'inhibitions'] as const,
+    inhibition: (id: string) => ['alerting', 'inhibitions', id] as const,
   },
+  // F-05 — external SIEM forwarders + per-forwarder status.
+  siemForwarders: {
+    all: ['siem-forwarders'] as const,
+    list: ['siem-forwarders', 'list'] as const,
+    detail: (id: string) => ['siem-forwarders', 'detail', id] as const,
+    status: (id: string) => ['siem-forwarders', 'status', id] as const,
+  },
+  // F-05 — SCIM provisioning tokens.
+  scimTokens: ['scim-tokens'] as const,
+  // P-04 — Gatekeeper constraint authoring (per-cluster).
+  gatekeeperConstraints: (clusterId: string) => ['gatekeeper-constraints', clusterId] as const,
   // Sprint 072 — read-only anomaly baselines for tuning.
   anomalyBaselines: {
     list: (params?: Record<string, unknown>) => ['anomaly-baselines', 'list', params] as const,
@@ -202,6 +216,13 @@ export const queryKeys = {
     queues: ['admin', 'queues'] as const,
     dlq: (queue: string) => ['admin', 'queues', queue, 'dlq'] as const,
     outbox: (status: string) => ['admin', 'task-outbox', status] as const,
+  },
+  // F-05 — superuser security diagnostics.
+  adminSecurity: {
+    keyStatus: ['admin', 'key-status'] as const,
+    shellSessions: ['admin', 'shell-sessions'] as const,
+    shellSessionCommands: (sessionId: string) =>
+      ['admin', 'shell-sessions', sessionId, 'commands'] as const,
   },
   storage: {
     all: ['storage'] as const,

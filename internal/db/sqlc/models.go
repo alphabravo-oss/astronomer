@@ -63,6 +63,18 @@ type AlertEvent struct {
 	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
+type AlertInhibition struct {
+	ID             uuid.UUID       `json:"id"`
+	Name           string          `json:"name"`
+	SourceMatchers json.RawMessage `json:"source_matchers"`
+	TargetMatchers json.RawMessage `json:"target_matchers"`
+	EqualLabels    json.RawMessage `json:"equal_labels"`
+	Enabled        bool            `json:"enabled"`
+	CreatedByID    pgtype.UUID     `json:"created_by_id"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
 type AlertRule struct {
 	ID                   uuid.UUID       `json:"id"`
 	Name                 string          `json:"name"`
@@ -338,6 +350,18 @@ type AuditLogDefault struct {
 	IpAddress       *netip.Addr     `json:"ip_address"`
 	UserAgent       string          `json:"user_agent"`
 	Detail          json.RawMessage `json:"detail"`
+}
+
+type AuthoredConstraint struct {
+	ID         uuid.UUID   `json:"id"`
+	ClusterID  uuid.UUID   `json:"cluster_id"`
+	Name       string      `json:"name"`
+	Kind       string      `json:"kind"`
+	ApiVersion string      `json:"api_version"`
+	Yaml       string      `json:"yaml"`
+	CreatedBy  pgtype.UUID `json:"created_by"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
 type Backup struct {

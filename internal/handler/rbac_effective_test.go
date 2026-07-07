@@ -230,6 +230,29 @@ func TestPermissionPreviewTemplateFlagsSensitiveAccess(t *testing.T) {
 	}
 }
 
+// TestGrantsFromEffectiveMarksInheritance verifies the preview renderer carries
+// the direct/inherited provenance of a template's flattened grants into the API
+// response so the UI can distinguish inherited permissions from direct ones.
+func TestGrantsFromEffectiveMarksInheritance(t *testing.T) {
+	src := effectivePermissionSource{Scope: "project", RoleName: "Top Admin"}
+	grants := grantsFromEffective([]rbac.EffectiveGrant{
+		{Resource: "workloads", Verb: "delete"},
+		{Resource: "pods", Verb: "read", Inherited: true, InheritedFrom: "base-viewer"},
+	}, src)
+
+	direct := effectiveGrantByKey(t, grants, "workloads", "delete")
+	if direct.Inherited || direct.InheritedFrom != "" {
+		t.Errorf("workloads:delete should be direct, got %+v", direct)
+	}
+	inherited := effectiveGrantByKey(t, grants, "pods", "read")
+	if !inherited.Inherited || inherited.InheritedFrom != "base-viewer" {
+		t.Errorf("pods:read should be inherited from base-viewer, got %+v", inherited)
+	}
+	if len(inherited.Sources) != 1 || inherited.Sources[0].RoleName != "Top Admin" {
+		t.Errorf("inherited grant sources = %+v", inherited.Sources)
+	}
+}
+
 func TestPermissionPreviewRejectsScopeMismatch(t *testing.T) {
 	cat, err := rbac.LoadCatalog()
 	if err != nil {

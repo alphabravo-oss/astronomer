@@ -12,6 +12,8 @@
  */
 import { Link } from '@/lib/link';
 import { ExtensionSlot } from '@/components/extensions/ExtensionSlot';
+import { useIsSuperuser } from '@/components/settings/hooks';
+import { PermissionState } from '@/components/ui/empty-state';
 import {
   Palette,
   Mail,
@@ -30,6 +32,7 @@ import {
   KeyRound,
   Activity,
   Puzzle,
+  Radio,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -137,6 +140,12 @@ const CARDS: SettingsCard[] = [
     icon: FileSearch,
   },
   {
+    href: '/dashboard/settings/siem',
+    title: 'SIEM forwarders',
+    description: 'Stream audit + platform events to syslog / Splunk HEC / NDJSON-HTTPS.',
+    icon: Radio,
+  },
+  {
     href: '/dashboard/settings/network-policies',
     title: 'Network policy templates',
     description: 'Deny-all / project-isolated / namespace-only Kubernetes NetworkPolicy bundles.',
@@ -145,6 +154,34 @@ const CARDS: SettingsCard[] = [
 ];
 
 export default function SettingsHubPage() {
+  // Every card fans out to an admin-only surface guarded by SettingsAuthGate.
+  // Rather than showing all 17 cards to a non-admin who'd bounce off a 403 per
+  // click (afford-then-deny, F-06), show a single "Admins only" state. Direct
+  // deep-links still work — each subpage's SettingsAuthGate enforces access.
+  const { isSuperuser, ready } = useIsSuperuser();
+
+  // While auth hydrates (!ready) render the header only — don't flash the full
+  // 17-card grid to a user who will turn out to be a non-admin. Once ready, a
+  // non-superuser gets a single "Admins only" state instead of afford-then-deny.
+  if (!ready || !isSuperuser) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Platform configuration and administration.
+          </p>
+        </div>
+        {ready && !isSuperuser && (
+          <PermissionState
+            title="Admins only"
+            description="Platform settings are restricted to superusers. Contact an administrator if you need access."
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>

@@ -1,6 +1,125 @@
 package rbac
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/google/uuid"
+)
+
+// EffectiveGrant is one flattened (resource, verb) permission a role template
+// confers, annotated with its provenance. Inherited is false for a grant the
+// template declares in its own rules and true for one contributed transitively
+// through an Inherits reference; InheritedFrom names the template that actually
+// declared the rule (empty for direct grants). Direct declarations win over
+// inherited ones for the same (resource, verb).
+type EffectiveGrant struct {
+	Resource      string `json:"resource"`
+	Verb          string `json:"verb"`
+	Inherited     bool   `json:"inherited"`
+	InheritedFrom string `json:"inherited_from,omitempty"`
+}
+
+// resolveInherited is the load-time composition pass that flattens role-template
+// inheritance. For every template it transitively unions its own permission set
+// with the permission sets of each name in Inherits, records provenance, and
+// stores the result on Template.effectiveGrants (read via EffectiveGrants).
+//
+// It fails closed: an Inherits name that does not resolve to an existing
+// template, or one whose scope differs from the inheriting template's scope, is
+// a hard error. Inheritance cycles are detected and rejected. The flattened set
+// is deterministically ordered (resource, then verb) so API output is stable.
+//
+// Templates without any Inherits still get effectiveGrants populated (equal to
+// their direct grants) so callers can read EffectiveGrants uniformly.
+func resolveInherited(byName map[string]Template) error {
+	// Validate every reference up front so unknown/cross-scope names fail the
+	// whole load rather than silently degrading a single template.
+	for name, t := range byName {
+		for _, parent := range t.Inherits {
+			p, ok := byName[parent]
+			if !ok {
+				return fmt.Errorf("template %q inherits unknown template %q", name, parent)
+			}
+			if p.Scope != t.Scope {
+				return fmt.Errorf("template %q (scope %s) inherits %q of incompatible scope %s", name, t.Scope, parent, p.Scope)
+			}
+		}
+	}
+
+	memo := make(map[string][]EffectiveGrant, len(byName))
+	var resolve func(name string, path []string) ([]EffectiveGrant, error)
+	resolve = func(name string, path []string) ([]EffectiveGrant, error) {
+		if g, ok := memo[name]; ok {
+			return g, nil
+		}
+		for _, seen := range path {
+			if seen == name {
+				return nil, fmt.Errorf("template inheritance cycle: %s -> %s", strings.Join(path, " -> "), name)
+			}
+		}
+		t := byName[name]
+		index := make(map[string]struct{})
+		grants := make([]EffectiveGrant, 0)
+		add := func(g EffectiveGrant) {
+			key := g.Resource + "\x00" + g.Verb
+			if _, dup := index[key]; dup {
+				return
+			}
+			index[key] = struct{}{}
+			grants = append(grants, g)
+		}
+		// Direct grants first: they win over anything inherited.
+		for _, rule := range t.Rules {
+			for _, verb := range rule.Verbs {
+				add(EffectiveGrant{Resource: rule.Resource, Verb: verb})
+			}
+		}
+		// Inherited grants, parents in declared order (first parent wins the
+		// provenance for a permission it shares with a later parent).
+		childPath := append(append([]string(nil), path...), name)
+		for _, parent := range t.Inherits {
+			pg, err := resolve(parent, childPath)
+			if err != nil {
+				return nil, err
+			}
+			for _, g := range pg {
+				// Attribute to the template that actually declared the rule: the
+				// parent itself when the parent declared it directly, otherwise
+				// the ancestor the parent inherited it from.
+				declaring := parent
+				if g.Inherited {
+					declaring = g.InheritedFrom
+				}
+				add(EffectiveGrant{Resource: g.Resource, Verb: g.Verb, Inherited: true, InheritedFrom: declaring})
+			}
+		}
+		sortEffectiveGrants(grants)
+		memo[name] = grants
+		return grants, nil
+	}
+
+	for name := range byName {
+		g, err := resolve(name, nil)
+		if err != nil {
+			return err
+		}
+		t := byName[name]
+		t.effectiveGrants = g
+		byName[name] = t
+	}
+	return nil
+}
+
+func sortEffectiveGrants(g []EffectiveGrant) {
+	sort.SliceStable(g, func(i, j int) bool {
+		if g[i].Resource != g[j].Resource {
+			return g[i].Resource < g[j].Resource
+		}
+		return g[i].Verb < g[j].Verb
+	})
+}
 
 // Engine evaluates permissions across the three-tier RBAC model.
 type Engine struct{}

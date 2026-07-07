@@ -387,6 +387,19 @@ rendered manifest.
     {{- if and .Values.dex.enabled (eq (default "" .Values.dex.clientSecret) "") }}
       {{- $errs = append $errs "  - dex.clientSecret is empty; replace with a freshly-generated value (the chart's default is intentionally weak and refused in production)" }}
     {{- end }}
+    {{- /* Management-plane backups must be wired in production or the DR story
+           is a no-op (RPO silently becomes infinite). managementBackup.enabled
+           defaults true but the S3 target is empty, so a plain production render
+           would ship with no CronJob and no warning. Require the S3 target, or
+           an explicit opt-out via managementBackup.enabled=false. */ -}}
+    {{- if .Values.managementBackup.enabled }}
+      {{- if not .Values.managementBackup.s3.bucket }}
+        {{- $errs = append $errs "  - managementBackup.s3.bucket is empty but managementBackup.enabled=true — production installs must back up the management DB. Set the bucket (see values-production.yaml) or set managementBackup.enabled=false to explicitly opt out (RPO becomes infinite)." }}
+      {{- end }}
+      {{- if not .Values.managementBackup.s3.credentialsSecretRef.name }}
+        {{- $errs = append $errs "  - managementBackup.s3.credentialsSecretRef.name is empty but managementBackup.enabled=true — provide the S3 credentials Secret (see values-production.yaml) or set managementBackup.enabled=false to explicitly opt out." }}
+      {{- end }}
+    {{- end }}
     {{- if gt (len $errs) 0 }}
       {{- $msg := printf "\n\nAstronomer production preflight failed:\n%s\n\nSee deploy/chart/README.md and deploy/chart/values-production.yaml for the expected wiring." (join "\n" $errs) }}
       {{- fail $msg }}

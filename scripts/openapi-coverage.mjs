@@ -62,6 +62,19 @@ const KNOWN_NIL_GATED = new Set([
   'GET /api/v1/alerting/channels',
   'POST /api/v1/alerting/channels',
   'GET /api/v1/alerting/events',
+  // P-03 alert inhibitions — the Alerting handler is nil in the route-dump
+  // router, so chi omits these real, served routes from docs/routes.json.
+  'GET /api/v1/admin/alerting/inhibitions',
+  'POST /api/v1/admin/alerting/inhibitions',
+  'GET /api/v1/admin/alerting/inhibitions/{}',
+  'PUT /api/v1/admin/alerting/inhibitions/{}',
+  'DELETE /api/v1/admin/alerting/inhibitions/{}',
+  // P-04 custom Gatekeeper constraint authoring — the Gatekeeper handler is
+  // nil in the route-dump router, so chi omits these real, served routes.
+  'GET /api/v1/clusters/{}/gatekeeper/constraints',
+  'POST /api/v1/clusters/{}/gatekeeper/constraints',
+  'POST /api/v1/clusters/{}/gatekeeper/constraints/validate',
+  'DELETE /api/v1/clusters/{}/gatekeeper/constraints/{}',
   'GET /api/v1/argocd/instances',
   'GET /api/v1/argocd/instances/{}/orphan-report',
   'GET /api/v1/clusters/{}/vulnerabilities/images',

@@ -42,6 +42,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// C-01: enforce the same production fail-fast the server runs. Without this
+	// the worker stays Running with a typo'd ASTRONOMER_ENCRYPTION_KEY / bad
+	// secret / plaintext DSN — silently no-op'ing its credential-migration,
+	// argocd auto-register, and email tasks — hiding exactly the misconfiguration
+	// the check exists to surface. warn-only in dev (ValidateProductionSecurity
+	// is a no-op outside production).
+	encryptorReady := false
+	if cfg.EncryptionKey != "" {
+		if _, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
+			encryptorReady = true
+		}
+	}
+	if secErr := config.ValidateProductionSecurity(cfg, encryptorReady); secErr != nil {
+		// Only returns non-nil in production mode.
+		log.Error("production security config invalid; refusing to start", "error", secErr)
+		os.Exit(1)
+	}
+
 	// Distributed tracing — same InitTracing/Shutdown contract as
 	// the server. The worker's asynq handlers extract traceparent from
 	// incoming task payloads (planned follow-up in this same sprint),
@@ -75,6 +93,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+	// C-01: fail fast on a corrupt schema_migrations row set (dirty=true or
+	// multi-row drift), same guard the server runs in NewApp. A worker that
+	// keeps sweeping against an indeterminate schema hides the .247-class
+	// incident instead of CrashLooping on it.
+	if shErr := database.SchemaHealth(context.Background()); shErr != nil {
+		log.Error("schema health check failed; refusing to start", "error", shErr)
+		os.Exit(1)
+	}
 	if _, err := observability.EnsureInstanceID(context.Background(), sqlc.New(database.Pool())); err != nil {
 		log.Error("failed to ensure observability instance id", "error", err)
 		os.Exit(1)
@@ -262,7 +288,12 @@ func main() {
 		}
 	}()
 	go func() {
-		if err := worker.StartMetricsServer(ctx, cfg.WorkerMetricsAddr, log); err != nil {
+		// C-02: the metrics listener also serves /healthz so the chart's
+		// worker probe (httpGet /healthz:9090) has a real target. Redis
+		// reachability via the asynq client is the meaningful liveness signal
+		// for a queue consumer — if it can't reach Redis it can't process or
+		// enqueue anything.
+		if err := worker.StartMetricsServer(ctx, cfg.WorkerMetricsAddr, runtimeEnqueuer, log); err != nil {
 			errCh <- fmt.Errorf("metrics server: %w", err)
 		}
 	}()

@@ -1,0 +1,120 @@
+{
+  "title": "Astronomer — Management Plane",
+  "uid": "astronomer-management-plane",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["astronomer", "management-plane"],
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "title": "HTTP 5xx ratio (5m)",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.01}, {"color": "red", "value": 0.05}]}}},
+      "targets": [{"expr": "astronomer:http_5xx_ratio:5m", "refId": "A"}]
+    },
+    {
+      "title": "HTTP p99 latency (5m)",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{"expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))", "refId": "A"}]
+    },
+    {
+      "title": "In-flight requests",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "targets": [{"expr": "sum(astronomer_http_in_flight_requests)", "refId": "A"}]
+    },
+    {
+      "title": "Agents disconnected",
+      "type": "stat",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+      "targets": [{"expr": "count(astronomer_agent_connections == 0) or vector(0)", "refId": "A"}]
+    },
+    {
+      "title": "HTTP request rate by status class",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (status_class) (rate(astronomer_http_requests_total[5m]))", "legendFormat": "{{status_class}}", "refId": "A"}]
+    },
+    {
+      "title": "HTTP latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p99", "refId": "C"}
+      ]
+    },
+    {
+      "title": "Asynq queue depth by queue + state",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (queue, state) (astronomer_worker_queue_depth)", "legendFormat": "{{queue}}/{{state}}", "refId": "A"}]
+    },
+    {
+      "title": "Asynq oldest-pending age by queue",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{"expr": "max by (queue) (astronomer_worker_queue_latency_seconds)", "legendFormat": "{{queue}}", "refId": "A"}]
+    },
+    {
+      "title": "Task outbox oldest-due age by status",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{"expr": "max by (status) (astronomer_task_outbox_oldest_due_seconds)", "legendFormat": "{{status}}", "refId": "A"}]
+    },
+    {
+      "title": "DB pool health (acquired / idle / max)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum(astronomer_db_pool_acquired_connections)", "legendFormat": "acquired", "refId": "A"},
+        {"expr": "sum(astronomer_db_pool_idle_connections)", "legendFormat": "idle", "refId": "B"},
+        {"expr": "sum(astronomer_db_pool_max_connections)", "legendFormat": "max", "refId": "C"},
+        {"expr": "sum(rate(astronomer_db_pool_empty_acquire_count_total[5m]))", "legendFormat": "empty-acquire/s", "refId": "D"}
+      ]
+    },
+    {
+      "title": "Agent connections (0 = disconnected)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 28, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}},
+      "targets": [{"expr": "astronomer_agent_connections", "legendFormat": "{{cluster_name}}", "refId": "A"}]
+    },
+    {
+      "title": "Agent reconnect rate",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (cluster_id) (rate(astronomer_agent_reconnects_total[5m]))", "legendFormat": "{{cluster_id}}", "refId": "A"}]
+    },
+    {
+      "title": "Management backup — hours since last success",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 36, "w": 8, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "h", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 26}]}}},
+      "targets": [{"expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-management-backup-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-management-backup-.*\"} > 0)) / 3600", "refId": "A"}]
+    },
+    {
+      "title": "Restore drill — days since last success",
+      "type": "stat",
+      "gridPos": {"x": 8, "y": 36, "w": 8, "h": 4},
+      "fieldConfig": {"defaults": {"unit": "d", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 14}]}}},
+      "targets": [{"expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-restore-drill-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-restore-drill-.*\"} > 0)) / 86400", "refId": "A"}]
+    },
+    {
+      "title": "Backup / restore-drill failures (24h)",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 36, "w": 8, "h": 4},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+      "targets": [{"expr": "sum(increase(kube_job_status_failed{job_name=~\".*-management-backup-.*|.*-restore-drill-.*\"}[24h]))", "refId": "A"}]
+    }
+  ]
+}

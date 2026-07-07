@@ -7,8 +7,10 @@ import {
   Filter,
   RefreshCw,
   Search,
+  TerminalSquare,
   X,
 } from 'lucide-react';
+import { Link } from '@/lib/link';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ActivityDetailsDrawer, type ActivityDetailField } from '@/components/audit/activity-details-drawer';
@@ -164,6 +166,13 @@ export default function AuditLogPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/audit/shell-sessions"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <TerminalSquare className="h-4 w-4" />
+            Shell sessions
+          </Link>
           <a
             href={exportHref}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

@@ -52,6 +52,47 @@ func TestReadinessHandlerOK(t *testing.T) {
 	}
 }
 
+// fakeDBSchema implements both Health and SchemaVersion so the C-03 gate runs.
+type fakeDBSchema struct {
+	version int64
+	err     error
+}
+
+func (f fakeDBSchema) Health(context.Context) error { return nil }
+func (f fakeDBSchema) SchemaVersion(context.Context) (int64, error) {
+	return f.version, f.err
+}
+
+// TestReadinessSchemaVersionGate (C-03): the pod stays out of rotation until the
+// applied schema reaches the binary's embedded floor.
+func TestReadinessSchemaVersionGate(t *testing.T) {
+	t.Run("stale schema 503s", func(t *testing.T) {
+		h := newReadinessHandler(fakeDBSchema{version: 5}, fakeQueuePing{}, fakeHubStatus{})
+		h.expectedSchemaVersion = 131
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("stale schema should 503, got %d", rec.Code)
+		}
+		var body map[string]any
+		_ = json.NewDecoder(rec.Body).Decode(&body)
+		sv, ok := body["checks"].(map[string]any)["schema_version"].(map[string]any)
+		if !ok || sv["ok"] != false {
+			t.Fatalf("expected failing schema_version check, got %v", body["checks"])
+		}
+	})
+
+	t.Run("current schema ready", func(t *testing.T) {
+		h := newReadinessHandler(fakeDBSchema{version: 131}, fakeQueuePing{}, fakeHubStatus{clusters: []string{"a"}})
+		h.expectedSchemaVersion = 131
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("current schema should be ready, got %d", rec.Code)
+		}
+	})
+}
+
 func TestReadinessHandlerDependencyFailure(t *testing.T) {
 	h := newReadinessHandler(fakeDBHealth{err: errors.New("db down")}, fakeQueuePing{err: errors.New("redis down")}, fakeHubStatus{})
 

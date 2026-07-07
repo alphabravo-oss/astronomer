@@ -17,6 +17,7 @@ import {
   type SearchableResourceType,
   type SearchResultRow,
 } from '@/lib/api';
+import { detailHref } from '@/lib/k8s-paths';
 import { useLiveQueryInvalidation } from '@/lib/live-events';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -25,7 +26,7 @@ import { cn } from '@/lib/utils';
 // SEARCHABLE_TYPES is the user-facing list shown in the type dropdown.
 // Keeping it in declaration order rather than alphabetical means the most
 // common targets (Pods, Deployments, ...) appear first.
-const SEARCHABLE_TYPES: { value: SearchableResourceType; label: string }[] = [
+export const SEARCHABLE_TYPES: { value: SearchableResourceType; label: string }[] = [
   { value: 'pods', label: 'Pods' },
   { value: 'deployments', label: 'Deployments' },
   { value: 'statefulsets', label: 'StatefulSets' },
@@ -40,6 +41,43 @@ const SEARCHABLE_TYPES: { value: SearchableResourceType; label: string }[] = [
   { value: 'namespaces', label: 'Namespaces' },
   { value: 'nodes', label: 'Nodes' },
 ];
+
+// searchResultHref resolves the in-app destination for a clicked search
+// result. Pods and other workload kinds land on their dedicated workload
+// detail; nodes/namespaces on their list/detail pages; everything else
+// (Services, Ingresses, ConfigMaps, Secrets, PVCs, ...) deep-links the
+// generic per-cluster detail route via `detailHref`, falling back to the
+// resource list when the row carries no name.
+export function searchResultHref(
+  resourceType: SearchableResourceType,
+  cid: string,
+  ns: string,
+  name: string,
+): string {
+  switch (resourceType) {
+    case 'pods':
+      return `/dashboard/clusters/${cid}/workloads/pods/${ns}/${name}`;
+    case 'deployments':
+    case 'statefulsets':
+    case 'daemonsets':
+    case 'jobs':
+    case 'cronjobs': {
+      const kind = resourceType.replace(/s$/, '');
+      return `/dashboard/clusters/${cid}/workloads/${kind.toLowerCase()}/${ns}/${name}`;
+    }
+    case 'nodes':
+      return `/dashboard/clusters/${cid}/nodes/${name}`;
+    case 'namespaces':
+      return `/dashboard/clusters/${cid}/namespaces`;
+    default:
+      // Generic k8s objects (services, ingresses, configmaps, secrets, pvcs).
+      // With a name we deep-link the detail route (matches resolveDetailSlug);
+      // without one we fall back to the cluster's resource list.
+      return name
+        ? detailHref(cid, resourceType, ns || undefined, name)
+        : `/dashboard/clusters/${cid}/${resourceType}`;
+  }
+}
 
 // useDebouncedValue returns a value that only updates after `delay`ms of
 // stillness. Avoids hammering the search endpoint on every keystroke.
@@ -184,36 +222,13 @@ export default function SearchPage() {
   ];
 
   const handleRowClick = (row: SearchResultRow) => {
-    // Click → per-cluster detail page. Routing target depends on the
-    // resource type. For workload-style resources we land on the
-    // workloads/{kind}/{namespace}/{name} detail; for plain k8s objects
-    // we land on the cluster's resources view.
+    // Click → per-cluster detail page. See `searchResultHref` for the
+    // per-type routing table.
     const cid = row.clusterId;
     if (!cid) return;
     const ns = (row.namespace as string) || '';
     const name = (row.name as string) || '';
-    switch (resourceType) {
-      case 'pods':
-        router.push(`/dashboard/clusters/${cid}/workloads/pods/${ns}/${name}`);
-        return;
-      case 'deployments':
-      case 'statefulsets':
-      case 'daemonsets':
-      case 'jobs':
-      case 'cronjobs': {
-        const kind = (row.type as string) || resourceType.replace(/s$/, '');
-        router.push(`/dashboard/clusters/${cid}/workloads/${kind.toLowerCase()}/${ns}/${name}`);
-        return;
-      }
-      case 'nodes':
-        router.push(`/dashboard/clusters/${cid}/nodes/${name}`);
-        return;
-      case 'namespaces':
-        router.push(`/dashboard/clusters/${cid}/namespaces`);
-        return;
-      default:
-        router.push(`/dashboard/clusters/${cid}/resources/${resourceType}`);
-    }
+    router.push(searchResultHref(resourceType, cid, ns, name));
   };
 
   const isEmpty = !isLoading && results.length === 0 && !error;

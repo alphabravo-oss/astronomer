@@ -3899,6 +3899,65 @@ components:
         Schema not yet fully enumerated; shape is the handler's JSON payload.
         Permissive object placeholder so every $ref in this spec resolves.
       additionalProperties: true
+    InhibitionMatcher:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        is_regex:
+          type: boolean
+      required:
+        - label
+        - value
+    InhibitionRequest:
+      type: object
+      description: Alert inhibition rule create/update body (P-03).
+      properties:
+        name:
+          type: string
+        source_matchers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InhibitionMatcher'
+        target_matchers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InhibitionMatcher'
+        equal_labels:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+      required:
+        - name
+    ConstraintYAMLRequest:
+      type: object
+      description: Gatekeeper constraint authoring body (P-04).
+      properties:
+        yaml:
+          type: string
+          description: A ConstraintTemplate or Gatekeeper Constraint YAML document.
+      required:
+        - yaml
+    ConstraintValidationResponse:
+      type: object
+      description: Result of validating (and optionally applying) a constraint (P-04).
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        applied:
+          type: boolean
+        name:
+          type: string
+        kind:
+          type: string
     NetworkPolicyApplicationResponse:
       type: object
       description: >-
@@ -6057,6 +6116,91 @@ paths:
           description: Created
         '400':
           description: Unsupported channel_type
+  /api/v1/admin/alerting/inhibitions/:
+    get:
+      tags:
+        - Alerting
+      summary: List alert inhibition rules (P-03)
+      description: Requires alerts:read (or alerts:list) RBAC.
+      security:
+        - bearerJWT: []
+      responses:
+        '200':
+          description: Array of inhibition rules.
+    post:
+      tags:
+        - Alerting
+      summary: Create an alert inhibition rule (P-03)
+      description: |
+        Alertmanager-style inhibition. A firing target alert is suppressed
+        while a source alert (matching source_matchers) is firing and both
+        share equal values on every equal_labels label. Requires the admin
+        api-token scope and alerts:create RBAC.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InhibitionRequest'
+      responses:
+        '201':
+          description: Created inhibition rule.
+        '400':
+          description: Invalid matchers or missing source/target.
+  /api/v1/admin/alerting/inhibitions/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - Alerting
+      summary: Get an alert inhibition rule (P-03)
+      description: Requires alerts:read (or alerts:list) RBAC.
+      security:
+        - bearerJWT: []
+      responses:
+        '200':
+          description: The inhibition rule.
+        '404':
+          description: Inhibition not found.
+    put:
+      tags:
+        - Alerting
+      summary: Update an alert inhibition rule (P-03)
+      description: Requires the admin api-token scope and alerts:update RBAC.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InhibitionRequest'
+      responses:
+        '200':
+          description: Updated inhibition rule.
+        '400':
+          description: Invalid matchers or missing source/target.
+        '404':
+          description: Inhibition not found.
+    delete:
+      tags:
+        - Alerting
+      summary: Delete an alert inhibition rule (P-03)
+      description: Requires the admin api-token scope and alerts:delete RBAC.
+      security:
+        - bearerJWT: []
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          description: Inhibition not found.
   /api/v1/clusters/{id}:
     parameters:
       - name: id
@@ -8437,6 +8581,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/clusters/{id}/gatekeeper/constraints/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - clusters
+      summary: List Gatekeeper constraints (bundle + authored) (P-04)
+      description: |
+        Lists the embedded starter-bundle constraints plus operator-authored
+        custom constraints for the cluster, with best-effort live violation
+        counts. Requires clusters:read RBAC.
+      security:
+        - bearerJWT: []
+      responses:
+        '200':
+          description: Bundle + custom constraints.
+    post:
+      tags:
+        - clusters
+      summary: Author a Gatekeeper constraint — validate + apply (P-04)
+      description: |
+        Validates the YAML (ConstraintTemplate or Constraint; ConstraintTemplate
+        Rego is structurally checked), server-side-applies it to the cluster
+        through the agent tunnel, and persists the authored record. Requires the
+        clusters:write api-token scope and clusters:update RBAC; every apply is
+        audited.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConstraintYAMLRequest'
+      responses:
+        '201':
+          description: Applied and recorded.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ConstraintValidationResponse'
+        '400':
+          description: Invalid YAML / Rego, or the cluster rejected the constraint.
+        '403':
+          description: Caller lacks clusters:update.
+  /api/v1/clusters/{id}/gatekeeper/constraints/validate/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - clusters
+      summary: Validate a Gatekeeper constraint YAML without applying (P-04)
+      description: Requires clusters:read RBAC. Never applies to the cluster.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConstraintYAMLRequest'
+      responses:
+        '200':
+          description: Validation result (valid, errors, name, kind).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ConstraintValidationResponse'
+  /api/v1/clusters/{id}/gatekeeper/constraints/{name}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags:
+        - clusters
+      summary: Delete an authored Gatekeeper constraint (P-04)
+      description: |
+        Removes the authored record and deletes the resource from the cluster.
+        Requires the clusters:write api-token scope and clusters:update RBAC;
+        audited.
+      security:
+        - bearerJWT: []
+      responses:
+        '204':
+          description: Deleted.
+        '403':
+          description: Caller lacks clusters:update.
+        '404':
+          description: Authored constraint not found.
   /api/v1/cloud-credentials/providers:
     get:
       summary: List supported cloud-credential providers

@@ -100,7 +100,7 @@ Before starting, confirm you have:
 
       ```bash
       kubectl -n astronomer get secret <release>-secrets \
-        -o jsonpath='{.data.ENCRYPTION_KEY}' | base64 -d
+        -o jsonpath='{.data.ASTRONOMER_ENCRYPTION_KEY}' | base64 -d
       ```
 
       Save the value somewhere safe in your password manager.
@@ -367,7 +367,7 @@ dump.
 ```bash
 # What the running server thinks the key is.
 kubectl -n astronomer get secret <release>-secrets \
-  -o jsonpath='{.data.ENCRYPTION_KEY}' | base64 -d
+  -o jsonpath='{.data.ASTRONOMER_ENCRYPTION_KEY}' | base64 -d
 ```
 
 Compare against the key you saved during step 0 of the preconditions. If
@@ -383,14 +383,19 @@ they differ, one of these happened:
 
 ### Fix
 
-If you still have the original key in your secret manager:
+If you still have the original key in your secret manager, patch **only** the
+affected key(s) so the other variables the chart renders into `<release>-secrets`
+(`SECRET_KEY`, `GITHUB_*`, `GOOGLE_*`, `OIDC_*`, and — for the bundled Postgres —
+`POSTGRES_PASSWORD`) are preserved. `envFrom` loads every key in the Secret as an
+env var, so a full recreate that omits them would silently blank those consumers:
 
 ```bash
-kubectl -n astronomer create secret generic <release>-secrets \
-  --from-literal=ENCRYPTION_KEY='<original-fernet-key>' \
-  --from-literal=SECRET_KEY='<original-jwt-key>' \
-  --dry-run=client -o yaml \
-  | kubectl apply -f -
+kubectl -n astronomer patch secret <release>-secrets --type merge \
+  -p '{"stringData":{"ASTRONOMER_ENCRYPTION_KEY":"<original-fernet-key>"}}'
+
+# If the JWT signing key also drifted, patch it in the same call:
+kubectl -n astronomer patch secret <release>-secrets --type merge \
+  -p '{"stringData":{"SECRET_KEY":"<original-jwt-key>"}}'
 
 kubectl -n astronomer rollout restart deploy/astronomer-server deploy/astronomer-worker
 ```
@@ -457,7 +462,7 @@ For an operator who is comfortable enough to skip the runbook narrative:
 ```bash
 # 0. Save the encryption key.
 kubectl -n astronomer get secret astronomer-secrets \
-  -o jsonpath='{.data.ENCRYPTION_KEY}' | base64 -d > /tmp/enc.key
+  -o jsonpath='{.data.ASTRONOMER_ENCRYPTION_KEY}' | base64 -d > /tmp/enc.key
 
 # 1. Freeze.
 kubectl -n astronomer scale deploy/astronomer-server deploy/astronomer-worker --replicas=0

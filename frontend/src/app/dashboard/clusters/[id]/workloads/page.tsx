@@ -42,6 +42,14 @@ import {
 import { k8sGet } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
 import { formatRelativeTime } from '@/lib/utils';
+import { useResourceWatch } from '@/hooks/use-resource-watch';
+
+// Fallback poll cadence when a live watch is open (safety net) vs. not.
+// A live watch streams add/update/delete frames, so we lengthen the poll to a
+// slow reconcile instead of dropping it entirely; if the watch drops the hook
+// reports `live: false` and the shorter interval resumes.
+const WATCH_LIVE_POLL_MS = 5 * 60 * 1000;
+const POLL_MS = 30 * 1000;
 
 // ---------------------------------------------------------------------
 // Types — narrow shapes over k8s objects, only fields we render.
@@ -125,40 +133,86 @@ export default function WorkloadsPage() {
   const [namespace, setNamespace] = useState<string>('');
   const [kindFilter, setKindFilter] = useState<Workload['kind'] | ''>('');
 
+  // One live watch per kind, folded into the same React Query cache the table
+  // reads. Each returns `live` once its `?watch=true` stream is open; while
+  // live we lengthen the query's poll to a slow reconcile (WATCH_LIVE_POLL_MS)
+  // and let the stream drive add/update/delete. A watch that can't open reports
+  // live: false, and the shorter POLL_MS keeps the row fresh — graceful
+  // degradation with no code path difference for the table itself.
+  const deployKey = queryKeys.clusterPages.workloadKind(clusterId, 'deployments');
+  const stsKey = queryKeys.clusterPages.workloadKind(clusterId, 'statefulsets');
+  const dsKey = queryKeys.clusterPages.workloadKind(clusterId, 'daemonsets');
+  const jobsKey = queryKeys.clusterPages.workloadKind(clusterId, 'jobs');
+  const cronKey = queryKeys.clusterPages.workloadKind(clusterId, 'cronjobs');
+
+  const deployWatch = useResourceWatch<DeploymentLike>({
+    clusterId,
+    queryKey: deployKey,
+    source: { kind: 'proxy', path: 'apis/apps/v1/deployments' },
+    enabled: !!clusterId,
+  });
+  const stsWatch = useResourceWatch<DeploymentLike>({
+    clusterId,
+    queryKey: stsKey,
+    source: { kind: 'proxy', path: 'apis/apps/v1/statefulsets' },
+    enabled: !!clusterId,
+  });
+  const dsWatch = useResourceWatch<DaemonSetLike>({
+    clusterId,
+    queryKey: dsKey,
+    source: { kind: 'proxy', path: 'apis/apps/v1/daemonsets' },
+    enabled: !!clusterId,
+  });
+  const jobsWatch = useResourceWatch<JobLike>({
+    clusterId,
+    queryKey: jobsKey,
+    source: { kind: 'proxy', path: 'apis/batch/v1/jobs' },
+    enabled: !!clusterId,
+  });
+  const cronWatch = useResourceWatch<CronJobLike>({
+    clusterId,
+    queryKey: cronKey,
+    source: { kind: 'proxy', path: 'apis/batch/v1/cronjobs' },
+    enabled: !!clusterId,
+  });
+
   // Five parallel queries. Each kind has its own retry/cache budget;
   // a missing apiVersion (e.g. batch/v1 disabled) doesn't take the
   // others down with it. enabled: !!clusterId guards against null
   // before the page params resolve.
   const deployments = useQuery({
-    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'deployments'),
+    queryKey: deployKey,
     queryFn: () => k8sGet(clusterId, 'apis/apps/v1/deployments') as Promise<K8sList<DeploymentLike>>,
     enabled: !!clusterId,
-    refetchInterval: 30 * 1000,
+    refetchInterval: deployWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
   });
   const statefulsets = useQuery({
-    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'statefulsets'),
+    queryKey: stsKey,
     queryFn: () => k8sGet(clusterId, 'apis/apps/v1/statefulsets') as Promise<K8sList<DeploymentLike>>,
     enabled: !!clusterId,
-    refetchInterval: 30 * 1000,
+    refetchInterval: stsWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
   });
   const daemonsets = useQuery({
-    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'daemonsets'),
+    queryKey: dsKey,
     queryFn: () => k8sGet(clusterId, 'apis/apps/v1/daemonsets') as Promise<K8sList<DaemonSetLike>>,
     enabled: !!clusterId,
-    refetchInterval: 30 * 1000,
+    refetchInterval: dsWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
   });
   const jobs = useQuery({
-    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'jobs'),
+    queryKey: jobsKey,
     queryFn: () => k8sGet(clusterId, 'apis/batch/v1/jobs') as Promise<K8sList<JobLike>>,
     enabled: !!clusterId,
-    refetchInterval: 30 * 1000,
+    refetchInterval: jobsWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
   });
   const cronjobs = useQuery({
-    queryKey: queryKeys.clusterPages.workloadKind(clusterId, 'cronjobs'),
+    queryKey: cronKey,
     queryFn: () => k8sGet(clusterId, 'apis/batch/v1/cronjobs') as Promise<K8sList<CronJobLike>>,
     enabled: !!clusterId,
-    refetchInterval: 30 * 1000,
+    refetchInterval: cronWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
   });
+
+  const anyLive =
+    deployWatch.live || stsWatch.live || dsWatch.live || jobsWatch.live || cronWatch.live;
 
   // Merge + filter. Memoise so re-renders triggered by other state
   // changes (search box typing) don't re-walk every row.
@@ -213,7 +267,15 @@ export default function WorkloadsPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Workloads</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold">Workloads</h1>
+            {anyLive && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
+                <span className="h-1.5 w-1.5 rounded-full bg-status-success animate-pulse" />
+                Live
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">
             All Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in this cluster.
           </p>

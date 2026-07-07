@@ -20,11 +20,18 @@ type hcLivenessQuerier struct {
 	// health is what GetClusterHealthStatus returns; updateClusterConditions
 	// reads LastMetricsAt off it to classify the MetricsAvailable condition.
 	health sqlc.ClusterHealthStatus
+	// simulateGuardSkip makes UpdateClusterStatusOnHeartbeat report 0 rows
+	// affected, emulating the H-02 guard rejecting a stale snapshot status
+	// because the cluster's heartbeat changed between snapshot and write.
+	simulateGuardSkip bool
 }
 
-func (q *hcLivenessQuerier) UpdateClusterStatus(_ context.Context, arg sqlc.UpdateClusterStatusParams) error {
+func (q *hcLivenessQuerier) UpdateClusterStatusOnHeartbeat(_ context.Context, arg sqlc.UpdateClusterStatusOnHeartbeatParams) (int64, error) {
 	q.statuses = append(q.statuses, arg.Status)
-	return nil
+	if q.simulateGuardSkip {
+		return 0, nil
+	}
+	return 1, nil
 }
 
 func (q *hcLivenessQuerier) UpsertClusterHealthStatus(_ context.Context, _ sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error) {
@@ -104,6 +111,32 @@ func TestHealthCheckFlipsGenuinelyStaleCluster(t *testing.T) {
 	}
 	if c := q.connectedCondition(t); c.Status != conditionFalse {
 		t.Fatalf("Connected condition = %+v, want False", c)
+	}
+}
+
+// TestHealthCheckToleratesGuardSkip is the H-02 race case at the task level: the
+// full-fleet snapshot computed 'disconnected', but by write time the cluster has
+// reconnected, so the heartbeat-guarded write matches 0 rows. updateClusterHealth
+// must treat that as a no-op (no error, converge next sweep) rather than surfacing
+// it or clobbering the reconnected cluster.
+func TestHealthCheckToleratesGuardSkip(t *testing.T) {
+	saved := runtimeDeps
+	t.Cleanup(func() { runtimeDeps = saved })
+
+	q := &hcLivenessQuerier{simulateGuardSkip: true}
+	runtimeDeps = RuntimeDependencies{Queries: q}
+
+	cluster := sqlc.Cluster{
+		ID:            uuid.New(),
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true},
+	}
+	if err := updateClusterHealth(context.Background(), cluster); err != nil {
+		t.Fatalf("guard-skipped write must not error, got %v", err)
+	}
+	// The requested status was still 'disconnected' (snapshot value); the SQL
+	// guard — not the task — is what declines to apply it.
+	if len(q.statuses) != 1 || q.statuses[0] != "disconnected" {
+		t.Fatalf("status writes = %v, want one 'disconnected' request", q.statuses)
 	}
 }
 

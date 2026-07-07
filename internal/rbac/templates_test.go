@@ -199,6 +199,175 @@ func TestCustomResources_TemplateGrants(t *testing.T) {
 	}
 }
 
+// TestResolveInherited_TransitiveUnion verifies a template's effective grants
+// are the flattened union of its own rules plus every rule reachable through
+// its Inherits chain (transitively), with direct grants marked direct and
+// inherited grants attributed to the template that declared them.
+func TestResolveInherited_TransitiveUnion(t *testing.T) {
+	fsys := fstest.MapFS{
+		"templates/base.yaml": &fstest.MapFile{Data: []byte(`name: base-viewer
+scope: project
+rules:
+  - resource: pods
+    verbs: [read, list]
+`)},
+		"templates/mid.yaml": &fstest.MapFile{Data: []byte(`name: mid-operator
+scope: project
+inherits: [base-viewer]
+rules:
+  - resource: workloads
+    verbs: [create]
+`)},
+		"templates/top.yaml": &fstest.MapFile{Data: []byte(`name: top-admin
+scope: project
+inherits: [mid-operator]
+rules:
+  - resource: workloads
+    verbs: [delete]
+`)},
+	}
+	cat, err := loadCatalogFrom(fsys, "templates")
+	if err != nil {
+		t.Fatalf("loadCatalogFrom: %v", err)
+	}
+	top, ok := cat.Get("top-admin")
+	if !ok {
+		t.Fatal("top-admin missing")
+	}
+	// Expected flattened set: workloads:delete (direct), workloads:create
+	// (inherited transitively from mid-operator), pods:read + pods:list
+	// (inherited transitively from base-viewer).
+	type key struct{ resource, verb string }
+	got := map[key]EffectiveGrant{}
+	for _, g := range top.EffectiveGrants() {
+		got[key{g.Resource, g.Verb}] = g
+	}
+	if len(got) != 4 {
+		t.Fatalf("effective grants = %d (%+v), want 4", len(got), top.EffectiveGrants())
+	}
+	if g := got[key{"workloads", "delete"}]; g.Inherited {
+		t.Errorf("workloads:delete should be direct, got %+v", g)
+	}
+	if g := got[key{"workloads", "create"}]; !g.Inherited || g.InheritedFrom != "mid-operator" {
+		t.Errorf("workloads:create should be inherited from mid-operator, got %+v", g)
+	}
+	for _, verb := range []string{"read", "list"} {
+		if g := got[key{"pods", verb}]; !g.Inherited || g.InheritedFrom != "base-viewer" {
+			t.Errorf("pods:%s should be inherited from base-viewer, got %+v", verb, g)
+		}
+	}
+	// EffectiveRules is the flattened rule shape used for risk/preview.
+	var podsVerbs []string
+	for _, r := range top.EffectiveRules() {
+		if r.Resource == "pods" {
+			podsVerbs = r.Verbs
+		}
+	}
+	if len(podsVerbs) != 2 {
+		t.Errorf("EffectiveRules pods verbs = %v, want read+list", podsVerbs)
+	}
+}
+
+// TestResolveInherited_DirectWinsOverInherited verifies a permission a template
+// declares directly is reported as direct even when an inherited template also
+// grants it.
+func TestResolveInherited_DirectWinsOverInherited(t *testing.T) {
+	fsys := fstest.MapFS{
+		"templates/base.yaml": &fstest.MapFile{Data: []byte(`name: base
+scope: cluster
+rules:
+  - resource: pods
+    verbs: [read]
+`)},
+		"templates/child.yaml": &fstest.MapFile{Data: []byte(`name: child
+scope: cluster
+inherits: [base]
+rules:
+  - resource: pods
+    verbs: [read]
+`)},
+	}
+	cat, err := loadCatalogFrom(fsys, "templates")
+	if err != nil {
+		t.Fatalf("loadCatalogFrom: %v", err)
+	}
+	child, _ := cat.Get("child")
+	grants := child.EffectiveGrants()
+	if len(grants) != 1 {
+		t.Fatalf("grants = %+v, want a single deduped pods:read", grants)
+	}
+	if grants[0].Inherited {
+		t.Errorf("pods:read should be direct (direct wins over inherited), got %+v", grants[0])
+	}
+}
+
+// TestResolveInherited_RejectsCycle verifies an inheritance cycle is a hard
+// load error rather than an infinite loop.
+func TestResolveInherited_RejectsCycle(t *testing.T) {
+	fsys := fstest.MapFS{
+		"templates/a.yaml": &fstest.MapFile{Data: []byte(`name: a
+scope: project
+inherits: [b]
+rules:
+  - resource: pods
+    verbs: [read]
+`)},
+		"templates/b.yaml": &fstest.MapFile{Data: []byte(`name: b
+scope: project
+inherits: [a]
+rules:
+  - resource: workloads
+    verbs: [read]
+`)},
+	}
+	_, err := loadCatalogFrom(fsys, "templates")
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("expected cycle error, got %v", err)
+	}
+}
+
+// TestResolveInherited_RejectsScopeMismatch verifies inheriting a template of a
+// different scope fails closed.
+func TestResolveInherited_RejectsScopeMismatch(t *testing.T) {
+	fsys := fstest.MapFS{
+		"templates/g.yaml": &fstest.MapFile{Data: []byte(`name: global-base
+scope: global
+rules:
+  - resource: pods
+    verbs: [read]
+`)},
+		"templates/p.yaml": &fstest.MapFile{Data: []byte(`name: project-child
+scope: project
+inherits: [global-base]
+rules:
+  - resource: workloads
+    verbs: [read]
+`)},
+	}
+	_, err := loadCatalogFrom(fsys, "templates")
+	if err == nil || !strings.Contains(err.Error(), "incompatible scope") {
+		t.Fatalf("expected scope mismatch error, got %v", err)
+	}
+}
+
+// TestResolveInherited_RejectsUnknown verifies inheriting a name that resolves
+// to no template fails closed.
+func TestResolveInherited_RejectsUnknown(t *testing.T) {
+	fsys := fstest.MapFS{
+		"templates/c.yaml": &fstest.MapFile{Data: []byte(`name: child
+scope: project
+inherits: [ghost]
+rules:
+  - resource: pods
+    verbs: [read]
+`)},
+	}
+	_, err := loadCatalogFrom(fsys, "templates")
+	if err == nil || !strings.Contains(err.Error(), "unknown template") {
+		t.Fatalf("expected unknown-template error, got %v", err)
+	}
+}
+
 func namesOf(ts []Template) []string {
 	out := make([]string, len(ts))
 	for i, t := range ts {

@@ -106,6 +106,27 @@ spec:
             {{- end }}
             {{- end }}
           {{- end }}
+          {{- if .Values.worker.probes.enabled }}
+          # The worker exposes /healthz on the same server as /metrics (9090).
+          # Liveness restarts a wedged consumer; readiness gates rollouts on
+          # Redis/scheduler health so a broken worker doesn't report Ready.
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.worker.probes.livenessPath }}
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.worker.probes.readinessPath }}
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- end }}
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

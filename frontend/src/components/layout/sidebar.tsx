@@ -47,6 +47,10 @@ import {
   ExternalLink,
   BookOpen,
   TerminalSquare,
+  Boxes,
+  Camera,
+  Route,
+  Waypoints,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExtensionNavItems } from '@/components/extensions/ExtensionNavItems';
@@ -172,6 +176,13 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         // page itself renders a "not available" state for managed control
         // planes and degrades gracefully when the feature is off server-side.
         { label: 'Control-plane DR', href: `${base}/control-plane-snapshots`, icon: Database },
+        // Registries (image-pull secrets), Velero workload Snapshots, and the
+        // apiserver Network & Access allow-list all drive the member cluster
+        // through the outbound tunnel — same agent-required gating as the
+        // items above (hidden for the management plane's local agent).
+        { label: 'Registries', href: `${base}/registries`, icon: Boxes },
+        { label: 'Snapshots', href: `${base}/snapshots`, icon: Camera },
+        { label: 'Network & Access', href: `${base}/network-access`, icon: Route },
       ];
   return [
     {
@@ -190,6 +201,9 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Events', href: `${base}/events`, icon: Activity },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
         { label: 'Apps', href: `${base}/apps`, icon: Package },
+        // Promoted from the overview badge pill to a first-class destination.
+        // Reads mesh CRs over the k8s proxy, so it works for local + remote.
+        { label: 'Service Mesh', href: `${base}/service-mesh`, icon: Waypoints },
         ...agentRequiredItems,
       ],
     },
@@ -242,6 +256,8 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Resource Quotas', href: `${base}/resourcequotas`, icon: Scale, countKey: 'resourcequotas' },
         { label: 'Limit Ranges', href: `${base}/limitranges`, icon: ShieldAlert, countKey: 'limitranges' },
         { label: 'PDB', href: `${base}/poddisruptionbudgets`, icon: ShieldCheck, countKey: 'poddisruptionbudgets' },
+        // P-04 — Gatekeeper/OPA constraint authoring (bundle + custom).
+        { label: 'Gatekeeper', href: `${base}/gatekeeper`, icon: ShieldCheck },
       ],
     },
     {
@@ -262,6 +278,9 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'CRDs', href: `${base}/crds`, icon: Puzzle, countKey: 'crds' },
         { label: 'Endpoints', href: `${base}/endpoints`, icon: Globe, countKey: 'endpoints' },
         { label: 'ReplicaSets', href: `${base}/replicasets`, icon: Copy, countKey: 'replicasets' },
+        // Read-only CRD-mirror view (quotas, policies, and other resources the
+        // agent mirrors into the management plane).
+        { label: 'Mirrored Resources', href: `${base}/resources`, icon: Layers },
       ],
     },
   ];
