@@ -196,6 +196,80 @@ func ClusterRoleManifest(n Names, verbs EffectiveVerbs) []byte {
 	return b
 }
 
+// RoleManifest renders a NAMESPACED Role scoped to a single namespace,
+// mirroring `verbs` against the wildcard resource set. Task 009 (DIR-04)
+// mechanism A: when a caller's astronomer grants confine them to a
+// specific set of namespaces, the shell provisions one Role + RoleBinding
+// per authorized namespace instead of a cluster-wide ClusterRole, so the
+// session ServiceAccount is genuinely confined at the apiserver — a
+// namespace-scoped operator can no longer read across the whole cluster.
+//
+// Superuser callers never reach this path (they bind to cluster-admin).
+func RoleManifest(n Names, namespace string, verbs EffectiveVerbs) []byte {
+	if verbs.Superuser {
+		return nil
+	}
+	rules := []map[string]any{
+		{
+			"apiGroups": []string{"*"},
+			"resources": []string{"*"},
+			"verbs":     verbs.Verbs(),
+		},
+	}
+	m := map[string]any{
+		"apiVersion": "rbac.authorization.k8s.io/v1",
+		"kind":       "Role",
+		"metadata": map[string]any{
+			"name":      n.RoleName,
+			"namespace": namespace,
+			"labels": map[string]string{
+				"app.kubernetes.io/managed-by": "astronomer-go",
+				"astronomer.io/component":      "kubectl-shell",
+			},
+		},
+		"rules": rules,
+	}
+	b, _ := json.Marshal(m)
+	return b
+}
+
+// RoleBindingManifest renders a NAMESPACED RoleBinding in `namespace` that
+// ties the session ServiceAccount (which lives in n.SANamespace, i.e.
+// kube-system) to the per-namespace Role emitted by RoleManifest. A
+// RoleBinding may reference a subject in another namespace, so one SA is
+// confined to exactly the set of namespaces the caller is authorized for.
+func RoleBindingManifest(n Names, namespace string, verbs EffectiveVerbs) []byte {
+	if verbs.Superuser {
+		return nil
+	}
+	m := map[string]any{
+		"apiVersion": "rbac.authorization.k8s.io/v1",
+		"kind":       "RoleBinding",
+		"metadata": map[string]any{
+			"name":      n.BindingName,
+			"namespace": namespace,
+			"labels": map[string]string{
+				"app.kubernetes.io/managed-by": "astronomer-go",
+				"astronomer.io/component":      "kubectl-shell",
+			},
+		},
+		"subjects": []map[string]any{
+			{
+				"kind":      "ServiceAccount",
+				"name":      n.SAName,
+				"namespace": n.SANamespace,
+			},
+		},
+		"roleRef": map[string]any{
+			"apiGroup": "rbac.authorization.k8s.io",
+			"kind":     "Role",
+			"name":     n.RoleName,
+		},
+	}
+	b, _ := json.Marshal(m)
+	return b
+}
+
 // ClusterRoleBindingManifest renders the binding that ties the SA to
 // either the per-session ClusterRole (non-superuser) or the built-in
 // cluster-admin ClusterRole (superuser).

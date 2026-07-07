@@ -325,6 +325,102 @@ func TestOpen_RBACBindingMatchesEffectiveVerbs(t *testing.T) {
 	}
 }
 
+// TestOpen_ConfinedProvisionsNamespacedRoles covers DIR-04 mechanism A: a
+// caller confined to specific namespaces gets one namespaced Role +
+// RoleBinding per namespace and NO cluster-wide ClusterRole, so the session
+// ServiceAccount is bounded at the apiserver.
+func TestOpen_ConfinedProvisionsNamespacedRoles(t *testing.T) {
+	q := newFakeQuerier()
+	r := newFakeRequester()
+	deps := Deps{Queries: q, Requester: r, PodReadyTimeout: 2 * time.Second}
+
+	_, err := Open(context.Background(), deps, OpenRequest{
+		UserID: uuid.New(), ClusterID: uuid.New(),
+		Verbs:      EffectiveVerbs{Read: true},
+		Namespaces: []string{"team-a", "team-b"},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	posts := r.callsByMethod("POST")
+
+	// No cluster-wide ClusterRole / ClusterRoleBinding for a confined session.
+	for _, c := range posts {
+		if strings.Contains(c.path, "/clusterroles") || strings.Contains(c.path, "/clusterrolebindings") {
+			t.Fatalf("confined session must not create cluster-wide RBAC, saw POST %s", c.path)
+		}
+	}
+
+	// One Role + one RoleBinding per namespace.
+	for _, ns := range []string{"team-a", "team-b"} {
+		if !hasPost(posts, "/namespaces/"+ns+"/roles") {
+			t.Errorf("missing namespaced Role POST for %s", ns)
+		}
+		if !hasPost(posts, "/namespaces/"+ns+"/rolebindings") {
+			t.Errorf("missing namespaced RoleBinding POST for %s", ns)
+		}
+	}
+}
+
+// TestClose_ConfinedDeletesNamespacedRoles verifies teardown enumerates and
+// deletes the per-namespace Role/RoleBinding objects a confined session left
+// behind (they aren't addressable from the session row).
+func TestClose_ConfinedDeletesNamespacedRoles(t *testing.T) {
+	q := newFakeQuerier()
+	r := newFakeRequester()
+	deps := Deps{Queries: q, Requester: r, PodReadyTimeout: 2 * time.Second}
+
+	info, err := Open(context.Background(), deps, OpenRequest{
+		UserID: uuid.New(), ClusterID: uuid.New(),
+		Verbs:      EffectiveVerbs{Read: true},
+		Namespaces: []string{"team-a"},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	roleName := q.snapshot(info.ID).SaName
+
+	// Program the cluster-wide Role/RoleBinding label-list response used by
+	// teardown so it can discover the per-namespace objects to delete. The
+	// fake short-circuits every labelSelector GET to listPods.
+	roleList, _ := json.Marshal(map[string]any{
+		"items": []map[string]any{
+			{"metadata": map[string]any{"name": roleName, "namespace": "team-a"}},
+		},
+	})
+	r.listPods = &K8sResponse{StatusCode: 200, Body: roleList}
+
+	if err := Close(context.Background(), deps, info.ID); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	deletedRole := false
+	deletedBinding := false
+	for _, c := range r.callsByMethod("DELETE") {
+		if strings.Contains(c.path, "/namespaces/team-a/roles/"+roleName) {
+			deletedRole = true
+		}
+		if strings.Contains(c.path, "/namespaces/team-a/rolebindings/"+roleName) {
+			deletedBinding = true
+		}
+	}
+	if !deletedRole {
+		t.Errorf("expected DELETE of namespaced Role in team-a")
+	}
+	if !deletedBinding {
+		t.Errorf("expected DELETE of namespaced RoleBinding in team-a")
+	}
+}
+
+func hasPost(posts []k8sCall, substr string) bool {
+	for _, c := range posts {
+		if strings.Contains(c.path, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestOpen_SuperuserUsesClusterAdmin(t *testing.T) {
 	q := newFakeQuerier()
 	r := newFakeRequester()

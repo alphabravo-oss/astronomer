@@ -1413,9 +1413,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if deps.KubectlShell != nil {
 		deps.KubectlShell.SetStreamAuth(jwtManager, queries)
 		deps.KubectlShell.SetStreamTickets(deps.StreamTicketStore)
-		// Opt-in caller-RBAC scoping. Reads feature.shell_scope_to_caller
-		// (default false via BoolValue's false fallback), so this only
-		// changes behaviour once an operator flips the flag on.
+		// Caller-RBAC scoping. Task 009 (DIR-04) collapses the two
+		// multi-tenancy switches: the master namespace_scoped_rbac_enabled
+		// config flag (promoted to default ON) enables shell scoping
+		// directly, and the legacy feature.shell_scope_to_caller platform
+		// setting still works as an independent opt-in for operators who
+		// disabled the master flag.
+		deps.KubectlShell.SetNamespaceScopedRBAC(cfg.NamespaceScopedRBACEnabled)
 		if deps.SettingsCache != nil {
 			deps.KubectlShell.SetFeatureFlags(deps.SettingsCache)
 		}

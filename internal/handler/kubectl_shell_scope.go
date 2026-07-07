@@ -125,6 +125,18 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
 		if !bindingAppliesToCluster(b, clusterID) {
 			continue
 		}
+		// A RAW project binding (project-scoped, no explicit cluster or
+		// namespace) is NOT a cross-namespace grant — treating it as
+		// AllNamespaces was the DIR-04 over-grant that handed a
+		// project-restricted operator the whole cluster. Its concrete
+		// namespaces come from the project→namespace expansion (the
+		// synthetic cluster+namespace bindings GetUserBindings emits when
+		// namespace_scoped_rbac is enabled), folded in via
+		// AuthorizedNamespaces below. Skip it here so it neither sets
+		// AllNamespaces nor (on its own) determines the scope.
+		if b.ProjectID != "" && b.ClusterID == "" {
+			continue
+		}
 		s.Determined = true
 		if b.Namespace != "" {
 			// Namespace-scoped binding contributes exactly that namespace.
@@ -134,6 +146,23 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
 		// A cluster-wide or global binding (no namespace narrowing)
 		// grants cross-namespace scope.
 		s.AllNamespaces = true
+	}
+	// Fold in the caller's REAL effective namespace grant on this cluster.
+	// AuthorizedNamespaces resolves the project→namespace expansion (and any
+	// native per-namespace list grants) into a concrete allow-set for the
+	// resources a shell reads, replacing the old coarse "determined but
+	// empty" project handling. It fails closed (all==false, empty set) when
+	// nothing applies. A cluster-wide grant here promotes to AllNamespaces.
+	if !s.AllNamespaces {
+		if all, names := engine.AuthorizedNamespaces(bindings, rbac.ResourcePods, rbac.VerbList, clusterID); all {
+			s.Determined = true
+			s.AllNamespaces = true
+		} else {
+			for ns := range names {
+				s.Determined = true
+				s.Namespaces[ns] = struct{}{}
+			}
+		}
 	}
 	if !s.Determined {
 		return s
@@ -159,13 +188,13 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
 
 // bindingAppliesToCluster reports whether a binding is relevant to the
 // target cluster for scope-derivation purposes. Mirrors the spirit of
-// rbac.Engine.bindingApplies (which is unexported) but is intentionally
-// conservative: a project-scoped binding without an explicit namespace
-// is treated as applicable (Determined) yet contributes no concrete
-// namespace, so its holder is confined to read-only with no explicit
-// namespace grant — safe by construction. Resolving a project's
-// namespace set would require a project→namespace lookup that lives
-// outside this handler's owned surface (see integration notes).
+// rbac.Engine.bindingApplies (which is unexported). NOTE (DIR-04): a raw
+// project-scoped binding (ProjectID set, no explicit cluster) is reported
+// applicable here, but deriveCallerScope no longer treats it as a
+// cross-namespace grant — it resolves the project's concrete namespaces via
+// engine.AuthorizedNamespaces (which consumes the project→namespace
+// synthetic-binding expansion). This function stays permissive so that
+// path can run; the confinement happens in deriveCallerScope.
 func bindingAppliesToCluster(b rbac.RoleBinding, clusterID uuid.UUID) bool {
 	if b.IsSuperuser {
 		return true
@@ -235,6 +264,22 @@ func (s CallerScope) ImpersonationHeaders() map[string]string {
 	}
 }
 
+// scopeEnforcementLabel names the in-cluster enforcement shape a session
+// gets, for the audit trail. "cluster-admin" and "cluster-role" are
+// cross-namespace; "namespaced-role" is the confined mechanism-A path where
+// per-namespace Roles genuinely bound the session ServiceAccount at the
+// apiserver (not merely audited).
+func scopeEnforcementLabel(s CallerScope) string {
+	switch {
+	case s.Superuser:
+		return "cluster-admin"
+	case s.AllNamespaces:
+		return "cluster-role"
+	default:
+		return "namespaced-role"
+	}
+}
+
 // namespaceAllSentinel represents a cross-namespace ("-A" /
 // --all-namespaces) command target in scope checks.
 const namespaceAllSentinel = "\x00__all_namespaces__"
@@ -273,12 +318,21 @@ func namespaceTargetsFromCommand(line string) []string {
 	return out
 }
 
-// shellScopeEnabled reports whether the caller-scoping feature flag is
-// set. DEFAULT FALSE — a nil reader or an unset key yields false, so
-// the shell's existing behaviour is preserved unless an operator
-// explicitly opts in.
+// shellScopeEnabled reports whether caller-scoping is active. Task 009
+// (DIR-04) collapses the two multi-tenancy switches: scoping is ON when
+// EITHER the master namespace_scoped_rbac_enabled config flag is set
+// (h.NamespaceScopedRBAC, the promoted default) OR the legacy
+// feature.shell_scope_to_caller platform setting is explicitly on. A nil
+// reader and an unset key both yield false for the legacy path, so with
+// namespace-scoped RBAC off the shell keeps its pre-feature behaviour.
 func (h *KubectlShellHandler) shellScopeEnabled(ctx context.Context) bool {
-	if h == nil || h.Features == nil {
+	if h == nil {
+		return false
+	}
+	if h.NamespaceScopedRBAC {
+		return true
+	}
+	if h.Features == nil {
 		return false
 	}
 	return h.Features.BoolValue(ctx, shellScopeToCallerFlag, false)

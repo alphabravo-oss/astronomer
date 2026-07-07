@@ -107,10 +107,17 @@ type Config struct {
 	// enabling it with zero rules is a no-op.
 	NativeRBACEnabled bool `mapstructure:"native_rbac_enabled"`
 	// NamespaceScopedRBACEnabled gates namespace/project-scoped cluster resource
-	// reads. Default false: when off, project bindings still grant nothing on
-	// cluster routes and list handlers return the full cluster (byte-identical
-	// to today). When on, project bindings resolve to their namespaces and list
-	// results are filtered to the caller's authorized namespaces.
+	// reads. Default OFF (opt-in) per plan 009 / finding DIR-04: promoting the
+	// default is deliberately deferred until the namespace-binding authoring UI
+	// ships (rbac_effective.go still reports that seam as pending), because a
+	// project-only caller with no project_namespaces mapping fails closed with
+	// no UI path to grant them namespaces. When ON, project bindings resolve to
+	// their namespaces, cluster list results are filtered to the caller's
+	// authorized namespaces, and kubectl-shell sessions are scoped to the
+	// caller's grants (see internal/handler/kubectl_shell_scope.go); the seams
+	// fail closed for scoped users while superusers/cluster-wide grants still
+	// see everything. Enable with NAMESPACE_SCOPED_RBAC_ENABLED=true; the flag
+	// is runtime-togglable and invalidates the RBAC cache on flip.
 	NamespaceScopedRBACEnabled      bool   `mapstructure:"namespace_scoped_rbac_enabled"`
 	KubectlShellImage               string `mapstructure:"kubectl_shell_image"`
 	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
@@ -271,6 +278,10 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "kubectl_shell_enabled", Value: false},
 		envconfig.Default{Key: "control_plane_snapshots_enabled", Value: false},
 		envconfig.Default{Key: "native_rbac_enabled", Value: false},
+		// Opt-in (plan 009 / DIR-04): default OFF until the namespace-binding
+		// authoring UI ships. Set NAMESPACE_SCOPED_RBAC_ENABLED=true to enable
+		// namespace-filtered reads + kubectl-shell caller scoping.
+		envconfig.Default{Key: "namespace_scoped_rbac_enabled", Value: false},
 		envconfig.Default{Key: "kubectl_shell_image", Value: "astronomer-shell:dev"},
 		envconfig.Default{Key: "kubectl_shell_idle_timeout_minutes", Value: 30},
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},

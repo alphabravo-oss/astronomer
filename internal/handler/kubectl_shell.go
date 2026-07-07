@@ -115,6 +115,24 @@ type KubectlShellHandler struct {
 	// its existing blanket-verb behaviour. Wired via SetFeatureFlags.
 	// See kubectl_shell_scope.go.
 	Features ShellFeatureReader
+	// NamespaceScopedRBAC mirrors cfg.NamespaceScopedRBACEnabled. Task 009
+	// (DIR-04) collapses the two independent multi-tenancy switches: when
+	// namespace-scoped RBAC is on, shell caller-scoping is on too, so an
+	// operator makes ONE multi-tenancy choice. shellScopeEnabled ORs this
+	// with the legacy feature.shell_scope_to_caller platform setting. Wired
+	// via SetNamespaceScopedRBAC.
+	NamespaceScopedRBAC bool
+}
+
+// SetNamespaceScopedRBAC wires the master multi-tenancy switch
+// (cfg.NamespaceScopedRBACEnabled). When true, shell caller-scoping is
+// enabled without also needing the legacy feature.shell_scope_to_caller
+// platform setting — see the flag-collapse note in kubectl_shell_scope.go.
+func (h *KubectlShellHandler) SetNamespaceScopedRBAC(enabled bool) {
+	if h == nil {
+		return
+	}
+	h.NamespaceScopedRBAC = enabled
 }
 
 // CrossPodWSForwarder is the surface the shell handler uses to
@@ -270,6 +288,10 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	// bindings grant against THIS cluster and FAIL CLOSED when the scope
 	// can't be determined. See kubectl_shell_scope.go.
 	var scopeDetail map[string]any
+	// scopeNamespaces carries the caller's confined namespace allow-set into
+	// kubectl.Open so it can provision per-namespace Roles (mechanism A).
+	// nil for cross-namespace / superuser callers (the ClusterRole path).
+	var scopeNamespaces []string
 	if h.shellScopeEnabled(r.Context()) {
 		scope, ok := h.deriveScopeForCaller(r.Context(), userID, clusterID, verbs)
 		if !ok {
@@ -278,11 +300,18 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		verbs = scope.Verbs
+		if !scope.AllNamespaces && !scope.Superuser {
+			// Confined caller — provision namespaced Roles so the session
+			// ServiceAccount is genuinely bounded at the apiserver, not just
+			// audited (DIR-04 mechanism A).
+			scopeNamespaces = scope.SortedNamespaces()
+		}
 		scopeDetail = map[string]any{
 			"scope_enabled":     true,
 			"scope_all_ns":      scope.AllNamespaces,
 			"scope_namespaces":  scope.SortedNamespaces(),
 			"scope_impersonate": scope.Caller.String(),
+			"scope_enforcement": scopeEnforcementLabel(scope),
 		}
 	}
 
@@ -292,11 +321,12 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	elevated := verbs.Superuser || verbs.Update || verbs.Delete
 
 	info, err := kubectl.Open(r.Context(), h.Deps, kubectl.OpenRequest{
-		UserID:    userID,
-		ClusterID: clusterID,
-		Verbs:     verbs,
-		ClientIP:  parseClientIP(r),
-		UserAgent: r.UserAgent(),
+		UserID:     userID,
+		ClusterID:  clusterID,
+		Verbs:      verbs,
+		Namespaces: scopeNamespaces,
+		ClientIP:   parseClientIP(r),
+		UserAgent:  r.UserAgent(),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ShellOpenFailed, err.Error())
@@ -630,17 +660,16 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 			if len(line) > 1024 {
 				line = line[:1024] + "...<truncated>"
 			}
-			// OPT-IN caller-scoping: DETECTIVE control. When the flag is
-			// on and the command targets a namespace outside the caller's
-			// scope, emit a security audit + structured log. We cannot
-			// hard-block here: onInput runs inside the exec read loop but
-			// has no signal back to suppress the forward (the frame is
-			// relayed by ExecConsumer). Real per-namespace ENFORCEMENT
-			// requires either namespaced Role manifests (internal/kubectl)
-			// or K8s impersonation on the proxy — see
-			// CallerScope.ImpersonationHeaders + integration notes. The
-			// Open-time verb constraint (read-only for namespace-scoped
-			// callers) already blunts the blast radius.
+			// Caller-scoping WS audit: DETECTIVE control layered on top of
+			// the PREVENTIVE enforcement. As of DIR-04 mechanism A, a
+			// confined session is provisioned with per-namespace Roles
+			// (internal/kubectl), so an out-of-scope target is already
+			// DENIED by the apiserver — the SA has no rights outside its
+			// namespaces. This block still records the attempt for the
+			// audit trail (onInput runs in the exec read loop and has no
+			// back-channel to suppress the forward, but it no longer needs
+			// one: the apiserver rejects it). The Open-time read-only verb
+			// cap on namespace-scoped callers is defense-in-depth.
 			if scopeActive && !wsScope.AllNamespaces {
 				for _, target := range namespaceTargetsFromCommand(line) {
 					if wsScope.Allows(target) {

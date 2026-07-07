@@ -93,6 +93,20 @@ type OpenRequest struct {
 	Verbs     EffectiveVerbs
 	ClientIP  *netip.Addr
 	UserAgent string
+	// Namespaces is the caller's authorized namespace allow-set (task 009 /
+	// DIR-04 mechanism A). When non-empty AND the caller is not a superuser,
+	// Open provisions a NAMESPACED Role + RoleBinding in each listed
+	// namespace instead of the blanket cluster-wide ClusterRole, confining
+	// the session ServiceAccount at the apiserver. Empty means cross-namespace
+	// (the pre-feature ClusterRole path) — used for superuser and cluster-wide
+	// callers.
+	Namespaces []string
+}
+
+// confined reports whether the session should be provisioned with
+// per-namespace Roles (mechanism A) rather than a cluster-wide ClusterRole.
+func (r OpenRequest) confined() bool {
+	return !r.Verbs.Superuser && len(r.Namespaces) > 0
 }
 
 // SessionInfo is the small wire-shape returned by Open() / Get().
@@ -182,21 +196,50 @@ func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error)
 		return fail(fmt.Errorf("create ServiceAccount: %w", err))
 	}
 
-	// Step 2: ClusterRole (skipped for superuser — they bind directly
-	// to the built-in cluster-admin role).
-	if !req.Verbs.Superuser {
+	// Steps 2+3: RBAC. Three shapes:
+	//   - superuser ............ ClusterRoleBinding → built-in cluster-admin.
+	//   - confined (mechanism A) namespaced Role + RoleBinding per authorized
+	//     namespace — the SA is genuinely confined at the apiserver.
+	//   - cross-namespace ...... cluster-wide ClusterRole + ClusterRoleBinding
+	//     (the pre-feature break-glass path).
+	switch {
+	case req.Verbs.Superuser:
+		// Step 3 only: ClusterRoleBinding to cluster-admin.
+		if err := applyJSON(ctx, deps.Requester, clusterID,
+			"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+			ClusterRoleBindingManifest(names, req.Verbs)); err != nil {
+			return fail(fmt.Errorf("create ClusterRoleBinding: %w", err))
+		}
+	case req.confined():
+		// Per-namespace Role + RoleBinding. Duplicate namespaces are
+		// harmless (applyJSON treats 409 as success).
+		for _, ns := range req.Namespaces {
+			if ns == "" {
+				continue
+			}
+			if err := applyJSON(ctx, deps.Requester, clusterID,
+				fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/namespaces/%s/roles", ns),
+				RoleManifest(names, ns, req.Verbs)); err != nil {
+				return fail(fmt.Errorf("create Role in %s: %w", ns, err))
+			}
+			if err := applyJSON(ctx, deps.Requester, clusterID,
+				fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/namespaces/%s/rolebindings", ns),
+				RoleBindingManifest(names, ns, req.Verbs)); err != nil {
+				return fail(fmt.Errorf("create RoleBinding in %s: %w", ns, err))
+			}
+		}
+	default:
+		// Cluster-wide ClusterRole + ClusterRoleBinding.
 		if err := applyJSON(ctx, deps.Requester, clusterID,
 			"/apis/rbac.authorization.k8s.io/v1/clusterroles",
 			ClusterRoleManifest(names, req.Verbs)); err != nil {
 			return fail(fmt.Errorf("create ClusterRole: %w", err))
 		}
-	}
-
-	// Step 3: ClusterRoleBinding.
-	if err := applyJSON(ctx, deps.Requester, clusterID,
-		"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
-		ClusterRoleBindingManifest(names, req.Verbs)); err != nil {
-		return fail(fmt.Errorf("create ClusterRoleBinding: %w", err))
+		if err := applyJSON(ctx, deps.Requester, clusterID,
+			"/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+			ClusterRoleBindingManifest(names, req.Verbs)); err != nil {
+			return fail(fmt.Errorf("create ClusterRoleBinding: %w", err))
+		}
 	}
 
 	// Step 4: Pod.
@@ -444,8 +487,81 @@ func tearDownK8s(ctx context.Context, deps Deps, clusterID string, n Names) erro
 	step(fmt.Sprintf("/api/v1/namespaces/%s/pods/%s", n.PodNamespace, n.PodName))
 	step(fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/%s", n.BindingName))
 	step(fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterroles/%s", n.RoleName))
+	// Mechanism A (DIR-04): confined sessions created NAMESPACED Role +
+	// RoleBinding objects whose namespaces aren't recorded on the session
+	// row, so we can't address them by path. Enumerate them cluster-wide by
+	// the shared component label, filter to THIS session's object name, and
+	// delete each by its namespace. Best-effort — the ClusterRole path above
+	// already covered the cross-namespace case (404s are treated as success).
+	if err := deleteNamespacedRBAC(ctx, deps, clusterID, n); err != nil && firstErr == nil {
+		firstErr = err
+	}
 	step(fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/%s", n.SANamespace, n.SAName))
 	return firstErr
+}
+
+// deleteNamespacedRBAC removes the per-namespace Role + RoleBinding objects a
+// confined (mechanism A) session provisioned. It lists both kinds
+// cluster-wide by the kubectl-shell component label and deletes only the ones
+// whose name matches this session's deterministic astro-shell-<id> name, so a
+// concurrent session's objects are never touched. A list failure is returned
+// (so the caller can surface it) but never blocks the rest of teardown.
+func deleteNamespacedRBAC(ctx context.Context, deps Deps, clusterID string, n Names) error {
+	kinds := []struct {
+		listPath string
+		wantName string
+	}{
+		{"/apis/rbac.authorization.k8s.io/v1/roles?labelSelector=astronomer.io/component=kubectl-shell", n.RoleName},
+		{"/apis/rbac.authorization.k8s.io/v1/rolebindings?labelSelector=astronomer.io/component=kubectl-shell", n.BindingName},
+	}
+	var firstErr error
+	for _, k := range kinds {
+		resp, err := deps.Requester.Do(ctx, clusterID, "GET", k.listPath, nil, nil)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			// 404 (RBAC API absent) or other — nothing to sweep.
+			continue
+		}
+		var list struct {
+			Items []struct {
+				Metadata struct {
+					Name      string `json:"name"`
+					Namespace string `json:"namespace"`
+				} `json:"metadata"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(resp.Body, &list); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		// RoleName == BindingName in practice (same short id), so key the
+		// delete path off the list we're iterating, not the name.
+		kindPath := kindPathFor(k.listPath)
+		for _, item := range list.Items {
+			if item.Metadata.Name != k.wantName || item.Metadata.Namespace == "" {
+				continue
+			}
+			_ = deleteJSON(ctx, deps.Requester, clusterID,
+				fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/namespaces/%s/%s/%s",
+					item.Metadata.Namespace, kindPath, item.Metadata.Name))
+		}
+	}
+	return firstErr
+}
+
+// kindPathFor maps a list path to its namespaced sub-resource segment.
+func kindPathFor(listPath string) string {
+	if strings.Contains(listPath, "/rolebindings") {
+		return "rolebindings"
+	}
+	return "roles"
 }
 
 // waitForPodReady polls the apiserver every 500ms (or PodReadyTimeout/8,
@@ -543,6 +659,9 @@ func sweepOrphanPods(ctx context.Context, deps Deps, clusterID string, keep map[
 			fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/%s", p.Metadata.Name))
 		_ = deleteJSON(ctx, deps.Requester, clusterID,
 			fmt.Sprintf("/apis/rbac.authorization.k8s.io/v1/clusterroles/%s", p.Metadata.Name))
+		// Sweep any per-namespace Role/RoleBinding an orphaned confined
+		// session left behind (mechanism A). Name == pod name == role name.
+		_ = deleteNamespacedRBAC(ctx, deps, clusterID, Names{RoleName: p.Metadata.Name, BindingName: p.Metadata.Name})
 		_ = deleteJSON(ctx, deps.Requester, clusterID,
 			fmt.Sprintf("/api/v1/namespaces/%s/serviceaccounts/%s", DefaultNamespace, p.Metadata.Name))
 	}
