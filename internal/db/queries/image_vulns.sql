@@ -60,6 +60,18 @@ SELECT
 FROM image_vulnerability_reports
 WHERE cluster_id = $1;
 
+-- name: AggregateVulnerabilitiesPerCluster :many
+-- Per-cluster critical/high/report_count aggregate for the whole fleet
+-- in one pass. Batched equivalent of AggregateClusterVulnerabilities so
+-- the compliance-posture rollup avoids one query per cluster.
+SELECT
+    cluster_id,
+    COALESCE(SUM(critical_count), 0)::bigint AS critical,
+    COALESCE(SUM(high_count), 0)::bigint AS high,
+    COUNT(*)::bigint AS report_count
+FROM image_vulnerability_reports
+GROUP BY cluster_id;
+
 -- name: AggregateFleetVulnerabilities :one
 SELECT
     COALESCE(SUM(critical_count), 0)::bigint AS critical,

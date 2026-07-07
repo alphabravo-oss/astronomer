@@ -62,6 +62,26 @@ DELETE FROM cluster_security_policies WHERE id = $1;
 -- name: CountClusterSecurityPolicies :one
 SELECT count(*) FROM cluster_security_policies;
 
+-- name: ListClusterIDsWithSecurityPolicy :many
+-- Fleet-wide set of cluster_ids that have at least one security policy
+-- row. Unbounded (no LIMIT/OFFSET) so the compliance-posture rollup can
+-- answer "does this cluster have a policy?" for any fleet size in one
+-- query instead of a per-cluster page that silently caps at 10 rows.
+SELECT DISTINCT cluster_id FROM cluster_security_policies;
+
+-- name: LatestCISScanPerCluster :many
+-- Latest CIS scan per cluster in one pass, mirroring the per-cluster
+-- "ORDER BY created_at DESC LIMIT 1" selection but batched across the
+-- whole fleet for the compliance-posture rollup.
+SELECT DISTINCT ON (cluster_id)
+    cluster_id,
+    passed,
+    failed,
+    completed_at
+FROM security_scan_results
+WHERE scan_type = 'cis'
+ORDER BY cluster_id, created_at DESC;
+
 -- Security Scan Results
 
 -- name: GetSecurityScanResultByID :one

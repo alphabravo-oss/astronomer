@@ -48,42 +48,37 @@ func (f *fakePostureQuerier) ListClusters(_ context.Context, _ sqlc.ListClusters
 	return f.clusters, nil
 }
 
-func (f *fakePostureQuerier) ListScansByClusterAndType(_ context.Context, arg sqlc.ListScansByClusterAndTypeParams) ([]sqlc.SecurityScanResult, error) {
-	if arg.ScanType != "cis" {
-		return nil, nil
+func (f *fakePostureQuerier) LatestCISScanPerCluster(_ context.Context) ([]sqlc.LatestCISScanPerClusterRow, error) {
+	out := make([]sqlc.LatestCISScanPerClusterRow, 0, len(f.cis))
+	for id, v := range f.cis {
+		out = append(out, sqlc.LatestCISScanPerClusterRow{
+			ClusterID:   id,
+			Passed:      v.Passed,
+			Failed:      v.Failed,
+			CompletedAt: pgtype.Timestamptz{Time: v.CompletedAt, Valid: true},
+		})
 	}
-	v, ok := f.cis[arg.ClusterID]
-	if !ok {
-		return nil, nil
-	}
-	return []sqlc.SecurityScanResult{{
-		ID:          uuid.New(),
-		ClusterID:   arg.ClusterID,
-		ScanType:    "cis",
-		Status:      "completed",
-		Passed:      v.Passed,
-		Failed:      v.Failed,
-		CompletedAt: pgtype.Timestamptz{Time: v.CompletedAt, Valid: true},
-	}}, nil
+	return out, nil
 }
 
-func (f *fakePostureQuerier) AggregateClusterVulnerabilities(_ context.Context, id uuid.UUID) (sqlc.AggregateClusterVulnerabilitiesRow, error) {
-	v, ok := f.vulns[id]
-	if !ok {
-		return sqlc.AggregateClusterVulnerabilitiesRow{}, nil
+func (f *fakePostureQuerier) AggregateVulnerabilitiesPerCluster(_ context.Context) ([]sqlc.AggregateVulnerabilitiesPerClusterRow, error) {
+	out := make([]sqlc.AggregateVulnerabilitiesPerClusterRow, 0, len(f.vulns))
+	for id, v := range f.vulns {
+		out = append(out, sqlc.AggregateVulnerabilitiesPerClusterRow{
+			ClusterID:   id,
+			Critical:    v.Critical,
+			High:        v.High,
+			ReportCount: v.ReportCount,
+		})
 	}
-	return sqlc.AggregateClusterVulnerabilitiesRow{
-		Critical:    v.Critical,
-		High:        v.High,
-		ReportCount: v.ReportCount,
-	}, nil
+	return out, nil
 }
 
-func (f *fakePostureQuerier) ListClusterSecurityPolicies(_ context.Context, _ sqlc.ListClusterSecurityPoliciesParams) ([]sqlc.ClusterSecurityPolicy, error) {
-	out := make([]sqlc.ClusterSecurityPolicy, 0, len(f.netpol))
+func (f *fakePostureQuerier) ListClusterIDsWithSecurityPolicy(_ context.Context) ([]uuid.UUID, error) {
+	out := make([]uuid.UUID, 0, len(f.netpol))
 	for id, has := range f.netpol {
 		if has {
-			out = append(out, sqlc.ClusterSecurityPolicy{ClusterID: id})
+			out = append(out, id)
 		}
 	}
 	return out, nil
@@ -192,6 +187,82 @@ func TestPosture_StaleCISFallsBackTo50(t *testing.T) {
 	out := h.compute(context.Background(), q.clusters)
 	if math.Abs(out.CISScore-50.0) > 1e-6 {
 		t.Errorf("stale CIS cluster sub-score = %v, want 50", out.CISScore)
+	}
+}
+
+// TestPosture_NetpolPolicyPastPageBoundary is the regression test for the
+// >10-policy bug: the old per-cluster path paged security policies with
+// LIMIT 10 and scanned that page for a match, so a cluster whose policy
+// sorted past row 10 fleet-wide was mis-scored. The batch DISTINCT set is
+// unbounded, so the target cluster must now score netpol=100.
+func TestPosture_NetpolPolicyPastPageBoundary(t *testing.T) {
+	now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	// 20 clusters, every one with a policy → the "target" (last one) would
+	// have sorted well past a 10-row page under the old query.
+	netpol := map[uuid.UUID]bool{}
+	clusters := make([]sqlc.Cluster, 0, 20)
+	var target uuid.UUID
+	for i := 0; i < 20; i++ {
+		id := uuid.New()
+		clusters = append(clusters, sqlc.Cluster{ID: id, Name: "c"})
+		netpol[id] = true
+		target = id
+	}
+	q := &fakePostureQuerier{clusters: clusters, netpol: netpol}
+	h := NewCompliancePostureHandler(q, 13).withNow(func() time.Time { return now })
+	out := h.compute(context.Background(), clusters)
+
+	// Every cluster has a policy → fleet netpol sub-score is a clean 100.
+	if math.Abs(out.NetPolScore-100.0) > 1e-6 {
+		t.Errorf("fleet netpol_score = %v, want 100", out.NetPolScore)
+	}
+	// The target cluster (would-be past row 10) must score 100 individually.
+	for _, cp := range out.Clusters {
+		if cp.ClusterID == target && math.Abs(cp.NetPolScore-100.0) > 1e-6 {
+			t.Errorf("target cluster netpol = %v, want 100", cp.NetPolScore)
+		}
+	}
+}
+
+// TestPosture_BatchMatchesPerClusterFixture pins that the batch-map path
+// produces the exact scores the documented per-cluster semantics call for
+// on the small two-cluster fixture (identical to the old fan-out path).
+func TestPosture_BatchMatchesPerClusterFixture(t *testing.T) {
+	now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	a := uuid.MustParse("aaaaaaaa-1111-1111-1111-111111111111")
+	b := uuid.MustParse("bbbbbbbb-2222-2222-2222-222222222222")
+	q := &fakePostureQuerier{
+		clusters: []sqlc.Cluster{{ID: a, Name: "a"}, {ID: b, Name: "b"}},
+		cis: map[uuid.UUID]struct {
+			Passed      int32
+			Failed      int32
+			CompletedAt time.Time
+		}{
+			a: {Passed: 90, Failed: 10, CompletedAt: now.Add(-time.Hour)}, // cis=90
+			// b: no scan → cis=50
+		},
+		vulns: map[uuid.UUID]struct {
+			Critical    int64
+			High        int64
+			ReportCount int64
+		}{
+			b: {Critical: 2, High: 5, ReportCount: 3}, // penalty=15 → vulns=85
+			// a: no report → vulns=50
+		},
+		netpol: map[uuid.UUID]bool{a: true}, // a→100, b→0
+	}
+	h := NewCompliancePostureHandler(q, 13).withNow(func() time.Time { return now })
+	out := h.compute(context.Background(), q.clusters)
+
+	byID := map[uuid.UUID]ClusterPosture{}
+	for _, cp := range out.Clusters {
+		byID[cp.ClusterID] = cp
+	}
+	if got := byID[a]; math.Abs(got.CISScore-90) > 1e-6 || math.Abs(got.VulnsScore-50) > 1e-6 || math.Abs(got.NetPolScore-100) > 1e-6 {
+		t.Errorf("cluster a = %+v, want cis=90 vulns=50 netpol=100", got)
+	}
+	if got := byID[b]; math.Abs(got.CISScore-50) > 1e-6 || math.Abs(got.VulnsScore-85) > 1e-6 || math.Abs(got.NetPolScore-0) > 1e-6 {
+		t.Errorf("cluster b = %+v, want cis=50 vulns=85 netpol=0", got)
 	}
 }
 
