@@ -65,7 +65,17 @@ Security-critical fixes verified by their own tests: R-01 argocd-authz (6 tests 
 | P-03 | Low | ✅ Done | Alert inhibition: migration 132, CRUD API (admin-scoped), two-pass eval suppression, inhibition UI + tests |
 | P-04 | Low | ✅ Done | Custom Gatekeeper authoring: migration 133, list/validate/create/delete (RBAC fail-closed + audited), YAML+Rego structural validation, DNS-1123 name/kind guard, SSA via tunnel, policy UI + tests |
 
-**Wave-2 (backlog) validation:** `make verify` still 100% (406/406 with 9 new documented routes), `make check-migrations` OK, `go test ./...` 0 failures, frontend **jest 417/417 / 52 suites**, tsc clean. Two small follow-ons remain, both explicitly noted, neither a blocker: **P-02** resources-page live-watch (workloads page is wired; the same hook drops onto the resources page), and **P-04** full Rego *compilation* (currently structural validation — package decl + balanced delimiters — because no OPA parser is vendored; a full AST compile means vendoring `github.com/open-policy-agent/opa`).
+**Wave-2 (backlog) validation:** `make verify` still 100% (406/406 with 9 new documented routes), `make check-migrations` OK, `go test ./...` 0 failures, frontend **jest 417/417 / 52 suites**, tsc clean.
+
+**Runtime smoke (2026-07-07).** Beyond tests, the new surface was exercised against a live server (Postgres 16 container, all 133 migrations applied, real bootstrap-admin JWT):
+- All 133 migrations apply clean; `alert_inhibitions` and `authored_constraints` tables materialize.
+- New routes are wired and auth-gated (401 unauthenticated; 200 with an admin token; a bogus sibling path is not routed).
+- **P-03**: `POST` inhibition → `201` persisted; `GET` list → `200` reads it back with the full matcher/equal-labels shape.
+- **P-04**: validate a good `ConstraintTemplate` → `valid:true`; a non-Gatekeeper `Secret` → `valid:false` ("… is not a Gatekeeper ConstraintTemplate or Constraint"); and a path-injection name `../../evil` → **rejected at runtime** by the DNS-1123 guard ("a lowercase RFC 1123 subdomain must consist of …"). The security fix works end-to-end, not just in unit tests.
+
+**The two "follow-ons" resolved on inspection — neither is real debt:**
+- **P-04 full Rego compilation is unnecessary.** Gatekeeper is the authoritative validator: it compiles the Rego at admission and rejects bad templates, and the apply path already surfaces that rejection to the operator (`internal/handler/gatekeeper_constraints.go:208-221`). The local check is a fast pre-filter; vendoring `github.com/open-policy-agent/opa` for a redundant second compile is over-engineering and was deliberately not done.
+- **P-02 does not belong on the resources page.** That page is an intentional **DB mirror** (its own copy: "mirrored from the cluster agent every ~10 minutes"), served from `listMirroredX()` — not the live `/k8s` proxy. Folding a live `?watch=true` stream into a periodic mirror is architecturally wrong. The live explorer is the workloads page, which is wired. No further P-02 work is warranted.
 
 ---
 
