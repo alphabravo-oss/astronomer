@@ -35,6 +35,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // defaultCloudTesterTimeout is the wall-clock budget for any single
@@ -142,6 +144,12 @@ func (t *DefaultCloudTester) TestGCP(ctx context.Context, blob map[string]string
 	tokenURI := strings.TrimSpace(key.TokenURI)
 	if tokenURI == "" {
 		tokenURI = "https://oauth2.googleapis.com/token"
+	}
+	// SSRF guard: token_uri comes from the operator-supplied service-account
+	// JSON, so refuse to dial a loopback/internal/metadata address. Do not echo
+	// the URI back to the caller.
+	if err := httpclient.GuardPublicHost(tokenURI); err != nil {
+		return CloudTestResult{OK: false, Message: "token_uri is not a permitted public address"}, nil
 	}
 	// Sign a real JWT assertion with the service-account's RSA private key
 	// and exchange it at the token URI. Merely parsing the JSON is NOT

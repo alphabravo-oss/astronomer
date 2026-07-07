@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // TestSlackPayloadShape locks down the wire format Slack receives so
@@ -15,6 +17,7 @@ import (
 // field breaks loudly in CI rather than silently posting unstyled
 // fallback text.
 func TestSlackPayloadShape(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	var captured map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -55,6 +58,7 @@ func TestSlackPayloadShape(t *testing.T) {
 // a typo in `dedup_key` produces duplicate incidents in prod, so we
 // pin the field name.
 func TestPagerDutyPayloadShape(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	var captured map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -113,6 +117,7 @@ func TestPagerDutyPayloadShape(t *testing.T) {
 // PagerDuty must emit event_action=resolve (with the same dedup_key so
 // the open incident closes), and Slack must render the green swatch.
 func TestResolvedNotificationShape(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	t.Run("pagerduty resolve", func(t *testing.T) {
 		// pagerDutyEventsURL is a hardcoded prod constant, so we verify
 		// the resolve body shape directly (same approach as
@@ -163,6 +168,7 @@ func TestResolvedNotificationShape(t *testing.T) {
 
 // TestMSTeamsPayloadShape locks down the Adaptive Card envelope.
 func TestMSTeamsPayloadShape(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	var captured map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -241,6 +247,7 @@ func TestPostJSONErrorOmitsSecretURL(t *testing.T) {
 }
 
 func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	resetRuntime()
 	defer resetRuntime()
 
@@ -261,5 +268,29 @@ func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
 	}
 	if runtimeHTTPClient().Timeout != defaultWorkerHTTPTimeout {
 		t.Fatalf("fallback Timeout = %s, want %s", runtimeHTTPClient().Timeout, defaultWorkerHTTPTimeout)
+	}
+}
+
+// TestPostJSONRejectsPrivateHost verifies the SSRF guard blocks a
+// loopback/internal channel URL before any request is dialed. The httptest
+// server would 500 if it were ever reached; guardrail is that it is not.
+func TestPostJSONRejectsPrivateHost(t *testing.T) {
+	var reached bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// srv.URL is a 127.0.0.1 address — the guard must reject it.
+	err := postJSON(context.Background(), http.DefaultClient, srv.URL, map[string]any{"ok": true}, http.StatusOK)
+	if err == nil {
+		t.Fatal("expected SSRF guard to reject loopback URL")
+	}
+	if reached {
+		t.Fatal("guard failed: request reached the loopback server")
+	}
+	if strings.Contains(err.Error(), "127.0.0.1") {
+		t.Fatalf("error leaks internal address: %v", err)
 	}
 }

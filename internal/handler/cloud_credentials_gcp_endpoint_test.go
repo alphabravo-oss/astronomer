@@ -11,6 +11,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // gcpServiceAccountJSON builds a service_account_json blob with a freshly
@@ -41,6 +43,7 @@ func gcpServiceAccountJSON(t *testing.T, tokenURI string) string {
 // token exchange and reports OK only when the token endpoint returns an
 // access_token.
 func TestGCP_ValidKeyExchangeReturnsOK(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		if r.FormValue("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" || r.FormValue("assertion") == "" {
@@ -70,6 +73,7 @@ func TestGCP_ValidKeyExchangeReturnsOK(t *testing.T) {
 // (invalid_grant, as a revoked/rotated key produces) must report OK=false.
 // Before the fix, parseable JSON alone returned OK=true.
 func TestGCP_RevokedKeyReturnsNotOK(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"Invalid JWT Signature."}`))
@@ -104,5 +108,35 @@ func TestGCP_UnparseablePrivateKeyReturnsNotOK(t *testing.T) {
 	}
 	if res.OK {
 		t.Fatalf("expected OK=false when the private_key cannot be signed with, got %+v", res)
+	}
+}
+
+// TestGCP_RejectsPrivateTokenURI proves the SSRF guard rejects a
+// loopback/internal token_uri before any request is dialed. The httptest
+// server records whether it was ever reached — the guard must stop it first.
+func TestGCP_RejectsPrivateTokenURI(t *testing.T) {
+	var reached bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"x","token_type":"Bearer","expires_in":1}`))
+	}))
+	defer srv.Close()
+
+	tester := NewDefaultCloudTester()
+	res, err := tester.TestGCP(context.Background(), map[string]string{
+		"service_account_json": gcpServiceAccountJSON(t, srv.URL), // 127.0.0.1
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.OK {
+		t.Fatalf("expected OK=false for a loopback token_uri, got %+v", res)
+	}
+	if reached {
+		t.Fatal("SSRF guard failed: request reached the loopback token endpoint")
+	}
+	if strings.Contains(res.Message, "127.0.0.1") {
+		t.Fatalf("message leaks internal address: %q", res.Message)
 	}
 }

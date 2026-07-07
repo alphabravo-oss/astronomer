@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 func TestTransport_SyslogUDP_RoundTrip(t *testing.T) {
@@ -83,6 +85,7 @@ func TestTransport_SyslogUDP_RoundTrip(t *testing.T) {
 }
 
 func TestTransport_SplunkHEC_PostsExpectedShape(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	var (
 		mu        sync.Mutex
 		gotHeader string
@@ -142,6 +145,7 @@ func TestTransport_SplunkHEC_PostsExpectedShape(t *testing.T) {
 }
 
 func TestTransport_SplunkHEC_NonOKStatusReturnsError(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"text":"Invalid token","code":4}`))
@@ -163,6 +167,7 @@ func TestTransport_SplunkHEC_NonOKStatusReturnsError(t *testing.T) {
 }
 
 func TestTransport_NDJSONHTTPS_AddsCustomHeaders(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	var (
 		mu      sync.Mutex
 		gotAuth string
@@ -252,5 +257,31 @@ func TestTransport_SyslogTCP_FramesNewlineDelimited(t *testing.T) {
 	got := <-received
 	if len(got) != 2 || got[0] != "<14>1 t a app - - - one" || got[1] != "<14>1 t a app - - - two" {
 		t.Errorf("received lines = %#v", got)
+	}
+}
+
+// TestTransport_SplunkHEC_RejectsPrivateHost verifies the SSRF guard blocks a
+// loopback collector endpoint before the HEC POST is dialed.
+func TestTransport_SplunkHEC_RejectsPrivateHost(t *testing.T) {
+	transport := NewSplunkHEC("http://127.0.0.1:8088", "token", http.DefaultClient)
+	err := transport.Send(context.Background(), [][]byte{[]byte(`{"a":1}`)})
+	if err == nil {
+		t.Fatal("expected SSRF guard to reject loopback collector URL")
+	}
+	if strings.Contains(err.Error(), "127.0.0.1") {
+		t.Fatalf("error leaks internal address: %v", err)
+	}
+}
+
+// TestTransport_NDJSONHTTPS_RejectsPrivateHost verifies the SSRF guard blocks a
+// link-local (cloud metadata) endpoint before the NDJSON POST is dialed.
+func TestTransport_NDJSONHTTPS_RejectsPrivateHost(t *testing.T) {
+	transport := NewNDJSONHTTPS("http://169.254.169.254/ingest", http.DefaultClient, nil)
+	err := transport.Send(context.Background(), [][]byte{[]byte("line")})
+	if err == nil {
+		t.Fatal("expected SSRF guard to reject link-local endpoint")
+	}
+	if strings.Contains(err.Error(), "169.254") {
+		t.Fatalf("error leaks internal address: %v", err)
 	}
 }

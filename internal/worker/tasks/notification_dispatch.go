@@ -41,6 +41,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
@@ -394,6 +395,12 @@ func postGenericWebhook(ctx context.Context, client *http.Client, url string, p 
 // so logs are clearer when an upstream silently returns 200 instead
 // of 202 etc.
 func postJSON(ctx context.Context, client *http.Client, url string, body any, acceptStatus int) error {
+	// SSRF guard: the channel URL is operator-configured (Slack/Teams/generic
+	// webhook), so refuse to dispatch to a loopback/internal/metadata address.
+	// Do not echo the URL in the error.
+	if err := httpclient.GuardPublicHost(url); err != nil {
+		return errors.New("notification destination is not a permitted public address")
+	}
 	if client == nil {
 		client = runtimeHTTPClient()
 	}

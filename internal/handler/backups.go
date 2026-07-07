@@ -1503,6 +1503,13 @@ func (h *BackupHandler) probeS3Bucket(ctx context.Context, cfg sqlc.BackupStorag
 	q.Set("max-keys", "1")
 	host.RawQuery = q.Encode()
 
+	// SSRF guard: the endpoint URL is operator-supplied (BackupStorageConfig),
+	// so refuse to dial a loopback/internal/metadata address. Do not echo the
+	// endpoint in the error.
+	if err := httpclient.GuardPublicHost(host.String()); err != nil {
+		return fmt.Errorf("endpoint is not a permitted public address")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, host.String(), nil)
 	if err != nil {
 		return err

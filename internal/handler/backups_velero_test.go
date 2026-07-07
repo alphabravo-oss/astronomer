@@ -15,6 +15,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -194,6 +195,7 @@ func TestVeleroResourceName_DNSCompliant(t *testing.T) {
 // --- TestStorageConfig connectivity probe (no live network) --------------
 
 func TestProbeS3Bucket_Success(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	var capturedAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
@@ -227,6 +229,7 @@ func TestProbeS3Bucket_Success(t *testing.T) {
 }
 
 func TestProbeS3Bucket_Forbidden(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = io.WriteString(w, `<Error><Code>InvalidAccessKeyId</Code></Error>`)
@@ -248,6 +251,7 @@ func TestProbeS3Bucket_Forbidden(t *testing.T) {
 }
 
 func TestProbeS3Bucket_NoSuchBucket(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = io.WriteString(w, `<Error><Code>NoSuchBucket</Code></Error>`)
@@ -262,6 +266,34 @@ func TestProbeS3Bucket_NoSuchBucket(t *testing.T) {
 	err := h.probeS3Bucket(context.Background(), cfg, "k", "s")
 	if err == nil || !strings.Contains(err.Error(), "bucket not found") {
 		t.Fatalf("expected 'bucket not found' error, got %v", err)
+	}
+}
+
+// TestProbeS3Bucket_RejectsPrivateEndpoint proves the SSRF guard blocks a
+// loopback/internal endpoint URL before the signed GET is dialed.
+func TestProbeS3Bucket_RejectsPrivateEndpoint(t *testing.T) {
+	var reached bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	h := &BackupHandler{httpClient: srv.Client()}
+	cfg := sqlc.BackupStorageConfig{
+		Bucket:      "x",
+		Region:      "us-east-1",
+		EndpointUrl: srv.URL, // 127.0.0.1
+	}
+	err := h.probeS3Bucket(context.Background(), cfg, "k", "s")
+	if err == nil {
+		t.Fatal("expected SSRF guard to reject loopback endpoint")
+	}
+	if reached {
+		t.Fatal("SSRF guard failed: request reached the loopback endpoint")
+	}
+	if strings.Contains(err.Error(), "127.0.0.1") {
+		t.Fatalf("error leaks internal address: %v", err)
 	}
 }
 
@@ -675,6 +707,7 @@ func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 }
 
 func TestStorageConfigEndpoint_Success(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))

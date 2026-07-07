@@ -4,7 +4,22 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sync/atomic"
 )
+
+// guardDisabled, when true, makes GuardPublicHost a no-op. It is flipped only
+// by tests via DisableGuardForTest so that httptest servers (which always
+// listen on loopback) stay reachable in unit tests. Production code never sets
+// it, so the guard is always active at runtime.
+var guardDisabled atomic.Bool
+
+// DisableGuardForTest disables GuardPublicHost and returns a restore function
+// that re-enables it. Intended as `defer httpclient.DisableGuardForTest()()`.
+// Only tests that must dial an httptest server on loopback should call this.
+func DisableGuardForTest() (restore func()) {
+	guardDisabled.Store(true)
+	return func() { guardDisabled.Store(false) }
+}
 
 // GuardPublicHost resolves the host in rawURL and returns a non-nil error when
 // any resolved address is loopback, unspecified, link-local (which includes the
@@ -17,6 +32,9 @@ import (
 // pass the check should still use a bounded HTTP client, and it does not defend
 // against DNS-rebinding between this check and the subsequent dial.
 func GuardPublicHost(rawURL string) error {
+	if guardDisabled.Load() {
+		return nil
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid url: %w", err)

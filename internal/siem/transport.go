@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // Transport identifiers stored in siem_forwarders.transport.
@@ -263,6 +265,11 @@ func (s *splunkHEC) Send(ctx context.Context, batch [][]byte) error {
 		return nil
 	}
 	target := s.collectorURL()
+	// SSRF guard: the collector endpoint is operator-supplied, so refuse to
+	// dial a loopback/internal/metadata address. Do not echo the target.
+	if err := httpclient.GuardPublicHost(target); err != nil {
+		return fmt.Errorf("splunk hec: destination is not a permitted public address")
+	}
 	var body bytes.Buffer
 	for _, ev := range batch {
 		// Strip trailing newlines from FormatNDJSON output so the
@@ -333,6 +340,11 @@ func (s *ndjsonHTTPS) Send(ctx context.Context, batch [][]byte) error {
 	}
 	if _, err := url.Parse(s.endpoint); err != nil {
 		return fmt.Errorf("ndjson https: parse endpoint: %w", err)
+	}
+	// SSRF guard: the endpoint is operator-supplied, so refuse to dial a
+	// loopback/internal/metadata address. Do not echo the endpoint.
+	if err := httpclient.GuardPublicHost(s.endpoint); err != nil {
+		return fmt.Errorf("ndjson https: destination is not a permitted public address")
 	}
 	var body bytes.Buffer
 	for _, ev := range batch {
