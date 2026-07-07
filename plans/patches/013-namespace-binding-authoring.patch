@@ -1,0 +1,701 @@
+diff --git a/frontend/src/app/dashboard/rbac/page.tsx b/frontend/src/app/dashboard/rbac/page.tsx
+index c905e60..22eab90 100644
+--- a/frontend/src/app/dashboard/rbac/page.tsx
++++ b/frontend/src/app/dashboard/rbac/page.tsx
+@@ -8,7 +8,10 @@ import {
+   useClusterRoles,
+   useProjectRoles,
+   useUsers,
+-  useRoleBindings,
++  useClusters,
++  useClusterRoleBindings,
++  useCreateClusterRoleBinding,
++  useDeleteClusterRoleBinding,
+   useCreateUser,
+   useUpdateUser,
+   useDeleteUser,
+@@ -23,12 +26,12 @@ import { OverlayShell } from '@/components/ui/overlay-shell';
+ import { formatRelativeTime, cn } from '@/lib/utils';
+ import type {
+   ClusterRole,
++  ClusterRoleBinding,
+   EffectivePermissionBinding,
+   EffectivePermissionGrant,
+   EffectivePermissionSource,
+   GlobalRole,
+   ProjectRole,
+-  RoleBinding,
+   User,
+ } from '@/types';
+ import {
+@@ -83,6 +86,17 @@ export function isUserLocked(user: Pick<User, 'lockedUntil' | 'locked_until'>):
+   return Number.isFinite(until) && until > Date.now();
+ }
+ 
++/**
++ * DNS-1123 label check mirroring the backend's k8svalidation.IsDNS1123Label on
++ * POST /rbac/cluster-role-bindings/. An empty value is valid client-side (it
++ * means "cluster-wide"); a non-empty value must be a lowercase alphanumeric
++ * label (dashes allowed internally), at most 63 characters.
++ */
++export function isValidNamespace(namespace: string): boolean {
++  if (namespace === '') return true;
++  return namespace.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace);
++}
++
+ export default function RBACPage() {
+   const router = useRouter();
+   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'global-roles');
+@@ -92,17 +106,36 @@ export default function RBACPage() {
+   const [resetPasswordResult, setResetPasswordResult] = useState<{ userId: string; password: string } | null>(null);
+   const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
+   const [resetPasswordTarget, setResetPasswordTarget] = useState<User | null>(null);
++  const [showCreateBinding, setShowCreateBinding] = useState(false);
++  const [deleteBindingTarget, setDeleteBindingTarget] = useState<ClusterRoleBinding | null>(null);
+ 
+   const { data: globalRoles, isLoading: globalLoading, isError: globalError, refetch: refetchGlobal } = useGlobalRoles();
+   const { data: clusterRoles, isLoading: clusterLoading, isError: clusterError, refetch: refetchCluster } = useClusterRoles();
+   const { data: projectRoles, isLoading: projectLoading, isError: projectError, refetch: refetchProject } = useProjectRoles();
+   const { data: usersData, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useUsers();
+-  const { data: bindings, isLoading: bindingsLoading, isError: bindingsError, refetch: refetchBindings } = useRoleBindings();
++  const { data: clustersData } = useClusters();
++  const { data: bindings, isLoading: bindingsLoading, isError: bindingsError, refetch: refetchBindings } = useClusterRoleBindings();
+ 
+   const deleteUser = useDeleteUser();
+   const resetPassword = useResetUserPassword();
++  const deleteBinding = useDeleteClusterRoleBinding();
+ 
+   const users = usersData?.data || [];
++  const clusters = clustersData?.data || [];
++
++  const clusterRoleNameById = new Map((clusterRoles || []).map((r) => [r.id, r.displayName || r.name]));
++  const clusterNameById = new Map(clusters.map((c) => [c.id, c.name]));
++  const userLabelById = new Map(users.map((u) => [u.id, u.displayName || u.username]));
++
++  const confirmDeleteBinding = async () => {
++    if (!deleteBindingTarget) return;
++    try {
++      await deleteBinding.mutateAsync(deleteBindingTarget.id);
++    } catch {
++      // Error handled by mutation
++    }
++    setDeleteBindingTarget(null);
++  };
+ 
+   const handleDeleteUser = (user: User) => setDeleteUserTarget(user);
+   const handleResetPassword = (user: User) => setResetPasswordTarget(user);
+@@ -347,42 +380,60 @@ export default function RBACPage() {
+     },
+   ];
+ 
+-  const bindingColumns: Column<RoleBinding>[] = [
+-    {
+-      key: 'name',
+-      header: 'Binding',
+-      accessor: (row) => <span className="font-medium text-foreground">{row.name}</span>,
+-    },
++  const bindingColumns: Column<ClusterRoleBinding>[] = [
+     {
+-      key: 'roleType',
+-      header: 'Scope',
++      key: 'subject',
++      header: 'Subject',
+       accessor: (row) => (
+-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">{row.roleType}</span>
++        <span className="font-medium text-foreground">
++          {row.user_id ? userLabelById.get(row.user_id) || row.user_id : `group: ${row.group}`}
++        </span>
+       ),
+     },
+     {
+       key: 'role',
+-      header: 'Role',
+-      accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{row.roleName}</span>,
++      header: 'Cluster Role',
++      accessor: (row) => (
++        <span className="text-sm text-muted-foreground">{clusterRoleNameById.get(row.role_id) || row.role_id}</span>
++      ),
+     },
+     {
+-      key: 'subjects',
+-      header: 'Subjects',
++      key: 'cluster',
++      header: 'Cluster',
+       accessor: (row) => (
+-        <div className="flex flex-wrap gap-1">
+-          {row.subjects.map((s, i) => (
+-            <span key={i} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+-              {s.kind}: {s.name}
+-            </span>
+-          ))}
+-        </div>
++        <span className="text-sm text-muted-foreground">{clusterNameById.get(row.cluster_id) || row.cluster_id}</span>
+       ),
+-      sortable: false,
++    },
++    {
++      key: 'namespace',
++      header: 'Namespace',
++      accessor: (row) =>
++        row.namespace ? (
++          <span className="font-mono text-xs text-foreground">{row.namespace}</span>
++        ) : (
++          <span className="text-xs text-muted-foreground">cluster-wide</span>
++        ),
+     },
+     {
+       key: 'created',
+       header: 'Created',
+-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
++      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.created_at)}</span>,
++    },
++    {
++      key: 'actions',
++      header: '',
++      accessor: (row) => (
++        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
++          <button
++            onClick={() => setDeleteBindingTarget(row)}
++            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
++            title="Revoke binding"
++          >
++            <Trash2 className="h-3.5 w-3.5" />
++          </button>
++        </div>
++      ),
++      sortable: false,
+     },
+   ];
+ 
+@@ -417,6 +468,16 @@ export default function RBACPage() {
+               Create Role
+             </button>
+           )}
++          {activeTab === 'bindings' && (
++            <button
++              onClick={() => setShowCreateBinding(true)}
++              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
++                text-sm font-medium hover:opacity-90 transition-opacity"
++            >
++              <Plus className="h-4 w-4" />
++              Create Binding
++            </button>
++          )}
+         </div>
+       </div>
+ 
+@@ -537,6 +598,11 @@ export default function RBACPage() {
+         />
+       )}
+ 
++      {/* Create Cluster Binding Modal */}
++      {showCreateBinding && (
++        <CreateClusterBindingModal onClose={() => setShowCreateBinding(false)} />
++      )}
++
+       {/* Reset Password Result */}
+       {resetPasswordResult && (
+         <ResetPasswordResultModal
+@@ -567,10 +633,165 @@ export default function RBACPage() {
+         confirmText="Reset Password"
+         loading={resetPassword.isPending}
+       />
++
++      {/* Revoke Binding Confirmation */}
++      <ConfirmDialog
++        open={!!deleteBindingTarget}
++        onClose={() => setDeleteBindingTarget(null)}
++        onConfirm={confirmDeleteBinding}
++        title="Revoke Binding"
++        description={
++          deleteBindingTarget?.namespace
++            ? `Revoke this cluster role binding scoped to namespace "${deleteBindingTarget.namespace}"? Access granted by it will be removed.`
++            : 'Revoke this cluster-wide role binding? Access granted by it will be removed.'
++        }
++        confirmText="Revoke"
++        variant="destructive"
++        loading={deleteBinding.isPending}
++      />
+     </div>
+   );
+ }
+ 
++// ============================================================
++// Create Cluster Binding Modal
++// ============================================================
++
++function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
++  const { data: usersData } = useUsers();
++  const { data: clusterRoles } = useClusterRoles();
++  const { data: clustersData } = useClusters();
++  const createBinding = useCreateClusterRoleBinding();
++
++  const users = usersData?.data || [];
++  const clusters = clustersData?.data || [];
++  const roles = clusterRoles || [];
++
++  const [form, setForm] = useState({ userId: '', roleId: '', clusterId: '', namespace: '' });
++
++  const namespaceValid = isValidNamespace(form.namespace.trim());
++  const canSubmit = !!form.userId && !!form.roleId && !!form.clusterId && namespaceValid;
++
++  const handleSave = async () => {
++    if (!canSubmit) {
++      toastError('Select a user, cluster role, and cluster; namespace must be a valid label');
++      return;
++    }
++    try {
++      await createBinding.mutateAsync({
++        user_id: form.userId,
++        role_id: form.roleId,
++        cluster_id: form.clusterId,
++        namespace: form.namespace.trim() || undefined,
++      });
++      onClose();
++    } catch {
++      // Error handled by mutation
++    }
++  };
++
++  return (
++    <OverlayShell onClose={onClose}>
++      <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
++        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
++          <h3 className="text-lg font-semibold text-foreground">Create Cluster Binding</h3>
++          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
++            <X className="h-5 w-5" />
++          </button>
++        </div>
++
++        <div className="flex-1 overflow-y-auto p-6 space-y-4">
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">User</label>
++            <select
++              value={form.userId}
++              onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
++              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++            >
++              <option value="">Select a user…</option>
++              {users.map((u) => (
++                <option key={u.id} value={u.id}>
++                  {u.displayName || u.username}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Cluster Role</label>
++            <select
++              value={form.roleId}
++              onChange={(e) => setForm((f) => ({ ...f, roleId: e.target.value }))}
++              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++            >
++              <option value="">Select a cluster role…</option>
++              {roles.map((r) => (
++                <option key={r.id} value={r.id}>
++                  {r.displayName || r.name}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Cluster</label>
++            <select
++              value={form.clusterId}
++              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
++              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
++            >
++              <option value="">Select a cluster…</option>
++              {clusters.map((c) => (
++                <option key={c.id} value={c.id}>
++                  {c.name}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          <div className="space-y-1.5">
++            <label className="text-sm font-medium text-foreground">Namespace</label>
++            <input
++              type="text"
++              value={form.namespace}
++              onChange={(e) => setForm((f) => ({ ...f, namespace: e.target.value }))}
++              placeholder="leave blank for cluster-wide"
++              className={cn(
++                'w-full h-9 px-3 rounded-md border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
++                namespaceValid ? 'border-border' : 'border-status-error'
++              )}
++            />
++            {!namespaceValid && (
++              <p className="text-xs text-status-error">
++                Must be a valid Kubernetes namespace (lowercase alphanumeric and dashes, ≤63 chars).
++              </p>
++            )}
++          </div>
++        </div>
++
++        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0 bg-muted/30">
++          <button
++            onClick={onClose}
++            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
++              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
++          >
++            Cancel
++          </button>
++          <button
++            onClick={handleSave}
++            disabled={createBinding.isPending || !canSubmit}
++            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
++              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
++          >
++            {createBinding.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
++            Create Binding
++          </button>
++        </div>
++      </div>
++    </OverlayShell>
++  );
++}
++
+ function EffectivePermissionsPanel() {
+   const [context, setContext] = useState({ clusterId: '', projectId: '', namespace: '' });
+   const selectedContext = {
+diff --git a/frontend/src/app/dashboard/rbac/rbac-routing.test.ts b/frontend/src/app/dashboard/rbac/rbac-routing.test.ts
+index 4df886a..5ad827a 100644
+--- a/frontend/src/app/dashboard/rbac/rbac-routing.test.ts
++++ b/frontend/src/app/dashboard/rbac/rbac-routing.test.ts
+@@ -1,4 +1,4 @@
+-import { adminUserHref, isUserLocked } from './page';
++import { adminUserHref, isUserLocked, isValidNamespace } from './page';
+ 
+ // F-03 regression: the RBAC users table must link each row to the admin
+ // user-security detail, and lock state must be derivable for the badge.
+@@ -31,3 +31,28 @@ describe('isUserLocked', () => {
+     expect(isUserLocked({ lockedUntil: 'not-a-date' })).toBe(false);
+   });
+ });
++
++// DIR-04: the cluster-binding create form gates submit on a DNS-1123 namespace
++// (empty == cluster-wide), mirroring the backend validation on
++// POST /rbac/cluster-role-bindings/.
++describe('isValidNamespace', () => {
++  it('allows an empty namespace (cluster-wide)', () => {
++    expect(isValidNamespace('')).toBe(true);
++  });
++
++  it('accepts valid DNS-1123 labels', () => {
++    expect(isValidNamespace('kube-system')).toBe(true);
++    expect(isValidNamespace('default')).toBe(true);
++    expect(isValidNamespace('a')).toBe(true);
++    expect(isValidNamespace('ns1')).toBe(true);
++  });
++
++  it('rejects invalid labels', () => {
++    expect(isValidNamespace('Bad_NS')).toBe(false);
++    expect(isValidNamespace('UPPER')).toBe(false);
++    expect(isValidNamespace('-leading')).toBe(false);
++    expect(isValidNamespace('trailing-')).toBe(false);
++    expect(isValidNamespace('has space')).toBe(false);
++    expect(isValidNamespace('a'.repeat(64))).toBe(false);
++  });
++});
+diff --git a/frontend/src/lib/api.ts b/frontend/src/lib/api.ts
+index 4cb7ee7..9448863 100644
+--- a/frontend/src/lib/api.ts
++++ b/frontend/src/lib/api.ts
+@@ -909,6 +909,35 @@ export async function createRoleBinding(data: {
+   return res.data.data;
+ }
+ 
++// --- Cluster role bindings (namespace-scoped authoring) ---
++// These target the real backend endpoints (unlike the phantom /rbac/bindings
++// helpers above). An empty `namespace` == cluster-wide.
++
++export async function listClusterRoleBindings(params?: { cluster_id?: string }) {
++  const res = await api.get<APIResponse<import('@/types').ClusterRoleBinding[]>>(
++    '/rbac/cluster-role-bindings/',
++    { params }
++  );
++  return res.data.data;
++}
++
++export async function createClusterRoleBinding(data: {
++  user_id: string;
++  role_id: string;
++  cluster_id: string;
++  namespace?: string;
++}) {
++  const res = await api.post<APIResponse<import('@/types').ClusterRoleBinding>>(
++    '/rbac/cluster-role-bindings/',
++    data
++  );
++  return res.data.data;
++}
++
++export async function deleteClusterRoleBinding(id: string) {
++  await api.delete(`/rbac/cluster-role-bindings/${id}/`);
++}
++
+ export interface EffectivePermissionParams {
+   clusterId?: string;
+   projectId?: string;
+diff --git a/frontend/src/lib/hooks.ts b/frontend/src/lib/hooks.ts
+index 4f24b68..374d7b0 100644
+--- a/frontend/src/lib/hooks.ts
++++ b/frontend/src/lib/hooks.ts
+@@ -660,6 +660,48 @@ export function useCreateRoleBinding() {
+   });
+ }
+ 
++// --- Cluster role bindings (namespace-scoped authoring) ---
++
++export function useClusterRoleBindings(params?: { cluster_id?: string }) {
++  return useQuery({
++    queryKey: queryKeys.rbac.clusterRoleBindings(params),
++    queryFn: () => apiClient.listClusterRoleBindings(params),
++  });
++}
++
++export function useCreateClusterRoleBinding() {
++  const queryClient = useQueryClient();
++  return useMutation({
++    mutationFn: (data: {
++      user_id: string;
++      role_id: string;
++      cluster_id: string;
++      namespace?: string;
++    }) => apiClient.createClusterRoleBinding(data),
++    onSuccess: () => {
++      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
++      toastSuccess('Cluster role binding created');
++    },
++    onError: (error: Error) => {
++      toastApiError('Failed to create cluster role binding', error);
++    },
++  });
++}
++
++export function useDeleteClusterRoleBinding() {
++  const queryClient = useQueryClient();
++  return useMutation({
++    mutationFn: (id: string) => apiClient.deleteClusterRoleBinding(id),
++    onSuccess: () => {
++      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
++      toastSuccess('Cluster role binding revoked');
++    },
++    onError: (error: Error) => {
++      toastApiError('Failed to revoke cluster role binding', error);
++    },
++  });
++}
++
+ // ============================================================
+ // User Hooks
+ // ============================================================
+diff --git a/frontend/src/lib/query-keys.ts b/frontend/src/lib/query-keys.ts
+index dc19b8f..9e4f38a 100644
+--- a/frontend/src/lib/query-keys.ts
++++ b/frontend/src/lib/query-keys.ts
+@@ -133,6 +133,8 @@ export const queryKeys = {
+     clusterRoles: (clusterId?: string) => ['rbac', 'cluster-roles', clusterId] as const,
+     projectRoles: (projectId?: string) => ['rbac', 'project-roles', projectId] as const,
+     bindings: (params?: Record<string, unknown>) => ['rbac', 'bindings', params] as const,
++    clusterRoleBindings: (params?: Record<string, unknown>) =>
++      ['rbac', 'cluster-role-bindings', params] as const,
+     myPermissions: (params?: apiClient.EffectivePermissionParams) => ['rbac', 'my-permissions', params] as const,
+   },
+   users: {
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index 01a8989..172fe9c 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -747,6 +747,19 @@ export interface RoleBindingSubject {
+   namespace?: string;
+ }
+ 
++// ClusterRoleBinding mirrors the backend `sqlc.ClusterRoleBinding` returned by
++// GET/POST /rbac/cluster-role-bindings/. An empty `namespace` means the binding
++// applies to the whole cluster; a non-empty value narrows it to one namespace.
++export interface ClusterRoleBinding {
++  id: string;
++  user_id: string | null;
++  group: string;
++  role_id: string;
++  cluster_id: string;
++  namespace: string;
++  created_at: string;
++}
++
+ export interface RBACEngineRule {
+   resource: string;
+   verbs: string[];
+diff --git a/internal/handler/rbac.go b/internal/handler/rbac.go
+index a9d7ac9..9c437cb 100644
+--- a/internal/handler/rbac.go
++++ b/internal/handler/rbac.go
+@@ -9,6 +9,7 @@ import (
+ 	"github.com/go-chi/chi/v5"
+ 	"github.com/google/uuid"
+ 	"github.com/jackc/pgx/v5/pgtype"
++	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
+ 
+ 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+ 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+@@ -595,6 +596,16 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
+ 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Cluster ID is required")
+ 		return
+ 	}
++	// A non-empty namespace scopes the binding to a single Kubernetes namespace
++	// (empty == cluster-wide). Validate it as a DNS-1123 label before persisting,
++	// mirroring the preview handler (rbac_effective.go).
++	if req.Namespace != "" {
++		if errs := k8svalidation.IsDNS1123Label(req.Namespace); len(errs) > 0 {
++			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
++				"namespace must be a valid Kubernetes namespace")
++			return
++		}
++	}
+ 	// Privilege-escalation guard: the caller may only grant a role whose every
+ 	// rule the caller already holds at this cluster (and namespace) scope.
+ 	if !h.guardClusterBinding(w, r, roleID, clusterID, req.Namespace) {
+diff --git a/internal/handler/rbac_audit_test.go b/internal/handler/rbac_audit_test.go
+index 0028160..5f09e5e 100644
+--- a/internal/handler/rbac_audit_test.go
++++ b/internal/handler/rbac_audit_test.go
+@@ -367,6 +367,7 @@ func (f *fakeRBACAuditQuerier) CreateClusterRoleBinding(_ context.Context, arg s
+ 		Group:     arg.Group,
+ 		RoleID:    arg.RoleID,
+ 		ClusterID: arg.ClusterID,
++		Namespace: arg.Namespace,
+ 		CreatedAt: now,
+ 		UpdatedAt: now,
+ 	}
+diff --git a/internal/handler/rbac_effective.go b/internal/handler/rbac_effective.go
+index 4e90925..83bc475 100644
+--- a/internal/handler/rbac_effective.go
++++ b/internal/handler/rbac_effective.go
+@@ -239,7 +239,7 @@ func effectivePermissionContextFromRequest(r *http.Request) (effectivePermission
+ 		if errs := k8svalidation.IsDNS1123Label(out.Namespace); len(errs) > 0 {
+ 			return out, errString("namespace must be a valid Kubernetes namespace")
+ 		}
+-		out.Warnings = append(out.Warnings, "namespace context is enforced for namespace-scoped bindings when present; binding storage and assignment UI are still pending")
++		out.Warnings = append(out.Warnings, "namespace context is enforced for namespace-scoped bindings when present")
+ 	}
+ 	return out, nil
+ }
+diff --git a/internal/handler/rbac_namespace_binding_test.go b/internal/handler/rbac_namespace_binding_test.go
+new file mode 100644
+index 0000000..22a3c86
+--- /dev/null
++++ b/internal/handler/rbac_namespace_binding_test.go
+@@ -0,0 +1,108 @@
++package handler
++
++import (
++	"encoding/json"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/google/uuid"
++)
++
++// TestCreateClusterRoleBinding_NamespaceValidation locks in the DNS-1123
++// validation on the namespace field of the cluster role-binding create
++// handler. An empty namespace means cluster-wide (allowed); a valid label is
++// persisted and echoed; an invalid label fails closed with a 400 and writes
++// nothing. The handler is constructed without SetAuthorization, so the
++// escalation guard short-circuits (engine==nil) and we exercise validation +
++// persistence in isolation.
++func TestCreateClusterRoleBinding_NamespaceValidation(t *testing.T) {
++	callerID := uuid.New()
++	userID := uuid.New()
++	roleID := uuid.New()
++	clusterID := uuid.New()
++
++	cases := []struct {
++		name          string
++		namespace     string
++		wantStatus    int
++		wantNamespace string
++		wantPersisted int
++	}{
++		{
++			name:          "valid namespace label",
++			namespace:     "kube-system",
++			wantStatus:    http.StatusCreated,
++			wantNamespace: "kube-system",
++			wantPersisted: 1,
++		},
++		{
++			name:          "empty namespace is cluster-wide",
++			namespace:     "",
++			wantStatus:    http.StatusCreated,
++			wantNamespace: "",
++			wantPersisted: 1,
++		},
++		{
++			name:          "invalid namespace label rejected",
++			namespace:     "Bad_NS",
++			wantStatus:    http.StatusBadRequest,
++			wantPersisted: 0,
++		},
++	}
++
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			q := newFakeRBACAuditQuerier()
++			h := NewRBACHandler(q)
++
++			body := []byte(fmt.Sprintf(
++				`{"user_id":"%s","role_id":"%s","cluster_id":"%s","namespace":"%s"}`,
++				userID, roleID, clusterID, tc.namespace))
++			req := authedRequest(http.MethodPost, "/api/v1/rbac/cluster-role-bindings/", callerID, body)
++			rec := httptest.NewRecorder()
++			h.CreateClusterRoleBinding(rec, req)
++
++			if rec.Code != tc.wantStatus {
++				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantStatus, rec.Body.String())
++			}
++			if n := len(q.clusterBindings); n != tc.wantPersisted {
++				t.Fatalf("persisted bindings = %d, want %d", n, tc.wantPersisted)
++			}
++
++			if tc.wantStatus == http.StatusCreated {
++				var resp struct {
++					Data struct {
++						Namespace string `json:"namespace"`
++					} `json:"data"`
++				}
++				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
++					t.Fatalf("decode response: %v; body=%s", err, rec.Body.String())
++				}
++				if resp.Data.Namespace != tc.wantNamespace {
++					t.Fatalf("response namespace = %q, want %q", resp.Data.Namespace, tc.wantNamespace)
++				}
++				for _, b := range q.clusterBindings {
++					if b.Namespace != tc.wantNamespace {
++						t.Fatalf("persisted namespace = %q, want %q", b.Namespace, tc.wantNamespace)
++					}
++				}
++			}
++
++			if tc.wantStatus == http.StatusBadRequest {
++				var resp struct {
++					Error struct {
++						Code string `json:"code"`
++					} `json:"error"`
++				}
++				if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
++					t.Fatalf("decode error response: %v; body=%s", err, rec.Body.String())
++				}
++				if resp.Error.Code != "validation_error" {
++					t.Fatalf("error code = %q, want validation_error; body=%s", resp.Error.Code, rec.Body.String())
++				}
++			}
++		})
++	}
++}

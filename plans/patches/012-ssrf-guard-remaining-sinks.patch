@@ -1,0 +1,588 @@
+diff --git a/internal/handler/backups.go b/internal/handler/backups.go
+index f8a3eec..9803d39 100644
+--- a/internal/handler/backups.go
++++ b/internal/handler/backups.go
+@@ -1503,6 +1503,13 @@ func (h *BackupHandler) probeS3Bucket(ctx context.Context, cfg sqlc.BackupStorag
+ 	q.Set("max-keys", "1")
+ 	host.RawQuery = q.Encode()
+ 
++	// SSRF guard: the endpoint URL is operator-supplied (BackupStorageConfig),
++	// so refuse to dial a loopback/internal/metadata address. Do not echo the
++	// endpoint in the error.
++	if err := httpclient.GuardPublicHost(host.String()); err != nil {
++		return fmt.Errorf("endpoint is not a permitted public address")
++	}
++
+ 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, host.String(), nil)
+ 	if err != nil {
+ 		return err
+diff --git a/internal/handler/backups_velero_test.go b/internal/handler/backups_velero_test.go
+index ae4f62f..44badc3 100644
+--- a/internal/handler/backups_velero_test.go
++++ b/internal/handler/backups_velero_test.go
+@@ -15,6 +15,7 @@ import (
+ 
+ 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+ 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+ 	"github.com/go-chi/chi/v5"
+ 	"github.com/google/uuid"
+@@ -194,6 +195,7 @@ func TestVeleroResourceName_DNSCompliant(t *testing.T) {
+ // --- TestStorageConfig connectivity probe (no live network) --------------
+ 
+ func TestProbeS3Bucket_Success(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	var capturedAuth string
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		capturedAuth = r.Header.Get("Authorization")
+@@ -227,6 +229,7 @@ func TestProbeS3Bucket_Success(t *testing.T) {
+ }
+ 
+ func TestProbeS3Bucket_Forbidden(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		w.WriteHeader(http.StatusForbidden)
+ 		_, _ = io.WriteString(w, `<Error><Code>InvalidAccessKeyId</Code></Error>`)
+@@ -248,6 +251,7 @@ func TestProbeS3Bucket_Forbidden(t *testing.T) {
+ }
+ 
+ func TestProbeS3Bucket_NoSuchBucket(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		w.WriteHeader(http.StatusNotFound)
+ 		_, _ = io.WriteString(w, `<Error><Code>NoSuchBucket</Code></Error>`)
+@@ -265,6 +269,34 @@ func TestProbeS3Bucket_NoSuchBucket(t *testing.T) {
+ 	}
+ }
+ 
++// TestProbeS3Bucket_RejectsPrivateEndpoint proves the SSRF guard blocks a
++// loopback/internal endpoint URL before the signed GET is dialed.
++func TestProbeS3Bucket_RejectsPrivateEndpoint(t *testing.T) {
++	var reached bool
++	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		reached = true
++		w.WriteHeader(http.StatusOK)
++	}))
++	defer srv.Close()
++
++	h := &BackupHandler{httpClient: srv.Client()}
++	cfg := sqlc.BackupStorageConfig{
++		Bucket:      "x",
++		Region:      "us-east-1",
++		EndpointUrl: srv.URL, // 127.0.0.1
++	}
++	err := h.probeS3Bucket(context.Background(), cfg, "k", "s")
++	if err == nil {
++		t.Fatal("expected SSRF guard to reject loopback endpoint")
++	}
++	if reached {
++		t.Fatal("SSRF guard failed: request reached the loopback endpoint")
++	}
++	if strings.Contains(err.Error(), "127.0.0.1") {
++		t.Fatalf("error leaks internal address: %v", err)
++	}
++}
++
+ // --- BSL apply round-trip via a stub K8sRequester -----------------------
+ 
+ // stubK8sRequester records every request handed to it and returns a fixed
+@@ -675,6 +707,7 @@ func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
+ }
+ 
+ func TestStorageConfigEndpoint_Success(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		w.WriteHeader(http.StatusOK)
+ 	}))
+diff --git a/internal/handler/cloud_credentials_gcp_endpoint_test.go b/internal/handler/cloud_credentials_gcp_endpoint_test.go
+index 95add1c..3025fdc 100644
+--- a/internal/handler/cloud_credentials_gcp_endpoint_test.go
++++ b/internal/handler/cloud_credentials_gcp_endpoint_test.go
+@@ -11,6 +11,8 @@ import (
+ 	"net/http/httptest"
+ 	"strings"
+ 	"testing"
++
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ )
+ 
+ // gcpServiceAccountJSON builds a service_account_json blob with a freshly
+@@ -41,6 +43,7 @@ func gcpServiceAccountJSON(t *testing.T, tokenURI string) string {
+ // token exchange and reports OK only when the token endpoint returns an
+ // access_token.
+ func TestGCP_ValidKeyExchangeReturnsOK(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		_ = r.ParseForm()
+ 		if r.FormValue("grant_type") != "urn:ietf:params:oauth:grant-type:jwt-bearer" || r.FormValue("assertion") == "" {
+@@ -70,6 +73,7 @@ func TestGCP_ValidKeyExchangeReturnsOK(t *testing.T) {
+ // (invalid_grant, as a revoked/rotated key produces) must report OK=false.
+ // Before the fix, parseable JSON alone returned OK=true.
+ func TestGCP_RevokedKeyReturnsNotOK(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		w.WriteHeader(http.StatusBadRequest)
+ 		_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"Invalid JWT Signature."}`))
+@@ -106,3 +110,33 @@ func TestGCP_UnparseablePrivateKeyReturnsNotOK(t *testing.T) {
+ 		t.Fatalf("expected OK=false when the private_key cannot be signed with, got %+v", res)
+ 	}
+ }
++
++// TestGCP_RejectsPrivateTokenURI proves the SSRF guard rejects a
++// loopback/internal token_uri before any request is dialed. The httptest
++// server records whether it was ever reached — the guard must stop it first.
++func TestGCP_RejectsPrivateTokenURI(t *testing.T) {
++	var reached bool
++	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		reached = true
++		w.Header().Set("Content-Type", "application/json")
++		_, _ = w.Write([]byte(`{"access_token":"x","token_type":"Bearer","expires_in":1}`))
++	}))
++	defer srv.Close()
++
++	tester := NewDefaultCloudTester()
++	res, err := tester.TestGCP(context.Background(), map[string]string{
++		"service_account_json": gcpServiceAccountJSON(t, srv.URL), // 127.0.0.1
++	})
++	if err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if res.OK {
++		t.Fatalf("expected OK=false for a loopback token_uri, got %+v", res)
++	}
++	if reached {
++		t.Fatal("SSRF guard failed: request reached the loopback token endpoint")
++	}
++	if strings.Contains(res.Message, "127.0.0.1") {
++		t.Fatalf("message leaks internal address: %q", res.Message)
++	}
++}
+diff --git a/internal/handler/cloud_credentials_test_endpoint.go b/internal/handler/cloud_credentials_test_endpoint.go
+index 052f702..be47317 100644
+--- a/internal/handler/cloud_credentials_test_endpoint.go
++++ b/internal/handler/cloud_credentials_test_endpoint.go
+@@ -35,6 +35,8 @@ import (
+ 	"net/url"
+ 	"strings"
+ 	"time"
++
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ )
+ 
+ // defaultCloudTesterTimeout is the wall-clock budget for any single
+@@ -143,6 +145,12 @@ func (t *DefaultCloudTester) TestGCP(ctx context.Context, blob map[string]string
+ 	if tokenURI == "" {
+ 		tokenURI = "https://oauth2.googleapis.com/token"
+ 	}
++	// SSRF guard: token_uri comes from the operator-supplied service-account
++	// JSON, so refuse to dial a loopback/internal/metadata address. Do not echo
++	// the URI back to the caller.
++	if err := httpclient.GuardPublicHost(tokenURI); err != nil {
++		return CloudTestResult{OK: false, Message: "token_uri is not a permitted public address"}, nil
++	}
+ 	// Sign a real JWT assertion with the service-account's RSA private key
+ 	// and exchange it at the token URI. Merely parsing the JSON is NOT
+ 	// enough: a revoked/rotated key produces syntactically-valid JSON, and
+diff --git a/internal/httpclient/ssrf.go b/internal/httpclient/ssrf.go
+new file mode 100644
+index 0000000..745d54c
+--- /dev/null
++++ b/internal/httpclient/ssrf.go
+@@ -0,0 +1,91 @@
++package httpclient
++
++import (
++	"errors"
++	"net"
++	"net/url"
++	"sync/atomic"
++)
++
++// ErrBlockedHost is returned by GuardPublicHost when the target resolves to a
++// non-public address. It deliberately carries no host or IP detail so callers
++// can surface it to end users without turning the endpoint into an SSRF /
++// internal port-scan oracle.
++var ErrBlockedHost = errors.New("destination host is not a permitted public address")
++
++// guardDisabled, when true, makes GuardPublicHost a no-op. It is flipped only
++// by tests via DisableGuardForTest so that httptest servers (which always
++// listen on loopback) remain reachable in unit tests. Production code never
++// sets it, so the guard is always active at runtime.
++var guardDisabled atomic.Bool
++
++// DisableGuardForTest disables GuardPublicHost and returns a restore function
++// that re-enables it. Intended for use as:
++//
++//	defer httpclient.DisableGuardForTest()()
++//
++// Only tests that must dial an httptest server on loopback should call this.
++func DisableGuardForTest() (restore func()) {
++	guardDisabled.Store(true)
++	return func() { guardDisabled.Store(false) }
++}
++
++// GuardPublicHost returns a non-nil error when rawURL's host resolves to any
++// loopback, unspecified, link-local (including the 169.254.169.254 cloud
++// metadata endpoint), private (RFC1918 / RFC4193 ULA), or multicast address.
++//
++// It must be called immediately BEFORE an outbound HTTP request whose target
++// URL is operator- or DB-supplied, to prevent the management pod from being
++// used to reach cluster-internal services (Postgres/Redis), the cloud metadata
++// endpoint, or to port-scan the internal network via SSRF. On error, callers
++// should return a generic failure to the client WITHOUT echoing the URL or the
++// resolved internal address.
++func GuardPublicHost(rawURL string) error {
++	if guardDisabled.Load() {
++		return nil
++	}
++	u, err := url.Parse(rawURL)
++	if err != nil {
++		return ErrBlockedHost
++	}
++	host := u.Hostname()
++	if host == "" {
++		return ErrBlockedHost
++	}
++
++	var ips []net.IP
++	if literal := net.ParseIP(host); literal != nil {
++		ips = []net.IP{literal}
++	} else {
++		resolved, err := net.LookupIP(host)
++		if err != nil || len(resolved) == 0 {
++			// Fail closed: if the name cannot be resolved we cannot prove it
++			// is public, so we refuse rather than dial.
++			return ErrBlockedHost
++		}
++		ips = resolved
++	}
++
++	// Reject if ANY resolved address is non-public. A hostname that resolves to
++	// a mix of public and private addresses is still a valid SSRF vector.
++	for _, ip := range ips {
++		if !isPublicIP(ip) {
++			return ErrBlockedHost
++		}
++	}
++	return nil
++}
++
++// isPublicIP reports whether ip is a globally-routable public address, i.e. not
++// loopback, unspecified, link-local, private, or multicast.
++func isPublicIP(ip net.IP) bool {
++	if ip.IsLoopback() || ip.IsUnspecified() ||
++		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
++		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
++		return false
++	}
++	if ip.IsPrivate() {
++		return false
++	}
++	return true
++}
+diff --git a/internal/httpclient/ssrf_test.go b/internal/httpclient/ssrf_test.go
+new file mode 100644
+index 0000000..3dec955
+--- /dev/null
++++ b/internal/httpclient/ssrf_test.go
+@@ -0,0 +1,81 @@
++package httpclient
++
++import (
++	"errors"
++	"testing"
++)
++
++func TestGuardPublicHost_RejectsNonPublic(t *testing.T) {
++	// IP literals only — no DNS lookups so the test is hermetic.
++	cases := []struct {
++		name string
++		url  string
++	}{
++		{"loopback v4", "http://127.0.0.1/index.yaml"},
++		{"loopback name", "http://localhost:8088/services/collector"},
++		{"loopback v6", "http://[::1]:6379/"},
++		{"unspecified v4", "http://0.0.0.0:5432/"},
++		{"link-local metadata", "http://169.254.169.254/latest/meta-data/"},
++		{"private 10", "https://10.0.0.5/"},
++		{"private 172", "https://172.16.4.4:9000/"},
++		{"private 192", "https://192.168.1.10/"},
++		{"multicast", "http://224.0.0.1/"},
++		{"empty host", "https:///path"},
++		{"garbage", "://not a url"},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			if err := GuardPublicHost(tc.url); err == nil {
++				t.Fatalf("GuardPublicHost(%q) = nil, want error", tc.url)
++			}
++		})
++	}
++}
++
++func TestGuardPublicHost_AllowsPublic(t *testing.T) {
++	// Public IP literals so no DNS is required.
++	cases := []string{
++		"https://8.8.8.8/",
++		"https://1.1.1.1:443/index.yaml",
++		"http://[2606:4700:4700::1111]/",
++	}
++	for _, u := range cases {
++		if err := GuardPublicHost(u); err != nil {
++			t.Fatalf("GuardPublicHost(%q) = %v, want nil", u, err)
++		}
++	}
++}
++
++func TestGuardPublicHost_ErrorIsGeneric(t *testing.T) {
++	err := GuardPublicHost("http://127.0.0.1:5432/")
++	if err == nil {
++		t.Fatal("expected error")
++	}
++	if !errors.Is(err, ErrBlockedHost) {
++		t.Fatalf("want ErrBlockedHost, got %v", err)
++	}
++	// The error must not leak the host/IP it blocked.
++	if got := err.Error(); got == "" || contains(got, "127.0.0.1") {
++		t.Fatalf("error message leaks target: %q", got)
++	}
++}
++
++func TestDisableGuardForTest(t *testing.T) {
++	restore := DisableGuardForTest()
++	if err := GuardPublicHost("http://127.0.0.1/"); err != nil {
++		t.Fatalf("guard should be disabled, got %v", err)
++	}
++	restore()
++	if err := GuardPublicHost("http://127.0.0.1/"); err == nil {
++		t.Fatal("guard should be re-enabled after restore")
++	}
++}
++
++func contains(s, sub string) bool {
++	for i := 0; i+len(sub) <= len(s); i++ {
++		if s[i:i+len(sub)] == sub {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/internal/siem/transport.go b/internal/siem/transport.go
+index 005c149..b91b645 100644
+--- a/internal/siem/transport.go
++++ b/internal/siem/transport.go
+@@ -13,6 +13,8 @@ import (
+ 	"strings"
+ 	"sync"
+ 	"time"
++
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ )
+ 
+ // Transport identifiers stored in siem_forwarders.transport.
+@@ -263,6 +265,11 @@ func (s *splunkHEC) Send(ctx context.Context, batch [][]byte) error {
+ 		return nil
+ 	}
+ 	target := s.collectorURL()
++	// SSRF guard: the collector endpoint is operator-supplied, so refuse to
++	// dial a loopback/internal/metadata address. Do not echo the target.
++	if err := httpclient.GuardPublicHost(target); err != nil {
++		return fmt.Errorf("splunk hec: destination is not a permitted public address")
++	}
+ 	var body bytes.Buffer
+ 	for _, ev := range batch {
+ 		// Strip trailing newlines from FormatNDJSON output so the
+@@ -334,6 +341,11 @@ func (s *ndjsonHTTPS) Send(ctx context.Context, batch [][]byte) error {
+ 	if _, err := url.Parse(s.endpoint); err != nil {
+ 		return fmt.Errorf("ndjson https: parse endpoint: %w", err)
+ 	}
++	// SSRF guard: the endpoint is operator-supplied, so refuse to dial a
++	// loopback/internal/metadata address. Do not echo the endpoint.
++	if err := httpclient.GuardPublicHost(s.endpoint); err != nil {
++		return fmt.Errorf("ndjson https: destination is not a permitted public address")
++	}
+ 	var body bytes.Buffer
+ 	for _, ev := range batch {
+ 		body.Write(ev)
+diff --git a/internal/siem/transport_test.go b/internal/siem/transport_test.go
+index a032705..05e2a44 100644
+--- a/internal/siem/transport_test.go
++++ b/internal/siem/transport_test.go
+@@ -13,6 +13,8 @@ import (
+ 	"sync"
+ 	"testing"
+ 	"time"
++
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ )
+ 
+ func TestTransport_SyslogUDP_RoundTrip(t *testing.T) {
+@@ -83,6 +85,7 @@ func TestTransport_SyslogUDP_RoundTrip(t *testing.T) {
+ }
+ 
+ func TestTransport_SplunkHEC_PostsExpectedShape(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	var (
+ 		mu        sync.Mutex
+ 		gotHeader string
+@@ -142,6 +145,7 @@ func TestTransport_SplunkHEC_PostsExpectedShape(t *testing.T) {
+ }
+ 
+ func TestTransport_SplunkHEC_NonOKStatusReturnsError(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		w.WriteHeader(http.StatusUnauthorized)
+ 		_, _ = w.Write([]byte(`{"text":"Invalid token","code":4}`))
+@@ -163,6 +167,7 @@ func TestTransport_SplunkHEC_NonOKStatusReturnsError(t *testing.T) {
+ }
+ 
+ func TestTransport_NDJSONHTTPS_AddsCustomHeaders(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	var (
+ 		mu      sync.Mutex
+ 		gotAuth string
+@@ -254,3 +259,29 @@ func TestTransport_SyslogTCP_FramesNewlineDelimited(t *testing.T) {
+ 		t.Errorf("received lines = %#v", got)
+ 	}
+ }
++
++// TestTransport_SplunkHEC_RejectsPrivateHost verifies the SSRF guard blocks a
++// loopback collector endpoint before the HEC POST is dialed.
++func TestTransport_SplunkHEC_RejectsPrivateHost(t *testing.T) {
++	transport := NewSplunkHEC("http://127.0.0.1:8088", "token", http.DefaultClient)
++	err := transport.Send(context.Background(), [][]byte{[]byte(`{"a":1}`)})
++	if err == nil {
++		t.Fatal("expected SSRF guard to reject loopback collector URL")
++	}
++	if strings.Contains(err.Error(), "127.0.0.1") {
++		t.Fatalf("error leaks internal address: %v", err)
++	}
++}
++
++// TestTransport_NDJSONHTTPS_RejectsPrivateHost verifies the SSRF guard blocks a
++// link-local (cloud metadata) endpoint before the NDJSON POST is dialed.
++func TestTransport_NDJSONHTTPS_RejectsPrivateHost(t *testing.T) {
++	transport := NewNDJSONHTTPS("http://169.254.169.254/ingest", http.DefaultClient, nil)
++	err := transport.Send(context.Background(), [][]byte{[]byte("line")})
++	if err == nil {
++		t.Fatal("expected SSRF guard to reject link-local endpoint")
++	}
++	if strings.Contains(err.Error(), "169.254") {
++		t.Fatalf("error leaks internal address: %v", err)
++	}
++}
+diff --git a/internal/worker/tasks/notification_dispatch.go b/internal/worker/tasks/notification_dispatch.go
+index 3005261..559b065 100644
+--- a/internal/worker/tasks/notification_dispatch.go
++++ b/internal/worker/tasks/notification_dispatch.go
+@@ -31,6 +31,7 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"encoding/json"
++	"errors"
+ 	"fmt"
+ 	"log/slog"
+ 	"net/http"
+@@ -39,6 +40,7 @@ import (
+ 
+ 	"github.com/hibiken/asynq"
+ 
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
+ )
+ 
+@@ -392,6 +394,12 @@ func postGenericWebhook(ctx context.Context, client *http.Client, url string, p
+ // so logs are clearer when an upstream silently returns 200 instead
+ // of 202 etc.
+ func postJSON(ctx context.Context, client *http.Client, url string, body any, acceptStatus int) error {
++	// SSRF guard: the channel URL is operator-configured (Slack/Teams/generic
++	// webhook), so refuse to dispatch to a loopback/internal/metadata address.
++	// Do not echo the URL in the error.
++	if err := httpclient.GuardPublicHost(url); err != nil {
++		return errors.New("notification destination is not a permitted public address")
++	}
+ 	if client == nil {
+ 		client = runtimeHTTPClient()
+ 	}
+diff --git a/internal/worker/tasks/notification_dispatch_test.go b/internal/worker/tasks/notification_dispatch_test.go
+index c06cb40..45f179e 100644
+--- a/internal/worker/tasks/notification_dispatch_test.go
++++ b/internal/worker/tasks/notification_dispatch_test.go
+@@ -8,6 +8,8 @@ import (
+ 	"net/http/httptest"
+ 	"strings"
+ 	"testing"
++
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ )
+ 
+ // TestSlackPayloadShape locks down the wire format Slack receives so
+@@ -15,6 +17,7 @@ import (
+ // field breaks loudly in CI rather than silently posting unstyled
+ // fallback text.
+ func TestSlackPayloadShape(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	var captured map[string]any
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		body, _ := io.ReadAll(r.Body)
+@@ -55,6 +58,7 @@ func TestSlackPayloadShape(t *testing.T) {
+ // a typo in `dedup_key` produces duplicate incidents in prod, so we
+ // pin the field name.
+ func TestPagerDutyPayloadShape(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	var captured map[string]any
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		body, _ := io.ReadAll(r.Body)
+@@ -113,6 +117,7 @@ func TestPagerDutyPayloadShape(t *testing.T) {
+ // PagerDuty must emit event_action=resolve (with the same dedup_key so
+ // the open incident closes), and Slack must render the green swatch.
+ func TestResolvedNotificationShape(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	t.Run("pagerduty resolve", func(t *testing.T) {
+ 		// pagerDutyEventsURL is a hardcoded prod constant, so we verify
+ 		// the resolve body shape directly (same approach as
+@@ -163,6 +168,7 @@ func TestResolvedNotificationShape(t *testing.T) {
+ 
+ // TestMSTeamsPayloadShape locks down the Adaptive Card envelope.
+ func TestMSTeamsPayloadShape(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	var captured map[string]any
+ 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		body, _ := io.ReadAll(r.Body)
+@@ -222,6 +228,7 @@ func TestRedactURL(t *testing.T) {
+ }
+ 
+ func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
++	defer httpclient.DisableGuardForTest()()
+ 	resetRuntime()
+ 	defer resetRuntime()
+ 
+@@ -244,3 +251,27 @@ func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
+ 		t.Fatalf("fallback Timeout = %s, want %s", runtimeHTTPClient().Timeout, defaultWorkerHTTPTimeout)
+ 	}
+ }
++
++// TestPostJSONRejectsPrivateHost verifies the SSRF guard blocks a
++// loopback/internal channel URL before any request is dialed. The httptest
++// server would 500 if it were ever reached; guardrail is that it is not.
++func TestPostJSONRejectsPrivateHost(t *testing.T) {
++	var reached bool
++	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		reached = true
++		w.WriteHeader(http.StatusOK)
++	}))
++	defer srv.Close()
++
++	// srv.URL is a 127.0.0.1 address — the guard must reject it.
++	err := postJSON(context.Background(), http.DefaultClient, srv.URL, map[string]any{"ok": true}, http.StatusOK)
++	if err == nil {
++		t.Fatal("expected SSRF guard to reject loopback URL")
++	}
++	if reached {
++		t.Fatal("guard failed: request reached the loopback server")
++	}
++	if strings.Contains(err.Error(), "127.0.0.1") {
++		t.Fatalf("error leaks internal address: %v", err)
++	}
++}
