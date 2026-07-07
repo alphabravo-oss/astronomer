@@ -20,6 +20,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
@@ -1301,6 +1302,14 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		pingURL := "https://" + host + "/v2/"
+		// SSRF backstop: this handler fetches an operator-supplied URL and
+		// echoes the upstream status/error back, so reject probes aimed at
+		// loopback / RFC-1918 / link-local (incl. the 169.254.169.254 metadata
+		// endpoint) before any request leaves the process.
+		if err := httpclient.GuardPublicHost(pingURL); err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
+			return
+		}
 		client := &http.Client{Timeout: 10 * time.Second}
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, pingURL, nil)
 		if err != nil {
@@ -1327,6 +1336,12 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	url := strings.TrimRight(repo.Url, "/") + "/index.yaml"
+	// SSRF backstop (see the OCI branch above): block probes at non-public
+	// hosts before dialing.
+	if err := httpclient.GuardPublicHost(url); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
+		return
+	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {

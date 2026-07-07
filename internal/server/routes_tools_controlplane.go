@@ -1,11 +1,31 @@
 package server
 
 import (
+	"net/http"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 )
+
+// requireSuperuser returns middleware that admits only superusers, reusing the
+// shared handler.RequireSuperuser gate. Used for platform-admin surfaces whose
+// handlers carry no per-request authorization of their own (e.g. the
+// control-plane controllers routes).
+func requireSuperuser(deps RouterDependencies) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := handler.RequireSuperuser(w, r, deps.AuthQueries, handler.SuperuserGateConfig{
+				ForbiddenMessage: "This action requires superuser privileges",
+			}); !ok {
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // Code organization: this file holds a domain-specific slice of the
 // protected-route registration originally inlined in routes.go's
@@ -34,14 +54,20 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 	}
 
 	if deps.ControlPlane != nil {
+		// The controllers surface is platform-admin: policy, alert
+		// acknowledgement, and alertmanager silences are fleet-wide and the
+		// handler carries no per-request authorization. Previously the mutating
+		// routes were reachable by any authenticated principal; gate them at the
+		// middleware level on superuser.
+		superuserOnly := requireSuperuser(deps)
 		r.Get("/controllers/status/", deps.ControlPlane.Status)
 		r.Get("/controllers/policy/", deps.ControlPlane.GetPolicy)
-		r.Put("/controllers/policy/", deps.ControlPlane.UpdatePolicy)
+		r.With(superuserOnly).Put("/controllers/policy/", deps.ControlPlane.UpdatePolicy)
 		r.Get("/controllers/alerts/", deps.ControlPlane.ListAlerts)
-		r.Post("/controllers/alerts/{id}/acknowledge/", deps.ControlPlane.AcknowledgeAlert)
+		r.With(superuserOnly).Post("/controllers/alerts/{id}/acknowledge/", deps.ControlPlane.AcknowledgeAlert)
 		r.Get("/controllers/silences/", deps.ControlPlane.ListSilences)
-		r.Post("/controllers/silences/", deps.ControlPlane.CreateSilence)
-		r.Delete("/controllers/silences/{id}/", deps.ControlPlane.DeleteSilence)
+		r.With(superuserOnly).Post("/controllers/silences/", deps.ControlPlane.CreateSilence)
+		r.With(superuserOnly).Delete("/controllers/silences/{id}/", deps.ControlPlane.DeleteSilence)
 	}
 
 	// Sprint 072 — read-only anomaly baseline inspection.
@@ -144,18 +170,27 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 	}
 
 	if deps.Catalog != nil {
+		// Per-route authorization for repository CRUD. These routes previously
+		// sat behind ONLY the feature-flag gate, so a zero-grant viewer could
+		// add/mutate/sync repositories. docs/security-sensitive-routes.json
+		// already declares the catalog:create/update/delete requirement; these
+		// gates make the code honor the doc. sync + test-connection are
+		// classified as catalog:update (they mutate/probe an existing repo).
+		catalogCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbCreate)
+		catalogUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbUpdate)
+		catalogDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
 		r.With(featureGate("feature.catalog", deps.SettingsCache)).Route("/catalog", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Catalog.ControllerStatus)
 			r.Get("/operations/", deps.Catalog.ListOperations)
 			r.Get("/operations/{id}/", deps.Catalog.GetOperation)
 			r.Post("/operations/{id}/retry/", deps.Catalog.RetryOperation)
 			r.Get("/repositories/", deps.Catalog.ListRepos)
-			r.Post("/repositories/", deps.Catalog.CreateRepo)
+			r.With(catalogCreate).Post("/repositories/", deps.Catalog.CreateRepo)
 			r.Get("/repositories/{id}/", deps.Catalog.GetRepo)
-			r.Put("/repositories/{id}/", deps.Catalog.UpdateRepo)
-			r.Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
-			r.Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
-			r.Post("/repositories/{id}/test-connection/", deps.Catalog.TestRepoConnection)
+			r.With(catalogUpdate).Put("/repositories/{id}/", deps.Catalog.UpdateRepo)
+			r.With(catalogDelete).Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
+			r.With(catalogUpdate).Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
+			r.With(catalogUpdate).Post("/repositories/{id}/test-connection/", deps.Catalog.TestRepoConnection)
 			r.Get("/charts/", deps.Catalog.ListCharts)
 			r.Get("/charts/{id}/", deps.Catalog.GetChart)
 			r.Get("/charts/{id}/versions/", deps.Catalog.ListChartVersions)

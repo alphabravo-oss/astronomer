@@ -18,19 +18,30 @@ import (
 
 func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies, rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler) {
 	if deps.Security != nil {
+		// Per-route authorization for the mutating security surface. Previously
+		// these routes sat behind ONLY the feature-flag gate, so any
+		// authenticated principal (including a zero-grant viewer) could mutate
+		// templates/policies/scans. ApplyPolicy + CreateScan push config to a
+		// managed cluster through the tunnel, so they additionally carry the
+		// write-clusters scope backstop, mirroring the apiserver-audit ingest
+		// composition below.
+		secCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbCreate)
+		secUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbUpdate)
+		secDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbDelete)
+		secWriteClusters := requireScope(iauth.ScopeWriteClusters)
 		r.With(featureGate("feature.security", deps.SettingsCache)).Route("/security", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Security.ControllerStatus)
 			r.Get("/templates/", deps.Security.ListTemplates)
-			r.Post("/templates/", deps.Security.CreateTemplate)
+			r.With(secCreate).Post("/templates/", deps.Security.CreateTemplate)
 			r.Get("/templates/{id}/", deps.Security.GetTemplate)
-			r.Put("/templates/{id}/", deps.Security.UpdateTemplate)
-			r.Delete("/templates/{id}/", deps.Security.DeleteTemplate)
+			r.With(secUpdate).Put("/templates/{id}/", deps.Security.UpdateTemplate)
+			r.With(secDelete).Delete("/templates/{id}/", deps.Security.DeleteTemplate)
 			r.Get("/policies/", deps.Security.ListPolicies)
-			r.Post("/policies/", deps.Security.CreatePolicy)
-			r.Post("/policies/{id}/apply/", deps.Security.ApplyPolicy)
-			r.Delete("/policies/{id}/", deps.Security.DeletePolicy)
+			r.With(secCreate).Post("/policies/", deps.Security.CreatePolicy)
+			r.With(secWriteClusters, secUpdate).Post("/policies/{id}/apply/", deps.Security.ApplyPolicy)
+			r.With(secDelete).Delete("/policies/{id}/", deps.Security.DeletePolicy)
 			r.Get("/scans/", deps.Security.ListAllScans)
-			r.Post("/scans/", deps.Security.CreateScan)
+			r.With(secWriteClusters, secCreate).Post("/scans/", deps.Security.CreateScan)
 		})
 		r.Get("/clusters/{cluster_id}/security/policy/", deps.Security.GetPolicy)
 		r.Get("/clusters/{cluster_id}/security/scans/", deps.Security.ListScans)

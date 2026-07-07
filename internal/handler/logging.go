@@ -325,6 +325,9 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
+		return
+	}
 
 	configuration := req.Configuration
 	if configuration == nil {
@@ -370,6 +373,15 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 	var req CreateLoggingOutputRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	// Authorize against the output's owning cluster before mutating it.
+	existing, err := h.queries.GetLoggingOutputByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(existing.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
@@ -433,8 +445,13 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 
 	existing, lookupErr := h.queries.GetLoggingOutputByID(r.Context(), id)
 	outputName := ""
+	var outputClusterID uuid.UUID
 	if lookupErr == nil {
 		outputName = existing.Name
+		outputClusterID = uuid.UUID(existing.ClusterID.Bytes)
+	}
+	if !h.authz.authorizeClusterAction(w, r, outputClusterID, rbac.ResourceLogging, rbac.VerbDelete) {
+		return
 	}
 	// Enqueue the delete operation BEFORE the row goes away — the
 	// reconciler will use the snapshot in the payload to know which
@@ -503,6 +520,9 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
+		return
+	}
 
 	namespaces := req.Namespaces
 	if namespaces == nil {
@@ -558,6 +578,15 @@ func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	// Authorize against the pipeline's owning cluster before mutating it.
+	existing, err := h.queries.GetLoggingPipelineByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, existing.ClusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
+		return
+	}
 	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
 		ID:         id,
 		Name:       req.Name,
@@ -591,8 +620,13 @@ func (h *LoggingHandler) DeletePipeline(w http.ResponseWriter, r *http.Request) 
 
 	existing, lookupErr := h.queries.GetLoggingPipelineByID(r.Context(), id)
 	pipelineName := ""
+	var pipelineClusterID uuid.UUID
 	if lookupErr == nil {
 		pipelineName = existing.Name
+		pipelineClusterID = existing.ClusterID
+	}
+	if !h.authz.authorizeClusterAction(w, r, pipelineClusterID, rbac.ResourceLogging, rbac.VerbDelete) {
+		return
 	}
 	var deleteOp sqlc.LoggingOperation
 	if lookupErr == nil {
@@ -634,6 +668,9 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 	current, err := h.queries.GetLoggingOutputByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(current.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
@@ -701,6 +738,9 @@ func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Reque
 	current, err := h.queries.GetLoggingPipelineByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
 		return
 	}
 	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
