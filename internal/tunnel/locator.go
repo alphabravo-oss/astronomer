@@ -62,6 +62,14 @@ type Locator struct {
 
 	mu      sync.Mutex
 	cancels map[string]context.CancelFunc // cluster_id → refresh-loop cancel
+	// gens carries a monotonic generation id per cluster_id alongside cancels.
+	// A fast agent flap A→B→A can start a NEWER refresh loop for the same
+	// cluster_id before an OLDER loop has observed its own supersede; the
+	// generation id lets a stale tick cancel/evict ONLY its own map slot
+	// (generation match), never the newer generation's live loop. nextGen is
+	// the source of the next id; both are guarded by mu.
+	nextGen uint64
+	gens    map[string]uint64
 	// static is set ONLY by NewFakeLocatorForTest; Lookup checks it
 	// before consulting redis so unit tests don't need miniredis.
 	static map[string]string
@@ -86,6 +94,7 @@ func NewLocatorFromAsynqRedisURL(redisURL, address string, log *slog.Logger) (*L
 		address: address,
 		log:     log,
 		cancels: map[string]context.CancelFunc{},
+		gens:    map[string]uint64{},
 	}, nil
 }
 
@@ -111,7 +120,13 @@ func (l *Locator) Set(parent context.Context, clusterID string) {
 		cancel()
 	}
 	ctx, cancel := context.WithCancel(parent)
+	l.nextGen++
+	gen := l.nextGen
 	l.cancels[clusterID] = cancel
+	if l.gens == nil {
+		l.gens = map[string]uint64{}
+	}
+	l.gens[clusterID] = gen
 	l.mu.Unlock()
 
 	// Immediate set so the address is visible before the first tick.
@@ -120,7 +135,7 @@ func (l *Locator) Set(parent context.Context, clusterID string) {
 			slog.String("cluster_id", clusterID), slog.String("error", err.Error()))
 	}
 
-	go l.refreshLoop(ctx, clusterID)
+	go l.refreshLoop(ctx, clusterID, gen)
 }
 
 // Delete clears the mapping immediately and stops the refresh loop.
@@ -133,6 +148,7 @@ func (l *Locator) Delete(ctx context.Context, clusterID string) {
 	if cancel, exists := l.cancels[clusterID]; exists {
 		cancel()
 		delete(l.cancels, clusterID)
+		delete(l.gens, clusterID)
 	}
 	l.mu.Unlock()
 
@@ -208,6 +224,7 @@ func (l *Locator) Drain(ctx context.Context) {
 		ids = append(ids, id)
 	}
 	l.cancels = map[string]context.CancelFunc{}
+	l.gens = map[string]uint64{}
 	l.mu.Unlock()
 	for _, id := range ids {
 		l.Delete(ctx, id)
@@ -262,10 +279,20 @@ func (l *Locator) refresh(ctx context.Context, clusterID string) (owner string, 
 	return owner, nil
 }
 
-// refreshTick performs one owner-checked refresh. It returns true when this pod
-// has been superseded (a different pod owns the entry), in which case it cancels
-// and drops this cluster's refresh loop so we stop fighting the new owner.
-func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded bool) {
+// refreshTick performs one owner-checked refresh for the loop generation gen.
+// It returns true when this pod has been superseded (a different pod owns the
+// entry), in which case this loop stops (it returns true from refreshLoop, and
+// its own ctx is cancelled by the map-slot eviction below when it still owns
+// the slot).
+//
+// The map mutation is generation-guarded: a fast flap A→B→A can start a NEWER
+// refresh loop for this same cluster_id before an OLDER loop observes its own
+// supersede. A stale tick must therefore evict/cancel ONLY its own slot — it
+// cancels and drops the map entry iff the stored generation is still THIS
+// loop's gen. If a newer generation already owns the slot, this stale loop
+// leaves it untouched and just stops itself (via its own ctx / the returned
+// true), never cancelling the live newer loop.
+func (l *Locator) refreshTick(ctx context.Context, clusterID string, gen uint64) (superseded bool) {
 	owner, err := l.refresh(ctx, clusterID)
 	if err != nil {
 		if l.log != nil {
@@ -282,9 +309,10 @@ func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded
 				slog.String("self", l.address))
 		}
 		l.mu.Lock()
-		if cancel, ok := l.cancels[clusterID]; ok {
+		if cancel, ok := l.cancels[clusterID]; ok && l.gens[clusterID] == gen {
 			cancel()
 			delete(l.cancels, clusterID)
+			delete(l.gens, clusterID)
 		}
 		l.mu.Unlock()
 		return true
@@ -292,7 +320,7 @@ func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded
 	return false
 }
 
-func (l *Locator) refreshLoop(ctx context.Context, clusterID string) {
+func (l *Locator) refreshLoop(ctx context.Context, clusterID string, gen uint64) {
 	ticker := time.NewTicker(locatorRefreshInterval)
 	defer ticker.Stop()
 	for {
@@ -300,7 +328,7 @@ func (l *Locator) refreshLoop(ctx context.Context, clusterID string) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if l.refreshTick(ctx, clusterID) {
+			if l.refreshTick(ctx, clusterID, gen) {
 				return
 			}
 		}

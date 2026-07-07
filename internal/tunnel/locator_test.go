@@ -9,7 +9,7 @@ import (
 )
 
 func newTestLocator(rdb *redis.Client, addr string) *Locator {
-	return &Locator{rdb: rdb, address: addr, cancels: map[string]context.CancelFunc{}}
+	return &Locator{rdb: rdb, address: addr, cancels: map[string]context.CancelFunc{}, gens: map[string]uint64{}}
 }
 
 // TestLocatorDelete_CAS_DoesNotClobberNewOwner is the M10 fix: when an agent
@@ -74,13 +74,15 @@ func TestLocatorRefresh_SupersededDoesNotClobber(t *testing.T) {
 		t.Fatalf("B write: %v", err)
 	}
 
-	// Register A's refresh-loop cancel so refreshTick can drop it on supersede.
+	// Register A's refresh-loop cancel + generation so refreshTick can drop it
+	// on supersede.
 	loopCtx, cancel := context.WithCancel(ctx)
 	locA.cancels[cid] = cancel
+	locA.gens = map[string]uint64{cid: 1}
 
 	// A's refresh tick observes B as the owner: must self-cancel, must NOT
 	// clobber B's entry.
-	if superseded := locA.refreshTick(loopCtx, cid); !superseded {
+	if superseded := locA.refreshTick(loopCtx, cid, 1); !superseded {
 		t.Fatal("H-01: A's refresh should have detected it was superseded by B")
 	}
 	got, err := rdb.Get(ctx, locatorKeyPrefix+cid).Result()
@@ -126,5 +128,60 @@ func TestLocatorDelete_CAS_OwnerDeletes(t *testing.T) {
 	loc.Delete(ctx, cid)
 	if _, err := rdb.Get(ctx, locatorKeyPrefix+cid).Result(); err != redis.Nil {
 		t.Fatalf("owner delete should remove the entry, err=%v", err)
+	}
+}
+
+// TestLocatorRefresh_StaleGenerationDoesNotCancelNewLoop is the 003 fix: a fast
+// flap A→B→A can leave an OLDER refresh generation still ticking after a NEWER
+// generation (from a subsequent Set) has taken over the map slot for the same
+// cluster_id. When that stale old-generation tick observes a supersede, it must
+// stop ITSELF (return superseded=true) but must NOT cancel the newer loop's
+// context nor evict the newer handle from the map — otherwise the healthy,
+// currently-connected cluster's refresh loop is killed and, once the redis TTL
+// lapses, the cluster becomes unroutable across replicas.
+func TestLocatorRefresh_StaleGenerationDoesNotCancelNewLoop(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	ctx := context.Background()
+
+	loc := newTestLocator(rdb, "10.0.0.1:8000")
+	const cid = "cluster-flap"
+
+	// Older generation (gen1) started, then a later Set replaced it with a newer
+	// generation (gen2) that now owns the map slot for this cluster_id.
+	oldCtx, oldCancel := context.WithCancel(ctx)
+	defer oldCancel()
+
+	newCtx, newCancel := context.WithCancel(ctx)
+	defer newCancel()
+	loc.cancels[cid] = newCancel // newest generation holds the slot
+	loc.gens = map[string]uint64{cid: 2}
+
+	// Directory now points at a DIFFERENT pod, so the stale gen1 tick will
+	// observe itself superseded.
+	if err := rdb.Set(ctx, locatorKeyPrefix+cid, "10.0.0.2:8000", locatorEntryTTL).Err(); err != nil {
+		t.Fatalf("seed redis: %v", err)
+	}
+
+	// gen1's stale tick sees the supersede: it must report superseded (stop
+	// itself) but leave gen2's slot and loop context untouched.
+	if superseded := loc.refreshTick(oldCtx, cid, 1); !superseded {
+		t.Fatal("003: stale gen1 tick should report superseded")
+	}
+
+	// gen2's loop context must still be live — the stale tick must NOT have
+	// invoked gen2's cancel.
+	select {
+	case <-newCtx.Done():
+		t.Fatal("003: stale gen1 tick CANCELLED the newer gen2 refresh loop")
+	default:
+	}
+	// The map must still hold gen2's slot (generation identity preserved).
+	if _, ok := loc.cancels[cid]; !ok {
+		t.Fatal("003: stale gen1 tick EVICTED the newer gen2 map slot")
+	}
+	if g := loc.gens[cid]; g != 2 {
+		t.Fatalf("003: gens[%q] = %d, want gen2 (2)", cid, g)
 	}
 }
