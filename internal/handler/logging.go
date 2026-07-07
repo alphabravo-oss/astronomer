@@ -423,6 +423,11 @@ func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
+	// A "test" pushes the output's config to the managed cluster through the
+	// agent, so it is a cluster-affecting mutation and gates like its siblings.
+	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(output.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
+		return
+	}
 	op, err := h.enqueueOutputApply(withOperationIdempotency(r, "logging"), output, currentUserUUID(r))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue apply test")

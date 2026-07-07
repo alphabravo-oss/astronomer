@@ -2,13 +2,17 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -69,6 +73,32 @@ func TestLoggingMutatingRoutesDenyZeroGrantViewer(t *testing.T) {
 		h.CreatePipeline(rec, authedLoggingReq(http.MethodPost, target, body))
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("CreatePipeline status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+		}
+	})
+
+	t.Run("test_output", func(t *testing.T) {
+		// Seed an output so TestOutput reaches the authz check (not a 404).
+		q := newLoggingFakeQuerier()
+		out, err := q.CreateLoggingOutput(nil, sqlc.CreateLoggingOutputParams{
+			Name:          "viewer-test",
+			OutputType:    "stdout",
+			Configuration: []byte(`{}`),
+			ClusterID:     pgtype.UUID{Bytes: clusterID, Valid: true},
+			Enabled:       true,
+		})
+		if err != nil {
+			t.Fatalf("seed output: %v", err)
+		}
+		h := NewLoggingHandler(q)
+		h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: nil})
+		req := authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/"+out.ID.String()+"/test/", nil)
+		rc := chi.NewRouteContext()
+		rc.URLParams.Add("id", out.ID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
+		rec := httptest.NewRecorder()
+		h.TestOutput(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("TestOutput status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
 		}
 	})
 }
