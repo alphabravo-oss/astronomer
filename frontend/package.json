@@ -81,7 +81,10 @@
     "typescript": "^5.4.5"
   },
   "overrides": {
-    "dompurify": "^3.4.10",
-    "postcss": "^8.5.15"
+    "dompurify": "^3.4.11",
+    "postcss": "^8.5.15",
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^3.15.0"
+    }
   }
 }
