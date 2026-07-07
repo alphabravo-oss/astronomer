@@ -148,9 +148,9 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 
 	// Surface the credentials prominently. The log line is intentionally
 	// formatted on a single block so it's easy to grep with `kubectl logs |
-	// grep BOOTSTRAP`. Only the auto-generated case prints the password;
-	// when ASTRONOMER_BOOTSTRAP_PASSWORD was supplied, the operator already
-	// knows it.
+	// grep BOOTSTRAP`. The plaintext password is never logged; when it was
+	// auto-generated the operator retrieves it from the bootstrap Secret,
+	// and when ASTRONOMER_BOOTSTRAP_PASSWORD was supplied they already know it.
 	logger.Warn(
 		"==================== BOOTSTRAP ADMIN CREATED ====================",
 		"username", user.Username,
@@ -158,10 +158,13 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 		"password_source", passwordSourceLabel(generated),
 	)
 	if generated {
+		// Never log the plaintext password. The Helm chart stores the same
+		// value in the `astronomer-bootstrap` Kubernetes Secret; operators
+		// retrieve it from there instead of from the logs.
 		logger.Warn(
-			"Use this generated password to sign in. The Helm chart also stores it "+
-				"in the bootstrap Secret for operator retrieval.",
-			"password", password,
+			"A password was auto-generated. Retrieve it from the bootstrap Secret: " +
+				"kubectl -n astronomer get secret astronomer-bootstrap " +
+				"-o jsonpath='{.data.password}' | base64 -d",
 		)
 	}
 	logger.Warn("=================================================================")

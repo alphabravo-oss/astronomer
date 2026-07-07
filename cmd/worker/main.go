@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -298,7 +299,14 @@ func main() {
 		}
 	}()
 
-	observability.WithEvent(log, "worker_started").Info("astronomer-worker started", "redis_url", cfg.RedisURL)
+	// Never log cfg.RedisURL raw: with external Redis it carries the
+	// password in the userinfo. Log only scheme+host so the endpoint is
+	// still identifiable without leaking the credential.
+	redisEndpoint := "<unparseable>"
+	if u, perr := url.Parse(cfg.RedisURL); perr == nil && u.Host != "" {
+		redisEndpoint = u.Scheme + "://" + u.Host
+	}
+	observability.WithEvent(log, "worker_started").Info("astronomer-worker started", "redis_endpoint", redisEndpoint)
 
 	// Wait for shutdown signal or fatal error.
 	select {

@@ -221,6 +221,25 @@ func TestRedactURL(t *testing.T) {
 	}
 }
 
+// TestPostJSONErrorOmitsSecretURL guards the asynq last-error / OTel span
+// path: when client.Do fails it returns a *url.Error whose Error() embeds
+// the FULL unredacted request URL (webhook secret in the path). The error
+// we return and store must not contain that secret.
+func TestPostJSONErrorOmitsSecretURL(t *testing.T) {
+	const secret = "SUPERSECRETWEBHOOKTOKEN"
+	// 127.0.0.1:1 is a reliably-refused port; the transport error becomes a
+	// *url.Error carrying the full URL (host + path secret).
+	target := "http://127.0.0.1:1/services/T000/B000/" + secret
+
+	err := postJSON(context.Background(), http.DefaultClient, target, map[string]any{"x": 1}, http.StatusOK)
+	if err == nil {
+		t.Fatalf("postJSON to refused port: got nil error, want failure")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("returned error leaked the webhook secret: %q", err.Error())
+	}
+}
+
 func TestPostJSONUsesBoundedFallbackClient(t *testing.T) {
 	resetRuntime()
 	defer resetRuntime()

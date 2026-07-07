@@ -31,9 +31,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 
@@ -409,6 +411,14 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ac
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
+		// client.Do returns a *url.Error whose Error() embeds the FULL
+		// unredacted request URL (webhook secret lives in the path). This
+		// error is stored as the asynq task last-error and attached to the
+		// OTel span, so strip the URL by unwrapping to the inner cause.
+		var ue *neturl.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
 		return fmt.Errorf("post %s: %w", redactURL(url), err)
 	}
 	defer func() {

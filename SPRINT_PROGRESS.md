@@ -4,7 +4,10 @@ _Updated 2026-05-12 ~21:08. Branch: `main` @ `f751540`. Live `.247` at migration
 
 ## Cumulative shipped
 
-URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `j3mMt0GJVtkQ3fYltBgV`
+URL: `http://astronomer.5.78.101.247.nip.io:8080/` · admin / `<see astronomer-bootstrap Secret>`
+
+> Retrieve the bootstrap admin password from the cluster Secret (never commit it here):
+> `kubectl -n astronomer get secret astronomer-bootstrap -o jsonpath='{.data.password}' | base64 -d`
 
 | Sprint | Headline features | Migrations | Status |
 |---|---|---|---|
