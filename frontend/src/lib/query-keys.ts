@@ -133,6 +133,8 @@ export const queryKeys = {
     clusterRoles: (clusterId?: string) => ['rbac', 'cluster-roles', clusterId] as const,
     projectRoles: (projectId?: string) => ['rbac', 'project-roles', projectId] as const,
     bindings: (params?: Record<string, unknown>) => ['rbac', 'bindings', params] as const,
+    clusterRoleBindings: (params?: Record<string, unknown>) =>
+      ['rbac', 'cluster-role-bindings', params] as const,
     myPermissions: (params?: apiClient.EffectivePermissionParams) => ['rbac', 'my-permissions', params] as const,
   },
   users: {

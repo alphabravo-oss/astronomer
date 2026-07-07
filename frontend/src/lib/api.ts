@@ -909,6 +909,35 @@ export async function createRoleBinding(data: {
   return res.data.data;
 }
 
+// --- Cluster role bindings (namespace-scoped authoring) ---
+// These target the real backend endpoints (unlike the phantom /rbac/bindings
+// helpers above). An empty `namespace` == cluster-wide.
+
+export async function listClusterRoleBindings(params?: { cluster_id?: string }) {
+  const res = await api.get<APIResponse<import('@/types').ClusterRoleBinding[]>>(
+    '/rbac/cluster-role-bindings/',
+    { params }
+  );
+  return res.data.data;
+}
+
+export async function createClusterRoleBinding(data: {
+  user_id: string;
+  role_id: string;
+  cluster_id: string;
+  namespace?: string;
+}) {
+  const res = await api.post<APIResponse<import('@/types').ClusterRoleBinding>>(
+    '/rbac/cluster-role-bindings/',
+    data
+  );
+  return res.data.data;
+}
+
+export async function deleteClusterRoleBinding(id: string) {
+  await api.delete(`/rbac/cluster-role-bindings/${id}/`);
+}
+
 export interface EffectivePermissionParams {
   clusterId?: string;
   projectId?: string;

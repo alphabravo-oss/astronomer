@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -594,6 +595,16 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Cluster ID is required")
 		return
+	}
+	// A non-empty namespace scopes the binding to a single Kubernetes namespace
+	// (empty == cluster-wide). Validate it as a DNS-1123 label before persisting,
+	// mirroring the preview handler (rbac_effective.go).
+	if req.Namespace != "" {
+		if errs := k8svalidation.IsDNS1123Label(req.Namespace); len(errs) > 0 {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+				"namespace must be a valid Kubernetes namespace")
+			return
+		}
 	}
 	// Privilege-escalation guard: the caller may only grant a role whose every
 	// rule the caller already holds at this cluster (and namespace) scope.

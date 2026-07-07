@@ -747,6 +747,19 @@ export interface RoleBindingSubject {
   namespace?: string;
 }
 
+// ClusterRoleBinding mirrors the backend `sqlc.ClusterRoleBinding` returned by
+// GET/POST /rbac/cluster-role-bindings/. An empty `namespace` means the binding
+// applies to the whole cluster; a non-empty value narrows it to one namespace.
+export interface ClusterRoleBinding {
+  id: string;
+  user_id: string | null;
+  group: string;
+  role_id: string;
+  cluster_id: string;
+  namespace: string;
+  created_at: string;
+}
+
 export interface RBACEngineRule {
   resource: string;
   verbs: string[];

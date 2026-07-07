@@ -8,7 +8,10 @@ import {
   useClusterRoles,
   useProjectRoles,
   useUsers,
-  useRoleBindings,
+  useClusters,
+  useClusterRoleBindings,
+  useCreateClusterRoleBinding,
+  useDeleteClusterRoleBinding,
   useCreateUser,
   useUpdateUser,
   useDeleteUser,
@@ -23,12 +26,12 @@ import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type {
   ClusterRole,
+  ClusterRoleBinding,
   EffectivePermissionBinding,
   EffectivePermissionGrant,
   EffectivePermissionSource,
   GlobalRole,
   ProjectRole,
-  RoleBinding,
   User,
 } from '@/types';
 import {
@@ -83,6 +86,17 @@ export function isUserLocked(user: Pick<User, 'lockedUntil' | 'locked_until'>): 
   return Number.isFinite(until) && until > Date.now();
 }
 
+/**
+ * DNS-1123 label check mirroring the backend's k8svalidation.IsDNS1123Label on
+ * POST /rbac/cluster-role-bindings/. An empty value is valid client-side (it
+ * means "cluster-wide"); a non-empty value must be a lowercase alphanumeric
+ * label (dashes allowed internally), at most 63 characters.
+ */
+export function isValidNamespace(namespace: string): boolean {
+  if (namespace === '') return true;
+  return namespace.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace);
+}
+
 export default function RBACPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, 'global-roles');
@@ -92,17 +106,36 @@ export default function RBACPage() {
   const [resetPasswordResult, setResetPasswordResult] = useState<{ userId: string; password: string } | null>(null);
   const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
   const [resetPasswordTarget, setResetPasswordTarget] = useState<User | null>(null);
+  const [showCreateBinding, setShowCreateBinding] = useState(false);
+  const [deleteBindingTarget, setDeleteBindingTarget] = useState<ClusterRoleBinding | null>(null);
 
   const { data: globalRoles, isLoading: globalLoading, isError: globalError, refetch: refetchGlobal } = useGlobalRoles();
   const { data: clusterRoles, isLoading: clusterLoading, isError: clusterError, refetch: refetchCluster } = useClusterRoles();
   const { data: projectRoles, isLoading: projectLoading, isError: projectError, refetch: refetchProject } = useProjectRoles();
   const { data: usersData, isLoading: usersLoading, isError: usersError, refetch: refetchUsers } = useUsers();
-  const { data: bindings, isLoading: bindingsLoading, isError: bindingsError, refetch: refetchBindings } = useRoleBindings();
+  const { data: clustersData } = useClusters();
+  const { data: bindings, isLoading: bindingsLoading, isError: bindingsError, refetch: refetchBindings } = useClusterRoleBindings();
 
   const deleteUser = useDeleteUser();
   const resetPassword = useResetUserPassword();
+  const deleteBinding = useDeleteClusterRoleBinding();
 
   const users = usersData?.data || [];
+  const clusters = clustersData?.data || [];
+
+  const clusterRoleNameById = new Map((clusterRoles || []).map((r) => [r.id, r.displayName || r.name]));
+  const clusterNameById = new Map(clusters.map((c) => [c.id, c.name]));
+  const userLabelById = new Map(users.map((u) => [u.id, u.displayName || u.username]));
+
+  const confirmDeleteBinding = async () => {
+    if (!deleteBindingTarget) return;
+    try {
+      await deleteBinding.mutateAsync(deleteBindingTarget.id);
+    } catch {
+      // Error handled by mutation
+    }
+    setDeleteBindingTarget(null);
+  };
 
   const handleDeleteUser = (user: User) => setDeleteUserTarget(user);
   const handleResetPassword = (user: User) => setResetPasswordTarget(user);
@@ -347,42 +380,60 @@ export default function RBACPage() {
     },
   ];
 
-  const bindingColumns: Column<RoleBinding>[] = [
+  const bindingColumns: Column<ClusterRoleBinding>[] = [
     {
-      key: 'name',
-      header: 'Binding',
-      accessor: (row) => <span className="font-medium text-foreground">{row.name}</span>,
-    },
-    {
-      key: 'roleType',
-      header: 'Scope',
+      key: 'subject',
+      header: 'Subject',
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">{row.roleType}</span>
+        <span className="font-medium text-foreground">
+          {row.user_id ? userLabelById.get(row.user_id) || row.user_id : `group: ${row.group}`}
+        </span>
       ),
     },
     {
       key: 'role',
-      header: 'Role',
-      accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{row.roleName}</span>,
+      header: 'Cluster Role',
+      accessor: (row) => (
+        <span className="text-sm text-muted-foreground">{clusterRoleNameById.get(row.role_id) || row.role_id}</span>
+      ),
     },
     {
-      key: 'subjects',
-      header: 'Subjects',
+      key: 'cluster',
+      header: 'Cluster',
       accessor: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.subjects.map((s, i) => (
-            <span key={i} className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
-              {s.kind}: {s.name}
-            </span>
-          ))}
-        </div>
+        <span className="text-sm text-muted-foreground">{clusterNameById.get(row.cluster_id) || row.cluster_id}</span>
       ),
-      sortable: false,
+    },
+    {
+      key: 'namespace',
+      header: 'Namespace',
+      accessor: (row) =>
+        row.namespace ? (
+          <span className="font-mono text-xs text-foreground">{row.namespace}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">cluster-wide</span>
+        ),
     },
     {
       key: 'created',
       header: 'Created',
-      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.createdAt)}</span>,
+      accessor: (row) => <span className="text-xs text-muted-foreground">{formatRelativeTime(row.created_at)}</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      accessor: (row) => (
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setDeleteBindingTarget(row)}
+            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            title="Revoke binding"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ),
+      sortable: false,
     },
   ];
 
@@ -415,6 +466,16 @@ export default function RBACPage() {
             >
               <Plus className="h-4 w-4" />
               Create Role
+            </button>
+          )}
+          {activeTab === 'bindings' && (
+            <button
+              onClick={() => setShowCreateBinding(true)}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
+                text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus className="h-4 w-4" />
+              Create Binding
             </button>
           )}
         </div>
@@ -537,6 +598,11 @@ export default function RBACPage() {
         />
       )}
 
+      {/* Create Cluster Binding Modal */}
+      {showCreateBinding && (
+        <CreateClusterBindingModal onClose={() => setShowCreateBinding(false)} />
+      )}
+
       {/* Reset Password Result */}
       {resetPasswordResult && (
         <ResetPasswordResultModal
@@ -567,7 +633,162 @@ export default function RBACPage() {
         confirmText="Reset Password"
         loading={resetPassword.isPending}
       />
+
+      {/* Revoke Binding Confirmation */}
+      <ConfirmDialog
+        open={!!deleteBindingTarget}
+        onClose={() => setDeleteBindingTarget(null)}
+        onConfirm={confirmDeleteBinding}
+        title="Revoke Binding"
+        description={
+          deleteBindingTarget?.namespace
+            ? `Revoke this cluster role binding scoped to namespace "${deleteBindingTarget.namespace}"? Access granted by it will be removed.`
+            : 'Revoke this cluster-wide role binding? Access granted by it will be removed.'
+        }
+        confirmText="Revoke"
+        variant="destructive"
+        loading={deleteBinding.isPending}
+      />
     </div>
+  );
+}
+
+// ============================================================
+// Create Cluster Binding Modal
+// ============================================================
+
+function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
+  const { data: usersData } = useUsers();
+  const { data: clusterRoles } = useClusterRoles();
+  const { data: clustersData } = useClusters();
+  const createBinding = useCreateClusterRoleBinding();
+
+  const users = usersData?.data || [];
+  const clusters = clustersData?.data || [];
+  const roles = clusterRoles || [];
+
+  const [form, setForm] = useState({ userId: '', roleId: '', clusterId: '', namespace: '' });
+
+  const namespaceValid = isValidNamespace(form.namespace.trim());
+  const canSubmit = !!form.userId && !!form.roleId && !!form.clusterId && namespaceValid;
+
+  const handleSave = async () => {
+    if (!canSubmit) {
+      toastError('Select a user, cluster role, and cluster; namespace must be a valid label');
+      return;
+    }
+    try {
+      await createBinding.mutateAsync({
+        user_id: form.userId,
+        role_id: form.roleId,
+        cluster_id: form.clusterId,
+        namespace: form.namespace.trim() || undefined,
+      });
+      onClose();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  return (
+    <OverlayShell onClose={onClose}>
+      <div className="relative w-full max-w-lg max-h-[85vh] rounded-xl border border-border bg-popover shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
+          <h3 className="text-lg font-semibold text-foreground">Create Cluster Binding</h3>
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">User</label>
+            <select
+              value={form.userId}
+              onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">Select a user…</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName || u.username}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Cluster Role</label>
+            <select
+              value={form.roleId}
+              onChange={(e) => setForm((f) => ({ ...f, roleId: e.target.value }))}
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">Select a cluster role…</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.displayName || r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Cluster</label>
+            <select
+              value={form.clusterId}
+              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">Select a cluster…</option>
+              {clusters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Namespace</label>
+            <input
+              type="text"
+              value={form.namespace}
+              onChange={(e) => setForm((f) => ({ ...f, namespace: e.target.value }))}
+              placeholder="leave blank for cluster-wide"
+              className={cn(
+                'w-full h-9 px-3 rounded-md border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                namespaceValid ? 'border-border' : 'border-status-error'
+              )}
+            />
+            {!namespaceValid && (
+              <p className="text-xs text-status-error">
+                Must be a valid Kubernetes namespace (lowercase alphanumeric and dashes, ≤63 chars).
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0 bg-muted/30">
+          <button
+            onClick={onClose}
+            className="h-9 px-4 rounded-lg border border-border text-sm font-medium
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={createBinding.isPending || !canSubmit}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
+              text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {createBinding.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Create Binding
+          </button>
+        </div>
+      </div>
+    </OverlayShell>
   );
 }
 

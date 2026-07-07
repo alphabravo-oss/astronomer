@@ -239,7 +239,7 @@ func effectivePermissionContextFromRequest(r *http.Request) (effectivePermission
 		if errs := k8svalidation.IsDNS1123Label(out.Namespace); len(errs) > 0 {
 			return out, errString("namespace must be a valid Kubernetes namespace")
 		}
-		out.Warnings = append(out.Warnings, "namespace context is enforced for namespace-scoped bindings when present; binding storage and assignment UI are still pending")
+		out.Warnings = append(out.Warnings, "namespace context is enforced for namespace-scoped bindings when present")
 	}
 	return out, nil
 }

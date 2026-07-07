@@ -660,6 +660,48 @@ export function useCreateRoleBinding() {
   });
 }
 
+// --- Cluster role bindings (namespace-scoped authoring) ---
+
+export function useClusterRoleBindings(params?: { cluster_id?: string }) {
+  return useQuery({
+    queryKey: queryKeys.rbac.clusterRoleBindings(params),
+    queryFn: () => apiClient.listClusterRoleBindings(params),
+  });
+}
+
+export function useCreateClusterRoleBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      user_id: string;
+      role_id: string;
+      cluster_id: string;
+      namespace?: string;
+    }) => apiClient.createClusterRoleBinding(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess('Cluster role binding created');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to create cluster role binding', error);
+    },
+  });
+}
+
+export function useDeleteClusterRoleBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.deleteClusterRoleBinding(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess('Cluster role binding revoked');
+    },
+    onError: (error: Error) => {
+      toastApiError('Failed to revoke cluster role binding', error);
+    },
+  });
+}
+
 // ============================================================
 // User Hooks
 // ============================================================

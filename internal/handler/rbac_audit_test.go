@@ -367,6 +367,7 @@ func (f *fakeRBACAuditQuerier) CreateClusterRoleBinding(_ context.Context, arg s
 		Group:     arg.Group,
 		RoleID:    arg.RoleID,
 		ClusterID: arg.ClusterID,
+		Namespace: arg.Namespace,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
