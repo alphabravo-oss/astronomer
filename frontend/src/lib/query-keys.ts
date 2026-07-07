@@ -203,6 +203,13 @@ export const queryKeys = {
     diagnostics: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'diagnostics'] as const,
     operations: (clusterId: string | null) => ['agents', 'fleet', clusterId, 'operations'] as const,
   },
+  fleetOperations: {
+    all: ['fleet-operations'] as const,
+    list: (params?: Record<string, unknown>) => ['fleet-operations', 'list', params] as const,
+    detail: (id: string) => ['fleet-operations', 'detail', id] as const,
+    targets: (id: string, params?: Record<string, unknown>) =>
+      ['fleet-operations', 'detail', id, 'targets', params] as const,
+  },
   extensions: {
     list: ['extensions'] as const,
     // §HostMounts — viewer-readable enabled-extension mounts. The host runtime

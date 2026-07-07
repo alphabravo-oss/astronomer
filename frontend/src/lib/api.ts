@@ -2726,3 +2726,9 @@ export * from './api/cluster-groups';
 // UI extensions — manifest validation and registry controls.
 // ============================================================
 export * from './api/extensions';
+
+// ============================================================
+// Fleet operations (DIR-01) — bulk fanout of tool/template/token
+// operations across the cluster fleet. See lib/api/fleet-operations.ts.
+// ============================================================
+export * from './api/fleet-operations';

@@ -51,6 +51,7 @@ import {
   Camera,
   Route,
   Waypoints,
+  Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExtensionNavItems } from '@/components/extensions/ExtensionNavItems';
@@ -111,6 +112,7 @@ const globalNavGroups: NavGroup[] = [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
       { label: 'Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'agents', verb: 'read' } },
+      { label: 'Fleet Operations', href: '/dashboard/fleet', icon: Rocket, permission: { resource: 'fleet_operations', verb: 'list' } },
       { label: 'Onboarding Bundles', href: '/dashboard/cluster-templates', icon: Layers, permission: { resource: 'cluster_templates', verb: 'list' } },
     ],
   },
