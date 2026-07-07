@@ -1,0 +1,150 @@
+diff --git a/internal/db/queries/fleet.sql b/internal/db/queries/fleet.sql
+index c81bfe2..7d699c6 100644
+--- a/internal/db/queries/fleet.sql
++++ b/internal/db/queries/fleet.sql
+@@ -228,6 +228,10 @@ WHERE operation_id = $1 AND status = 'failed';
+ -- string-map comparison that's easier to reason about than a JSONB
+ -- predicate, and the cluster count never exceeds a few thousand
+ -- in any deployment we've seen).
+-SELECT id, name, labels FROM clusters
++--
++-- group_id (migration 066) is the at-most-one cluster_groups
++-- membership; the orchestrator maps it into the candidate's GroupIDs
++-- slice so matchGroupIDs selectors can resolve.
++SELECT id, name, labels, group_id FROM clusters
+ WHERE decommissioned_at IS NULL
+ ORDER BY name ASC;
+diff --git a/internal/db/sqlc/fleet.sql.go b/internal/db/sqlc/fleet.sql.go
+index cb079cf..a65ef33 100644
+--- a/internal/db/sqlc/fleet.sql.go
++++ b/internal/db/sqlc/fleet.sql.go
+@@ -266,15 +266,16 @@ func (q *Queries) GetFleetOperation(ctx context.Context, id uuid.UUID) (FleetOpe
+ }
+ 
+ const listClustersForSelectorEvaluation = `-- name: ListClustersForSelectorEvaluation :many
+-SELECT id, name, labels FROM clusters
++SELECT id, name, labels, group_id FROM clusters
+ WHERE decommissioned_at IS NULL
+ ORDER BY name ASC
+ `
+ 
+ type ListClustersForSelectorEvaluationRow struct {
+-	ID     uuid.UUID       `json:"id"`
+-	Name   string          `json:"name"`
+-	Labels json.RawMessage `json:"labels"`
++	ID      uuid.UUID       `json:"id"`
++	Name    string          `json:"name"`
++	Labels  json.RawMessage `json:"labels"`
++	GroupID pgtype.UUID     `json:"group_id"`
+ }
+ 
+ // All non-decommissioned clusters. The orchestrator's selector
+@@ -291,7 +292,7 @@ func (q *Queries) ListClustersForSelectorEvaluation(ctx context.Context) ([]List
+ 	items := []ListClustersForSelectorEvaluationRow{}
+ 	for rows.Next() {
+ 		var i ListClustersForSelectorEvaluationRow
+-		if err := rows.Scan(&i.ID, &i.Name, &i.Labels); err != nil {
++		if err := rows.Scan(&i.ID, &i.Name, &i.Labels, &i.GroupID); err != nil {
+ 			return nil, err
+ 		}
+ 		items = append(items, i)
+diff --git a/internal/worker/tasks/fleet_orchestrate.go b/internal/worker/tasks/fleet_orchestrate.go
+index 704ba69..89345c2 100644
+--- a/internal/worker/tasks/fleet_orchestrate.go
++++ b/internal/worker/tasks/fleet_orchestrate.go
+@@ -384,10 +384,19 @@ func launchFleetOperation(ctx context.Context, deps FleetOrchestrateDeps, op sql
+ 	}
+ 	candidates := make([]FleetClusterCandidate, 0, len(rows))
+ 	for _, r := range rows {
++		var groupIDs []string
++		// A cluster belongs to at most one group (migration 066:
++		// clusters.group_id). Map a present membership into the
++		// single-element GroupIDs slice the selector's matchGroupIDs
++		// branch intersects against; NULL contributes no group.
++		if r.GroupID.Valid {
++			groupIDs = []string{uuid.UUID(r.GroupID.Bytes).String()}
++		}
+ 		candidates = append(candidates, FleetClusterCandidate{
+-			ID:     r.ID,
+-			Name:   r.Name,
+-			Labels: DecodeClusterLabels(r.Labels),
++			ID:       r.ID,
++			Name:     r.Name,
++			Labels:   DecodeClusterLabels(r.Labels),
++			GroupIDs: groupIDs,
+ 		})
+ 	}
+ 	matched := EvaluateFleetSelector(sel, candidates)
+diff --git a/internal/worker/tasks/fleet_orchestrate_test.go b/internal/worker/tasks/fleet_orchestrate_test.go
+index c50c11d..5d4b2cd 100644
+--- a/internal/worker/tasks/fleet_orchestrate_test.go
++++ b/internal/worker/tasks/fleet_orchestrate_test.go
+@@ -483,6 +483,23 @@ func addCluster(q *fakeFleetQuerier, labels map[string]string) uuid.UUID {
+ 	return c.ID
+ }
+ 
++// addClusterWithGroup registers one cluster whose clusters.group_id is
++// set to the given group (migration 066 — at most one group). A zero
++// groupID leaves the membership NULL, matching an ungrouped cluster.
++func addClusterWithGroup(q *fakeFleetQuerier, labels map[string]string, groupID uuid.UUID) uuid.UUID {
++	labelsRaw, _ := json.Marshal(labels)
++	c := sqlc.ListClustersForSelectorEvaluationRow{
++		ID:     uuid.New(),
++		Name:   "cluster-" + uuid.New().String()[:8],
++		Labels: labelsRaw,
++	}
++	if groupID != uuid.Nil {
++		c.GroupID = pgtype.UUID{Bytes: groupID, Valid: true}
++	}
++	q.clusters = append(q.clusters, c)
++	return c.ID
++}
++
+ // ─────────────────────────────────────────────────────────────────────
+ // Tests
+ // ─────────────────────────────────────────────────────────────────────
+@@ -878,3 +895,44 @@ func TestFleetSelector_MatchExpressions(t *testing.T) {
+ 		t.Errorf("DoesNotExist: got %d, want 1 (d)", len(got))
+ 	}
+ }
++
++// TestFleetOperation_LaunchMatchesByGroupID proves the orchestrator now
++// wires clusters.group_id (migration 066) into each candidate's GroupIDs
++// so a matchGroupIDs selector resolves. BEFORE THE FIX the candidate
++// list was built without group membership, so a group-targeted operation
++// matched nothing and completed as "0 clusters".
++func TestFleetOperation_LaunchMatchesByGroupID(t *testing.T) {
++	q := newFakeFleetQuerier()
++
++	groupA := uuid.New()
++	groupB := uuid.New()
++
++	inGroup := addClusterWithGroup(q, map[string]string{"tier": "prod"}, groupA)
++	_ = addClusterWithGroup(q, map[string]string{"tier": "prod"}, groupB) // other group
++	_ = addClusterWithGroup(q, map[string]string{"tier": "prod"}, uuid.Nil) // ungrouped
++
++	op := mkFleetOp("group-a-upgrade", FleetOpTypeToolUpgrade, FleetStrategyParallel, FleetOnErrorAbort, 3,
++		map[string]any{"matchGroupIDs": []string{groupA.String()}})
++	q.ops[op.ID] = op
++
++	d := newFakeFleetDispatcher(q)
++	deps := FleetOrchestrateDeps{Queries: q, Dispatcher: d, MaintenanceWindow: NoopMaintenanceWindowChecker{}}
++
++	if err := runFleetOrchestrateTick(context.Background(), deps); err != nil {
++		t.Fatalf("tick: %v", err)
++	}
++
++	if got := len(q.targets[op.ID]); got != 1 {
++		t.Fatalf("expected 1 target (the cluster in group A), got %d", got)
++	}
++	targeted := map[uuid.UUID]bool{}
++	for _, tgt := range q.targets[op.ID] {
++		targeted[tgt.ClusterID] = true
++	}
++	if !targeted[inGroup] {
++		t.Errorf("group-A member %s not among targets %v", inGroup, targeted)
++	}
++	if q.ops[op.ID].Status != FleetOpStatusRunning {
++		t.Errorf("expected running, got %q", q.ops[op.ID].Status)
++	}
++}

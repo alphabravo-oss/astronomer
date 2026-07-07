@@ -1,0 +1,535 @@
+diff --git a/internal/db/queries/image_vulns.sql b/internal/db/queries/image_vulns.sql
+index 996b5a5..990e725 100644
+--- a/internal/db/queries/image_vulns.sql
++++ b/internal/db/queries/image_vulns.sql
+@@ -60,6 +60,18 @@ SELECT
+ FROM image_vulnerability_reports
+ WHERE cluster_id = $1;
+ 
++-- name: AggregateVulnerabilitiesPerCluster :many
++-- Per-cluster critical/high/report_count aggregate for the whole fleet
++-- in one pass. Batched equivalent of AggregateClusterVulnerabilities so
++-- the compliance-posture rollup avoids one query per cluster.
++SELECT
++    cluster_id,
++    COALESCE(SUM(critical_count), 0)::bigint AS critical,
++    COALESCE(SUM(high_count), 0)::bigint AS high,
++    COUNT(*)::bigint AS report_count
++FROM image_vulnerability_reports
++GROUP BY cluster_id;
++
+ -- name: AggregateFleetVulnerabilities :one
+ SELECT
+     COALESCE(SUM(critical_count), 0)::bigint AS critical,
+diff --git a/internal/db/queries/security.sql b/internal/db/queries/security.sql
+index 226381c..8cdea7a 100644
+--- a/internal/db/queries/security.sql
++++ b/internal/db/queries/security.sql
+@@ -62,6 +62,26 @@ DELETE FROM cluster_security_policies WHERE id = $1;
+ -- name: CountClusterSecurityPolicies :one
+ SELECT count(*) FROM cluster_security_policies;
+ 
++-- name: ListClusterIDsWithSecurityPolicy :many
++-- Fleet-wide set of cluster_ids that have at least one security policy
++-- row. Unbounded (no LIMIT/OFFSET) so the compliance-posture rollup can
++-- answer "does this cluster have a policy?" for any fleet size in one
++-- query instead of a per-cluster page that silently caps at 10 rows.
++SELECT DISTINCT cluster_id FROM cluster_security_policies;
++
++-- name: LatestCISScanPerCluster :many
++-- Latest CIS scan per cluster in one pass, mirroring the per-cluster
++-- "ORDER BY created_at DESC LIMIT 1" selection but batched across the
++-- whole fleet for the compliance-posture rollup.
++SELECT DISTINCT ON (cluster_id)
++    cluster_id,
++    passed,
++    failed,
++    completed_at
++FROM security_scan_results
++WHERE scan_type = 'cis'
++ORDER BY cluster_id, created_at DESC;
++
+ -- Security Scan Results
+ 
+ -- name: GetSecurityScanResultByID :one
+diff --git a/internal/db/sqlc/compliance_posture_ext.sql.go b/internal/db/sqlc/compliance_posture_ext.sql.go
+new file mode 100644
+index 0000000..0fc53c4
+--- /dev/null
++++ b/internal/db/sqlc/compliance_posture_ext.sql.go
+@@ -0,0 +1,141 @@
++// Hand-written query layer for the compliance-posture rollup
++// (internal/handler/compliance_posture.go).
++//
++// File suffix `_ext` is intentional — same reason as
++// catalog_coverage_ext.sql.go: keep hand-written queries out of the
++// security.sql.go / image_vulns.sql.go regeneration target so a future
++// `sqlc generate` run doesn't drop them. sqlc's CLI is intentionally not
++// run in this repo; these are the batched, fleet-wide equivalents of the
++// per-cluster queries the posture handler used to fan out N times.
++
++package sqlc
++
++import (
++	"context"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const listClusterIDsWithSecurityPolicy = `-- name: ListClusterIDsWithSecurityPolicy :many
++SELECT DISTINCT cluster_id FROM cluster_security_policies
++`
++
++// ListClusterIDsWithSecurityPolicy returns the fleet-wide set of
++// cluster_ids that have at least one cluster_security_policies row.
++// Unbounded (no LIMIT/OFFSET) so a cluster whose policy would sort past a
++// paged window is never mis-scored.
++func (q *Queries) ListClusterIDsWithSecurityPolicy(ctx context.Context) ([]uuid.UUID, error) {
++	rows, err := q.db.Query(ctx, listClusterIDsWithSecurityPolicy)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	items := []uuid.UUID{}
++	for rows.Next() {
++		var clusterID uuid.UUID
++		if err := rows.Scan(&clusterID); err != nil {
++			return nil, err
++		}
++		items = append(items, clusterID)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return items, nil
++}
++
++const latestCISScanPerCluster = `-- name: LatestCISScanPerCluster :many
++SELECT DISTINCT ON (cluster_id)
++    cluster_id,
++    passed,
++    failed,
++    completed_at
++FROM security_scan_results
++WHERE scan_type = 'cis'
++ORDER BY cluster_id, created_at DESC
++`
++
++// LatestCISScanPerClusterRow is the slim projection the posture rollup
++// needs: the newest CIS scan's pass/fail counts and completion time per
++// cluster.
++type LatestCISScanPerClusterRow struct {
++	ClusterID   uuid.UUID          `json:"cluster_id"`
++	Passed      int32              `json:"passed"`
++	Failed      int32              `json:"failed"`
++	CompletedAt pgtype.Timestamptz `json:"completed_at"`
++}
++
++// LatestCISScanPerCluster returns the latest CIS scan (by created_at) for
++// every cluster that has one, batched across the whole fleet.
++func (q *Queries) LatestCISScanPerCluster(ctx context.Context) ([]LatestCISScanPerClusterRow, error) {
++	rows, err := q.db.Query(ctx, latestCISScanPerCluster)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	items := []LatestCISScanPerClusterRow{}
++	for rows.Next() {
++		var i LatestCISScanPerClusterRow
++		if err := rows.Scan(
++			&i.ClusterID,
++			&i.Passed,
++			&i.Failed,
++			&i.CompletedAt,
++		); err != nil {
++			return nil, err
++		}
++		items = append(items, i)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return items, nil
++}
++
++const aggregateVulnerabilitiesPerCluster = `-- name: AggregateVulnerabilitiesPerCluster :many
++SELECT
++    cluster_id,
++    COALESCE(SUM(critical_count), 0)::bigint AS critical,
++    COALESCE(SUM(high_count), 0)::bigint AS high,
++    COUNT(*)::bigint AS report_count
++FROM image_vulnerability_reports
++GROUP BY cluster_id
++`
++
++// AggregateVulnerabilitiesPerClusterRow mirrors the per-cluster shape of
++// AggregateClusterVulnerabilitiesRow but only the fields the posture
++// rollup scores on, keyed by cluster_id.
++type AggregateVulnerabilitiesPerClusterRow struct {
++	ClusterID   uuid.UUID `json:"cluster_id"`
++	Critical    int64     `json:"critical"`
++	High        int64     `json:"high"`
++	ReportCount int64     `json:"report_count"`
++}
++
++// AggregateVulnerabilitiesPerCluster returns per-cluster critical/high/
++// report_count aggregates for the whole fleet in one pass.
++func (q *Queries) AggregateVulnerabilitiesPerCluster(ctx context.Context) ([]AggregateVulnerabilitiesPerClusterRow, error) {
++	rows, err := q.db.Query(ctx, aggregateVulnerabilitiesPerCluster)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	items := []AggregateVulnerabilitiesPerClusterRow{}
++	for rows.Next() {
++		var i AggregateVulnerabilitiesPerClusterRow
++		if err := rows.Scan(
++			&i.ClusterID,
++			&i.Critical,
++			&i.High,
++			&i.ReportCount,
++		); err != nil {
++			return nil, err
++		}
++		items = append(items, i)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return items, nil
++}
+diff --git a/internal/handler/compliance_posture.go b/internal/handler/compliance_posture.go
+index ff36646..0e7e86a 100644
+--- a/internal/handler/compliance_posture.go
++++ b/internal/handler/compliance_posture.go
+@@ -94,11 +94,15 @@ type PostureIssue struct {
+ 
+ // CompliancePostureQuerier is the slice of *sqlc.Queries the handler
+ // touches. Local interface so a unit test can substitute a fake.
++//
++// All the scoring inputs are fetched with fleet-wide BATCH queries
++// (one round-trip each) rather than ~3 queries per cluster, so a large
++// fleet costs a constant number of DB hits.
+ type CompliancePostureQuerier interface {
+ 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
+-	ListScansByClusterAndType(ctx context.Context, arg sqlc.ListScansByClusterAndTypeParams) ([]sqlc.SecurityScanResult, error)
+-	AggregateClusterVulnerabilities(ctx context.Context, clusterID uuid.UUID) (sqlc.AggregateClusterVulnerabilitiesRow, error)
+-	ListClusterSecurityPolicies(ctx context.Context, arg sqlc.ListClusterSecurityPoliciesParams) ([]sqlc.ClusterSecurityPolicy, error)
++	LatestCISScanPerCluster(ctx context.Context) ([]sqlc.LatestCISScanPerClusterRow, error)
++	AggregateVulnerabilitiesPerCluster(ctx context.Context) ([]sqlc.AggregateVulnerabilitiesPerClusterRow, error)
++	ListClusterIDsWithSecurityPolicy(ctx context.Context) ([]uuid.UUID, error)
+ }
+ 
+ // CompliancePostureHandler computes the fleet posture rollup. Read-only.
+@@ -129,10 +133,20 @@ func (h *CompliancePostureHandler) withNow(fn func() time.Time) *CompliancePostu
+ // Get is the HTTP handler. Returns 200 with the full posture rollup.
+ // Empty fleet returns 200 with 0 clusters and overall_score=0.
+ func (h *CompliancePostureHandler) Get(w http.ResponseWriter, r *http.Request) {
+-	clusters, err := h.q.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: 500, Offset: 0})
+-	if err != nil {
+-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+-		return
++	// Page through the whole fleet so no cluster is silently truncated
++	// regardless of fleet size — the rollup's value is being exhaustive.
++	const pageSize int32 = 500
++	clusters := make([]sqlc.Cluster, 0)
++	for offset := int32(0); ; offset += pageSize {
++		page, err := h.q.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: pageSize, Offset: offset})
++		if err != nil {
++			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
++			return
++		}
++		clusters = append(clusters, page...)
++		if int32(len(page)) < pageSize {
++			break
++		}
+ 	}
+ 	out := h.compute(r.Context(), clusters)
+ 	RespondJSON(w, http.StatusOK, out)
+@@ -154,14 +168,21 @@ func (h *CompliancePostureHandler) compute(ctx context.Context, clusters []sqlc.
+ 		return out
+ 	}
+ 
++	// Fetch every scoring input in a fixed number of BATCH queries built
++	// ONCE here, then score each cluster from the in-memory maps. This
++	// replaces the old ~3-queries-per-cluster fan-out.
++	cisByCluster, vulnByCluster, hasPolicy, policyOK := h.batchInputs(ctx)
++
+ 	var cisSum, vulnSum, netpolSum float64
+ 	for _, c := range clusters {
++		cisRow, cisOK := cisByCluster[c.ID]
++		vulnRow, vulnOK := vulnByCluster[c.ID]
+ 		cp := ClusterPosture{
+ 			ClusterID:   c.ID,
+ 			ClusterName: c.Name,
+-			CISScore:    h.cisSubScoreForCluster(ctx, c.ID),
+-			VulnsScore:  h.vulnsSubScoreForCluster(ctx, c.ID, &out.TopIssues, c.Name),
+-			NetPolScore: h.netpolSubScoreForCluster(ctx, c.ID, &out.TopIssues, c.Name),
++			CISScore:    h.cisSubScore(cisRow, cisOK),
++			VulnsScore:  h.vulnsSubScore(vulnRow, vulnOK, &out.TopIssues, c.ID, c.Name),
++			NetPolScore: h.netpolSubScore(hasPolicy[c.ID], policyOK, &out.TopIssues, c.ID, c.Name),
+ 		}
+ 		cp.OverallScore = weightedOverall(cp.CISScore, cp.VulnsScore, cp.NetPolScore, h.auditSubScore())
+ 		out.Clusters = append(out.Clusters, cp)
+@@ -205,17 +226,50 @@ func clamp(v, lo, hi float64) float64 {
+ // 50-pt "unknown" bucket.
+ const cisStaleWindow = 30 * 24 * time.Hour
+ 
+-func (h *CompliancePostureHandler) cisSubScoreForCluster(ctx context.Context, id uuid.UUID) float64 {
+-	scans, err := h.q.ListScansByClusterAndType(ctx, sqlc.ListScansByClusterAndTypeParams{
+-		ClusterID: id,
+-		ScanType:  "cis",
+-		Limit:     1,
+-		Offset:    0,
+-	})
+-	if err != nil || len(scans) == 0 {
++// batchInputs runs the fixed set of fleet-wide queries the scoring needs
++// and returns them as lookup maps keyed by cluster_id, plus a flag for
++// whether the security-policy query succeeded (so netpol can fall back to
++// the "unknown" 50 bucket on a query error rather than scoring every
++// cluster as "no policy"). A failure of the CIS or vuln query degrades to
++// an empty map, which the per-cluster helpers already read as the
++// "unknown" 50 bucket — matching the old per-cluster error behaviour.
++func (h *CompliancePostureHandler) batchInputs(ctx context.Context) (
++	cisByCluster map[uuid.UUID]sqlc.LatestCISScanPerClusterRow,
++	vulnByCluster map[uuid.UUID]sqlc.AggregateVulnerabilitiesPerClusterRow,
++	hasPolicy map[uuid.UUID]bool,
++	policyOK bool,
++) {
++	cisByCluster = make(map[uuid.UUID]sqlc.LatestCISScanPerClusterRow)
++	if rows, err := h.q.LatestCISScanPerCluster(ctx); err == nil {
++		for _, row := range rows {
++			cisByCluster[row.ClusterID] = row
++		}
++	}
++
++	vulnByCluster = make(map[uuid.UUID]sqlc.AggregateVulnerabilitiesPerClusterRow)
++	if rows, err := h.q.AggregateVulnerabilitiesPerCluster(ctx); err == nil {
++		for _, row := range rows {
++			vulnByCluster[row.ClusterID] = row
++		}
++	}
++
++	hasPolicy = make(map[uuid.UUID]bool)
++	if ids, err := h.q.ListClusterIDsWithSecurityPolicy(ctx); err == nil {
++		policyOK = true
++		for _, id := range ids {
++			hasPolicy[id] = true
++		}
++	}
++	return cisByCluster, vulnByCluster, hasPolicy, policyOK
++}
++
++// cisSubScore scores one cluster from its prebuilt latest-CIS-scan row.
++// ok is false when the cluster has no CIS scan at all → the 50 "unknown"
++// bucket.
++func (h *CompliancePostureHandler) cisSubScore(s sqlc.LatestCISScanPerClusterRow, ok bool) float64 {
++	if !ok {
+ 		return 50.0
+ 	}
+-	s := scans[0]
+ 	if s.CompletedAt.Valid && h.now().Sub(s.CompletedAt.Time) > cisStaleWindow {
+ 		return 50.0
+ 	}
+@@ -226,12 +280,10 @@ func (h *CompliancePostureHandler) cisSubScoreForCluster(ctx context.Context, id
+ 	return clamp(100.0*float64(s.Passed)/float64(total), 0, 100)
+ }
+ 
+-func (h *CompliancePostureHandler) vulnsSubScoreForCluster(ctx context.Context, id uuid.UUID, issues *[]PostureIssue, name string) float64 {
+-	agg, err := h.q.AggregateClusterVulnerabilities(ctx, id)
+-	if err != nil {
+-		return 50.0
+-	}
+-	if agg.ReportCount == 0 {
++// vulnsSubScore scores one cluster from its prebuilt vuln aggregate. ok
++// is false when the cluster has no vuln reports → the 50 "unknown" bucket.
++func (h *CompliancePostureHandler) vulnsSubScore(agg sqlc.AggregateVulnerabilitiesPerClusterRow, ok bool, issues *[]PostureIssue, id uuid.UUID, name string) float64 {
++	if !ok || agg.ReportCount == 0 {
+ 		return 50.0
+ 	}
+ 	penalty := float64(agg.Critical)*5 + float64(agg.High)
+@@ -248,20 +300,17 @@ func (h *CompliancePostureHandler) vulnsSubScoreForCluster(ctx context.Context,
+ 	return score
+ }
+ 
+-func (h *CompliancePostureHandler) netpolSubScoreForCluster(ctx context.Context, id uuid.UUID, issues *[]PostureIssue, name string) float64 {
+-	// ListClusterSecurityPolicies is paginated; we only need to know
+-	// "is there at least one" so a small page is plenty.
+-	rows, err := h.q.ListClusterSecurityPolicies(ctx, sqlc.ListClusterSecurityPoliciesParams{
+-		Limit:  10,
+-		Offset: 0,
+-	})
+-	if err != nil {
++// netpolSubScore scores one cluster from the prebuilt has-policy set. This
++// consults the whole-fleet DISTINCT cluster_id set, so a cluster whose
++// policy would sort past any paged window is scored correctly. policyOK is
++// false only when the underlying query errored, in which case we fall back
++// to the 50 "unknown" bucket rather than scoring the cluster as unprotected.
++func (h *CompliancePostureHandler) netpolSubScore(inSet, policyOK bool, issues *[]PostureIssue, id uuid.UUID, name string) float64 {
++	if !policyOK {
+ 		return 50.0
+ 	}
+-	for _, p := range rows {
+-		if p.ClusterID == id {
+-			return 100.0
+-		}
++	if inSet {
++		return 100.0
+ 	}
+ 	*issues = append(*issues, PostureIssue{
+ 		ClusterID:   id,
+diff --git a/internal/handler/compliance_posture_test.go b/internal/handler/compliance_posture_test.go
+index a53fa17..d6e9746 100644
+--- a/internal/handler/compliance_posture_test.go
++++ b/internal/handler/compliance_posture_test.go
+@@ -48,42 +48,37 @@ func (f *fakePostureQuerier) ListClusters(_ context.Context, _ sqlc.ListClusters
+ 	return f.clusters, nil
+ }
+ 
+-func (f *fakePostureQuerier) ListScansByClusterAndType(_ context.Context, arg sqlc.ListScansByClusterAndTypeParams) ([]sqlc.SecurityScanResult, error) {
+-	if arg.ScanType != "cis" {
+-		return nil, nil
+-	}
+-	v, ok := f.cis[arg.ClusterID]
+-	if !ok {
+-		return nil, nil
+-	}
+-	return []sqlc.SecurityScanResult{{
+-		ID:          uuid.New(),
+-		ClusterID:   arg.ClusterID,
+-		ScanType:    "cis",
+-		Status:      "completed",
+-		Passed:      v.Passed,
+-		Failed:      v.Failed,
+-		CompletedAt: pgtype.Timestamptz{Time: v.CompletedAt, Valid: true},
+-	}}, nil
++func (f *fakePostureQuerier) LatestCISScanPerCluster(_ context.Context) ([]sqlc.LatestCISScanPerClusterRow, error) {
++	out := make([]sqlc.LatestCISScanPerClusterRow, 0, len(f.cis))
++	for id, v := range f.cis {
++		out = append(out, sqlc.LatestCISScanPerClusterRow{
++			ClusterID:   id,
++			Passed:      v.Passed,
++			Failed:      v.Failed,
++			CompletedAt: pgtype.Timestamptz{Time: v.CompletedAt, Valid: true},
++		})
++	}
++	return out, nil
+ }
+ 
+-func (f *fakePostureQuerier) AggregateClusterVulnerabilities(_ context.Context, id uuid.UUID) (sqlc.AggregateClusterVulnerabilitiesRow, error) {
+-	v, ok := f.vulns[id]
+-	if !ok {
+-		return sqlc.AggregateClusterVulnerabilitiesRow{}, nil
++func (f *fakePostureQuerier) AggregateVulnerabilitiesPerCluster(_ context.Context) ([]sqlc.AggregateVulnerabilitiesPerClusterRow, error) {
++	out := make([]sqlc.AggregateVulnerabilitiesPerClusterRow, 0, len(f.vulns))
++	for id, v := range f.vulns {
++		out = append(out, sqlc.AggregateVulnerabilitiesPerClusterRow{
++			ClusterID:   id,
++			Critical:    v.Critical,
++			High:        v.High,
++			ReportCount: v.ReportCount,
++		})
+ 	}
+-	return sqlc.AggregateClusterVulnerabilitiesRow{
+-		Critical:    v.Critical,
+-		High:        v.High,
+-		ReportCount: v.ReportCount,
+-	}, nil
++	return out, nil
+ }
+ 
+-func (f *fakePostureQuerier) ListClusterSecurityPolicies(_ context.Context, _ sqlc.ListClusterSecurityPoliciesParams) ([]sqlc.ClusterSecurityPolicy, error) {
+-	out := make([]sqlc.ClusterSecurityPolicy, 0, len(f.netpol))
++func (f *fakePostureQuerier) ListClusterIDsWithSecurityPolicy(_ context.Context) ([]uuid.UUID, error) {
++	out := make([]uuid.UUID, 0, len(f.netpol))
+ 	for id, has := range f.netpol {
+ 		if has {
+-			out = append(out, sqlc.ClusterSecurityPolicy{ClusterID: id})
++			out = append(out, id)
+ 		}
+ 	}
+ 	return out, nil
+@@ -195,6 +190,82 @@ func TestPosture_StaleCISFallsBackTo50(t *testing.T) {
+ 	}
+ }
+ 
++// TestPosture_NetpolPolicyPastPageBoundary is the regression test for the
++// >10-policy bug: the old per-cluster path paged security policies with
++// LIMIT 10 and scanned that page for a match, so a cluster whose policy
++// sorted past row 10 fleet-wide was mis-scored. The batch DISTINCT set is
++// unbounded, so the target cluster must now score netpol=100.
++func TestPosture_NetpolPolicyPastPageBoundary(t *testing.T) {
++	now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
++	// 20 clusters, every one with a policy → the "target" (last one) would
++	// have sorted well past a 10-row page under the old query.
++	netpol := map[uuid.UUID]bool{}
++	clusters := make([]sqlc.Cluster, 0, 20)
++	var target uuid.UUID
++	for i := 0; i < 20; i++ {
++		id := uuid.New()
++		clusters = append(clusters, sqlc.Cluster{ID: id, Name: "c"})
++		netpol[id] = true
++		target = id
++	}
++	q := &fakePostureQuerier{clusters: clusters, netpol: netpol}
++	h := NewCompliancePostureHandler(q, 13).withNow(func() time.Time { return now })
++	out := h.compute(context.Background(), clusters)
++
++	// Every cluster has a policy → fleet netpol sub-score is a clean 100.
++	if math.Abs(out.NetPolScore-100.0) > 1e-6 {
++		t.Errorf("fleet netpol_score = %v, want 100", out.NetPolScore)
++	}
++	// The target cluster (would-be past row 10) must score 100 individually.
++	for _, cp := range out.Clusters {
++		if cp.ClusterID == target && math.Abs(cp.NetPolScore-100.0) > 1e-6 {
++			t.Errorf("target cluster netpol = %v, want 100", cp.NetPolScore)
++		}
++	}
++}
++
++// TestPosture_BatchMatchesPerClusterFixture pins that the batch-map path
++// produces the exact scores the documented per-cluster semantics call for
++// on the small two-cluster fixture (identical to the old fan-out path).
++func TestPosture_BatchMatchesPerClusterFixture(t *testing.T) {
++	now := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
++	a := uuid.MustParse("aaaaaaaa-1111-1111-1111-111111111111")
++	b := uuid.MustParse("bbbbbbbb-2222-2222-2222-222222222222")
++	q := &fakePostureQuerier{
++		clusters: []sqlc.Cluster{{ID: a, Name: "a"}, {ID: b, Name: "b"}},
++		cis: map[uuid.UUID]struct {
++			Passed      int32
++			Failed      int32
++			CompletedAt time.Time
++		}{
++			a: {Passed: 90, Failed: 10, CompletedAt: now.Add(-time.Hour)}, // cis=90
++			// b: no scan → cis=50
++		},
++		vulns: map[uuid.UUID]struct {
++			Critical    int64
++			High        int64
++			ReportCount int64
++		}{
++			b: {Critical: 2, High: 5, ReportCount: 3}, // penalty=15 → vulns=85
++			// a: no report → vulns=50
++		},
++		netpol: map[uuid.UUID]bool{a: true}, // a→100, b→0
++	}
++	h := NewCompliancePostureHandler(q, 13).withNow(func() time.Time { return now })
++	out := h.compute(context.Background(), q.clusters)
++
++	byID := map[uuid.UUID]ClusterPosture{}
++	for _, cp := range out.Clusters {
++		byID[cp.ClusterID] = cp
++	}
++	if got := byID[a]; math.Abs(got.CISScore-90) > 1e-6 || math.Abs(got.VulnsScore-50) > 1e-6 || math.Abs(got.NetPolScore-100) > 1e-6 {
++		t.Errorf("cluster a = %+v, want cis=90 vulns=50 netpol=100", got)
++	}
++	if got := byID[b]; math.Abs(got.CISScore-50) > 1e-6 || math.Abs(got.VulnsScore-85) > 1e-6 || math.Abs(got.NetPolScore-0) > 1e-6 {
++		t.Errorf("cluster b = %+v, want cis=50 vulns=85 netpol=0", got)
++	}
++}
++
+ func TestPosture_HTTPEndpoint_ReturnsEnvelopedJSON(t *testing.T) {
+ 	q := &fakePostureQuerier{clusters: nil}
+ 	h := NewCompliancePostureHandler(q, 13)

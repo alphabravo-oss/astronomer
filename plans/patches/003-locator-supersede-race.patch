@@ -1,0 +1,211 @@
+diff --git a/internal/tunnel/locator.go b/internal/tunnel/locator.go
+index 5ca08a1..4108107 100644
+--- a/internal/tunnel/locator.go
++++ b/internal/tunnel/locator.go
+@@ -62,6 +62,14 @@ type Locator struct {
+ 
+ 	mu      sync.Mutex
+ 	cancels map[string]context.CancelFunc // cluster_id → refresh-loop cancel
++	// gens carries a monotonic generation id per cluster_id alongside cancels.
++	// A fast agent flap A→B→A can start a NEWER refresh loop for the same
++	// cluster_id before an OLDER loop has observed its own supersede; the
++	// generation id lets a stale tick cancel/evict ONLY its own map slot
++	// (generation match), never the newer generation's live loop. nextGen is
++	// the source of the next id; both are guarded by mu.
++	nextGen uint64
++	gens    map[string]uint64
+ 	// static is set ONLY by NewFakeLocatorForTest; Lookup checks it
+ 	// before consulting redis so unit tests don't need miniredis.
+ 	static map[string]string
+@@ -86,6 +94,7 @@ func NewLocatorFromAsynqRedisURL(redisURL, address string, log *slog.Logger) (*L
+ 		address: address,
+ 		log:     log,
+ 		cancels: map[string]context.CancelFunc{},
++		gens:    map[string]uint64{},
+ 	}, nil
+ }
+ 
+@@ -111,7 +120,13 @@ func (l *Locator) Set(parent context.Context, clusterID string) {
+ 		cancel()
+ 	}
+ 	ctx, cancel := context.WithCancel(parent)
++	l.nextGen++
++	gen := l.nextGen
+ 	l.cancels[clusterID] = cancel
++	if l.gens == nil {
++		l.gens = map[string]uint64{}
++	}
++	l.gens[clusterID] = gen
+ 	l.mu.Unlock()
+ 
+ 	// Immediate set so the address is visible before the first tick.
+@@ -120,7 +135,7 @@ func (l *Locator) Set(parent context.Context, clusterID string) {
+ 			slog.String("cluster_id", clusterID), slog.String("error", err.Error()))
+ 	}
+ 
+-	go l.refreshLoop(ctx, clusterID)
++	go l.refreshLoop(ctx, clusterID, gen)
+ }
+ 
+ // Delete clears the mapping immediately and stops the refresh loop.
+@@ -133,6 +148,7 @@ func (l *Locator) Delete(ctx context.Context, clusterID string) {
+ 	if cancel, exists := l.cancels[clusterID]; exists {
+ 		cancel()
+ 		delete(l.cancels, clusterID)
++		delete(l.gens, clusterID)
+ 	}
+ 	l.mu.Unlock()
+ 
+@@ -208,6 +224,7 @@ func (l *Locator) Drain(ctx context.Context) {
+ 		ids = append(ids, id)
+ 	}
+ 	l.cancels = map[string]context.CancelFunc{}
++	l.gens = map[string]uint64{}
+ 	l.mu.Unlock()
+ 	for _, id := range ids {
+ 		l.Delete(ctx, id)
+@@ -262,10 +279,20 @@ func (l *Locator) refresh(ctx context.Context, clusterID string) (owner string,
+ 	return owner, nil
+ }
+ 
+-// refreshTick performs one owner-checked refresh. It returns true when this pod
+-// has been superseded (a different pod owns the entry), in which case it cancels
+-// and drops this cluster's refresh loop so we stop fighting the new owner.
+-func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded bool) {
++// refreshTick performs one owner-checked refresh for the loop generation gen.
++// It returns true when this pod has been superseded (a different pod owns the
++// entry), in which case this loop stops (it returns true from refreshLoop, and
++// its own ctx is cancelled by the map-slot eviction below when it still owns
++// the slot).
++//
++// The map mutation is generation-guarded: a fast flap A→B→A can start a NEWER
++// refresh loop for this same cluster_id before an OLDER loop observes its own
++// supersede. A stale tick must therefore evict/cancel ONLY its own slot — it
++// cancels and drops the map entry iff the stored generation is still THIS
++// loop's gen. If a newer generation already owns the slot, this stale loop
++// leaves it untouched and just stops itself (via its own ctx / the returned
++// true), never cancelling the live newer loop.
++func (l *Locator) refreshTick(ctx context.Context, clusterID string, gen uint64) (superseded bool) {
+ 	owner, err := l.refresh(ctx, clusterID)
+ 	if err != nil {
+ 		if l.log != nil {
+@@ -282,9 +309,10 @@ func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded
+ 				slog.String("self", l.address))
+ 		}
+ 		l.mu.Lock()
+-		if cancel, ok := l.cancels[clusterID]; ok {
++		if cancel, ok := l.cancels[clusterID]; ok && l.gens[clusterID] == gen {
+ 			cancel()
+ 			delete(l.cancels, clusterID)
++			delete(l.gens, clusterID)
+ 		}
+ 		l.mu.Unlock()
+ 		return true
+@@ -292,7 +320,7 @@ func (l *Locator) refreshTick(ctx context.Context, clusterID string) (superseded
+ 	return false
+ }
+ 
+-func (l *Locator) refreshLoop(ctx context.Context, clusterID string) {
++func (l *Locator) refreshLoop(ctx context.Context, clusterID string, gen uint64) {
+ 	ticker := time.NewTicker(locatorRefreshInterval)
+ 	defer ticker.Stop()
+ 	for {
+@@ -300,7 +328,7 @@ func (l *Locator) refreshLoop(ctx context.Context, clusterID string) {
+ 		case <-ctx.Done():
+ 			return
+ 		case <-ticker.C:
+-			if l.refreshTick(ctx, clusterID) {
++			if l.refreshTick(ctx, clusterID, gen) {
+ 				return
+ 			}
+ 		}
+diff --git a/internal/tunnel/locator_test.go b/internal/tunnel/locator_test.go
+index ffa23df..c3bd0bb 100644
+--- a/internal/tunnel/locator_test.go
++++ b/internal/tunnel/locator_test.go
+@@ -9,7 +9,7 @@ import (
+ )
+ 
+ func newTestLocator(rdb *redis.Client, addr string) *Locator {
+-	return &Locator{rdb: rdb, address: addr, cancels: map[string]context.CancelFunc{}}
++	return &Locator{rdb: rdb, address: addr, cancels: map[string]context.CancelFunc{}, gens: map[string]uint64{}}
+ }
+ 
+ // TestLocatorDelete_CAS_DoesNotClobberNewOwner is the M10 fix: when an agent
+@@ -74,13 +74,15 @@ func TestLocatorRefresh_SupersededDoesNotClobber(t *testing.T) {
+ 		t.Fatalf("B write: %v", err)
+ 	}
+ 
+-	// Register A's refresh-loop cancel so refreshTick can drop it on supersede.
++	// Register A's refresh-loop cancel + generation so refreshTick can drop it
++	// on supersede.
+ 	loopCtx, cancel := context.WithCancel(ctx)
+ 	locA.cancels[cid] = cancel
++	locA.gens = map[string]uint64{cid: 1}
+ 
+ 	// A's refresh tick observes B as the owner: must self-cancel, must NOT
+ 	// clobber B's entry.
+-	if superseded := locA.refreshTick(loopCtx, cid); !superseded {
++	if superseded := locA.refreshTick(loopCtx, cid, 1); !superseded {
+ 		t.Fatal("H-01: A's refresh should have detected it was superseded by B")
+ 	}
+ 	got, err := rdb.Get(ctx, locatorKeyPrefix+cid).Result()
+@@ -128,3 +130,58 @@ func TestLocatorDelete_CAS_OwnerDeletes(t *testing.T) {
+ 		t.Fatalf("owner delete should remove the entry, err=%v", err)
+ 	}
+ }
++
++// TestLocatorRefresh_StaleGenerationDoesNotCancelNewLoop is the 003 fix: a fast
++// flap A→B→A can leave an OLDER refresh generation still ticking after a NEWER
++// generation (from a subsequent Set) has taken over the map slot for the same
++// cluster_id. When that stale old-generation tick observes a supersede, it must
++// stop ITSELF (return superseded=true) but must NOT cancel the newer loop's
++// context nor evict the newer handle from the map — otherwise the healthy,
++// currently-connected cluster's refresh loop is killed and, once the redis TTL
++// lapses, the cluster becomes unroutable across replicas.
++func TestLocatorRefresh_StaleGenerationDoesNotCancelNewLoop(t *testing.T) {
++	mr := miniredis.RunT(t)
++	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
++	defer rdb.Close()
++	ctx := context.Background()
++
++	loc := newTestLocator(rdb, "10.0.0.1:8000")
++	const cid = "cluster-flap"
++
++	// Older generation (gen1) started, then a later Set replaced it with a newer
++	// generation (gen2) that now owns the map slot for this cluster_id.
++	oldCtx, oldCancel := context.WithCancel(ctx)
++	defer oldCancel()
++
++	newCtx, newCancel := context.WithCancel(ctx)
++	defer newCancel()
++	loc.cancels[cid] = newCancel // newest generation holds the slot
++	loc.gens = map[string]uint64{cid: 2}
++
++	// Directory now points at a DIFFERENT pod, so the stale gen1 tick will
++	// observe itself superseded.
++	if err := rdb.Set(ctx, locatorKeyPrefix+cid, "10.0.0.2:8000", locatorEntryTTL).Err(); err != nil {
++		t.Fatalf("seed redis: %v", err)
++	}
++
++	// gen1's stale tick sees the supersede: it must report superseded (stop
++	// itself) but leave gen2's slot and loop context untouched.
++	if superseded := loc.refreshTick(oldCtx, cid, 1); !superseded {
++		t.Fatal("003: stale gen1 tick should report superseded")
++	}
++
++	// gen2's loop context must still be live — the stale tick must NOT have
++	// invoked gen2's cancel.
++	select {
++	case <-newCtx.Done():
++		t.Fatal("003: stale gen1 tick CANCELLED the newer gen2 refresh loop")
++	default:
++	}
++	// The map must still hold gen2's slot (generation identity preserved).
++	if _, ok := loc.cancels[cid]; !ok {
++		t.Fatal("003: stale gen1 tick EVICTED the newer gen2 map slot")
++	}
++	if g := loc.gens[cid]; g != 2 {
++		t.Fatalf("003: gens[%q] = %d, want gen2 (2)", cid, g)
++	}
++}

@@ -1,0 +1,633 @@
+diff --git a/internal/handler/catalog.go b/internal/handler/catalog.go
+index eb057cc..441a679 100644
+--- a/internal/handler/catalog.go
++++ b/internal/handler/catalog.go
+@@ -20,6 +20,7 @@ import (
+ 
+ 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+ 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
++	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+ 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+ 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+ 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
+@@ -1301,6 +1302,14 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
+ 			return
+ 		}
+ 		pingURL := "https://" + host + "/v2/"
++		// SSRF backstop: this handler fetches an operator-supplied URL and
++		// echoes the upstream status/error back, so reject probes aimed at
++		// loopback / RFC-1918 / link-local (incl. the 169.254.169.254 metadata
++		// endpoint) before any request leaves the process.
++		if err := httpclient.GuardPublicHost(pingURL); err != nil {
++			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
++			return
++		}
+ 		client := &http.Client{Timeout: 10 * time.Second}
+ 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, pingURL, nil)
+ 		if err != nil {
+@@ -1327,6 +1336,12 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
+ 		return
+ 	}
+ 	url := strings.TrimRight(repo.Url, "/") + "/index.yaml"
++	// SSRF backstop (see the OCI branch above): block probes at non-public
++	// hosts before dialing.
++	if err := httpclient.GuardPublicHost(url); err != nil {
++		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
++		return
++	}
+ 	client := &http.Client{Timeout: 10 * time.Second}
+ 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+ 	if err != nil {
+diff --git a/internal/handler/logging.go b/internal/handler/logging.go
+index 41f63ff..47379ed 100644
+--- a/internal/handler/logging.go
++++ b/internal/handler/logging.go
+@@ -325,6 +325,9 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
+ 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+ 		return
+ 	}
++	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
++		return
++	}
+ 
+ 	configuration := req.Configuration
+ 	if configuration == nil {
+@@ -372,6 +375,15 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
+ 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+ 		return
+ 	}
++	// Authorize against the output's owning cluster before mutating it.
++	existing, err := h.queries.GetLoggingOutputByID(r.Context(), id)
++	if err != nil {
++		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
++		return
++	}
++	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(existing.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
++		return
++	}
+ 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
+ 		ID:            id,
+ 		Name:          req.Name,
+@@ -433,8 +445,13 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
+ 
+ 	existing, lookupErr := h.queries.GetLoggingOutputByID(r.Context(), id)
+ 	outputName := ""
++	var outputClusterID uuid.UUID
+ 	if lookupErr == nil {
+ 		outputName = existing.Name
++		outputClusterID = uuid.UUID(existing.ClusterID.Bytes)
++	}
++	if !h.authz.authorizeClusterAction(w, r, outputClusterID, rbac.ResourceLogging, rbac.VerbDelete) {
++		return
+ 	}
+ 	// Enqueue the delete operation BEFORE the row goes away — the
+ 	// reconciler will use the snapshot in the payload to know which
+@@ -503,6 +520,9 @@ func (h *LoggingHandler) CreatePipeline(w http.ResponseWriter, r *http.Request)
+ 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+ 		return
+ 	}
++	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
++		return
++	}
+ 
+ 	namespaces := req.Namespaces
+ 	if namespaces == nil {
+@@ -558,6 +578,15 @@ func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request)
+ 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+ 		return
+ 	}
++	// Authorize against the pipeline's owning cluster before mutating it.
++	existing, err := h.queries.GetLoggingPipelineByID(r.Context(), id)
++	if err != nil {
++		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
++		return
++	}
++	if !h.authz.authorizeClusterAction(w, r, existing.ClusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
++		return
++	}
+ 	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
+ 		ID:         id,
+ 		Name:       req.Name,
+@@ -591,8 +620,13 @@ func (h *LoggingHandler) DeletePipeline(w http.ResponseWriter, r *http.Request)
+ 
+ 	existing, lookupErr := h.queries.GetLoggingPipelineByID(r.Context(), id)
+ 	pipelineName := ""
++	var pipelineClusterID uuid.UUID
+ 	if lookupErr == nil {
+ 		pipelineName = existing.Name
++		pipelineClusterID = existing.ClusterID
++	}
++	if !h.authz.authorizeClusterAction(w, r, pipelineClusterID, rbac.ResourceLogging, rbac.VerbDelete) {
++		return
+ 	}
+ 	var deleteOp sqlc.LoggingOperation
+ 	if lookupErr == nil {
+@@ -636,6 +670,9 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
+ 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+ 		return
+ 	}
++	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(current.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
++		return
++	}
+ 	output, err := h.queries.UpdateLoggingOutput(r.Context(), sqlc.UpdateLoggingOutputParams{
+ 		ID:            id,
+ 		Name:          current.Name,
+@@ -703,6 +740,9 @@ func (h *LoggingHandler) setPipelineEnabled(w http.ResponseWriter, r *http.Reque
+ 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging pipeline not found")
+ 		return
+ 	}
++	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
++		return
++	}
+ 	pipeline, err := h.queries.UpdateLoggingPipeline(r.Context(), sqlc.UpdateLoggingPipelineParams{
+ 		ID:         id,
+ 		Name:       current.Name,
+diff --git a/internal/handler/logging_authz_test.go b/internal/handler/logging_authz_test.go
+new file mode 100644
+index 0000000..a3619cd
+--- /dev/null
++++ b/internal/handler/logging_authz_test.go
+@@ -0,0 +1,101 @@
++package handler
++
++import (
++	"bytes"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/rbac"
++	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
++)
++
++// authedLoggingReq builds a request whose context carries an authenticated
++// principal, so the handler's authorizeClusterAction path treats the caller as
++// RBAC-restricted (a real session) rather than an unconfigured/no-auth request.
++func authedLoggingReq(method, target string, body []byte) *http.Request {
++	var req *http.Request
++	if body != nil {
++		req = httptest.NewRequest(method, target, bytes.NewReader(body))
++	} else {
++		req = httptest.NewRequest(method, target, nil)
++	}
++	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()})
++	return req.WithContext(ctx)
++}
++
++// TestLoggingMutatingRoutesDenyZeroGrantViewer proves a zero-grant viewer
++// session is refused with 403 on the logging mutation surface. Before the fix
++// these handlers never called authorizeClusterAction, so any authenticated
++// principal could create/enable logging outputs and pipelines.
++func TestLoggingMutatingRoutesDenyZeroGrantViewer(t *testing.T) {
++	clusterID := uuid.New()
++
++	newHandler := func() *LoggingHandler {
++		h := NewLoggingHandler(newLoggingFakeQuerier())
++		// Zero-grant viewer: authorization configured, but no logging bindings.
++		h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: nil})
++		return h
++	}
++
++	t.Run("create_output", func(t *testing.T) {
++		h := newHandler()
++		body, _ := json.Marshal(map[string]any{
++			"name":          "viewer-output",
++			"output_type":   "stdout",
++			"configuration": map[string]any{},
++			"cluster_id":    clusterID.String(),
++			"enabled":       true,
++		})
++		rec := httptest.NewRecorder()
++		h.CreateOutput(rec, authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/", body))
++		if rec.Code != http.StatusForbidden {
++			t.Fatalf("CreateOutput status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
++		}
++	})
++
++	t.Run("create_pipeline", func(t *testing.T) {
++		h := newHandler()
++		body, _ := json.Marshal(map[string]any{
++			"name":       "viewer-pipeline",
++			"cluster_id": clusterID.String(),
++			"enabled":    true,
++		})
++		target := "/api/v1/logging/pipelines/?cluster_id=" + clusterID.String()
++		rec := httptest.NewRecorder()
++		h.CreatePipeline(rec, authedLoggingReq(http.MethodPost, target, body))
++		if rec.Code != http.StatusForbidden {
++			t.Fatalf("CreatePipeline status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
++		}
++	})
++}
++
++// TestLoggingMutatingRoutesAllowGrantedPrincipal is the positive control: a
++// caller holding logging:create for the target cluster is NOT blocked by the
++// new authorization gate (it proceeds into the handler body).
++func TestLoggingMutatingRoutesAllowGrantedPrincipal(t *testing.T) {
++	clusterID := uuid.New()
++	h := NewLoggingHandler(newLoggingFakeQuerier())
++	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: []rbac.RoleBinding{{
++		ClusterID: clusterID.String(),
++		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbCreate)}}},
++	}}})
++	body, _ := json.Marshal(map[string]any{
++		"name":          "granted-output",
++		"output_type":   "stdout",
++		"configuration": map[string]any{},
++		"cluster_id":    clusterID.String(),
++		"enabled":       true,
++	})
++	rec := httptest.NewRecorder()
++	h.CreateOutput(rec, authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/", body))
++	if rec.Code == http.StatusForbidden {
++		t.Fatalf("granted principal was denied: status = %d; body=%s", rec.Code, rec.Body.String())
++	}
++	if rec.Code != http.StatusCreated {
++		t.Fatalf("CreateOutput status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
++	}
++}
+diff --git a/internal/httpclient/ssrf.go b/internal/httpclient/ssrf.go
+new file mode 100644
+index 0000000..e602d63
+--- /dev/null
++++ b/internal/httpclient/ssrf.go
+@@ -0,0 +1,59 @@
++package httpclient
++
++import (
++	"fmt"
++	"net"
++	"net/url"
++)
++
++// GuardPublicHost resolves the host in rawURL and returns a non-nil error when
++// any resolved address is loopback, unspecified, link-local (which includes the
++// 169.254.169.254 cloud-metadata endpoint), private/RFC-1918, or multicast.
++//
++// It is a deliberately small backstop for server-side "test connection" probes
++// that fetch an operator-supplied URL and echo the upstream status/error back
++// to the caller — behaviour that otherwise turns the probe into an SSRF /
++// internal port-scan oracle. It is NOT a general SSRF framework: callers that
++// pass the check should still use a bounded HTTP client, and it does not defend
++// against DNS-rebinding between this check and the subsequent dial.
++func GuardPublicHost(rawURL string) error {
++	u, err := url.Parse(rawURL)
++	if err != nil {
++		return fmt.Errorf("invalid url: %w", err)
++	}
++	host := u.Hostname()
++	if host == "" {
++		return fmt.Errorf("url has no host")
++	}
++	// A literal IP needs no resolution; still run it through the filter.
++	if ip := net.ParseIP(host); ip != nil {
++		if !isPublicIP(ip) {
++			return fmt.Errorf("host resolves to a disallowed address")
++		}
++		return nil
++	}
++	ips, err := net.LookupIP(host)
++	if err != nil {
++		return fmt.Errorf("resolve host: %w", err)
++	}
++	for _, ip := range ips {
++		if !isPublicIP(ip) {
++			return fmt.Errorf("host resolves to a disallowed address")
++		}
++	}
++	return nil
++}
++
++// isPublicIP reports whether ip is a routable public address, rejecting the
++// address classes an SSRF probe must never reach.
++func isPublicIP(ip net.IP) bool {
++	if ip.IsLoopback() ||
++		ip.IsUnspecified() ||
++		ip.IsLinkLocalUnicast() ||
++		ip.IsLinkLocalMulticast() ||
++		ip.IsMulticast() ||
++		ip.IsPrivate() {
++		return false
++	}
++	return true
++}
+diff --git a/internal/httpclient/ssrf_test.go b/internal/httpclient/ssrf_test.go
+new file mode 100644
+index 0000000..777dbe3
+--- /dev/null
++++ b/internal/httpclient/ssrf_test.go
+@@ -0,0 +1,31 @@
++package httpclient
++
++import "testing"
++
++func TestGuardPublicHost(t *testing.T) {
++	blocked := []string{
++		"http://127.0.0.1/index.yaml",
++		"https://localhost/v2/",
++		"http://10.0.0.5/index.yaml",
++		"http://192.168.1.1/index.yaml",
++		"http://172.16.0.1/index.yaml",
++		"http://169.254.169.254/latest/meta-data/",
++		"http://[::1]/v2/",
++		"http://0.0.0.0/",
++	}
++	for _, u := range blocked {
++		if err := GuardPublicHost(u); err == nil {
++			t.Errorf("GuardPublicHost(%q) = nil, want error (non-public host)", u)
++		}
++	}
++
++	// Literal public IP needs no DNS resolution, keeping the test hermetic.
++	if err := GuardPublicHost("https://8.8.8.8/index.yaml"); err != nil {
++		t.Errorf("GuardPublicHost(public IP) = %v, want nil", err)
++	}
++
++	// A URL with no host (e.g. a file scheme) must be rejected.
++	if err := GuardPublicHost("file:///etc/passwd"); err == nil {
++		t.Errorf("GuardPublicHost(hostless) = nil, want error")
++	}
++}
+diff --git a/internal/server/routes_authz_deny_test.go b/internal/server/routes_authz_deny_test.go
+new file mode 100644
+index 0000000..0c85c69
+--- /dev/null
++++ b/internal/server/routes_authz_deny_test.go
+@@ -0,0 +1,137 @@
++package server
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/auth"
++	"github.com/alphabravocompany/astronomer-go/internal/config"
++	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
++	"github.com/alphabravocompany/astronomer-go/internal/handler"
++	"github.com/alphabravocompany/astronomer-go/internal/rbac"
++)
++
++// TestSecurityMutatingRoutesRequireSecurityRBAC proves the mutating security
++// routes reject a zero-grant viewer with 403. Before the fix these routes sat
++// behind ONLY the feature-flag gate, so any authenticated principal could
++// create/update/delete templates and policies and launch scans.
++func TestSecurityMutatingRoutesRequireSecurityRBAC(t *testing.T) {
++	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
++	token, err := jwtMgr.GenerateAccessToken(uuid.New())
++	if err != nil {
++		t.Fatalf("generate token: %v", err)
++	}
++	router := NewRouter(&config.Config{}, RouterDependencies{
++		JWT:         jwtMgr,
++		RBACEngine:  rbac.NewEngine(),
++		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
++		Security:    handler.NewSecurityHandler(nil),
++	})
++
++	for _, tc := range []struct {
++		name   string
++		method string
++		path   string
++	}{
++		{"create_template", http.MethodPost, "/api/v1/security/templates/"},
++		{"update_template", http.MethodPut, "/api/v1/security/templates/" + uuid.NewString() + "/"},
++		{"delete_template", http.MethodDelete, "/api/v1/security/templates/" + uuid.NewString() + "/"},
++		{"create_policy", http.MethodPost, "/api/v1/security/policies/"},
++		{"apply_policy", http.MethodPost, "/api/v1/security/policies/" + uuid.NewString() + "/apply/"},
++		{"delete_policy", http.MethodDelete, "/api/v1/security/policies/" + uuid.NewString() + "/"},
++		{"create_scan", http.MethodPost, "/api/v1/security/scans/"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			req := httptest.NewRequest(tc.method, tc.path, nil)
++			req.Header.Set("Authorization", "Bearer "+token)
++			rec := httptest.NewRecorder()
++			router.ServeHTTP(rec, req)
++			if rec.Code != http.StatusForbidden {
++				t.Fatalf("%s %s status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusForbidden, rec.Body.String())
++			}
++		})
++	}
++}
++
++// TestCatalogRepositoryRoutesRequireCatalogRBAC proves repository CRUD refuses a
++// zero-grant viewer, honoring the catalog:create/update/delete requirement that
++// docs/security-sensitive-routes.json already declares.
++func TestCatalogRepositoryRoutesRequireCatalogRBAC(t *testing.T) {
++	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
++	token, err := jwtMgr.GenerateAccessToken(uuid.New())
++	if err != nil {
++		t.Fatalf("generate token: %v", err)
++	}
++	router := NewRouter(&config.Config{}, RouterDependencies{
++		JWT:         jwtMgr,
++		RBACEngine:  rbac.NewEngine(),
++		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
++		Catalog:     handler.NewCatalogHandler(nil),
++	})
++
++	for _, tc := range []struct {
++		name   string
++		method string
++		path   string
++	}{
++		{"create_repo", http.MethodPost, "/api/v1/catalog/repositories/"},
++		{"update_repo", http.MethodPut, "/api/v1/catalog/repositories/" + uuid.NewString() + "/"},
++		{"delete_repo", http.MethodDelete, "/api/v1/catalog/repositories/" + uuid.NewString() + "/"},
++		{"sync_repo", http.MethodPost, "/api/v1/catalog/repositories/" + uuid.NewString() + "/sync/"},
++		{"test_connection", http.MethodPost, "/api/v1/catalog/repositories/" + uuid.NewString() + "/test-connection/"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			req := httptest.NewRequest(tc.method, tc.path, nil)
++			req.Header.Set("Authorization", "Bearer "+token)
++			rec := httptest.NewRecorder()
++			router.ServeHTTP(rec, req)
++			if rec.Code != http.StatusForbidden {
++				t.Fatalf("%s %s status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusForbidden, rec.Body.String())
++			}
++		})
++	}
++}
++
++// TestControllersMutatingRoutesRequireSuperuser proves the platform-admin
++// controllers surface refuses a non-superuser principal with 403. Before the
++// fix the mutating routes were reachable by any authenticated caller.
++func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
++	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
++	userID := uuid.New()
++	token, err := jwtMgr.GenerateAccessToken(userID)
++	if err != nil {
++		t.Fatalf("generate token: %v", err)
++	}
++	router := NewRouter(&config.Config{}, RouterDependencies{
++		JWT: jwtMgr,
++		// Non-superuser user resolved by the superuser gate.
++		AuthQueries:  routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}},
++		RBACEngine:   rbac.NewEngine(),
++		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
++		ControlPlane: handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil),
++	})
++
++	for _, tc := range []struct {
++		name   string
++		method string
++		path   string
++	}{
++		{"update_policy", http.MethodPut, "/api/v1/controllers/policy/"},
++		{"acknowledge_alert", http.MethodPost, "/api/v1/controllers/alerts/" + uuid.NewString() + "/acknowledge/"},
++		{"create_silence", http.MethodPost, "/api/v1/controllers/silences/"},
++		{"delete_silence", http.MethodDelete, "/api/v1/controllers/silences/" + uuid.NewString() + "/"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			req := httptest.NewRequest(tc.method, tc.path, nil)
++			req.Header.Set("Authorization", "Bearer "+token)
++			rec := httptest.NewRecorder()
++			router.ServeHTTP(rec, req)
++			if rec.Code != http.StatusForbidden {
++				t.Fatalf("%s %s status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusForbidden, rec.Body.String())
++			}
++		})
++	}
++}
+diff --git a/internal/server/routes_security.go b/internal/server/routes_security.go
+index 06200a4..8c990ce 100644
+--- a/internal/server/routes_security.go
++++ b/internal/server/routes_security.go
+@@ -18,19 +18,30 @@ import (
+ 
+ func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDependencies, rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler) {
+ 	if deps.Security != nil {
++		// Per-route authorization for the mutating security surface. Previously
++		// these routes sat behind ONLY the feature-flag gate, so any
++		// authenticated principal (including a zero-grant viewer) could mutate
++		// templates/policies/scans. ApplyPolicy + CreateScan push config to a
++		// managed cluster through the tunnel, so they additionally carry the
++		// write-clusters scope backstop, mirroring the apiserver-audit ingest
++		// composition below.
++		secCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbCreate)
++		secUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbUpdate)
++		secDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSecurity, rbac.VerbDelete)
++		secWriteClusters := requireScope(iauth.ScopeWriteClusters)
+ 		r.With(featureGate("feature.security", deps.SettingsCache)).Route("/security", func(r chi.Router) {
+ 			r.Get("/controller/status/", deps.Security.ControllerStatus)
+ 			r.Get("/templates/", deps.Security.ListTemplates)
+-			r.Post("/templates/", deps.Security.CreateTemplate)
++			r.With(secCreate).Post("/templates/", deps.Security.CreateTemplate)
+ 			r.Get("/templates/{id}/", deps.Security.GetTemplate)
+-			r.Put("/templates/{id}/", deps.Security.UpdateTemplate)
+-			r.Delete("/templates/{id}/", deps.Security.DeleteTemplate)
++			r.With(secUpdate).Put("/templates/{id}/", deps.Security.UpdateTemplate)
++			r.With(secDelete).Delete("/templates/{id}/", deps.Security.DeleteTemplate)
+ 			r.Get("/policies/", deps.Security.ListPolicies)
+-			r.Post("/policies/", deps.Security.CreatePolicy)
+-			r.Post("/policies/{id}/apply/", deps.Security.ApplyPolicy)
+-			r.Delete("/policies/{id}/", deps.Security.DeletePolicy)
++			r.With(secCreate).Post("/policies/", deps.Security.CreatePolicy)
++			r.With(secWriteClusters, secUpdate).Post("/policies/{id}/apply/", deps.Security.ApplyPolicy)
++			r.With(secDelete).Delete("/policies/{id}/", deps.Security.DeletePolicy)
+ 			r.Get("/scans/", deps.Security.ListAllScans)
+-			r.Post("/scans/", deps.Security.CreateScan)
++			r.With(secWriteClusters, secCreate).Post("/scans/", deps.Security.CreateScan)
+ 		})
+ 		r.Get("/clusters/{cluster_id}/security/policy/", deps.Security.GetPolicy)
+ 		r.Get("/clusters/{cluster_id}/security/scans/", deps.Security.ListScans)
+diff --git a/internal/server/routes_tools_controlplane.go b/internal/server/routes_tools_controlplane.go
+index f4e1652..1c50280 100644
+--- a/internal/server/routes_tools_controlplane.go
++++ b/internal/server/routes_tools_controlplane.go
+@@ -1,12 +1,32 @@
+ package server
+ 
+ import (
++	"net/http"
++
+ 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
++	"github.com/alphabravocompany/astronomer-go/internal/handler"
+ 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+ 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+ 	"github.com/go-chi/chi/v5"
+ )
+ 
++// requireSuperuser returns middleware that admits only superusers, reusing the
++// shared handler.RequireSuperuser gate. Used for platform-admin surfaces whose
++// handlers carry no per-request authorization of their own (e.g. the
++// control-plane controllers routes).
++func requireSuperuser(deps RouterDependencies) func(http.Handler) http.Handler {
++	return func(next http.Handler) http.Handler {
++		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			if _, ok := handler.RequireSuperuser(w, r, deps.AuthQueries, handler.SuperuserGateConfig{
++				ForbiddenMessage: "This action requires superuser privileges",
++			}); !ok {
++				return
++			}
++			next.ServeHTTP(w, r)
++		})
++	}
++}
++
+ // Code organization: this file holds a domain-specific slice of the
+ // protected-route registration originally inlined in routes.go's
+ // registerProtectedRoutes. Pure behaviour-preserving extraction.
+@@ -34,14 +54,20 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
+ 	}
+ 
+ 	if deps.ControlPlane != nil {
++		// The controllers surface is platform-admin: policy, alert
++		// acknowledgement, and alertmanager silences are fleet-wide and the
++		// handler carries no per-request authorization. Previously the mutating
++		// routes were reachable by any authenticated principal; gate them at the
++		// middleware level on superuser.
++		superuserOnly := requireSuperuser(deps)
+ 		r.Get("/controllers/status/", deps.ControlPlane.Status)
+ 		r.Get("/controllers/policy/", deps.ControlPlane.GetPolicy)
+-		r.Put("/controllers/policy/", deps.ControlPlane.UpdatePolicy)
++		r.With(superuserOnly).Put("/controllers/policy/", deps.ControlPlane.UpdatePolicy)
+ 		r.Get("/controllers/alerts/", deps.ControlPlane.ListAlerts)
+-		r.Post("/controllers/alerts/{id}/acknowledge/", deps.ControlPlane.AcknowledgeAlert)
++		r.With(superuserOnly).Post("/controllers/alerts/{id}/acknowledge/", deps.ControlPlane.AcknowledgeAlert)
+ 		r.Get("/controllers/silences/", deps.ControlPlane.ListSilences)
+-		r.Post("/controllers/silences/", deps.ControlPlane.CreateSilence)
+-		r.Delete("/controllers/silences/{id}/", deps.ControlPlane.DeleteSilence)
++		r.With(superuserOnly).Post("/controllers/silences/", deps.ControlPlane.CreateSilence)
++		r.With(superuserOnly).Delete("/controllers/silences/{id}/", deps.ControlPlane.DeleteSilence)
+ 	}
+ 
+ 	// Sprint 072 — read-only anomaly baseline inspection.
+@@ -144,18 +170,27 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
+ 	}
+ 
+ 	if deps.Catalog != nil {
++		// Per-route authorization for repository CRUD. These routes previously
++		// sat behind ONLY the feature-flag gate, so a zero-grant viewer could
++		// add/mutate/sync repositories. docs/security-sensitive-routes.json
++		// already declares the catalog:create/update/delete requirement; these
++		// gates make the code honor the doc. sync + test-connection are
++		// classified as catalog:update (they mutate/probe an existing repo).
++		catalogCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbCreate)
++		catalogUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbUpdate)
++		catalogDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
+ 		r.With(featureGate("feature.catalog", deps.SettingsCache)).Route("/catalog", func(r chi.Router) {
+ 			r.Get("/controller/status/", deps.Catalog.ControllerStatus)
+ 			r.Get("/operations/", deps.Catalog.ListOperations)
+ 			r.Get("/operations/{id}/", deps.Catalog.GetOperation)
+ 			r.Post("/operations/{id}/retry/", deps.Catalog.RetryOperation)
+ 			r.Get("/repositories/", deps.Catalog.ListRepos)
+-			r.Post("/repositories/", deps.Catalog.CreateRepo)
++			r.With(catalogCreate).Post("/repositories/", deps.Catalog.CreateRepo)
+ 			r.Get("/repositories/{id}/", deps.Catalog.GetRepo)
+-			r.Put("/repositories/{id}/", deps.Catalog.UpdateRepo)
+-			r.Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
+-			r.Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
+-			r.Post("/repositories/{id}/test-connection/", deps.Catalog.TestRepoConnection)
++			r.With(catalogUpdate).Put("/repositories/{id}/", deps.Catalog.UpdateRepo)
++			r.With(catalogDelete).Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
++			r.With(catalogUpdate).Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
++			r.With(catalogUpdate).Post("/repositories/{id}/test-connection/", deps.Catalog.TestRepoConnection)
+ 			r.Get("/charts/", deps.Catalog.ListCharts)
+ 			r.Get("/charts/{id}/", deps.Catalog.GetChart)
+ 			r.Get("/charts/{id}/versions/", deps.Catalog.ListChartVersions)

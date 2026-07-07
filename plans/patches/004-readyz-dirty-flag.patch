@@ -1,0 +1,144 @@
+diff --git a/internal/db/schema_version.go b/internal/db/schema_version.go
+index b20aef6..ac6c3bb 100644
+--- a/internal/db/schema_version.go
++++ b/internal/db/schema_version.go
+@@ -1,6 +1,11 @@
+ package db
+ 
+-import "context"
++import (
++	"context"
++	"errors"
++
++	"github.com/jackc/pgx/v5"
++)
+ 
+ // ExpectedSchemaVersion is the highest migration number the binary was built
+ // against. /readyz gates the pod out of Service rotation until the applied
+@@ -14,19 +19,27 @@ import "context"
+ const ExpectedSchemaVersion int64 = 133
+ 
+ // SchemaVersion returns the currently-applied golang-migrate schema version
+-// (max(version) in schema_migrations). It reports 0 — not an error — when the
+-// table does not exist yet or is empty (a fresh, pre-migration install), so the
+-// readiness probe treats "not migrated yet" as not-ready rather than errored.
+-func (d *DB) SchemaVersion(ctx context.Context) (int64, error) {
++// (the highest row in schema_migrations) along with that row's dirty flag. It
++// reports version=0, dirty=false — not an error — when the table does not exist
++// yet or is empty (a fresh, pre-migration install), so the readiness probe
++// treats "not migrated yet" as not-ready rather than errored.
++//
++// golang-migrate writes (version=N, dirty=true) BEFORE running migration N and
++// flips dirty=false only on success, so dirty=true means the latest migration is
++// in progress or crashed mid-DDL. The readiness probe must hold the pod out of
++// Service rotation in that state (it would otherwise serve traffic against a
++// half-applied schema).
++func (d *DB) SchemaVersion(ctx context.Context) (int64, bool, error) {
+ 	if d == nil || d.pool == nil {
+-		return 0, nil
++		return 0, false, nil
+ 	}
+ 	var version int64
+-	if err := d.pool.QueryRow(ctx, `SELECT COALESCE(max(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+-		if isUndefinedTable(err) {
+-			return 0, nil
++	var dirty bool
++	if err := d.pool.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version, &dirty); err != nil {
++		if isUndefinedTable(err) || errors.Is(err, pgx.ErrNoRows) {
++			return 0, false, nil
+ 		}
+-		return 0, err
++		return 0, false, err
+ 	}
+-	return version, nil
++	return version, dirty, nil
+ }
+diff --git a/internal/server/readiness.go b/internal/server/readiness.go
+index ad47615..1fccad1 100644
+--- a/internal/server/readiness.go
++++ b/internal/server/readiness.go
+@@ -19,7 +19,10 @@ type dbHealthChecker interface {
+ // binary's embedded ExpectedSchemaVersion (C-03). *db.DB implements it; the test
+ // fakes don't, so the gate only runs against the real database.
+ type schemaVersionChecker interface {
+-	SchemaVersion(ctx context.Context) (int64, error)
++	// SchemaVersion returns the applied schema version and the latest row's
++	// golang-migrate dirty flag. dirty=true means the newest migration is in
++	// progress or crashed mid-DDL, so the gate must treat it as not-ready.
++	SchemaVersion(ctx context.Context) (int64, bool, error)
+ }
+ 
+ // dbPoolSaturationReporter is an optional add-on to dbHealthChecker so the
+@@ -116,12 +119,22 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		// schema_migrations.version >= the version this binary was built against.
+ 		if sv, ok := h.db.(schemaVersionChecker); ok && h.expectedSchemaVersion > 0 {
+ 			ctx, cancel := context.WithTimeout(r.Context(), h.timeout)
+-			got, err := sv.SchemaVersion(ctx)
++			got, dirty, err := sv.SchemaVersion(ctx)
+ 			cancel()
+ 			switch {
+ 			case err != nil:
+ 				checks["schema_version"] = readinessCheck{OK: false, Error: err.Error()}
+ 				statusCode = http.StatusServiceUnavailable
++			case dirty:
++				// golang-migrate marks the row dirty BEFORE running the
++				// migration and clears it only on success, so dirty=true means
++				// the latest migration is mid-flight or crashed mid-DDL. Hold
++				// the pod out of rotation rather than serve a half-applied schema.
++				checks["schema_version"] = readinessCheck{
++					OK:    false,
++					Error: "schema migration in progress or failed (dirty)",
++				}
++				statusCode = http.StatusServiceUnavailable
+ 			case got < h.expectedSchemaVersion:
+ 				checks["schema_version"] = readinessCheck{
+ 					OK: false,
+diff --git a/internal/server/readiness_test.go b/internal/server/readiness_test.go
+index c74ab05..a5928bb 100644
+--- a/internal/server/readiness_test.go
++++ b/internal/server/readiness_test.go
+@@ -55,12 +55,13 @@ func TestReadinessHandlerOK(t *testing.T) {
+ // fakeDBSchema implements both Health and SchemaVersion so the C-03 gate runs.
+ type fakeDBSchema struct {
+ 	version int64
++	dirty   bool
+ 	err     error
+ }
+ 
+ func (f fakeDBSchema) Health(context.Context) error { return nil }
+-func (f fakeDBSchema) SchemaVersion(context.Context) (int64, error) {
+-	return f.version, f.err
++func (f fakeDBSchema) SchemaVersion(context.Context) (int64, bool, error) {
++	return f.version, f.dirty, f.err
+ }
+ 
+ // TestReadinessSchemaVersionGate (C-03): the pod stays out of rotation until the
+@@ -91,6 +92,28 @@ func TestReadinessSchemaVersionGate(t *testing.T) {
+ 			t.Fatalf("current schema should be ready, got %d", rec.Code)
+ 		}
+ 	})
++
++	// dirty=true at the expected version means the last migration is mid-flight
++	// or crashed mid-DDL: the pod must stay out of rotation even though
++	// version >= floor, so it never serves a half-applied schema.
++	t.Run("dirty at expected version 503s", func(t *testing.T) {
++		h := newReadinessHandler(fakeDBSchema{version: 131, dirty: true}, fakeQueuePing{}, fakeHubStatus{clusters: []string{"a"}})
++		h.expectedSchemaVersion = 131
++		rec := httptest.NewRecorder()
++		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
++		if rec.Code != http.StatusServiceUnavailable {
++			t.Fatalf("dirty schema should 503, got %d", rec.Code)
++		}
++		var body map[string]any
++		_ = json.NewDecoder(rec.Body).Decode(&body)
++		sv, ok := body["checks"].(map[string]any)["schema_version"].(map[string]any)
++		if !ok || sv["ok"] != false {
++			t.Fatalf("expected failing schema_version check, got %v", body["checks"])
++		}
++		if sv["error"] != "schema migration in progress or failed (dirty)" {
++			t.Fatalf("schema_version.error = %v, want dirty message", sv["error"])
++		}
++	})
+ }
+ 
+ func TestReadinessHandlerDependencyFailure(t *testing.T) {
