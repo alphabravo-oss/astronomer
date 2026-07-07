@@ -25,8 +25,10 @@ func (f fakePinger) Ping() error { return f.err }
 // readiness checks hit: 200 when Redis is reachable, 503 when the asynq ping
 // fails.
 func TestWorkerHealthz_C02(t *testing.T) {
+	discardLog := slog.New(slog.NewTextHandler(io.Discard, nil))
+
 	t.Run("healthy", func(t *testing.T) {
-		srv := httptest.NewServer(newWorkerMux(fakePinger{}))
+		srv := httptest.NewServer(newWorkerMux(fakePinger{}, discardLog))
 		defer srv.Close()
 		resp, err := http.Get(srv.URL + "/healthz")
 		if err != nil {
@@ -39,7 +41,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 	})
 
 	t.Run("redis_down", func(t *testing.T) {
-		srv := httptest.NewServer(newWorkerMux(fakePinger{err: errors.New("dial tcp: connection refused")}))
+		srv := httptest.NewServer(newWorkerMux(fakePinger{err: errors.New("dial tcp: connection refused")}, discardLog))
 		defer srv.Close()
 		resp, err := http.Get(srv.URL + "/healthz")
 		if err != nil {
@@ -48,6 +50,32 @@ func TestWorkerHealthz_C02(t *testing.T) {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("redis-down /healthz = %d, want 503", resp.StatusCode)
+		}
+	})
+
+	// The /healthz probe is unauthenticated, so the 503 body must not leak the
+	// Redis host:port embedded in the asynq ping error.
+	t.Run("redis_down_does_not_leak_address", func(t *testing.T) {
+		const sentinel = "redis-master.astronomer.svc.cluster.local:6379"
+		srv := httptest.NewServer(newWorkerMux(
+			fakePinger{err: errors.New("dial tcp " + sentinel + ": connection refused")},
+			discardLog,
+		))
+		defer srv.Close()
+		resp, err := http.Get(srv.URL + "/healthz")
+		if err != nil {
+			t.Fatalf("get /healthz: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("redis-down /healthz = %d, want 503", resp.StatusCode)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if strings.Contains(string(body), sentinel) {
+			t.Fatalf("503 body leaked redis address %q: %s", sentinel, body)
 		}
 	})
 }
