@@ -10,7 +10,26 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+// podFrameNamespace extracts metadata.namespace from a raw pod-watch object,
+// returning "" when the object is absent, unparseable, or carries no namespace.
+// Used to confine a namespace-scoped watcher to its authorized allow-set.
+func podFrameNamespace(obj json.RawMessage) string {
+	if len(obj) == 0 {
+		return ""
+	}
+	var meta struct {
+		Metadata struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(obj, &meta); err != nil {
+		return ""
+	}
+	return meta.Metadata.Namespace
+}
 
 // PodWatchEvent is one Kubernetes watch event for a pod: the watch verb
 // (ADDED/MODIFIED/DELETED/BOOKMARK/ERROR) plus the raw pod object JSON exactly
@@ -67,6 +86,20 @@ func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// F7: namespace-scoped tenants are admitted by the LIST route gate (which
+	// only proves they hold pods:read in ≥1 namespace, or the specific namespace
+	// they pinned). The upstream watch, however, is opened cluster-wide when no
+	// namespace is pinned, so we must filter emitted frames down to the caller's
+	// authorized namespaces before forwarding — the same gate+filter invariant
+	// ListPods relies on. `all==true` (feature flag off, superuser, or a
+	// cluster-wide grant) forwards everything unfiltered; `!all` is a strict
+	// fail-closed allow-list.
+	all, allowed, err := h.authz.authorizedNamespaces(r.Context(), parseClusterUUID(clusterID), rbac.ResourcePods, rbac.VerbRead)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+
 	events, err := h.podWatcher.WatchPods(r.Context(), clusterID, namespace)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
@@ -100,6 +133,20 @@ func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
 			}
 			if ev.Type == "" {
 				continue
+			}
+			// Namespace-scoped caller: drop any frame whose pod is outside the
+			// authorized allow-set (fail closed — a frame with a missing/empty
+			// namespace is dropped, matching filterItemsByNamespaceKey). A frame
+			// carrying no object (e.g. a bare ERROR) has no namespace to prove
+			// ownership of, so it is also dropped for a restricted caller.
+			if !all {
+				ns := podFrameNamespace(ev.Object)
+				if ns == "" {
+					continue
+				}
+				if _, ok := allowed[ns]; !ok {
+					continue
+				}
 			}
 			// data is the pod object JSON; "null" when the watch frame
 			// carried no object (e.g. ERROR/BOOKMARK without one).

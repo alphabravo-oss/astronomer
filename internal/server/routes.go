@@ -1017,9 +1017,19 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// (same contract as the event/registration SSE streams above). Auth is
 		// a one-use stream ticket (scoped to the cluster) or a normal token,
 		// plus the pods:read RBAC gate.
+		//
+		// F7: use the namespace-scoped LIST gate instead of the cluster-wide
+		// requirePermission so a namespace-confined tenant can open the watch for
+		// a namespace they own (or a bare watch when they hold pods:read in ≥1
+		// namespace). With namespace_scoped_rbac_enabled OFF this is byte-identical
+		// to requirePermission(pods, read) — no behavior change. The admission is
+		// paired with per-frame filtering in WatchPods (same gate+filter invariant
+		// as ListPods) so an admitted scoped caller never receives frames for a
+		// namespace outside their allow-set; a cluster-wide/superuser caller passes
+		// the plain check and watches everything unfiltered.
 		r.With(
 			requireStreamTicketOrAuth(deps.JWT, deps.AuthQueries, deps.StreamTicketStore, iauth.StreamKindLogs, "cluster_id"),
-			requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbRead),
+			requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbRead, deps.NamespaceScopedRBAC),
 		).Get("/api/v1/clusters/{cluster_id}/pods/watch/", deps.Workloads.WatchPods)
 	}
 	if deps.RemoteServer != nil {
