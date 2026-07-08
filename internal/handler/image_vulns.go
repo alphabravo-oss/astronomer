@@ -112,7 +112,7 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	if limit <= 0 || limit > 200 {
 		limit = 20
 	}
@@ -177,7 +177,7 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 		return
 	}
 	severity := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("severity")))
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
@@ -353,7 +353,7 @@ func (h *ImageVulnHandler) FleetSummary(w http.ResponseWriter, r *http.Request) 
 // FleetTopClusters handles GET /api/v1/security/vulnerabilities/top-clusters/.
 // Returns the N worst clusters by critical+high.
 func (h *ImageVulnHandler) FleetTopClusters(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 10))
+	limit := int32(queryLimit(r, 10))
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}

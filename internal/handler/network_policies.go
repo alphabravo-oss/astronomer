@@ -242,7 +242,7 @@ func validateNamespace(ns string) error {
 // ListTemplates handles GET /api/v1/admin/network-policy-templates/.
 func (h *NetworkPolicyHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	items, err := h.queries.ListNetworkPolicyTemplates(r.Context(), sqlc.ListNetworkPolicyTemplatesParams{
-		Limit:  int32(queryInt(r, "limit", 50)),
+		Limit:  int32(queryLimit(r, 50)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {

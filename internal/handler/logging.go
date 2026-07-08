@@ -282,7 +282,7 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	outputs, err := h.queries.ListOutputsByCluster(r.Context(), sqlc.ListOutputsByClusterParams{
@@ -492,7 +492,7 @@ func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	pipelines, err := h.queries.ListPipelinesByCluster(r.Context(), sqlc.ListPipelinesByClusterParams{
@@ -910,7 +910,7 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 
 // ListOperations handles GET /api/v1/logging/operations/.
 func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	offset := int32(queryInt(r, "offset", 0))
 	arg := sqlc.ListLoggingOperationsParams{Limit: limit, Offset: offset}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {

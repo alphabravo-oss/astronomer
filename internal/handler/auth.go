@@ -1551,7 +1551,7 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	tokens, err := h.tokens.ListTokensByUser(r.Context(), sqlc.ListTokensByUserParams{

@@ -331,7 +331,7 @@ func validateTemplateSpec(raw json.RawMessage) error {
 // List handles GET /api/v1/cluster-templates/.
 func (h *ClusterTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	items, err := h.queries.ListClusterTemplates(r.Context(), sqlc.ListClusterTemplatesParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {

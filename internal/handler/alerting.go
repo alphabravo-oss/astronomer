@@ -183,7 +183,7 @@ type InhibitionRequest struct {
 
 // ListChannels handles GET /api/v1/alerting/channels/.
 func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	channels, err := h.queries.ListNotificationChannels(r.Context(), sqlc.ListNotificationChannelsParams{
@@ -403,7 +403,7 @@ func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) 
 
 // ListRules handles GET /api/v1/alerting/rules/.
 func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	rules, err := h.queries.ListAlertRules(r.Context(), sqlc.ListAlertRulesParams{
@@ -581,7 +581,7 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 
 // ListEvents handles GET /api/v1/alerting/events/.
 func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	// Filters are pushed into SQL so pagination totals are correct across
@@ -696,7 +696,7 @@ func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
 
 // ListSilences handles GET /api/v1/alerting/silences/.
 func (h *AlertingHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	silences, err := h.queries.ListAlertSilences(r.Context(), sqlc.ListAlertSilencesParams{
@@ -884,7 +884,7 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 
 // ListInhibitions handles GET /api/v1/admin/alerting/inhibitions/.
 func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	offset := int32(queryInt(r, "offset", 0))
 
 	inhibitions, err := h.queries.ListAlertInhibitions(r.Context(), sqlc.ListAlertInhibitionsParams{

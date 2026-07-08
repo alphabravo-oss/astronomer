@@ -229,7 +229,7 @@ func (h *CatalogHandler) runReconciler(ctx context.Context) {
 // neither is set, the legacy "global list" behaviour is preserved
 // verbatim — no semantic change for existing callers.
 func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
@@ -725,7 +725,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 // Migration 071: also accepts ?tag= to filter on helm_chart_tags (used by
 // the service-mesh tab "Install" deep-link).
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
 
@@ -831,7 +831,7 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")
 		return
 	}
-	limit := queryInt(r, "limit", 50)
+	limit := queryLimit(r, 50)
 	offset := queryInt(r, "offset", 0)
 	versions, err := h.queries.ListChartVersions(r.Context(), sqlc.ListChartVersionsParams{
 		ChartID: chartID,
@@ -863,7 +863,7 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	installations, err := h.queries.ListInstalledChartsByCluster(r.Context(), sqlc.ListInstalledChartsByClusterParams{
@@ -1081,7 +1081,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	}
 
 	rows, err := h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -1106,7 +1106,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	}
 	// TODO(total): list is RBAC-filtered in-Go; no COUNT matches the visible
 	// set, so use the post-filter page length.
-	limit := queryInt(r, "limit", 20)
+	limit := queryLimit(r, 20)
 	offset := queryInt(r, "offset", 0)
 	RespondList(w, items, NewPagination(len(items), limit, offset, len(items)))
 }
@@ -1496,7 +1496,7 @@ func (h *CatalogHandler) resolveChartVersion(r *http.Request, chart sqlc.HelmCha
 }
 
 func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
-	limit := queryInt(r, "limit", 50)
+	limit := queryLimit(r, 50)
 	offset := queryInt(r, "offset", 0)
 	arg := sqlc.ListCatalogOperationsParams{Limit: int32(limit), Offset: int32(offset)}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {

@@ -197,7 +197,7 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	fieldSelector := strings.TrimSpace(q.Get("field"))
 	nameFilter := strings.ToLower(strings.TrimSpace(q.Get("name")))
 
-	limit := queryInt(r, "limit", resourcesSearchDefaultLimit)
+	limit := queryLimit(r, resourcesSearchDefaultLimit)
 	if limit <= 0 {
 		limit = resourcesSearchDefaultLimit
 	}

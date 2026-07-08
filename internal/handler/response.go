@@ -103,6 +103,36 @@ func queryBool(r *http.Request, key string) bool {
 	}
 }
 
+// defaultLimitCap is the hard upper bound applied to a client-supplied ?limit
+// on ordinary list endpoints. It prevents ?limit=10000000 from materializing a
+// whole table into memory (a cheap DoS / memory-amplification lever). Endpoints
+// over the largest tables that legitimately page wider use queryLimitMax.
+const defaultLimitCap = 200
+
+// queryLimit parses the "limit" query param and clamps it to [1, defaultLimitCap],
+// falling back to defaultLimit when missing/unparseable/<1. Use it instead of a
+// raw queryInt(r, "limit", …) at any endpoint whose limit reaches SQL, so a
+// hostile ?limit cannot amplify memory/DB load. A contract test enforces this.
+func queryLimit(r *http.Request, defaultLimit int) int {
+	return queryLimitMax(r, defaultLimit, defaultLimitCap)
+}
+
+// queryLimitMax is queryLimit with a caller-chosen ceiling, for endpoints over
+// large tables (e.g. audit) that page wider than the default cap by design.
+func queryLimitMax(r *http.Request, defaultLimit, max int) int {
+	limit := queryInt(r, "limit", defaultLimit)
+	if limit < 1 {
+		limit = defaultLimit
+	}
+	if limit > max {
+		limit = max
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	return limit
+}
+
 // queryLimitOffset parses the "limit"/"offset" pagination query params, clamping
 // limit to [1, 200] (falling back to defaultLimit when missing, unparseable, or
 // < 1) and offset to >= 0.

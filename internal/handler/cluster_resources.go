@@ -415,7 +415,7 @@ func mirrorDecodeStringMap(b []byte) map[string]string {
 // in size (one row per (cluster, kind, namespace, name)) so a full read
 // is fine.
 func paginate[T any](items []T, r *http.Request) []T {
-	limit := queryInt(r, "limit", 20)
+	limit := queryLimit(r, 20)
 	offset := queryInt(r, "offset", 0)
 	if offset >= len(items) {
 		return []T{}

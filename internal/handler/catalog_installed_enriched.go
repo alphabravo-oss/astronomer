@@ -38,7 +38,7 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}

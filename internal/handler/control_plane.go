@@ -167,7 +167,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 
 func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	arg := sqlc.ListControlPlaneAlertsParams{
-		Limit:  int32(queryInt(r, "limit", 50)),
+		Limit:  int32(queryLimit(r, 50)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	}
 	if status := r.URL.Query().Get("status"); status != "" {
@@ -214,7 +214,7 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 
 func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 	items, err := h.queries.ListControlPlaneSilences(r.Context(), sqlc.ListControlPlaneSilencesParams{
-		Limit:  int32(queryInt(r, "limit", 50)),
+		Limit:  int32(queryLimit(r, 50)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -228,7 +228,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 	// No COUNT query is exposed for control-plane silences, so the page
 	// length stands in as the total. // TODO(total): add a
 	// CountControlPlaneSilences query.
-	RespondList(w, resp, NewPagination(len(resp), queryInt(r, "limit", 50), queryInt(r, "offset", 0), len(resp)))
+	RespondList(w, resp, NewPagination(len(resp), queryLimit(r, 50), queryInt(r, "offset", 0), len(resp)))
 }
 
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {

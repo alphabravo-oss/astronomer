@@ -823,7 +823,7 @@ func (h *ResourceHandler) DeleteSSOProvider(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
-	limit := queryInt(r, "limit", 20)
+	limit := queryLimit(r, 20)
 	if h.queries == nil {
 		RespondList(w, []any{}, NewPagination(0, limit, 0, 0))
 		return
@@ -859,7 +859,7 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -905,7 +905,7 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	users, err := h.queries.ListUsers(r.Context(), sqlc.ListUsersParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {

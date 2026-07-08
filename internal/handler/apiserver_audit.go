@@ -260,7 +260,7 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimitMax(r, 50, 500))
 	if limit < 1 {
 		limit = 50
 	}

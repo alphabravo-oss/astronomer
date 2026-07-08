@@ -283,10 +283,10 @@ func (h *MonitoringHandler) StartReconciler(ctx context.Context) {
 
 func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondList(w, []any{}, NewPagination(0, queryInt(r, "limit", 50), queryInt(r, "offset", 0), 0))
+		RespondList(w, []any{}, NewPagination(0, queryLimit(r, 50), queryInt(r, "offset", 0), 0))
 		return
 	}
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	offset := int32(queryInt(r, "offset", 0))
 	arg := sqlc.ListMonitoringOperationsParams{
 		Limit:  limit,

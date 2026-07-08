@@ -402,7 +402,7 @@ func supportsFilteredAudit(q auditReaderV1) bool {
 }
 
 func auditQueryLimit(r *http.Request) int32 {
-	limit := queryInt(r, "limit", queryInt(r, "pageSize", queryInt(r, "page_size", 20)))
+	limit := queryLimitMax(r, queryInt(r, "pageSize", queryInt(r, "page_size", 20)), 500)
 	if limit < 1 {
 		limit = 20
 	}

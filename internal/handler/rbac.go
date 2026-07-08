@@ -182,7 +182,7 @@ type roleBindingRequest struct {
 }
 
 func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListGlobalRoles(r.Context(), sqlc.ListGlobalRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
@@ -281,7 +281,7 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListClusterRoles(r.Context(), sqlc.ListClusterRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
@@ -380,7 +380,7 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListProjectRoles(r.Context(), sqlc.ListProjectRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
@@ -479,7 +479,7 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	items, err := h.queries.ListGlobalRoleBindings(r.Context(), sqlc.ListGlobalRoleBindingsParams{Limit: limit, Offset: offset})
 	if err != nil {
@@ -550,7 +550,7 @@ func (h *RBACHandler) DeleteGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 }
 
 func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	clusterID := r.URL.Query().Get("cluster_id")
 	var (
@@ -651,7 +651,7 @@ func (h *RBACHandler) DeleteClusterRoleBinding(w http.ResponseWriter, r *http.Re
 }
 
 func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	projectID := r.URL.Query().Get("project_id")
 	var (

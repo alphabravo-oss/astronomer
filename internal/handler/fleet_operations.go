@@ -348,7 +348,7 @@ func (h *FleetOperationHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := h.queries.ListFleetOperations(r.Context(), sqlc.ListFleetOperationsParams{
 		Status:      status,
-		QueryLimit:  int32(queryInt(r, "limit", 20)),
+		QueryLimit:  int32(queryLimit(r, 20)),
 		QueryOffset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -463,7 +463,7 @@ func (h *FleetOperationHandler) ListTargets(w http.ResponseWriter, r *http.Reque
 	}
 	items, err := h.queries.ListFleetOperationTargets(r.Context(), sqlc.ListFleetOperationTargetsParams{
 		OperationID: id,
-		QueryLimit:  int32(queryInt(r, "limit", 50)),
+		QueryLimit:  int32(queryLimit(r, 50)),
 		QueryOffset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {

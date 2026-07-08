@@ -321,7 +321,7 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	if limit <= 0 || limit > 100 {
 		limit = 20
@@ -498,7 +498,7 @@ func (h *ChartRatingsHandler) DeleteRating(w http.ResponseWriter, r *http.Reques
 
 // PopularRecommendations handles GET /catalog/recommendations/popular/.
 func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *http.Request) {
-	limit := queryInt(r, "limit", 6)
+	limit := queryLimit(r, 6)
 	if limit <= 0 || limit > 50 {
 		limit = 6
 	}
@@ -519,7 +519,7 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
-	limit := queryInt(r, "limit", 5)
+	limit := queryLimit(r, 5)
 	if limit <= 0 || limit > 20 {
 		limit = 5
 	}

@@ -223,7 +223,7 @@ type CreateTemplateRequest struct {
 
 // ListTemplates handles GET /api/v1/security/templates/.
 func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	templates, err := h.queries.ListPodSecurityTemplates(r.Context(), sqlc.ListPodSecurityTemplatesParams{
@@ -414,7 +414,7 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	scans, err := h.queries.ListScansByCluster(r.Context(), sqlc.ListScansByClusterParams{
@@ -456,7 +456,7 @@ func (h *SecurityHandler) GetScan(w http.ResponseWriter, r *http.Request) {
 // ListPolicies handles GET /api/v1/security/policies/.
 func (h *SecurityHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 	policies, err := h.queries.ListClusterSecurityPolicies(r.Context(), sqlc.ListClusterSecurityPoliciesParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -544,7 +544,7 @@ func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 // ListAllScans handles GET /api/v1/security/scans/.
 func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
 	scans, err := h.queries.ListSecurityScanResults(r.Context(), sqlc.ListSecurityScanResultsParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {

@@ -333,7 +333,7 @@ func (h *ArgoCDHandler) runReconciler(ctx context.Context) {
 
 // ListInstances handles GET /api/v1/argocd/instances/.
 func (h *ArgoCDHandler) ListInstances(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	instances, err := h.queries.ListArgoCDInstances(r.Context(), sqlc.ListArgoCDInstancesParams{
@@ -541,7 +541,7 @@ func (h *ArgoCDHandler) ListAppsByInstance(w http.ResponseWriter, r *http.Reques
 	}
 	instanceID := instance.ID
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	apps, err := h.queries.ListAppsByInstance(r.Context(), sqlc.ListAppsByInstanceParams{
@@ -565,7 +565,7 @@ func (h *ArgoCDHandler) ListAppsByInstance(w http.ResponseWriter, r *http.Reques
 
 // ListAllApps handles GET /api/v1/argocd/apps/.
 func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	apps, err := h.queries.ListArgoCDApplications(r.Context(), sqlc.ListArgoCDApplicationsParams{
@@ -907,7 +907,7 @@ func (h *ArgoCDHandler) SyncAppByName(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	offset := int32(queryInt(r, "offset", 0))
 	arg := sqlc.ListArgoCDOperationsParams{Limit: limit, Offset: offset}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {

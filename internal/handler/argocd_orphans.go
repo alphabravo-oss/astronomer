@@ -63,7 +63,7 @@ func (h *ArgoCDHandler) InstanceOrphanReport(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 1000))
+	limit := int32(queryLimit(r, 1000))
 	if limit <= 0 {
 		limit = 1000
 	}

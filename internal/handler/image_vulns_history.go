@@ -70,7 +70,7 @@ func (h *ImageVulnHandler) ClusterHistory(w http.ResponseWriter, r *http.Request
 	if hoursBack <= 0 || hoursBack > 24*365 {
 		hoursBack = 24 * 30
 	}
-	limit := int32(queryInt(r, "limit", 200))
+	limit := int32(queryLimit(r, 200))
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
@@ -265,7 +265,7 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 100))
+	limit := int32(queryLimit(r, 100))
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}

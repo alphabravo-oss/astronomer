@@ -469,7 +469,7 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	}
 	charts, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
 		RepositoryID: catalogID,
-		Limit:        int32(queryInt(r, "limit", 100)),
+		Limit:        int32(queryLimit(r, 100)),
 		Offset:       int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -479,7 +479,7 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	// ListChartsByRepository is limit/offset paged but no COUNT query is
 	// exposed for it, so has_more is inferred from a full page.
 	// // TODO(total): add a CountChartsByRepository query.
-	limit := queryInt(r, "limit", 100)
+	limit := queryLimit(r, 100)
 	offset := queryInt(r, "offset", 0)
 	RespondList(w, charts, NewPaginationFromPage(limit, offset, len(charts)))
 }

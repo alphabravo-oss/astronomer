@@ -256,7 +256,7 @@ func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	configs, err := h.queries.ListBackupStorageConfigs(r.Context(), sqlc.ListBackupStorageConfigsParams{
@@ -560,7 +560,7 @@ func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	backups, err := h.queries.ListBackups(r.Context(), sqlc.ListBackupsParams{
@@ -723,7 +723,7 @@ func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	schedules, err := h.queries.ListBackupSchedules(r.Context(), sqlc.ListBackupSchedulesParams{
@@ -1164,7 +1164,7 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	restores, err := h.queries.ListRestoreOperations(r.Context(), sqlc.ListRestoreOperationsParams{

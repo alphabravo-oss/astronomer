@@ -136,9 +136,17 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				statusCode = http.StatusServiceUnavailable
 			case got < h.expectedSchemaVersion:
+				// This is transient DURING an upgrade (migrations still running).
+				// If it PERSISTS after the migrate Job/init has completed, the
+				// cause is a version skew — the migrate image is older than the
+				// server image and lacks the migrations this binary requires (a
+				// "never applies" state, not "not yet"). The message names both so
+				// a stuck pod is diagnosable without reading code. See F1 in
+				// plans/production-readiness.md for the chart-level guard.
 				checks["schema_version"] = readinessCheck{
 					OK: false,
-					Error: fmt.Sprintf("applied schema version %d < required %d (migrations not yet applied)",
+					Error: fmt.Sprintf("applied schema version %d < required %d: migrations not yet applied "+
+						"(if persistent after the migrate job completes, the migrate image is behind the server image)",
 						got, h.expectedSchemaVersion),
 				}
 				statusCode = http.StatusServiceUnavailable

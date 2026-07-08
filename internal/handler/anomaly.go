@@ -98,7 +98,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
-	limit := int32(queryInt(r, "limit", 50))
+	limit := int32(queryLimit(r, 50))
 	offset := int32(queryInt(r, "offset", 0))
 	rows, err := h.queries.ListAnomalyBaselines(r.Context(), sqlc.ListAnomalyBaselinesParams{
 		Limit:  limit,

@@ -316,7 +316,7 @@ func (h *AgentFleetHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 100))
+	limit := int32(queryLimit(r, 100))
 	offset := int32(queryInt(r, "offset", 0))
 	if limit <= 0 {
 		limit = 100
@@ -867,7 +867,7 @@ func (h *AgentFleetHandler) Operations(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 	if limit <= 0 {
 		limit = 20

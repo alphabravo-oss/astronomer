@@ -347,7 +347,7 @@ func (h *ToolHandler) runReconciler(ctx context.Context) {
 
 func (h *ToolHandler) List(w http.ResponseWriter, r *http.Request) {
 	tools, err := h.queries.ListClusterTools(r.Context(), sqlc.ListClusterToolsParams{
-		Limit:  int32(queryInt(r, "limit", 20)),
+		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryInt(r, "offset", 0)),
 	})
 	if err != nil {
@@ -716,7 +716,7 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
-	limit := queryInt(r, "limit", 50)
+	limit := queryLimit(r, 50)
 	offset := queryInt(r, "offset", 0)
 	arg := sqlc.ListToolOperationsParams{Limit: int32(limit), Offset: int32(offset)}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {

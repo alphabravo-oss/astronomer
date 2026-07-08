@@ -418,7 +418,7 @@ func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := queryInt(r, "limit", 100)
+	limit := queryLimit(r, 100)
 	offset := queryInt(r, "offset", 0)
 	if limit < 1 {
 		limit = 100

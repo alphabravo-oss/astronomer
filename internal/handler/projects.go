@@ -441,7 +441,7 @@ type UpdateProjectPolicyRequest struct {
 
 // List handles GET /api/v1/projects/.
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	projects, err := h.queries.ListProjects(r.Context(), sqlc.ListProjectsParams{
@@ -1141,7 +1141,7 @@ func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryInt(r, "limit", 20))
+	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
 	projects, err := h.queries.ListProjectsByCluster(r.Context(), sqlc.ListProjectsByClusterParams{
