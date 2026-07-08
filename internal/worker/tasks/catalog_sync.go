@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // catalogMaxVersionsPerChart caps how many recent versions we ingest per chart.
@@ -75,7 +76,7 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 			if err != nil {
 				return err
 			}
-			indexFile, err := fetchRepositoryIndex(ctx, runtimeHTTPClient(), indexURL, repoRecord.Url)
+			indexFile, err := fetchRepositoryIndex(ctx, httpclient.SafeClient(catalogFetchTimeout), indexURL, repoRecord.Url)
 			if err != nil {
 				return err
 			}
@@ -97,6 +98,13 @@ const catalogFetchTimeout = 30 * time.Second
 func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL, repositoryURL string) (*repo.IndexFile, error) {
 	fetchCtx, cancel := context.WithTimeout(ctx, catalogFetchTimeout)
 	defer cancel()
+	// SSRF guard: the repository URL is operator/DB-supplied and fetched
+	// server-side, so refuse loopback/internal/metadata targets. GuardPublicHost
+	// is the cheap pre-check; the caller passes a SafeClient whose dialer
+	// re-validates the connected IP to close the DNS-rebinding window.
+	if err := httpclient.GuardPublicHost(indexURL); err != nil {
+		return nil, fmt.Errorf("catalog repository host is not a permitted public address")
+	}
 	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, indexURL, nil)
 	if err != nil {
 		return nil, err
@@ -259,11 +267,16 @@ func fetchChartAssets(ctx context.Context, repositoryURL string, urls []string) 
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, catalogFetchTimeout)
 	defer cancel()
+	// SSRF guard on the operator/DB-supplied chart URL (same rationale as the
+	// index fetch): pre-check the host, dial through the rebind-safe client.
+	if err := httpclient.GuardPublicHost(chartURL); err != nil {
+		return "", emptySchema, ""
+	}
 	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, chartURL, nil)
 	if err != nil {
 		return "", emptySchema, ""
 	}
-	resp, err := runtimeHTTPClient().Do(req)
+	resp, err := httpclient.SafeClient(catalogFetchTimeout).Do(req)
 	if err != nil {
 		return "", emptySchema, ""
 	}

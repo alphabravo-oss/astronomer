@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -169,6 +170,11 @@ func Reconcile(ctx context.Context, store BlessedStore, doc *CatalogDoc) error {
 func Load(ctx context.Context, store BlessedStore, client *http.Client, url string) (int, error) {
 	if strings.TrimSpace(url) == "" {
 		return 0, nil
+	}
+	// SSRF guard: the blessed-catalog URL is operator-supplied and fetched
+	// server-side; refuse loopback/internal/metadata targets before dialing.
+	if err := httpclient.GuardPublicHost(url); err != nil {
+		return 0, fmt.Errorf("blessed catalog host is not a permitted public address")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

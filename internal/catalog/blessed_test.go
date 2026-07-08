@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 type fakeBlessedStore struct {
@@ -39,6 +40,9 @@ entries:
 `
 
 func TestLoad_FetchParseReconcile(t *testing.T) {
+	// The blessed-catalog fetch is now SSRF-guarded; the test server is on
+	// loopback, so disable the guard for this test (production keeps it on).
+	defer httpclient.DisableGuardForTest()()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(goodCatalog))
 	}))
