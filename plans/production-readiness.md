@@ -34,6 +34,37 @@ the live-watch fix.
 
 ---
 
+## 1b. Phase 0 status (updated 2026-07-08)
+
+All Phase 0 code/chart fixes are **implemented, gate-verified, and committed to main**
+(adversarially reviewed; one regression the review caught was fixed before commit).
+
+| Fix | Status | Notes |
+|---|---|---|
+| **F1** server↔migrate coupling | ✅ Done | helm render fails on a server/migrate tag skew (+ deploy render tests) |
+| **F2** catalog sync SSRF | ✅ Done | guard added to catalog_sync + blessed fetches |
+| **F3** DNS-rebinding | ✅ Done | new `httpclient.SafeClient` re-checks the dialed IP |
+| **F4** backup keys + drill decrypt | ✅ Done | opt-in wrapped key backup + decrypt-or-fail drill |
+| **F5** `?limit` clamp | ✅ Done | ~70 sites swept to `queryLimit`; contract test blocks new ones |
+| **F6** worker sweeps | ✅ Done | fan-out + deadlines; **mesh:detect was inert — fixed**; false-resolve regression guarded |
+| **F7** live-watch ns-scope | ⚠️ Partial | typed `/pods/watch/` SSE now tenant-safe, BUT see follow-up ★ |
+| **F8** bootstrap-secret | ✅ Done | render fails on unpinned prod GitOps password |
+| **F8** readyz pending-vs-never | ✅ Done | 503 message now names the skew cause |
+| **F8** RBAC cache stampede | ⏳ Deferred | targeted invalidation — security-sensitive, own pass |
+| **F8** impersonation dead code | ⏳ Deferred | cosmetic; fold in with the cache fix |
+
+**★ New follow-up (F7-b, HIGH):** fixing `WatchPods` secured the typed SSE, but the
+**browser** live view drives the *raw k8s-proxy watch* (`/k8s/{path}?watch=true`), which
+still fails closed for namespace-scoped tenants (`routes.go:1339`). To make the tenant
+live view actually update, either namespace-filter the raw-proxy watch stream
+(`internal/tunnel` `WithNamespaceFilter` path) **or** switch the frontend pod live view to
+consume the now-scoped `/pods/watch/` SSE. Do this before flipping the ns-RBAC default.
+
+**Confirmed:** the `mesh:detect` open question — it *was* inert (gated on `status='healthy'`
+which no writer sets); F6 fixed it to select active clusters.
+
+---
+
 ## 2. Infra to provision
 
 Tiered so you only spin up what a given phase needs. "Fake agents" = a small Go generator
