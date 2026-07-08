@@ -13,6 +13,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/google/uuid"
 
@@ -38,6 +39,13 @@ func NewAlertEvaluationTask(payload AlertEvaluationPayload) (*asynq.Task, error)
 // HandleAlertEvaluation evaluates all enabled alert rules against current metrics.
 func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, "alert:evaluate", func() error {
+		// F6: bound the whole tick so an interval overrun can't run for many
+		// minutes while the scheduler keeps enqueuing on top of it. Shorter
+		// than the 60s cadence so a stuck sweep is abandoned before the next
+		// tick; the per-cluster PromQL fan-out below adds its own timeout.
+		ctx, cancel := context.WithTimeout(ctx, alertEvalSweepDeadline)
+		defer cancel()
+
 		var p AlertEvaluationPayload
 		if len(t.Payload()) > 0 {
 			if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -469,41 +477,47 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 	// GetClusterHealthStatus per rule (G full-fleet scans + G×C point reads)
 	// was pure redundancy. When fleet is nil (defensive: caller couldn't build
 	// it) fall back to paging the fleet inline so behavior is preserved.
-	evaluations := make([]ruleClusterEval, 0)
+	var evaluations []ruleClusterEval
+	var allFailed bool
 	if fleet != nil {
-		for _, cluster := range fleet.clusters {
-			eval, err := evaluateGlobalClusterRow(ctx, rule, config, cluster, fleet.health[cluster.ID], fleet.known[cluster.ID])
-			if err != nil {
-				return nil, err
-			}
-			evaluations = append(evaluations, eval)
-		}
+		evaluations, allFailed = evaluateGlobalRuleClusters(ctx, rule, config, fleet.clusters,
+			func(_ context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
+				return fleet.health[c.ID], fleet.known[c.ID]
+			})
 	} else {
+		// Defensive fallback: caller couldn't build the shared snapshot, so page
+		// the fleet inline, then fan out the per-cluster evaluation the same way.
+		var clusters []sqlc.Cluster
 		for offset := int32(0); ; offset += alertEvalSweepPageSize {
-			clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+			page, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
 			if err != nil {
 				return nil, err
 			}
-			if len(clusters) == 0 {
+			if len(page) == 0 {
 				break
 			}
-			for _, cluster := range clusters {
-				health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
-				eval, evalErr := evaluateGlobalClusterRow(ctx, rule, config, cluster, health, healthErr == nil)
-				if evalErr != nil {
-					return nil, evalErr
-				}
-				evaluations = append(evaluations, eval)
-			}
-			if int32(len(clusters)) < alertEvalSweepPageSize {
+			clusters = append(clusters, page...)
+			if int32(len(page)) < alertEvalSweepPageSize {
 				break
 			}
 		}
+		evaluations, allFailed = evaluateGlobalRuleClusters(ctx, rule, config, clusters,
+			func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
+				health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, c.ID)
+				return health, healthErr == nil
+			})
 	}
-	// No clusters: emit a single non-triggering, cluster-less evaluation so
-	// any stale active events for this rule still resolve (preserves the old
-	// "resolve everything when nothing triggers" behavior).
 	if len(evaluations) == 0 {
+		// Non-empty fleet where every cluster errored/timed out: fail the tick
+		// (matching the pre-F6 serial behavior of returning on the first error)
+		// rather than emit the resolve-all sentinel, which would false-resolve
+		// every firing alert on a fleet-wide monitoring outage.
+		if allFailed {
+			return nil, fmt.Errorf("alert rule %s: all clusters failed global evaluation this tick", rule.ID)
+		}
+		// Genuinely no clusters: emit a single non-triggering, cluster-less
+		// evaluation so stale active events for this rule still resolve
+		// (preserves the old "resolve everything when nothing triggers" behavior).
 		return []ruleClusterEval{{}}, nil
 	}
 	return evaluations, nil
@@ -534,6 +548,77 @@ func evaluateGlobalClusterRow(ctx context.Context, rule sqlc.AlertRule, config m
 		return ruleClusterEval{}, evalErr
 	}
 	return ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID}, nil
+}
+
+// alertEvalSweepDeadline caps the whole alert tick; alertEvalPerClusterTimeout
+// caps a single global-rule cluster evaluation (its PromQL round-trip to the
+// monitoring backend). The aggregate deadline is under the 60s cadence so a
+// stuck tick is abandoned before the next one.
+const (
+	alertEvalSweepDeadline     = 50 * time.Second
+	alertEvalPerClusterTimeout = 10 * time.Second
+)
+
+// evaluateGlobalRuleClusters evaluates a global (cluster-less) rule against
+// every cluster with bounded concurrency + a per-cluster timeout. Historically
+// this ran SERIALLY: a global PromQL rule issued C monitoring-backend
+// round-trips end-to-end, blowing the 60s tick at fleet scale, and a single
+// slow/disconnected backend stalled (or, on error, aborted) the whole tick.
+//
+// F6: fan out at fleetSweepConcurrency, time-box each cluster, and
+// skip-with-log a cluster whose evaluation errors or times out — its events
+// converge on the next tick — rather than failing the sweep. Results are
+// written into a pre-sized slice by index (each goroutine owns its slot, no
+// lock needed) so cluster order is preserved and the two-pass inhibition logic
+// downstream is unaffected. The DB-writing dispatch pass stays serial in the
+// caller, so alert outcomes are unchanged.
+func evaluateGlobalRuleClusters(
+	ctx context.Context,
+	rule sqlc.AlertRule,
+	config map[string]any,
+	clusters []sqlc.Cluster,
+	healthFor func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool),
+) ([]ruleClusterEval, bool) {
+	results := make([]ruleClusterEval, len(clusters))
+	ok := make([]bool, len(clusters))
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(fleetSweepConcurrency)
+	for i, cluster := range clusters {
+		i, cluster := i, cluster
+		if gctx.Err() != nil {
+			break // aggregate deadline hit — remaining clusters converge next tick
+		}
+		g.Go(func() error {
+			cctx, cancel := context.WithTimeout(gctx, alertEvalPerClusterTimeout)
+			defer cancel()
+			health, known := healthFor(cctx, cluster)
+			eval, err := evaluateGlobalClusterRow(cctx, rule, config, cluster, health, known)
+			if err != nil {
+				runtimeLogger().WarnContext(cctx, "alert global-rule cluster evaluation failed, skipping",
+					"rule_id", rule.ID.String(), "cluster_id", cluster.ID.String(), "error", err)
+				return nil // never bubble — skip this cluster, keep the sweep alive
+			}
+			results[i] = eval
+			ok[i] = true
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	out := make([]ruleClusterEval, 0, len(clusters))
+	for i := range results {
+		if ok[i] {
+			out = append(out, results[i])
+		}
+	}
+	// allFailed distinguishes "there were no clusters" from "the fleet was
+	// non-empty but every cluster errored or timed out". The caller must NOT
+	// treat the latter as the empty-fleet resolve-all sentinel: a fleet-wide
+	// monitoring-backend outage would otherwise collapse to zero evaluations and
+	// false-resolve every firing alert (dispatching spurious recovery pages).
+	allFailed := len(clusters) > 0 && len(out) == 0
+	return out, allFailed
 }
 
 // fleetHealthSnapshot is the once-per-tick fleet view shared across all global

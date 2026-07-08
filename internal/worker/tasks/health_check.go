@@ -61,6 +61,12 @@ func NewHealthCheckTask(payload HealthCheckPayload) (*asynq.Task, error) {
 // HandleHealthCheck checks all active cluster connections and updates health status.
 func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, "cluster:health_check", func() error {
+		// F6: bound the whole sweep so an interval overrun can't run for many
+		// minutes while the scheduler keeps enqueuing. Shorter than the 60s
+		// cadence so a stuck tail is abandoned before the next tick.
+		ctx, cancel := context.WithTimeout(ctx, healthCheckSweepDeadline)
+		defer cancel()
+
 		var p HealthCheckPayload
 		if len(t.Payload()) > 0 {
 			if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -83,11 +89,16 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			return err
 		}
-		for _, cluster := range clusters {
+		// F6: fan out the ~5 serial DB round-trips per cluster with bounded
+		// concurrency and a per-cluster timeout. A cluster whose write fails or
+		// times out is skipped-with-log so it can't abort the whole fleet sweep
+		// (each cluster is an independent row; the next tick converges it).
+		fanOutClusters(ctx, clusters, healthCheckPerClusterTimeout, func(ctx context.Context, cluster sqlc.Cluster) {
 			if err := updateClusterHealth(ctx, cluster); err != nil {
-				return err
+				slog.WarnContext(ctx, "health check failed for cluster, skipping",
+					"cluster_id", cluster.ID.String(), "error", err)
 			}
-		}
+		})
 		slog.InfoContext(ctx, "health check complete")
 		return nil
 	})
@@ -101,6 +112,14 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
 // their agents disconnect their clusters.status would stay frozen at
 // 'active' forever. Paging on Offset covers the whole fleet.
 const healthCheckPageSize = 500
+
+// healthCheckSweepDeadline caps the whole fan-out; healthCheckPerClusterTimeout
+// caps a single cluster's ~5 DB round-trips. The aggregate deadline is under
+// the 60s cadence so a stuck sweep is abandoned before the next tick.
+const (
+	healthCheckSweepDeadline     = 50 * time.Second
+	healthCheckPerClusterTimeout = 10 * time.Second
+)
 
 func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, error) {
 	if clusterID != "" {

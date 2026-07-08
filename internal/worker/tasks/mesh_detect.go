@@ -88,7 +88,7 @@ var astronomerClusterMesh = prometheus.NewGaugeVec(
 )
 
 // meshDetectAttempts counts each detection by outcome. outcome is
-// "success", "failure", or "skipped" (cluster not healthy).
+// "success", "failure", or "skipped" (cluster not connected).
 var meshDetectAttempts = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Namespace: "astronomer",
@@ -108,6 +108,12 @@ func init() {
 // 5m fleet sweep.
 func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 	return runPeriodicTaskWithLeader(ctx, MeshDetectType, func() error {
+		// F6: bound the whole sweep so an interval overrun can't run for many
+		// minutes while the scheduler keeps enqueuing on top of it. Shorter than
+		// the 5m cadence so a stuck tail is abandoned before the next tick.
+		ctx, cancel := context.WithTimeout(ctx, meshDetectSweepDeadline)
+		defer cancel()
+
 		if meshDetectDeps.Queries == nil {
 			runtimeLogger().InfoContext(ctx, "mesh detect runtime not configured, skipping")
 			return nil
@@ -123,17 +129,29 @@ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}
+		// Select the CONNECTED clusters. The gate historically compared against
+		// "healthy" — a status the fleet never carries (health_check.go /
+		// metrics/publisher.go only ever write "active" / "disconnected", and
+		// the schema defaults to "pending"), so this sweep skipped EVERY cluster
+		// and was inert. "active" is the real connected status.
+		active := clusters[:0:0]
 		for _, c := range clusters {
-			if c.Status != "healthy" {
+			if c.Status != "active" {
 				meshDetectAttempts.WithLabelValues(observability.MetricValues("skipped")...).Inc()
 				continue
 			}
+			active = append(active, c)
+		}
+		// F6: fan out the per-cluster tunnel detection with bounded concurrency
+		// and a per-cluster timeout so a slow/disconnected agent is
+		// skipped-with-log instead of stalling the whole 5m tick.
+		fanOutClusters(ctx, active, meshDetectPerClusterTimeout, func(ctx context.Context, c sqlc.Cluster) {
 			if err := DetectAndUpsert(ctx, c.ID); err != nil {
 				runtimeLogger().WarnContext(ctx, "mesh detect failed",
 					"cluster_id", c.ID.String(),
 					"error", err)
 			}
-		}
+		})
 		return nil
 	})
 }
@@ -217,6 +235,15 @@ func joinErrors(errs []string) string {
 const meshDetectInterval = 5 * time.Minute
 
 var _ = meshDetectInterval // reserved for the scheduler wiring
+
+// meshDetectSweepDeadline caps the whole fan-out; meshDetectPerClusterTimeout
+// caps a single cluster's tunnel detection. The aggregate deadline is well
+// under the 5m cadence so a stuck sweep is abandoned before the next tick, and
+// the per-cluster timeout keeps one slow agent from consuming the budget.
+const (
+	meshDetectSweepDeadline     = 4 * time.Minute
+	meshDetectPerClusterTimeout = 20 * time.Second
+)
 
 // ensureClusterRow guarantees a placeholder row exists for the
 // cluster before the first detection runs. The current upsert path

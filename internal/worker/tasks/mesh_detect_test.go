@@ -151,7 +151,10 @@ func setupMeshDeps(t *testing.T) (*fakeMeshQuerier, *scriptedRequester) {
 func TestWorker_UpsertsRow(t *testing.T) {
 	q, r := setupMeshDeps(t)
 	clusterID := uuid.New()
-	q.clusters = []sqlc.Cluster{{ID: clusterID, Name: "c1", Status: "healthy"}}
+	// "active" is the real connected status the fleet carries — the sweep gate
+	// selects on it. (Historically the gate compared against "healthy", a status
+	// nothing ever writes, so the sweep was inert and upserted nothing.)
+	q.clusters = []sqlc.Cluster{{ID: clusterID, Name: "c1", Status: "active"}}
 	// Bare-minimum mesh detection: one Istio gateway is enough to
 	// flip the detected_mesh to "istio".
 	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
@@ -172,6 +175,40 @@ func TestWorker_UpsertsRow(t *testing.T) {
 	}
 	if got.GatewayCount != 2 {
 		t.Errorf("gateway_count = %d, want 2", got.GatewayCount)
+	}
+}
+
+// TestWorker_SelectsActiveClusters is the F6 regression proving the sweep is
+// no longer inert: the gate must select clusters whose status is the real
+// connected value ("active") and skip everything else ("disconnected",
+// "pending", and the legacy phantom "healthy" that nothing ever writes). Before
+// the fix the gate compared against "healthy", so EVERY cluster was skipped and
+// the sweep never upserted a single row.
+func TestWorker_SelectsActiveClusters(t *testing.T) {
+	q, r := setupMeshDeps(t)
+	activeA := uuid.New()
+	activeB := uuid.New()
+	q.clusters = []sqlc.Cluster{
+		{ID: activeA, Name: "active-a", Status: "active"},
+		{ID: uuid.New(), Name: "gone", Status: "disconnected"},
+		{ID: uuid.New(), Name: "new", Status: "pending"},
+		// The phantom status the inert gate keyed on — must NOT be selected.
+		{ID: uuid.New(), Name: "phantom", Status: "healthy"},
+		{ID: activeB, Name: "active-b", Status: "active"},
+	}
+	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
+	r.set("GET", "/apis/networking.istio.io/v1beta1/gateways", 200, meshItemsList(1))
+
+	if err := HandleMeshDetect(context.Background(), nil); err != nil {
+		t.Fatalf("HandleMeshDetect: %v", err)
+	}
+
+	got := map[uuid.UUID]bool{}
+	for _, u := range q.upserts {
+		got[u.ClusterID] = true
+	}
+	if len(got) != 2 || !got[activeA] || !got[activeB] {
+		t.Fatalf("upserted clusters = %v, want exactly the two active clusters %s, %s", got, activeA, activeB)
 	}
 }
 
