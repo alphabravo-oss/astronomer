@@ -905,3 +905,155 @@ func TestDeleteDependents_CleansSnapshotSchedulesAndOrphanTables(t *testing.T) {
 		}
 	}
 }
+
+// TestGraceExhausted_WallClockBackstopFires is the FIX A guard: with
+// started_at PRESERVED across re-claims (COALESCE(started_at, now()) in
+// MarkClusterDecommissionRunning), a decommission first-claimed >15m ago trips
+// the wall-clock backstop even though attempts are well below the cap. This is
+// the exit that guarantees eventual tombstone when started_at is NOT reset on
+// every sweep re-run. `gone` is false so ONLY the wall-clock path can fire.
+func TestGraceExhausted_WallClockBackstopFires(t *testing.T) {
+	row := sqlc.ClusterDecommission{
+		Attempts:  3, // far below maxCleanupAttempts
+		StartedAt: pgtype.Timestamptz{Time: time.Now().Add(-16 * time.Minute), Valid: true},
+	}
+	if !graceExhausted(row, false) {
+		t.Fatalf("expected wall-clock backstop to fire for a decommission started 16m ago")
+	}
+	// Sanity: a freshly-started row with the same low attempts must NOT trip.
+	fresh := sqlc.ClusterDecommission{
+		Attempts:  3,
+		StartedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	if graceExhausted(fresh, false) {
+		t.Fatalf("fresh started_at with low attempts must NOT exhaust grace")
+	}
+}
+
+// TestMarkRunning_PreservesStartedAt asserts the COALESCE behaviour the FIX A
+// backstop depends on: the first claim stamps started_at, and a re-claim
+// leaves it unchanged (does NOT reset it to now()). Modeled on the production
+// COALESCE(started_at, now()) query.
+func TestMarkRunning_PreservesStartedAt(t *testing.T) {
+	q := newFakeDecommQuerier()
+	first, err := q.MarkClusterDecommissionRunning(context.Background(), sqlc.MarkClusterDecommissionRunningParams{ID: q.row.ID, LeaseTtlSeconds: decommissionLeaseTTLSeconds})
+	if err != nil {
+		t.Fatalf("first claim: %v", err)
+	}
+	if !first.StartedAt.Valid {
+		t.Fatalf("first claim must stamp started_at")
+	}
+	stamped := first.StartedAt.Time
+	time.Sleep(2 * time.Millisecond)
+	second, err := q.MarkClusterDecommissionRunning(context.Background(), sqlc.MarkClusterDecommissionRunningParams{ID: q.row.ID, LeaseTtlSeconds: decommissionLeaseTTLSeconds})
+	if err != nil {
+		t.Fatalf("re-claim: %v", err)
+	}
+	if !second.StartedAt.Time.Equal(stamped) {
+		t.Errorf("re-claim reset started_at from %v to %v; must be preserved", stamped, second.StartedAt.Time)
+	}
+	if second.Attempts != first.Attempts+1 {
+		t.Errorf("attempts must still increment per claim: first=%d second=%d", first.Attempts, second.Attempts)
+	}
+}
+
+// TestGoneFastPath_StaleHeartbeatAdvances is the FIX B promptness path: cleanup
+// is skipped (agent not connected), the cluster's last_heartbeat is stale
+// (definitively gone) and attempts have reached the confirmation floor — so the
+// reconciler advances past cleanup WITHOUT waiting out the 15m grace window and
+// proceeds all the way to tombstone.
+func TestGoneFastPath_StaleHeartbeatAdvances(t *testing.T) {
+	q := newFakeDecommQuerier()
+	// One attempt already made; MarkClusterDecommissionRunning bumps to 2 (==
+	// decommissionGoneMinAttempts), and started_at is fresh so neither the
+	// wall-clock nor the attempt-cap backstop can be what advances it.
+	q.row.Attempts = decommissionGoneMinAttempts - 1
+	q.cluster.Status = "disconnected"
+	q.cluster.LastHeartbeat = pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Minute), Valid: true}
+	tun := &fakeTunnel{connected: false, disconnected: true}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("runClusterDecommission: %v", err)
+	}
+	if q.row.Status != "succeeded" {
+		t.Errorf("expected definitively-gone cluster to advance to succeeded, got %s", q.row.Status)
+	}
+	if q.calls["DeleteClusterRegistrationTokensByCluster"] != 1 {
+		t.Errorf("token-revoke must run once the gone fast-path trips; calls=%d", q.calls["DeleteClusterRegistrationTokensByCluster"])
+	}
+	if q.calls["TombstoneCluster"] != 1 {
+		t.Errorf("tombstone must run once the gone fast-path trips; calls=%d", q.calls["TombstoneCluster"])
+	}
+	// Grace was NOT exhausted by the legacy backstops — prove the fast-path was
+	// load-bearing by confirming attempts stayed below the cap.
+	if q.row.Attempts >= maxCleanupAttempts {
+		t.Errorf("attempts reached the cap (%d); the gone fast-path was not what advanced", q.row.Attempts)
+	}
+}
+
+// TestGoneFastPath_FreshHeartbeatWaits is the REGRESSION guard: cleanup is
+// skipped but the cluster's agent heart-beated recently (a transient
+// disconnect, likely to reconnect) and attempts are low — so grace is NOT
+// exhausted. The reconciler must keep waiting so a reconnecting agent can run
+// real in-cluster cleanup; it must NOT revoke the token or tombstone.
+func TestGoneFastPath_FreshHeartbeatWaits(t *testing.T) {
+	q := newFakeDecommQuerier()
+	q.row.Attempts = decommissionGoneMinAttempts - 1 // bumped to the floor on claim
+	q.cluster.Status = "active"
+	q.cluster.LastHeartbeat = pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Second), Valid: true}
+	tun := &fakeTunnel{connected: false}
+	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
+
+	if err := runClusterDecommission(context.Background(), deps, q.row.ID); err != nil {
+		t.Fatalf("runClusterDecommission: %v", err)
+	}
+	if q.row.Status == "succeeded" {
+		t.Errorf("fresh-heartbeat cluster must keep waiting within grace, not succeed")
+	}
+	if q.calls["DeleteClusterRegistrationTokensByCluster"] != 0 {
+		t.Errorf("token-revoke must NOT run for a recently-connected agent; calls=%d", q.calls["DeleteClusterRegistrationTokensByCluster"])
+	}
+	if q.calls["TombstoneCluster"] != 0 {
+		t.Errorf("tombstone must NOT run for a recently-connected agent; calls=%d", q.calls["TombstoneCluster"])
+	}
+
+	// And the Force fast-path still advances immediately even with a fresh
+	// heartbeat and low attempts (the operator asserted the target is gone).
+	qf := newFakeDecommQuerier()
+	qf.row.Force = true
+	qf.row.Attempts = 0
+	qf.cluster.Status = "active"
+	qf.cluster.LastHeartbeat = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	tunf := &fakeTunnel{connected: false, disconnected: true}
+	depsf := ClusterDecommissionDeps{Queries: qf, Tunnel: tunf, TunnelWait: 10 * time.Millisecond}
+	if err := runClusterDecommission(context.Background(), depsf, qf.row.ID); err != nil {
+		t.Fatalf("force runClusterDecommission: %v", err)
+	}
+	if qf.row.Status != "succeeded" {
+		t.Errorf("force must advance to succeeded immediately regardless of heartbeat, got %s", qf.row.Status)
+	}
+	if qf.calls["TombstoneCluster"] != 1 {
+		t.Errorf("force must tombstone immediately; calls=%d", qf.calls["TombstoneCluster"])
+	}
+}
+
+// TestClusterDefinitivelyGone_Thresholds unit-tests the gone classifier used by
+// the FIX B fast-path.
+func TestClusterDefinitivelyGone_Thresholds(t *testing.T) {
+	cases := []struct {
+		name    string
+		cluster sqlc.Cluster
+		want    bool
+	}{
+		{"status_disconnected", sqlc.Cluster{Status: "disconnected", LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, true},
+		{"heartbeat_never", sqlc.Cluster{Status: "active"}, true},
+		{"heartbeat_stale", sqlc.Cluster{Status: "active", LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true}}, true},
+		{"heartbeat_fresh", sqlc.Cluster{Status: "active", LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Second), Valid: true}}, false},
+	}
+	for _, tc := range cases {
+		if got := clusterDefinitivelyGone(tc.cluster); got != tc.want {
+			t.Errorf("%s: clusterDefinitivelyGone = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

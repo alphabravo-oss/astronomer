@@ -112,6 +112,20 @@ const decommissionLeaseTTLSeconds = 120
 const (
 	maxCleanupAttempts  = 10
 	cleanupGraceTimeout = 15 * time.Minute
+	// decommissionGoneMinAttempts is the minimum number of claim attempts —
+	// each of which skipped cleanup because the agent was not connected —
+	// required before the "definitively gone" fast-path may trip the grace
+	// window early. Set to 2 so a single sweep blip on a briefly-disconnected
+	// agent (which is likely to reconnect and run real in-cluster cleanup)
+	// never short-circuits the optimistic reconnect grace.
+	decommissionGoneMinAttempts = 2
+	// decommissionGoneHeartbeatStale is how long a cluster's last_heartbeat
+	// must be stale before the fast-path treats it as definitively gone. Kept
+	// at the health checker's disconnected threshold (health_check.go declares
+	// a cluster 'disconnected' when last_heartbeat is older than 2m) so the two
+	// never disagree and we don't trip on a cluster the health checker still
+	// considers connected.
+	decommissionGoneHeartbeatStale = 2 * time.Minute
 )
 
 // claimNotAcquired reports whether a MarkClusterDecommissionRunning lease-CAS
@@ -123,9 +137,11 @@ func claimNotAcquired(err error) bool {
 }
 
 // graceExhausted reports whether the managed-side cleanup grace window has
-// elapsed (too many attempts, or the decommission has been running too long),
-// at which point the reconciler advances past a still-skipped cleanup phase.
-func graceExhausted(row sqlc.ClusterDecommission) bool {
+// elapsed, at which point the reconciler advances past a still-skipped cleanup
+// phase. `gone` is the "definitively gone" fast-path signal (see
+// clusterDefinitivelyGone): when true, a cluster that is provably unreachable
+// tombstones promptly instead of waiting out the full optimistic grace.
+func graceExhausted(row sqlc.ClusterDecommission, gone bool) bool {
 	// Force-delete: the operator asserts the target cluster/agent is gone, so we
 	// don't wait out the grace window for a reconnect — advance immediately once
 	// the single cleanup attempt has been made (and skipped because the agent is
@@ -137,18 +153,61 @@ func graceExhausted(row sqlc.ClusterDecommission) bool {
 	if row.Attempts >= maxCleanupAttempts {
 		return true
 	}
+	// Definitively-gone fast-path: the cluster is confidently unreachable (agent
+	// disconnected past the health-check staleness window) AND we have confirmed
+	// the skip across at least decommissionGoneMinAttempts claims. No reconnect
+	// is coming to run in-cluster cleanup, so trip grace early — this is what
+	// lets a provably-gone cluster (agent deleted / apiserver destroyed) reach
+	// the tombstone in ~1-2 minutes instead of ~10-20. The attempt floor keeps a
+	// single transient blip from prematurely orphaning a reconnecting agent.
+	if gone && row.Attempts >= decommissionGoneMinAttempts {
+		return true
+	}
 	return row.StartedAt.Valid && time.Since(row.StartedAt.Time) > cleanupGraceTimeout
+}
+
+// clusterDefinitivelyGone reports whether the managed cluster is confidently
+// unreachable — not merely a transient agent disconnect. True when the cluster
+// is marked 'disconnected' by the health checker, or its last_heartbeat is
+// stale beyond decommissionGoneHeartbeatStale (or was never recorded). Used
+// only as the fast-path signal into graceExhausted, in combination with the
+// decommissionGoneMinAttempts confirmation floor.
+func clusterDefinitivelyGone(cluster sqlc.Cluster) bool {
+	if cluster.Status == "disconnected" {
+		return true
+	}
+	if !cluster.LastHeartbeat.Valid {
+		return true
+	}
+	return time.Since(cluster.LastHeartbeat.Time) > decommissionGoneHeartbeatStale
+}
+
+// clusterGone loads the cluster row and evaluates clusterDefinitivelyGone. A
+// hard-deleted cluster (no rows) is treated as gone; any other load error is
+// treated conservatively as NOT gone so a transient DB hiccup can't
+// prematurely orphan the cluster before the wall-clock/attempt backstops fire.
+func clusterGone(ctx context.Context, deps ClusterDecommissionDeps, clusterID uuid.UUID) bool {
+	cluster, err := deps.Queries.GetClusterByID(ctx, clusterID)
+	if err != nil {
+		return strings.Contains(err.Error(), "no rows in result set")
+	}
+	return clusterDefinitivelyGone(cluster)
 }
 
 // cleanupSatisfied reports whether the reconciler may advance past the
 // cleanup_managed_side phase to token-revoke: either cleanup actually
 // succeeded, or it's skipped (agent gone) AND the grace window is exhausted.
-func cleanupSatisfied(phases phasesMap, row sqlc.ClusterDecommission) bool {
+// The cluster row is only loaded (for the definitively-gone fast-path) when
+// cleanup is skipped — the success path never touches it.
+func cleanupSatisfied(ctx context.Context, deps ClusterDecommissionDeps, phases phasesMap, row sqlc.ClusterDecommission) bool {
 	rec := phases[PhaseCleanupManagedSide]
 	if rec.Status == PhaseStatusSucceeded {
 		return true
 	}
-	return rec.Status == PhaseStatusSkipped && graceExhausted(row)
+	if rec.Status != PhaseStatusSkipped {
+		return false
+	}
+	return graceExhausted(row, clusterGone(ctx, deps, row.ClusterID))
 }
 
 // ClusterDecommissionQuerier is the slice of *sqlc.Queries the reconciler
@@ -465,7 +524,7 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 	// the 1-minute sweep to retry; we do NOT revoke the token yet, so a
 	// reconnecting agent can still authenticate to run cleanup. The grace cap
 	// guarantees we eventually advance (no deadlock on a dead agent).
-	if !cleanupSatisfied(phases, row) {
+	if !cleanupSatisfied(ctx, deps, phases, row) {
 		runtimeLogger().InfoContext(ctx, "cluster decommission waiting for managed-side cleanup before token revoke",
 			"decommission_id", id.String(), "cluster_id", row.ClusterID.String(),
 			"attempts", row.Attempts)

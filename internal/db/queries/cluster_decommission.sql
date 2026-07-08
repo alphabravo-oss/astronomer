@@ -2,7 +2,9 @@
 --
 -- The handler enqueues a row via CreateClusterDecommission; the worker
 -- claims it via MarkClusterDecommissionRunning (which bumps `attempts` and
--- sets `started_at`), records per-phase progress via UpdateClusterDecommissionPhases,
+-- stamps `started_at` ONCE via COALESCE — preserved across re-claims so the
+-- graceExhausted wall-clock backstop measures from first claim, not last),
+-- records per-phase progress via UpdateClusterDecommissionPhases,
 -- and finally MarkClusterDecommissionSucceeded / MarkClusterDecommissionFailed
 -- when all phases are done. The `phases` JSONB blob is rewritten in full each
 -- time the reconciler advances — it's small and JSONB merge primitives in
