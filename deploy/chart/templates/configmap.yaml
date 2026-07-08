@@ -5,6 +5,7 @@
        section for the recipe. The helper returns ""; we discard the
        result so this only fails the render, never injects manifest text. */}}
 {{- $_ := include "astronomer.validateInputs" . -}}
+{{- $_ := include "astronomer.validateImageSkew" . -}}
 {{- $_ := include "astronomer.requireProductionInputs" . -}}
 apiVersion: v1
 kind: ConfigMap

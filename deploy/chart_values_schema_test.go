@@ -86,6 +86,9 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		"secrets.secretKey=prod-jwt-signing-key",
 		"secrets.encryptionKey=prod-fernet-key",
 		"bootstrap.email=admin@example.com",
+		// F8: production render requires a pinned bootstrap password (or an
+		// existingSecret) so a GitOps re-render can't rotate the admin password.
+		"bootstrap.password=prod-admin-initial",
 		"dex.clientSecret=prod-dex-client-secret",
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",

@@ -226,15 +226,19 @@ dex:
   replicaCount: 2
   clientSecret: ""    # required — replace with `openssl rand -hex 32` or similar
 
-# Production deploys can pin the bootstrap password instead of relying on the
-# chart's random generator. When left empty, the chart stores the generated
-# password in the <release>-bootstrap Secret. Pass a known initial password via
-#   --set bootstrap.password=<initial-admin-password>
-# or use --set-file to read from a file outside git.
+# F8 (C-04): in production the render FAILS unless bootstrap.password is pinned
+# OR bootstrap.existingSecret is provided. This is deliberate — an empty
+# bootstrap.password re-rolls a random value on every GitOps render (the
+# `lookup` guard can't read the prior Secret without a live cluster), silently
+# rotating the admin password. Pass a known initial password via
+#   --set bootstrap.password=<initial-admin-password>   (or --set-file, outside git)
+# or point at a pre-created Secret with a `password` key via
+#   --set bootstrap.existingSecret=<secret-name>
 bootstrap:
   username: admin
   email: ""
-  password: ""
+  password: ""       # REQUIRED in production unless existingSecret is set
+  existingSecret: "" # OR set this to a pre-created Secret (key: password)
 
 # ── ServiceAccount + RBAC ─────────────────────────────────────────────────
 serviceAccount:
@@ -309,3 +313,29 @@ managementBackup:
     credentialsSecretRef:
       name: ""   # REQUIRED — operator supplies via --set
       key: "credentials"
+  # F4 (HIGH · DR): back up the Fernet/JWT encryption key WITH the DB, wrapped
+  # with a SEPARATELY-held passphrase. Without this a restore onto a new cluster
+  # is undecryptable. STRONGLY recommended in production. Create the wrapping
+  # secret out-of-band and hold it in DIFFERENT custody than the S3 credentials:
+  #
+  #   kubectl -n astronomer create secret generic astronomer-key-wrap \
+  #     --from-literal=passphrase="$(openssl rand -base64 48)"
+  #
+  #   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap
+  #
+  # See docs/management-plane-dr-runbook.md ("Key custody").
+  encryptionKeyBackup:
+    enabled: true
+    wrappingSecretRef:
+      name: ""   # REQUIRED for key backup — hold in SEPARATE custody from S3 creds
+      key: "passphrase"
+
+# The weekly restore-drill proves the dump is restorable AND — once the key
+# backup above is wired — that the backed-up key actually DECRYPTS the restored
+# data. Point decryptCheck at the SAME wrapping secret so it can unwrap the key.
+managementRestoreDrill:
+  enabled: true
+  decryptCheck:
+    enabled: true
+    wrappingSecretRef:
+      name: ""   # set to the SAME secret as encryptionKeyBackup.wrappingSecretRef.name

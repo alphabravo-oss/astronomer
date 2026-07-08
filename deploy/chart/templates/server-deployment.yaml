@@ -123,7 +123,7 @@ spec:
             - name: ASTRONOMER_BOOTSTRAP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "astronomer.fullname" . }}-bootstrap
+                  name: {{ include "astronomer.bootstrapSecretName" . }}
                   key: password
             - name: ASTRONOMER_BOOTSTRAP_USERNAME
               value: {{ .Values.bootstrap.username | quote }}

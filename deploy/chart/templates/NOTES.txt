@@ -9,6 +9,16 @@ Worker image : {{ include "astronomer.image" (dict "context" . "component" "work
 Migrate image: {{ include "astronomer.image" (dict "context" . "component" "migrate") }}
 
 Migrations were applied via a pre-install/pre-upgrade Helm hook Job.
+{{- if ne (toString .Values.image.server.tag) (toString .Values.image.migrate.tag) }}
+
+!! SCHEMA-SKEW OVERRIDE ACTIVE (F1) !!
+   image.server.tag ({{ .Values.image.server.tag }}) != image.migrate.tag ({{ .Values.image.migrate.tag }})
+   and image.allowSchemaSkew=true, so the chart did NOT refuse the mismatch.
+   The server's /readyz enforces a minimum DB schema; if the migrate image ships
+   a schema BELOW the server binary's ExpectedSchemaVersion, the server pods will
+   be held out of Service rotation until you deploy a matching migrate image.
+   Only keep this override for a hotfix that ships no new migration.
+{{- end }}
 
 TLS
 ---
@@ -99,6 +109,22 @@ Nightly pg_dump is ENABLED.
   Endpoint    : {{ . }}
   {{- end }}
   Retention   : daily={{ .Values.managementBackup.retention.daily }} weekly={{ .Values.managementBackup.retention.weekly }} monthly={{ .Values.managementBackup.retention.monthly }}
+{{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
+  Key backup  : ENABLED — the Fernet/JWT key Secret is wrapped with a separately
+                held passphrase and stored under {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" }}/. A restore onto a
+                new cluster can decrypt agent tokens / SSO secrets / gitops creds.
+{{- else }}
+
+  WARNING: encryption-key backup is NOT wired (F4). pg_dump alone is NOT a
+  recoverable backup — a restore onto a new cluster would bring back rows whose
+  agent tokens / SSO secrets / gitops creds are permanently UNDECRYPTABLE,
+  because the Fernet key lives in a Secret, not in Postgres. Wire it:
+
+    --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=<secret>
+
+  and hold that wrapping passphrase in SEPARATE custody from the S3 backup
+  credentials. See docs/management-plane-dr-runbook.md ("Key custody").
+{{- end }}
 
 Restore procedure: docs/management-plane-dr-runbook.md
 

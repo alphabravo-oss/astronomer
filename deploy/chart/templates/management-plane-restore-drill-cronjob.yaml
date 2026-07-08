@@ -244,6 +244,64 @@ spec:
                   done
                   unset IFS
 
+                  # --- Decryptability proof (F4 b) ---------------------------
+                  # A green schema + row-count drill can still hide a DR-FATAL
+                  # problem: the encryption key was never backed up, or has
+                  # drifted from the ciphertext, so the restored rows are
+                  # undecryptable. Download the latest WRAPPED key bundle, unwrap
+                  # it with the separately-held wrapping passphrase, and Fernet-
+                  # verify one known encrypted column from the restored DB. Fail
+                  # the drill if we can't — this is the check that turns "the DB
+                  # restored" into "the DB restored AND is usable".
+                  #
+                  # Requires openssl + python3 in the drill image (python3 uses
+                  # only the stdlib: base64/hmac/hashlib). Gated on the wrapping
+                  # secret being wired, so it stays inert until DR is configured.
+                  if [ -n "${DECRYPT_CHECK_ENABLED:-}" ]; then
+                    echo "Verifying decryptability of ${DECRYPT_TABLE}.${DECRYPT_COLUMN}"
+                    KEY_PFX="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/"
+                    KEY_LIST="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
+                                    --bucket "${BUCKET}" --prefix "${KEY_PFX}" \
+                                    --query 'Contents[].Key' --output text 2>/dev/null || echo '')"
+                    if [ -z "${KEY_LIST}" ] || [ "${KEY_LIST}" = "None" ]; then
+                      fail_and_exit "no wrapped key bundle under s3://${BUCKET}/${KEY_PFX} — the encryption key is NOT being backed up, so a real restore would be undecryptable"
+                    fi
+                    LATEST_KEY_OBJ="$(echo "${KEY_LIST}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' | sort | tail -n1)"
+                    echo "Selected key bundle: s3://${BUCKET}/${LATEST_KEY_OBJ}"
+                    aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${LATEST_KEY_OBJ}" /tmp/keys.tar.enc
+                    openssl enc -d -aes-256-cbc -pbkdf2 \
+                      -in /tmp/keys.tar.enc -out /tmp/keys.tar \
+                      -pass file:/var/run/astronomer-wrap/passphrase \
+                      || fail_and_exit "could not unwrap key bundle (wrong wrapping passphrase?)"
+                    mkdir -p /tmp/keys
+                    tar -C /tmp/keys -xf /tmp/keys.tar || fail_and_exit "could not extract key bundle"
+                    if [ ! -s /tmp/keys/ASTRONOMER_ENCRYPTION_KEY ]; then
+                      fail_and_exit "ASTRONOMER_ENCRYPTION_KEY absent from restored key bundle"
+                    fi
+                    SAMPLE="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
+                      "SELECT ${DECRYPT_COLUMN} FROM ${DECRYPT_TABLE} WHERE ${DECRYPT_COLUMN} IS NOT NULL AND ${DECRYPT_COLUMN} <> '' LIMIT 1;" \
+                      2>/dev/null || echo '')"
+                    if [ -z "${SAMPLE}" ]; then
+                      echo "  no encrypted rows in ${DECRYPT_TABLE}.${DECRYPT_COLUMN} yet — nothing to prove on this install; skipping decrypt (key backup itself is verified above)"
+                    else
+                      # Fernet HMAC verification: base64url-decode the key + token,
+                      # HMAC-SHA256 over token[:-32] with signing_key=key[:16] and
+                      # compare to the trailing 32-byte tag. A match proves the
+                      # backed-up key signed this ciphertext == it decrypts. The
+                      # verifier is a pure-stdlib python3 script (base64/hmac/
+                      # hashlib — no third-party crypto lib), base64-encoded here
+                      # so it survives the YAML block scalar as one line.
+                      export SAMPLE_TOKEN="${SAMPLE}"
+                      echo 'aW1wb3J0IGJhc2U2NCwgaG1hYywgaGFzaGxpYiwgb3MsIHN5cwprZXkgPSBiYXNlNjQudXJsc2FmZV9iNjRkZWNvZGUob3BlbihzeXMuYXJndlsxXSkucmVhZCgpLnN0cmlwKCkpCmlmIGxlbihrZXkpICE9IDMyOgogICAgc3lzLmV4aXQoImZlcm5ldCBrZXkgaXMgbm90IDMyIGJ5dGVzIGFmdGVyIGRlY29kZSIpCnNpZyA9IGtleVs6MTZdCnRvayA9IGJhc2U2NC51cmxzYWZlX2I2NGRlY29kZShvcy5lbnZpcm9uWyJTQU1QTEVfVE9LRU4iXS5zdHJpcCgpKQppZiBsZW4odG9rKSA8IDQxIG9yIHRva1swXSAhPSAweDgwOgogICAgc3lzLmV4aXQoInNhbXBsZWQgdmFsdWUgaXMgbm90IGEgZmVybmV0IHRva2VuIikKbWFjID0gaG1hYy5uZXcoc2lnLCB0b2tbOi0zMl0sIGhhc2hsaWIuc2hhMjU2KS5kaWdlc3QoKQpzeXMuZXhpdCgwIGlmIGhtYWMuY29tcGFyZV9kaWdlc3QobWFjLCB0b2tbLTMyOl0pIGVsc2UgImhtYWMgbWlzbWF0Y2g6IGtleSBkb2VzIG5vdCBtYXRjaCBjaXBoZXJ0ZXh0IikK' \
+                        | base64 -d | python3 - /tmp/keys/ASTRONOMER_ENCRYPTION_KEY \
+                        || fail_and_exit "restored ${DECRYPT_TABLE}.${DECRYPT_COLUMN} did NOT verify under the backed-up key — DR is broken"
+                      unset SAMPLE_TOKEN
+                      echo "  decrypt check OK: ${DECRYPT_TABLE}.${DECRYPT_COLUMN} verifies under the backed-up key"
+                    fi
+                    rm -f /tmp/keys.tar.enc /tmp/keys.tar
+                    rm -rf /tmp/keys
+                  fi
+
                   # --- Success: write status row -----------------------------
                   trap - EXIT
                   FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -274,6 +332,16 @@ spec:
                   value: {{ .Values.managementRestoreDrill.expectedMinSchemaVersion | quote }}
                 - name: EXPECTED_TABLES
                   value: {{ join "," .Values.managementRestoreDrill.expectedTables | quote }}
+                {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
+                - name: DECRYPT_CHECK_ENABLED
+                  value: "1"
+                - name: DECRYPT_TABLE
+                  value: {{ .Values.managementRestoreDrill.decryptCheck.table | default "argocd_instances" | quote }}
+                - name: DECRYPT_COLUMN
+                  value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "auth_token_encrypted" | quote }}
+                - name: KEYBACKUP_PREFIX
+                  value: {{ .Values.managementRestoreDrill.decryptCheck.keyPrefix | default "keys" | quote }}
+                {{- end }}
                 - name: DRILL_PASSWORD
                   value: {{ .Values.managementRestoreDrill.sidecar.password | quote }}
                 # The PRODUCTION DB DSN — used ONLY for the audit row
@@ -299,6 +367,11 @@ spec:
                   readOnly: true
                 - name: scratch
                   mountPath: /tmp
+                {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
+                - name: wrapping-passphrase
+                  mountPath: /var/run/astronomer-wrap
+                  readOnly: true
+                {{- end }}
               resources:
                 {{- toYaml .Values.managementRestoreDrill.resources | nindent 16 }}
           volumes:
@@ -308,6 +381,16 @@ spec:
                 items:
                   - key: {{ .Values.managementBackup.s3.credentialsSecretRef.key | default "credentials" | quote }}
                     path: credentials
+            {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
+            # Same wrapping passphrase the backup used to wrap the key bundle.
+            # Custody MUST be separate from the S3 credentials above.
+            - name: wrapping-passphrase
+              secret:
+                secretName: {{ .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name | quote }}
+                items:
+                  - key: {{ .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.key | default "passphrase" | quote }}
+                    path: passphrase
+            {{- end }}
             - name: scratch
               emptyDir:
                 sizeLimit: {{ .Values.managementRestoreDrill.scratchSizeLimit | default "8Gi" | quote }}

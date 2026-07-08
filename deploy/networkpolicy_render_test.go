@@ -129,6 +129,7 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 		"secrets.secretKey=prod-jwt-signing-key",
 		"secrets.encryptionKey=prod-fernet-key",
 		"bootstrap.email=admin@example.com",
+		"bootstrap.password=prod-admin-initial",
 		"dex.clientSecret=prod-dex-client-secret",
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",

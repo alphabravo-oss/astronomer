@@ -13,6 +13,7 @@
         "registry": { "type": "string" },
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
         "pullSecrets": { "type": "array" },
+        "allowSchemaSkew": { "type": "boolean" },
         "server": { "$ref": "#/definitions/imageRef" },
         "worker": { "$ref": "#/definitions/imageRef" },
         "agent": { "$ref": "#/definitions/imageRef" },
@@ -136,7 +137,8 @@
       "properties": {
         "username": { "type": "string", "minLength": 1 },
         "email": { "type": "string" },
-        "password": { "type": "string" }
+        "password": { "type": "string" },
+        "existingSecret": { "type": "string" }
       }
     },
     "tls": {

@@ -39,6 +39,8 @@ var productionWiringSets = []string{
 	"secrets.secretKey=prod-jwt-signing-key",
 	"secrets.encryptionKey=prod-fernet-key",
 	"bootstrap.email=admin@example.com",
+	// F8: production requires a pinned bootstrap password (or existingSecret).
+	"bootstrap.password=prod-admin-initial",
 	"dex.clientSecret=prod-dex-client-secret",
 	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
@@ -211,6 +213,10 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 		"image.worker.tag=v-worker",
 		"image.migrate.tag=v-migrate",
 		"frontend.image.tag=v-frontend",
+		// This test deliberately gives each image a distinct tag to prove the
+		// per-image tag plumbing; that trips the F1 server↔migrate skew guard,
+		// so opt into the skew explicitly (it is not a real deploy).
+		"image.allowSchemaSkew=true",
 	))
 
 	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/astronomer-go-server:v-server", "Always")

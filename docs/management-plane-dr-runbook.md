@@ -79,6 +79,77 @@ becomes garbage and agents can not re-authenticate.
 
 ---
 
+## Key custody and the encryption-key backup (F4)
+
+The nightly `pg_dump` captures ciphertext. It does **not**, on its own, capture
+the Fernet/JWT key that decrypts it — that key lives in a Kubernetes Secret
+(`<release>-secrets`), not in Postgres. A restore onto a brand-new cluster where
+that Secret is gone brings back rows that are permanently undecryptable.
+
+The chart closes this gap when you wire
+`managementBackup.encryptionKeyBackup.wrappingSecretRef.name`:
+
+- Every backup run also captures the `<release>-secrets` Secret, **symmetrically
+  encrypted with a separately-held wrapping passphrase** before upload, and
+  stores it under `<prefix>/<release>/keys/<timestamp>.keys.tar.enc` (a tier
+  distinct from `daily/weekly/monthly`). The key is **never** written to S3 in
+  plaintext next to the data it protects.
+- The weekly restore-drill (`managementRestoreDrill.decryptCheck`) downloads the
+  latest wrapped key bundle, unwraps it with the **same** passphrase, and
+  Fernet-verifies one known encrypted column in the restored DB. If it can't
+  decrypt, the drill **fails** — so a broken key backup can no longer hide
+  behind a green drill.
+
+**Custody rules — read before wiring this:**
+
+1. The wrapping passphrase MUST live in a different custody domain than the S3
+   backup credentials and the DB dump. Whoever can read the backup bucket must
+   NOT also be able to read the wrapping passphrase, or the separation is moot
+   (they could unwrap the key and decrypt every secret in the dump). Practical
+   options: a different cloud account / KMS, an offline password vault, or a
+   sealed-secret whose sealing key is held by a different team.
+2. Create the wrapping-passphrase Secret out-of-band (never commit it to git):
+
+   ```bash
+   kubectl -n astronomer create secret generic astronomer-key-wrap \
+     --from-literal=passphrase="$(openssl rand -base64 48)"
+   ```
+
+   Then record that passphrase in your separate custody store — **losing it
+   makes the key backup unrecoverable**, and rotating it invalidates every
+   previously-wrapped bundle (keep the old passphrase until the retention window
+   of bundles wrapped under it has rolled off).
+3. Wire both halves so backup and drill agree:
+
+   ```
+   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
+   --set managementRestoreDrill.decryptCheck.wrappingSecretRef.name=astronomer-key-wrap
+   ```
+
+4. The drill's decrypt verification needs `openssl` and `python3` (stdlib only)
+   in the backup image; the default `pgdump-s3` image ships both.
+
+**Recovering the key during a real restore onto a new cluster:**
+
+```bash
+# Fetch the newest wrapped key bundle (read-only).
+aws s3 cp "$(aws s3api list-objects-v2 --bucket <bucket> \
+  --prefix astronomer-pg/<release>/keys/ --query 'Contents[-1].Key' --output text \
+  | xargs -I{} echo s3://<bucket>/{})" ./keys.tar.enc
+
+# Unwrap with the separately-held passphrase, then read the Fernet key.
+openssl enc -d -aes-256-cbc -pbkdf2 -in keys.tar.enc -out keys.tar \
+  -pass pass:"<wrapping-passphrase>"
+mkdir keys && tar -C keys -xf keys.tar
+cat keys/ASTRONOMER_ENCRYPTION_KEY   # feed this into secrets.encryptionKey
+```
+
+Restore `secrets.encryptionKey` (and `secrets.secretKey` from
+`keys/SECRET_KEY`) into the new install **before** you restore the database, so
+the decrypted columns line up with the key.
+
+---
+
 ## Preconditions
 
 Before starting, confirm you have:

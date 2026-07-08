@@ -26,6 +26,12 @@ image:
   registry: ""           # Empty registry = use local images (k3d-imported).
   pullPolicy: IfNotPresent
   pullSecrets: []
+  # F1 schema-skew guard: server and migrate ship the same DB schema and are
+  # built from one commit, so their tags MUST match. The chart fails the render
+  # when image.server.tag != image.migrate.tag (a mismatch can 503 the plane
+  # permanently via the /readyz schema floor). Set true ONLY for a deliberate
+  # skewed rollout that ships no new migration (a NOTES.txt warning then fires).
+  allowSchemaSkew: false
   # Per-image `registry` is the online default home (first-party = GHCR). The
   # global `image.registry` above overrides ALL of these when set (air-gap:
   # mirror everything into one private registry). Empty global => these defaults.
@@ -522,6 +528,13 @@ bootstrap:
   username: admin
   email: admin@astronomer.local
   password: ""
+  # GitOps-safe escape hatch (F8 / C-04). Point this at a pre-created Secret
+  # (in the release namespace) with a `password` key and the chart will NOT
+  # manage a bootstrap Secret of its own — the server reads the password
+  # straight from yours. Mirrors postgres.external.dsnSecretRef. Leave empty to
+  # use bootstrap.password / the chart-generated <release>-bootstrap Secret.
+  # In production the render fails unless bootstrap.password OR this is set.
+  existingSecret: ""
 
 # =============================================================================
 # TLS — single source of truth, consumed by both gateway.* and ingress.*.
@@ -772,6 +785,38 @@ managementBackup:
     credentialsSecretRef:
       name: ""
       key: "credentials"
+  # ---------------------------------------------------------------------------
+  # F4 (HIGH · DR): back up the Fernet/JWT encryption-key Secret WITH the DB.
+  # ---------------------------------------------------------------------------
+  # pg_dump alone is not a recoverable backup: every encrypted column (agent
+  # tokens, SSO client secrets, wrapped gitops/integration creds) is Fernet-
+  # wrapped with secrets.encryptionKey, which lives in a Kubernetes Secret, NOT
+  # in Postgres. Restore onto a NEW cluster without that key and every such row
+  # is permanently undecryptable. This captures the key Secret alongside the
+  # dump — but symmetrically ENCRYPTED with a SEPARATELY-held wrapping passphrase
+  # first, so the key is never written to S3 in plaintext next to the data it
+  # protects. Key custody steps: docs/management-plane-dr-runbook.md.
+  encryptionKeyBackup:
+    # Default on, but INERT until wrappingSecretRef.name is set (the chart
+    # refuses to upload the key in plaintext). When unset a NOTES/preflight
+    # warning fires so the DR gap is visible rather than silent.
+    enabled: true
+    # In-cluster Secret holding the Fernet + JWT keys. Empty => <release>-secrets
+    # (the chart's own secret.yaml). Override only for BYO/external-secret setups.
+    secretName: ""
+    # Secret holding the wrapping passphrase used to encrypt the key bundle
+    # before upload. HOLD THIS SEPARATELY from the S3 backup credentials and the
+    # DB — ideally a different cloud account / KMS / offline vault. Whoever holds
+    # only the S3 bucket must NOT also hold this, or the separation is moot.
+    wrappingSecretRef:
+      name: ""
+      key: "passphrase"
+    # S3 sub-tier (under <prefix>/<release>/) the wrapped key bundles land in.
+    # Deliberately distinct from daily/weekly/monthly so key custody is separable.
+    keyPrefix: "keys"
+    # How many wrapped key bundles to retain. Keys rotate rarely, so keep a
+    # generous history so an older dump can still be paired with its key.
+    retention: 30
   # Image bundling postgresql-client + aws-cli. Built and published by
   # Astronomer at ghcr.io/alphabravocompany/pgdump-s3; override to an
   # internally mirrored image when air-gapped.
@@ -853,6 +898,28 @@ managementRestoreDrill:
     - clusters
     - projects
     - audit_log
+  # ---------------------------------------------------------------------------
+  # F4 (b): prove the backed-up encryption key actually DECRYPTS the restored
+  # data. Without this the drill can stay green while real DR is broken (the key
+  # was never backed up, or drifted from the ciphertext). The drill downloads
+  # the latest wrapped key bundle (written by managementBackup.encryptionKeyBackup),
+  # unwraps it with the SAME wrapping passphrase, and Fernet-verifies one known
+  # encrypted column in the restored DB — failing the drill if it can't.
+  decryptCheck:
+    enabled: true
+    # A known Fernet-encrypted column to sample. The default targets the row the
+    # Argo self-management loop always writes, so a live install has one to test.
+    table: "argocd_instances"
+    column: "auth_token_encrypted"
+    # The SAME wrapping-passphrase Secret managementBackup.encryptionKeyBackup
+    # used to wrap the key bundle. Empty => the decrypt check is skipped (the
+    # drill can't unwrap the key), and a warning is emitted. Set it to make the
+    # drill actually prove decryptability.
+    wrappingSecretRef:
+      name: ""
+      key: "passphrase"
+    # Must match managementBackup.encryptionKeyBackup.keyPrefix.
+    keyPrefix: "keys"
   # Image bundling postgresql-client + aws-cli — reuse the same image
   # as managementBackup so the drill can run wherever the backup runs.
   image:

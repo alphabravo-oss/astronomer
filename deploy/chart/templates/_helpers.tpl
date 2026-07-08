@@ -315,6 +315,46 @@ rendered manifest.
 {{- end }}
 
 {{/*
+astronomer.bootstrapSecretName — the Secret the server reads
+ASTRONOMER_BOOTSTRAP_PASSWORD from. When bootstrap.existingSecret is set the
+chart does NOT manage a bootstrap Secret (see bootstrap-secret.yaml) and the
+server wires straight to the operator-provided one; otherwise the chart-managed
+<release>-bootstrap Secret is used.
+*/}}
+{{- define "astronomer.bootstrapSecretName" -}}
+{{- if .Values.bootstrap.existingSecret -}}
+{{- .Values.bootstrap.existingSecret -}}
+{{- else -}}
+{{- printf "%s-bootstrap" (include "astronomer.fullname" .) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+astronomer.validateImageSkew (F1 · BLOCKER) runs on every render, any env.
+
+The server binary enforces a minimum DB schema (internal/db.ExpectedSchemaVersion)
+via /readyz; the matching migrations ship in the migrate image built from the
+SAME commit. Bumping image.server.tag without image.migrate.tag (or vice-versa)
+leaves the applied schema below the server's floor and holds the pod out of
+Service rotation PERMANENTLY — the exact production incident F1 exists to prevent.
+
+Both images are built from one commit, so their tags must match. We fail the
+render on a mismatch unless the operator explicitly opts into a skewed rollout
+(image.allowSchemaSkew=true — e.g. a hotfix that ships no new migration), in
+which case NOTES.txt warns instead. Returns "" so callers can discard it.
+*/}}
+{{- define "astronomer.validateImageSkew" -}}
+  {{- $serverTag := toString .Values.image.server.tag }}
+  {{- $migrateTag := toString .Values.image.migrate.tag }}
+  {{- if ne $serverTag $migrateTag }}
+    {{- if not .Values.image.allowSchemaSkew }}
+      {{- $msg := printf "\n\nAstronomer image-skew guard (F1) failed:\n  - image.server.tag=%q but image.migrate.tag=%q\n\nThe server and migrate images are built from the same commit and MUST ship the\nsame schema: the server's /readyz holds the pod out of Service rotation until the\napplied DB schema reaches the binary's ExpectedSchemaVersion, and those migrations\nlive in the migrate image. A mismatched pair can 503 the management plane\npermanently (this happened in production — see plans/production-readiness.md F1).\n\nDeploy server + migrate from ONE commit so the tags match (values-production.yaml\nsets both from a single --set image.<name>.tag=<git-sha>). If you INTEND a skewed\nrollout that ships no new migration, set image.allowSchemaSkew=true to override." $serverTag $migrateTag }}
+      {{- fail $msg }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{/*
 astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
 render when env=production but mandatory production knobs are missing. Helm's
 `fail` builtin aborts the whole release with a single human-readable message
@@ -374,6 +414,15 @@ rendered manifest.
     {{- end }}
     {{- if not .Values.secrets.encryptionKey }}
       {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
+    {{- end }}
+    {{- /* F8 (C-04): bootstrap-secret.yaml generates randAlphaNum when
+           bootstrap.password is empty and the `lookup` guard can't see the
+           existing Secret. Under GitOps / `helm template` (no live cluster)
+           lookup returns nil, so every sync re-rolls the admin password. In
+           production require an explicit pin or an existingSecret escape hatch
+           (mirrors postgres.external.dsnSecretRef) so the render is stable. */ -}}
+    {{- if not (or .Values.bootstrap.password .Values.bootstrap.existingSecret) }}
+      {{- $errs = append $errs "  - bootstrap.password or bootstrap.existingSecret must be set when config.env=production. An empty bootstrap.password re-rolls randAlphaNum on every GitOps render (lookup can't read the prior Secret without a live cluster), rotating the admin password. Pin bootstrap.password, or set bootstrap.existingSecret to a pre-created Secret with a 'password' key." }}
     {{- end }}
     {{- /* Migration 045 soft check: production posture is "Dex on" unless
            the operator explicitly opts into local-password-only auth. The

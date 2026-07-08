@@ -148,6 +148,30 @@ spec:
                   prune_tier "weekly"  "${MANAGEMENT_BACKUP_KEEP_WEEKLY}"
                   prune_tier "monthly" "${MANAGEMENT_BACKUP_KEEP_MONTHLY}"
 
+                  # --- Encryption-key backup (F4) ------------------------------
+                  # pg_dump captures the ciphertext; this captures the Fernet/JWT
+                  # KEY that decrypts it — WITHOUT which a restore onto a new
+                  # cluster is undecryptable. The key Secret is mounted at
+                  # /var/run/astronomer-keys (one file per key). We tar it (-h to
+                  # dereference the k8s secret-mount symlinks) and symmetrically
+                  # encrypt the archive with the SEPARATELY-held wrapping
+                  # passphrase BEFORE upload, so the key never lands in S3 in
+                  # plaintext beside the data it protects.
+                  if [ -n "${KEYBACKUP_ENABLED:-}" ]; then
+                    echo "Backing up encryption-key Secret (wrapped) to ${KEYBACKUP_PREFIX}/"
+                    KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
+                    KEY_ENC="${KEY_BUNDLE}.enc"
+                    KEY_S3="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.enc"
+                    tar -C /var/run/astronomer-keys -chf "${KEY_BUNDLE}" .
+                    openssl enc -aes-256-cbc -pbkdf2 -salt \
+                      -in "${KEY_BUNDLE}" -out "${KEY_ENC}" \
+                      -pass file:/var/run/astronomer-wrap/passphrase
+                    aws s3 cp ${AWS_S3_FLAGS} "${KEY_ENC}" "s3://${BUCKET}/${KEY_S3}"
+                    rm -f "${KEY_BUNDLE}" "${KEY_ENC}"
+                    prune_tier "${KEYBACKUP_PREFIX}" "${KEYBACKUP_KEEP}"
+                    echo "Encryption-key backup OK: s3://${BUCKET}/${KEY_S3}"
+                  fi
+
                   echo "Backup OK."
               env:
                 - name: HOME
@@ -170,6 +194,14 @@ spec:
                   value: {{ .Values.managementBackup.retention.weekly | default 12 | quote }}
                 - name: MANAGEMENT_BACKUP_KEEP_MONTHLY
                   value: {{ .Values.managementBackup.retention.monthly | default 6 | quote }}
+                {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
+                - name: KEYBACKUP_ENABLED
+                  value: "1"
+                - name: KEYBACKUP_PREFIX
+                  value: {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" | quote }}
+                - name: KEYBACKUP_KEEP
+                  value: {{ .Values.managementBackup.encryptionKeyBackup.retention | default 30 | quote }}
+                {{- end }}
                 {{- if .Values.postgres.external.dsnSecretRef.name }}
                 - name: DATABASE_URL
                   valueFrom:
@@ -189,6 +221,14 @@ spec:
                   readOnly: true
                 - name: scratch
                   mountPath: /tmp
+                {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
+                - name: encryption-keys
+                  mountPath: /var/run/astronomer-keys
+                  readOnly: true
+                - name: wrapping-passphrase
+                  mountPath: /var/run/astronomer-wrap
+                  readOnly: true
+                {{- end }}
               resources:
                 {{- toYaml .Values.managementBackup.resources | nindent 16 }}
           volumes:
@@ -201,4 +241,19 @@ spec:
             - name: scratch
               emptyDir:
                 sizeLimit: {{ .Values.managementBackup.scratchSizeLimit | default "8Gi" | quote }}
+            {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
+            # The Fernet/JWT key Secret, mounted read-only so the job can wrap
+            # and back it up. Defaults to the chart's own <release>-secrets.
+            - name: encryption-keys
+              secret:
+                secretName: {{ .Values.managementBackup.encryptionKeyBackup.secretName | default (printf "%s-secrets" (include "astronomer.fullname" .)) | quote }}
+            # Separately-held wrapping passphrase. Custody MUST be distinct from
+            # the S3 backup credentials (see docs/management-plane-dr-runbook.md).
+            - name: wrapping-passphrase
+              secret:
+                secretName: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name | quote }}
+                items:
+                  - key: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.key | default "passphrase" | quote }}
+                    path: passphrase
+            {{- end }}
 {{- end }}
