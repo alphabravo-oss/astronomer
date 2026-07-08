@@ -1,0 +1,603 @@
+diff --git a/internal/worker/tasks/alert_evaluation.go b/internal/worker/tasks/alert_evaluation.go
+index bfaf33b..03406b7 100644
+--- a/internal/worker/tasks/alert_evaluation.go
++++ b/internal/worker/tasks/alert_evaluation.go
+@@ -13,6 +13,7 @@ import (
+ 	"github.com/hibiken/asynq"
+ 	"github.com/jackc/pgx/v5"
+ 	"github.com/jackc/pgx/v5/pgtype"
++	"golang.org/x/sync/errgroup"
+ 
+ 	"github.com/google/uuid"
+ 
+@@ -38,6 +39,13 @@ func NewAlertEvaluationTask(payload AlertEvaluationPayload) (*asynq.Task, error)
+ // HandleAlertEvaluation evaluates all enabled alert rules against current metrics.
+ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
+ 	return runPeriodicTaskWithLeader(ctx, "alert:evaluate", func() error {
++		// F6: bound the whole tick so an interval overrun can't run for many
++		// minutes while the scheduler keeps enqueuing on top of it. Shorter
++		// than the 60s cadence so a stuck sweep is abandoned before the next
++		// tick; the per-cluster PromQL fan-out below adds its own timeout.
++		ctx, cancel := context.WithTimeout(ctx, alertEvalSweepDeadline)
++		defer cancel()
++
+ 		var p AlertEvaluationPayload
+ 		if len(t.Payload()) > 0 {
+ 			if err := json.Unmarshal(t.Payload(), &p); err != nil {
+@@ -469,36 +477,34 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
+ 	// GetClusterHealthStatus per rule (G full-fleet scans + G×C point reads)
+ 	// was pure redundancy. When fleet is nil (defensive: caller couldn't build
+ 	// it) fall back to paging the fleet inline so behavior is preserved.
+-	evaluations := make([]ruleClusterEval, 0)
++	var evaluations []ruleClusterEval
+ 	if fleet != nil {
+-		for _, cluster := range fleet.clusters {
+-			eval, err := evaluateGlobalClusterRow(ctx, rule, config, cluster, fleet.health[cluster.ID], fleet.known[cluster.ID])
+-			if err != nil {
+-				return nil, err
+-			}
+-			evaluations = append(evaluations, eval)
+-		}
++		evaluations = evaluateGlobalRuleClusters(ctx, rule, config, fleet.clusters,
++			func(_ context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
++				return fleet.health[c.ID], fleet.known[c.ID]
++			})
+ 	} else {
++		// Defensive fallback: caller couldn't build the shared snapshot, so page
++		// the fleet inline, then fan out the per-cluster evaluation the same way.
++		var clusters []sqlc.Cluster
+ 		for offset := int32(0); ; offset += alertEvalSweepPageSize {
+-			clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
++			page, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
+ 			if err != nil {
+ 				return nil, err
+ 			}
+-			if len(clusters) == 0 {
++			if len(page) == 0 {
+ 				break
+ 			}
+-			for _, cluster := range clusters {
+-				health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, cluster.ID)
+-				eval, evalErr := evaluateGlobalClusterRow(ctx, rule, config, cluster, health, healthErr == nil)
+-				if evalErr != nil {
+-					return nil, evalErr
+-				}
+-				evaluations = append(evaluations, eval)
+-			}
+-			if int32(len(clusters)) < alertEvalSweepPageSize {
++			clusters = append(clusters, page...)
++			if int32(len(page)) < alertEvalSweepPageSize {
+ 				break
+ 			}
+ 		}
++		evaluations = evaluateGlobalRuleClusters(ctx, rule, config, clusters,
++			func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
++				health, healthErr := runtimeDeps.Queries.GetClusterHealthStatus(ctx, c.ID)
++				return health, healthErr == nil
++			})
+ 	}
+ 	// No clusters: emit a single non-triggering, cluster-less evaluation so
+ 	// any stale active events for this rule still resolve (preserves the old
+@@ -536,6 +542,71 @@ func evaluateGlobalClusterRow(ctx context.Context, rule sqlc.AlertRule, config m
+ 	return ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID}, nil
+ }
+ 
++// alertEvalSweepDeadline caps the whole alert tick; alertEvalPerClusterTimeout
++// caps a single global-rule cluster evaluation (its PromQL round-trip to the
++// monitoring backend). The aggregate deadline is under the 60s cadence so a
++// stuck tick is abandoned before the next one.
++const (
++	alertEvalSweepDeadline     = 50 * time.Second
++	alertEvalPerClusterTimeout = 10 * time.Second
++)
++
++// evaluateGlobalRuleClusters evaluates a global (cluster-less) rule against
++// every cluster with bounded concurrency + a per-cluster timeout. Historically
++// this ran SERIALLY: a global PromQL rule issued C monitoring-backend
++// round-trips end-to-end, blowing the 60s tick at fleet scale, and a single
++// slow/disconnected backend stalled (or, on error, aborted) the whole tick.
++//
++// F6: fan out at fleetSweepConcurrency, time-box each cluster, and
++// skip-with-log a cluster whose evaluation errors or times out — its events
++// converge on the next tick — rather than failing the sweep. Results are
++// written into a pre-sized slice by index (each goroutine owns its slot, no
++// lock needed) so cluster order is preserved and the two-pass inhibition logic
++// downstream is unaffected. The DB-writing dispatch pass stays serial in the
++// caller, so alert outcomes are unchanged.
++func evaluateGlobalRuleClusters(
++	ctx context.Context,
++	rule sqlc.AlertRule,
++	config map[string]any,
++	clusters []sqlc.Cluster,
++	healthFor func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool),
++) []ruleClusterEval {
++	results := make([]ruleClusterEval, len(clusters))
++	ok := make([]bool, len(clusters))
++
++	g, gctx := errgroup.WithContext(ctx)
++	g.SetLimit(fleetSweepConcurrency)
++	for i, cluster := range clusters {
++		i, cluster := i, cluster
++		if gctx.Err() != nil {
++			break // aggregate deadline hit — remaining clusters converge next tick
++		}
++		g.Go(func() error {
++			cctx, cancel := context.WithTimeout(gctx, alertEvalPerClusterTimeout)
++			defer cancel()
++			health, known := healthFor(cctx, cluster)
++			eval, err := evaluateGlobalClusterRow(cctx, rule, config, cluster, health, known)
++			if err != nil {
++				runtimeLogger().WarnContext(cctx, "alert global-rule cluster evaluation failed, skipping",
++					"rule_id", rule.ID.String(), "cluster_id", cluster.ID.String(), "error", err)
++				return nil // never bubble — skip this cluster, keep the sweep alive
++			}
++			results[i] = eval
++			ok[i] = true
++			return nil
++		})
++	}
++	_ = g.Wait()
++
++	out := make([]ruleClusterEval, 0, len(clusters))
++	for i := range results {
++		if ok[i] {
++			out = append(out, results[i])
++		}
++	}
++	return out
++}
++
+ // fleetHealthSnapshot is the once-per-tick fleet view shared across all global
+ // rule evaluations: the full non-decommissioned cluster list plus a
+ // cluster_id→health map (and a "was the health read known" set). Building it
+diff --git a/internal/worker/tasks/fleet_sweep.go b/internal/worker/tasks/fleet_sweep.go
+new file mode 100644
+index 0000000..a398d61
+--- /dev/null
++++ b/internal/worker/tasks/fleet_sweep.go
+@@ -0,0 +1,68 @@
++// Package tasks — F6 shared fleet-sweep scaffolding.
++//
++// The periodic worker sweeps (alert:evaluate, mesh:detect,
++// gatekeeper:policy_apply, cluster:health_check) each walk the WHOLE fleet
++// once per tick under a single leader lease. Historically they did so
++// SERIALLY with a per-cluster tunnel/DB/monitoring round-trip and no
++// aggregate deadline, so at ~100–200 clusters the wall-clock exceeded the
++// tick interval and a handful of slow/disconnected agents stalled the entire
++// sweep (the scheduler kept enqueuing on top of the stuck run).
++//
++// This file centralises the three knobs the F6 fix hangs on:
++//   - fleetSweepConcurrency: bounded fan-out width (mirrors the
++//     resources_search.go handler's SetLimit(16)).
++//   - fanOutClusters: a bounded-concurrency, per-cluster-timeout iterator that
++//     skips-with-log rather than failing the sweep on one slow cluster and
++//     stops scheduling new work once the aggregate sweep deadline elapses.
++//   - the per-sweep aggregate deadlines / per-cluster timeouts each handler
++//     applies (defined next to their handlers).
++
++package tasks
++
++import (
++	"context"
++	"time"
++
++	"golang.org/x/sync/errgroup"
++
++	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
++)
++
++// fleetSweepConcurrency caps how many clusters a periodic fleet sweep touches
++// in parallel. Matches resourcesSearchMaxConcurrency (handler
++// resources_search.go): wide enough to keep the aggregate wall-clock ~
++// (fleet/16)×per-cluster instead of fleet×per-cluster, narrow enough not to
++// exhaust the pgx pool or open hundreds of simultaneous tunnel round-trips.
++const fleetSweepConcurrency = 16
++
++// fanOutClusters runs fn for every cluster with bounded concurrency and a
++// per-cluster timeout. It never returns an error and never aborts the batch on
++// a single cluster: fn is responsible for logging its own failures, so one
++// slow/disconnected agent is skipped-with-log rather than stalling the tick or
++// failing the whole sweep.
++//
++// It honours the parent ctx deadline (the per-sweep aggregate deadline the
++// caller installs): once that fires, gctx is cancelled, in-flight per-cluster
++// contexts observe the cancellation, and no further clusters are scheduled. A
++// sweep can therefore never run materially past its tick interval even if the
++// tail of the fleet is unreachable.
++func fanOutClusters(ctx context.Context, clusters []sqlc.Cluster, perCluster time.Duration, fn func(ctx context.Context, c sqlc.Cluster)) {
++	g, gctx := errgroup.WithContext(ctx)
++	g.SetLimit(fleetSweepConcurrency)
++	for _, c := range clusters {
++		c := c
++		// Stop scheduling new work once the aggregate deadline (or a parent
++		// cancellation) has fired — the remaining clusters are skipped and
++		// converge on the next tick.
++		if gctx.Err() != nil {
++			break
++		}
++		g.Go(func() error {
++			cctx, cancel := context.WithTimeout(gctx, perCluster)
++			defer cancel()
++			fn(cctx, c)
++			return nil // never bubble — partial failure is expected/skipped
++		})
++	}
++	_ = g.Wait() // goroutines never return an error, so this never errors
++}
+diff --git a/internal/worker/tasks/fleet_sweep_test.go b/internal/worker/tasks/fleet_sweep_test.go
+new file mode 100644
+index 0000000..5edddb7
+--- /dev/null
++++ b/internal/worker/tasks/fleet_sweep_test.go
+@@ -0,0 +1,126 @@
++package tasks
++
++import (
++	"context"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
++)
++
++func makeClusters(n int) []sqlc.Cluster {
++	out := make([]sqlc.Cluster, n)
++	for i := range out {
++		out[i] = sqlc.Cluster{ID: uuid.New(), Status: "active"}
++	}
++	return out
++}
++
++// TestFanOutClusters_BoundedConcurrency proves the fan-out (a) runs clusters in
++// parallel rather than serially and (b) never exceeds fleetSweepConcurrency
++// simultaneous in-flight per-cluster calls. Without the F6 fix the sweeps ran
++// strictly serially (peak concurrency 1); an unbounded fan-out would blow past
++// the pool/tunnel budget.
++func TestFanOutClusters_BoundedConcurrency(t *testing.T) {
++	const n = fleetSweepConcurrency * 4
++	clusters := makeClusters(n)
++
++	var inflight, maxInflight, processed int32
++	release := make(chan struct{})
++
++	go func() {
++		fanOutClusters(context.Background(), clusters, time.Minute, func(_ context.Context, _ sqlc.Cluster) {
++			cur := atomic.AddInt32(&inflight, 1)
++			for {
++				old := atomic.LoadInt32(&maxInflight)
++				if cur <= old || atomic.CompareAndSwapInt32(&maxInflight, old, cur) {
++					break
++				}
++			}
++			<-release // hold the slot so the cap can be observed
++			atomic.AddInt32(&inflight, -1)
++			atomic.AddInt32(&processed, 1)
++		})
++	}()
++
++	// Wait until the limiter has saturated at exactly the cap.
++	deadline := time.After(2 * time.Second)
++	for atomic.LoadInt32(&maxInflight) < fleetSweepConcurrency {
++		select {
++		case <-deadline:
++			t.Fatalf("only reached %d concurrent, want %d (fan-out not parallel enough)",
++				atomic.LoadInt32(&maxInflight), fleetSweepConcurrency)
++		default:
++			time.Sleep(time.Millisecond)
++		}
++	}
++	if got := atomic.LoadInt32(&inflight); got > fleetSweepConcurrency {
++		t.Fatalf("observed %d concurrent, must never exceed cap %d", got, fleetSweepConcurrency)
++	}
++	close(release) // let every wave drain
++
++	// The batch must fully complete (all n processed) and never breach the cap.
++	waited := time.After(3 * time.Second)
++	for atomic.LoadInt32(&processed) < int32(n) {
++		select {
++		case <-waited:
++			t.Fatalf("processed %d/%d clusters", atomic.LoadInt32(&processed), n)
++		default:
++			time.Sleep(time.Millisecond)
++		}
++	}
++	if got := atomic.LoadInt32(&maxInflight); got != fleetSweepConcurrency {
++		t.Fatalf("peak concurrency = %d, want exactly %d", got, fleetSweepConcurrency)
++	}
++}
++
++// TestFanOutClusters_PerClusterTimeout proves one slow cluster's per-cluster
++// context is cancelled at the per-cluster timeout so it cannot hold the slot
++// (and the tick) open indefinitely — the F6 "one slow agent stalls the sweep"
++// failure mode.
++func TestFanOutClusters_PerClusterTimeout(t *testing.T) {
++	clusters := makeClusters(1)
++	var timedOut int32
++
++	start := time.Now()
++	fanOutClusters(context.Background(), clusters, 40*time.Millisecond, func(ctx context.Context, _ sqlc.Cluster) {
++		<-ctx.Done() // simulate a hung tunnel/DB call
++		if ctx.Err() == context.DeadlineExceeded {
++			atomic.StoreInt32(&timedOut, 1)
++		}
++	})
++	if elapsed := time.Since(start); elapsed > time.Second {
++		t.Fatalf("fan-out took %s, per-cluster timeout should have released it near 40ms", elapsed)
++	}
++	if atomic.LoadInt32(&timedOut) != 1 {
++		t.Fatal("slow cluster's context was not cancelled by the per-cluster timeout")
++	}
++}
++
++// TestFanOutClusters_AggregateDeadline proves the whole sweep is abandoned when
++// the aggregate deadline fires: in-flight clusters are cancelled and the
++// remaining fleet is skipped rather than the sweep running for many minutes.
++func TestFanOutClusters_AggregateDeadline(t *testing.T) {
++	const n = 200
++	clusters := makeClusters(n)
++	var started int32
++
++	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
++	defer cancel()
++
++	start := time.Now()
++	fanOutClusters(ctx, clusters, 10*time.Second, func(cctx context.Context, _ sqlc.Cluster) {
++		atomic.AddInt32(&started, 1)
++		<-cctx.Done() // block until the aggregate deadline cancels us
++	})
++	elapsed := time.Since(start)
++	if elapsed > 3*time.Second {
++		t.Fatalf("fan-out ran %s; aggregate deadline should have abandoned it near 60ms", elapsed)
++	}
++	if got := atomic.LoadInt32(&started); got >= int32(n) {
++		t.Fatalf("started %d/%d clusters; the aggregate deadline should have skipped the tail", got, n)
++	}
++}
+diff --git a/internal/worker/tasks/gatekeeper_policy_apply.go b/internal/worker/tasks/gatekeeper_policy_apply.go
+index 3543334..6f57e16 100644
+--- a/internal/worker/tasks/gatekeeper_policy_apply.go
++++ b/internal/worker/tasks/gatekeeper_policy_apply.go
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"net/http"
++	"time"
+ 
+ 	"github.com/google/uuid"
+ 	"github.com/hibiken/asynq"
+@@ -20,6 +21,16 @@ const GatekeeperPolicyApplyType = "gatekeeper:policy_apply"
+ 
+ const gatekeeperPolicyFieldManager = "astronomer-gatekeeper-policy"
+ 
++// gatekeeperPolicySweepDeadline caps the whole fan-out;
++// gatekeeperPolicyPerClusterTimeout caps a single cluster's probe+apply. The
++// aggregate deadline is well under the 5m cadence so a stuck sweep is abandoned
++// before the next tick; the per-cluster timeout keeps one slow agent from
++// consuming the budget.
++const (
++	gatekeeperPolicySweepDeadline     = 4 * time.Minute
++	gatekeeperPolicyPerClusterTimeout = 20 * time.Second
++)
++
+ // NewGatekeeperPolicyApplyTask builds a fresh task handle.
+ func NewGatekeeperPolicyApplyTask() *asynq.Task {
+ 	return asynq.NewTask(GatekeeperPolicyApplyType, nil, asynq.MaxRetry(2))
+@@ -36,6 +47,12 @@ func NewGatekeeperPolicyApplyTask() *asynq.Task {
+ // convergence is intentional — re-apply is cheap and idempotent.
+ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
+ 	return runPeriodicTaskWithLeader(ctx, GatekeeperPolicyApplyType, func() error {
++		// F6: bound the whole sweep so an interval overrun can't run for many
++		// minutes while the scheduler keeps enqueuing. Shorter than the 5m
++		// cadence so a stuck tail is abandoned before the next tick.
++		ctx, cancel := context.WithTimeout(ctx, gatekeeperPolicySweepDeadline)
++		defer cancel()
++
+ 		if runtimeDeps.Queries == nil {
+ 			runtimeLogger().DebugContext(ctx, "gatekeeper policy runtime not configured, skipping")
+ 			return nil
+@@ -53,12 +70,16 @@ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
+ 		if err != nil {
+ 			return fmt.Errorf("list clusters: %w", err)
+ 		}
+-		for _, c := range clusters {
++		// F6: fan out the per-cluster tunnel probe + apply with bounded
++		// concurrency and a per-cluster timeout so one slow/disconnected agent
++		// is skipped-with-log instead of stalling the whole 5m tick. A tunnel
++		// error already reads as "not installed" and skips the cluster.
++		fanOutClusters(ctx, clusters, gatekeeperPolicyPerClusterTimeout, func(ctx context.Context, c sqlc.Cluster) {
+ 			if !gatekeeperInstalled(ctx, c.ID) {
+-				continue
++				return
+ 			}
+ 			applyGatekeeperBundle(ctx, c.ID, manifests)
+-		}
++		})
+ 		return nil
+ 	})
+ }
+diff --git a/internal/worker/tasks/health_check.go b/internal/worker/tasks/health_check.go
+index c3d179b..ce754d5 100644
+--- a/internal/worker/tasks/health_check.go
++++ b/internal/worker/tasks/health_check.go
+@@ -61,6 +61,12 @@ func NewHealthCheckTask(payload HealthCheckPayload) (*asynq.Task, error) {
+ // HandleHealthCheck checks all active cluster connections and updates health status.
+ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
+ 	return runPeriodicTaskWithLeader(ctx, "cluster:health_check", func() error {
++		// F6: bound the whole sweep so an interval overrun can't run for many
++		// minutes while the scheduler keeps enqueuing. Shorter than the 60s
++		// cadence so a stuck tail is abandoned before the next tick.
++		ctx, cancel := context.WithTimeout(ctx, healthCheckSweepDeadline)
++		defer cancel()
++
+ 		var p HealthCheckPayload
+ 		if len(t.Payload()) > 0 {
+ 			if err := json.Unmarshal(t.Payload(), &p); err != nil {
+@@ -83,11 +89,16 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
+ 		if err != nil {
+ 			return err
+ 		}
+-		for _, cluster := range clusters {
++		// F6: fan out the ~5 serial DB round-trips per cluster with bounded
++		// concurrency and a per-cluster timeout. A cluster whose write fails or
++		// times out is skipped-with-log so it can't abort the whole fleet sweep
++		// (each cluster is an independent row; the next tick converges it).
++		fanOutClusters(ctx, clusters, healthCheckPerClusterTimeout, func(ctx context.Context, cluster sqlc.Cluster) {
+ 			if err := updateClusterHealth(ctx, cluster); err != nil {
+-				return err
++				slog.WarnContext(ctx, "health check failed for cluster, skipping",
++					"cluster_id", cluster.ID.String(), "error", err)
+ 			}
+-		}
++		})
+ 		slog.InfoContext(ctx, "health check complete")
+ 		return nil
+ 	})
+@@ -102,6 +113,14 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
+ // 'active' forever. Paging on Offset covers the whole fleet.
+ const healthCheckPageSize = 500
+ 
++// healthCheckSweepDeadline caps the whole fan-out; healthCheckPerClusterTimeout
++// caps a single cluster's ~5 DB round-trips. The aggregate deadline is under
++// the 60s cadence so a stuck sweep is abandoned before the next tick.
++const (
++	healthCheckSweepDeadline     = 50 * time.Second
++	healthCheckPerClusterTimeout = 10 * time.Second
++)
++
+ func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, error) {
+ 	if clusterID != "" {
+ 		id, err := uuid.Parse(clusterID)
+diff --git a/internal/worker/tasks/mesh_detect.go b/internal/worker/tasks/mesh_detect.go
+index d8cd5f5..320e676 100644
+--- a/internal/worker/tasks/mesh_detect.go
++++ b/internal/worker/tasks/mesh_detect.go
+@@ -88,7 +88,7 @@ var astronomerClusterMesh = prometheus.NewGaugeVec(
+ )
+ 
+ // meshDetectAttempts counts each detection by outcome. outcome is
+-// "success", "failure", or "skipped" (cluster not healthy).
++// "success", "failure", or "skipped" (cluster not connected).
+ var meshDetectAttempts = prometheus.NewCounterVec(
+ 	prometheus.CounterOpts{
+ 		Namespace: "astronomer",
+@@ -108,6 +108,12 @@ func init() {
+ // 5m fleet sweep.
+ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
+ 	return runPeriodicTaskWithLeader(ctx, MeshDetectType, func() error {
++		// F6: bound the whole sweep so an interval overrun can't run for many
++		// minutes while the scheduler keeps enqueuing on top of it. Shorter than
++		// the 5m cadence so a stuck tail is abandoned before the next tick.
++		ctx, cancel := context.WithTimeout(ctx, meshDetectSweepDeadline)
++		defer cancel()
++
+ 		if meshDetectDeps.Queries == nil {
+ 			runtimeLogger().InfoContext(ctx, "mesh detect runtime not configured, skipping")
+ 			return nil
+@@ -123,17 +129,29 @@ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
+ 		if err != nil {
+ 			return fmt.Errorf("list clusters: %w", err)
+ 		}
++		// Select the CONNECTED clusters. The gate historically compared against
++		// "healthy" — a status the fleet never carries (health_check.go /
++		// metrics/publisher.go only ever write "active" / "disconnected", and
++		// the schema defaults to "pending"), so this sweep skipped EVERY cluster
++		// and was inert. "active" is the real connected status.
++		active := clusters[:0:0]
+ 		for _, c := range clusters {
+-			if c.Status != "healthy" {
++			if c.Status != "active" {
+ 				meshDetectAttempts.WithLabelValues(observability.MetricValues("skipped")...).Inc()
+ 				continue
+ 			}
++			active = append(active, c)
++		}
++		// F6: fan out the per-cluster tunnel detection with bounded concurrency
++		// and a per-cluster timeout so a slow/disconnected agent is
++		// skipped-with-log instead of stalling the whole 5m tick.
++		fanOutClusters(ctx, active, meshDetectPerClusterTimeout, func(ctx context.Context, c sqlc.Cluster) {
+ 			if err := DetectAndUpsert(ctx, c.ID); err != nil {
+ 				runtimeLogger().WarnContext(ctx, "mesh detect failed",
+ 					"cluster_id", c.ID.String(),
+ 					"error", err)
+ 			}
+-		}
++		})
+ 		return nil
+ 	})
+ }
+@@ -218,6 +236,15 @@ const meshDetectInterval = 5 * time.Minute
+ 
+ var _ = meshDetectInterval // reserved for the scheduler wiring
+ 
++// meshDetectSweepDeadline caps the whole fan-out; meshDetectPerClusterTimeout
++// caps a single cluster's tunnel detection. The aggregate deadline is well
++// under the 5m cadence so a stuck sweep is abandoned before the next tick, and
++// the per-cluster timeout keeps one slow agent from consuming the budget.
++const (
++	meshDetectSweepDeadline     = 4 * time.Minute
++	meshDetectPerClusterTimeout = 20 * time.Second
++)
++
+ // ensureClusterRow guarantees a placeholder row exists for the
+ // cluster before the first detection runs. The current upsert path
+ // already covers this, so the function is a no-op; it's reserved as
+diff --git a/internal/worker/tasks/mesh_detect_test.go b/internal/worker/tasks/mesh_detect_test.go
+index 171b503..70e4016 100644
+--- a/internal/worker/tasks/mesh_detect_test.go
++++ b/internal/worker/tasks/mesh_detect_test.go
+@@ -151,7 +151,10 @@ func setupMeshDeps(t *testing.T) (*fakeMeshQuerier, *scriptedRequester) {
+ func TestWorker_UpsertsRow(t *testing.T) {
+ 	q, r := setupMeshDeps(t)
+ 	clusterID := uuid.New()
+-	q.clusters = []sqlc.Cluster{{ID: clusterID, Name: "c1", Status: "healthy"}}
++	// "active" is the real connected status the fleet carries — the sweep gate
++	// selects on it. (Historically the gate compared against "healthy", a status
++	// nothing ever writes, so the sweep was inert and upserted nothing.)
++	q.clusters = []sqlc.Cluster{{ID: clusterID, Name: "c1", Status: "active"}}
+ 	// Bare-minimum mesh detection: one Istio gateway is enough to
+ 	// flip the detected_mesh to "istio".
+ 	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
+@@ -175,6 +178,40 @@ func TestWorker_UpsertsRow(t *testing.T) {
+ 	}
+ }
+ 
++// TestWorker_SelectsActiveClusters is the F6 regression proving the sweep is
++// no longer inert: the gate must select clusters whose status is the real
++// connected value ("active") and skip everything else ("disconnected",
++// "pending", and the legacy phantom "healthy" that nothing ever writes). Before
++// the fix the gate compared against "healthy", so EVERY cluster was skipped and
++// the sweep never upserted a single row.
++func TestWorker_SelectsActiveClusters(t *testing.T) {
++	q, r := setupMeshDeps(t)
++	activeA := uuid.New()
++	activeB := uuid.New()
++	q.clusters = []sqlc.Cluster{
++		{ID: activeA, Name: "active-a", Status: "active"},
++		{ID: uuid.New(), Name: "gone", Status: "disconnected"},
++		{ID: uuid.New(), Name: "new", Status: "pending"},
++		// The phantom status the inert gate keyed on — must NOT be selected.
++		{ID: uuid.New(), Name: "phantom", Status: "healthy"},
++		{ID: activeB, Name: "active-b", Status: "active"},
++	}
++	r.set("GET", "/api/v1/namespaces", 200, meshNSList("default"))
++	r.set("GET", "/apis/networking.istio.io/v1beta1/gateways", 200, meshItemsList(1))
++
++	if err := HandleMeshDetect(context.Background(), nil); err != nil {
++		t.Fatalf("HandleMeshDetect: %v", err)
++	}
++
++	got := map[uuid.UUID]bool{}
++	for _, u := range q.upserts {
++		got[u.ClusterID] = true
++	}
++	if len(got) != 2 || !got[activeA] || !got[activeB] {
++		t.Fatalf("upserted clusters = %v, want exactly the two active clusters %s, %s", got, activeA, activeB)
++	}
++}
++
+ func TestWorker_NoOpForUnhealthyCluster(t *testing.T) {
+ 	q, _ := setupMeshDeps(t)
+ 	q.clusters = []sqlc.Cluster{

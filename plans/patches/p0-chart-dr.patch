@@ -1,0 +1,885 @@
+diff --git a/deploy/chart/templates/NOTES.txt b/deploy/chart/templates/NOTES.txt
+index e823557..1361ce9 100644
+--- a/deploy/chart/templates/NOTES.txt
++++ b/deploy/chart/templates/NOTES.txt
+@@ -9,6 +9,16 @@ Worker image : {{ include "astronomer.image" (dict "context" . "component" "work
+ Migrate image: {{ include "astronomer.image" (dict "context" . "component" "migrate") }}
+ 
+ Migrations were applied via a pre-install/pre-upgrade Helm hook Job.
++{{- if ne (toString .Values.image.server.tag) (toString .Values.image.migrate.tag) }}
++
++!! SCHEMA-SKEW OVERRIDE ACTIVE (F1) !!
++   image.server.tag ({{ .Values.image.server.tag }}) != image.migrate.tag ({{ .Values.image.migrate.tag }})
++   and image.allowSchemaSkew=true, so the chart did NOT refuse the mismatch.
++   The server's /readyz enforces a minimum DB schema; if the migrate image ships
++   a schema BELOW the server binary's ExpectedSchemaVersion, the server pods will
++   be held out of Service rotation until you deploy a matching migrate image.
++   Only keep this override for a hotfix that ships no new migration.
++{{- end }}
+ 
+ TLS
+ ---
+@@ -99,6 +109,22 @@ Nightly pg_dump is ENABLED.
+   Endpoint    : {{ . }}
+   {{- end }}
+   Retention   : daily={{ .Values.managementBackup.retention.daily }} weekly={{ .Values.managementBackup.retention.weekly }} monthly={{ .Values.managementBackup.retention.monthly }}
++{{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
++  Key backup  : ENABLED — the Fernet/JWT key Secret is wrapped with a separately
++                held passphrase and stored under {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" }}/. A restore onto a
++                new cluster can decrypt agent tokens / SSO secrets / gitops creds.
++{{- else }}
++
++  WARNING: encryption-key backup is NOT wired (F4). pg_dump alone is NOT a
++  recoverable backup — a restore onto a new cluster would bring back rows whose
++  agent tokens / SSO secrets / gitops creds are permanently UNDECRYPTABLE,
++  because the Fernet key lives in a Secret, not in Postgres. Wire it:
++
++    --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=<secret>
++
++  and hold that wrapping passphrase in SEPARATE custody from the S3 backup
++  credentials. See docs/management-plane-dr-runbook.md ("Key custody").
++{{- end }}
+ 
+ Restore procedure: docs/management-plane-dr-runbook.md
+ 
+diff --git a/deploy/chart/templates/_helpers.tpl b/deploy/chart/templates/_helpers.tpl
+index 9390637..64cb97d 100644
+--- a/deploy/chart/templates/_helpers.tpl
++++ b/deploy/chart/templates/_helpers.tpl
+@@ -314,6 +314,46 @@ rendered manifest.
+   {{- end }}
+ {{- end }}
+ 
++{{/*
++astronomer.bootstrapSecretName — the Secret the server reads
++ASTRONOMER_BOOTSTRAP_PASSWORD from. When bootstrap.existingSecret is set the
++chart does NOT manage a bootstrap Secret (see bootstrap-secret.yaml) and the
++server wires straight to the operator-provided one; otherwise the chart-managed
++<release>-bootstrap Secret is used.
++*/}}
++{{- define "astronomer.bootstrapSecretName" -}}
++{{- if .Values.bootstrap.existingSecret -}}
++{{- .Values.bootstrap.existingSecret -}}
++{{- else -}}
++{{- printf "%s-bootstrap" (include "astronomer.fullname" .) -}}
++{{- end -}}
++{{- end }}
++
++{{/*
++astronomer.validateImageSkew (F1 · BLOCKER) runs on every render, any env.
++
++The server binary enforces a minimum DB schema (internal/db.ExpectedSchemaVersion)
++via /readyz; the matching migrations ship in the migrate image built from the
++SAME commit. Bumping image.server.tag without image.migrate.tag (or vice-versa)
++leaves the applied schema below the server's floor and holds the pod out of
++Service rotation PERMANENTLY — the exact production incident F1 exists to prevent.
++
++Both images are built from one commit, so their tags must match. We fail the
++render on a mismatch unless the operator explicitly opts into a skewed rollout
++(image.allowSchemaSkew=true — e.g. a hotfix that ships no new migration), in
++which case NOTES.txt warns instead. Returns "" so callers can discard it.
++*/}}
++{{- define "astronomer.validateImageSkew" -}}
++  {{- $serverTag := toString .Values.image.server.tag }}
++  {{- $migrateTag := toString .Values.image.migrate.tag }}
++  {{- if ne $serverTag $migrateTag }}
++    {{- if not .Values.image.allowSchemaSkew }}
++      {{- $msg := printf "\n\nAstronomer image-skew guard (F1) failed:\n  - image.server.tag=%q but image.migrate.tag=%q\n\nThe server and migrate images are built from the same commit and MUST ship the\nsame schema: the server's /readyz holds the pod out of Service rotation until the\napplied DB schema reaches the binary's ExpectedSchemaVersion, and those migrations\nlive in the migrate image. A mismatched pair can 503 the management plane\npermanently (this happened in production — see plans/production-readiness.md F1).\n\nDeploy server + migrate from ONE commit so the tags match (values-production.yaml\nsets both from a single --set image.<name>.tag=<git-sha>). If you INTEND a skewed\nrollout that ships no new migration, set image.allowSchemaSkew=true to override." $serverTag $migrateTag }}
++      {{- fail $msg }}
++    {{- end }}
++  {{- end }}
++{{- end }}
++
+ {{/*
+ astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
+ render when env=production but mandatory production knobs are missing. Helm's
+@@ -375,6 +415,15 @@ rendered manifest.
+     {{- if not .Values.secrets.encryptionKey }}
+       {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
+     {{- end }}
++    {{- /* F8 (C-04): bootstrap-secret.yaml generates randAlphaNum when
++           bootstrap.password is empty and the `lookup` guard can't see the
++           existing Secret. Under GitOps / `helm template` (no live cluster)
++           lookup returns nil, so every sync re-rolls the admin password. In
++           production require an explicit pin or an existingSecret escape hatch
++           (mirrors postgres.external.dsnSecretRef) so the render is stable. */ -}}
++    {{- if not (or .Values.bootstrap.password .Values.bootstrap.existingSecret) }}
++      {{- $errs = append $errs "  - bootstrap.password or bootstrap.existingSecret must be set when config.env=production. An empty bootstrap.password re-rolls randAlphaNum on every GitOps render (lookup can't read the prior Secret without a live cluster), rotating the admin password. Pin bootstrap.password, or set bootstrap.existingSecret to a pre-created Secret with a 'password' key." }}
++    {{- end }}
+     {{- /* Migration 045 soft check: production posture is "Dex on" unless
+            the operator explicitly opts into local-password-only auth. The
+            default chart value of config.auth.localPasswordOnly=false makes
+diff --git a/deploy/chart/templates/bootstrap-secret.yaml b/deploy/chart/templates/bootstrap-secret.yaml
+index 12bb515..3fa4792 100644
+--- a/deploy/chart/templates/bootstrap-secret.yaml
++++ b/deploy/chart/templates/bootstrap-secret.yaml
+@@ -1,25 +1,32 @@
+ {{- /*
+ Rancher-style bootstrap-admin password.
+ 
++  - When .Values.bootstrap.existingSecret is set, the chart manages NOTHING
++    here — the operator pre-creates that Secret (with a `password` key) and the
++    server wires straight to it (mirrors postgres.external.dsnSecretRef). This is
++    the GitOps-safe escape hatch: no chart-generated value to drift.
+   - When .Values.bootstrap.password is non-empty, use it as-is so operators
+     can pin a known value via --set bootstrap.password=... or external
+     secret tooling.
+-  - When the value is empty, generate a random 24-character password on the
++  - When both are empty, generate a random 24-character password on the
+     *first* install only; the `lookup` guard re-reads the existing secret
+     on subsequent upgrades so the value remains stable.
+ 
+-GITOPS CAVEAT (C-04): `lookup` returns nil under `helm template` and any
++GITOPS CAVEAT (C-04, F8): `lookup` returns nil under `helm template` and any
+ renderer that templates without a live cluster connection — which is exactly
+ how Argo CD and other GitOps tools apply this chart. In that mode the guard
+-above cannot see the existing Secret, so an empty bootstrap.password would
++below cannot see the existing Secret, so an empty bootstrap.password would
+ re-roll `randAlphaNum 24` on every sync and rotate the admin password out from
+ under you. GitOps installs MUST pin `bootstrap.password` (via values or an
+-external secret manager) or pre-create the `<release>-bootstrap` Secret. The
+-`helm.sh/resource-policy: keep` annotation preserves it once created.
++external secret manager) or set `bootstrap.existingSecret`. In production the
++chart now hard-fails the render unless one of those is provided
++(astronomer.requireProductionInputs). The `helm.sh/resource-policy: keep`
++annotation preserves the chart-managed Secret once created.
+ 
+ The server reads this via ASTRONOMER_BOOTSTRAP_PASSWORD; see the env wire-up
+ in templates/server-deployment.yaml.
+ */}}
++{{- if not .Values.bootstrap.existingSecret -}}
+ {{- $name := printf "%s-bootstrap" (include "astronomer.fullname" .) -}}
+ {{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
+ {{- $pw := "" -}}
+@@ -43,3 +50,4 @@ metadata:
+ type: Opaque
+ stringData:
+   password: {{ $pw | quote }}
++{{- end }}
+diff --git a/deploy/chart/templates/configmap.yaml b/deploy/chart/templates/configmap.yaml
+index 9ca9054..11ccb6e 100644
+--- a/deploy/chart/templates/configmap.yaml
++++ b/deploy/chart/templates/configmap.yaml
+@@ -5,6 +5,7 @@
+        section for the recipe. The helper returns ""; we discard the
+        result so this only fails the render, never injects manifest text. */}}
+ {{- $_ := include "astronomer.validateInputs" . -}}
++{{- $_ := include "astronomer.validateImageSkew" . -}}
+ {{- $_ := include "astronomer.requireProductionInputs" . -}}
+ apiVersion: v1
+ kind: ConfigMap
+diff --git a/deploy/chart/templates/management-plane-backup-cronjob.yaml b/deploy/chart/templates/management-plane-backup-cronjob.yaml
+index 249357c..ea3d4de 100644
+--- a/deploy/chart/templates/management-plane-backup-cronjob.yaml
++++ b/deploy/chart/templates/management-plane-backup-cronjob.yaml
+@@ -148,6 +148,30 @@ spec:
+                   prune_tier "weekly"  "${MANAGEMENT_BACKUP_KEEP_WEEKLY}"
+                   prune_tier "monthly" "${MANAGEMENT_BACKUP_KEEP_MONTHLY}"
+ 
++                  # --- Encryption-key backup (F4) ------------------------------
++                  # pg_dump captures the ciphertext; this captures the Fernet/JWT
++                  # KEY that decrypts it — WITHOUT which a restore onto a new
++                  # cluster is undecryptable. The key Secret is mounted at
++                  # /var/run/astronomer-keys (one file per key). We tar it (-h to
++                  # dereference the k8s secret-mount symlinks) and symmetrically
++                  # encrypt the archive with the SEPARATELY-held wrapping
++                  # passphrase BEFORE upload, so the key never lands in S3 in
++                  # plaintext beside the data it protects.
++                  if [ -n "${KEYBACKUP_ENABLED:-}" ]; then
++                    echo "Backing up encryption-key Secret (wrapped) to ${KEYBACKUP_PREFIX}/"
++                    KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
++                    KEY_ENC="${KEY_BUNDLE}.enc"
++                    KEY_S3="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.enc"
++                    tar -C /var/run/astronomer-keys -chf "${KEY_BUNDLE}" .
++                    openssl enc -aes-256-cbc -pbkdf2 -salt \
++                      -in "${KEY_BUNDLE}" -out "${KEY_ENC}" \
++                      -pass file:/var/run/astronomer-wrap/passphrase
++                    aws s3 cp ${AWS_S3_FLAGS} "${KEY_ENC}" "s3://${BUCKET}/${KEY_S3}"
++                    rm -f "${KEY_BUNDLE}" "${KEY_ENC}"
++                    prune_tier "${KEYBACKUP_PREFIX}" "${KEYBACKUP_KEEP}"
++                    echo "Encryption-key backup OK: s3://${BUCKET}/${KEY_S3}"
++                  fi
++
+                   echo "Backup OK."
+               env:
+                 - name: HOME
+@@ -170,6 +194,14 @@ spec:
+                   value: {{ .Values.managementBackup.retention.weekly | default 12 | quote }}
+                 - name: MANAGEMENT_BACKUP_KEEP_MONTHLY
+                   value: {{ .Values.managementBackup.retention.monthly | default 6 | quote }}
++                {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
++                - name: KEYBACKUP_ENABLED
++                  value: "1"
++                - name: KEYBACKUP_PREFIX
++                  value: {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" | quote }}
++                - name: KEYBACKUP_KEEP
++                  value: {{ .Values.managementBackup.encryptionKeyBackup.retention | default 30 | quote }}
++                {{- end }}
+                 {{- if .Values.postgres.external.dsnSecretRef.name }}
+                 - name: DATABASE_URL
+                   valueFrom:
+@@ -189,6 +221,14 @@ spec:
+                   readOnly: true
+                 - name: scratch
+                   mountPath: /tmp
++                {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
++                - name: encryption-keys
++                  mountPath: /var/run/astronomer-keys
++                  readOnly: true
++                - name: wrapping-passphrase
++                  mountPath: /var/run/astronomer-wrap
++                  readOnly: true
++                {{- end }}
+               resources:
+                 {{- toYaml .Values.managementBackup.resources | nindent 16 }}
+           volumes:
+@@ -201,4 +241,19 @@ spec:
+             - name: scratch
+               emptyDir:
+                 sizeLimit: {{ .Values.managementBackup.scratchSizeLimit | default "8Gi" | quote }}
++            {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
++            # The Fernet/JWT key Secret, mounted read-only so the job can wrap
++            # and back it up. Defaults to the chart's own <release>-secrets.
++            - name: encryption-keys
++              secret:
++                secretName: {{ .Values.managementBackup.encryptionKeyBackup.secretName | default (printf "%s-secrets" (include "astronomer.fullname" .)) | quote }}
++            # Separately-held wrapping passphrase. Custody MUST be distinct from
++            # the S3 backup credentials (see docs/management-plane-dr-runbook.md).
++            - name: wrapping-passphrase
++              secret:
++                secretName: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name | quote }}
++                items:
++                  - key: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.key | default "passphrase" | quote }}
++                    path: passphrase
++            {{- end }}
+ {{- end }}
+diff --git a/deploy/chart/templates/management-plane-restore-drill-cronjob.yaml b/deploy/chart/templates/management-plane-restore-drill-cronjob.yaml
+index b32f2b5..50288cd 100644
+--- a/deploy/chart/templates/management-plane-restore-drill-cronjob.yaml
++++ b/deploy/chart/templates/management-plane-restore-drill-cronjob.yaml
+@@ -244,6 +244,64 @@ spec:
+                   done
+                   unset IFS
+ 
++                  # --- Decryptability proof (F4 b) ---------------------------
++                  # A green schema + row-count drill can still hide a DR-FATAL
++                  # problem: the encryption key was never backed up, or has
++                  # drifted from the ciphertext, so the restored rows are
++                  # undecryptable. Download the latest WRAPPED key bundle, unwrap
++                  # it with the separately-held wrapping passphrase, and Fernet-
++                  # verify one known encrypted column from the restored DB. Fail
++                  # the drill if we can't — this is the check that turns "the DB
++                  # restored" into "the DB restored AND is usable".
++                  #
++                  # Requires openssl + python3 in the drill image (python3 uses
++                  # only the stdlib: base64/hmac/hashlib). Gated on the wrapping
++                  # secret being wired, so it stays inert until DR is configured.
++                  if [ -n "${DECRYPT_CHECK_ENABLED:-}" ]; then
++                    echo "Verifying decryptability of ${DECRYPT_TABLE}.${DECRYPT_COLUMN}"
++                    KEY_PFX="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/"
++                    KEY_LIST="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
++                                    --bucket "${BUCKET}" --prefix "${KEY_PFX}" \
++                                    --query 'Contents[].Key' --output text 2>/dev/null || echo '')"
++                    if [ -z "${KEY_LIST}" ] || [ "${KEY_LIST}" = "None" ]; then
++                      fail_and_exit "no wrapped key bundle under s3://${BUCKET}/${KEY_PFX} — the encryption key is NOT being backed up, so a real restore would be undecryptable"
++                    fi
++                    LATEST_KEY_OBJ="$(echo "${KEY_LIST}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' | sort | tail -n1)"
++                    echo "Selected key bundle: s3://${BUCKET}/${LATEST_KEY_OBJ}"
++                    aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${LATEST_KEY_OBJ}" /tmp/keys.tar.enc
++                    openssl enc -d -aes-256-cbc -pbkdf2 \
++                      -in /tmp/keys.tar.enc -out /tmp/keys.tar \
++                      -pass file:/var/run/astronomer-wrap/passphrase \
++                      || fail_and_exit "could not unwrap key bundle (wrong wrapping passphrase?)"
++                    mkdir -p /tmp/keys
++                    tar -C /tmp/keys -xf /tmp/keys.tar || fail_and_exit "could not extract key bundle"
++                    if [ ! -s /tmp/keys/ASTRONOMER_ENCRYPTION_KEY ]; then
++                      fail_and_exit "ASTRONOMER_ENCRYPTION_KEY absent from restored key bundle"
++                    fi
++                    SAMPLE="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
++                      "SELECT ${DECRYPT_COLUMN} FROM ${DECRYPT_TABLE} WHERE ${DECRYPT_COLUMN} IS NOT NULL AND ${DECRYPT_COLUMN} <> '' LIMIT 1;" \
++                      2>/dev/null || echo '')"
++                    if [ -z "${SAMPLE}" ]; then
++                      echo "  no encrypted rows in ${DECRYPT_TABLE}.${DECRYPT_COLUMN} yet — nothing to prove on this install; skipping decrypt (key backup itself is verified above)"
++                    else
++                      # Fernet HMAC verification: base64url-decode the key + token,
++                      # HMAC-SHA256 over token[:-32] with signing_key=key[:16] and
++                      # compare to the trailing 32-byte tag. A match proves the
++                      # backed-up key signed this ciphertext == it decrypts. The
++                      # verifier is a pure-stdlib python3 script (base64/hmac/
++                      # hashlib — no third-party crypto lib), base64-encoded here
++                      # so it survives the YAML block scalar as one line.
++                      export SAMPLE_TOKEN="${SAMPLE}"
++                      echo 'aW1wb3J0IGJhc2U2NCwgaG1hYywgaGFzaGxpYiwgb3MsIHN5cwprZXkgPSBiYXNlNjQudXJsc2FmZV9iNjRkZWNvZGUob3BlbihzeXMuYXJndlsxXSkucmVhZCgpLnN0cmlwKCkpCmlmIGxlbihrZXkpICE9IDMyOgogICAgc3lzLmV4aXQoImZlcm5ldCBrZXkgaXMgbm90IDMyIGJ5dGVzIGFmdGVyIGRlY29kZSIpCnNpZyA9IGtleVs6MTZdCnRvayA9IGJhc2U2NC51cmxzYWZlX2I2NGRlY29kZShvcy5lbnZpcm9uWyJTQU1QTEVfVE9LRU4iXS5zdHJpcCgpKQppZiBsZW4odG9rKSA8IDQxIG9yIHRva1swXSAhPSAweDgwOgogICAgc3lzLmV4aXQoInNhbXBsZWQgdmFsdWUgaXMgbm90IGEgZmVybmV0IHRva2VuIikKbWFjID0gaG1hYy5uZXcoc2lnLCB0b2tbOi0zMl0sIGhhc2hsaWIuc2hhMjU2KS5kaWdlc3QoKQpzeXMuZXhpdCgwIGlmIGhtYWMuY29tcGFyZV9kaWdlc3QobWFjLCB0b2tbLTMyOl0pIGVsc2UgImhtYWMgbWlzbWF0Y2g6IGtleSBkb2VzIG5vdCBtYXRjaCBjaXBoZXJ0ZXh0IikK' \
++                        | base64 -d | python3 - /tmp/keys/ASTRONOMER_ENCRYPTION_KEY \
++                        || fail_and_exit "restored ${DECRYPT_TABLE}.${DECRYPT_COLUMN} did NOT verify under the backed-up key — DR is broken"
++                      unset SAMPLE_TOKEN
++                      echo "  decrypt check OK: ${DECRYPT_TABLE}.${DECRYPT_COLUMN} verifies under the backed-up key"
++                    fi
++                    rm -f /tmp/keys.tar.enc /tmp/keys.tar
++                    rm -rf /tmp/keys
++                  fi
++
+                   # --- Success: write status row -----------------------------
+                   trap - EXIT
+                   FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+@@ -274,6 +332,16 @@ spec:
+                   value: {{ .Values.managementRestoreDrill.expectedMinSchemaVersion | quote }}
+                 - name: EXPECTED_TABLES
+                   value: {{ join "," .Values.managementRestoreDrill.expectedTables | quote }}
++                {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
++                - name: DECRYPT_CHECK_ENABLED
++                  value: "1"
++                - name: DECRYPT_TABLE
++                  value: {{ .Values.managementRestoreDrill.decryptCheck.table | default "argocd_instances" | quote }}
++                - name: DECRYPT_COLUMN
++                  value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "auth_token_encrypted" | quote }}
++                - name: KEYBACKUP_PREFIX
++                  value: {{ .Values.managementRestoreDrill.decryptCheck.keyPrefix | default "keys" | quote }}
++                {{- end }}
+                 - name: DRILL_PASSWORD
+                   value: {{ .Values.managementRestoreDrill.sidecar.password | quote }}
+                 # The PRODUCTION DB DSN — used ONLY for the audit row
+@@ -299,6 +367,11 @@ spec:
+                   readOnly: true
+                 - name: scratch
+                   mountPath: /tmp
++                {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
++                - name: wrapping-passphrase
++                  mountPath: /var/run/astronomer-wrap
++                  readOnly: true
++                {{- end }}
+               resources:
+                 {{- toYaml .Values.managementRestoreDrill.resources | nindent 16 }}
+           volumes:
+@@ -308,6 +381,16 @@ spec:
+                 items:
+                   - key: {{ .Values.managementBackup.s3.credentialsSecretRef.key | default "credentials" | quote }}
+                     path: credentials
++            {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
++            # Same wrapping passphrase the backup used to wrap the key bundle.
++            # Custody MUST be separate from the S3 credentials above.
++            - name: wrapping-passphrase
++              secret:
++                secretName: {{ .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name | quote }}
++                items:
++                  - key: {{ .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.key | default "passphrase" | quote }}
++                    path: passphrase
++            {{- end }}
+             - name: scratch
+               emptyDir:
+                 sizeLimit: {{ .Values.managementRestoreDrill.scratchSizeLimit | default "8Gi" | quote }}
+diff --git a/deploy/chart/templates/server-deployment.yaml b/deploy/chart/templates/server-deployment.yaml
+index bdf02c7..c78fc56 100644
+--- a/deploy/chart/templates/server-deployment.yaml
++++ b/deploy/chart/templates/server-deployment.yaml
+@@ -123,7 +123,7 @@ spec:
+             - name: ASTRONOMER_BOOTSTRAP_PASSWORD
+               valueFrom:
+                 secretKeyRef:
+-                  name: {{ include "astronomer.fullname" . }}-bootstrap
++                  name: {{ include "astronomer.bootstrapSecretName" . }}
+                   key: password
+             - name: ASTRONOMER_BOOTSTRAP_USERNAME
+               value: {{ .Values.bootstrap.username | quote }}
+diff --git a/deploy/chart/values-production.yaml b/deploy/chart/values-production.yaml
+index 6d0328b..617c40a 100644
+--- a/deploy/chart/values-production.yaml
++++ b/deploy/chart/values-production.yaml
+@@ -226,15 +226,19 @@ dex:
+   replicaCount: 2
+   clientSecret: ""    # required — replace with `openssl rand -hex 32` or similar
+ 
+-# Production deploys can pin the bootstrap password instead of relying on the
+-# chart's random generator. When left empty, the chart stores the generated
+-# password in the <release>-bootstrap Secret. Pass a known initial password via
+-#   --set bootstrap.password=<initial-admin-password>
+-# or use --set-file to read from a file outside git.
++# F8 (C-04): in production the render FAILS unless bootstrap.password is pinned
++# OR bootstrap.existingSecret is provided. This is deliberate — an empty
++# bootstrap.password re-rolls a random value on every GitOps render (the
++# `lookup` guard can't read the prior Secret without a live cluster), silently
++# rotating the admin password. Pass a known initial password via
++#   --set bootstrap.password=<initial-admin-password>   (or --set-file, outside git)
++# or point at a pre-created Secret with a `password` key via
++#   --set bootstrap.existingSecret=<secret-name>
+ bootstrap:
+   username: admin
+   email: ""
+-  password: ""
++  password: ""       # REQUIRED in production unless existingSecret is set
++  existingSecret: "" # OR set this to a pre-created Secret (key: password)
+ 
+ # ── ServiceAccount + RBAC ─────────────────────────────────────────────────
+ serviceAccount:
+@@ -309,3 +313,29 @@ managementBackup:
+     credentialsSecretRef:
+       name: ""   # REQUIRED — operator supplies via --set
+       key: "credentials"
++  # F4 (HIGH · DR): back up the Fernet/JWT encryption key WITH the DB, wrapped
++  # with a SEPARATELY-held passphrase. Without this a restore onto a new cluster
++  # is undecryptable. STRONGLY recommended in production. Create the wrapping
++  # secret out-of-band and hold it in DIFFERENT custody than the S3 credentials:
++  #
++  #   kubectl -n astronomer create secret generic astronomer-key-wrap \
++  #     --from-literal=passphrase="$(openssl rand -base64 48)"
++  #
++  #   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap
++  #
++  # See docs/management-plane-dr-runbook.md ("Key custody").
++  encryptionKeyBackup:
++    enabled: true
++    wrappingSecretRef:
++      name: ""   # REQUIRED for key backup — hold in SEPARATE custody from S3 creds
++      key: "passphrase"
++
++# The weekly restore-drill proves the dump is restorable AND — once the key
++# backup above is wired — that the backed-up key actually DECRYPTS the restored
++# data. Point decryptCheck at the SAME wrapping secret so it can unwrap the key.
++managementRestoreDrill:
++  enabled: true
++  decryptCheck:
++    enabled: true
++    wrappingSecretRef:
++      name: ""   # set to the SAME secret as encryptionKeyBackup.wrappingSecretRef.name
+diff --git a/deploy/chart/values.schema.json b/deploy/chart/values.schema.json
+index 84a37d0..811714b 100644
+--- a/deploy/chart/values.schema.json
++++ b/deploy/chart/values.schema.json
+@@ -13,6 +13,7 @@
+         "registry": { "type": "string" },
+         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+         "pullSecrets": { "type": "array" },
++        "allowSchemaSkew": { "type": "boolean" },
+         "server": { "$ref": "#/definitions/imageRef" },
+         "worker": { "$ref": "#/definitions/imageRef" },
+         "agent": { "$ref": "#/definitions/imageRef" },
+@@ -136,7 +137,8 @@
+       "properties": {
+         "username": { "type": "string", "minLength": 1 },
+         "email": { "type": "string" },
+-        "password": { "type": "string" }
++        "password": { "type": "string" },
++        "existingSecret": { "type": "string" }
+       }
+     },
+     "tls": {
+diff --git a/deploy/chart/values.yaml b/deploy/chart/values.yaml
+index c8053a1..3d8475c 100644
+--- a/deploy/chart/values.yaml
++++ b/deploy/chart/values.yaml
+@@ -26,6 +26,12 @@ image:
+   registry: ""           # Empty registry = use local images (k3d-imported).
+   pullPolicy: IfNotPresent
+   pullSecrets: []
++  # F1 schema-skew guard: server and migrate ship the same DB schema and are
++  # built from one commit, so their tags MUST match. The chart fails the render
++  # when image.server.tag != image.migrate.tag (a mismatch can 503 the plane
++  # permanently via the /readyz schema floor). Set true ONLY for a deliberate
++  # skewed rollout that ships no new migration (a NOTES.txt warning then fires).
++  allowSchemaSkew: false
+   # Per-image `registry` is the online default home (first-party = GHCR). The
+   # global `image.registry` above overrides ALL of these when set (air-gap:
+   # mirror everything into one private registry). Empty global => these defaults.
+@@ -522,6 +528,13 @@ bootstrap:
+   username: admin
+   email: admin@astronomer.local
+   password: ""
++  # GitOps-safe escape hatch (F8 / C-04). Point this at a pre-created Secret
++  # (in the release namespace) with a `password` key and the chart will NOT
++  # manage a bootstrap Secret of its own — the server reads the password
++  # straight from yours. Mirrors postgres.external.dsnSecretRef. Leave empty to
++  # use bootstrap.password / the chart-generated <release>-bootstrap Secret.
++  # In production the render fails unless bootstrap.password OR this is set.
++  existingSecret: ""
+ 
+ # =============================================================================
+ # TLS — single source of truth, consumed by both gateway.* and ingress.*.
+@@ -772,6 +785,38 @@ managementBackup:
+     credentialsSecretRef:
+       name: ""
+       key: "credentials"
++  # ---------------------------------------------------------------------------
++  # F4 (HIGH · DR): back up the Fernet/JWT encryption-key Secret WITH the DB.
++  # ---------------------------------------------------------------------------
++  # pg_dump alone is not a recoverable backup: every encrypted column (agent
++  # tokens, SSO client secrets, wrapped gitops/integration creds) is Fernet-
++  # wrapped with secrets.encryptionKey, which lives in a Kubernetes Secret, NOT
++  # in Postgres. Restore onto a NEW cluster without that key and every such row
++  # is permanently undecryptable. This captures the key Secret alongside the
++  # dump — but symmetrically ENCRYPTED with a SEPARATELY-held wrapping passphrase
++  # first, so the key is never written to S3 in plaintext next to the data it
++  # protects. Key custody steps: docs/management-plane-dr-runbook.md.
++  encryptionKeyBackup:
++    # Default on, but INERT until wrappingSecretRef.name is set (the chart
++    # refuses to upload the key in plaintext). When unset a NOTES/preflight
++    # warning fires so the DR gap is visible rather than silent.
++    enabled: true
++    # In-cluster Secret holding the Fernet + JWT keys. Empty => <release>-secrets
++    # (the chart's own secret.yaml). Override only for BYO/external-secret setups.
++    secretName: ""
++    # Secret holding the wrapping passphrase used to encrypt the key bundle
++    # before upload. HOLD THIS SEPARATELY from the S3 backup credentials and the
++    # DB — ideally a different cloud account / KMS / offline vault. Whoever holds
++    # only the S3 bucket must NOT also hold this, or the separation is moot.
++    wrappingSecretRef:
++      name: ""
++      key: "passphrase"
++    # S3 sub-tier (under <prefix>/<release>/) the wrapped key bundles land in.
++    # Deliberately distinct from daily/weekly/monthly so key custody is separable.
++    keyPrefix: "keys"
++    # How many wrapped key bundles to retain. Keys rotate rarely, so keep a
++    # generous history so an older dump can still be paired with its key.
++    retention: 30
+   # Image bundling postgresql-client + aws-cli. Built and published by
+   # Astronomer at ghcr.io/alphabravocompany/pgdump-s3; override to an
+   # internally mirrored image when air-gapped.
+@@ -853,6 +898,28 @@ managementRestoreDrill:
+     - clusters
+     - projects
+     - audit_log
++  # ---------------------------------------------------------------------------
++  # F4 (b): prove the backed-up encryption key actually DECRYPTS the restored
++  # data. Without this the drill can stay green while real DR is broken (the key
++  # was never backed up, or drifted from the ciphertext). The drill downloads
++  # the latest wrapped key bundle (written by managementBackup.encryptionKeyBackup),
++  # unwraps it with the SAME wrapping passphrase, and Fernet-verifies one known
++  # encrypted column in the restored DB — failing the drill if it can't.
++  decryptCheck:
++    enabled: true
++    # A known Fernet-encrypted column to sample. The default targets the row the
++    # Argo self-management loop always writes, so a live install has one to test.
++    table: "argocd_instances"
++    column: "auth_token_encrypted"
++    # The SAME wrapping-passphrase Secret managementBackup.encryptionKeyBackup
++    # used to wrap the key bundle. Empty => the decrypt check is skipped (the
++    # drill can't unwrap the key), and a warning is emitted. Set it to make the
++    # drill actually prove decryptability.
++    wrappingSecretRef:
++      name: ""
++      key: "passphrase"
++    # Must match managementBackup.encryptionKeyBackup.keyPrefix.
++    keyPrefix: "keys"
+   # Image bundling postgresql-client + aws-cli — reuse the same image
+   # as managementBackup so the drill can run wherever the backup runs.
+   image:
+diff --git a/deploy/chart_operational_contract_test.go b/deploy/chart_operational_contract_test.go
+index bd8dbe6..69e4c79 100644
+--- a/deploy/chart_operational_contract_test.go
++++ b/deploy/chart_operational_contract_test.go
+@@ -39,6 +39,8 @@ var productionWiringSets = []string{
+ 	"secrets.secretKey=prod-jwt-signing-key",
+ 	"secrets.encryptionKey=prod-fernet-key",
+ 	"bootstrap.email=admin@example.com",
++	// F8: production requires a pinned bootstrap password (or existingSecret).
++	"bootstrap.password=prod-admin-initial",
+ 	"dex.clientSecret=prod-dex-client-secret",
+ 	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
+ 	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+@@ -211,6 +213,10 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
+ 		"image.worker.tag=v-worker",
+ 		"image.migrate.tag=v-migrate",
+ 		"frontend.image.tag=v-frontend",
++		// This test deliberately gives each image a distinct tag to prove the
++		// per-image tag plumbing; that trips the F1 server↔migrate skew guard,
++		// so opt into the skew explicitly (it is not a real deploy).
++		"image.allowSchemaSkew=true",
+ 	))
+ 
+ 	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/astronomer-go-server:v-server", "Always")
+diff --git a/deploy/chart_values_schema_test.go b/deploy/chart_values_schema_test.go
+index b877915..89d7dc7 100644
+--- a/deploy/chart_values_schema_test.go
++++ b/deploy/chart_values_schema_test.go
+@@ -86,6 +86,9 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
+ 		"secrets.secretKey=prod-jwt-signing-key",
+ 		"secrets.encryptionKey=prod-fernet-key",
+ 		"bootstrap.email=admin@example.com",
++		// F8: production render requires a pinned bootstrap password (or an
++		// existingSecret) so a GitOps re-render can't rotate the admin password.
++		"bootstrap.password=prod-admin-initial",
+ 		"dex.clientSecret=prod-dex-client-secret",
+ 		"managementBackup.s3.bucket=astronomer-backups",
+ 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
+diff --git a/deploy/dr_chart_render_test.go b/deploy/dr_chart_render_test.go
+new file mode 100644
+index 0000000..41adb4c
+--- /dev/null
++++ b/deploy/dr_chart_render_test.go
+@@ -0,0 +1,183 @@
++// Package deploy — chart-render coverage for the P0 chart DR items:
++//
++//	F1  server↔migrate image-tag skew guard
++//	F8  bootstrap-password GitOps stability (existingSecret escape hatch)
++//	F4  encryption-key backup + restore-drill decrypt proof
++//
++// All tests shell out to `helm` and auto-skip when it isn't on PATH.
++package deploy
++
++import (
++	"path/filepath"
++	"runtime"
++	"strings"
++	"testing"
++)
++
++func drProdValues(t *testing.T) string {
++	t.Helper()
++	_, here, _, ok := runtime.Caller(0)
++	if !ok {
++		t.Fatal("runtime.Caller(0) failed")
++	}
++	return filepath.Join(filepath.Dir(here), "chart", "values-production.yaml")
++}
++
++// ── F1: server↔migrate image-tag skew guard ────────────────────────────────
++
++// A skewed pair (server tag != migrate tag) can leave the DB below the server
++// binary's schema floor and 503 the plane permanently. The chart must refuse
++// the render — not silently produce a mismatched Deployment.
++func TestF1_MismatchedServerMigrateTagsFailsRender(t *testing.T) {
++	errOut := helmTemplateExpectError(t, nil,
++		"image.server.tag=commit-A",
++		"image.migrate.tag=commit-B",
++	)
++	if !strings.Contains(errOut, "image-skew guard (F1) failed") {
++		t.Fatalf("mismatched server/migrate tags did not trip the F1 guard:\n%s", errOut)
++	}
++}
++
++// Matching tags (the built-from-one-commit norm) render cleanly.
++func TestF1_MatchingTagsRender(t *testing.T) {
++	out := helmTemplate(t, "image.server.tag=v9", "image.migrate.tag=v9")
++	if !strings.Contains(out, "astronomer-go-server:v9") {
++		t.Fatalf("expected server image at tag v9 in render:\n%s", out)
++	}
++}
++
++// The escape hatch (allowSchemaSkew=true) lets a deliberate hotfix through and
++// swaps the hard failure for a NOTES.txt warning.
++func TestF1_AllowSchemaSkewOverride(t *testing.T) {
++	out := helmTemplate(t,
++		"image.server.tag=commit-A",
++		"image.migrate.tag=commit-B",
++		"image.allowSchemaSkew=true",
++	)
++	// Render succeeds and the server Deployment still names the override tag.
++	if !strings.Contains(out, "astronomer-go-server:commit-A") {
++		t.Fatalf("allowSchemaSkew override should render the server image:\n%s", out)
++	}
++}
++
++// ── F8: bootstrap-password GitOps stability ─────────────────────────────────
++
++// The default (dev) render keeps the chart-managed bootstrap Secret so the
++// local install UX is unchanged.
++func TestF8_DefaultRendersChartBootstrapSecret(t *testing.T) {
++	out := helmTemplate(t)
++	if !strings.Contains(out, "name: astronomer-bootstrap") {
++		t.Fatalf("default render should manage the <release>-bootstrap Secret:\n%s", out)
++	}
++}
++
++// bootstrap.existingSecret is the GitOps-safe escape hatch: the chart manages
++// NO bootstrap Secret and the server wires ASTRONOMER_BOOTSTRAP_PASSWORD to the
++// operator-provided Secret.
++func TestF8_ExistingSecretSuppressesChartSecretAndRewiresServer(t *testing.T) {
++	out := helmTemplate(t, "bootstrap.existingSecret=my-bootstrap")
++	if strings.Contains(out, "name: astronomer-bootstrap\n") {
++		t.Fatalf("existingSecret set — chart must not render its own bootstrap Secret:\n%s", out)
++	}
++	// The server env must reference the operator's Secret name.
++	if !strings.Contains(out, "name: my-bootstrap") {
++		t.Fatalf("server ASTRONOMER_BOOTSTRAP_PASSWORD not rewired to existingSecret:\n%s", out)
++	}
++}
++
++// In production an empty bootstrap.password (with no existingSecret) re-rolls
++// randAlphaNum on every GitOps render → the chart must refuse.
++func TestF8_ProductionWithoutBootstrapPasswordFails(t *testing.T) {
++	errOut := helmTemplateExpectError(t, []string{drProdValues(t)}, append([]string{},
++		"config.serverURL=https://astronomer.example.com",
++		"gateway.hosts[0]=astronomer.example.com",
++		"tls.source=secret", "tls.secretName=astronomer-tls",
++		"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
++		"redis.external.address=redis.astronomer.svc.cluster.local:6379",
++		"secrets.secretKey=prod-jwt-signing-key",
++		"secrets.encryptionKey=prod-fernet-key",
++		"bootstrap.email=admin@example.com",
++		"dex.clientSecret=prod-dex-client-secret",
++		"managementBackup.s3.bucket=astronomer-backups",
++		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
++		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
++		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
++	)...)
++	if !strings.Contains(errOut, "bootstrap.password or bootstrap.existingSecret must be set") {
++		t.Fatalf("production render without a pinned bootstrap password did not fail on F8:\n%s", errOut)
++	}
++}
++
++// ── F4: encryption-key backup + restore-drill decrypt proof ─────────────────
++
++// Wiring only the backup S3 target (no key-backup wrapping secret) must NOT
++// mount the key Secret or wrapping passphrase — the key is not written to S3.
++func TestF4_KeyBackupInertWithoutWrappingSecret(t *testing.T) {
++	out := helmTemplate(t,
++		"managementBackup.s3.bucket=astronomer-backups",
++		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
++	)
++	if !strings.Contains(out, "name: astronomer-management-backup") {
++		t.Fatalf("backup CronJob should render with S3 wired:\n%s", out)
++	}
++	if strings.Contains(out, "- name: KEYBACKUP_ENABLED") || strings.Contains(out, "name: encryption-keys") {
++		t.Fatalf("key backup must stay inert until a wrapping secret is wired:\n%s", out)
++	}
++}
++
++// With the wrapping secret wired the backup mounts the key Secret + passphrase
++// and turns on the wrapped-upload path.
++func TestF4_KeyBackupRendersWhenWrappingSecretWired(t *testing.T) {
++	out := helmTemplate(t,
++		"managementBackup.s3.bucket=astronomer-backups",
++		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
++		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
++	)
++	for _, want := range []string{
++		"- name: KEYBACKUP_ENABLED",
++		"name: encryption-keys",
++		"name: wrapping-passphrase",
++		`secretName: "astronomer-key-wrap"`,
++		`secretName: "astronomer-secrets"`, // default key Secret = <release>-secrets
++		"openssl enc -aes-256-cbc",
++	} {
++		if !strings.Contains(out, want) {
++			t.Fatalf("key-backup render missing %q:\n%s", want, out)
++		}
++	}
++}
++
++// The restore-drill decrypt check stays off until its wrapping secret is wired.
++func TestF4_DrillDecryptCheckInertWithoutWrappingSecret(t *testing.T) {
++	out := helmTemplate(t,
++		"managementBackup.s3.bucket=astronomer-backups",
++		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
++	)
++	if !strings.Contains(out, "name: astronomer-restore-drill") {
++		t.Fatalf("restore-drill CronJob should render with S3 wired:\n%s", out)
++	}
++	if strings.Contains(out, "- name: DECRYPT_CHECK_ENABLED") {
++		t.Fatalf("drill decrypt check must stay inert until a wrapping secret is wired:\n%s", out)
++	}
++}
++
++// With the drill wrapping secret wired the decrypt-proof path renders: env
++// toggle, passphrase mount, unwrap, and the Fernet HMAC verifier invocation.
++func TestF4_DrillDecryptCheckRendersWhenWired(t *testing.T) {
++	out := helmTemplate(t,
++		"managementBackup.s3.bucket=astronomer-backups",
++		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
++		"managementRestoreDrill.decryptCheck.wrappingSecretRef.name=astronomer-key-wrap",
++	)
++	for _, want := range []string{
++		"- name: DECRYPT_CHECK_ENABLED",
++		"name: wrapping-passphrase",
++		"openssl enc -d -aes-256-cbc",
++		"base64 -d | python3 -",
++		"did NOT verify under the backed-up key",
++	} {
++		if !strings.Contains(out, want) {
++			t.Fatalf("drill decrypt-check render missing %q:\n%s", want, out)
++		}
++	}
++}
+diff --git a/deploy/networkpolicy_render_test.go b/deploy/networkpolicy_render_test.go
+index 782988f..2d21cf8 100644
+--- a/deploy/networkpolicy_render_test.go
++++ b/deploy/networkpolicy_render_test.go
+@@ -129,6 +129,7 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
+ 		"secrets.secretKey=prod-jwt-signing-key",
+ 		"secrets.encryptionKey=prod-fernet-key",
+ 		"bootstrap.email=admin@example.com",
++		"bootstrap.password=prod-admin-initial",
+ 		"dex.clientSecret=prod-dex-client-secret",
+ 		"managementBackup.s3.bucket=astronomer-backups",
+ 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
+diff --git a/docs/management-plane-dr-runbook.md b/docs/management-plane-dr-runbook.md
+index 64bf831..169fe17 100644
+--- a/docs/management-plane-dr-runbook.md
++++ b/docs/management-plane-dr-runbook.md
+@@ -79,6 +79,77 @@ becomes garbage and agents can not re-authenticate.
+ 
+ ---
+ 
++## Key custody and the encryption-key backup (F4)
++
++The nightly `pg_dump` captures ciphertext. It does **not**, on its own, capture
++the Fernet/JWT key that decrypts it — that key lives in a Kubernetes Secret
++(`<release>-secrets`), not in Postgres. A restore onto a brand-new cluster where
++that Secret is gone brings back rows that are permanently undecryptable.
++
++The chart closes this gap when you wire
++`managementBackup.encryptionKeyBackup.wrappingSecretRef.name`:
++
++- Every backup run also captures the `<release>-secrets` Secret, **symmetrically
++  encrypted with a separately-held wrapping passphrase** before upload, and
++  stores it under `<prefix>/<release>/keys/<timestamp>.keys.tar.enc` (a tier
++  distinct from `daily/weekly/monthly`). The key is **never** written to S3 in
++  plaintext next to the data it protects.
++- The weekly restore-drill (`managementRestoreDrill.decryptCheck`) downloads the
++  latest wrapped key bundle, unwraps it with the **same** passphrase, and
++  Fernet-verifies one known encrypted column in the restored DB. If it can't
++  decrypt, the drill **fails** — so a broken key backup can no longer hide
++  behind a green drill.
++
++**Custody rules — read before wiring this:**
++
++1. The wrapping passphrase MUST live in a different custody domain than the S3
++   backup credentials and the DB dump. Whoever can read the backup bucket must
++   NOT also be able to read the wrapping passphrase, or the separation is moot
++   (they could unwrap the key and decrypt every secret in the dump). Practical
++   options: a different cloud account / KMS, an offline password vault, or a
++   sealed-secret whose sealing key is held by a different team.
++2. Create the wrapping-passphrase Secret out-of-band (never commit it to git):
++
++   ```bash
++   kubectl -n astronomer create secret generic astronomer-key-wrap \
++     --from-literal=passphrase="$(openssl rand -base64 48)"
++   ```
++
++   Then record that passphrase in your separate custody store — **losing it
++   makes the key backup unrecoverable**, and rotating it invalidates every
++   previously-wrapped bundle (keep the old passphrase until the retention window
++   of bundles wrapped under it has rolled off).
++3. Wire both halves so backup and drill agree:
++
++   ```
++   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
++   --set managementRestoreDrill.decryptCheck.wrappingSecretRef.name=astronomer-key-wrap
++   ```
++
++4. The drill's decrypt verification needs `openssl` and `python3` (stdlib only)
++   in the backup image; the default `pgdump-s3` image ships both.
++
++**Recovering the key during a real restore onto a new cluster:**
++
++```bash
++# Fetch the newest wrapped key bundle (read-only).
++aws s3 cp "$(aws s3api list-objects-v2 --bucket <bucket> \
++  --prefix astronomer-pg/<release>/keys/ --query 'Contents[-1].Key' --output text \
++  | xargs -I{} echo s3://<bucket>/{})" ./keys.tar.enc
++
++# Unwrap with the separately-held passphrase, then read the Fernet key.
++openssl enc -d -aes-256-cbc -pbkdf2 -in keys.tar.enc -out keys.tar \
++  -pass pass:"<wrapping-passphrase>"
++mkdir keys && tar -C keys -xf keys.tar
++cat keys/ASTRONOMER_ENCRYPTION_KEY   # feed this into secrets.encryptionKey
++```
++
++Restore `secrets.encryptionKey` (and `secrets.secretKey` from
++`keys/SECRET_KEY`) into the new install **before** you restore the database, so
++the decrypted columns line up with the key.
++
++---
++
+ ## Preconditions
+ 
+ Before starting, confirm you have:
