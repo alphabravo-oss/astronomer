@@ -364,7 +364,7 @@
               "defaultDeny": { "const": true },
               "externalPostgresEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
               "externalRedisEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
-              "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/apiDestinationCIDRs" }
+              "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" }
             },
             "required": ["enabled", "defaultDeny", "externalPostgresEgressCIDRs", "externalRedisEgressCIDRs", "kubernetesAPIEgressCIDRs"]
           }
@@ -560,12 +560,6 @@
     "nonEmptyStringArray": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "apiDestinationCIDRs": {
-      "type": "array",
-      "minItems": 2,
-      "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     }
   }

@@ -666,10 +666,10 @@ networkPolicy:
   externalHTTPSEgressCIDRs: []
   externalPostgresEgressCIDRs: []
   externalRedisEgressCIDRs: []
-  # Include both the kubernetes.default Service ClusterIP (often a /32) and
-  # the API endpoint or node network. NetworkPolicy may be evaluated before or
-  # after Service DNAT depending on the CNI; the preflight policy allows only
-  # TCP 443/6443 to these destinations.
+  # Cover both the kubernetes.default Service ClusterIP and the API endpoint or
+  # node network. One scoped CIDR may cover both. NetworkPolicy may be evaluated
+  # before or after Service DNAT depending on the CNI; Helm cannot inspect live
+  # addresses to prove coverage. The policy allows only TCP 443/6443 here.
   kubernetesAPIEgressCIDRs: []
   identityProviderEgressCIDRs: []
 

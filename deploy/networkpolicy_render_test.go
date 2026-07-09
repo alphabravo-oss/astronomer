@@ -139,13 +139,12 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
-		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32",
-		"networkPolicy.kubernetesAPIEgressCIDRs[1]=10.40.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 	)
 	if strings.Contains(out, `cidr: "0.0.0.0/0"`) {
 		t.Fatalf("production render should not include broad external egress:\n%s", out)
 	}
-	for _, want := range []string{`cidr: "10.20.0.0/16"`, `cidr: "10.30.0.0/16"`, `cidr: "10.43.0.1/32"`, `cidr: "10.40.0.0/16"`} {
+	for _, want := range []string{`cidr: "10.20.0.0/16"`, `cidr: "10.30.0.0/16"`, `cidr: "10.40.0.0/14"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("production render missing %q:\n%s", want, out)
 		}

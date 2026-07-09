@@ -102,8 +102,7 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
-		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32",
-		"networkPolicy.kubernetesAPIEgressCIDRs[1]=10.40.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 	)
 	assertRenderedContains(t, out,
 		"ENV: \"production\"",
@@ -136,6 +135,7 @@ func TestProductionPreflightNetworkPolicyRequiresNarrowAPICIDRs(t *testing.T) {
 		"networkPolicy.kubernetesAPIEgressCIDRs must contain",
 		"kubernetes.default Service ClusterIP",
 		"CNI DNAT ordering varies",
+		"Helm cannot inspect live addresses",
 	} {
 		if !strings.Contains(renderErr, want) {
 			t.Fatalf("production render-time preflight error missing %q:\n%s", want, renderErr)
@@ -143,10 +143,10 @@ func TestProductionPreflightNetworkPolicyRequiresNarrowAPICIDRs(t *testing.T) {
 	}
 
 	singleAPI := append([]string{}, setsWithoutAPI...)
-	singleAPI = append(singleAPI, "networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32")
-	singleErr := helmTemplateExpectError(t, []string{prodValues}, singleAPI...)
-	if !strings.Contains(singleErr, "/networkPolicy/kubernetesAPIEgressCIDRs") || !strings.Contains(singleErr, "minItems: got 1, want 2") {
-		t.Fatalf("production schema must require Service and endpoint CIDR entries:\n%s", singleErr)
+	singleAPI = append(singleAPI, "networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14")
+	singleOut := helmTemplateWithValueFiles(t, []string{prodValues}, singleAPI...)
+	if !strings.Contains(singleOut, `cidr: "10.40.0.0/14"`) {
+		t.Fatalf("one scoped CIDR covering both address classes was not accepted:\n%s", singleOut)
 	}
 
 	for _, cidr := range []string{"0.0.0.0/0", "::/0"} {

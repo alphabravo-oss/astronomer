@@ -327,11 +327,12 @@ CIDRs and rejects `0.0.0.0/0` and `::/0` rather than falling back to unrestricte
 egress.
 
 NetworkPolicy handling of Kubernetes Service DNAT varies by CNI. Populate
-`kubernetesAPIEgressCIDRs` with both the `kubernetes.default` Service ClusterIP
-(prefer an exact `/32` or `/128`) and every API endpoint or node network the
-Service can translate to. Port 443 covers evaluation before DNAT; port 6443
-covers the common post-DNAT API endpoint. Validate the CIDRs against the
-production cluster's Service and endpoint data before upgrading.
+`kubernetesAPIEgressCIDRs` with CIDR coverage for both the `kubernetes.default`
+Service ClusterIP and every API endpoint or node network the Service can
+translate to. One appropriately scoped CIDR may cover both; two CIDRs can still
+be wrong. Helm cannot inspect live addresses to prove semantic coverage. Port
+443 covers evaluation before DNAT; port 6443 covers the common post-DNAT API
+endpoint. Validate the CIDRs against the production cluster before upgrading.
 
 Kubernetes authorization caches can take a few seconds to observe newly
 created hook RBAC. To avoid reporting that propagation window as a missing

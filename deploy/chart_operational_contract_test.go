@@ -46,8 +46,10 @@ var productionWiringSets = []string{
 	"dex.clientSecret=prod-dex-client-secret",
 	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
-	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32",
-	"networkPolicy.kubernetesAPIEgressCIDRs[1]=10.40.0.0/16",
+	// This one CIDR intentionally covers both the example 10.43.0.1 Service
+	// address and 10.40.x API endpoint network. Cardinality cannot prove that;
+	// operators must inventory the target cluster's actual addresses.
+	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 }
 
 type renderedDoc map[string]any

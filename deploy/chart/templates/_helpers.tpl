@@ -466,11 +466,11 @@ rendered manifest.
     {{- /* The retained namespace default-deny already selects Helm hook pods
            during upgrades. The preflight allow-policy cannot safely infer API
            addresses because NetworkPolicy may evaluate Service traffic before
-           or after DNAT depending on the CNI. Require both address classes to
-           be supplied explicitly by the operator. */ -}}
+           or after DNAT depending on the CNI. Require the operator to configure
+           CIDR coverage for both address classes explicitly. */ -}}
     {{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
-      {{- if lt (len (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list))) 2 }}
-        {{- $errs = append $errs "  - networkPolicy.kubernetesAPIEgressCIDRs must contain at least two entries covering the kubernetes.default Service ClusterIP CIDR/address and Kubernetes API endpoint or node network when production preflight runs under default deny. CNI DNAT ordering varies, so both pre-DNAT Service and post-DNAT endpoint destinations must be covered." }}
+      {{- if eq (len (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list))) 0 }}
+        {{- $errs = append $errs "  - networkPolicy.kubernetesAPIEgressCIDRs must contain CIDR coverage for the kubernetes.default Service ClusterIP and Kubernetes API endpoint or node network when production preflight runs under default deny. CNI DNAT ordering varies, so both pre-DNAT Service and post-DNAT endpoint destinations must be covered. Helm cannot inspect live addresses to prove semantic coverage; inventory the target cluster before setting this value." }}
       {{- end }}
       {{- $preflightCIDRs := concat (.Values.networkPolicy.externalEgressCIDRs | default (list)) (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list)) (.Values.networkPolicy.externalPostgresEgressCIDRs | default (list)) }}
       {{- if or (has "0.0.0.0/0" $preflightCIDRs) (has "::/0" $preflightCIDRs) }}

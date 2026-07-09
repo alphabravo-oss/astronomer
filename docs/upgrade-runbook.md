@@ -261,7 +261,9 @@ What happens:
    API access on TCP 443/6443. Before production upgrades, ensure
    `networkPolicy.kubernetesAPIEgressCIDRs` covers both the
    `kubernetes.default` Service ClusterIP and API endpoint/node networks. CNIs
-   differ on whether policy sees Service traffic before or after DNAT.
+   differ on whether policy sees Service traffic before or after DNAT. One
+   appropriately scoped CIDR may cover both address classes; array length does
+   not prove coverage, and Helm cannot inspect the live cluster to validate it.
 
    Inventory both address classes before setting the CIDRs:
 
