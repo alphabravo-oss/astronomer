@@ -99,7 +99,7 @@ curl -fsSL -X PUT .../clusters/$cluster_id/registration/options/ \
     -d '{"install_baseline": false}'
 
 # 3. Fetch the agent install manifest and apply it on the target.
-curl -fsSL .../clusters/$cluster_id/manifest/ | kubectl apply -f -
+curl -fsSL .../clusters/$cluster_id/manifest/ | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 
 # 4. Confirm - moves to awaiting_agent. The first heartbeat from the
 #    agent advances it to connected.

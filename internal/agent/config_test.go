@@ -48,11 +48,35 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.PrivilegeProfile != agenttemplate.PrivilegeProfileViewer {
 		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, agenttemplate.PrivilegeProfileViewer)
 	}
-	if cfg.TokenSecretName != "astronomer-agent-token" {
-		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "astronomer-agent-token")
+	if cfg.BootstrapTokenSecretName != "astronomer-agent-registration-token" {
+		t.Errorf("BootstrapTokenSecretName = %q", cfg.BootstrapTokenSecretName)
 	}
-	if cfg.TokenSecretKey != "token" {
-		t.Errorf("TokenSecretKey = %q, want %q", cfg.TokenSecretKey, "token")
+	if cfg.DurableTokenSecretName != "astronomer-agent-token" {
+		t.Errorf("DurableTokenSecretName = %q", cfg.DurableTokenSecretName)
+	}
+	if cfg.BootstrapTokenSecretKey != "token" || cfg.DurableTokenSecretKey != "token" {
+		t.Errorf("credential keys = bootstrap:%q durable:%q, want token", cfg.BootstrapTokenSecretKey, cfg.DurableTokenSecretKey)
+	}
+	if cfg.CredentialSource != credentialSourceEnvironment {
+		t.Errorf("CredentialSource = %q, want %q", cfg.CredentialSource, credentialSourceEnvironment)
+	}
+}
+
+func TestCredentialSourceDiagnosticNeverLogsMaterial(t *testing.T) {
+	const marker = "bootstrap-sensitive-material-000001"
+	t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+	t.Setenv("ASTRONOMER_CLUSTER_ID", "test-cluster")
+	t.Setenv("ASTRONOMER_AGENT_TOKEN", marker)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	if _, err := LoadAgentConfigWithLogger(logger); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "credential_source=environment") {
+		t.Fatalf("credential source diagnostic missing: %s", logs.String())
+	}
+	if strings.Contains(logs.String(), marker) {
+		t.Fatalf("credential material leaked in startup diagnostic: %s", logs.String())
 	}
 }
 
@@ -161,11 +185,11 @@ func TestLoadAgentConfig_CustomValues(t *testing.T) {
 	if cfg.PrivilegeProfile != "operator" {
 		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "operator")
 	}
-	if cfg.TokenSecretName != "custom-secret" {
-		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "custom-secret")
+	if cfg.DurableTokenSecretName != "custom-secret" {
+		t.Errorf("DurableTokenSecretName = %q, want %q", cfg.DurableTokenSecretName, "custom-secret")
 	}
-	if cfg.TokenSecretKey != "agent-token" {
-		t.Errorf("TokenSecretKey = %q, want %q", cfg.TokenSecretKey, "agent-token")
+	if cfg.DurableTokenSecretKey != "agent-token" {
+		t.Errorf("DurableTokenSecretKey = %q, want %q", cfg.DurableTokenSecretKey, "agent-token")
 	}
 }
 
@@ -193,7 +217,7 @@ func TestLoadAgentConfig_MissingRequired(t *testing.T) {
 				"ASTRONOMER_SERVER_URL": "wss://example.com",
 				"ASTRONOMER_CLUSTER_ID": "test-cluster",
 			},
-			wantErr: "ASTRONOMER_AGENT_TOKEN is required",
+			wantErr: "ASTRONOMER_AGENT_TOKEN is required when no durable agent token exists",
 		},
 	}
 

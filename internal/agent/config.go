@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -17,12 +18,24 @@ const caCertMountPath = "/etc/astronomer/tls/ca.crt"
 
 // AgentConfig holds configuration for the agent process.
 type AgentConfig struct {
-	ServerURL         string `mapstructure:"server_url"`         // WebSocket server URL
-	ClusterID         string `mapstructure:"cluster_id"`         // Cluster UUID
-	AgentToken        string `mapstructure:"agent_token"`        // Registration token
-	AgentID           string `mapstructure:"agent_id"`           // Unique agent instance ID
-	TokenSecretName   string `mapstructure:"token_secret_name"`  // K8s Secret holding the durable token
-	TokenSecretKey    string `mapstructure:"token_secret_key"`   // Secret key to rewrite on rotation
+	ServerURL  string `mapstructure:"server_url"`  // WebSocket server URL
+	ClusterID  string `mapstructure:"cluster_id"`  // Cluster UUID
+	AgentToken string `mapstructure:"agent_token"` // Selected runtime credential; env input is bootstrap only
+	AgentID    string `mapstructure:"agent_id"`    // Unique agent instance ID
+
+	BootstrapTokenSecretName string `mapstructure:"bootstrap_token_secret_name"` // Installer-owned bootstrap Secret
+	BootstrapTokenSecretKey  string `mapstructure:"bootstrap_token_secret_key"`  // Bootstrap token key
+	DurableTokenSecretName   string `mapstructure:"durable_token_secret_name"`   // Agent-owned durable Secret
+	DurableTokenSecretKey    string `mapstructure:"durable_token_secret_key"`    // Durable token key
+	// TokenSecretName/Key preserve the pre-AGENT-02 environment override. When
+	// explicitly set they override the durable fields; they never refer to the
+	// installer-owned bootstrap Secret.
+	TokenSecretName string `mapstructure:"token_secret_name"`
+	TokenSecretKey  string `mapstructure:"token_secret_key"`
+	// CredentialSource is diagnostic state only (durable_secret, bootstrap_secret,
+	// or environment). It never contains credential material.
+	CredentialSource string `mapstructure:"-"`
+
 	ReconnectBackoff  int    `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
 	MaxReconnect      int    `mapstructure:"max_reconnect"`      // Max backoff seconds (default 300)
 	HeartbeatInterval int    `mapstructure:"heartbeat_interval"` // Seconds (default 30)
@@ -64,6 +77,15 @@ type AgentConfig struct {
 // sensible defaults. Environment variables are prefixed with ASTRONOMER_,
 // e.g. ASTRONOMER_SERVER_URL, ASTRONOMER_CLUSTER_ID.
 func LoadAgentConfig() (*AgentConfig, error) {
+	return LoadAgentConfigWithLogger(slog.Default())
+}
+
+// LoadAgentConfigWithLogger emits source-only credential diagnostics through
+// the process logger. It never attaches token or Secret data to a log record.
+func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
+	if log == nil {
+		log = slog.Default()
+	}
 	_, privilegeProfileExplicit := os.LookupEnv("ASTRONOMER_PRIVILEGE_PROFILE")
 	v := envconfig.NewViper("ASTRONOMER")
 	envconfig.SetDefaults(v,
@@ -71,8 +93,12 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "cluster_id", Value: ""},
 		envconfig.Default{Key: "agent_token", Value: ""},
 		envconfig.Default{Key: "agent_id", Value: ""},
-		envconfig.Default{Key: "token_secret_name", Value: "astronomer-agent-token"},
-		envconfig.Default{Key: "token_secret_key", Value: "token"},
+		envconfig.Default{Key: "bootstrap_token_secret_name", Value: "astronomer-agent-registration-token"},
+		envconfig.Default{Key: "bootstrap_token_secret_key", Value: "token"},
+		envconfig.Default{Key: "durable_token_secret_name", Value: "astronomer-agent-token"},
+		envconfig.Default{Key: "durable_token_secret_key", Value: "token"},
+		envconfig.Default{Key: "token_secret_name", Value: ""},
+		envconfig.Default{Key: "token_secret_key", Value: ""},
 		envconfig.Default{Key: "reconnect_backoff", Value: 5},
 		envconfig.Default{Key: "max_reconnect", Value: 300},
 		envconfig.Default{Key: "heartbeat_interval", Value: 30},
@@ -102,10 +128,25 @@ func LoadAgentConfig() (*AgentConfig, error) {
 	if cfg.ClusterID == "" {
 		return nil, fmt.Errorf("ASTRONOMER_CLUSTER_ID is required")
 	}
-	if cfg.AgentToken == "" {
-		return nil, fmt.Errorf("ASTRONOMER_AGENT_TOKEN is required")
+	if cfg.TokenSecretName != "" {
+		cfg.DurableTokenSecretName = cfg.TokenSecretName
 	}
-	cfg.PrivilegeProfile = resolveConfiguredPrivilegeProfile(cfg.PrivilegeProfile, privilegeProfileExplicit, slog.Default())
+	if cfg.TokenSecretKey != "" {
+		cfg.DurableTokenSecretKey = cfg.TokenSecretKey
+	}
+	if cfg.DurableTokenSecretName == "" || cfg.DurableTokenSecretKey == "" {
+		return nil, fmt.Errorf("durable agent token Secret name and key are required")
+	}
+	credentialCtx, cancel := context.WithTimeout(context.Background(), credentialReadTimeout)
+	defer cancel()
+	if err := resolveStartupCredential(credentialCtx, cfg, log); err != nil {
+		return nil, err
+	}
+	if cfg.AgentToken == "" {
+		return nil, fmt.Errorf("ASTRONOMER_AGENT_TOKEN is required when no durable agent token exists")
+	}
+	log.Info("agent credential selected", "credential_source", cfg.CredentialSource)
+	cfg.PrivilegeProfile = resolveConfiguredPrivilegeProfile(cfg.PrivilegeProfile, privilegeProfileExplicit, log)
 
 	// Reject plaintext tunnels by default. Only https:// and wss:// are allowed
 	// transports; ws:// and http:// expose the agent token and proxied traffic
@@ -115,7 +156,7 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		if os.Getenv("ASTRONOMER_INSECURE") != "true" {
 			return nil, fmt.Errorf("ASTRONOMER_SERVER_URL must use https:// or wss://; got %q (set ASTRONOMER_INSECURE=true to override)", cfg.ServerURL)
 		}
-		slog.Warn("INSECURE: plaintext ServerURL allowed only because ASTRONOMER_INSECURE=true; the agent token and tunnel traffic are unencrypted", "server_url", cfg.ServerURL)
+		log.Warn("INSECURE: plaintext ServerURL allowed only because ASTRONOMER_INSECURE=true; the agent token and tunnel traffic are unencrypted", "server_url", cfg.ServerURL)
 	}
 
 	// CA bundle priority: explicit env wins; otherwise fall back to the mounted

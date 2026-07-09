@@ -34,6 +34,37 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
+func TestDurableTokenActivatesOnlyAfterPersistenceAndRetriesBeforeReconnect(t *testing.T) {
+	cfg := testConfig()
+	oldToken := cfg.AgentToken
+	const newToken = "new-durable-token-material-000000001"
+	tc := NewTunnelClient(cfg, testLogger())
+	attempts := 0
+	tc.tokenPersister = func(context.Context, *AgentConfig, string) error {
+		attempts++
+		if attempts == 1 {
+			return errors.New("temporary Kubernetes API failure")
+		}
+		return nil
+	}
+
+	if err := tc.persistAndActivateAgentToken(context.Background(), newToken); err == nil {
+		t.Fatal("first persistence attempt should fail")
+	}
+	if cfg.AgentToken != oldToken {
+		t.Fatal("live credential changed before durable persistence")
+	}
+	if tc.pendingAgentToken != newToken {
+		t.Fatal("failed durable token was not retained for reconnect retry")
+	}
+	if err := tc.persistPendingAgentToken(context.Background()); err != nil {
+		t.Fatalf("retry pending token: %v", err)
+	}
+	if cfg.AgentToken != newToken || tc.pendingAgentToken != "" {
+		t.Fatal("persisted durable token was not activated before reconnect")
+	}
+}
+
 // TestConnect_InitialFailureEntersReconnectLoop locks the L20 fix: a failed
 // INITIAL dial must NOT be fatal (which lands the pod in CrashLoopBackOff during
 // the join window). Connect must fall into the reconnect loop and only return on

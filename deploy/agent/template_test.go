@@ -485,7 +485,7 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 		`kind: RoleBinding`,
 		`namespace: astronomer-system`,
 		`Namespace-scoped workload operations`,
-		// The agent's own token Role is always present, scoped to one secret name.
+		// Existing durable Secret access is always scoped to one name.
 		`name: astronomer-agent-token`,
 		`resourceNames: ["astronomer-agent-token"]`,
 	} {
@@ -527,6 +527,98 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 	if strings.Contains(RBACRulesYAML(PrivilegeProfileNamespaceOperator), `"secrets"`) {
 		t.Fatal("namespace-operator RBAC rules must not grant secrets")
 	}
+}
+
+func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "registration-material",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileViewer,
+	})
+	if strings.Contains(manifest, "kubectl.kubernetes.io/last-applied-configuration") {
+		t.Fatal("rendered manifest must not contain a client-side last-applied annotation")
+	}
+
+	type rule struct {
+		Resources     []string `yaml:"resources"`
+		ResourceNames []string `yaml:"resourceNames"`
+		Verbs         []string `yaml:"verbs"`
+	}
+	type doc struct {
+		Kind     string `yaml:"kind"`
+		Metadata struct {
+			Name string `yaml:"name"`
+		} `yaml:"metadata"`
+		StringData map[string]string `yaml:"stringData"`
+		Rules      []rule            `yaml:"rules"`
+	}
+	var tokenRole []rule
+	secretNames := map[string]bool{}
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	for {
+		var d doc
+		if err := dec.Decode(&d); err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatal(err)
+		}
+		if d.Kind == "Secret" {
+			secretNames[d.Metadata.Name] = true
+			if d.Metadata.Name == "astronomer-agent-registration-token" && d.StringData["token"] != "registration-material" {
+				t.Fatal("bootstrap Secret does not contain rendered registration material")
+			}
+		}
+		if d.Kind == "Role" && d.Metadata.Name == "astronomer-agent-token" {
+			tokenRole = d.Rules
+		}
+	}
+	if !secretNames["astronomer-agent-registration-token"] {
+		t.Fatal("installer-owned bootstrap Secret is missing")
+	}
+	if secretNames["astronomer-agent-token"] {
+		t.Fatal("agent-owned durable Secret must be absent from installer manifest")
+	}
+	if len(tokenRole) != 2 {
+		t.Fatalf("durable token Role has %d rules, want named access plus isolated create", len(tokenRole))
+	}
+
+	allows := func(verb, name string) bool {
+		for _, r := range tokenRole {
+			if !containsString(r.Resources, "secrets") || !containsString(r.Verbs, verb) {
+				continue
+			}
+			if len(r.ResourceNames) == 0 || containsString(r.ResourceNames, name) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, verb := range []string{"get", "update", "patch"} {
+		if !allows(verb, "astronomer-agent-token") {
+			t.Fatalf("durable Secret must allow %s", verb)
+		}
+		if allows(verb, "arbitrary-secret") {
+			t.Fatalf("arbitrary existing Secret unexpectedly allows %s", verb)
+		}
+	}
+	if allows("delete", "astronomer-agent-token") {
+		t.Fatal("token persistence Role must not grant delete")
+	}
+	if !allows("create", "astronomer-agent-token") {
+		t.Fatal("fresh adoption requires Secret create")
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRenderInstallYAMLUsesInstallMetadata(t *testing.T) {

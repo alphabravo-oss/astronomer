@@ -64,7 +64,7 @@ func main() {
 // ASTRONOMER_AGENT_TOKEN) but does not need any of the per-feature handlers —
 // remotedialer ferries dial requests directly to the agent's local network.
 func runConnect2(logger *slog.Logger) error {
-	cfg, err := agent.LoadAgentConfig()
+	cfg, err := agent.LoadAgentConfigWithLogger(logger)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return err
@@ -92,7 +92,7 @@ func runConnect2(logger *slog.Logger) error {
 }
 
 func runConnect(logger *slog.Logger) error {
-	cfg, err := agent.LoadAgentConfig()
+	cfg, err := agent.LoadAgentConfigWithLogger(logger)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return err

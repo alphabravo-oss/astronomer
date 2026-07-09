@@ -395,7 +395,8 @@ export async function getClusterManifest(clusterId: string): Promise<string> {
 // Like getClusterManifest, but also returns the registration token that
 // was freshly minted to render it. The token comes back via response
 // header (X-Astronomer-Registration-Token) so the wizard can build a
-// Rancher-style `curl … | kubectl apply -f -` one-liner that points at
+// Rancher-style server-side `curl … | kubectl apply --server-side … -f -`
+// one-liner that points at
 // the public /api/v1/register/<token> endpoint.
 export async function getClusterManifestWithToken(clusterId: string): Promise<{ manifest: string; token: string }> {
   const res = await api.get<string>(`/clusters/${clusterId}/manifest`, {

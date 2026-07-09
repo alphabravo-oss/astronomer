@@ -90,7 +90,8 @@ For least privilege, start with `operator` for clusters where baseline component
 - Prefer `viewer` for audit-only or inventory-only clusters.
 - Prefer `namespace-operator` or `namespace-viewer` when Astronomer should only operate inside the agent namespace.
 - Use `custom` only when you manage the Role/ClusterRole bindings outside the generated manifest.
-- Re-render and re-apply the agent manifest after changing the profile.
+- Re-render and re-apply the agent manifest after changing the profile with
+  `kubectl apply --server-side --field-manager=astronomer-bootstrap -f -`.
 - Validate important workflows after profile changes: resource browsing, logs, shell/exec, tool install, ArgoCD sync, backup, scan, and decommission.
 
 ## Enforcement model (M8 — important)
@@ -110,7 +111,8 @@ profile check on each request. Consequences:
   the agent has no second gate that would catch it — the API server's RBAC is
   the single source of truth. Review the rendered ClusterRole, not just the
   ConfigMap label, when auditing a cluster's actual privilege.
-- Re-rendering and re-applying the manifest re-asserts the intended RBAC; do that
-  after any suspected drift.
+- Re-rendering and server-side-applying the manifest with field manager
+  `astronomer-bootstrap` re-asserts the intended RBAC without taking ownership
+  of the agent's durable credential; do that after any suspected drift.
 - (Optional hardening, not implemented: a startup `SelfSubjectRulesReview` that
   alerts/refuses if the agent's live permissions exceed its declared profile.)

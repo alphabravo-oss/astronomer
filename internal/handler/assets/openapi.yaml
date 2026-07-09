@@ -6962,7 +6962,7 @@ paths:
         - clusters
       security: []
       description: |
-        Unauthenticated. Consumed by `curl -sfL <server>/api/v1/register/<token>.yaml | kubectl apply -f -`. The `.yaml` suffix on the token is stripped server-side.
+        Unauthenticated. Consumed by `curl -sfL <server>/api/v1/register/<token>.yaml | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -`. The `.yaml` suffix on the token is stripped server-side.
       parameters:
         - name: token
           in: path

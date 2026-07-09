@@ -84,11 +84,14 @@ subjects:
     namespace: astronomer-system
 
 ---
-# Namespaced Role: the agent persists its own rotated auth token into a single
-# Secret in its own namespace. This is the agent's operational need, not cluster
-# observation, so it is granted for EVERY profile — including read-only viewer,
-# whose ClusterRole intentionally has no secrets access. Scoped to exactly that
-# one Secret name, so it never widens into reading other secrets.
+# Namespaced Role: the agent persists rotated auth material only in its durable
+# Secret. get/update/patch are resourceName-scoped. Kubernetes RBAC cannot scope
+# create by resourceNames (the authorizer does not have an existing object name
+# for create), so create is isolated in its own rule. Clusters that require
+# name-scoped create must add the admission guard documented in
+# docs/agent-credential-ownership.md. No rule in this Role permits reading or
+# modifying any other existing Secret (explicit operator/admin profiles retain
+# their separately documented broader user-cluster privileges).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -103,6 +106,9 @@ rules:
     resources: ["secrets"]
     resourceNames: ["astronomer-agent-token"]
     verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -474,24 +480,16 @@ data:
   PRIVILEGE_PROFILE: "{{PRIVILEGE_PROFILE}}"
 
 ---
-# Secret for the registration token.
-#
-# RE-APPLY CAVEAT (L4/L17):
-#   - The agent persists its rotated DURABLE token back into THIS Secret
-#     (token_persistence.go). Re-running `kubectl apply` of this manifest
-#     overwrites it with the (short-TTL) registration token again. This is
-#     self-healing — on the next CONNECT the server resolves a still-valid
-#     registration token back to the existing durable token — but a re-apply
-#     after the registration token has expired requires a fresh manifest. For a
-#     true bootstrap-vs-rotated split, manage this Secret out-of-band.
-#   - Prefer `kubectl apply --server-side`: client-side apply persists the
-#     plaintext token in the kubectl.kubernetes.io/last-applied-configuration
-#     annotation. Bounded by the 1h registration-token TTL + namespace RBAC, but
-#     server-side apply avoids it entirely.
+# Installer-owned, short-lived registration bootstrap. The agent never writes
+# this object. After adoption it creates and rotates the distinct durable Secret
+# `astronomer-agent-token`, which is intentionally absent from this manifest.
+# Reapplying this manifest can refresh bootstrap material but cannot overwrite or
+# delete a valid durable identity. Apply only with the documented server-side
+# field manager so plaintext is not copied into a last-applied annotation.
 apiVersion: v1
 kind: Secret
 metadata:
-  name: astronomer-agent-token
+  name: astronomer-agent-registration-token
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -586,8 +584,20 @@ spec:
             - name: ASTRONOMER_AGENT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: astronomer-agent-token
+                  name: astronomer-agent-registration-token
                   key: token
+                  # A durable adopted agent can restart even if an operator has
+                  # removed the bootstrap Secret; startup resolves durable state
+                  # through the Kubernetes API before requiring this value.
+                  optional: true
+            - name: ASTRONOMER_BOOTSTRAP_TOKEN_SECRET_NAME
+              value: "astronomer-agent-registration-token"
+            - name: ASTRONOMER_BOOTSTRAP_TOKEN_SECRET_KEY
+              value: "token"
+            - name: ASTRONOMER_DURABLE_TOKEN_SECRET_NAME
+              value: "astronomer-agent-token"
+            - name: ASTRONOMER_DURABLE_TOKEN_SECRET_KEY
+              value: "token"
             - name: ASTRONOMER_HEALTH_ADDR
               valueFrom:
                 configMapKeyRef:

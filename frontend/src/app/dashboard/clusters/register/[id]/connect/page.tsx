@@ -20,9 +20,13 @@ import {
   type RegistrationTLSMode,
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live-events';
+import {
+  inlineManifestCommand,
+  registrationCurlCommands,
+  type CurlVariant,
+} from './install-commands';
 
 type Tab = 'curl' | 'quick' | 'yaml' | 'airgapped';
-type CurlVariant = 'public_ca' | 'private_ca' | 'insecure';
 
 const TAB_KEYS = ['curl', 'quick', 'yaml', 'airgapped'] as const;
 
@@ -105,7 +109,7 @@ export default function ConnectStepPage() {
     }
   };
 
-  const oneLiner = `cat <<'EOF' | kubectl apply -f -\n${manifest}\nEOF`;
+  const oneLiner = inlineManifestCommand(manifest);
 
   // Rancher-style one-liner that pulls the manifest from the public
   // /api/v1/register/<token> endpoint and pipes it into kubectl apply.
@@ -121,6 +125,7 @@ export default function ConnectStepPage() {
     ? `${curlOrigin}/api/v1/register/${registrationToken}.yaml`
     : '';
   const caURL = `${curlOrigin}/api/v1/register/ca.crt`;
+  const installCommands = registrationCurlCommands(manifestURL, caURL);
 
   // Rancher offers three TLS postures. We render all three so the
   // operator can pick whichever one matches their reality (the radio
@@ -130,19 +135,17 @@ export default function ConnectStepPage() {
     public_ca: {
       label: 'Trusted CA',
       hint: 'Use when this platform serves over HTTPS with a publicly-trusted certificate.',
-      cmd: manifestURL ? `curl -sfL ${manifestURL} | kubectl apply -f -` : '',
+      cmd: installCommands.public_ca,
     },
     private_ca: {
       label: 'Private CA',
       hint: 'Use when this platform serves over HTTPS with a CA that isn\'t in the system trust store. The first curl fetches the operator-provided bundle, the second pins to it.',
-      cmd: manifestURL
-        ? `curl -sfL ${caURL} -o /tmp/astronomer-ca.crt\ncurl --cacert /tmp/astronomer-ca.crt -sfL ${manifestURL} | kubectl apply -f -`
-        : '',
+      cmd: installCommands.private_ca,
     },
     insecure: {
       label: 'Skip TLS verify',
       hint: 'Escape hatch for ops who haven\'t pinned a CA yet. Functionally equivalent to passing --insecure-skip-tls-verify; not recommended for long-lived agents.',
-      cmd: manifestURL ? `curl --insecure -sfL ${manifestURL} | kubectl apply -f -` : '',
+      cmd: installCommands.insecure,
     },
   };
 

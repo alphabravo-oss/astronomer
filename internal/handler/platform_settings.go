@@ -102,7 +102,8 @@ const (
 	NamespaceToken     = "token"
 	NamespaceTelemetry = "telemetry"
 	// NamespaceRegistration carries the platform-TLS posture used to
-	// shape the `curl … | kubectl apply -f -` one-liner the cluster-
+	// shape the server-side `curl … | kubectl apply --server-side … -f -`
+	// one-liner the cluster-
 	// registration wizard renders. Exposed pre-auth so an agent host
 	// can fetch the CA bundle (or learn it needs --insecure) without
 	// already having a session — matches Rancher's mental model.
