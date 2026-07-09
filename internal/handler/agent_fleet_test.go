@@ -1219,4 +1219,20 @@ func TestAgentPrivilegeProfileSelfTestPasses(t *testing.T) {
 	if custom.Status != "warning" {
 		t.Fatalf("custom profile should warn, got %q: %s", custom.Status, custom.Message)
 	}
+
+	implicit := agentPrivilegeProfileSelfTestCheck(agentFleetItem{})
+	if !strings.Contains(implicit.Message, "effective viewer") {
+		t.Fatalf("implicit profile message = %q, want normalized effective viewer", implicit.Message)
+	}
+	admin := agentPrivilegeProfileSelfTestCheck(agentFleetItem{PrivilegeProfile: agenttemplate.PrivilegeProfileAdmin})
+	if !strings.Contains(admin.Message, "explicit full-management") || strings.Contains(admin.Message, "(default)") {
+		t.Fatalf("admin profile message = %q, want explicit full-management and no default claim", admin.Message)
+	}
+}
+
+func TestAgentUpgradeFallbackProfileIsViewer(t *testing.T) {
+	h := NewAgentFleetHandler(nil)
+	if h.agentUpgradeDefaultProfile != agenttemplate.PrivilegeProfileViewer {
+		t.Fatalf("agent upgrade fallback = %q, want viewer", h.agentUpgradeDefaultProfile)
+	}
 }

@@ -61,6 +61,26 @@ func counterValue(t *testing.T, c interface{ Write(*dto.Metric) error }) float64
 	return m.Counter.GetValue()
 }
 
+func TestStateSubscriberSecretInformerRequiresCompatibleExplicitProfile(t *testing.T) {
+	subscriber := NewStateSubscriber(fake.NewClientset(), &recordingSender{}, slog.Default())
+	if subscriber.watchSecrets {
+		t.Fatal("new subscriber must default secret watching off")
+	}
+
+	for _, profile := range []string{"", "   ", "unknown", "viewer", "namespace-viewer", "namespace-operator", "custom"} {
+		subscriber.SetWatchSecrets(ProfileAllowsSecrets(profile))
+		if subscriber.watchSecrets {
+			t.Fatalf("profile %q unexpectedly enables the Secret informer", profile)
+		}
+	}
+	for _, profile := range []string{"operator", "admin"} {
+		subscriber.SetWatchSecrets(ProfileAllowsSecrets(profile))
+		if !subscriber.watchSecrets {
+			t.Fatalf("explicit compatible profile %q should enable the Secret informer", profile)
+		}
+	}
+}
+
 // TestStateRateLimiterCollapsesBurst verifies that a burst on the same key
 // emits exactly one accept and the rest are dropped within the window.
 func TestStateRateLimiterCollapsesBurst(t *testing.T) {

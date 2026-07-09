@@ -189,8 +189,9 @@ type StateSubscriber struct {
 
 	// watchSecrets gates the Secret informer. The viewer/namespace-* profiles
 	// deliberately lack secret RBAC, so starting the informer there just
-	// error-loops on Forbidden. Defaults true (admin/operator); SetWatchSecrets
-	// turns it off for read-only profiles.
+	// error-loops on Forbidden. Defaults false so a caller omission cannot
+	// silently add a sensitive informer; SetWatchSecrets enables it only for an
+	// explicitly compatible normalized profile.
 	watchSecrets bool
 
 	// stores holds the durable-kind informer caches so the reconnect-replay
@@ -221,7 +222,7 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		limiter:      newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
 		readyCh:      make(chan struct{}),
 		startedAt:    time.Now(),
-		watchSecrets: true,
+		watchSecrets: false,
 		stores:       make(map[string]stateStoreEntry),
 	}
 }
@@ -237,8 +238,8 @@ func (s *StateSubscriber) SetConnectionWatcher(c StateConnectionWatcher) {
 }
 
 // SetWatchSecrets enables/disables the Secret informer. Call before Run with
-// the result of ProfileAllowsSecrets so read-only profiles (viewer,
-// namespace-*) don't error-loop on a Forbidden secrets watch.
+// the result of ProfileAllowsSecrets so read-only, custom, and unknown
+// profiles don't error-loop or silently widen into a sensitive secrets watch.
 func (s *StateSubscriber) SetWatchSecrets(enabled bool) {
 	if s != nil {
 		s.watchSecrets = enabled

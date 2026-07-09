@@ -53,7 +53,7 @@ func NewAgentFleetHandler(queries AgentFleetQuerier) *AgentFleetHandler {
 	return &AgentFleetHandler{
 		queries:                    queries,
 		now:                        time.Now,
-		agentUpgradeDefaultProfile: agenttemplate.PrivilegeProfileOperator,
+		agentUpgradeDefaultProfile: agenttemplate.PrivilegeProfileViewer,
 	}
 }
 
@@ -620,15 +620,13 @@ func agentTimestampSelfTestCheck(name, label string, value *string, now time.Tim
 }
 
 func agentPrivilegeProfileSelfTestCheck(agent agentFleetItem) agentSelfTestCheck {
-	switch agenttemplate.NormalizePrivilegeProfile(agent.PrivilegeProfile) {
+	effectiveProfile := agenttemplate.NormalizePrivilegeProfile(agent.PrivilegeProfile)
+	switch effectiveProfile {
 	case agenttemplate.PrivilegeProfileViewer, agenttemplate.PrivilegeProfileOperator,
 		agenttemplate.PrivilegeProfileNamespaceViewer, agenttemplate.PrivilegeProfileNamespaceOperator:
-		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the " + agent.PrivilegeProfile + " privilege profile."}
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the effective " + effectiveProfile + " privilege profile."}
 	case agenttemplate.PrivilegeProfileAdmin:
-		// Full management control is the default (Rancher-style); the per-user
-		// gate is the management-plane RBAC. Not a finding — just note that a
-		// least-privilege profile can be applied if desired.
-		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the full-management (admin) privilege profile (default). Apply a viewer/operator profile to scope it down if least privilege is required."}
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the explicit full-management (admin) privilege profile. Apply a viewer/operator profile to scope it down if least privilege is required."}
 	case agenttemplate.PrivilegeProfileCustom:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using custom RBAC; run live diagnostics to verify required permissions."}
 	default:
@@ -1035,8 +1033,8 @@ func latestAgentObservationTime(cluster sqlc.Cluster, conn sqlc.AgentConnection)
 }
 
 func agentPrivilegeProfileFromAnnotations(raw json.RawMessage) string {
-	// Unspecified annotations default to full management control (see
-	// NormalizePrivilegeProfile), matching Rancher's cluster-admin agent model.
+	// Unspecified, malformed, and unknown annotations fail closed to viewer via
+	// the canonical normalizer. Admin is available only as an explicit value.
 	if len(raw) == 0 {
 		return agenttemplate.NormalizePrivilegeProfile("")
 	}

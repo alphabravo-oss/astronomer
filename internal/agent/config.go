@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
 
@@ -33,12 +34,12 @@ type AgentConfig struct {
 	// Requires a cluster-admin prerequisite: the apiserver must be started
 	// with --audit-policy-file + --audit-log-path, and that log path must be
 	// mounted into the agent pod via a hostPath volume. See docs.
-	AuditEnabled       bool   `mapstructure:"audit_enabled"`        // Enable the apiserver-audit tailer (default false)
-	AuditLogPath       string `mapstructure:"audit_log_path"`       // Path to the kube-apiserver audit log file
+	AuditEnabled        bool   `mapstructure:"audit_enabled"`         // Enable the apiserver-audit tailer (default false)
+	AuditLogPath        string `mapstructure:"audit_log_path"`        // Path to the kube-apiserver audit log file
 	AuditCheckpointPath string `mapstructure:"audit_checkpoint_path"` // Path where the tail offset is persisted (default audit_log_path + ".checkpoint")
-	AuditBatchSize     int    `mapstructure:"audit_batch_size"`     // Max events per forwarded batch (default 100)
-	AuditPollInterval  int    `mapstructure:"audit_poll_interval"`  // Seconds between tail polls (default 10)
-	AuditDelivery      string `mapstructure:"audit_delivery"`       // How batches are delivered: tunnel (default) | http | stub
+	AuditBatchSize      int    `mapstructure:"audit_batch_size"`      // Max events per forwarded batch (default 100)
+	AuditPollInterval   int    `mapstructure:"audit_poll_interval"`   // Seconds between tail polls (default 10)
+	AuditDelivery       string `mapstructure:"audit_delivery"`        // How batches are delivered: tunnel (default) | http | stub
 
 	// Fleet-style PULL reconcile (sprint: pull-reconcile). When disabled (the
 	// default) the agent does NOT start its local reconcile loop and v0.1.0
@@ -63,6 +64,7 @@ type AgentConfig struct {
 // sensible defaults. Environment variables are prefixed with ASTRONOMER_,
 // e.g. ASTRONOMER_SERVER_URL, ASTRONOMER_CLUSTER_ID.
 func LoadAgentConfig() (*AgentConfig, error) {
+	_, privilegeProfileExplicit := os.LookupEnv("ASTRONOMER_PRIVILEGE_PROFILE")
 	v := envconfig.NewViper("ASTRONOMER")
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "server_url", Value: ""},
@@ -76,7 +78,7 @@ func LoadAgentConfig() (*AgentConfig, error) {
 		envconfig.Default{Key: "heartbeat_interval", Value: 30},
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
-		envconfig.Default{Key: "privilege_profile", Value: "admin"},
+		envconfig.Default{Key: "privilege_profile", Value: agenttemplate.PrivilegeProfileViewer},
 		envconfig.Default{Key: "audit_enabled", Value: false},
 		envconfig.Default{Key: "audit_log_path", Value: ""},
 		envconfig.Default{Key: "audit_checkpoint_path", Value: ""},
@@ -103,6 +105,7 @@ func LoadAgentConfig() (*AgentConfig, error) {
 	if cfg.AgentToken == "" {
 		return nil, fmt.Errorf("ASTRONOMER_AGENT_TOKEN is required")
 	}
+	cfg.PrivilegeProfile = resolveConfiguredPrivilegeProfile(cfg.PrivilegeProfile, privilegeProfileExplicit, slog.Default())
 
 	// Reject plaintext tunnels by default. Only https:// and wss:// are allowed
 	// transports; ws:// and http:// expose the agent token and proxied traffic
@@ -126,4 +129,33 @@ func LoadAgentConfig() (*AgentConfig, error) {
 	cfg.CAChecksum = strings.TrimSpace(cfg.CAChecksum)
 
 	return cfg, nil
+}
+
+// resolveConfiguredPrivilegeProfile applies the same fail-closed profile
+// semantics as install-manifest RBAC rendering. The explicit bit is kept
+// separate from the value because Viper supplies the safe viewer default when
+// the environment variable is absent; operators upgrading an old manifest
+// still need a visible warning that implicit admin is no longer supported.
+func resolveConfiguredPrivilegeProfile(raw string, explicitlyConfigured bool, log *slog.Logger) string {
+	profile := agenttemplate.NormalizePrivilegeProfile(raw)
+	if log == nil {
+		log = slog.Default()
+	}
+	if !explicitlyConfigured {
+		log.Warn(
+			"ASTRONOMER_PRIVILEGE_PROFILE is unset; using least-privilege viewer (set admin explicitly before upgrading only if full-management access is intentionally required)",
+			"effective_privilege_profile", profile,
+		)
+		return profile
+	}
+
+	trimmed := strings.TrimSpace(raw)
+	if trimmed != "" && profile == agenttemplate.PrivilegeProfileViewer && !strings.EqualFold(trimmed, agenttemplate.PrivilegeProfileViewer) {
+		log.Warn(
+			"unrecognized ASTRONOMER_PRIVILEGE_PROFILE; failing closed to viewer",
+			"configured_privilege_profile", trimmed,
+			"effective_privilege_profile", profile,
+		)
+	}
+	return profile
 }

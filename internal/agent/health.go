@@ -286,7 +286,7 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 		Timestamp:              time.Now().UTC().Format(time.RFC3339),
 		AgentVersion:           hr.agentVersion,
 		AgentBuildSHA:          defaultAgentValue(hr.agentBuildSHA, version.GitCommit),
-		PrivilegeProfile:       defaultAgentValue(hr.privilegeProfile, "admin"),
+		PrivilegeProfile:       normalizeAgentPrivilegeProfile(hr.privilegeProfile),
 		EnabledFeatures:        append([]string{}, hr.enabledFeatures...),
 		DeniedFeatures:         append([]string{}, hr.deniedFeatures...),
 		LastSuccessfulAction:   "heartbeat.collect",
@@ -458,18 +458,18 @@ func normalizeAgentPrivilegeProfile(profile string) string {
 	return agenttemplate.NormalizePrivilegeProfile(profile)
 }
 
-// ProfileAllowsSecrets reports whether the given privilege profile grants secret
-// access. Single source of truth: a profile allows secrets iff "secrets" is not
-// in its denied-capability list. Used to gate the agent's Secret informer so
-// read-only profiles don't error-loop on a Forbidden watch.
+// ProfileAllowsSecrets reports whether the normalized built-in profile is
+// explicitly known to grant secret access. Custom and unknown profiles remain
+// disabled because their permissions cannot be inferred safely. Used to gate
+// the agent's Secret informer so omission or ambiguous RBAC never widens the
+// sensitive watch surface.
 func ProfileAllowsSecrets(profile string) bool {
-	_, denied := capabilityFeaturesForProfile(profile)
-	for _, d := range denied {
-		if d == "secrets" {
-			return false
-		}
+	switch normalizeAgentPrivilegeProfile(profile) {
+	case agenttemplate.PrivilegeProfileAdmin, agenttemplate.PrivilegeProfileOperator:
+		return true
+	default:
+		return false
 	}
-	return true
 }
 
 func capabilityFeaturesForProfile(profile string) ([]string, []string) {

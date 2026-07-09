@@ -1,8 +1,13 @@
 package agent
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
+	"strings"
 	"testing"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 )
 
 func TestLoadAgentConfig_Defaults(t *testing.T) {
@@ -40,17 +45,79 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.HealthAddr != ":8081" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":8081")
 	}
-	// The default privilege profile is full-management admin (Rancher-style):
-	// the agent holds broad access and the per-user gate is the
-	// management-plane RBAC. Least-privilege profiles are opt-in.
-	if cfg.PrivilegeProfile != "admin" {
-		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "admin")
+	if cfg.PrivilegeProfile != agenttemplate.PrivilegeProfileViewer {
+		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, agenttemplate.PrivilegeProfileViewer)
 	}
 	if cfg.TokenSecretName != "astronomer-agent-token" {
 		t.Errorf("TokenSecretName = %q, want %q", cfg.TokenSecretName, "astronomer-agent-token")
 	}
 	if cfg.TokenSecretKey != "token" {
 		t.Errorf("TokenSecretKey = %q, want %q", cfg.TokenSecretKey, "token")
+	}
+}
+
+func TestResolveConfiguredPrivilegeProfile(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		explicit bool
+		want     string
+		wantLog  string
+	}{
+		{name: "omitted", want: agenttemplate.PrivilegeProfileViewer, wantLog: "is unset"},
+		{name: "empty explicit", explicit: true, want: agenttemplate.PrivilegeProfileViewer},
+		{name: "whitespace explicit", raw: "  \t", explicit: true, want: agenttemplate.PrivilegeProfileViewer},
+		{name: "unknown explicit", raw: "cluster-owner", explicit: true, want: agenttemplate.PrivilegeProfileViewer, wantLog: "failing closed"},
+		{name: "viewer", raw: "viewer", explicit: true, want: agenttemplate.PrivilegeProfileViewer},
+		{name: "operator", raw: "operator", explicit: true, want: agenttemplate.PrivilegeProfileOperator},
+		{name: "namespace viewer", raw: "namespace_viewer", explicit: true, want: agenttemplate.PrivilegeProfileNamespaceViewer},
+		{name: "namespace operator", raw: "namespace operator", explicit: true, want: agenttemplate.PrivilegeProfileNamespaceOperator},
+		{name: "custom", raw: "custom", explicit: true, want: agenttemplate.PrivilegeProfileCustom},
+		{name: "explicit admin", raw: " ADMIN ", explicit: true, want: agenttemplate.PrivilegeProfileAdmin},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			got := resolveConfiguredPrivilegeProfile(tt.raw, tt.explicit, logger)
+			if got != tt.want {
+				t.Fatalf("resolveConfiguredPrivilegeProfile(%q, %t) = %q, want %q", tt.raw, tt.explicit, got, tt.want)
+			}
+			if tt.wantLog == "" && logs.Len() != 0 {
+				t.Fatalf("unexpected startup warning: %s", logs.String())
+			}
+			if tt.wantLog != "" && !strings.Contains(logs.String(), tt.wantLog) {
+				t.Fatalf("startup warning = %q, want substring %q", logs.String(), tt.wantLog)
+			}
+		})
+	}
+}
+
+func TestLoadAgentConfigNormalizesEffectivePrivilegeProfile(t *testing.T) {
+	tests := map[string]string{
+		"   ":                agenttemplate.PrivilegeProfileViewer,
+		"not-a-profile":      agenttemplate.PrivilegeProfileViewer,
+		"viewer":             agenttemplate.PrivilegeProfileViewer,
+		"operator":           agenttemplate.PrivilegeProfileOperator,
+		"namespace-viewer":   agenttemplate.PrivilegeProfileNamespaceViewer,
+		"namespace-operator": agenttemplate.PrivilegeProfileNamespaceOperator,
+		"custom":             agenttemplate.PrivilegeProfileCustom,
+		"admin":              agenttemplate.PrivilegeProfileAdmin,
+	}
+	for raw, want := range tests {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+			t.Setenv("ASTRONOMER_CLUSTER_ID", "c1")
+			t.Setenv("ASTRONOMER_AGENT_TOKEN", "tok")
+			t.Setenv("ASTRONOMER_PRIVILEGE_PROFILE", raw)
+			cfg, err := LoadAgentConfig()
+			if err != nil {
+				t.Fatalf("LoadAgentConfig: %v", err)
+			}
+			if cfg.PrivilegeProfile != want {
+				t.Fatalf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, want)
+			}
+		})
 	}
 }
 
