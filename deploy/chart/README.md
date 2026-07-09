@@ -74,6 +74,19 @@ they're the bare minimum a production install needs:
   restored Fernet data will be undecryptable on a new cluster)
 - `bootstrap.password` or `bootstrap.existingSecret` (GitOps pin; see below)
 
+### Known Helm 3.21 value-coalescing warning
+
+With exactly Helm v3.21.0 and bundled `argo-cd` 9.5.21, lint and template may
+emit `destination for argo-cd.server.env is a table`. Helm's nested-dependency
+evaluation temporarily compares Astronomer's map-shaped `server.env` with
+Argo CD's list-shaped value while inspecting `redis-ha`; the rendered
+Deployments remain correctly isolated. `TestServerEnvironmentValuesRemainIsolatedFromArgoCD`
+enforces that contract for default, custom, combined, and production values.
+
+Do not filter this warning. Chart maintainers must review this note and the
+contract test on the next Helm or Argo CD dependency change, or by 2026-10-09,
+whichever occurs first.
+
 ### Bootstrap credentials
 
 The bootstrap admin logs in with `bootstrap.email`. If `bootstrap.password` is
