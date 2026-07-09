@@ -25,6 +25,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 // UserQuerier abstracts the user-related database queries needed by AuthHandler.
@@ -375,16 +376,14 @@ func (h *AuthHandler) passwordPolicy(ctx context.Context) auth.PasswordPolicy {
 	return auth.LoadPasswordPolicy(ctx, h.settingsCache)
 }
 
-// applySessionTimeoutFromSettings updates the JWT manager access TTL when
-// a runtime session.timeout_minutes policy is configured.
-func (h *AuthHandler) applySessionTimeoutFromSettings(ctx context.Context) {
+// applySessionTimeoutFromSettings resolves the runtime policy once and carries
+// it on the mint context. The JWT provider consumes this value, avoiding a
+// second DB read and preventing two reads from observing different settings.
+func (h *AuthHandler) applySessionTimeoutFromSettings(ctx context.Context) context.Context {
 	if h == nil || h.jwt == nil || h.sessionTimeoutMinutes == nil {
-		return
+		return ctx
 	}
-	mins := h.sessionTimeoutMinutes(ctx)
-	if mins > 0 {
-		h.jwt.SetAccessTokenTTL(time.Duration(mins) * time.Minute)
-	}
+	return sessionpolicy.WithMinutes(ctx, h.sessionTimeoutMinutes(ctx))
 }
 
 // totpEnforced reports whether MFA enrollment is mandatory for this
@@ -676,8 +675,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.applySessionTimeoutFromSettings(r.Context())
-	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
+	mintCtx := h.applySessionTimeoutFromSettings(r.Context())
+	accessToken, refreshToken, err := h.jwt.GenerateTokenPairContext(mintCtx, user.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
 		return
@@ -857,8 +856,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.applySessionTimeoutFromSettings(r.Context())
-	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
+	mintCtx := h.applySessionTimeoutFromSettings(r.Context())
+	accessToken, refreshToken, err := h.jwt.GenerateTokenPairContext(mintCtx, user.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
 		return

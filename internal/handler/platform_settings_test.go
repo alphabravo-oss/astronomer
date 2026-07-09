@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 // fakeSettingsQuerier is the in-memory PlatformSettingsQuerier used by
@@ -220,6 +221,32 @@ func TestSettings_GetSetDeleteCycle(t *testing.T) {
 		if q.auditOps[i] != a {
 			t.Fatalf("audit ops[%d] = %q, want %q", i, q.auditOps[i], a)
 		}
+	}
+}
+
+func TestSettings_GetSessionTimeoutReturnsEffectiveDefault(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	h := NewPlatformSettingsHandler(q)
+	req := withURLParam(
+		authedRequest(http.MethodGet, "/api/v1/admin/settings/session.timeout_minutes/", callerID, nil),
+		"key", sessionpolicy.SettingKey,
+	)
+	w := httptest.NewRecorder()
+
+	h.Get(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Data settingResponse `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if string(body.Data.Value) != "60" || body.Data.Default != float64(60) || !body.Data.IsDefault {
+		t.Fatalf("effective session default = value:%s default:%v is_default:%t, want 60/60/true", body.Data.Value, body.Data.Default, body.Data.IsDefault)
 	}
 }
 

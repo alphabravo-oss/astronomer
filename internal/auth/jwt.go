@@ -9,6 +9,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 // TokenType distinguishes access from refresh tokens
@@ -129,8 +131,8 @@ type validationCacheEntry struct {
 //     session has been re-issued under <new>
 //  4. drop the old key from config on the next restart
 func NewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
-	if accessLifetimeMinutes <= 0 {
-		accessLifetimeMinutes = 60 // default 60 min
+	if accessLifetimeMinutes < sessionpolicy.MinMinutes || accessLifetimeMinutes > sessionpolicy.MaxMinutes {
+		accessLifetimeMinutes = sessionpolicy.DefaultMinutes
 	}
 	var keys [][]byte
 	for _, raw := range strings.Split(secretKey, ",") {
@@ -208,7 +210,15 @@ func (m *JWTManager) KeyCount() int {
 
 // GenerateTokenPair creates both access and refresh tokens for a user
 func (m *JWTManager) GenerateTokenPair(userID uuid.UUID) (accessToken, refreshToken string, err error) {
-	accessToken, err = m.GenerateAccessToken(userID)
+	return m.GenerateTokenPairContext(context.Background(), userID)
+}
+
+// GenerateTokenPairContext is the request-aware session mint used by every
+// interactive authentication path. The context is propagated to the runtime
+// access-TTL provider so settings reads inherit request cancellation and
+// deadlines.
+func (m *JWTManager) GenerateTokenPairContext(ctx context.Context, userID uuid.UUID) (accessToken, refreshToken string, err error) {
+	accessToken, err = m.GenerateAccessTokenContext(ctx, userID)
 	if err != nil {
 		return "", "", fmt.Errorf("generating access token: %w", err)
 	}
@@ -280,7 +290,14 @@ func (m *JWTManager) effectiveAccessTTL(ctx context.Context) time.Duration {
 
 // GenerateAccessToken creates an access token
 func (m *JWTManager) GenerateAccessToken(userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(context.Background()))
+	return m.GenerateAccessTokenContext(context.Background(), userID)
+}
+
+// GenerateAccessTokenContext is the context-aware access-token mint. Session
+// handlers use this through GenerateTokenPairContext; the context-free method
+// remains for non-request callers and compatibility.
+func (m *JWTManager) GenerateAccessTokenContext(ctx context.Context, userID uuid.UUID) (string, error) {
+	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx))
 }
 
 // GenerateRefreshToken creates a refresh token

@@ -53,8 +53,8 @@ const DEFAULTS: PlatformSettingsGrouped = {
     maxTtlSeconds: 2592000,
   },
   session: {
-    // Matches backend registry default (480 minutes = 8h absolute JWT TTL).
-    timeoutMinutes: 480,
+    // Matches the backend's canonical 60-minute absolute JWT TTL.
+    timeoutMinutes: 60,
   },
   telemetry: {
     enabled: false,

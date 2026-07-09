@@ -684,6 +684,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	authHandler.SetLockoutQuerier(queries)
 	authHandler.SetRevocationQuerier(queries)
 	authHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
+	// Session lifetime is independent of encryption, SSO, and TOTP. Wire the
+	// runtime policy for every deployment so password login and refresh cannot
+	// silently fall back to boot configuration when encrypted features are off.
+	configureSessionTimeoutPolicy(authHandler, jwtManager, queries, logger)
 	// Single sign-out (migration 054 / NIST 800-53 AC-12). Wired when
 	// the encryptor is available: the stored upstream id_token is
 	// Fernet-encrypted at rest, so without the key Logout has nothing
@@ -731,34 +735,6 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return true // unparseable value -> enforce rather than silently disable
 			}
 			return v
-		})
-		// DIR-05 / AUTH-R02: session.timeout_minutes from platform settings
-		// (compliance baselines write this key) is applied on every access
-		// token mint — password login, refresh, SSO, and TOTP complete —
-		// via the JWT manager provider so no mint path can skip it.
-		sessionTimeoutMins := func(ctx context.Context) int {
-			row, err := queries.GetPlatformSetting(ctx, "session.timeout_minutes")
-			if err != nil || len(row.Value) == 0 {
-				return 0
-			}
-			var mins int
-			if json.Unmarshal(row.Value, &mins) != nil {
-				// Also accept JSON number as float.
-				var f float64
-				if json.Unmarshal(row.Value, &f) != nil {
-					return 0
-				}
-				mins = int(f)
-			}
-			return mins
-		}
-		authHandler.SetSessionTimeoutPolicy(sessionTimeoutMins)
-		jwtManager.SetAccessTokenTTLProvider(func(ctx context.Context) time.Duration {
-			mins := sessionTimeoutMins(ctx)
-			if mins <= 0 {
-				return 0
-			}
-			return time.Duration(mins) * time.Minute
 		})
 	}
 	// Wire the same revocation + cutoff backend into the JWT validator

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 // Config holds all configuration for the application.
@@ -265,7 +266,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
-		envconfig.Default{Key: "session_timeout_minutes", Value: 60},
+		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},

@@ -49,6 +49,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 // PlatformSettingsQuerier is the narrow DB surface this handler needs.
@@ -150,13 +151,13 @@ var settingsRegistry = map[string]settingSpec{
 	// must honor this setting (not only boot-config SessionTimeoutMinutes).
 	// AUTH-R02: this is absolute JWT access-token TTL (exp at mint/refresh), not
 	// an idle/sliding timeout — activity does not extend the access token past exp.
-	"session.timeout_minutes": {Type: typeInt, Default: 480, Description: "Absolute access-token lifetime in minutes (JWT exp at mint/refresh). Not idle timeout — activity does not slide the access token; refresh may issue a new access token under the same setting", MinInt: 5, MaxInt: 10080},
+	sessionpolicy.SettingKey: {Type: typeInt, Default: sessionpolicy.DefaultMinutes, Description: "Absolute access-token lifetime in minutes (JWT exp at mint/refresh). Not idle timeout — activity does not slide the access token; refresh may issue a new access token under the same setting", MinInt: sessionpolicy.MinMinutes, MaxInt: sessionpolicy.MaxMinutes},
 	// DIR-04: local-password policy for create/change/reset.
-	"password.min_length":          {Type: typeInt, Default: 12, Description: "Minimum password length for local accounts", MinInt: 8, MaxInt: 128},
-	"password.require_uppercase":   {Type: typeBool, Default: true, Description: "Require at least one uppercase letter in local passwords"},
-	"password.require_lowercase":   {Type: typeBool, Default: true, Description: "Require at least one lowercase letter in local passwords"},
-	"password.require_digit":       {Type: typeBool, Default: true, Description: "Require at least one digit in local passwords"},
-	"password.require_special":     {Type: typeBool, Default: false, Description: "Require at least one non-alphanumeric character in local passwords"},
+	"password.min_length":        {Type: typeInt, Default: 12, Description: "Minimum password length for local accounts", MinInt: 8, MaxInt: 128},
+	"password.require_uppercase": {Type: typeBool, Default: true, Description: "Require at least one uppercase letter in local passwords"},
+	"password.require_lowercase": {Type: typeBool, Default: true, Description: "Require at least one lowercase letter in local passwords"},
+	"password.require_digit":     {Type: typeBool, Default: true, Description: "Require at least one digit in local passwords"},
+	"password.require_special":   {Type: typeBool, Default: false, Description: "Require at least one non-alphanumeric character in local passwords"},
 	// DIR-08: Alertmanager route timing (rendered into AM config).
 	"alertmanager.group_wait":      {Type: typeString, Default: "30s", Description: "Alertmanager group_wait duration (e.g. 30s)"},
 	"alertmanager.group_interval":  {Type: typeString, Default: "5m", Description: "Alertmanager group_interval duration (e.g. 5m)"},

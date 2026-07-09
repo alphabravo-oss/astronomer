@@ -52,11 +52,17 @@ type SSORBACInvalidator interface {
 	Invalidate(userID string)
 }
 
+type ssoFlowManager interface {
+	HasProvider(name string) bool
+	GetAuthorizationURL(provider string) (url string, state string, err error)
+	HandleCallback(ctx context.Context, provider, code, state string) (*auth.SSOUserInfo, error)
+}
+
 // SSOHandler exposes /api/v1/auth/login/{provider}/ and
 // /api/v1/auth/callback/{provider}/ endpoints. Provider configuration is
 // loaded into the SSOManager at boot from sso_configurations.
 type SSOHandler struct {
-	manager   *auth.SSOManager
+	manager   ssoFlowManager
 	queries   SSOQuerier
 	jwt       *auth.JWTManager
 	frontend  string
@@ -98,8 +104,12 @@ func NewSSOHandler(manager *auth.SSOManager, queries SSOQuerier, jwt *auth.JWTMa
 	if frontendURL == "" {
 		frontendURL = "/"
 	}
+	var flow ssoFlowManager
+	if manager != nil {
+		flow = manager
+	}
 	return &SSOHandler{
-		manager:  manager,
+		manager:  flow,
 		queries:  queries,
 		jwt:      jwt,
 		frontend: frontendURL,
@@ -249,7 +259,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, refresh, err := h.jwt.GenerateTokenPair(user.ID)
+	access, refresh, err := h.jwt.GenerateTokenPairContext(r.Context(), user.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
 		return

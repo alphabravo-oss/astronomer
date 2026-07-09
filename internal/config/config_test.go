@@ -1,6 +1,21 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
+)
+
+func TestLoadDefaultSessionTimeoutUsesCanonicalValue(t *testing.T) {
+	t.Setenv("SESSION_TIMEOUT_MINUTES", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.SessionTimeoutMinutes != sessionpolicy.DefaultMinutes {
+		t.Fatalf("SessionTimeoutMinutes = %d, want %d", cfg.SessionTimeoutMinutes, sessionpolicy.DefaultMinutes)
+	}
+}
 
 func TestLoadDefaultsWorkerMetricsAddr(t *testing.T) {
 	t.Setenv("SERVER_METRICS_ADDR", "")
