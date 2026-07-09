@@ -33,6 +33,7 @@ func credentialTestConfig(environmentFallback string) *AgentConfig {
 		IdentityTokenSecretKey:   "token",
 		LegacyTokenSecretName:    "astronomer-agent-token",
 		LegacyTokenSecretKey:     "token",
+		IdentityLayoutConfigured: true,
 	}
 }
 
@@ -116,6 +117,158 @@ func TestIdentityContainerAndReadErrorsFailClosed(t *testing.T) {
 				t.Fatal("non-NotFound read error must fail closed")
 			}
 		})
+	}
+}
+
+func TestLegacyLayoutFallbackIsLimitedToIdentityForbiddenOrNotFound(t *testing.T) {
+	cfg := credentialTestConfig("")
+	cfg.IdentityLayoutConfigured = false
+	cfg.LegacyLayoutConfigured = true
+
+	for _, tt := range []struct {
+		name        string
+		identityErr error
+	}{
+		{name: "image-only missing identity", identityErr: apierrors.NewNotFound(schema.GroupResource{Resource: "secrets"}, cfg.IdentityTokenSecretName)},
+		{name: "image-only old RBAC", identityErr: apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, cfg.IdentityTokenSecretName, errors.New("old role"))},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewSimpleClientset(testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken))
+			client.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
+				if action.(ktesting.GetAction).GetName() == cfg.IdentityTokenSecretName {
+					return true, nil, tt.identityErr
+				}
+				return false, nil, nil
+			})
+			got, source, err := resolveCredentialFromSecrets(context.Background(), client, "astronomer-system", cfg)
+			if err != nil || got != testLegacyToken || source != credentialSourceLegacy {
+				t.Fatalf("legacy fallback = (%q, %q, %v)", got, source, err)
+			}
+		})
+	}
+
+	client := fake.NewSimpleClientset(testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken))
+	client.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
+		if action.(ktesting.GetAction).GetName() == cfg.IdentityTokenSecretName {
+			return true, nil, apierrors.NewInternalError(errors.New("apiserver timeout"))
+		}
+		return false, nil, nil
+	})
+	if _, _, err := resolveCredentialFromSecrets(context.Background(), client, "astronomer-system", cfg); err == nil {
+		t.Fatal("legacy-layout marker must not downgrade an arbitrary identity read error")
+	}
+
+	identityClient := fake.NewSimpleClientset(
+		testCredentialSecret(cfg.IdentityTokenSecretName, testIdentityToken),
+		testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken),
+	)
+	got, source, err := resolveCredentialFromSecrets(context.Background(), identityClient, "astronomer-system", cfg)
+	if err != nil || got != testIdentityToken || source != CredentialSourceIdentity {
+		t.Fatalf("cached old deployment with current RBAC selected (%q, %q, %v), want active identity", got, source, err)
+	}
+
+	noMarkerCfg := credentialTestConfig("")
+	noMarkerCfg.IdentityLayoutConfigured = false
+	noMarkerCfg.LegacyLayoutConfigured = false
+	noMarkerClient := fake.NewSimpleClientset(testCredentialSecret(noMarkerCfg.LegacyTokenSecretName, testLegacyToken))
+	if _, _, err := resolveCredentialFromSecrets(context.Background(), noMarkerClient, "astronomer-system", noMarkerCfg); err == nil {
+		t.Fatal("missing identity without an explicit legacy-layout marker must fail closed")
+	}
+}
+
+func TestImageFirstUpgradeThenCurrentManifestMigration(t *testing.T) {
+	ctx := context.Background()
+	namespace := "astronomer-system"
+
+	// Phase 1: the built-in updater changed only the image. The new binary sees
+	// the old env marker and old RBAC, so identity GET is Forbidden and it reads
+	// and rotates only the exact legacy Secret.
+	legacyCfg := credentialTestConfig("")
+	legacyCfg.IdentityLayoutConfigured = false
+	legacyCfg.LegacyLayoutConfigured = true
+	legacyClient := fake.NewSimpleClientset(testCredentialSecret(legacyCfg.LegacyTokenSecretName, testLegacyToken))
+	var imageFirstPatchNames []string
+	legacyClient.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
+		if action.(ktesting.GetAction).GetName() == legacyCfg.IdentityTokenSecretName {
+			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, legacyCfg.IdentityTokenSecretName, errors.New("old exact-name role"))
+		}
+		return false, nil, nil
+	})
+	legacyClient.PrependReactor("patch", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
+		patch := action.(ktesting.PatchAction)
+		imageFirstPatchNames = append(imageFirstPatchNames, patch.GetName())
+		if patch.GetName() != legacyCfg.LegacyTokenSecretName {
+			t.Fatalf("image-first process patched %q", patch.GetName())
+		}
+		return true, testCredentialSecret(legacyCfg.LegacyTokenSecretName, testRotatedToken), nil
+	})
+	legacyToken, source, err := resolveCredentialFromSecrets(ctx, legacyClient, namespace, legacyCfg)
+	if err != nil || legacyToken != testLegacyToken || source != credentialSourceLegacy {
+		t.Fatalf("image-first startup = (%q, %q, %v)", legacyToken, source, err)
+	}
+	legacyCfg.AgentToken, legacyCfg.CredentialSource = legacyToken, source
+	legacyTunnel := NewTunnelClient(legacyCfg, testLogger())
+	legacyTunnel.tokenPersister = func(ctx context.Context, cfg *AgentConfig, token string) error {
+		return persistRotatedTokenWithClient(ctx, legacyClient, namespace, cfg, token)
+	}
+	rotated, err := legacyTunnel.persistAcceptedAgentToken(ctx, testRotatedToken)
+	if err != nil || !rotated || legacyCfg.AgentToken != testRotatedToken || legacyCfg.CredentialSource != credentialSourceLegacy {
+		t.Fatalf("image-first rotation = %t, token=%q source=%q err=%v", rotated, legacyCfg.AgentToken, legacyCfg.CredentialSource, err)
+	}
+	if len(imageFirstPatchNames) != 1 || imageFirstPatchNames[0] != legacyCfg.LegacyTokenSecretName {
+		t.Fatalf("image-first patch targets = %v", imageFirstPatchNames)
+	}
+
+	// Phase 2: applying the current manifest creates the empty identity
+	// container and distinct Role/Binding. The restarted current-layout process
+	// reads legacy once, migrates after Accepted=true, then active identity wins
+	// even if a cached old manifest later overwrites legacy material.
+	currentCfg := credentialTestConfig("")
+	currentClient := fake.NewSimpleClientset(
+		emptyIdentityContainer(),
+		testCredentialSecret(currentCfg.LegacyTokenSecretName, testRotatedToken),
+		testCredentialSecret(currentCfg.BootstrapTokenSecretName, testBootstrapToken),
+	)
+	var currentPatchName string
+	currentClient.PrependReactor("patch", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
+		patch := action.(ktesting.PatchAction)
+		if patch.GetPatchType() == types.ApplyPatchType {
+			currentPatchName = patch.GetName()
+		}
+		return true, testCredentialSecret(patch.GetName(), testRotatedToken), nil
+	})
+	currentToken, source, err := resolveCredentialFromSecrets(ctx, currentClient, namespace, currentCfg)
+	if err != nil || currentToken != testRotatedToken || source != credentialSourceLegacy {
+		t.Fatalf("current-layout pre-migration startup = (%q, %q, %v)", currentToken, source, err)
+	}
+	currentCfg.AgentToken, currentCfg.CredentialSource = currentToken, source
+	currentTunnel := NewTunnelClient(currentCfg, testLogger())
+	currentTunnel.tokenPersister = func(ctx context.Context, cfg *AgentConfig, token string) error {
+		return persistRotatedTokenWithClient(ctx, currentClient, namespace, cfg, token)
+	}
+	migrated, err := currentTunnel.persistAcceptedAgentToken(ctx, "")
+	if err != nil || !migrated || currentCfg.CredentialSource != CredentialSourceIdentity || currentPatchName != currentCfg.IdentityTokenSecretName {
+		t.Fatalf("current-layout migration = %t, source=%q patch=%q err=%v", migrated, currentCfg.CredentialSource, currentPatchName, err)
+	}
+	identity, err := currentClient.CoreV1().Secrets(namespace).Get(ctx, currentCfg.IdentityTokenSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity.Data = map[string][]byte{currentCfg.IdentityTokenSecretKey: []byte(testRotatedToken)}
+	if _, err := currentClient.CoreV1().Secrets(namespace).Update(ctx, identity, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := currentClient.CoreV1().Secrets(namespace).Get(ctx, currentCfg.LegacyTokenSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.Data = map[string][]byte{currentCfg.LegacyTokenSecretKey: []byte("cached-old-manifest-token-00000001")}
+	if _, err := currentClient.CoreV1().Secrets(namespace).Update(ctx, legacy, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	got, source, err := resolveCredentialFromSecrets(ctx, currentClient, namespace, currentCfg)
+	if err != nil || got != testRotatedToken || source != CredentialSourceIdentity {
+		t.Fatalf("post-cached-manifest startup = (%q, %q, %v)", got, source, err)
 	}
 }
 

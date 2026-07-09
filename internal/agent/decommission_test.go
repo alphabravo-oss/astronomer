@@ -57,6 +57,10 @@ func seedFullFootprint() *fake.Clientset {
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent", Labels: map[string]string{tPartOf: "astronomer"}}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-kube-state-metrics", Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"}}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-kube-state-metrics", Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"}}},
+		&rbacv1.Role{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
+		&rbacv1.RoleBinding{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
+		&rbacv1.Role{ObjectMeta: partOfMeta("astronomer-agent-token", "astronomer-system")},
+		&rbacv1.RoleBinding{ObjectMeta: partOfMeta("astronomer-agent-token", "astronomer-system")},
 		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-registration-token", "astronomer-system")},
 		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
 		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-token", "astronomer-system")},
@@ -210,6 +214,8 @@ func TestFullCleanup_DeletesExactlyManagedSet(t *testing.T) {
 		"secrets/astronomer-agent-token", "secrets/astronomer-agent-ca",
 		"configmaps/astronomer-agent-config", "services/astronomer-agent",
 		"networkpolicies/astronomer-agent", "poddisruptionbudgets/astronomer-agent",
+		"rolebindings/astronomer-agent-identity", "rolebindings/astronomer-agent-token",
+		"roles/astronomer-agent-identity", "roles/astronomer-agent-token",
 		"deployments/astronomer-agent",
 		"namespaces/astronomer-system",
 		// NOTE: serviceaccounts/astronomer-agent is intentionally NOT in this set
@@ -279,6 +285,8 @@ func TestFullCleanup_NeverDeletesUnmanaged(t *testing.T) {
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 		// astronomer-agent ClusterRole WITHOUT part-of.
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent"}},
+		// current credential Role WITHOUT part-of.
+		&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent-identity", Namespace: "astronomer-system"}},
 		// active identity Secret WITHOUT part-of.
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent-identity", Namespace: "astronomer-system"}},
 		// astronomer-system WITHOUT managed-by (operator-precreated).
@@ -295,6 +303,7 @@ func TestFullCleanup_NeverDeletesUnmanaged(t *testing.T) {
 		"namespaces/kube-system",
 		"namespaces/astronomer-system",
 		"clusterroles/astronomer-agent",
+		"roles/astronomer-agent-identity",
 		"secrets/astronomer-agent-identity",
 	} {
 		if contains(dels, forbidden) {
@@ -385,6 +394,10 @@ func TestLegacyPayload_BackCompat(t *testing.T) {
 		"namespaces/astronomer-monitoring",
 		"namespaces/astronomer-system",
 		"clusterroles/astronomer-agent",
+		"roles/astronomer-agent-identity",
+		"rolebindings/astronomer-agent-identity",
+		"roles/astronomer-agent-token",
+		"rolebindings/astronomer-agent-token",
 		"secrets/astronomer-agent-identity",
 		"secrets/astronomer-agent-registration-token",
 		"secrets/astronomer-agent-token",

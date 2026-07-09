@@ -63,6 +63,24 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.CredentialSource != CredentialSourceEnvironment {
 		t.Errorf("CredentialSource = %q, want %q", cfg.CredentialSource, CredentialSourceEnvironment)
 	}
+	if cfg.IdentityLayoutConfigured || !cfg.LegacyLayoutConfigured {
+		t.Errorf("layout markers = identity:%t legacy:%t, want image-first legacy layout", cfg.IdentityLayoutConfigured, cfg.LegacyLayoutConfigured)
+	}
+}
+
+func TestLoadAgentConfigRecordsExplicitIdentityLayoutBeforeDefaults(t *testing.T) {
+	t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+	t.Setenv("ASTRONOMER_CLUSTER_ID", "test-cluster-123")
+	t.Setenv("ASTRONOMER_AGENT_TOKEN", "test-token-abc")
+	t.Setenv("ASTRONOMER_IDENTITY_TOKEN_SECRET_NAME", "astronomer-agent-identity")
+
+	cfg, err := LoadAgentConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.IdentityLayoutConfigured || cfg.LegacyLayoutConfigured {
+		t.Fatalf("layout markers = identity:%t legacy:%t, want current identity layout only", cfg.IdentityLayoutConfigured, cfg.LegacyLayoutConfigured)
+	}
 }
 
 func TestCredentialSourceDiagnosticNeverLogsMaterial(t *testing.T) {

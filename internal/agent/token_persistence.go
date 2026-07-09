@@ -78,6 +78,9 @@ func resolveCredentialFromSecrets(ctx context.Context, client kubernetes.Interfa
 	secrets := client.CoreV1().Secrets(namespace)
 	identity, err := secrets.Get(ctx, cfg.IdentityTokenSecretName, metav1.GetOptions{})
 	if err != nil {
+		if cfg.LegacyLayoutConfigured && (apierrors.IsNotFound(err) || apierrors.IsForbidden(err)) {
+			return resolveLegacyCredential(ctx, secrets, cfg)
+		}
 		if apierrors.IsNotFound(err) {
 			return "", "", fmt.Errorf("active identity container is missing; apply the current registration manifest before starting this agent")
 		}
@@ -92,6 +95,9 @@ func resolveCredentialFromSecrets(ctx context.Context, client kubernetes.Interfa
 	}
 	if identity.Labels[credentialIdentityLabel] != credentialIdentityPurpose {
 		return "", "", fmt.Errorf("empty active agent identity is missing its expected container-purpose label")
+	}
+	if cfg.LegacyLayoutConfigured {
+		return "", "", fmt.Errorf("active identity is empty while the pod still uses the legacy credential layout; apply the current registration manifest")
 	}
 
 	legacy, err := secrets.Get(ctx, cfg.LegacyTokenSecretName, metav1.GetOptions{})
@@ -118,6 +124,18 @@ func resolveCredentialFromSecrets(ctx context.Context, client kubernetes.Interfa
 		return "", "", fmt.Errorf("bootstrap agent credential has invalid shape: %w", err)
 	}
 	return bootstrapToken, credentialSourceBootstrap, nil
+}
+
+func resolveLegacyCredential(ctx context.Context, secrets secretGetter, cfg *AgentConfig) (string, string, error) {
+	legacy, err := secrets.Get(ctx, cfg.LegacyTokenSecretName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", fmt.Errorf("read image-first legacy agent credential: %w", err)
+	}
+	legacyToken := string(legacy.Data[cfg.LegacyTokenSecretKey])
+	if err := validateCredentialShape(legacyToken); err != nil {
+		return "", "", fmt.Errorf("image-first legacy agent credential has invalid shape: %w", err)
+	}
+	return legacyToken, credentialSourceLegacy, nil
 }
 
 func validateCredentialShape(token string) error {
@@ -152,7 +170,11 @@ func persistRotatedToken(ctx context.Context, cfg *AgentConfig, token string) er
 	if cfg == nil || token == "" {
 		return fmt.Errorf("agent config and durable token are required")
 	}
-	if cfg.IdentityTokenSecretName == "" || cfg.IdentityTokenSecretKey == "" {
+	if usesLegacyCredentialStorage(cfg) {
+		if cfg.LegacyTokenSecretName == "" || cfg.LegacyTokenSecretKey == "" {
+			return fmt.Errorf("legacy identity Secret name and key are required")
+		}
+	} else if cfg.IdentityTokenSecretName == "" || cfg.IdentityTokenSecretKey == "" {
 		return fmt.Errorf("active identity Secret name and key are required")
 	}
 	namespace, err := serviceAccountNamespace()
@@ -170,10 +192,11 @@ func persistRotatedToken(ctx context.Context, cfg *AgentConfig, token string) er
 	return persistRotatedTokenWithClient(ctx, clientset, namespace, cfg, token)
 }
 
-// persistRotatedTokenWithClient owns only data.<token-key> on the pre-created
-// identity container. It never performs Create or full-object Update. Force is
-// deliberate and bounded to the fields present in this minimal SSA document so
-// legacy client-side ownership of data.token can be migrated safely.
+// persistRotatedTokenWithClient owns only one data.<token-key> field. A current
+// layout writes the pre-created active identity. An image-first legacy-layout
+// process that authenticated with legacy durable identity patches that existing
+// legacy Secret only; it never attempts identity migration until a current-
+// manifest restart. Neither path performs Create or full-object Update.
 func persistRotatedTokenWithClient(ctx context.Context, client kubernetes.Interface, namespace string, cfg *AgentConfig, token string) error {
 	if client == nil || cfg == nil {
 		return fmt.Errorf("Kubernetes token persistence client and agent config are required")
@@ -184,6 +207,12 @@ func persistRotatedTokenWithClient(ctx context.Context, client kubernetes.Interf
 	writeCtx, cancel := context.WithTimeout(ctx, credentialWriteTimeout)
 	defer cancel()
 	secrets := client.CoreV1().Secrets(namespace)
+	if usesLegacyCredentialStorage(cfg) {
+		if err := scrubLastAppliedAnnotation(writeCtx, secrets, cfg.LegacyTokenSecretName); err != nil {
+			return fmt.Errorf("scrub image-first legacy identity annotation: %w", err)
+		}
+		return applyCredentialToken(writeCtx, secrets, namespace, cfg.LegacyTokenSecretName, cfg.LegacyTokenSecretKey, token, "image-first legacy identity")
+	}
 	if err := scrubLastAppliedAnnotation(writeCtx, secrets, cfg.IdentityTokenSecretName); err != nil {
 		return fmt.Errorf("scrub active identity annotation: %w", err)
 	}
@@ -191,26 +220,38 @@ func persistRotatedTokenWithClient(ctx context.Context, client kubernetes.Interf
 		return fmt.Errorf("scrub legacy identity annotation: %w", err)
 	}
 
+	return applyCredentialToken(writeCtx, secrets, namespace, cfg.IdentityTokenSecretName, cfg.IdentityTokenSecretKey, token, "durable identity")
+}
+
+func usesLegacyCredentialStorage(cfg *AgentConfig) bool {
+	return cfg != nil && cfg.LegacyLayoutConfigured && cfg.CredentialSource == credentialSourceLegacy
+}
+
+func applyCredentialToken(ctx context.Context, secrets secretGetterPatcher, namespace, name, key, token, description string) error {
 	apply := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cfg.IdentityTokenSecretName,
+			Name:      name,
 			Namespace: namespace,
 		},
-		Data: map[string][]byte{cfg.IdentityTokenSecretKey: []byte(token)},
+		Data: map[string][]byte{key: []byte(token)},
 	}
 	payload, err := json.Marshal(apply)
 	if err != nil {
-		return fmt.Errorf("encode durable identity apply patch: %w", err)
+		return fmt.Errorf("encode %s apply patch: %w", description, err)
 	}
 	force := true
-	if _, err := secrets.Patch(writeCtx, cfg.IdentityTokenSecretName, types.ApplyPatchType, payload, metav1.PatchOptions{
+	if _, err := secrets.Patch(ctx, name, types.ApplyPatchType, payload, metav1.PatchOptions{
 		FieldManager: credentialFieldManager,
 		Force:        &force,
 	}); err != nil {
-		return fmt.Errorf("server-side apply durable identity token: %w", err)
+		return fmt.Errorf("server-side apply %s token: %w", description, err)
 	}
 	return nil
+}
+
+type secretGetter interface {
+	Get(context.Context, string, metav1.GetOptions) (*corev1.Secret, error)
 }
 
 type secretGetterPatcher interface {

@@ -108,6 +108,52 @@ func TestAcceptedBootstrapPersistsACKDurableIdentity(t *testing.T) {
 	}
 }
 
+func TestAcceptedBootstrapRejectsMissingOrReusedDurableACK(t *testing.T) {
+	for _, ackToken := range []string{"", testBootstrapToken} {
+		t.Run(ackToken, func(t *testing.T) {
+			cfg := testConfig()
+			cfg.AgentToken = testBootstrapToken
+			cfg.CredentialSource = credentialSourceBootstrap
+			tc := NewTunnelClient(cfg, testLogger())
+			persisted := false
+			tc.tokenPersister = func(context.Context, *AgentConfig, string) error {
+				persisted = true
+				return nil
+			}
+			migrated, err := tc.persistAcceptedAgentToken(context.Background(), ackToken)
+			if err == nil || migrated || persisted {
+				t.Fatalf("bootstrap ACK %q = migrated:%t persisted:%t err:%v", ackToken, migrated, persisted, err)
+			}
+			if cfg.AgentToken != testBootstrapToken || cfg.CredentialSource != credentialSourceBootstrap {
+				t.Fatal("invalid bootstrap ACK changed live credential state")
+			}
+		})
+	}
+}
+
+func TestImageFirstLegacyRotationStaysOnLegacySource(t *testing.T) {
+	cfg := testConfig()
+	cfg.AgentToken = testLegacyToken
+	cfg.CredentialSource = credentialSourceLegacy
+	cfg.LegacyLayoutConfigured = true
+	tc := NewTunnelClient(cfg, testLogger())
+	var persisted string
+	tc.tokenPersister = func(_ context.Context, gotCfg *AgentConfig, token string) error {
+		if !usesLegacyCredentialStorage(gotCfg) {
+			t.Fatal("image-first rotation did not select legacy credential storage")
+		}
+		persisted = token
+		return nil
+	}
+	rotated, err := tc.persistAcceptedAgentToken(context.Background(), testRotatedToken)
+	if err != nil || !rotated || persisted != testRotatedToken {
+		t.Fatalf("rotation = %t, persisted=%q, err=%v", rotated, persisted, err)
+	}
+	if cfg.AgentToken != testRotatedToken || cfg.CredentialSource != credentialSourceLegacy {
+		t.Fatalf("token=%q source=%q, want rotated legacy", cfg.AgentToken, cfg.CredentialSource)
+	}
+}
+
 func TestPersistenceAttemptHasInternalDeadlineAndHonorsCancellation(t *testing.T) {
 	oldTimeout := credentialWriteTimeout
 	credentialWriteTimeout = 25 * time.Millisecond

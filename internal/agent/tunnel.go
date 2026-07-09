@@ -261,11 +261,15 @@ func (tc *TunnelClient) persistAcceptedAgentToken(ctx context.Context, ackToken 
 	if tc == nil || tc.config == nil {
 		return false, fmt.Errorf("agent config is required")
 	}
+	if tc.config.CredentialSource == credentialSourceBootstrap && (ackToken == "" || ackToken == tc.config.AgentToken) {
+		return false, fmt.Errorf("accepted bootstrap connection did not provide a distinct durable agent credential")
+	}
 	durableToken := ackToken
 	if durableToken == "" {
 		durableToken = tc.config.AgentToken
 	}
-	needsIdentityMigration := tc.config.CredentialSource == credentialSourceBootstrap || tc.config.CredentialSource == credentialSourceLegacy
+	legacyImageFirst := tc.config.CredentialSource == credentialSourceLegacy && tc.config.LegacyLayoutConfigured
+	needsIdentityMigration := tc.config.CredentialSource == credentialSourceBootstrap || (tc.config.CredentialSource == credentialSourceLegacy && !legacyImageFirst)
 	needsRotation := ackToken != "" && ackToken != tc.config.AgentToken
 	if tc.config.CredentialSource == CredentialSourceEnvironment {
 		if needsRotation {
@@ -297,7 +301,9 @@ func (tc *TunnelClient) persistAndActivateAgentToken(ctx context.Context, token 
 		return fmt.Errorf("persist durable agent credential before activation: %w", err)
 	}
 	tc.config.AgentToken = token
-	tc.config.CredentialSource = CredentialSourceIdentity
+	if !usesLegacyCredentialStorage(tc.config) {
+		tc.config.CredentialSource = CredentialSourceIdentity
+	}
 	tc.pendingAgentToken = ""
 	return nil
 }

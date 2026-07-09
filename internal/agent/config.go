@@ -29,6 +29,15 @@ type AgentConfig struct {
 	IdentityTokenSecretKey   string `mapstructure:"identity_token_secret_key"`   // Agent-owned token field
 	LegacyTokenSecretName    string `mapstructure:"legacy_token_secret_name"`    // Pre-AGENT-02 durable Secret
 	LegacyTokenSecretKey     string `mapstructure:"legacy_token_secret_key"`     // Legacy durable token key
+	// IdentityLayoutConfigured records whether the Deployment explicitly carries
+	// the AGENT-02 identity-layout marker. It is captured before Viper defaults
+	// are applied so an image-only self-upgrade can be distinguished from the
+	// current manifest. It never changes in-process.
+	IdentityLayoutConfigured bool `mapstructure:"-"`
+	// LegacyLayoutConfigured is true only when the pre-AGENT-02 token env is
+	// explicitly present and the identity-layout marker is absent. It permits
+	// the narrowly scoped image-first compatibility path.
+	LegacyLayoutConfigured bool `mapstructure:"-"`
 	// TokenSecretName/Key preserve the pre-AGENT-02 environment override. When
 	// explicitly set they override the legacy fields; active identity always uses
 	// the fixed, separately-owned identity fields.
@@ -90,6 +99,8 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		log = slog.Default()
 	}
 	_, privilegeProfileExplicit := os.LookupEnv("ASTRONOMER_PRIVILEGE_PROFILE")
+	_, identityLayoutConfigured := os.LookupEnv("ASTRONOMER_IDENTITY_TOKEN_SECRET_NAME")
+	_, legacyTokenEnvironmentConfigured := os.LookupEnv("ASTRONOMER_AGENT_TOKEN")
 	v := envconfig.NewViper("ASTRONOMER")
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "server_url", Value: ""},
@@ -126,6 +137,8 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal agent config: %w", err)
 	}
+	cfg.IdentityLayoutConfigured = identityLayoutConfigured
+	cfg.LegacyLayoutConfigured = !identityLayoutConfigured && legacyTokenEnvironmentConfigured
 
 	if cfg.ServerURL == "" {
 		return nil, fmt.Errorf("ASTRONOMER_SERVER_URL is required")

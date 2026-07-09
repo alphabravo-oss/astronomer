@@ -231,16 +231,19 @@ curl -fsSL -X POST \
 ```
 
 The next authenticated CONNECT delivers the replacement credential in its ACK.
-The agent patches only `data.token` on `astronomer-agent-identity`, reconnects with it, and the
-server retires the previous hash after adoption. Verify the cluster reconnects
-and `agent_last_seen_at` advances. If durable persistence fails, inspect the
-agent's `credential_source` diagnostic and its name-scoped Secret RBAC; never
-print either Secret's data while troubleshooting.
+The agent patches only `data.token` on `astronomer-agent-identity`, reconnects
+with it, and the server retires the previous hash after adoption. Verify the
+cluster reconnects and `agent_last_seen_at` advances. If durable persistence
+fails, inspect the agent's `credential_source` diagnostic and its name-scoped
+Secret RBAC; never print either Secret's data while troubleshooting.
 
 Deleting the durable Secret is a recovery action, not normal rotation. On the
-next restart the agent falls back only to the bootstrap Secret; the server still
-enforces registration-token expiry and cluster binding. Generate a fresh
-manifest if that bootstrap has expired, then apply it with:
+next restart a current-layout agent fails closed because the required identity
+container is absent; it does not directly fall back. Reapply the current manifest
+to recreate the empty labeled identity container. Startup then prefers any valid
+legacy `astronomer-agent-token` material before bootstrap. If legacy is absent,
+the server still enforces bootstrap registration-token expiry and cluster
+binding. Generate a fresh manifest if bootstrap has expired, then apply it with:
 
 ```bash
 kubectl apply --server-side --field-manager=astronomer-bootstrap -f -

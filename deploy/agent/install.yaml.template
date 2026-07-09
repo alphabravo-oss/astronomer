@@ -88,11 +88,14 @@ subjects:
 # pre-creates the empty identity container because Kubernetes RBAC cannot scope
 # Secret CREATE by name. The agent reads bootstrap/new/legacy identity and may
 # patch only the active identity plus the legacy object during annotation scrub.
-# No create/update/list/watch/delete and no arbitrary Secret access.
+# Credential and CA deletion is exact-name scoped for full decommission. The
+# AGENT-02 Role name is distinct from the legacy Role so cached old manifests
+# cannot revoke current identity access. No create/update/list/watch or
+# arbitrary Secret access.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: astronomer-agent-token
+  name: astronomer-agent-identity
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -101,17 +104,21 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: ["astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token"]
+    resourceNames: ["astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token", "astronomer-agent-ca"]
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames: ["astronomer-agent-identity", "astronomer-agent-token"]
     verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token", "astronomer-agent-ca"]
+    verbs: ["delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: astronomer-agent-token
+  name: astronomer-agent-identity
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -120,7 +127,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: astronomer-agent-token
+  name: astronomer-agent-identity
 subjects:
   - kind: ServiceAccount
     name: {{AGENT_SERVICE_ACCOUNT_NAME}}

@@ -134,6 +134,9 @@ verify_backend() {
   # generated and static contract checks here without pointlessly rerunning
   # those exact test cases. The api-contract scope retains focused diagnostics.
   verify_contract_artifacts
+
+  step "Agent identity live API-server acceptance (requires explicit AGENT_IDENTITY_TEST_CONTEXT)"
+  run_logged agent-identity-live ./scripts/verify-agent-identity-rbac.sh --if-available
 }
 
 verify_frontend() {

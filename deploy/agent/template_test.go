@@ -485,8 +485,8 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 		`kind: RoleBinding`,
 		`namespace: astronomer-system`,
 		`Namespace-scoped workload operations`,
-		// Existing durable Secret access is always scoped to one name.
-		`name: astronomer-agent-token`,
+		// Credential access has a distinct current-layout RBAC object.
+		`name: astronomer-agent-identity`,
 		`resourceNames: ["astronomer-agent-identity", "astronomer-agent-token"]`,
 	} {
 		if !strings.Contains(manifest, want) {
@@ -522,7 +522,7 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 			t.Fatalf("namespace-operator must bind the agent via a namespaced RoleBinding, found a ClusterRoleBinding to %q", d.RoleRef.Name)
 		}
 	}
-	// The only secrets grant must be the resourceName-scoped token Role — the
+	// The only secrets grant must be the resourceName-scoped identity Role — the
 	// namespace-operator's own ClusterRole rules must not include secrets.
 	if strings.Contains(RBACRulesYAML(PrivilegeProfileNamespaceOperator), `"secrets"`) {
 		t.Fatal("namespace-operator RBAC rules must not grant secrets")
@@ -559,7 +559,8 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 		Data       map[string]string `yaml:"data"`
 		Rules      []rule            `yaml:"rules"`
 	}
-	var tokenRole []rule
+	var identityRole []rule
+	credentialRBACObjects := map[string]bool{}
 	secretNames := map[string]bool{}
 	dec := yaml.NewDecoder(strings.NewReader(manifest))
 	for {
@@ -584,8 +585,11 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 				}
 			}
 		}
-		if d.Kind == "Role" && d.Metadata.Name == "astronomer-agent-token" {
-			tokenRole = d.Rules
+		if (d.Kind == "Role" || d.Kind == "RoleBinding") && (d.Metadata.Name == "astronomer-agent-identity" || d.Metadata.Name == "astronomer-agent-token") {
+			credentialRBACObjects[d.Kind+"/"+d.Metadata.Name] = true
+		}
+		if d.Kind == "Role" && d.Metadata.Name == "astronomer-agent-identity" {
+			identityRole = d.Rules
 		}
 	}
 	if !secretNames["astronomer-agent-registration-token"] {
@@ -597,12 +601,18 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 	if secretNames["astronomer-agent-token"] {
 		t.Fatal("legacy durable Secret must be absent from current installer manifest")
 	}
-	if len(tokenRole) != 2 {
-		t.Fatalf("credential Role has %d rules, want exact-name get plus patch", len(tokenRole))
+	if len(identityRole) != 3 {
+		t.Fatalf("credential Role has %d rules, want exact-name get, patch, and delete", len(identityRole))
+	}
+	if !credentialRBACObjects["Role/astronomer-agent-identity"] || !credentialRBACObjects["RoleBinding/astronomer-agent-identity"] {
+		t.Fatal("current credential Role/Binding is missing")
+	}
+	if credentialRBACObjects["Role/astronomer-agent-token"] || credentialRBACObjects["RoleBinding/astronomer-agent-token"] {
+		t.Fatal("current manifest must not own the cached-manifest legacy credential Role/Binding names")
 	}
 
 	allows := func(verb, name string) bool {
-		for _, r := range tokenRole {
+		for _, r := range identityRole {
 			if !containsString(r.Resources, "secrets") || !containsString(r.Verbs, verb) {
 				continue
 			}
@@ -626,7 +636,18 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 	if !allows("get", "astronomer-agent-token") || !allows("patch", "astronomer-agent-token") {
 		t.Fatal("legacy identity requires exact-name read plus annotation scrub patch")
 	}
-	for _, verb := range []string{"create", "update", "list", "watch", "delete"} {
+	if !allows("get", "astronomer-agent-ca") || allows("patch", "astronomer-agent-ca") {
+		t.Fatal("agent CA must be exact-name readable for guarded decommission and never patchable")
+	}
+	for _, name := range []string{"astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token", "astronomer-agent-ca"} {
+		if !allows("delete", name) {
+			t.Fatalf("full decommission must allow exact-name delete of %s", name)
+		}
+	}
+	if allows("delete", "arbitrary-secret") {
+		t.Fatal("arbitrary Secret unexpectedly allows delete")
+	}
+	for _, verb := range []string{"create", "update", "list", "watch"} {
 		if allows(verb, "astronomer-agent-identity") || allows(verb, "arbitrary-secret") {
 			t.Fatalf("credential Role unexpectedly allows %s", verb)
 		}
