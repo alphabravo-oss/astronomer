@@ -128,6 +128,22 @@ function ensureConnection(): ConnectionState {
   return conn;
 }
 
+/** Current SSE connection status (for UX-04 poll backoff when live). */
+export function liveEventsStatus(): ConnectionState['status'] {
+  return conn?.status ?? 'idle';
+}
+
+/**
+ * UX-04: when the dashboard live bus is open, lengthen poll intervals so
+ * refetch is a fallback; when disconnected, keep the base interval.
+ */
+export function liveAwareRefetchInterval(baseMs: number): number {
+  if (liveEventsStatus() === 'open') {
+    return Math.max(baseMs * 4, 60_000);
+  }
+  return baseMs;
+}
+
 /** Build the stream URL with a one-use stream ticket. */
 function streamURL(ticket: string): string {
   const base = process.env.NEXT_PUBLIC_API_URL || '/api/v1';

@@ -383,15 +383,57 @@ func writeSpec(ctx context.Context, q Querier, spec BaselineSpec, userID uuid.UU
 		}
 	}
 
-	// Read-audit policies (sprint 063). If the table doesn't exist
-	// yet on this platform, the Querier won't have the method —
-	// we degrade gracefully by NOT having a method here. Operators
-	// who upgrade to sprint 063 + re-apply pick up the enablement.
+	// DIR-09: enable named read_audit_policies rows when the querier supports it.
 	if len(spec.ReadAuditPolicies) > 0 {
-		logger.Warn("compliance.apply: read_audit_policies field present but engine doesn't yet wire to sprint-063 table; skipping",
-			slog.Int("count", len(spec.ReadAuditPolicies)))
+		if err := enableReadAuditPolicies(ctx, q, spec.ReadAuditPolicies, logger); err != nil {
+			return fmt.Errorf("enable read_audit_policies: %w", err)
+		}
 	}
 
+	return nil
+}
+
+// readAuditPolicyEnabler is optional on Querier — *sqlc.Queries implements it.
+type readAuditPolicyEnabler interface {
+	ListReadAuditPolicies(ctx context.Context) ([]sqlc.ReadAuditPolicy, error)
+	UpdateReadAuditPolicy(ctx context.Context, arg sqlc.UpdateReadAuditPolicyParams) (sqlc.ReadAuditPolicy, error)
+}
+
+func enableReadAuditPolicies(ctx context.Context, q Querier, names []string, logger *slog.Logger) error {
+	enabler, ok := q.(readAuditPolicyEnabler)
+	if !ok {
+		if logger != nil {
+			logger.Warn("compliance.apply: querier lacks read_audit_policies methods; skipping enablement",
+				slog.Int("count", len(names)))
+		}
+		return nil
+	}
+	want := map[string]struct{}{}
+	for _, n := range names {
+		want[n] = struct{}{}
+	}
+	rows, err := enabler.ListReadAuditPolicies(ctx)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if _, match := want[row.Name]; !match {
+			continue
+		}
+		if row.Enabled {
+			continue
+		}
+		if _, err := enabler.UpdateReadAuditPolicy(ctx, sqlc.UpdateReadAuditPolicyParams{
+			ID:          row.ID,
+			Description: row.Description,
+			PathPattern: row.PathPattern,
+			Verbs:       row.Verbs,
+			SampleRate:  row.SampleRate,
+			Enabled:     true,
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -458,6 +500,14 @@ func restoreSpec(ctx context.Context, q Querier, owner, snap BaselineSpec, userI
 		}
 		if err := set("webhooks.required", webhooks); err != nil {
 			return err
+		}
+	}
+	// DIR-09: restore prior enablement of read_audit_policies the baseline owned.
+	// writeSpec already ran enableReadAuditPolicies on snap (which may be a
+	// subset); also disable any owner policies that were off pre-apply.
+	if len(owner.ReadAuditPolicies) > 0 {
+		if err := restoreReadAuditPolicies(ctx, q, owner.ReadAuditPolicies, snap.ReadAuditPolicies, logger); err != nil {
+			return fmt.Errorf("restore read_audit_policies: %w", err)
 		}
 	}
 	return nil
@@ -534,11 +584,86 @@ func buildSnapshot(ctx context.Context, q Querier, spec BaselineSpec) BaselineSp
 		}
 	}
 	if len(spec.ReadAuditPolicies) > 0 {
-		// Snapshot of read_audit_policies isn't taken — we don't
-		// touch that table in writeSpec yet (sprint 063 dependency).
-		out.ReadAuditPolicies = nil
+		// Snapshot the names of policies that are currently enabled among
+		// the set the baseline will touch, so Revert can restore prior
+		// enablement (DIR-09). Policies that were already enabled stay
+		// listed; disabled ones are omitted so restore only re-enables
+		// what was on before apply.
+		out.ReadAuditPolicies = snapshotEnabledReadAuditPolicies(ctx, q, spec.ReadAuditPolicies)
 	}
 	return out
+}
+
+// snapshotEnabledReadAuditPolicies returns the subset of `names` that are
+// currently enabled in the DB. Used as previous_state for Revert.
+func snapshotEnabledReadAuditPolicies(ctx context.Context, q Querier, names []string) []string {
+	enabler, ok := q.(readAuditPolicyEnabler)
+	if !ok {
+		return nil
+	}
+	want := map[string]struct{}{}
+	for _, n := range names {
+		want[n] = struct{}{}
+	}
+	rows, err := enabler.ListReadAuditPolicies(ctx)
+	if err != nil {
+		return nil
+	}
+	var enabled []string
+	for _, row := range rows {
+		if _, match := want[row.Name]; !match {
+			continue
+		}
+		if row.Enabled {
+			enabled = append(enabled, row.Name)
+		}
+	}
+	return enabled
+}
+
+// restoreReadAuditPolicies brings named policies to the captured enabled set:
+// enable every name in snap, disable every name in owner that is not in snap.
+func restoreReadAuditPolicies(ctx context.Context, q Querier, owner, snap []string, logger *slog.Logger) error {
+	enabler, ok := q.(readAuditPolicyEnabler)
+	if !ok {
+		if logger != nil {
+			logger.Warn("compliance.revert: querier lacks read_audit_policies methods; skipping restore")
+		}
+		return nil
+	}
+	wantEnabled := map[string]struct{}{}
+	for _, n := range snap {
+		wantEnabled[n] = struct{}{}
+	}
+	// Only touch policies the applied baseline owned.
+	owned := map[string]struct{}{}
+	for _, n := range owner {
+		owned[n] = struct{}{}
+	}
+	rows, err := enabler.ListReadAuditPolicies(ctx)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if _, match := owned[row.Name]; !match {
+			continue
+		}
+		_, shouldEnable := wantEnabled[row.Name]
+		if row.Enabled == shouldEnable {
+			continue
+		}
+		if _, err := enabler.UpdateReadAuditPolicy(ctx, sqlc.UpdateReadAuditPolicyParams{
+			ID:          row.ID,
+			Description: row.Description,
+			PathPattern: row.PathPattern,
+			Verbs:       row.Verbs,
+			SampleRate:  row.SampleRate,
+			Enabled:     shouldEnable,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ── diff helpers ──────────────────────────────────────────────────────

@@ -74,6 +74,10 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// task immediately; this sweep repairs missed enqueue, worker crash,
 		// or an ArgoCD cluster Secret deleted out-of-band.
 		{"@every 5m", tasks.ArgoCDAutoRegisterClusterType, "argocd managed-cluster auto-adoption sweep"},
+		// DIR-10: periodic re-stamp of astronomer.io/label-* keys on ArgoCD
+		// cluster Secrets so AppSet generators stay current even when the
+		// asynq queue was down during a labels mutation.
+		{"@every 15m", tasks.ArgoCDRefreshAllManagedClusterLabelsType, "argocd managed-cluster label re-stamp sweep"},
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},

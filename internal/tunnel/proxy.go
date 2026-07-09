@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -337,6 +338,13 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 				if err != nil {
 					bodyBytes = []byte(frame.Body)
 				}
+				// F7-b: drop watch events outside the caller's namespace allow-set.
+				if allowed, ok := namespaceFilterFromContext(r.Context()); ok {
+					keep, ferr := watchEventAllowed(bodyBytes, allowed)
+					if ferr != nil || !keep {
+						continue
+					}
+				}
 				if _, werr := w.Write(bodyBytes); werr != nil {
 					recordK8sProxyError("watch", "client_write_failed")
 					return
@@ -565,15 +573,23 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	}()
 
 	// Namespace-scoped RBAC fail-closed on the cross-pod path. When this
-	// (front) pod's authz middleware admitted a cluster-wide LIST for a
-	// namespace-restricted user it stashed the allow-set in r's context. The
-	// owner pod re-runs the same middleware and filters its buffered response,
-	// but we must NEVER stream an owner response through unfiltered when a
-	// filter was requested. A filtered request is always a unary LIST (watches
-	// are 403'd at the middleware), so buffer the owner's body and re-apply the
-	// filter here — idempotent when the owner already filtered, and fail-closed
-	// (403) if the body is unfilterable.
+	// (front) pod's authz middleware admitted a cluster-wide LIST/WATCH for a
+	// namespace-restricted user it stashed the allow-set in r's context. We
+	// must NEVER stream an owner response through unfiltered when a filter was
+	// requested.
+	//
+	// Unary LIST: buffer + applyNamespaceFilter (idempotent if owner already
+	// filtered). WATCH (F7-b): stream NDJSON lines and drop events outside the
+	// allow-set — never buffer the whole long-lived body.
 	if allowed, ok := namespaceFilterFromContext(r.Context()); ok {
+		if isWatchRequest(r) {
+			if p.forwardFilteredOwnerWatch(w, resp, allowed) {
+				return true
+			}
+			recordK8sProxyError(k8sProxyMode(r), "namespace_filter_forbidden")
+			http.Error(w, `{"error":"You do not have permission to perform this action"}`, http.StatusForbidden)
+			return true
+		}
 		if p.forwardFilteredOwnerResponse(w, resp, allowed) {
 			return true
 		}
@@ -615,6 +631,53 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	_, _ = io.Copy(w, resp.Body)
 	if flusher != nil {
 		flusher.Flush()
+	}
+	return true
+}
+
+// forwardFilteredOwnerWatch streams a cross-pod watch response while dropping
+// events outside the namespace allow-set (F7-b). Kubernetes watch bodies are
+// newline-delimited JSON objects; each complete line is evaluated with
+// watchEventAllowed. Returns false only when headers cannot be written.
+func (p *ProxyHandler) forwardFilteredOwnerWatch(w http.ResponseWriter, resp *http.Response, allowed map[string]struct{}) bool {
+	for k, v := range resp.Header {
+		if len(v) == 0 || !k8sProxyResponseHeaderAllowed(k) {
+			continue
+		}
+		w.Header()[k] = v
+	}
+	// Avoid advertising a full unfiltered Content-Length after we drop frames.
+	w.Header().Del("Content-Length")
+	w.WriteHeader(resp.StatusCode)
+	flusher, _ := w.(http.Flusher)
+	if flusher != nil {
+		flusher.Flush()
+	}
+	if resp.StatusCode != 0 && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		_, _ = io.Copy(w, resp.Body)
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return true
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	// Watch events can be large CRD objects; raise the default 64KiB token limit.
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		keep, err := watchEventAllowed(line, allowed)
+		if err != nil || !keep {
+			continue
+		}
+		if _, werr := w.Write(append(line, '\n')); werr != nil {
+			return true
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
 	}
 	return true
 }

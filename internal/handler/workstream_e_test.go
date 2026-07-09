@@ -123,6 +123,10 @@ func (s *captureHelmStub) Do(_ context.Context, _ string, _ protocol.MessageType
 	return &protocol.HelmResultPayload{Success: true, Status: "deployed", Revision: 1}, nil
 }
 
+func (s *captureHelmStub) History(_ context.Context, _, _, _ string) (*protocol.HelmResultPayload, error) {
+	return &protocol.HelmResultPayload{Success: true}, nil
+}
+
 func (s *captureHelmStub) Status(_ context.Context, _, _, _ string) (*protocol.HelmResultPayload, error) {
 	return nil, errors.New("release: not found")
 }

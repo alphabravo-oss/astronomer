@@ -214,6 +214,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	tunnelClient.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)
 	tunnelClient.RegisterHandler(protocol.MsgHelmRollback, helm.HandleRollback)
 	tunnelClient.RegisterHandler(protocol.MsgHelmStatus, helm.HandleStatus)
+	tunnelClient.RegisterHandler(protocol.MsgHelmHistory, helm.HandleHistory)
 
 	// Health reporter — drives the heartbeat / metrics tickers that update the
 	// cluster row's last_heartbeat / agent_version / k8s_version columns.

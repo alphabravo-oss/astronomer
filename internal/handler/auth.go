@@ -133,6 +133,13 @@ type AuthHandler struct {
 	// enroll-only challenge. nil disables the runtime read (test fakes
 	// that only want the static knob leave it unset).
 	totpPolicy func(ctx context.Context) bool
+	// sessionTimeoutMinutes, when set, returns the platform setting
+	// session.timeout_minutes so mint/refresh honor compliance-applied
+	// session lifetime (DIR-05). nil keeps the JWT manager boot TTL.
+	sessionTimeoutMinutes func(ctx context.Context) int
+	// settingsCache resolves password.* platform settings for change/
+	// reset password (AUTH-R01). Nil falls back to defaults.
+	settingsCache *SettingsCache
 
 	// emails is the optional email-enqueue hook used by the
 	// lockout + token-created hot paths. Optional and best-effort:
@@ -344,6 +351,40 @@ func (h *AuthHandler) SetTOTPRequireAll(require bool) {
 // a redeploy. nil leaves only the static knob in force.
 func (h *AuthHandler) SetTOTPPolicy(fn func(ctx context.Context) bool) {
 	h.totpPolicy = fn
+}
+
+// SetSessionTimeoutPolicy wires session.timeout_minutes from platform
+// settings (DIR-05). Applied immediately before each token mint/refresh.
+func (h *AuthHandler) SetSessionTimeoutPolicy(fn func(ctx context.Context) int) {
+	h.sessionTimeoutMinutes = fn
+}
+
+// SetSettingsCache wires platform settings for password policy (AUTH-R01).
+func (h *AuthHandler) SetSettingsCache(c *SettingsCache) {
+	if h != nil {
+		h.settingsCache = c
+	}
+}
+
+// passwordPolicy returns the live password policy from platform settings
+// when wired, else DefaultPasswordPolicy.
+func (h *AuthHandler) passwordPolicy(ctx context.Context) auth.PasswordPolicy {
+	if h == nil {
+		return auth.DefaultPasswordPolicy()
+	}
+	return auth.LoadPasswordPolicy(ctx, h.settingsCache)
+}
+
+// applySessionTimeoutFromSettings updates the JWT manager access TTL when
+// a runtime session.timeout_minutes policy is configured.
+func (h *AuthHandler) applySessionTimeoutFromSettings(ctx context.Context) {
+	if h == nil || h.jwt == nil || h.sessionTimeoutMinutes == nil {
+		return
+	}
+	mins := h.sessionTimeoutMinutes(ctx)
+	if mins > 0 {
+		h.jwt.SetAccessTokenTTL(time.Duration(mins) * time.Minute)
+	}
 }
 
 // totpEnforced reports whether MFA enrollment is mandatory for this
@@ -635,6 +676,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.applySessionTimeoutFromSettings(r.Context())
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
@@ -815,6 +857,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.applySessionTimeoutFromSettings(r.Context())
 	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(user.ID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
@@ -1170,6 +1213,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CurrentPassword == "" || req.NewPassword == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "current_password and new_password are required")
+		return
+	}
+	if err := auth.ValidatePassword(req.NewPassword, h.passwordPolicy(r.Context())); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 

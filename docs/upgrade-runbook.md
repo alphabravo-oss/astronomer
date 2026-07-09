@@ -16,16 +16,23 @@ shape of the chart (`deploy/chart/`).
 ## TL;DR
 
 ```bash
-# Pre-upgrade: render-time preflight (catches missing/invalid values before
-# anything is applied). The chart also runs a pre-upgrade preflight Job on the
-# real cluster (see "Pre-upgrade checklist" and step 2 below).
+# 1) Capture the live values FIRST so dry-run / upgrade preserve operator pins.
+helm get values astronomer -n astronomer > /tmp/astronomer-values.yaml
+
+# 2) Render-time preflight (catches missing/invalid values before anything is
+# applied). The chart also runs a pre-upgrade preflight Job on the real cluster
+# (see "Pre-upgrade checklist" and step 2 below).
 helm upgrade astronomer ./deploy/chart --dry-run \
   -f deploy/chart/values.yaml \
   -f deploy/chart/values-production.yaml \
-  -f /tmp/astronomer-values.yaml
-helm get values astronomer -n astronomer > /tmp/astronomer-values.yaml
+  -f /tmp/astronomer-values.yaml \
+  --set image.server.tag=<NEW_SHA> \
+  --set image.worker.tag=<NEW_SHA> \
+  --set image.agent.tag=<NEW_SHA> \
+  --set image.migrate.tag=<NEW_SHA> \
+  --set frontend.image.tag=<NEW_SHA>
 
-# Upgrade
+# 3) Diff, then upgrade
 helm diff upgrade astronomer ./deploy/chart \
   -f deploy/chart/values.yaml \
   -f deploy/chart/values-production.yaml \
@@ -46,7 +53,7 @@ helm upgrade astronomer ./deploy/chart \
   --set image.migrate.tag=<NEW_SHA> \
   --set frontend.image.tag=<NEW_SHA>
 
-# Verify (see "Post-upgrade verification")
+# 4) Verify (see "Post-upgrade verification")
 curl -s $URL/health/                              # 200
 curl -s $URL/readyz                               # 200
 curl -s -H "Authorization: Bearer $TOKEN" $URL/api/v1/platform/health-summary/
@@ -85,15 +92,35 @@ saves the round trip.
 
 ### 1. Postgres + schema state
 
+Production installs use **external** Postgres (`postgres.bundled.enabled=false`
+in `values-production.yaml`). Do **not** assume a pod named
+`astronomer-postgres-0` exists — that StatefulSet is dev/k3d only.
+
 ```bash
 # Backups: confirm last good nightly pg_dump landed
 kubectl -n astronomer logs -l app.kubernetes.io/component=management-backup \
   --tail=200 | grep -i 'completed\|error' | tail -10
 
-# Schema state: should be clean (dirty=false)
-kubectl -n astronomer exec astronomer-postgres-0 -- \
-  psql -U astronomer -d astronomer -c \
-  'SELECT version, dirty FROM schema_migrations;'
+# Schema state: should be clean (dirty=false).
+# Prefer the server's DATABASE_URL (works for external Postgres and bundled).
+DB_URL="$(kubectl -n astronomer get secret astronomer-postgres-dsn \
+  -o jsonpath='{.data.dsn}' 2>/dev/null | base64 -d)"
+# Fallback when the chart still manages a literal secret key name:
+if [[ -z "$DB_URL" ]]; then
+  DB_URL="$(kubectl -n astronomer get deploy astronomer-server \
+    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DATABASE_URL")].value}')"
+fi
+
+# External Postgres (production): run psql from a throwaway pod that can
+# reach the managed DB, OR use your provider's SQL console.
+kubectl -n astronomer run psql-check --rm -it --restart=Never \
+  --image=postgres:16-alpine -- \
+  psql "$DB_URL" -c 'SELECT version, dirty FROM schema_migrations;'
+
+# Bundled Postgres only (dev / k3d — skip this on production installs):
+# kubectl -n astronomer exec astronomer-postgres-0 -- \
+#   psql -U astronomer -d astronomer -c \
+#   'SELECT version, dirty FROM schema_migrations;'
 ```
 
 If `dirty=true`, **stop**. A previous migration crashed midway and the
@@ -101,37 +128,50 @@ schema is in an indeterminate state. Recover with:
 
 ```bash
 # Inspect the offending migration's down/up SQL
-ls deploy/chart/templates/../../../internal/db/migrations/<NN>_*.{up,down}.sql
+ls internal/db/migrations/<NN>_*.{up,down}.sql
 
 # Decide: roll forward (re-run the up) or roll back (run the down)
-# Then mark clean:
+# Then mark clean (DATABASE_URL from the same secret/env as above):
 kubectl -n astronomer run migrate --rm -it \
   --image=astronomer-go-migrate:<TAG> --restart=Never -- \
-  migrate -database "$DATABASE_URL" -path /migrations force <NN-1>
+  migrate -database "$DB_URL" -path /migrations force <NN-1>
 ```
 
 ### 2. In-flight tasks
 
-```bash
-# Pending + active asynq tasks. >100 pending is a yellow flag —
-# the upgrade will work but you'll lose visibility into them mid-roll.
-kubectl -n astronomer exec deploy/astronomer-worker -- /bin/sh -c '
-  echo "(asynq queue counts surface via /metrics and the support bundle)"'
+There is no shell-side asynq CLI in the worker image. Use the real signals:
 
-# Or via support bundle:
+```bash
+# Prometheus metrics on the worker (port 9090). >100 pending is a yellow
+# flag — the upgrade will work but in-flight visibility dips mid-roll.
+kubectl -n astronomer port-forward deploy/astronomer-worker 9090:9090 &
+curl -s http://127.0.0.1:9090/metrics | grep '^astronomer_worker_queue_depth'
+# Look at state="pending" / state="active" / state="retry".
+
+# Or scrape the support bundle (includes asynq-queues.json):
 curl -sH "Authorization: Bearer $ADMIN_TOKEN" $URL/api/v1/support-bundle/ \
   -o /tmp/bundle.zip
 unzip -p /tmp/bundle.zip asynq-queues.json | jq '.'
 ```
 
+See [`metrics-v1.md`](./metrics-v1.md) for the full
+`astronomer_worker_queue_depth{...,state=...}` series.
+
 ### 3. Agent fleet versions
 
 ```bash
 # When server bumps a major version, every agent must be re-rolled too
-# (the wire protocol may have changed). Confirm current agent versions:
-kubectl -n astronomer exec astronomer-postgres-0 -- \
-  psql -U astronomer -d astronomer -c \
+# (the wire protocol may have changed). Confirm current agent versions
+# against the same Postgres the management plane uses (see §1 for DB_URL).
+kubectl -n astronomer run psql-agents --rm -it --restart=Never \
+  --image=postgres:16-alpine -- \
+  psql "$DB_URL" -c \
   "SELECT cluster_id, agent_version, last_ping FROM agent_connections WHERE status='connected';"
+
+# Bundled Postgres only (dev / k3d):
+# kubectl -n astronomer exec astronomer-postgres-0 -- \
+#   psql -U astronomer -d astronomer -c \
+#   "SELECT cluster_id, agent_version, last_ping FROM agent_connections WHERE status='connected';"
 ```
 
 ### 4. Disk + node capacity
@@ -238,9 +278,10 @@ curl -sH "Authorization: Bearer $TOKEN" $URL/api/v1/platform/health-summary/
 # Confirm no DLQ growth from the upgrade
 unzip -p <(curl -sH "Authorization: Bearer $TOKEN" $URL/api/v1/support-bundle/) asynq-queues.json | jq '.'
 
-# Confirm agents reconnected after server pods rolled
-kubectl -n astronomer exec astronomer-postgres-0 -- \
-  psql -U astronomer -d astronomer -c \
+# Confirm agents reconnected after server pods rolled (same DB_URL as §1)
+kubectl -n astronomer run psql-agents --rm -it --restart=Never \
+  --image=postgres:16-alpine -- \
+  psql "$DB_URL" -c \
   "SELECT cluster_id, agent_version, last_ping FROM agent_connections WHERE status='connected';"
 ```
 

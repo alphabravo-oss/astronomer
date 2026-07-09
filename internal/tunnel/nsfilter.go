@@ -168,6 +168,47 @@ func emptyListBody(obj map[string]any, kind string) ([]byte, error) {
 	return json.Marshal(out)
 }
 
+// watchEventAllowed reports whether a Kubernetes watch event JSON payload
+// (type + object) is in the namespace allow-set. Events for disallowed or
+// unparseable namespaces are dropped (fail closed for data plane). Bookmark
+// / ERROR events with no object namespace pass through when type is BOOKMARK
+// or ERROR so clients can stay in sync.
+func watchEventAllowed(body []byte, allowed map[string]struct{}) (bool, error) {
+	var ev map[string]any
+	if err := json.Unmarshal(body, &ev); err != nil {
+		return false, err
+	}
+	typ, _ := ev["type"].(string)
+	if typ == "BOOKMARK" || typ == "ERROR" {
+		return true, nil
+	}
+	obj, ok := ev["object"].(map[string]any)
+	if !ok {
+		return false, nil
+	}
+	meta, ok := obj["metadata"].(map[string]any)
+	if !ok {
+		return false, nil
+	}
+	// Namespace objects: identity is metadata.name.
+	kind, _ := obj["kind"].(string)
+	if kind == "Namespace" {
+		name, _ := meta["name"].(string)
+		if name == "" {
+			return false, nil
+		}
+		_, ok := allowed[name]
+		return ok, nil
+	}
+	ns, _ := meta["namespace"].(string)
+	if ns == "" {
+		// Cluster-scoped object on a watch — drop for ns-scoped callers.
+		return false, nil
+	}
+	_, ok = allowed[ns]
+	return ok, nil
+}
+
 // setContentLengthHeader replaces any existing (case-insensitive) Content-Length
 // entry with the recomputed length so the filtered body advertises the correct
 // size. Content-Length is on k8sProxyResponseHeaderAllowed, so it is forwarded.

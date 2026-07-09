@@ -127,6 +127,10 @@ export interface PlatformSettingsGrouped {
     defaultTtlSeconds: number;
     maxTtlSeconds: number;
   };
+  /** Browser/API JWT access-token absolute lifetime (session.timeout_minutes). */
+  session: {
+    timeoutMinutes: number;
+  };
   telemetry: {
     enabled: boolean;
     endpoint: string;

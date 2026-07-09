@@ -269,6 +269,7 @@ const listClustersForSelectorEvaluation = `-- name: ListClustersForSelectorEvalu
 SELECT id, name, labels, group_id FROM clusters
 WHERE decommissioned_at IS NULL
 ORDER BY name ASC
+LIMIT 10000
 `
 
 type ListClustersForSelectorEvaluationRow struct {
@@ -281,8 +282,12 @@ type ListClustersForSelectorEvaluationRow struct {
 // All non-decommissioned clusters. The orchestrator's selector
 // evaluator walks this list in Go (matchLabels intersection is a
 // string-map comparison that's easier to reason about than a JSONB
-// predicate, and the cluster count never exceeds a few thousand
-// in any deployment we've seen).
+// predicate). CORR-R05: hard safety valve LIMIT 10000 — callers that
+// receive a full page must fail the op rather than silently truncate.
+//
+// group_id (migration 066) is the at-most-one cluster_groups
+// membership; the orchestrator maps it into the candidate's GroupIDs
+// slice so matchGroupIDs selectors can resolve.
 func (q *Queries) ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error) {
 	rows, err := q.db.Query(ctx, listClustersForSelectorEvaluation)
 	if err != nil {
@@ -292,7 +297,12 @@ func (q *Queries) ListClustersForSelectorEvaluation(ctx context.Context) ([]List
 	items := []ListClustersForSelectorEvaluationRow{}
 	for rows.Next() {
 		var i ListClustersForSelectorEvaluationRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Labels, &i.GroupID); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Labels,
+			&i.GroupID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

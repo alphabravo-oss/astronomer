@@ -102,6 +102,7 @@ GET /api/v1/catalog/charts/{id}/values
 GET /api/v1/catalog/charts/{id}/versions
 GET /api/v1/catalog/controller/status
 GET /api/v1/catalog/installed
+GET /api/v1/catalog/installed/{id}/revisions
 GET /api/v1/catalog/installed/{id}/values
 GET /api/v1/catalog/operations
 GET /api/v1/catalog/operations/{id}

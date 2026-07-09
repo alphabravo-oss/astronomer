@@ -38,9 +38,14 @@ func main() {
 		},
 	}
 
+	// DEBT-01: connect2 (remotedialer) is the preferred default tunnel path for
+	// new installs; legacy `connect` remains for agents that still register the
+	// full per-feature message handlers. Prefer connect2 unless you need an
+	// agent feature that has not yet been ported to the remotedialer path.
 	connect2Cmd := &cobra.Command{
 		Use:   "connect2",
-		Short: "Connect using the remotedialer-based tunnel (migration target)",
+		Short: "Connect using the remotedialer-based tunnel (preferred default)",
+		Long:  "Preferred agent connection path. Uses remotedialer to ferry dial requests to the agent network. Use legacy `connect` only when a feature still requires the older full-handler tunnel.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runConnect2(logger)
 		},
@@ -359,6 +364,7 @@ func registerHelm(tunnel *agent.TunnelClient, _ *slog.Logger) {
 	tunnel.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)
 	tunnel.RegisterHandler(protocol.MsgHelmRollback, helm.HandleRollback)
 	tunnel.RegisterHandler(protocol.MsgHelmStatus, helm.HandleStatus)
+	tunnel.RegisterHandler(protocol.MsgHelmHistory, helm.HandleHistory)
 }
 
 func runHelmAndConnect(ctx context.Context, tunnel *agent.TunnelClient, logger *slog.Logger, cfg *agent.AgentConfig) error {

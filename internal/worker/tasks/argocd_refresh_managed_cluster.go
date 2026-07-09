@@ -35,6 +35,10 @@ import (
 // Task type name. Exported so worker.go can register it against the asynq mux.
 const ArgoCDRefreshManagedClusterLabelsType = "argocd:refresh_managed_cluster_labels"
 
+// ArgoCDRefreshAllManagedClusterLabelsType is the periodic fleet sweep
+// (DIR-10) that re-stamps labels for every managed-cluster mapping.
+const ArgoCDRefreshAllManagedClusterLabelsType = "argocd:refresh_all_managed_cluster_labels"
+
 // argoCDNamespace is the namespace where the upstream ArgoCD instance stores
 // its cluster Secrets. Kept in lockstep with internal/handler.argocdNamespace —
 // duplicated here so this package doesn't import internal/handler (which would
@@ -75,6 +79,8 @@ type ArgoCDRefreshQuerier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
 	UpdateArgoCDManagedClusterLabels(ctx context.Context, arg sqlc.UpdateArgoCDManagedClusterLabelsParams) (sqlc.ArgocdManagedCluster, error)
+	// ListClusters powers the DIR-10 fleet-wide re-stamp sweep.
+	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
 }
 
 // ArgoCDRefreshDeps wires the task's runtime dependencies. The control-plane
@@ -114,6 +120,51 @@ func NewArgoCDRefreshManagedClusterLabelsTask(clusterID uuid.UUID) (*asynq.Task,
 		return nil, fmt.Errorf("marshal argocd refresh payload: %w", err)
 	}
 	return asynq.NewTask(ArgoCDRefreshManagedClusterLabelsType, data, asynq.MaxRetry(3)), nil
+}
+
+// HandleArgoCDRefreshAllManagedClusterLabels walks every non-decommissioned
+// cluster and re-stamps Argo labels (DIR-10 periodic sweep).
+func HandleArgoCDRefreshAllManagedClusterLabels(ctx context.Context, t *asynq.Task) error {
+	if argoCDRefreshDeps.Queries == nil {
+		runtimeLogger().InfoContext(ctx, "argocd refresh-all runtime not configured, skipping")
+		return nil
+	}
+	const pageSize int32 = 500
+	var offset int32
+	var firstErr error
+	for {
+		page, err := argoCDRefreshDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{
+			Limit:  pageSize,
+			Offset: offset,
+		})
+		if err != nil {
+			return fmt.Errorf("list clusters for label re-stamp: %w", err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, c := range page {
+			if c.DecommissionedAt.Valid {
+				continue
+			}
+			payload, err := json.Marshal(ArgoCDRefreshManagedClusterPayload{ClusterID: c.ID.String()})
+			if err != nil {
+				continue
+			}
+			if err := HandleArgoCDRefreshManagedClusterLabels(ctx, asynq.NewTask(ArgoCDRefreshManagedClusterLabelsType, payload)); err != nil {
+				runtimeLogger().WarnContext(ctx, "argocd refresh-all: cluster re-stamp failed",
+					"cluster_id", c.ID.String(), "error", err)
+				if firstErr == nil {
+					firstErr = err
+				}
+			}
+		}
+		if int32(len(page)) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+	return firstErr
 }
 
 // HandleArgoCDRefreshManagedClusterLabels is the asynq handler.

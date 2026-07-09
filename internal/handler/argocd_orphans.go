@@ -63,13 +63,12 @@ func (h *ArgoCDHandler) InstanceOrphanReport(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 1000))
-	if limit <= 0 {
-		limit = 1000
-	}
-	if limit > 5000 {
-		limit = 5000
-	}
+	// Orphan reports legitimately page wider than the ordinary list cap (200)
+	// so large Argo CD instances aren't silently truncated mid-fleet. Ceiling
+	// matches the previous author intent (5000) via queryLimitMax rather than
+	// queryLimit's hard 200 clamp (PERF-04).
+	limit := int32(queryLimitMax(r, 1000, 5000))
+
 	apps, err := h.queries.ListAppsByInstance(r.Context(), sqlc.ListAppsByInstanceParams{
 		ArgocdInstanceID: instance.ID,
 		Limit:            limit,

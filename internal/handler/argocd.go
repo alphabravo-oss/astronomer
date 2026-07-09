@@ -29,6 +29,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -123,7 +124,8 @@ func NewArgoCDHandler(queries ArgoCDQuerier) *ArgoCDHandler {
 	return &ArgoCDHandler{
 		queries: queries,
 		log:     slog.Default(),
-		http:    &http.Client{Timeout: 10 * time.Second},
+		// SEC-R05: dial-guarded; AllowPrivate for in-cluster Argo CD.
+		http:    httpclient.SafeClientAllowPrivate(10 * time.Second),
 		trigger: make(chan struct{}, 1),
 	}
 }
@@ -1671,12 +1673,11 @@ func (h *ArgoCDHandler) instanceHTTPClient(instance sqlc.ArgocdInstance) *http.C
 	if h.http != nil && h.http.Timeout != 0 {
 		timeout = h.http.Timeout
 	}
-	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: !instance.VerifySsl},
-		},
-	}
+	// SEC-R05: same AllowPrivate dial policy as the shared client, with
+	// TLS verification skipped for self-signed Argo CD endpoints.
+	return httpclient.SafeClientAllowPrivateWithTLS(timeout, &tls.Config{
+		InsecureSkipVerify: true, // #nosec G402 — operator-opt-in via verify_ssl=false
+	})
 }
 
 // argoCDClient builds a typed client for the given instance. The token is

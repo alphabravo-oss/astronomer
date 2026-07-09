@@ -26,7 +26,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -41,7 +40,6 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
@@ -50,6 +48,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -1050,99 +1049,80 @@ func (h *Hub) persistPing(agent *AgentConnection) {
 }
 
 func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UUID, payload protocol.ConnectPayload) (string, string, error) {
-	registrationToken, regErr := h.validator.GetRegistrationTokenByToken(ctx, payload.Token)
-	if regErr == nil {
-		if registrationToken.ClusterID != clusterID {
-			return "", "", fmt.Errorf("registration token does not match cluster")
-		}
-		// M2: a registration token created at/before the cluster's durable-token
-		// adoption is spent — replaying it post-join must NOT re-mint/return a
-		// durable. A token created AFTER adoption is a deliberately re-minted
-		// (re-import) token and is allowed. adopted_at NULL = pre-adoption join
-		// window -> allowed. A revoked durable returns ErrNoRows (the query
-		// filters revoked_at IS NULL) -> the AdoptedAt check is skipped, also
-		// allowed. Fail closed on any non-ErrNoRows error.
-		existing, exErr := h.validator.GetClusterAgentTokenByClusterID(ctx, clusterID)
-		if exErr == nil && existing.AdoptedAt.Valid && !registrationToken.CreatedAt.After(existing.AdoptedAt.Time) {
-			return "", "", fmt.Errorf("registration token already redeemed; cluster has adopted its durable agent token")
-		}
-		if exErr != nil && !errors.Is(exErr, pgx.ErrNoRows) {
-			return "", "", fmt.Errorf("failed to verify adoption state: %w", exErr)
-		}
-		if err := h.validator.MarkRegistrationTokenUsed(ctx, registrationToken.ID); err != nil {
+	// SEC-R01: shared A3 gate with tunnel2 (adoption + durable hash + cluster match).
+	res, err := connectauth.Validate(ctx, h.validator, clusterID, payload.Token)
+	if err != nil {
+		return "", "", err
+	}
+
+	if res.Kind == connectauth.KindRegistration {
+		if err := h.validator.MarkRegistrationTokenUsed(ctx, res.RegistrationToken.ID); err != nil {
 			return "", "", fmt.Errorf("failed to mark token used")
 		}
 		durable, err := h.ensureClusterAgentToken(ctx, clusterID)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to issue agent token")
 		}
-		return "registration", durable, nil
+		return connectauth.KindRegistration, durable, nil
 	}
 
-	agentToken, agentErr := h.validator.GetClusterAgentTokenByToken(ctx, payload.Token)
-	if agentErr == nil {
-		if agentToken.ClusterID != clusterID {
-			return "", "", fmt.Errorf("agent token does not match cluster")
-		}
+	agentToken := res.AgentToken
 
-		// A3: stamp adoption on the first CONNECT that presents a valid durable
-		// token (proof the agent persisted it). Best-effort/non-fatal like the
-		// adjacent Touch; the query's WHERE adopted_at IS NULL makes it
-		// idempotent across reconnects and rotation/grace sub-paths. agentToken.ID
-		// is row-stable across A2 rotation, so stamping pre-rotation is correct.
-		if err := h.validator.MarkClusterAgentTokenAdopted(ctx, agentToken.ID); err != nil {
-			h.log.Warn("failed to mark cluster agent token adopted",
-				slog.String("cluster_id", payload.ClusterID), slog.String("error", err.Error()))
-		}
-
-		// Rotation grace. When a rotation is pending, the very next CONNECT
-		// (presenting the still-valid current token) mints a fresh durable
-		// token, demotes the old hash to previous_token_hash so it keeps
-		// validating until the agent adopts the new one, and delivers the
-		// fresh token in the ACK. The agent never holds an invalid token.
-		if agentToken.RotationPendingAt.Valid {
-			presentedHash := auth.HashOpaqueToken(payload.Token)
-			// Only rotate when the agent presented the CURRENT token. If it
-			// presented the previous (already-rotated-out) token we must not
-			// rotate again — that would strand the in-flight new token.
-			if agentToken.TokenHash == presentedHash {
-				if fresh, err := h.rotateClusterAgentToken(ctx, clusterID, agentToken); err == nil {
-					return "agent", fresh, nil
-				} else {
-					h.log.Warn("failed to rotate cluster agent token; continuing with current token",
-						slog.String("cluster_id", payload.ClusterID),
-						slog.String("error", err.Error()),
-					)
-				}
-			}
-		}
-
-		// First CONNECT with the NEW current token retires the old hash
-		// (revoke the previous token now that the agent has adopted the new
-		// one). Skip when the agent presented the previous token — that's the
-		// grace path and clearing here would lock it out.
-		if agentToken.PreviousTokenHash.Valid && agentToken.PreviousTokenHash.String != "" {
-			presentedHash := auth.HashOpaqueToken(payload.Token)
-			if agentToken.TokenHash == presentedHash {
-				if err := h.validator.ClearPreviousClusterAgentTokenHash(ctx, agentToken.ID); err != nil {
-					h.log.Warn("failed to clear previous agent token hash",
-						slog.String("cluster_id", payload.ClusterID),
-						slog.String("error", err.Error()),
-					)
-				}
-			}
-		}
-
-		if err := h.validator.TouchClusterAgentToken(ctx, agentToken.ID); err != nil {
-			h.log.Warn("failed to touch cluster agent token",
-				slog.String("cluster_id", payload.ClusterID),
-				slog.String("error", err.Error()),
-			)
-		}
-		return "agent", payload.Token, nil
+	// A3: stamp adoption on the first CONNECT that presents a valid durable
+	// token (proof the agent persisted it). Best-effort/non-fatal like the
+	// adjacent Touch; the query's WHERE adopted_at IS NULL makes it
+	// idempotent across reconnects and rotation/grace sub-paths. agentToken.ID
+	// is row-stable across A2 rotation, so stamping pre-rotation is correct.
+	if err := h.validator.MarkClusterAgentTokenAdopted(ctx, agentToken.ID); err != nil {
+		h.log.Warn("failed to mark cluster agent token adopted",
+			slog.String("cluster_id", payload.ClusterID), slog.String("error", err.Error()))
 	}
 
-	return "", "", fmt.Errorf("invalid registration token")
+	// Rotation grace. When a rotation is pending, the very next CONNECT
+	// (presenting the still-valid current token) mints a fresh durable
+	// token, demotes the old hash to previous_token_hash so it keeps
+	// validating until the agent adopts the new one, and delivers the
+	// fresh token in the ACK. The agent never holds an invalid token.
+	if agentToken.RotationPendingAt.Valid {
+		presentedHash := auth.HashOpaqueToken(payload.Token)
+		// Only rotate when the agent presented the CURRENT token. If it
+		// presented the previous (already-rotated-out) token we must not
+		// rotate again — that would strand the in-flight new token.
+		if agentToken.TokenHash == presentedHash {
+			if fresh, err := h.rotateClusterAgentToken(ctx, clusterID, agentToken); err == nil {
+				return connectauth.KindAgent, fresh, nil
+			} else {
+				h.log.Warn("failed to rotate cluster agent token; continuing with current token",
+					slog.String("cluster_id", payload.ClusterID),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+	}
+
+	// First CONNECT with the NEW current token retires the old hash
+	// (revoke the previous token now that the agent has adopted the new
+	// one). Skip when the agent presented the previous token — that's the
+	// grace path and clearing here would lock it out.
+	if agentToken.PreviousTokenHash.Valid && agentToken.PreviousTokenHash.String != "" {
+		presentedHash := auth.HashOpaqueToken(payload.Token)
+		if agentToken.TokenHash == presentedHash {
+			if err := h.validator.ClearPreviousClusterAgentTokenHash(ctx, agentToken.ID); err != nil {
+				h.log.Warn("failed to clear previous agent token hash",
+					slog.String("cluster_id", payload.ClusterID),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+	}
+
+	if err := h.validator.TouchClusterAgentToken(ctx, agentToken.ID); err != nil {
+		h.log.Warn("failed to touch cluster agent token",
+			slog.String("cluster_id", payload.ClusterID),
+			slog.String("error", err.Error()),
+		)
+	}
+	return connectauth.KindAgent, payload.Token, nil
 }
 
 // rotateClusterAgentToken mints a fresh durable token and performs the grace
@@ -1267,10 +1247,7 @@ func (h *Hub) recordAgentAuthFailed(ctx context.Context, payload protocol.Connec
 // wire label: "registration" (registration-token exchange) -> "registration",
 // "agent" (durable agent token) -> "durable".
 func connectTokenKindLabel(kind string) string {
-	if kind == "registration" {
-		return "registration"
-	}
-	return "durable"
+	return connectauth.TokenKindLabel(kind)
 }
 
 func ipKeyOf(addr *netip.Addr) string {

@@ -31,6 +31,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // DefaultClientFactory builds a production *vaultClient. Decrypted auth
@@ -43,10 +44,13 @@ func DefaultClientFactory(conn sqlc.VaultConnection, authBlob string) (Client, e
 	}
 	cfg := vaultapi.DefaultConfig()
 	cfg.Address = conn.Addr
-	// Build a custom transport so we can honour tls_skip_verify +
-	// ca_cert_pem without mutating the global http.DefaultTransport.
+	// SEC-R06: Vault is almost always private (in-cluster or VPC). Use
+	// SafeClientAllowPrivate so RFC1918/CGNAT work while loopback,
+	// link-local, and cloud metadata (169.254.169.254) stay blocked.
+	// Prefer DisableGuardForTest only in unit tests.
+	var tlsCfg *tls.Config
 	if conn.TlsSkipVerify || conn.CaCertPem != "" {
-		tlsCfg := &tls.Config{InsecureSkipVerify: conn.TlsSkipVerify} //nolint:gosec
+		tlsCfg = &tls.Config{InsecureSkipVerify: conn.TlsSkipVerify} //nolint:gosec
 		if conn.CaCertPem != "" {
 			pool := x509.NewCertPool()
 			if !pool.AppendCertsFromPEM([]byte(conn.CaCertPem)) {
@@ -54,11 +58,8 @@ func DefaultClientFactory(conn sqlc.VaultConnection, authBlob string) (Client, e
 			}
 			tlsCfg.RootCAs = pool
 		}
-		cfg.HttpClient = &http.Client{
-			Transport: &http.Transport{TLSClientConfig: tlsCfg},
-			Timeout:   30 * time.Second,
-		}
 	}
+	cfg.HttpClient = httpclient.SafeClientAllowPrivateWithTLS(30*time.Second, tlsCfg)
 	api, err := vaultapi.NewClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("build vault api client: %w", err)

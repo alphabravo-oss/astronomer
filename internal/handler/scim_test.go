@@ -28,6 +28,9 @@ type fakeSCIMQuerier struct {
 	// invalidatedTokensFor records user ids passed to InvalidateAllTokens so
 	// tests can assert SCIM deactivate/deprovision revoked live sessions.
 	invalidatedTokensFor []uuid.UUID
+	// groups maps displayName -> mapping row for DIR-03 SCIM Group writes.
+	groups    map[string]sqlc.IdentityGroupMapping
+	idpGroups map[uuid.UUID]sqlc.UserIdpGroup
 }
 
 func (f *fakeSCIMQuerier) InvalidateAllTokens(_ context.Context, arg sqlc.InvalidateAllTokensParams) error {
@@ -123,10 +126,71 @@ func (f *fakeSCIMQuerier) DeleteUser(_ context.Context, id uuid.UUID) error {
 }
 
 func (f *fakeSCIMQuerier) ListSCIMGroupNames(_ context.Context, _ sqlc.ListSCIMGroupNamesParams) ([]string, error) {
-	return nil, nil
+	names := make([]string, 0, len(f.groups))
+	for n := range f.groups {
+		names = append(names, n)
+	}
+	return names, nil
 }
 
-func (f *fakeSCIMQuerier) CountSCIMGroupNames(_ context.Context) (int64, error) { return 0, nil }
+func (f *fakeSCIMQuerier) CountSCIMGroupNames(_ context.Context) (int64, error) {
+	return int64(len(f.groups)), nil
+}
+
+func (f *fakeSCIMQuerier) CreateGroupMapping(_ context.Context, arg sqlc.CreateGroupMappingParams) (sqlc.IdentityGroupMapping, error) {
+	if f.groups == nil {
+		f.groups = map[string]sqlc.IdentityGroupMapping{}
+	}
+	row := sqlc.IdentityGroupMapping{
+		ID:        uuid.New(),
+		GroupName: arg.GroupName,
+		Scope:     arg.Scope,
+		RoleID:    arg.RoleID,
+	}
+	f.groups[arg.GroupName] = row
+	return row, nil
+}
+
+func (f *fakeSCIMQuerier) ListGroupMappings(_ context.Context, _ sqlc.ListGroupMappingsParams) ([]sqlc.IdentityGroupMapping, error) {
+	out := make([]sqlc.IdentityGroupMapping, 0, len(f.groups))
+	for _, g := range f.groups {
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+func (f *fakeSCIMQuerier) DeleteGroupMapping(_ context.Context, id uuid.UUID) error {
+	for k, g := range f.groups {
+		if g.ID == id {
+			delete(f.groups, k)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (f *fakeSCIMQuerier) ListGlobalRoles(_ context.Context, _ sqlc.ListGlobalRolesParams) ([]sqlc.GlobalRole, error) {
+	return []sqlc.GlobalRole{{ID: uuid.MustParse("00000000-0000-0000-0000-0000000000aa"), Name: "Auditor"}}, nil
+}
+
+func (f *fakeSCIMQuerier) GetUserIDPGroups(_ context.Context, userID uuid.UUID) (sqlc.UserIdpGroup, error) {
+	if f.idpGroups == nil {
+		return sqlc.UserIdpGroup{}, pgx.ErrNoRows
+	}
+	if g, ok := f.idpGroups[userID]; ok {
+		return g, nil
+	}
+	return sqlc.UserIdpGroup{}, pgx.ErrNoRows
+}
+
+func (f *fakeSCIMQuerier) UpsertUserIDPGroups(_ context.Context, arg sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
+	if f.idpGroups == nil {
+		f.idpGroups = map[uuid.UUID]sqlc.UserIdpGroup{}
+	}
+	row := sqlc.UserIdpGroup{UserID: arg.UserID, Groups: arg.Groups, SyncedAt: arg.SyncedAt}
+	f.idpGroups[arg.UserID] = row
+	return row, nil
+}
 
 // TestSCIMUserLifecycle exercises the smallest end-to-end slice: a bad
 // token is rejected with 401, and a valid token can create then read
@@ -363,6 +427,73 @@ func TestSCIMPatchUserRejectsBadSchema(t *testing.T) {
 	h.Auth(http.HandlerFunc(h.PatchUser)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad schema: want 400, got %d", rec.Code)
+	}
+}
+
+// TestSCIMCreateGroup writes an identity_group_mappings row (DIR-03).
+func TestSCIMCreateGroup(t *testing.T) {
+	token := "astro_scim_grouptoken"
+	q := &fakeSCIMQuerier{
+		tokenHash: auth.HashSCIMToken(token),
+		users:     map[string]sqlc.User{},
+		groups:    map[string]sqlc.IdentityGroupMapping{},
+	}
+	h := NewSCIMHandler(q)
+	body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"engineers"}`
+	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Groups", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/scim+json")
+	rec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.CreateGroup)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := q.groups["engineers"]; !ok {
+		t.Fatalf("expected group mapping for engineers, got %+v", q.groups)
+	}
+}
+
+// TestSCIMDeleteGroup removes the mapping and returns 204 (SCIM-R01).
+func TestSCIMDeleteGroup(t *testing.T) {
+	token := "astro_scim_delgroup"
+	q := &fakeSCIMQuerier{
+		tokenHash: auth.HashSCIMToken(token),
+		users:     map[string]sqlc.User{},
+		groups:    map[string]sqlc.IdentityGroupMapping{},
+	}
+	h := NewSCIMHandler(q)
+
+	// Seed via CreateGroup so the group exists in the SCIM view.
+	createBody := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"contractors"}`
+	createReq := httptest.NewRequest(http.MethodPost, "/scim/v2/Groups", strings.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createReq.Header.Set("Content-Type", "application/scim+json")
+	createRec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.CreateGroup)).ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create: status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/scim/v2/Groups/contractors", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req = withChiID(req, "contractors")
+	rec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.DeleteGroup)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: want 204, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if _, ok := q.groups["contractors"]; ok {
+		t.Fatalf("group mapping should be gone, still have %+v", q.groups)
+	}
+
+	// Second delete → 404.
+	req2 := httptest.NewRequest(http.MethodDelete, "/scim/v2/Groups/contractors", nil)
+	req2.Header.Set("Authorization", "Bearer "+token)
+	req2 = withChiID(req2, "contractors")
+	rec2 := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.DeleteGroup)).ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusNotFound {
+		t.Fatalf("delete missing: want 404, got %d", rec2.Code)
 	}
 }
 

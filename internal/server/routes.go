@@ -453,7 +453,10 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			r.Patch("/Users/{id}", deps.SCIM.PatchUser)
 			r.Delete("/Users/{id}", deps.SCIM.DeleteUser)
 			r.Get("/Groups", deps.SCIM.ListGroups)
+			r.Post("/Groups", deps.SCIM.CreateGroup)
 			r.Get("/Groups/{id}", deps.SCIM.GetGroup)
+			r.Patch("/Groups/{id}", deps.SCIM.PatchGroup)
+			r.Delete("/Groups/{id}", deps.SCIM.DeleteGroup)
 			// Discovery (read-only, static) — Azure AD/Okta probe these
 			// before provisioning.
 			r.Get("/ServiceProviderConfig", deps.SCIM.ServiceProviderConfig)
@@ -1333,22 +1336,30 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 					// Namespace-scoped RBAC allow-through-and-filter gate. Both
 					// the coarse and native checks denied because this scoped
 					// user has no cluster-wide grant. If the flag is on and this
-					// is a plain cluster-wide LIST (GET, VerbList, not a watch,
+					// is a cluster-wide LIST or WATCH (GET, VerbList|VerbWatch,
 					// namespace=="") for which the user holds the (resource,
 					// list) permission in at least one namespace on this cluster,
 					// admit the request and stash the authorized-namespace
-					// allow-set. The tunnel proxy filters the buffered list body
-					// down to those namespaces. Namespaced paths were already
-					// authorized above by CheckPermission; watches, mutations,
-					// named GETs, and users with no namespace access all keep
-					// failing closed here.
+					// allow-set. The tunnel proxy filters list bodies and watch
+					// event frames down to those namespaces (F7-b). Namespaced
+					// paths were already authorized above by CheckPermission;
+					// mutations, named GETs, and users with no namespace access
+					// keep failing closed here.
+					//
+					// Watch requests use VerbWatch for CheckPermission but we
+					// compute the allow-set with VerbList: namespace bindings
+					// commonly grant list+read without an explicit watch verb,
+					// and list is the correct predicate for "which namespaces'
+					// objects may appear on the stream".
 					if namespaceScoped &&
 						r.Method == http.MethodGet &&
-						verb == rbac.VerbList &&
-						namespace == "" &&
-						!isK8sProxyWatchRequest(r) &&
-						ref["watch"] != "true" {
-						all, names := engine.AuthorizedNamespaces(bindings, resource, verb, clusterID)
+						(verb == rbac.VerbList || verb == rbac.VerbWatch) &&
+						namespace == "" {
+						allowVerb := verb
+						if verb == rbac.VerbWatch {
+							allowVerb = rbac.VerbList
+						}
+						all, names := engine.AuthorizedNamespaces(bindings, resource, allowVerb, clusterID)
 						// Fold native per-namespace list grants into the allow-set
 						// too. Coarse project bindings already participate (via
 						// AuthorizedNamespaces above), but a user whose ONLY grant
@@ -1555,11 +1566,16 @@ func k8sProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
 // webhooks (intercept/mutate any request), aggregated APIServices, and CRD
 // definitions (own the shape of arbitrary cluster resources).
 func isPrivilegeEscalationAPIGroup(group string) bool {
+	// Keep in lockstep with rbac.isPrivilegeEscalationGroup (native rules):
+	// CSR minting and TokenReview/TokenRequest are cluster-admin equivalent
+	// and must not fall through to custom_resources write (SEC-04).
 	switch strings.ToLower(strings.TrimSpace(group)) {
 	case "rbac.authorization.k8s.io",
 		"admissionregistration.k8s.io",
 		"apiregistration.k8s.io",
-		"apiextensions.k8s.io":
+		"apiextensions.k8s.io",
+		"certificates.k8s.io",
+		"authentication.k8s.io":
 		return true
 	}
 	return false

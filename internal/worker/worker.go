@@ -263,6 +263,7 @@ func (w *Worker) RegisterHandlers() {
 	// server's tunnel-queue worker (see RegisterTunnelHandlers) and are
 	// enqueued/scheduled to the "tunnel" queue.
 	w.mux.HandleFunc(TypeArgoCDRefreshManagedClusterLabels, instrumentTask(TypeArgoCDRefreshManagedClusterLabels, tasks.HandleArgoCDRefreshManagedClusterLabels))
+	w.mux.HandleFunc(tasks.ArgoCDRefreshAllManagedClusterLabelsType, instrumentTask(tasks.ArgoCDRefreshAllManagedClusterLabelsType, tasks.HandleArgoCDRefreshAllManagedClusterLabels))
 	w.mux.HandleFunc(TypeArgoCDAutoRegisterCluster, instrumentTask(TypeArgoCDAutoRegisterCluster, tasks.HandleArgoCDAutoRegisterCluster))
 	w.mux.HandleFunc(tasks.RefreshGroupSyncMetricsType, instrumentTask(tasks.RefreshGroupSyncMetricsType, tasks.HandleRefreshGroupSyncMetrics))
 	w.mux.HandleFunc(TypeTelemetrySend, instrumentTask(TypeTelemetrySend, tasks.HandleTelemetrySend))

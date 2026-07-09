@@ -5,11 +5,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
+
+// TestMain disables the SSRF dial guard so httptest loopback servers stay
+// reachable. Production uses SafeClientAllowPrivate (SEC-R04).
+func TestMain(m *testing.M) {
+	restore := httpclient.DisableGuardForTest()
+	code := m.Run()
+	restore()
+	os.Exit(code)
+}
 
 // TestPromQueryRange_CachedSecondHit verifies the 30s cache: two
 // QueryRange calls inside the TTL must produce ONE upstream HTTP

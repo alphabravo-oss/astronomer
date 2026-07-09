@@ -38,6 +38,11 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: MarkToolOperationRunning :one
+-- Atomic claim (CORR-R01): only transition an op that is still claimable —
+-- either 'pending', or a 'running' op whose lease is stale (started_at older
+-- than the 1-minute fresh-running window). Under HA (server.replicaCount>1)
+-- two reconcilers can ListPending the same row; the first UPDATE wins and the
+-- second gets pgx.ErrNoRows so claimLatestOperations skips it.
 UPDATE tool_operations
 SET
     status = 'running',
@@ -46,6 +51,10 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status = 'pending'
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+  )
 RETURNING *;
 
 -- name: MarkToolOperationCompleted :one

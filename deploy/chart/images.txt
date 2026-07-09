@@ -2,6 +2,8 @@
 #
 # Regenerated via: make images.txt
 # Source:          deploy/chart/values.yaml + helm template
+#                  (default render ∪ production-like optional components:
+#                   dex, managementBackup/pgdump-s3, managementLogging/fluent-bit)
 #
 # Air-gapped install procedure:
 #   1) grep -v '^#' deploy/chart/images.txt > /tmp/images.txt
@@ -13,7 +15,10 @@
 #
 # See docs/airgapped-install.md for the full operator procedure.
 busybox:1.36
+dexidp/dex:v2.41.1
 ecr-public.aws.com/docker/library/redis:8.2.3-alpine
+fluent/fluent-bit:3.2.4
+ghcr.io/alphabravocompany/pgdump-s3:16-awscli
 ghcr.io/alphabravo-oss/astronomer-frontend:dev
 ghcr.io/alphabravo-oss/astronomer-go-agent:dev
 ghcr.io/alphabravo-oss/astronomer-go-migrate:dev

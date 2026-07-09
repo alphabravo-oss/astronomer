@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from '@/lib/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -13,7 +13,7 @@ import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
 import { cn } from '@/lib/utils';
-import { Lock } from 'lucide-react';
+import { Lock, WifiOff } from 'lucide-react';
 
 export default function DashboardLayout({
   children,
@@ -30,6 +30,19 @@ export default function DashboardLayout({
     ? currentUser.mustChangePassword || currentUser.must_change_password
     : false;
   const disabledFeature = disabledFeatureForPath(pathname, featureFlags);
+  // UX-05: surface browser offline so hung tables/mutations are explained.
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -66,6 +79,15 @@ export default function DashboardLayout({
           )}
         >
           <Topbar />
+          {!online && (
+            <div
+              role="status"
+              className="flex items-center gap-2 bg-amber-500/15 text-amber-900 dark:text-amber-100 border-b border-amber-500/30 px-4 py-2 text-sm"
+            >
+              <WifiOff className="h-4 w-4 shrink-0" />
+              You are offline. Live updates and mutations will fail until connectivity returns.
+            </div>
+          )}
           <main className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
               {disabledFeature ? <FeatureDisabledState /> : children}

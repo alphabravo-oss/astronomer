@@ -90,6 +90,8 @@ type AlertingHandler struct {
 	// "Test Channel" button. Optional — when nil, the test endpoint reports
 	// the dispatcher is unavailable rather than pretending success.
 	enqueuer tasks.Enqueuer
+	// settingsCache resolves DIR-08 Alertmanager timing knobs at render time.
+	settingsCache *SettingsCache
 }
 
 // NewAlertingHandler creates a new alerting handler.
@@ -103,6 +105,31 @@ func NewAlertingHandlerWithDeps(queries AlertingQuerier, requester K8sRequester)
 
 // SetEnqueuer wires the asynq client used to dispatch test notifications.
 func (h *AlertingHandler) SetEnqueuer(e tasks.Enqueuer) { h.enqueuer = e }
+
+// SetSettingsCache wires platform settings for Alertmanager timing (DIR-08).
+func (h *AlertingHandler) SetSettingsCache(c *SettingsCache) {
+	if h == nil {
+		return
+	}
+	h.settingsCache = c
+}
+
+func (h *AlertingHandler) alertmanagerTiming(ctx context.Context) (groupWait, groupInterval, repeatInterval string) {
+	groupWait, groupInterval, repeatInterval = "30s", "5m", "3h"
+	if h == nil || h.settingsCache == nil {
+		return
+	}
+	if v := strings.TrimSpace(h.settingsCache.StringValue(ctx, "alertmanager.group_wait", groupWait)); v != "" {
+		groupWait = v
+	}
+	if v := strings.TrimSpace(h.settingsCache.StringValue(ctx, "alertmanager.group_interval", groupInterval)); v != "" {
+		groupInterval = v
+	}
+	if v := strings.TrimSpace(h.settingsCache.StringValue(ctx, "alertmanager.repeat_interval", repeatInterval)); v != "" {
+		repeatInterval = v
+	}
+	return
+}
 
 // --- Request types ---
 
@@ -1304,6 +1331,7 @@ func (h *AlertingHandler) renderAlertmanagerConfig(ctx context.Context, channels
 			})
 		}
 	}
+	groupWait, groupInterval, repeatInterval := h.alertmanagerTiming(ctx)
 	payload := map[string]any{
 		"global": map[string]any{
 			"resolve_timeout": "5m",
@@ -1311,9 +1339,9 @@ func (h *AlertingHandler) renderAlertmanagerConfig(ctx context.Context, channels
 		"route": map[string]any{
 			"receiver":        "null",
 			"group_by":        []string{"alertname", "astronomer_rule_id", "cluster"},
-			"group_wait":      "30s",
-			"group_interval":  "5m",
-			"repeat_interval": "3h",
+			"group_wait":      groupWait,
+			"group_interval":  groupInterval,
+			"repeat_interval": repeatInterval,
 			"routes":          routes,
 		},
 		"receivers": receivers,

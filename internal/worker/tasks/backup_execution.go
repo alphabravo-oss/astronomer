@@ -96,8 +96,12 @@ func HandleBackupExecution(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 
-	if err := q.UpdateBackupStarted(ctx, backup.ID); err != nil {
+	n, err := q.UpdateBackupStarted(ctx, backup.ID)
+	if err != nil {
 		return fmt.Errorf("marking backup started: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("backup %s not claimable (already running or terminal)", backup.ID)
 	}
 
 	runtimeLogger().InfoContext(ctx, "backup row marked running; server-side reconciler will drive Velero CR",

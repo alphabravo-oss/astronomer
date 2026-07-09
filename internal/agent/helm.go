@@ -331,3 +331,62 @@ func (h *HelmHandler) HandleStatus(_ context.Context, msg *protocol.Message) (*p
 
 	return helmResult(msg.StreamID, rel.Name, rel.Namespace, rel.Info.Status.String(), rel.Version, nil), nil
 }
+
+// HandleHistory processes HELM_HISTORY messages (DIR-12).
+func (h *HelmHandler) HandleHistory(_ context.Context, msg *protocol.Message) (*protocol.Message, error) {
+	req, err := decodeHelmRequest(msg)
+	if err != nil {
+		return helmHistoryResult(msg.StreamID, "", "", nil, err), nil
+	}
+
+	h.log.Info("helm history", "release", req.ReleaseName, "namespace", req.Namespace)
+
+	cfg, err := h.actionConfig(req.Namespace)
+	if err != nil {
+		return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
+	}
+
+	hist := action.NewHistory(cfg)
+	hist.Max = 256
+	rels, err := hist.Run(req.ReleaseName)
+	if err != nil {
+		return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
+	}
+	revs := make([]protocol.HelmRevision, 0, len(rels))
+	for _, rel := range rels {
+		if rel == nil || rel.Info == nil {
+			continue
+		}
+		entry := protocol.HelmRevision{
+			Revision:    rel.Version,
+			Updated:     rel.Info.LastDeployed.UTC().Format(time.RFC3339),
+			Status:      rel.Info.Status.String(),
+			Description: rel.Info.Description,
+		}
+		if rel.Chart != nil && rel.Chart.Metadata != nil {
+			entry.Chart = rel.Chart.Metadata.Name + "-" + rel.Chart.Metadata.Version
+			entry.AppVersion = rel.Chart.Metadata.AppVersion
+		}
+		revs = append(revs, entry)
+	}
+	return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, revs, nil), nil
+}
+
+func helmHistoryResult(streamID, releaseName, namespace string, revs []protocol.HelmRevision, err error) *protocol.Message {
+	result := protocol.HelmResultPayload{
+		Success:     err == nil,
+		ReleaseName: releaseName,
+		Namespace:   namespace,
+		Revisions:   revs,
+	}
+	if err != nil {
+		result.Error = err.Error()
+	}
+	payload, _ := json.Marshal(result)
+	return &protocol.Message{
+		Type:      protocol.MsgHelmResult,
+		StreamID:  streamID,
+		Timestamp: time.Now().UTC(),
+		Payload:   payload,
+	}
+}

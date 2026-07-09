@@ -207,6 +207,7 @@ func TestRegisterMultipleHandlers(t *testing.T) {
 		protocol.MsgHelmUninstall,
 		protocol.MsgHelmRollback,
 		protocol.MsgHelmStatus,
+		protocol.MsgHelmHistory,
 	}
 
 	for _, mt := range handlerTypes {

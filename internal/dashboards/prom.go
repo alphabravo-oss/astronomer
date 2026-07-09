@@ -32,6 +32,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // Datasource is the minimal Prometheus endpoint description. Auth is
@@ -130,10 +132,14 @@ func httpClientFor(skipVerify bool) *http.Client {
 	if c, ok := httpClients[skipVerify]; ok {
 		return c
 	}
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: skipVerify}, // #nosec G402 — operator-opt-in
+	// SEC-R04: dial-guarded client with AllowPrivate for in-cluster Prom
+	// (RFC1918/CGNAT ok). Loopback, link-local, and metadata stay blocked.
+	// TLSSkipVerify remains operator-opt-in for self-signed datasources.
+	var tlsCfg *tls.Config
+	if skipVerify {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — operator-opt-in
 	}
-	c := &http.Client{Timeout: 10 * time.Second, Transport: tr}
+	c := httpclient.SafeClientAllowPrivateWithTLS(10*time.Second, tlsCfg)
 	httpClients[skipVerify] = c
 	return c
 }

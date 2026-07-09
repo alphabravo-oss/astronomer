@@ -20,6 +20,9 @@ import (
 type HelmRequester interface {
 	Do(ctx context.Context, clusterID string, msgType protocol.MessageType, payload protocol.HelmRequestPayload) (*protocol.HelmResultPayload, error)
 	Status(ctx context.Context, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, error)
+	// History returns helm release revisions (DIR-12). Optional for stubs —
+	// implementors may return an error if unsupported.
+	History(ctx context.Context, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, error)
 }
 
 // TunnelHelmRequester implements HelmRequester by forwarding to the
@@ -78,6 +81,14 @@ func (r *TunnelHelmRequester) Do(ctx context.Context, clusterID string, msgType 
 
 func (r *TunnelHelmRequester) Status(ctx context.Context, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, error) {
 	return r.Do(ctx, clusterID, protocol.MsgHelmStatus, protocol.HelmRequestPayload{
+		ReleaseName: releaseName,
+		Namespace:   namespace,
+	})
+}
+
+// History returns helm release revision history via the agent (DIR-12).
+func (r *TunnelHelmRequester) History(ctx context.Context, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, error) {
+	return r.Do(ctx, clusterID, protocol.MsgHelmHistory, protocol.HelmRequestPayload{
 		ReleaseName: releaseName,
 		Namespace:   namespace,
 	})

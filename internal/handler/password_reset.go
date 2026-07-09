@@ -147,16 +147,15 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Password reset is not configured")
 		return
 	}
-	// Minimum complexity: mirror the implicit constraint
-	// CreateUser/ChangePassword carry today (bcrypt rejects strings
-	// > 72 bytes at hash time; we reject < 8 bytes up front so a
-	// reset can't downgrade the account's password strength).
-	if len(req.NewPassword) < 8 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "new_password must be at least 8 characters")
-		return
-	}
+	// AUTH-R01: enforce the live platform password policy so a reset
+	// cannot downgrade below CreateUser/ChangePassword strength. bcrypt
+	// also rejects strings > 72 bytes at hash time.
 	if len(req.NewPassword) > 72 {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "new_password must be at most 72 characters")
+		return
+	}
+	if err := auth.ValidatePassword(req.NewPassword, h.passwordPolicy(r.Context())); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 

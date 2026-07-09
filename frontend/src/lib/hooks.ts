@@ -42,6 +42,7 @@ import type {
 } from '@/types';
 import type { AuditLogQueryParams, GeneralSettings } from './api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { liveAwareRefetchInterval } from '@/lib/live-events';
 
 // Query key factory lives in ./query-keys.ts (single source of truth).
 // Imported here and re-exported so existing `import { queryKeys } from '@/lib/hooks'`
@@ -72,7 +73,8 @@ export function useClusters(params?: {
   return useQuery({
     queryKey: queryKeys.clusters.list(params),
     queryFn: () => apiClient.getClusters(params),
-    refetchInterval: 30000,
+    // UX-04: lengthen poll when live SSE bus is open (fallback only).
+    refetchInterval: () => liveAwareRefetchInterval(30000),
   });
 }
 
@@ -81,7 +83,7 @@ export function useCluster(id: string) {
     queryKey: queryKeys.clusters.detail(id),
     queryFn: () => apiClient.getCluster(id),
     enabled: !!id,
-    refetchInterval: 15000,
+    refetchInterval: () => liveAwareRefetchInterval(15000),
   });
 }
 
@@ -90,7 +92,7 @@ export function useClusterNodes(clusterId: string) {
     queryKey: queryKeys.clusters.nodes(clusterId),
     queryFn: () => apiClient.getClusterNodes(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 30000,
+    refetchInterval: () => liveAwareRefetchInterval(30000),
   });
 }
 

@@ -291,3 +291,26 @@ func TestNextBackoff_MatchesSchedule(t *testing.T) {
 type errClient struct{ err error }
 
 func (e *errClient) Do(req *http.Request) (*http.Response, error) { return nil, e.err }
+
+// SEC-R02: NewSender(nil) must ship a dial-guarded SafeClient so loopback
+// destinations are refused when the SSRF guard is enabled.
+func TestNewSender_NilUsesSafeClient(t *testing.T) {
+	s := NewSender(nil)
+	if s == nil || s.client == nil {
+		t.Fatal("NewSender(nil) must install a non-nil client")
+	}
+	client, ok := s.client.(*http.Client)
+	if !ok {
+		t.Fatalf("default client type = %T, want *http.Client", s.client)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client.Timeout = 2 * time.Second
+	_, err := client.Get(srv.URL)
+	if err == nil {
+		t.Fatal("default NewSender client dialed loopback; want SafeClient block")
+	}
+}

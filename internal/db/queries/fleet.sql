@@ -226,12 +226,13 @@ WHERE operation_id = $1 AND status = 'failed';
 -- All non-decommissioned clusters. The orchestrator's selector
 -- evaluator walks this list in Go (matchLabels intersection is a
 -- string-map comparison that's easier to reason about than a JSONB
--- predicate, and the cluster count never exceeds a few thousand
--- in any deployment we've seen).
+-- predicate). CORR-R05: hard safety valve LIMIT 10000 — callers that
+-- receive a full page must fail the op rather than silently truncate.
 --
 -- group_id (migration 066) is the at-most-one cluster_groups
 -- membership; the orchestrator maps it into the candidate's GroupIDs
 -- slice so matchGroupIDs selectors can resolve.
 SELECT id, name, labels, group_id FROM clusters
 WHERE decommissioned_at IS NULL
-ORDER BY name ASC;
+ORDER BY name ASC
+LIMIT 10000;

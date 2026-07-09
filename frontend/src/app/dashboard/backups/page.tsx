@@ -43,6 +43,8 @@ import { PhaseBadge } from '@/components/backups/phase-badge';
 import { RestoreModal } from '@/components/backups/restore-modal';
 import { cronToHuman } from '@/components/backups/cron';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
+import { can } from '@/lib/permissions';
+import { useAuthStore } from '@/lib/store';
 import {
   b2Keys,
   useB2DeleteSchedule,
@@ -84,6 +86,9 @@ export default function BackupsPage() {
   const [restoreTarget, setRestoreTarget] = useState<BackupRun | null>(null);
   const [deleteStorage, setDeleteStorage] = useState<BackupStorageLocation | null>(null);
   const [deleteSchedule, setDeleteSchedule] = useState<BackupScheduleRow | null>(null);
+  // UX-01: hide destructive/create controls without backups:update/create grants.
+  const user = useAuthStore((s) => s.user);
+  const canMutateBackups = can(user, 'backups', 'update') || can(user, 'backups', 'create') || can(user, 'backups', 'delete');
 
   const storageQ = useB2StorageLocations();
   const schedulesQ = useB2Schedules();
@@ -213,13 +218,17 @@ export default function BackupsPage() {
                 }
               },
             },
-            {
-              label: 'Delete',
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteStorage(row),
-              variant: 'destructive',
-              separator: true,
-            },
+            ...(canMutateBackups
+              ? [
+                  {
+                    label: 'Delete',
+                    icon: <Trash2 className="h-3.5 w-3.5" />,
+                    onClick: () => setDeleteStorage(row),
+                    variant: 'destructive' as const,
+                    separator: true,
+                  },
+                ]
+              : []),
           ]}
         />
       ),
@@ -435,7 +444,7 @@ export default function BackupsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {tab === 'storage' && (
+          {canMutateBackups && tab === 'storage' && (
             <button
               onClick={() => router.push('/dashboard/backups/storage/new')}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
@@ -445,7 +454,7 @@ export default function BackupsPage() {
               Add Storage
             </button>
           )}
-          {tab === 'schedules' && (
+          {canMutateBackups && tab === 'schedules' && (
             <button
               onClick={() => router.push('/dashboard/backups/schedules/new')}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground

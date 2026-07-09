@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"testing"
 	"time"
 
@@ -191,6 +193,7 @@ func (q *argocdManagedClusterQueryStub) UpsertArgoCDBaselineOwnershipDecision(_ 
 }
 
 func TestRegisterManagedClusterLocalAutoToken(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	instanceID := uuid.New()
 	clusterID := uuid.New()
 	clusterServer := "https://10.43.0.1:443"
@@ -284,6 +287,7 @@ func TestRegisterManagedClusterLocalAutoToken(t *testing.T) {
 }
 
 func TestRegisterManagedClusterRemoteDefaultsToTunnelProxyURL(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	instanceID := uuid.New()
 	clusterID := uuid.New()
 	expectedServer := "http://astronomer-server.astronomer.svc.cluster.local:8000/api/v1/clusters/" + clusterID.String() + "/k8s"
@@ -452,6 +456,7 @@ func TestRefreshManagedClusterLabelsRestampsSecretAndDB(t *testing.T) {
 }
 
 func TestRefreshLocalManagedClusterRegistrationMigratesServerAndSecretName(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
 	instanceID := uuid.New()
 	clusterID := uuid.New()
 	oldServer := "https://kubernetes.default.svc"

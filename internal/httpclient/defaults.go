@@ -9,24 +9,29 @@ import (
 // outbound HTTP calls that are not long-lived streams.
 const DefaultExternalTimeout = 30 * time.Second
 
-var defaultExternalClient = &http.Client{Timeout: DefaultExternalTimeout}
+// defaultExternalClient is a SafeClient: dial-time public-IP enforcement so
+// operator/DB-supplied URLs cannot rebind to loopback/metadata after a
+// GuardPublicHost pre-check (SEC-03). Callers that need private destinations
+// must use an explicit allow-private client, not this default.
+var defaultExternalClient = SafeClient(DefaultExternalTimeout)
 
-// DefaultExternal returns the shared bounded client for routine outbound calls.
+// DefaultExternal returns the shared bounded SafeClient for routine outbound
+// calls that may target operator- or DB-supplied URLs.
 func DefaultExternal() *http.Client {
 	return defaultExternalClient
 }
 
-// New returns an HTTP client with timeout, falling back to DefaultExternalTimeout
-// when timeout is not positive.
+// New returns a SafeClient with timeout, falling back to DefaultExternalTimeout
+// when timeout is not positive. Prefer this over &http.Client{} for any
+// server-side fetch of an external URL.
 func New(timeout time.Duration) *http.Client {
 	if timeout <= 0 {
 		timeout = DefaultExternalTimeout
 	}
-	return &http.Client{Timeout: timeout}
+	return SafeClient(timeout)
 }
 
-// WithDefault returns client when provided, otherwise a new bounded HTTP client
-// using timeout.
+// WithDefault returns client when provided, otherwise a SafeClient with timeout.
 func WithDefault(client *http.Client, timeout time.Duration) *http.Client {
 	if client != nil {
 		return client

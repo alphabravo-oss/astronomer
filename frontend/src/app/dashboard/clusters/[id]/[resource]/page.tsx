@@ -49,6 +49,7 @@ import { ScaleDialog } from '@/components/workloads/scale-dialog';
 import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
+import { ConfigMapFormDialog } from '@/components/resources/configmap-form';
 import { k8sResourcePath, k8sListPath, getResourceDef, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
 import { usePermissionDecision, canonicalPermissionResource } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
@@ -2695,7 +2696,11 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
         variant="destructive"
         loading={k8sDeleteMut.isPending}
       />
-      {creatableConfig && (
+      {creatableConfig && resourceType === 'configmaps' && (
+        // DIR-02: schema-lite form for ConfigMap; YAML still available via template dialog for other kinds.
+        <ConfigMapFormDialog open={showCreate} onClose={() => setShowCreate(false)} clusterId={clusterId} />
+      )}
+      {creatableConfig && resourceType !== 'configmaps' && (
         <CreateResourceDialog open={showCreate} onClose={() => setShowCreate(false)} clusterId={clusterId}
           templateKey={creatableConfig.templateKey} title={creatableConfig.label} />
       )}

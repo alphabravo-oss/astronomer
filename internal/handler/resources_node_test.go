@@ -398,6 +398,17 @@ func TestResourceHandlerNamedResourceMutationsAreAudited(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("update resource status = %d body=%s", rr.Code, rr.Body.String())
 	}
+	// DIR-01: UpdateNamedResource must server-side-apply (PATCH apply-patch).
+	foundSSA := false
+	for _, c := range requester.calls {
+		if c.method == http.MethodPatch && strings.Contains(c.path, "fieldManager=astronomer") {
+			foundSSA = true
+			break
+		}
+	}
+	if !foundSSA {
+		t.Fatalf("expected SSA PATCH with fieldManager=astronomer, calls=%+v", requester.calls)
+	}
 
 	req = resourceRouteRequest(http.MethodDelete, "/api/v1/clusters/cluster-1/resources/services/default/demo/", map[string]string{
 		"cluster_id":    "cluster-1",

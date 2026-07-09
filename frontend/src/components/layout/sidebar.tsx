@@ -158,7 +158,9 @@ const globalNavGroups: NavGroup[] = [
       { label: 'Auth', href: '/dashboard/settings/auth', icon: KeyRound, superuserOnly: true },
       // Mark Settings as exact so /dashboard/settings/auth doesn't double-highlight
       // both rows (the active-route matcher otherwise prefix-matches both).
-      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true, permission: { resource: 'settings', verb: 'read' } },
+      // UX-07: Settings hub is superuser-only on the backend; align nav so
+      // non-superusers with settings:read do not see a dead link.
+      { label: 'Settings', href: '/dashboard/settings', icon: Settings, exact: true, superuserOnly: true },
     ],
   },
 ];
@@ -169,22 +171,23 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
   // Tabs that need a real outbound tunnel to a remote cluster agent.
   // Hidden for the management plane's own cluster (is_local=true) where
   // the in-cluster local-agent doesn't reliably support these flows.
+  // UX-03: attach permission metadata so cluster nav filters like global nav.
   const agentRequiredItems = opts.isLocal
     ? []
     : [
-        { label: 'Image Scans', href: `${base}/image-scans`, icon: ShieldAlert },
-        { label: 'Shell', href: `${base}/shell`, icon: TerminalSquare },
+        { label: 'Image Scans', href: `${base}/image-scans`, icon: ShieldAlert, permission: { resource: 'security', verb: 'read' as const } },
+        { label: 'Shell', href: `${base}/shell`, icon: TerminalSquare, permission: { resource: 'shell', verb: 'exec' as const } },
         // Control-plane (etcd) DR snapshots. Tunnel + self-managed only; the
         // page itself renders a "not available" state for managed control
         // planes and degrades gracefully when the feature is off server-side.
-        { label: 'Control-plane DR', href: `${base}/control-plane-snapshots`, icon: Database },
+        { label: 'Control-plane DR', href: `${base}/control-plane-snapshots`, icon: Database, permission: { resource: 'backups', verb: 'read' as const } },
         // Registries (image-pull secrets), Velero workload Snapshots, and the
         // apiserver Network & Access allow-list all drive the member cluster
         // through the outbound tunnel — same agent-required gating as the
         // items above (hidden for the management plane's local agent).
-        { label: 'Registries', href: `${base}/registries`, icon: Boxes },
-        { label: 'Snapshots', href: `${base}/snapshots`, icon: Camera },
-        { label: 'Network & Access', href: `${base}/network-access`, icon: Route },
+        { label: 'Registries', href: `${base}/registries`, icon: Boxes, permission: { resource: 'clusters', verb: 'read' as const } },
+        { label: 'Snapshots', href: `${base}/snapshots`, icon: Camera, permission: { resource: 'backups', verb: 'read' as const } },
+        { label: 'Network & Access', href: `${base}/network-access`, icon: Route, permission: { resource: 'security', verb: 'read' as const } },
       ];
   return [
     {
@@ -248,7 +251,7 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'PVCs', href: `${base}/persistentvolumeclaims`, icon: FolderOpen, countKey: 'pvcs' },
         { label: 'StorageClasses', href: `${base}/storageclasses`, icon: Database, countKey: 'storageclasses' },
         { label: 'ConfigMaps', href: `${base}/configmaps`, icon: FileText, countKey: 'configmaps' },
-        { label: 'Secrets', href: `${base}/secrets`, icon: Lock, countKey: 'secrets' },
+        { label: 'Secrets', href: `${base}/secrets`, icon: Lock, countKey: 'secrets', permission: { resource: 'secrets', verb: 'read' } },
       ],
     },
     {
@@ -259,7 +262,7 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Limit Ranges', href: `${base}/limitranges`, icon: ShieldAlert, countKey: 'limitranges' },
         { label: 'PDB', href: `${base}/poddisruptionbudgets`, icon: ShieldCheck, countKey: 'poddisruptionbudgets' },
         // P-04 — Gatekeeper/OPA constraint authoring (bundle + custom).
-        { label: 'Gatekeeper', href: `${base}/gatekeeper`, icon: ShieldCheck },
+        { label: 'Gatekeeper', href: `${base}/gatekeeper`, icon: ShieldCheck, permission: { resource: 'security', verb: 'read' } },
       ],
     },
     {

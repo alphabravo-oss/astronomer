@@ -55,17 +55,20 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 
 	if deps.ControlPlane != nil {
 		// The controllers surface is platform-admin: policy, alert
-		// acknowledgement, and alertmanager silences are fleet-wide and the
-		// handler carries no per-request authorization. Previously the mutating
-		// routes were reachable by any authenticated principal; gate them at the
-		// middleware level on superuser.
+		// acknowledgement, and alertmanager silences are fleet-wide.
+		// Mutations stay superuser-only; GETs require alerts:read/list so any
+		// authenticated principal cannot enumerate fleet policy (SEC-05).
 		superuserOnly := requireSuperuser(deps)
-		r.Get("/controllers/status/", deps.ControlPlane.Status)
-		r.Get("/controllers/policy/", deps.ControlPlane.GetPolicy)
+		alertsRead := requireAnyPermission(deps.RBACEngine, deps.RBACQueries,
+			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbRead},
+			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbList},
+		)
+		r.With(alertsRead).Get("/controllers/status/", deps.ControlPlane.Status)
+		r.With(alertsRead).Get("/controllers/policy/", deps.ControlPlane.GetPolicy)
 		r.With(superuserOnly).Put("/controllers/policy/", deps.ControlPlane.UpdatePolicy)
-		r.Get("/controllers/alerts/", deps.ControlPlane.ListAlerts)
+		r.With(alertsRead).Get("/controllers/alerts/", deps.ControlPlane.ListAlerts)
 		r.With(superuserOnly).Post("/controllers/alerts/{id}/acknowledge/", deps.ControlPlane.AcknowledgeAlert)
-		r.Get("/controllers/silences/", deps.ControlPlane.ListSilences)
+		r.With(alertsRead).Get("/controllers/silences/", deps.ControlPlane.ListSilences)
 		r.With(superuserOnly).Post("/controllers/silences/", deps.ControlPlane.CreateSilence)
 		r.With(superuserOnly).Delete("/controllers/silences/{id}/", deps.ControlPlane.DeleteSilence)
 	}
@@ -179,14 +182,20 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		catalogCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbCreate)
 		catalogUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbUpdate)
 		catalogDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
+		// SEC-01: list/get carry live auth_config (redacted) and must not be
+		// world-readable to every authenticated principal.
+		catalogRead := requireAnyPermission(deps.RBACEngine, deps.RBACQueries,
+			permissionRequirement{resource: rbac.ResourceCatalog, verb: rbac.VerbRead},
+			permissionRequirement{resource: rbac.ResourceCatalog, verb: rbac.VerbList},
+		)
 		r.With(featureGate("feature.catalog", deps.SettingsCache)).Route("/catalog", func(r chi.Router) {
 			r.Get("/controller/status/", deps.Catalog.ControllerStatus)
 			r.Get("/operations/", deps.Catalog.ListOperations)
 			r.Get("/operations/{id}/", deps.Catalog.GetOperation)
 			r.Post("/operations/{id}/retry/", deps.Catalog.RetryOperation)
-			r.Get("/repositories/", deps.Catalog.ListRepos)
+			r.With(catalogRead).Get("/repositories/", deps.Catalog.ListRepos)
 			r.With(catalogCreate).Post("/repositories/", deps.Catalog.CreateRepo)
-			r.Get("/repositories/{id}/", deps.Catalog.GetRepo)
+			r.With(catalogRead).Get("/repositories/{id}/", deps.Catalog.GetRepo)
 			r.With(catalogUpdate).Put("/repositories/{id}/", deps.Catalog.UpdateRepo)
 			r.With(catalogDelete).Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
 			r.With(catalogUpdate).Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
@@ -209,6 +218,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(mutationWriteScope).Post("/installed/{id}/rollback/", deps.Catalog.RollbackInstalledChart)
 			r.With(mutationWriteScope).Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
 			r.Get("/installed/{id}/values/", deps.Catalog.GetInstalledChartValues)
+			r.Get("/installed/{id}/revisions/", deps.Catalog.ListInstalledChartRevisions)
 		})
 
 		// Sprint 082 — per-cluster Apps tab. Lives outside the

@@ -497,8 +497,8 @@ func (f *fakeBackupQuerier) CreateBackup(ctx context.Context, arg sqlc.CreateBac
 func (f *fakeBackupQuerier) UpdateBackupVeleroIdentity(ctx context.Context, arg sqlc.UpdateBackupVeleroIdentityParams) error {
 	return nil
 }
-func (f *fakeBackupQuerier) UpdateBackupStarted(ctx context.Context, id uuid.UUID) error {
-	return nil
+func (f *fakeBackupQuerier) UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error) {
+	return 1, nil
 }
 func (f *fakeBackupQuerier) UpdateBackupCompleted(ctx context.Context, arg sqlc.UpdateBackupCompletedParams) error {
 	return nil
@@ -568,8 +568,8 @@ func (f *fakeBackupQuerier) CreateRestoreOperationIdempotent(ctx context.Context
 	f.restoreByKey[key] = restore
 	return restore, nil
 }
-func (f *fakeBackupQuerier) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error {
-	return nil
+func (f *fakeBackupQuerier) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error) {
+	return 1, nil
 }
 func (f *fakeBackupQuerier) UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error {
 	return nil

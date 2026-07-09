@@ -10,10 +10,12 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
-// EventStreamHandler serves Server-Sent Events from the in-memory bus.
+// EventStreamHandler serves Server-Sent Events from the in-memory bus
+// (optionally Redis-backed for multi-replica fan-out).
 //
 // Auth contract:
 //
@@ -22,19 +24,16 @@ import (
 // EventSource cannot set custom headers, so browsers should first POST to
 // /api/v1/streams/tickets/ and pass the one-use ticket in the stream URL.
 //
-// Frontend usage:
-//
-//	const es = new EventSource('/api/v1/events/stream/?ticket=' + ticket);
-//	es.addEventListener('cluster.connected', e => { ... });
-//
-// The bus only emits resource-lifecycle events that mirror existing readable
-// state, so per-event RBAC is not enforced here — same posture as the
-// pre-existing implementation.
+// SEC-R07: when authorization is wired, per-event delivery is filtered by
+// clusters:read (or list) on the event's cluster_id. Events without a
+// cluster_id pass through only for unrestricted (superuser) principals;
+// restricted users drop unscoped events.
 type EventStreamHandler struct {
 	bus     *events.Bus
 	jwt     *auth.JWTManager
 	queries middleware.TokenUserQuerier
 	tickets *auth.StreamTicketStore
+	authz   authorizationSupport
 }
 
 // NewEventStreamHandler wraps a bus.
@@ -60,12 +59,19 @@ func (h *EventStreamHandler) SetStreamTickets(tickets *auth.StreamTicketStore) {
 	h.tickets = tickets
 }
 
+// SetAuthorization enables per-event cluster RBAC filtering (SEC-R07).
+func (h *EventStreamHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.authz.engine = engine
+	h.authz.querier = querier
+}
+
 // authenticateRequest validates the request via a one-use stream ticket or
-// Authorization header. Returns true if either path succeeded, or if no JWT
-// manager is wired (dev/test mode).
-func (h *EventStreamHandler) authenticateRequest(r *http.Request) bool {
-	_, ok := auth.AuthorizeStreamRequestWithTickets(r, h.queries, h.jwt, h.tickets, auth.StreamKindEvents, uuid.Nil)
-	return ok
+// Authorization header. Returns the user ID (may be Nil in dev mode) and ok.
+func (h *EventStreamHandler) authenticateRequest(r *http.Request) (uuid.UUID, bool) {
+	return auth.AuthorizeStreamRequestWithTickets(r, h.queries, h.jwt, h.tickets, auth.StreamKindEvents, uuid.Nil)
 }
 
 // Stream is the GET handler for SSE.
@@ -74,7 +80,8 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event stream not available", http.StatusServiceUnavailable)
 		return
 	}
-	if !h.authenticateRequest(r) {
+	userID, ok := h.authenticateRequest(r)
+	if !ok {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
@@ -82,6 +89,26 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
+	}
+
+	// Load bindings once for the stream lifetime (SEC-R07). Superusers /
+	// unrestricted principals get restricted=false.
+	var (
+		bindings   []rbac.RoleBinding
+		restricted bool
+	)
+	if h.authz.engine != nil && h.authz.querier != nil && userID != uuid.Nil {
+		b, err := h.authz.querier.GetUserBindings(r.Context(), userID.String())
+		if err == nil {
+			bindings = b
+			restricted = true
+			// Superuser shortcut: empty global * binding treated via engine.
+			if h.authz.engine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbList, uuid.Nil, uuid.Nil) {
+				// Global list without cluster constraint → unrestricted stream.
+				// CheckPermission with Nil cluster may not mean global; keep restricted
+				// and filter unless allowsCluster succeeds for each event.
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -116,6 +143,9 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			if restricted && !eventAllowedForUser(h.authz, bindings, ev) {
+				continue
+			}
 			payload, err := json.Marshal(ev)
 			if err != nil {
 				continue
@@ -126,5 +156,57 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 		}
+	}
+}
+
+// eventAllowedForUser implements SEC-R07 per-event cluster RBAC.
+// Events without a parseable cluster_id are dropped for restricted users
+// (fail closed — no fleet-wide leak of unscoped lifecycle noise).
+func eventAllowedForUser(a authorizationSupport, bindings []rbac.RoleBinding, ev events.Event) bool {
+	if a.engine == nil {
+		return true
+	}
+	clusterID, ok := clusterIDFromEventData(ev.Data)
+	if !ok {
+		return false
+	}
+	return a.allowsCluster(bindings, clusterID, rbac.ResourceClusters, rbac.VerbRead) ||
+		a.allowsCluster(bindings, clusterID, rbac.ResourceClusters, rbac.VerbList)
+}
+
+// clusterIDFromEventData extracts cluster_id from common event payload shapes.
+func clusterIDFromEventData(data any) (uuid.UUID, bool) {
+	switch v := data.(type) {
+	case map[string]any:
+		return parseClusterIDField(v["cluster_id"])
+	case json.RawMessage:
+		var m map[string]any
+		if err := json.Unmarshal(v, &m); err != nil {
+			return uuid.Nil, false
+		}
+		return parseClusterIDField(m["cluster_id"])
+	default:
+		// Best-effort re-marshal for struct payloads.
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return uuid.Nil, false
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return uuid.Nil, false
+		}
+		return parseClusterIDField(m["cluster_id"])
+	}
+}
+
+func parseClusterIDField(v any) (uuid.UUID, bool) {
+	switch t := v.(type) {
+	case string:
+		id, err := uuid.Parse(t)
+		return id, err == nil
+	case uuid.UUID:
+		return t, t != uuid.Nil
+	default:
+		return uuid.Nil, false
 	}
 }

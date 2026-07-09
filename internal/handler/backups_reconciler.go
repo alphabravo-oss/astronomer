@@ -116,6 +116,16 @@ func (h *BackupHandler) pollRunningRestores(ctx context.Context) {
 }
 
 func (h *BackupHandler) reconcilePendingBackup(ctx context.Context, row sqlc.Backup) {
+	// CORR-R03: claim before Velero apply so two HA server replicas cannot both
+	// apply the same pending backup CR.
+	claimed, err := h.queries.UpdateBackupStarted(ctx, row.ID)
+	if err != nil {
+		h.logReconcileError("mark backup started", err, "backup_id", row.ID.String())
+		return
+	}
+	if claimed == 0 {
+		return
+	}
 	storage, err := h.queries.GetBackupStorageConfigByID(ctx, row.StorageID)
 	if err != nil {
 		h.failBackup(ctx, row.ID, fmt.Sprintf("loading storage config: %v", err))
@@ -128,9 +138,6 @@ func (h *BackupHandler) reconcilePendingBackup(ctx context.Context, row sqlc.Bac
 	if err := h.applyVeleroBackupForRow(ctx, row, storage); err != nil {
 		h.failBackup(ctx, row.ID, fmt.Sprintf("apply velero backup: %v", err))
 		return
-	}
-	if err := h.queries.UpdateBackupStarted(ctx, row.ID); err != nil {
-		h.logReconcileError("mark backup started", err, "backup_id", row.ID.String())
 	}
 }
 
@@ -192,6 +199,15 @@ func (h *BackupHandler) pollRunningBackup(ctx context.Context, row sqlc.Backup) 
 }
 
 func (h *BackupHandler) reconcilePendingRestore(ctx context.Context, row sqlc.RestoreOperation) {
+	// CORR-R03: claim before Velero apply (mirror backup path).
+	claimed, err := h.queries.UpdateRestoreOperationStarted(ctx, row.ID)
+	if err != nil {
+		h.logReconcileError("mark restore started", err, "restore_id", row.ID.String())
+		return
+	}
+	if claimed == 0 {
+		return
+	}
 	backup, err := h.queries.GetBackupByID(ctx, row.BackupID)
 	if err != nil {
 		h.failRestore(ctx, row.ID, fmt.Sprintf("loading source backup: %v", err))
@@ -204,9 +220,6 @@ func (h *BackupHandler) reconcilePendingRestore(ctx context.Context, row sqlc.Re
 	if err := h.applyVeleroRestoreForRow(ctx, row, backup); err != nil {
 		h.failRestore(ctx, row.ID, fmt.Sprintf("apply velero restore: %v", err))
 		return
-	}
-	if err := h.queries.UpdateRestoreOperationStarted(ctx, row.ID); err != nil {
-		h.logReconcileError("mark restore started", err, "restore_id", row.ID.String())
 	}
 }
 

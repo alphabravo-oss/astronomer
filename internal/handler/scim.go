@@ -1,8 +1,8 @@
 // Package handler — SCIM 2.0 provisioning (P1 item 11 — "scim").
 //
 // Smallest working slice of RFC 7643/7644: bearer-token-authenticated
-// User CRUD (create/get/list/delete) + read-only Group list/get, mapped
-// onto the existing users + identity_group_mappings tables. Mounted at
+// User CRUD + Group list/get/create/patch/delete, mapped onto the
+// existing users + identity_group_mappings tables. Mounted at
 // /scim/v2/* OUTSIDE the JWT auth chain — SCIM clients (Okta, Azure AD,
 // OneLogin) authenticate with a static bearer token whose SHA-256 hash
 // lives in scim_tokens (migration 114).
@@ -15,23 +15,28 @@
 //	DELETE /scim/v2/Users/{id}   — de-provision (delete) a user
 //	GET    /scim/v2/Groups       — list groups (from group_mappings)
 //	GET    /scim/v2/Groups/{id}  — get one group by name
+//	POST   /scim/v2/Groups       — create group mapping
+//	PATCH  /scim/v2/Groups/{id}  — rename / membership patch
+//	DELETE /scim/v2/Groups/{id}  — delete group mapping + memberships
 //	GET    /scim/v2/ServiceProviderConfig — advertise supported features
 //	GET    /scim/v2/ResourceTypes — User + Group resource types
 //	GET    /scim/v2/Schemas      — core User + Group schema definitions
 //
-// Deferred (full RFC): add/remove PATCH ops, richer filtering, Group
-// membership writes. The distinct-group-name read is enough for an IdP
-// to enumerate the targets an operator has wired via
-// identity_group_mappings.
+// Group writes (DIR-03): POST/PATCH/DELETE Groups create, update, or
+// remove identity_group_mappings rows (group_name → default global role)
+// and optional members[] are reflected into user_idp_groups so SSO group
+// sync sees IdP-pushed membership.
 package handler
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -70,6 +75,13 @@ type SCIMQuerier interface {
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	ListSCIMGroupNames(ctx context.Context, arg sqlc.ListSCIMGroupNamesParams) ([]string, error)
 	CountSCIMGroupNames(ctx context.Context) (int64, error)
+	// Group write surface (DIR-03).
+	CreateGroupMapping(ctx context.Context, arg sqlc.CreateGroupMappingParams) (sqlc.IdentityGroupMapping, error)
+	ListGroupMappings(ctx context.Context, arg sqlc.ListGroupMappingsParams) ([]sqlc.IdentityGroupMapping, error)
+	DeleteGroupMapping(ctx context.Context, id uuid.UUID) error
+	ListGlobalRoles(ctx context.Context, arg sqlc.ListGlobalRolesParams) ([]sqlc.GlobalRole, error)
+	GetUserIDPGroups(ctx context.Context, userID uuid.UUID) (sqlc.UserIdpGroup, error)
+	UpsertUserIDPGroups(ctx context.Context, arg sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error)
 }
 
 // SCIMHandler owns the /scim/v2/* surface.
@@ -125,11 +137,17 @@ type scimUser struct {
 	Meta     scimMeta    `json:"meta"`
 }
 
+type scimGroupMember struct {
+	Value   string `json:"value"`
+	Display string `json:"display,omitempty"`
+}
+
 type scimGroup struct {
-	Schemas     []string `json:"schemas"`
-	ID          string   `json:"id"`
-	DisplayName string   `json:"displayName"`
-	Meta        scimMeta `json:"meta"`
+	Schemas     []string          `json:"schemas"`
+	ID          string            `json:"id"`
+	DisplayName string            `json:"displayName"`
+	Members     []scimGroupMember `json:"members,omitempty"`
+	Meta        scimMeta          `json:"meta"`
 }
 
 type scimListResponse struct {
@@ -653,7 +671,259 @@ func (h *SCIMHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- Group endpoints (read-only) ---
+// --- Group endpoints ---
+
+// CreateGroup handles POST /scim/v2/Groups (DIR-03). Creates an
+// identity_group_mappings row for the displayName so the group becomes
+// visible to List/Get and to SSO group sync. Optional members[] are
+// written into user_idp_groups.
+func (h *SCIMHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		DisplayName string            `json:"displayName"`
+		Members     []scimGroupMember `json:"members"`
+		// Optional extension: role_id of a global role to map. When empty we
+		// pick the built-in Auditor role (read-only default).
+		RoleID string `json:"roleId,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.scimError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	name := strings.TrimSpace(body.DisplayName)
+	if name == "" {
+		h.scimError(w, http.StatusBadRequest, "displayName is required")
+		return
+	}
+	// Idempotent: if the group already exists, return it.
+	if h.scimGroupExists(r.Context(), name) {
+		h.writeSCIM(w, http.StatusOK, toSCIMGroup(name))
+		return
+	}
+	roleID, err := h.resolveSCIMGroupRoleID(r.Context(), body.RoleID)
+	if err != nil {
+		h.scimError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := h.queries.CreateGroupMapping(r.Context(), sqlc.CreateGroupMappingParams{
+		GroupName: name,
+		Scope:     "global",
+		RoleID:    roleID,
+	}); err != nil {
+		h.scimError(w, http.StatusInternalServerError, "failed to create group mapping")
+		return
+	}
+	for _, m := range body.Members {
+		_ = h.addUserToSCIMGroup(r.Context(), m.Value, name)
+	}
+	h.writeSCIM(w, http.StatusCreated, toSCIMGroup(name))
+}
+
+// PatchGroup handles PATCH /scim/v2/Groups/{id} for displayName replace and
+// members add/remove (DIR-03).
+func (h *SCIMHandler) PatchGroup(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "id")
+	if name == "" || !h.scimGroupExists(r.Context(), name) {
+		h.scimError(w, http.StatusNotFound, "group not found")
+		return
+	}
+	var body struct {
+		Schemas    []string `json:"schemas"`
+		Operations []struct {
+			Op    string          `json:"op"`
+			Path  string          `json:"path"`
+			Value json.RawMessage `json:"value"`
+		} `json:"Operations"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.scimError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	for _, schema := range body.Schemas {
+		if schema != "" && schema != scimPatchSchema {
+			h.scimError(w, http.StatusBadRequest, "unsupported schema")
+			return
+		}
+	}
+	currentName := name
+	for _, op := range body.Operations {
+		opName := strings.ToLower(strings.TrimSpace(op.Op))
+		path := strings.ToLower(strings.TrimSpace(op.Path))
+		switch {
+		case (opName == "replace" || opName == "add") && (path == "displayname" || path == ""):
+			var v any
+			if err := json.Unmarshal(op.Value, &v); err != nil {
+				continue
+			}
+			switch typed := v.(type) {
+			case string:
+				if path == "displayname" && strings.TrimSpace(typed) != "" && typed != currentName {
+					if err := h.renameSCIMGroup(r.Context(), currentName, strings.TrimSpace(typed)); err != nil {
+						h.scimError(w, http.StatusInternalServerError, "failed to rename group")
+						return
+					}
+					currentName = strings.TrimSpace(typed)
+				}
+			case map[string]any:
+				if dn, ok := typed["displayName"].(string); ok && strings.TrimSpace(dn) != "" && dn != currentName {
+					if err := h.renameSCIMGroup(r.Context(), currentName, strings.TrimSpace(dn)); err != nil {
+						h.scimError(w, http.StatusInternalServerError, "failed to rename group")
+						return
+					}
+					currentName = strings.TrimSpace(dn)
+				}
+			}
+		case (opName == "add" || opName == "replace") && strings.HasPrefix(path, "members"):
+			var members []scimGroupMember
+			if err := json.Unmarshal(op.Value, &members); err != nil {
+				var one scimGroupMember
+				if err2 := json.Unmarshal(op.Value, &one); err2 == nil && one.Value != "" {
+					members = []scimGroupMember{one}
+				}
+			}
+			for _, m := range members {
+				_ = h.addUserToSCIMGroup(r.Context(), m.Value, currentName)
+			}
+		case opName == "remove" && strings.HasPrefix(path, "members"):
+			// members[value eq "uuid"] or raw value array
+			if strings.Contains(path, "value eq") {
+				// path like members[value eq "uuid"]
+				start := strings.Index(path, `"`)
+				end := strings.LastIndex(path, `"`)
+				if start >= 0 && end > start {
+					uid := path[start+1 : end]
+					_ = h.removeUserFromSCIMGroup(r.Context(), uid, currentName)
+				}
+			} else {
+				var members []scimGroupMember
+				_ = json.Unmarshal(op.Value, &members)
+				for _, m := range members {
+					_ = h.removeUserFromSCIMGroup(r.Context(), m.Value, currentName)
+				}
+			}
+		}
+	}
+	h.writeSCIM(w, http.StatusOK, toSCIMGroup(currentName))
+}
+
+func (h *SCIMHandler) scimGroupExists(ctx context.Context, name string) bool {
+	names, err := h.queries.ListSCIMGroupNames(ctx, sqlc.ListSCIMGroupNamesParams{
+		Limit: scimMaxListResult, Offset: 0,
+	})
+	if err != nil {
+		return false
+	}
+	for _, n := range names {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *SCIMHandler) resolveSCIMGroupRoleID(ctx context.Context, explicit string) (uuid.UUID, error) {
+	if explicit != "" {
+		id, err := uuid.Parse(explicit)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("invalid roleId")
+		}
+		return id, nil
+	}
+	roles, err := h.queries.ListGlobalRoles(ctx, sqlc.ListGlobalRolesParams{Limit: 200, Offset: 0})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to resolve default role")
+	}
+	for _, preferred := range []string{"Auditor", "Audit Viewer", "User"} {
+		for _, role := range roles {
+			if role.Name == preferred {
+				return role.ID, nil
+			}
+		}
+	}
+	if len(roles) == 0 {
+		return uuid.Nil, fmt.Errorf("no global roles available to map SCIM group")
+	}
+	return roles[0].ID, nil
+}
+
+func (h *SCIMHandler) renameSCIMGroup(ctx context.Context, oldName, newName string) error {
+	rows, err := h.queries.ListGroupMappings(ctx, sqlc.ListGroupMappingsParams{Limit: 500, Offset: 0})
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if row.GroupName != oldName {
+			continue
+		}
+		if err := h.queries.DeleteGroupMapping(ctx, row.ID); err != nil {
+			return err
+		}
+		if _, err := h.queries.CreateGroupMapping(ctx, sqlc.CreateGroupMappingParams{
+			ConnectorID: row.ConnectorID,
+			GroupName:   newName,
+			Scope:       row.Scope,
+			RoleID:      row.RoleID,
+			ClusterID:   row.ClusterID,
+			ProjectID:   row.ProjectID,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *SCIMHandler) addUserToSCIMGroup(ctx context.Context, userIDStr, groupName string) error {
+	uid, err := uuid.Parse(strings.TrimSpace(userIDStr))
+	if err != nil {
+		return err
+	}
+	if _, err := h.queries.GetUserByID(ctx, uid); err != nil {
+		return err
+	}
+	groups := []string{}
+	row, err := h.queries.GetUserIDPGroups(ctx, uid)
+	if err == nil {
+		_ = json.Unmarshal(row.Groups, &groups)
+	}
+	for _, g := range groups {
+		if g == groupName {
+			return nil
+		}
+	}
+	groups = append(groups, groupName)
+	raw, _ := json.Marshal(groups)
+	_, err = h.queries.UpsertUserIDPGroups(ctx, sqlc.UpsertUserIDPGroupsParams{
+		UserID:    uid,
+		Groups:    raw,
+		SyncedAt:  time.Now().UTC(),
+	})
+	return err
+}
+
+func (h *SCIMHandler) removeUserFromSCIMGroup(ctx context.Context, userIDStr, groupName string) error {
+	uid, err := uuid.Parse(strings.TrimSpace(userIDStr))
+	if err != nil {
+		return err
+	}
+	row, err := h.queries.GetUserIDPGroups(ctx, uid)
+	if err != nil {
+		return nil
+	}
+	var groups []string
+	_ = json.Unmarshal(row.Groups, &groups)
+	out := groups[:0]
+	for _, g := range groups {
+		if g != groupName {
+			out = append(out, g)
+		}
+	}
+	raw, _ := json.Marshal(out)
+	_, err = h.queries.UpsertUserIDPGroups(ctx, sqlc.UpsertUserIDPGroupsParams{
+		UserID:   uid,
+		Groups:   raw,
+		SyncedAt: time.Now().UTC(),
+	})
+	return err
+}
 
 // ListGroups handles GET /scim/v2/Groups. Each distinct group_name in
 // identity_group_mappings becomes one SCIM Group resource. The Group id
@@ -710,6 +980,53 @@ func (h *SCIMHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	h.scimError(w, http.StatusNotFound, "group not found")
 }
 
+// DeleteGroup handles DELETE /scim/v2/Groups/{id}, where {id} is the group's
+// displayName. Removes every identity_group_mappings row for that name and
+// strips the group from user_idp_groups membership lists. Returns 204 on
+// success (RFC 7644) and 404 when the group is unknown.
+func (h *SCIMHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "id")
+	if name == "" || !h.scimGroupExists(r.Context(), name) {
+		h.scimError(w, http.StatusNotFound, "group not found")
+		return
+	}
+	if err := h.deleteSCIMGroup(r.Context(), name); err != nil {
+		h.scimError(w, http.StatusInternalServerError, "failed to delete group")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteSCIMGroup drops all mappings for groupName and removes the name from
+// every user_idp_groups row that still lists it. Best-effort on membership
+// scan: mapping deletes are authoritative for List/Get visibility.
+func (h *SCIMHandler) deleteSCIMGroup(ctx context.Context, groupName string) error {
+	rows, err := h.queries.ListGroupMappings(ctx, sqlc.ListGroupMappingsParams{Limit: 500, Offset: 0})
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if row.GroupName != groupName {
+			continue
+		}
+		if err := h.queries.DeleteGroupMapping(ctx, row.ID); err != nil {
+			return err
+		}
+	}
+	// Strip membership from users who still list this group (IdP deprovision).
+	// There is no "list all idp groups" query on the SCIM surface; we rely on
+	// ListUsers + GetUserIDPGroups. Bounded by scimMaxListResult.
+	users, err := h.queries.ListUsers(ctx, sqlc.ListUsersParams{Limit: scimMaxListResult, Offset: 0})
+	if err != nil {
+		// Mapping rows already removed — membership cleanup is best-effort.
+		return nil
+	}
+	for _, u := range users {
+		_ = h.removeUserFromSCIMGroup(ctx, u.ID.String(), groupName)
+	}
+	return nil
+}
+
 func toSCIMGroup(name string) scimGroup {
 	return scimGroup{
 		Schemas:     []string{scimGroupSchema},
@@ -744,6 +1061,7 @@ func (h *SCIMHandler) ServiceProviderConfig(w http.ResponseWriter, r *http.Reque
 		// We only implement `userName eq "x"`, but filter is advertised as
 		// supported because IdPs gate the pre-create lookup on this flag.
 		"filter":         map[string]any{"supported": true, "maxResults": scimMaxListResult},
+		// DIR-03: Groups support create + patch (membership / displayName).
 		"changePassword": map[string]any{"supported": false},
 		"sort":           map[string]any{"supported": false},
 		"etag":           map[string]any{"supported": false},
@@ -824,6 +1142,7 @@ func (h *SCIMHandler) Schemas(w http.ResponseWriter, r *http.Request) {
 			"description": "Group",
 			"attributes": []any{
 				attr("displayName", "string", false),
+				attr("members", "complex", true),
 			},
 			"meta": map[string]any{"resourceType": "Schema"},
 		},

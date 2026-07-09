@@ -17,6 +17,7 @@ import (
 	"helm.sh/helm/v3/pkg/registry"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // OCIPrefix identifies an OCI Helm registry URL.
@@ -314,7 +315,7 @@ func probeOCICatalog(ctx context.Context, repoURL, username, password string) ([
 	if username != "" || password != "" {
 		req.SetBasicAuth(username, password)
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := httpclient.SafeClient(15 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call /v2/_catalog: %w", err)

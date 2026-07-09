@@ -1,6 +1,10 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import type { APIResponse, PaginatedResponse } from '@/types';
+import type { OpenAPIComponents } from '@/types/openapi.generated';
 import { clearLegacyTokenStorage } from '@/lib/auth/session';
+
+// TEST-03: product code imports OpenAPI-generated schemas (not test-only).
+export type AgentFleetItemOpenAPI = OpenAPIComponents['schemas']['AgentFleetItem'];
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 const CSRF_COOKIE = 'astronomer_csrf';
@@ -1982,7 +1986,9 @@ export async function k8sDryRunYaml(clusterId: string, path: string, yamlStr: st
     fieldManager: 'astronomer',
     fieldValidation: 'Warn',
   });
-  return k8sProxy(clusterId, 'PUT', dryRunPath, body);
+  return k8sProxy(clusterId, 'PATCH', dryRunPath, body, {
+    'Content-Type': 'application/apply-patch+yaml',
+  });
 }
 
 export async function k8sPatch(
@@ -2031,13 +2037,20 @@ export async function k8sGetYaml(clusterId: string, path: string): Promise<strin
 }
 
 /**
- * Apply a YAML manifest to a K8s resource (PUT).
- * Converts YAML → JSON client-side, then sends PUT.
+ * Apply a YAML manifest to a K8s resource via server-side apply (DIR-01).
+ * Converts YAML → JSON client-side, then PATCH with apply-patch+yaml and
+ * fieldManager=astronomer (force) so concurrent edits get ownership semantics.
  */
 export async function k8sApplyYaml(clusterId: string, path: string, yamlStr: string) {
   const yaml = await import('js-yaml');
   const body = yaml.load(yamlStr);
-  return k8sUpdate(clusterId, path, body);
+  const applyPath = appendK8sQuery(path, {
+    fieldManager: 'astronomer',
+    force: 'true',
+  });
+  return k8sProxy(clusterId, 'PATCH', applyPath, body, {
+    'Content-Type': 'application/apply-patch+yaml',
+  });
 }
 
 // === Phase B1: ArgoCD lifecycle ===

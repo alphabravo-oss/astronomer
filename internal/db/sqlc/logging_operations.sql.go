@@ -343,9 +343,14 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status = 'pending'
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+  )
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
 
+// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 func (q *Queries) MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error) {
 	row := q.db.QueryRow(ctx, markLoggingOperationRunning, id)
 	var i LoggingOperation

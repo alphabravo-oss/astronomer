@@ -23,6 +23,12 @@ jobs:
       - name: Migration safety check
         run: ./scripts/check-migrations.sh
 
+      - name: Migration roundtrip smoke (TEST-05)
+        run: ./scripts/migrate-roundtrip-smoke.sh
+        env:
+          # Job uses service container when present; script also self-starts docker PG.
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
       - name: SQLC generated code check
         run: ./scripts/check-sqlc-generated.sh
 
@@ -107,19 +113,28 @@ jobs:
             >/tmp/astronomer-dev.yaml
 
       - name: Render production values
+        # Keep this --set list aligned with productionWiringSets in
+        # deploy/chart_operational_contract_test.go plus the backup + key-wrap
+        # knobs required by production preflight (OPS-01 / F8 / NP schema).
         run: |
           helm template astronomer deploy/chart \
             -f deploy/chart/values-production.yaml \
             --set config.serverURL=https://astronomer.example.com \
             --set 'gateway.hosts={astronomer.example.com}' \
-            --set gateway.tls.secretName=astronomer-tls \
-            --set postgres.external.dsn='postgres://astronomer:secret@postgres.example.com:5432/astronomer?sslmode=require' \
+            --set tls.source=secret \
+            --set tls.secretName=astronomer-tls \
+            --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
             --set redis.external.address=redis.example.com:6379 \
             --set secrets.secretKey=prod-secret-key \
             --set secrets.encryptionKey='prod-encryption-key-prod-encryption-key12' \
+            --set bootstrap.email=admin@example.com \
+            --set bootstrap.password=prod-admin-initial \
             --set dex.clientSecret=prod-dex-client-secret \
+            --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
+            --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
             --set managementBackup.s3.bucket=astronomer-backups \
             --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
+            --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
             >/tmp/astronomer-prod.yaml
 
   container-supply-chain:

@@ -317,6 +317,7 @@ WITH RECURSIVE subtree AS (
 SELECT cl.id, cl.name FROM clusters cl
 INNER JOIN subtree s ON cl.group_id = s.id
 ORDER BY cl.name ASC
+LIMIT 5000
 `
 
 type ListClustersInGroupTreeRow struct {
@@ -324,6 +325,10 @@ type ListClustersInGroupTreeRow struct {
 	Name string    `json:"name"`
 }
 
+// PERF-03: callers that only need a page should clamp after fetch (handler
+// ListClusters uses queryLimit). Delete uses the full result for audit.
+// A hard safety LIMIT keeps a pathological tree from materializing unbounded
+// rows into the Go process even when the handler forgets to clamp.
 func (q *Queries) ListClustersInGroupTree(ctx context.Context, id uuid.UUID) ([]ListClustersInGroupTreeRow, error) {
 	rows, err := q.db.Query(ctx, listClustersInGroupTree, id)
 	if err != nil {

@@ -149,6 +149,10 @@ func (t *BusTap) Start(ctx context.Context) {
 // tap without spinning up a real bus. MUST NOT block the caller — every
 // branch returns promptly even when the channel is full.
 func (t *BusTap) HandleEvent(ctx context.Context, ev events.Event) {
+	// CORR-R02: only the publishing pod enqueues SIEM deliveries.
+	if ev.Remote {
+		return
+	}
 	subs, err := t.subscriptions(ctx)
 	if err != nil {
 		t.log.WarnContext(ctx, "siem tap: list forwarders failed",

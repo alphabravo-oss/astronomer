@@ -490,7 +490,8 @@ func defaultSIEMTransportFactory(sub sqlc.SiemForwarder, secret authBlob) (siem.
 	}
 }
 
-// buildHTTPClient applies the per-forwarder TLS toggles to an *http.Client.
+// buildHTTPClient applies the per-forwarder TLS toggles to an *http.Client
+// that still enforces dial-time public-IP checks (SEC-03 SafeClient).
 // When tls_skip_verify is on, we log a warn at startup elsewhere; the
 // client itself just honors the operator's choice.
 func buildHTTPClient(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client {
@@ -500,8 +501,7 @@ func buildHTTPClient(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client
 		// dispatcher logs the error elsewhere via the status row.
 		cfg = &tls.Config{InsecureSkipVerify: sub.TlsSkipVerify} //nolint:gosec // operator-controlled toggle
 	}
-	transport := &http.Transport{TLSClientConfig: cfg}
-	return &http.Client{Timeout: timeout, Transport: transport}
+	return httpclient.SafeClientWithTLS(timeout, cfg)
 }
 
 // buildTLSConfig assembles the tls.Config from the forwarder's

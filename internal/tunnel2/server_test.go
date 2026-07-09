@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5"
 	"github.com/rancher/remotedialer"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,11 +42,12 @@ func (s *stubValidator) MarkRegistrationTokenUsed(_ context.Context, _ uuid.UUID
 }
 
 func (s *stubValidator) GetClusterAgentTokenByClusterID(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterAgentToken, error) {
-	return sqlc.ClusterAgentToken{}, errNotFound{}
+	// connectauth.Validate treats only pgx.ErrNoRows as "no durable adopted yet".
+	return sqlc.ClusterAgentToken{}, pgx.ErrNoRows
 }
 
 func (s *stubValidator) GetClusterAgentTokenByToken(_ context.Context, token string) (sqlc.ClusterAgentToken, error) {
-	return sqlc.ClusterAgentToken{}, errNotFound{}
+	return sqlc.ClusterAgentToken{}, pgx.ErrNoRows
 }
 
 func (s *stubValidator) UpsertClusterAgentToken(_ context.Context, arg sqlc.UpsertClusterAgentTokenParams) (sqlc.ClusterAgentToken, error) {

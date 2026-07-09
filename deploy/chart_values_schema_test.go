@@ -92,6 +92,8 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		"dex.clientSecret=prod-dex-client-secret",
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
+		// OPS-01: production preflight requires key-wrap when backups are on.
+		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
 	)

@@ -18,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 )
 
 // rbacCacheInvalidator mirrors middleware.RBACCacheInvalidator but is
@@ -53,6 +54,9 @@ type ResourceHandler struct {
 	// rows" (the user's existing browsers redirect-loop on next
 	// request because the JWT cutoff was stamped).
 	ssoBackchannel SSOBackchannelClient
+	// settingsCache resolves password.* platform settings for local
+	// account create/reset (AUTH-R01). Nil falls back to defaults.
+	settingsCache *SettingsCache
 }
 
 type drainNodeRequest struct {
@@ -155,6 +159,22 @@ type ResourceSSOSessionStore interface {
 // logout at all.
 type SSOBackchannelClient interface {
 	PostEndSession(ctx context.Context, endpoint, idTokenHint string) error
+}
+
+// SetSettingsCache wires platform settings for password policy (AUTH-R01).
+func (h *ResourceHandler) SetSettingsCache(c *SettingsCache) {
+	if h != nil {
+		h.settingsCache = c
+	}
+}
+
+// passwordPolicy returns the live password policy from platform settings
+// when wired, else DefaultPasswordPolicy.
+func (h *ResourceHandler) passwordPolicy(ctx context.Context) auth.PasswordPolicy {
+	if h == nil {
+		return auth.DefaultPasswordPolicy()
+	}
+	return auth.LoadPasswordPolicy(ctx, h.settingsCache)
 }
 
 // SetSSOSessionStore wires the sso_sessions reader/deleter into the
@@ -1424,13 +1444,15 @@ func (h *ResourceHandler) GetNamedResource(w http.ResponseWriter, r *http.Reques
 }
 
 // UpdateNamedResource handles PUT /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/.
+// DIR-01: mutates via Kubernetes server-side apply (PATCH apply-patch+yaml)
+// so concurrent edits get field-manager ownership instead of last-write-wins PUT.
 func (h *ResourceHandler) UpdateNamedResource(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Failed to read request body")
 		return
 	}
-	h.namedResourceRequest(w, r, http.MethodPut, body)
+	h.namedResourceRequest(w, r, http.MethodPatch, body)
 }
 
 // DeleteNamedResourceREST handles DELETE /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/.
@@ -1453,12 +1475,20 @@ func (h *ResourceHandler) namedResourceRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 	headers := requestHeaders("")
-	if method == http.MethodPut {
+	switch method {
+	case http.MethodPut:
 		headers = requestHeaders("application/json")
+	case http.MethodPatch:
+		// Server-side apply: force ownership under fieldManager=astronomer.
+		path = kubeutil.ServerSideApplyPath(path, kubeutil.ApplyOptions{
+			FieldManager: "astronomer",
+			Force:        true,
+		})
+		headers = kubeutil.ApplyPatchHeaders()
 	}
 	// Audit only the mutating verbs — GET is just a read.
 	switch method {
-	case http.MethodPut:
+	case http.MethodPut, http.MethodPatch:
 		recordAudit(r, h.queries, "cluster.resource.update", resourceType, "", name, map[string]any{
 			"cluster_id": clusterID, "namespace": namespace,
 		})

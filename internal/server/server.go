@@ -23,6 +23,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
@@ -43,6 +44,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -56,6 +58,64 @@ type busPublisherAdapter struct{ bus *events.Bus }
 func (a busPublisherAdapter) Publish(eventType string, data any) {
 	a.bus.Publish(events.Type(eventType), data)
 }
+
+// runServerReconcilerLeader holds a Postgres advisory lock and starts server
+// reconcilers only while this pod is leader (CORR-R06). On leadership loss it
+// cancels the child context (stopping ticker loops that respect ctx) and
+// retries acquisition.
+func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log *slog.Logger, start func(context.Context)) {
+	if log == nil {
+		log = slog.Default()
+	}
+	const job = "server.reconcilers"
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	var (
+		heldCtx    context.Context
+		heldCancel context.CancelFunc
+		release    func()
+	)
+	stopHeld := func() {
+		if heldCancel != nil {
+			heldCancel()
+			heldCancel = nil
+			heldCtx = nil
+		}
+		if release != nil {
+			release()
+			release = nil
+		}
+	}
+	defer stopHeld()
+	try := func() {
+		if release != nil {
+			// Already leader — keep holding.
+			return
+		}
+		rel, held, err := elector.TryLeader(ctx, job)
+		if err != nil {
+			log.Warn("server reconciler leader election failed", "error", err)
+			return
+		}
+		if !held {
+			return
+		}
+		release = rel
+		heldCtx, heldCancel = context.WithCancel(ctx)
+		log.Info("server reconciler leadership acquired", "job", job)
+		start(heldCtx)
+	}
+	try()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			try()
+		}
+	}
+}
+
 
 // emailNotifierAdapter wraps *email.Enqueuer in the handler-local
 // EmailNotifier surface. The two-type indirection keeps the handler
@@ -672,6 +732,34 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 			return v
 		})
+		// DIR-05 / AUTH-R02: session.timeout_minutes from platform settings
+		// (compliance baselines write this key) is applied on every access
+		// token mint — password login, refresh, SSO, and TOTP complete —
+		// via the JWT manager provider so no mint path can skip it.
+		sessionTimeoutMins := func(ctx context.Context) int {
+			row, err := queries.GetPlatformSetting(ctx, "session.timeout_minutes")
+			if err != nil || len(row.Value) == 0 {
+				return 0
+			}
+			var mins int
+			if json.Unmarshal(row.Value, &mins) != nil {
+				// Also accept JSON number as float.
+				var f float64
+				if json.Unmarshal(row.Value, &f) != nil {
+					return 0
+				}
+				mins = int(f)
+			}
+			return mins
+		}
+		authHandler.SetSessionTimeoutPolicy(sessionTimeoutMins)
+		jwtManager.SetAccessTokenTTLProvider(func(ctx context.Context) time.Duration {
+			mins := sessionTimeoutMins(ctx)
+			if mins <= 0 {
+				return 0
+			}
+			return time.Duration(mins) * time.Minute
+		})
 	}
 	// Wire the same revocation + cutoff backend into the JWT validator
 	// so the auth middleware enforces the deny-list on every authenticated
@@ -923,7 +1011,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		webhookHandler = handler.NewWebhookHandler(queries, encryptor, logger)
 		webhookHandler.SetAuditWriter(queries)
 		webhookHandler.SetBaselineOverrideChecker(handler.NewBaselineOverrideChecker(rbacEngine, rbacQuerier))
-		webhookSender := webhook.NewSender(nil) // default http.Client
+		webhookSender := webhook.NewSender(httpclient.SafeClient(30 * time.Second))
 		// Bridge to the notification_templates override layer
 		// (migration 059). The webhook precedence order becomes
 		// subscription template → operator override → JSON marshal;
@@ -994,6 +1082,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		logger.Warn("stream tickets: redis backend unavailable, using per-pod in-memory store (multi-replica browser exec/logs/shell auth will fail ~50%)", "error", terr)
 	} else {
 		streamTickets = auth.NewStreamTicketStoreWithBackend(time.Minute, backend)
+	}
+	// CORR-R02: cross-pod event fan-out for SSE (webhook/SIEM taps skip Remote).
+	if cfg.RedisURL != "" {
+		if opt, rerr := asynq.ParseRedisURI(cfg.RedisURL); rerr == nil {
+			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
+				bus.AttachRedis(client, events.DefaultRedisChannel, logger)
+				go bus.StartRedisRelay(ctx)
+				logger.Info("events bus redis fan-out enabled", "channel", events.DefaultRedisChannel)
+			}
+		}
 	}
 	streamTicketHandler := handler.NewStreamTicketHandler(streamTickets)
 	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
@@ -1306,6 +1404,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Wire the asynq client into the alerting handler so the "Test Channel"
 	// endpoint can dispatch a real notification:send task.
 	deps.Alerting.SetEnqueuer(queue)
+	if deps.SettingsCache != nil {
+		deps.Alerting.SetSettingsCache(deps.SettingsCache)
+		// AUTH-R01: live password.min_length / complexity for create/change/reset.
+		if deps.Auth != nil {
+			deps.Auth.SetSettingsCache(deps.SettingsCache)
+		}
+		if deps.Resources != nil {
+			deps.Resources.SetSettingsCache(deps.SettingsCache)
+		}
+	}
 	// Migration 063 — read-side audit. The PolicyEvaluator is shared
 	// between the middleware and the admin handler so policy writes
 	// invalidate the 30s cache. Both are nil-safe; when queries are
@@ -1381,6 +1489,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// token fallback and the preferred one-use stream-ticket validator.
 	deps.EventStream.SetAuth(jwtManager, queries)
 	deps.EventStream.SetStreamTickets(deps.StreamTicketStore)
+	deps.EventStream.SetAuthorization(rbacEngine, rbacQuerier)
 	// Group-sync admin re-sync mutates the user's bindings; share the
 	// same RBAC cache invalidator the SSO + user handlers use so the
 	// effect is immediate on the next authenticated request.
@@ -1508,14 +1617,25 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	reconcileCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	monitoringHandler.StartReconciler(reconcileCtx)
-	argocdHandler.StartReconciler(reconcileCtx)
-	backupHandler.StartReconciler(reconcileCtx)
-	toolHandler.StartReconciler(reconcileCtx)
-	catalogHandler.StartReconciler(reconcileCtx)
-	loggingHandler.StartReconciler(reconcileCtx)
-	controlPlaneHandler.StartEvaluator(reconcileCtx)
-	workloadHandler.StartReconciler(reconcileCtx)
+	// CORR-R06: under multi-replica server, only one pod runs reconcilers.
+	// Atomic claims (CORR-R01) still protect correctness when leadership is
+	// briefly dual or unavailable; this reduces N× list/claim load.
+	startServerReconcilers := func(ctx context.Context) {
+		monitoringHandler.StartReconciler(ctx)
+		argocdHandler.StartReconciler(ctx)
+		backupHandler.StartReconciler(ctx)
+		toolHandler.StartReconciler(ctx)
+		catalogHandler.StartReconciler(ctx)
+		loggingHandler.StartReconciler(ctx)
+		controlPlaneHandler.StartEvaluator(ctx)
+		workloadHandler.StartReconciler(ctx)
+	}
+	if cfg.ServerReplicas > 1 && database != nil {
+		elector := leader.New(database.Pool(), logger)
+		go runServerReconcilerLeader(reconcileCtx, elector, logger, startServerReconcilers)
+	} else {
+		startServerReconcilers(reconcileCtx)
+	}
 	// A4: reap expired connect-failure buckets so the limiter map stays bounded.
 	connLimiter.StartJanitor(reconcileCtx, 0)
 	// Migration 048: kick off the webhook bus tap if wired. Subscribes
@@ -1700,7 +1820,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Reconcile the blessed catalog (astronomer-catalog/catalog.yaml) into the
 	// default helm_repositories + catalog_blessed_charts overlays. Best-effort:
 	// a blank URL is a no-op, and any fetch/parse error keeps the existing rows.
-	if n, err := catalog.Load(reconcileCtx, queries, &http.Client{Timeout: 15 * time.Second}, cfg.CatalogURL); err != nil {
+	if n, err := catalog.Load(reconcileCtx, queries, httpclient.SafeClient(15*time.Second), cfg.CatalogURL); err != nil {
 		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "url", cfg.CatalogURL, "error", err)
 	} else if n > 0 {
 		logger.Info("blessed catalog reconciled", "entries", n, "url", cfg.CatalogURL)

@@ -1,18 +1,24 @@
-// Package events implements an in-memory pub/sub bus used to push lifecycle
-// events to long-lived API consumers (SSE / WebSocket subscribers).
+// Package events implements a pub/sub bus used to push lifecycle events to
+// long-lived API consumers (SSE / WebSocket subscribers) and local taps
+// (webhooks, SIEM). The bus is lossy on slow consumers.
 //
-// The bus is intentionally minimal: events are best-effort and slow consumers
-// drop frames rather than block the producer.
+// Multi-replica: when a Redis client is attached via AttachRedis, Publish
+// also fans out to other server pods. Remote replicas re-inject with
+// Event.Remote=true so webhook/SIEM taps (which must not double-deliver)
+// skip them; SSE consumers still receive them.
 package events
 
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/redis/go-redis/v9"
 )
 
 // Type is the event-type discriminator used by clients to filter / dispatch.
@@ -77,42 +83,171 @@ const (
 	TypeClusterRegistrationPhase Type = "cluster.registration.phase"
 )
 
+// DefaultRedisChannel is the pub/sub channel for cross-pod event fan-out.
+const DefaultRedisChannel = "astronomer:events:v1"
+
 // Event is a single push payload. Data is opaque JSON-marshalable per Type.
 type Event struct {
 	ID   uint64    `json:"id"`
 	Type Type      `json:"type"`
 	Time time.Time `json:"time"`
 	Data any       `json:"data,omitempty"`
+	// Remote is true when the event was injected from another server pod via
+	// Redis. Webhook/SIEM taps MUST skip Remote events to avoid double delivery;
+	// SSE consumers should deliver them.
+	Remote bool `json:"remote,omitempty"`
+	// Origin identifies the publishing pod (best-effort; used for echo suppress).
+	Origin string `json:"origin,omitempty"`
 }
 
-// Bus is a multi-subscriber, lossy-on-slow-consumer in-memory pub/sub.
+// Bus is a multi-subscriber, lossy-on-slow-consumer pub/sub with optional
+// Redis fan-out for multi-replica SSE.
 type Bus struct {
 	mu     sync.RWMutex
 	subs   map[*subscription]struct{}
 	nextID atomic.Uint64
+
+	rdb     redis.UniversalClient
+	channel string
+	origin  string
+	log     *slog.Logger
 }
 
 type subscription struct {
 	ch chan Event
 }
 
-// NewBus constructs a Bus.
-func NewBus() *Bus {
-	return &Bus{subs: make(map[*subscription]struct{})}
+// redisWire is the payload published to Redis (stable JSON).
+type redisWire struct {
+	ID     uint64          `json:"id"`
+	Type   Type            `json:"type"`
+	Time   time.Time       `json:"time"`
+	Data   json.RawMessage `json:"data,omitempty"`
+	Origin string          `json:"origin"`
 }
 
-// Publish broadcasts e to every active subscriber. Slow subscribers (channel
-// full) drop the event rather than block the publisher.
+// NewBus constructs a Bus.
+func NewBus() *Bus {
+	origin, _ := os.Hostname()
+	if origin == "" {
+		origin = "unknown"
+	}
+	return &Bus{
+		subs:   make(map[*subscription]struct{}),
+		origin: origin,
+		log:    slog.Default(),
+	}
+}
+
+// AttachRedis enables cross-pod fan-out. Safe to call once at startup.
+// rdb may be a *redis.Client or other UniversalClient.
+func (b *Bus) AttachRedis(rdb redis.UniversalClient, channel string, log *slog.Logger) {
+	if b == nil || rdb == nil {
+		return
+	}
+	if channel == "" {
+		channel = DefaultRedisChannel
+	}
+	if log != nil {
+		b.log = log
+	}
+	b.rdb = rdb
+	b.channel = channel
+}
+
+// StartRedisRelay subscribes to the Redis channel and re-injects remote events
+// into the local bus with Remote=true. Blocks until ctx is cancelled.
+func (b *Bus) StartRedisRelay(ctx context.Context) {
+	if b == nil || b.rdb == nil {
+		return
+	}
+	ch := b.channel
+	if ch == "" {
+		ch = DefaultRedisChannel
+	}
+	pubsub := b.rdb.Subscribe(ctx, ch)
+	defer func() { _ = pubsub.Close() }()
+
+	msgCh := pubsub.Channel()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-msgCh:
+			if !ok {
+				return
+			}
+			if msg == nil || msg.Payload == "" {
+				continue
+			}
+			var wire redisWire
+			if err := json.Unmarshal([]byte(msg.Payload), &wire); err != nil {
+				if b.log != nil {
+					b.log.Debug("events redis: bad payload", "error", err)
+				}
+				continue
+			}
+			if wire.Origin != "" && wire.Origin == b.origin {
+				continue // echo of our own publish
+			}
+			var data any
+			if len(wire.Data) > 0 {
+				data = json.RawMessage(wire.Data)
+			}
+			e := Event{
+				ID:     wire.ID,
+				Type:   wire.Type,
+				Time:   wire.Time,
+				Data:   data,
+				Remote: true,
+				Origin: wire.Origin,
+			}
+			if e.ID == 0 {
+				e.ID = b.nextID.Add(1)
+			}
+			if e.Time.IsZero() {
+				e.Time = time.Now().UTC()
+			}
+			b.broadcastLocal(e)
+		}
+	}
+}
+
+// Publish broadcasts e to every active local subscriber and, when Redis is
+// attached, to sibling pods. Local taps see Remote=false; remote pods inject
+// with Remote=true.
 func (b *Bus) Publish(t Type, data any) {
 	if b == nil {
 		return
 	}
 	e := Event{
-		ID:   b.nextID.Add(1),
-		Type: t,
-		Time: time.Now().UTC(),
-		Data: data,
+		ID:     b.nextID.Add(1),
+		Type:   t,
+		Time:   time.Now().UTC(),
+		Data:   data,
+		Origin: b.origin,
 	}
+	b.broadcastLocal(e)
+	b.publishRedis(e)
+}
+
+// PublishRemote injects an already-built remote event for tests (Remote=true).
+func (b *Bus) PublishRemote(t Type, data any) {
+	if b == nil {
+		return
+	}
+	e := Event{
+		ID:     b.nextID.Add(1),
+		Type:   t,
+		Time:   time.Now().UTC(),
+		Data:   data,
+		Remote: true,
+		Origin: "test-remote",
+	}
+	b.broadcastLocal(e)
+}
+
+func (b *Bus) broadcastLocal(e Event) {
 	b.mu.RLock()
 	for s := range b.subs {
 		select {
@@ -122,6 +257,39 @@ func (b *Bus) Publish(t Type, data any) {
 		}
 	}
 	b.mu.RUnlock()
+}
+
+func (b *Bus) publishRedis(e Event) {
+	if b.rdb == nil {
+		return
+	}
+	ch := b.channel
+	if ch == "" {
+		ch = DefaultRedisChannel
+	}
+	var dataRaw json.RawMessage
+	if e.Data != nil {
+		raw, err := json.Marshal(e.Data)
+		if err != nil {
+			return
+		}
+		dataRaw = raw
+	}
+	payload, err := json.Marshal(redisWire{
+		ID:     e.ID,
+		Type:   e.Type,
+		Time:   e.Time,
+		Data:   dataRaw,
+		Origin: e.Origin,
+	})
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := b.rdb.Publish(ctx, ch, payload).Err(); err != nil && b.log != nil {
+		b.log.Debug("events redis publish failed", "error", err)
+	}
 }
 
 // Subscribe returns a channel that receives events until ctx is cancelled.

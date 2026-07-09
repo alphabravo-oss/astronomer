@@ -20,6 +20,10 @@ type Querier interface {
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
 	AggregateClusterVulnerabilities(ctx context.Context, clusterID uuid.UUID) (AggregateClusterVulnerabilitiesRow, error)
 	AggregateFleetVulnerabilities(ctx context.Context) (AggregateFleetVulnerabilitiesRow, error)
+	// Per-cluster critical/high/report_count aggregate for the whole fleet
+	// in one pass. Batched equivalent of AggregateClusterVulnerabilities so
+	// the compliance-posture rollup avoids one query per cluster.
+	AggregateVulnerabilitiesPerCluster(ctx context.Context) ([]AggregateVulnerabilitiesPerClusterRow, error)
 	// Atomic archive-then-delete used by the decommission archive_audit phase.
 	//
 	// A single statement so both halves see ONE snapshot: to_archive pins the exact
@@ -248,7 +252,9 @@ type Querier interface {
 	//
 	// The handler enqueues a row via CreateClusterDecommission; the worker
 	// claims it via MarkClusterDecommissionRunning (which bumps `attempts` and
-	// sets `started_at`), records per-phase progress via UpdateClusterDecommissionPhases,
+	// stamps `started_at` ONCE via COALESCE — preserved across re-claims so the
+	// graceExhausted wall-clock backstop measures from first claim, not last),
+	// records per-phase progress via UpdateClusterDecommissionPhases,
 	// and finally MarkClusterDecommissionSucceeded / MarkClusterDecommissionFailed
 	// when all phases are done. The `phases` JSONB blob is rewritten in full each
 	// time the reconciler advances — it's small and JSONB merge primitives in
@@ -929,6 +935,10 @@ type Querier interface {
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
+	// Latest CIS scan per cluster in one pass, mirroring the per-cluster
+	// "ORDER BY created_at DESC LIMIT 1" selection but batched across the
+	// whole fleet for the compliance-posture rollup.
+	LatestCISScanPerCluster(ctx context.Context) ([]LatestCISScanPerClusterRow, error)
 	// Every API token row with user identity LEFT-JOINed in and the hash
 	// + raw secret material stripped. `is_revoked = false` is NOT
 	// filtered — auditors need the historical record of issued
@@ -1107,6 +1117,11 @@ type Querier interface {
 	// are the canonical source-of-truth for the contract.
 	ListClusterGroups(ctx context.Context) ([]ClusterGroup, error)
 	ListClusterGroupsAsTree(ctx context.Context) ([]ListClusterGroupsAsTreeRow, error)
+	// Fleet-wide set of cluster_ids that have at least one security policy
+	// row. Unbounded (no LIMIT/OFFSET) so the compliance-posture rollup can
+	// answer "does this cluster have a policy?" for any fleet size in one
+	// query instead of a per-cluster page that silently caps at 10 rows.
+	ListClusterIDsWithSecurityPolicy(ctx context.Context) ([]uuid.UUID, error)
 	ListClusterRegistrationSteps(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistrationStep, error)
 	// Migration 050: multi-registry-per-cluster CRUD. The legacy
 	// Get/Upsert/Delete by cluster_id above is kept for back-compat with the old
@@ -1167,9 +1182,17 @@ type Querier interface {
 	// All non-decommissioned clusters. The orchestrator's selector
 	// evaluator walks this list in Go (matchLabels intersection is a
 	// string-map comparison that's easier to reason about than a JSONB
-	// predicate, and the cluster count never exceeds a few thousand
-	// in any deployment we've seen).
+	// predicate). CORR-R05: hard safety valve LIMIT 10000 — callers that
+	// receive a full page must fail the op rather than silently truncate.
+	//
+	// group_id (migration 066) is the at-most-one cluster_groups
+	// membership; the orchestrator maps it into the candidate's GroupIDs
+	// slice so matchGroupIDs selectors can resolve.
 	ListClustersForSelectorEvaluation(ctx context.Context) ([]ListClustersForSelectorEvaluationRow, error)
+	// PERF-03: callers that only need a page should clamp after fetch (handler
+	// ListClusters uses queryLimit). Delete uses the full result for audit.
+	// A hard safety LIMIT keeps a pathological tree from materializing unbounded
+	// rows into the Go process even when the handler forgets to clamp.
 	ListClustersInGroupTree(ctx context.Context, id uuid.UUID) ([]ListClustersInGroupTreeRow, error)
 	ListConnectionsByCluster(ctx context.Context, arg ListConnectionsByClusterParams) ([]AgentConnection, error)
 	ListControlPlaneAlerts(ctx context.Context, arg ListControlPlaneAlertsParams) ([]ControlPlaneAlert, error)
@@ -1544,6 +1567,7 @@ type Querier interface {
 	MarkArgoCDOperationSuperseded(ctx context.Context, arg MarkArgoCDOperationSupersededParams) (ArgocdOperation, error)
 	MarkCatalogOperationCompleted(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	MarkCatalogOperationFailed(ctx context.Context, arg MarkCatalogOperationFailedParams) (CatalogOperation, error)
+	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 	MarkCatalogOperationRunning(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	MarkCatalogOperationSuperseded(ctx context.Context, arg MarkCatalogOperationSupersededParams) (CatalogOperation, error)
 	MarkCloudCredentialMaterializationApplied(ctx context.Context, id uuid.UUID) error
@@ -1607,10 +1631,12 @@ type Querier interface {
 	MarkInstalledChartDrift(ctx context.Context, arg MarkInstalledChartDriftParams) error
 	MarkLoggingOperationCompleted(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	MarkLoggingOperationFailed(ctx context.Context, arg MarkLoggingOperationFailedParams) (LoggingOperation, error)
+	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 	MarkLoggingOperationRunning(ctx context.Context, id uuid.UUID) (LoggingOperation, error)
 	MarkLoggingOperationSuperseded(ctx context.Context, arg MarkLoggingOperationSupersededParams) (LoggingOperation, error)
 	MarkMonitoringOperationCompleted(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	MarkMonitoringOperationFailed(ctx context.Context, arg MarkMonitoringOperationFailedParams) (MonitoringOperation, error)
+	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 	MarkMonitoringOperationRunning(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	MarkMonitoringOperationSuperseded(ctx context.Context, arg MarkMonitoringOperationSupersededParams) (MonitoringOperation, error)
 	// Atomic transition used by the reconciler + drift check. When
@@ -1624,6 +1650,11 @@ type Querier interface {
 	MarkSnapshotScheduleRan(ctx context.Context, arg MarkSnapshotScheduleRanParams) error
 	MarkToolOperationCompleted(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	MarkToolOperationFailed(ctx context.Context, arg MarkToolOperationFailedParams) (ToolOperation, error)
+	// Atomic claim (CORR-R01): only transition an op that is still claimable —
+	// either 'pending', or a 'running' op whose lease is stale (started_at older
+	// than the 1-minute fresh-running window). Under HA (server.replicaCount>1)
+	// two reconcilers can ListPending the same row; the first UPDATE wins and the
+	// second gets pgx.ErrNoRows so claimLatestOperations skips it.
 	MarkToolOperationRunning(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	MarkToolOperationSuperseded(ctx context.Context, arg MarkToolOperationSupersededParams) (ToolOperation, error)
 	// Final-state UPDATE on a 2xx. response_status/response_body capture
@@ -1639,6 +1670,7 @@ type Querier interface {
 	MarkWebhookDeliveryFailed(ctx context.Context, arg MarkWebhookDeliveryFailedParams) error
 	MarkWorkloadOperationCompleted(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationFailed(ctx context.Context, arg MarkWorkloadOperationFailedParams) (WorkloadOperation, error)
+	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
@@ -1808,7 +1840,9 @@ type Querier interface {
 	UpdateBackupFailed(ctx context.Context, arg UpdateBackupFailedParams) error
 	UpdateBackupSchedule(ctx context.Context, arg UpdateBackupScheduleParams) (BackupSchedule, error)
 	UpdateBackupScheduleLastBackup(ctx context.Context, arg UpdateBackupScheduleLastBackupParams) error
-	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
+	// CORR-05: only transition out of non-terminal pending/queued states so a
+	// concurrent reconciler cannot re-stamp a completed/failed backup as running.
+	UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
 	UpdateCloudCredential(ctx context.Context, arg UpdateCloudCredentialParams) (CloudCredential, error)
@@ -1886,7 +1920,8 @@ type Querier interface {
 	UpdatePrometheusDatasource(ctx context.Context, arg UpdatePrometheusDatasourceParams) (PrometheusDatasource, error)
 	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
 	UpdateRestoreOperationFailed(ctx context.Context, arg UpdateRestoreOperationFailedParams) error
-	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
+	// CORR-05 / CORR-R03: CAS status transition for restores (see UpdateBackupStarted).
+	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	// Full replacement update (PUT semantics). The handler preserves the
 	// existing auth_encrypted when the admin didn't re-supply it (sentinel
 	// pattern, analogous to webhook_subscriptions.secret_encrypted).

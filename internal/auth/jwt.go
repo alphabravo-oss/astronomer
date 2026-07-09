@@ -81,6 +81,14 @@ type JWTManager struct {
 	accessTokenLifetime  time.Duration
 	refreshTokenLifetime time.Duration
 
+	// accessTTLProvider, when set, is consulted on every access-token mint
+	// (DIR-05 / AUTH-R02) so platform setting session.timeout_minutes is
+	// applied for password login, SSO, TOTP complete, and refresh without
+	// each caller remembering to re-read settings. Returning <=0 keeps the
+	// configured accessTokenLifetime.
+	accessTTLMu       sync.RWMutex
+	accessTTLProvider func(ctx context.Context) time.Duration
+
 	// revocations is the deny-list backend. Optional — when nil, only
 	// signature + expiry checks run. The HTTP layer attaches it via
 	// SetRevocationChecker after construction so the auth package
@@ -213,9 +221,66 @@ func (m *JWTManager) GenerateTokenPair(userID uuid.UUID) (accessToken, refreshTo
 	return accessToken, refreshToken, nil
 }
 
+// SetAccessTokenTTL updates the access-token lifetime used for subsequent
+// mint/refresh. DIR-05: compliance baseline session.timeout_minutes is applied
+// here at runtime without restarting the process.
+func (m *JWTManager) SetAccessTokenTTL(d time.Duration) {
+	if m == nil || d <= 0 {
+		return
+	}
+	m.accessTTLMu.Lock()
+	m.accessTokenLifetime = d
+	m.accessTTLMu.Unlock()
+}
+
+// SetAccessTokenTTLProvider wires a runtime resolver (typically reading
+// platform setting session.timeout_minutes). Consulted on every access-token
+// mint so SSO/TOTP/password/refresh all honor the same absolute TTL.
+func (m *JWTManager) SetAccessTokenTTLProvider(fn func(ctx context.Context) time.Duration) {
+	if m == nil {
+		return
+	}
+	m.accessTTLMu.Lock()
+	m.accessTTLProvider = fn
+	m.accessTTLMu.Unlock()
+}
+
+// AccessTokenTTL returns the current access-token lifetime (boot/default or
+// last SetAccessTokenTTL value). Runtime provider overrides are applied only
+// at mint time via effectiveAccessTTL.
+func (m *JWTManager) AccessTokenTTL() time.Duration {
+	if m == nil {
+		return 0
+	}
+	m.accessTTLMu.RLock()
+	defer m.accessTTLMu.RUnlock()
+	return m.accessTokenLifetime
+}
+
+// effectiveAccessTTL returns the lifetime used for the next access token.
+// Provider wins when it returns a positive duration (AUTH-R02).
+func (m *JWTManager) effectiveAccessTTL(ctx context.Context) time.Duration {
+	if m == nil {
+		return 0
+	}
+	m.accessTTLMu.RLock()
+	provider := m.accessTTLProvider
+	base := m.accessTokenLifetime
+	m.accessTTLMu.RUnlock()
+	if provider != nil {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if d := provider(ctx); d > 0 {
+			return d
+		}
+	}
+	return base
+}
+
 // GenerateAccessToken creates an access token
 func (m *JWTManager) GenerateAccessToken(userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, AccessToken, m.accessTokenLifetime)
+	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(context.Background()))
 }
 
 // GenerateRefreshToken creates a refresh token

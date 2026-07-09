@@ -10,8 +10,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 )
 
 // TapQuerier is the database surface the bus tap needs. *sqlc.Queries
@@ -76,6 +78,10 @@ func (t *Tap) Start(ctx context.Context) {
 // HandleEvent is the per-event hot path. Public so tests can drive the
 // Tap without spinning up a real Bus.
 func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
+	// CORR-R02: only the publishing pod enqueues webhook deliveries.
+	if ev.Remote {
+		return
+	}
 	subs, err := t.subscriptions(ctx)
 	if err != nil {
 		t.log.WarnContext(ctx, "webhook tap: list subscriptions failed",
@@ -87,11 +93,14 @@ func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
 	}
 	eventName := string(ev.Type)
 	now := time.Now().UTC()
+	// SEC-R09: redact secret-shaped keys before persisting the delivery
+	// payload so webhook_deliveries never stores live credentials.
+	detail := redactEventDetail(ev.Data)
 	payload, err := json.Marshal(eventEnvelope{
 		EventName: eventName,
 		EventID:   fmt.Sprintf("%d", ev.ID),
 		Timestamp: ev.Time,
-		Detail:    events.RawJSON(ev.Data),
+		Detail:    events.RawJSON(detail),
 	})
 	if err != nil {
 		t.log.WarnContext(ctx, "webhook tap: marshal event failed",
@@ -181,4 +190,20 @@ type eventEnvelope struct {
 	EventID   string          `json:"event_id"`
 	Timestamp time.Time       `json:"timestamp"`
 	Detail    json.RawMessage `json:"detail,omitempty"`
+}
+
+// redactEventDetail strips credential-shaped keys from an event payload
+// before it is written to webhook_deliveries (SEC-R09). Prefer audit
+// sanitize for map-shaped audit details; fall back to redaction.Payload
+// for other JSON-like shapes.
+func redactEventDetail(data any) any {
+	if data == nil {
+		return nil
+	}
+	switch typed := data.(type) {
+	case map[string]any:
+		return audit.SanitizeDetail(typed)
+	default:
+		return redaction.Payload(data)
+	}
 }

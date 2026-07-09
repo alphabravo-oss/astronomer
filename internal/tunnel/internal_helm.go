@@ -141,7 +141,8 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.MsgType {
 	case protocol.MsgHelmInstall, protocol.MsgHelmUpgrade,
-		protocol.MsgHelmUninstall, protocol.MsgHelmRollback, protocol.MsgHelmStatus:
+		protocol.MsgHelmUninstall, protocol.MsgHelmRollback, protocol.MsgHelmStatus,
+		protocol.MsgHelmHistory:
 	default:
 		http.Error(w, `{"error":"invalid helm message type"}`, http.StatusBadRequest)
 		return

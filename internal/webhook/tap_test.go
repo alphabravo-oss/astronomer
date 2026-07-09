@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -141,6 +142,57 @@ func TestEventBusTap_CacheRefreshOnInvalidate(t *testing.T) {
 	// Both subscriptions match now → cumulative inserts = 1 (first event) + 2 (second event) = 3.
 	if got := len(q.inserted); got != 3 {
 		t.Errorf("after invalidate: cumulative inserts = %d, want 3", got)
+	}
+}
+
+// SEC-R09: secret-shaped keys in event detail must be redacted before insert.
+func TestEventBusTap_RedactsSecretShapedPayload(t *testing.T) {
+	q := &fakeTapQuerier{
+		subs: []sqlc.WebhookSubscription{
+			newTapSubscription("audit-all", []string{"audit.*"}),
+		},
+	}
+	tap := NewTap(q, nil, nil)
+	tap.SetCacheTTL(time.Millisecond)
+	tap.HandleEvent(context.Background(), events.Event{
+		ID:   1,
+		Type: "audit.user.login",
+		Time: time.Now().UTC(),
+		Data: map[string]any{
+			"user":     "alice",
+			"password": "super-secret-value",
+			"token":    "tok-abc",
+			"nested": map[string]any{
+				"client_secret": "still-secret",
+			},
+		},
+	})
+	if got := len(q.inserted); got != 1 {
+		t.Fatalf("expected 1 insert, got %d", got)
+	}
+	var env struct {
+		Detail map[string]any `json:"detail"`
+	}
+	if err := json.Unmarshal(q.inserted[0].Payload, &env); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if env.Detail["password"] != "[redacted]" {
+		t.Errorf("password = %v, want [redacted]", env.Detail["password"])
+	}
+	if env.Detail["token"] != "[redacted]" {
+		t.Errorf("token = %v, want [redacted]", env.Detail["token"])
+	}
+	if env.Detail["user"] != "alice" {
+		t.Errorf("non-secret user field must pass through, got %v", env.Detail["user"])
+	}
+	nested, _ := env.Detail["nested"].(map[string]any)
+	if nested == nil || nested["client_secret"] != "[redacted]" {
+		t.Errorf("nested client_secret = %v, want [redacted]", nested)
+	}
+	// Ensure the raw secret never appears anywhere in the stored JSON.
+	raw := string(q.inserted[0].Payload)
+	if strings.Contains(raw, "super-secret-value") || strings.Contains(raw, "still-secret") {
+		t.Errorf("payload leaked secret material: %s", raw)
 	}
 }
 

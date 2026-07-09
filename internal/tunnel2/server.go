@@ -21,10 +21,12 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/rancher/remotedialer"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth"
 )
 
 // A4 audit actions, shared verbatim with the hub connect path so both connect
@@ -117,10 +119,11 @@ func NewRemoteServer(logger *slog.Logger, validator tunnel.AgentTokenValidator) 
 //
 // We extract the cluster_id from (in priority order) the URL chi router param,
 // the ?cluster_id= query, or the X-Cluster-ID header. We extract the bearer
-// token from the Authorization header. The token is validated against the
-// cluster_registration_tokens table and the token row's cluster_id MUST match
-// the requested cluster_id. The returned clientKey is the cluster UUID string
-// — that is what callers pass to DialerFor / HasSession.
+// token from the Authorization header. Credential checks share hub A3 logic
+// via connectauth.Validate: post-adoption registration tokens are rejected,
+// durable agent tokens (hashed) are accepted, and the token's cluster_id MUST
+// match the requested cluster_id. The returned clientKey is the cluster UUID
+// string — that is what callers pass to DialerFor / HasSession.
 func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedialer.Authorizer {
 	log := s.log
 	return func(req *http.Request) (string, bool, error) {
@@ -152,39 +155,47 @@ func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedia
 			return clusterID, true, nil
 		}
 
-		tokenRecord, err := validator.GetRegistrationTokenByToken(req.Context(), token)
+		clusterUUID, err := uuid.Parse(clusterID)
+		if err != nil {
+			// Malformed cluster UUID is a cheap PRE-DB rejection, not a
+			// credential probe — do not count it against the limiter.
+			return "", false, fmt.Errorf("invalid cluster_id")
+		}
+
+		// SEC-R01: same A3 validation as the hub (adoption gate + durable hash).
+		res, err := connectauth.Validate(req.Context(), validator, clusterUUID, token)
 		if err != nil {
 			// A4 / M5+M6: a failed DB-backed token lookup is the probe surface —
 			// count it (shared per-IP view) and audit it (fail-open).
 			if s.limiter != nil {
 				s.limiter.Fail(ipKey)
 			}
-			s.recordAuthFailed(req.Context(), clusterID, ipAddr, req, "invalid registration token")
-			log.Warn("tunnel2: invalid registration token",
+			s.recordAuthFailed(req.Context(), clusterID, ipAddr, req, err.Error())
+			log.Warn("tunnel2: agent authentication failed",
 				slog.String("cluster_id", clusterID),
 				slog.String("error", err.Error()),
 			)
-			return "", false, fmt.Errorf("invalid registration token")
+			return "", false, err
 		}
-		if tokenRecord.ClusterID.String() != clusterID {
-			if s.limiter != nil {
-				s.limiter.Fail(ipKey)
+
+		// Best-effort adoption stamp when a durable authenticates (mirrors hub).
+		if res.Kind == connectauth.KindAgent && res.AgentToken.ID != uuid.Nil {
+			if err := validator.MarkClusterAgentTokenAdopted(req.Context(), res.AgentToken.ID); err != nil {
+				log.Warn("tunnel2: failed to mark cluster agent token adopted",
+					slog.String("cluster_id", clusterID),
+					slog.String("error", err.Error()),
+				)
 			}
-			s.recordAuthFailed(req.Context(), clusterID, ipAddr, req, "registration token does not match cluster")
-			log.Warn("tunnel2: registration token cluster mismatch",
-				slog.String("expected_cluster_id", tokenRecord.ClusterID.String()),
-				slog.String("provided_cluster_id", clusterID),
-			)
-			return "", false, fmt.Errorf("registration token does not match cluster")
 		}
 
 		// Success: clear this IP's failure history and audit the connect.
 		if s.limiter != nil {
 			s.limiter.Reset(ipKey)
 		}
-		s.recordConnected(req.Context(), clusterID, ipAddr, req)
+		s.recordConnected(req.Context(), clusterID, ipAddr, req, res.Kind)
 		log.Info("tunnel2: agent authorized",
 			slog.String("cluster_id", clusterID),
+			slog.String("token_kind", connectauth.TokenKindLabel(res.Kind)),
 		)
 		return clusterID, true, nil
 	}
@@ -195,7 +206,7 @@ func (s *RemoteServer) authorize(validator tunnel.AgentTokenValidator) remotedia
 // only sees the HTTP upgrade request, which carries no agent_version (that
 // arrives in post-upgrade frames remotedialer abstracts away), so the version
 // is omitted here — the hub path records it for the deployed agent.
-func (s *RemoteServer) recordConnected(ctx context.Context, clusterID string, ipAddr *netip.Addr, r *http.Request) {
+func (s *RemoteServer) recordConnected(ctx context.Context, clusterID string, ipAddr *netip.Addr, r *http.Request, tokenKind string) {
 	q, ok := s.validator.(audit.Querier)
 	if !ok {
 		return
@@ -213,7 +224,7 @@ func (s *RemoteServer) recordConnected(ctx context.Context, clusterID string, ip
 		Detail: map[string]any{
 			"cluster_id": clusterID,
 			"source_ip":  ipString(ipAddr),
-			"token_kind": "registration",
+			"token_kind": connectauth.TokenKindLabel(tokenKind),
 			"transport":  "remotedialer",
 		},
 	})

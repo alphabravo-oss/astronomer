@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -247,6 +248,33 @@ func TestJWTManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
+	}
+}
+
+// AUTH-R02: session.timeout_minutes provider is applied at access-token mint
+// without requiring each caller to SetAccessTokenTTL first.
+func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
+	mgr := NewJWTManager("ttl-provider-secret", 60) // boot default 60m
+	mgr.SetAccessTokenTTLProvider(func(context.Context) time.Duration {
+		return 15 * time.Minute
+	})
+	userID := uuid.New()
+	token, err := mgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatalf("GenerateAccessToken: %v", err)
+	}
+	claims, err := mgr.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	expected := time.Now().Add(15 * time.Minute)
+	diff := claims.ExpiresAt.Sub(expected)
+	if diff < -5*time.Second || diff > 5*time.Second {
+		t.Errorf("expiry %v not within 5s of provider TTL %v (diff %v)", claims.ExpiresAt.Time, expected, diff)
+	}
+	// Boot TTL unchanged; provider only affects mint.
+	if mgr.AccessTokenTTL() != 60*time.Minute {
+		t.Errorf("AccessTokenTTL() = %v, want 60m base", mgr.AccessTokenTTL())
 	}
 }
 

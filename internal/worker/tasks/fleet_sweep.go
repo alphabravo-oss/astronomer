@@ -66,3 +66,25 @@ func fanOutClusters(ctx context.Context, clusters []sqlc.Cluster, perCluster tim
 	}
 	_ = g.Wait() // goroutines never return an error, so this never errors
 }
+
+// fleetSweepPageSize matches health_check paging so full-fleet sweeps never
+// silently drop clusters past a hard 1000-row cap (PERF-01).
+const fleetSweepPageSize int32 = 500
+
+// listAllClustersPaged loads every non-decommissioned cluster via LIMIT/OFFSET
+// pages. Prefer this over a single ListClusters(Limit:1000) for any fleet-wide
+// worker sweep.
+func listAllClustersPaged(ctx context.Context, list func(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error)) ([]sqlc.Cluster, error) {
+	var all []sqlc.Cluster
+	for offset := int32(0); ; offset += fleetSweepPageSize {
+		page, err := list(ctx, sqlc.ListClustersParams{Limit: fleetSweepPageSize, Offset: offset})
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if int32(len(page)) < fleetSweepPageSize {
+			break
+		}
+	}
+	return all, nil
+}

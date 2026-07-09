@@ -85,8 +85,12 @@ func HandleRunRestore(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("%s", msg)
 	}
 
-	if err := q.UpdateRestoreOperationStarted(ctx, op.ID); err != nil {
+	n, err := q.UpdateRestoreOperationStarted(ctx, op.ID)
+	if err != nil {
 		return fmt.Errorf("marking restore started: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("restore %s not claimable (already running or terminal)", op.ID)
 	}
 
 	runtimeLogger().InfoContext(ctx, "restore row marked running; server-side reconciler will drive Velero CR",

@@ -122,10 +122,7 @@ func HandleMeshDetect(ctx context.Context, _ *asynq.Task) error {
 			runtimeLogger().InfoContext(ctx, "mesh detect requester not configured, skipping")
 			return nil
 		}
-		clusters, err := meshDetectDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{
-			Limit:  1000,
-			Offset: 0,
-		})
+		clusters, err := listAllClustersPaged(ctx, meshDetectDeps.Queries.ListClusters)
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}

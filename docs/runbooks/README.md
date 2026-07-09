@@ -14,26 +14,41 @@ Anything reachable from a `runbook_url` annotation on a PrometheusRule
 
 ## Alert-linked runbooks
 
+Anything with a `runbook_url` on a PrometheusRule in
+`deploy/chart/templates/prometheus-rules.yaml` belongs in this table.
+
 | Alert | Runbook |
 |---|---|
 | `AstronomerHighHTTPErrorRate` | [high-http-error-rate.md](high-http-error-rate.md) |
 | `AstronomerWorkerQueueBacklog` | [worker-queue-backlog.md](worker-queue-backlog.md) |
 | `AstronomerWorkerDLQGrowing` | [worker-dlq-growing.md](worker-dlq-growing.md) |
+| `AstronomerTaskOutboxDeadRows` | [task-outbox-stalled.md](task-outbox-stalled.md) |
+| `AstronomerTaskOutboxStalled` | [task-outbox-stalled.md](task-outbox-stalled.md) |
 | `AstronomerDBPoolExhausted` | [db-pool-exhausted.md](db-pool-exhausted.md) |
 | `AstronomerDBDeadlocks` | [db-runtime-contention.md](db-runtime-contention.md) |
 | `AstronomerDBLongTransaction` | [db-runtime-contention.md](db-runtime-contention.md) |
+| `AstronomerMigrationJobLongRunning` | [failed-migration.md](failed-migration.md) |
+| `AstronomerMigrationJobFailed` | [failed-migration.md](failed-migration.md) |
+| `AstronomerPostgresReplicationLagHigh` | [postgres-failover.md](postgres-failover.md) |
 | `AstronomerAgentDisconnected` | [agent-disconnected.md](agent-disconnected.md) |
+| `AstronomerBackupRestoreDrillStale` | [backup-restore-drill-failed.md](backup-restore-drill-failed.md) |
+| `AstronomerBackupRestoreDrillFailed` | [backup-restore-drill-failed.md](backup-restore-drill-failed.md) |
+| `AstronomerManagementBackupStale` | [backup-restore-drill-failed.md](backup-restore-drill-failed.md) |
+| `AstronomerManagementBackupFailed` | [backup-restore-drill-failed.md](backup-restore-drill-failed.md) |
+| `AstronomerAuditEventsDropped` | [audit-events-dropped.md](audit-events-dropped.md) |
+| `AstronomerAuditWriteFailures` | [audit-events-dropped.md](audit-events-dropped.md) |
+| `AstronomerSIEMEventsDropped` | [siem-events-dropped.md](siem-events-dropped.md) |
+| `AstronomerManagementLoggingForwarderDown` | [management-logging-down.md](management-logging-down.md) |
+| `AstronomerClusterLoggingFlatlined` | [logging-flatlined.md](logging-flatlined.md) |
 | `AstronomerArgoSelfManageDrift` | [argocd-drift.md](argocd-drift.md) |
 
 ## Operational scenarios (no automated alert)
 
 | Scenario | Runbook |
 |---|---|
-| Failed schema migration | [failed-migration.md](failed-migration.md) |
 | cert-manager renewal stuck | [cert-manager-stuck.md](cert-manager-stuck.md) |
 | Agent fleet de-pair / mass-disconnect | [agent-fleet-depair.md](agent-fleet-depair.md) |
 | Redis data loss | [redis-data-loss.md](redis-data-loss.md) |
-| Postgres failover (external DB) | [postgres-failover.md](postgres-failover.md) |
 | OIDC / SSO outage | [oidc-outage.md](oidc-outage.md) |
 | License expiry | [license-expiry.md](license-expiry.md) |
 | Postgres PVC near full | [postgres-disk-full.md](postgres-disk-full.md) |

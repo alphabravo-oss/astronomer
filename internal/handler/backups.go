@@ -41,7 +41,9 @@ type BackupQuerier interface {
 	GetBackupByID(ctx context.Context, id uuid.UUID) (sqlc.Backup, error)
 	CreateBackup(ctx context.Context, arg sqlc.CreateBackupParams) (sqlc.Backup, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg sqlc.UpdateBackupVeleroIdentityParams) error
-	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
+	// UpdateBackupStarted is a CAS claim: rows==0 means another replica already
+	// claimed or the row left pending/queued/created.
+	UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateBackupCompleted(ctx context.Context, arg sqlc.UpdateBackupCompletedParams) error
 	UpdateBackupFailed(ctx context.Context, arg sqlc.UpdateBackupFailedParams) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
@@ -59,7 +61,7 @@ type BackupQuerier interface {
 	ListRunningRestoresForPolling(ctx context.Context, limit int32) ([]sqlc.RestoreOperation, error)
 	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (sqlc.RestoreOperation, error)
 	CreateRestoreOperation(ctx context.Context, arg sqlc.CreateRestoreOperationParams) (sqlc.RestoreOperation, error)
-	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
+	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
 	UpdateRestoreOperationFailed(ctx context.Context, arg sqlc.UpdateRestoreOperationFailedParams) error
 	TouchRestorePolling(ctx context.Context, id uuid.UUID) error
@@ -86,7 +88,9 @@ func NewBackupHandler(queries BackupQuerier) *BackupHandler {
 	return &BackupHandler{
 		queries:    queries,
 		log:        slog.Default(),
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		// SEC-03: S3 connectivity probe dials operator-supplied endpoints;
+		// SafeClient enforces public-IP at dial time (not GuardPublicHost alone).
+		httpClient: httpclient.SafeClient(15 * time.Second),
 	}
 }
 

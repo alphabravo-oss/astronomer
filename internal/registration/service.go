@@ -343,9 +343,16 @@ func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, op
 // compiles and simply falls back to the unconditional update. The method
 // takes positional args (not a generated *Params struct) so this file
 // compiles before the shim is regenerated; the shim's signature must match.
+// phaseCASQuerier matches *sqlc.Queries.UpdateClusterRegistrationPhaseCAS so
+// production wiring actually takes the compare-and-swap path. An earlier
+// positional signature never matched the generated method, so CAS was inert
+// and every Advance fell through to the unconditional UPDATE (CORR-01).
 type phaseCASQuerier interface {
-	UpdateClusterRegistrationPhaseCAS(ctx context.Context, id uuid.UUID, expectedPhase, nextPhase string, startedAt, completedAt pgtype.Timestamptz) (sqlc.UpdateClusterRegistrationPhaseRow, error)
+	UpdateClusterRegistrationPhaseCAS(ctx context.Context, arg sqlc.UpdateClusterRegistrationPhaseCASParams) (sqlc.UpdateClusterRegistrationPhaseCASRow, error)
 }
+
+// Compile-time guard: production *sqlc.Queries must satisfy the CAS path.
+var _ phaseCASQuerier = (*sqlc.Queries)(nil)
 
 // writePhase persists the phase move. When the underlying Querier supports
 // compare-and-swap it writes conditionally on the phase we read (`expected`),
@@ -356,7 +363,13 @@ type phaseCASQuerier interface {
 // preserving legacy behaviour exactly.
 func (s *Service) writePhase(ctx context.Context, clusterID uuid.UUID, expected, next string, startedAt, completedAt pgtype.Timestamptz) (sqlc.UpdateClusterRegistrationPhaseRow, error) {
 	if cas, ok := s.q.(phaseCASQuerier); ok {
-		row, err := cas.UpdateClusterRegistrationPhaseCAS(ctx, clusterID, expected, next, startedAt, completedAt)
+		row, err := cas.UpdateClusterRegistrationPhaseCAS(ctx, sqlc.UpdateClusterRegistrationPhaseCASParams{
+			ID:                      clusterID,
+			RegistrationPhase:       next,
+			RegistrationStartedAt:   startedAt,
+			RegistrationCompletedAt: completedAt,
+			RegistrationPhase_2:     expected,
+		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				// CAS miss: the phase changed under us between our read and
@@ -366,7 +379,13 @@ func (s *Service) writePhase(ctx context.Context, clusterID uuid.UUID, expected,
 			}
 			return sqlc.UpdateClusterRegistrationPhaseRow{}, err
 		}
-		return row, nil
+		return sqlc.UpdateClusterRegistrationPhaseRow{
+			ID:                      row.ID,
+			RegistrationPhase:       row.RegistrationPhase,
+			RegistrationStartedAt:   row.RegistrationStartedAt,
+			RegistrationCompletedAt: row.RegistrationCompletedAt,
+			InstallBaseline:         row.InstallBaseline,
+		}, nil
 	}
 	return s.q.UpdateClusterRegistrationPhase(ctx, sqlc.UpdateClusterRegistrationPhaseParams{
 		ID:                      clusterID,

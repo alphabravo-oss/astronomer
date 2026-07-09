@@ -48,6 +48,13 @@ func (q *argocdRefreshQuerierStub) UpdateArgoCDManagedClusterLabels(_ context.Co
 	return sqlc.ArgocdManagedCluster{}, nil
 }
 
+func (q *argocdRefreshQuerierStub) ListClusters(_ context.Context, _ sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
+	if q.cluster.ID == uuid.Nil {
+		return nil, nil
+	}
+	return []sqlc.Cluster{q.cluster}, nil
+}
+
 // makeRefreshTask wraps the payload marshaling + asynq.Task boilerplate so
 // each test case is a single declarative call.
 func makeRefreshTask(t *testing.T, clusterID uuid.UUID) *asynq.Task {

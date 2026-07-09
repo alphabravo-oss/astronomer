@@ -50,7 +50,7 @@ type RuntimeQuerier interface {
 	DeleteBackup(ctx context.Context, id uuid.UUID) error
 	// Restore execution.
 	GetRestoreOperationByID(ctx context.Context, id uuid.UUID) (sqlc.RestoreOperation, error)
-	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error
+	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error
 	UpdateRestoreOperationFailed(ctx context.Context, arg sqlc.UpdateRestoreOperationFailedParams) error
 
@@ -93,7 +93,7 @@ type RuntimeQuerier interface {
 	UpdateAlertEventStatus(ctx context.Context, arg sqlc.UpdateAlertEventStatusParams) error
 	GetBackupByID(ctx context.Context, id uuid.UUID) (sqlc.Backup, error)
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (sqlc.BackupStorageConfig, error)
-	UpdateBackupStarted(ctx context.Context, id uuid.UUID) error
+	UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateBackupCompleted(ctx context.Context, arg sqlc.UpdateBackupCompletedParams) error
 	UpdateBackupFailed(ctx context.Context, arg sqlc.UpdateBackupFailedParams) error
 	CreateSecurityScanResult(ctx context.Context, arg sqlc.CreateSecurityScanResultParams) (sqlc.SecurityScanResult, error)

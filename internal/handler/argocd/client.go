@@ -27,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -147,13 +148,15 @@ func NewClient(baseURL, token string, opts Options) *Client {
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: !opts.VerifySSL},
+	// SEC-R05: dial-guarded client. Argo CD is commonly in-cluster, so
+	// AllowPrivate is enabled — loopback, link-local, and cloud metadata
+	// remain blocked. VerifySSL=false keeps the existing insecure path
+	// for self-signed management clusters.
+	var tlsCfg *tls.Config
+	if !opts.VerifySSL {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — operator-opt-in
 	}
-	c.httpClient = &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-	}
+	c.httpClient = httpclient.SafeClientAllowPrivateWithTLS(timeout, tlsCfg)
 	return c
 }
 

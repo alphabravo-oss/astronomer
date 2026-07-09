@@ -2374,6 +2374,9 @@ func (h *MonitoringHandler) renderSharedAlertmanagerConfig(ctx context.Context, 
 		"route": map[string]any{
 			"receiver":        "null",
 			"group_by":        []string{"alertname", "astronomer_rule_id", "cluster"},
+			// Defaults match platform_settings alertmanager.* (DIR-08); monitoring
+			// stack render does not currently thread SettingsCache, so keep the
+			// same registry defaults here for parity with AlertingHandler.
 			"group_wait":      "30s",
 			"group_interval":  "5m",
 			"repeat_interval": "3h",

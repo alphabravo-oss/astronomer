@@ -13,7 +13,6 @@ import {
   useHelmChartVersions,
   useInstalledCharts,
   useInstallHelmChart,
-  useUpgradeInstalledChart,
   useUninstallChart,
   useRollbackChart,
   useClusters,
@@ -52,7 +51,6 @@ import {
   Loader2,
   Download,
   RotateCcw,
-  ArrowUpCircle,
   ExternalLink,
   Grid3X3,
   List,
@@ -198,15 +196,7 @@ export default function CatalogPage() {
       header: '',
       accessor: (row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => {
-              /* upgrade would open a modal - for now, just a placeholder action */
-            }}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Upgrade"
-          >
-            <ArrowUpCircle className="h-3.5 w-3.5" />
-          </button>
+          {/* UX-06: hide Upgrade until an upgrade modal / version picker is wired. */}
           <button
             onClick={() => {
               if (row.revision > 1) {

@@ -249,7 +249,7 @@ func (s *syslogTLS) Close() error {
 // "event" key. Auth is `Authorization: Splunk <token>`.
 func NewSplunkHEC(endpoint, token string, client *http.Client) Transport {
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = httpclient.SafeClient(10 * time.Second)
 	}
 	return &splunkHEC{endpoint: endpoint, token: token, client: client}
 }
@@ -323,7 +323,7 @@ func (s *splunkHEC) collectorURL() string {
 // override) come from the forwarder's auth blob + transport defaults.
 func NewNDJSONHTTPS(endpoint string, client *http.Client, headers http.Header) Transport {
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = httpclient.SafeClient(10 * time.Second)
 	}
 	return &ndjsonHTTPS{endpoint: endpoint, client: client, headers: headers}
 }

@@ -387,6 +387,80 @@ func (q *Queries) GetSecurityScanResultByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const latestCISScanPerCluster = `-- name: LatestCISScanPerCluster :many
+SELECT DISTINCT ON (cluster_id)
+    cluster_id,
+    passed,
+    failed,
+    completed_at
+FROM security_scan_results
+WHERE scan_type = 'cis'
+ORDER BY cluster_id, created_at DESC
+`
+
+type LatestCISScanPerClusterRow struct {
+	ClusterID   uuid.UUID          `json:"cluster_id"`
+	Passed      int32              `json:"passed"`
+	Failed      int32              `json:"failed"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+}
+
+// Latest CIS scan per cluster in one pass, mirroring the per-cluster
+// "ORDER BY created_at DESC LIMIT 1" selection but batched across the
+// whole fleet for the compliance-posture rollup.
+func (q *Queries) LatestCISScanPerCluster(ctx context.Context) ([]LatestCISScanPerClusterRow, error) {
+	rows, err := q.db.Query(ctx, latestCISScanPerCluster)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LatestCISScanPerClusterRow{}
+	for rows.Next() {
+		var i LatestCISScanPerClusterRow
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.Passed,
+			&i.Failed,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterIDsWithSecurityPolicy = `-- name: ListClusterIDsWithSecurityPolicy :many
+SELECT DISTINCT cluster_id FROM cluster_security_policies
+`
+
+// Fleet-wide set of cluster_ids that have at least one security policy
+// row. Unbounded (no LIMIT/OFFSET) so the compliance-posture rollup can
+// answer "does this cluster have a policy?" for any fleet size in one
+// query instead of a per-cluster page that silently caps at 10 rows.
+func (q *Queries) ListClusterIDsWithSecurityPolicy(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listClusterIDsWithSecurityPolicy)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var cluster_id uuid.UUID
+		if err := rows.Scan(&cluster_id); err != nil {
+			return nil, err
+		}
+		items = append(items, cluster_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusterSecurityPolicies = `-- name: ListClusterSecurityPolicies :many
 SELECT id, cluster_id, template_id, applied_at, sync_status, error_message, created_at, updated_at FROM cluster_security_policies ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `

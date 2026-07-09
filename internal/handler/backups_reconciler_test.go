@@ -69,11 +69,19 @@ func (q *reconcilerBackupQuerier) GetBackupByID(ctx context.Context, id uuid.UUI
 	return row, nil
 }
 
-func (q *reconcilerBackupQuerier) UpdateBackupStarted(ctx context.Context, id uuid.UUID) error {
-	row := q.backups[id]
-	row.Status = "running"
-	q.backups[id] = row
-	return nil
+func (q *reconcilerBackupQuerier) UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error) {
+	row, ok := q.backups[id]
+	if !ok {
+		return 0, nil
+	}
+	switch row.Status {
+	case "pending", "queued", "created":
+		row.Status = "running"
+		q.backups[id] = row
+		return 1, nil
+	default:
+		return 0, nil
+	}
 }
 
 func (q *reconcilerBackupQuerier) UpdateBackupCompleted(ctx context.Context, arg sqlc.UpdateBackupCompletedParams) error {
@@ -127,11 +135,19 @@ func (q *reconcilerBackupQuerier) GetRestoreOperationByID(ctx context.Context, i
 	return row, nil
 }
 
-func (q *reconcilerBackupQuerier) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error {
-	row := q.restores[id]
-	row.Status = "running"
-	q.restores[id] = row
-	return nil
+func (q *reconcilerBackupQuerier) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error) {
+	row, ok := q.restores[id]
+	if !ok {
+		return 0, nil
+	}
+	switch row.Status {
+	case "pending", "queued", "created":
+		row.Status = "running"
+		q.restores[id] = row
+		return 1, nil
+	default:
+		return 0, nil
+	}
 }
 
 func (q *reconcilerBackupQuerier) UpdateRestoreOperationCompleted(ctx context.Context, id uuid.UUID) error {
@@ -312,5 +328,61 @@ func TestBackupReconcilerFailsRestoreWhenSourceBackupIsNotCompleted(t *testing.T
 	}
 	if !strings.Contains(q.restoreFailed[restoreID], "is not completed") {
 		t.Fatalf("restore failure message = %q", q.restoreFailed[restoreID])
+	}
+}
+
+func TestBackupReconcilerClaimBeforeApplySkipsSecondReplica(t *testing.T) {
+	// CORR-R03: two concurrent reconcilePendingBackup calls for the same pending
+	// row must produce exactly one Velero apply (POST).
+	clusterID := uuid.New()
+	storageID := uuid.New()
+	backupID := uuid.New()
+
+	q := newReconcilerBackupQuerier()
+	q.storages[storageID] = sqlc.BackupStorageConfig{
+		ID:              storageID,
+		ClusterID:       pgtype.UUID{Bytes: clusterID, Valid: true},
+		VeleroNamespace: "velero",
+		BslName:         "primary",
+		Bucket:          "backups",
+		Prefix:          "demo",
+		StorageType:     "s3",
+	}
+	q.backups[backupID] = sqlc.Backup{
+		ID:               backupID,
+		Name:             "team-a",
+		StorageID:        storageID,
+		Status:           "pending",
+		ClusterID:        pgtype.UUID{Bytes: clusterID, Valid: true},
+		VeleroBackupName: "backup-team-a",
+		VeleroNamespace:  "velero",
+	}
+
+	requester := &reconcilerK8sRequester{
+		responses: map[string]*protocol.K8sResponsePayload{
+			http.MethodPatch + " /apis/velero.io/v1/namespaces/velero/backups/backup-team-a": {StatusCode: http.StatusNotFound, Body: base64.StdEncoding.EncodeToString([]byte(`{}`))},
+			http.MethodPost + " /apis/velero.io/v1/namespaces/velero/backups":                encodedJSONResponse(http.StatusCreated, map[string]any{"kind": "Backup"}),
+		},
+	}
+
+	h := &BackupHandler{queries: q, requester: requester}
+	row := q.backups[backupID]
+
+	// First claimer wins.
+	h.reconcilePendingBackup(context.Background(), row)
+	// Second claimer must observe claimable=0 and not POST again.
+	h.reconcilePendingBackup(context.Background(), row)
+
+	postCount := 0
+	for _, c := range requester.calls {
+		if strings.HasPrefix(c, http.MethodPost+" ") {
+			postCount++
+		}
+	}
+	if postCount != 1 {
+		t.Fatalf("Velero POST count = %d, want 1 (single claimer applies); calls=%v", postCount, requester.calls)
+	}
+	if q.backups[backupID].Status != "running" {
+		t.Fatalf("backup status = %q, want running after claim", q.backups[backupID].Status)
 	}
 }

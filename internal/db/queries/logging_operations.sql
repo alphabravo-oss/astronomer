@@ -32,6 +32,7 @@ ORDER BY created_at ASC
 LIMIT $1;
 
 -- name: MarkLoggingOperationRunning :one
+-- Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 UPDATE logging_operations
 SET
     status = 'running',
@@ -40,6 +41,10 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status = 'pending'
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+  )
 RETURNING *;
 
 -- name: MarkLoggingOperationCompleted :one

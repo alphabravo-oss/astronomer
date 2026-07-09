@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -707,21 +708,52 @@ func (h *LoggingHandler) setOutputEnabled(w http.ResponseWriter, r *http.Request
 	RespondJSON(w, http.StatusOK, output)
 }
 
+// loggingQueryRequest is the body for POST .../logging/outputs/{id}/query/.
+type loggingQueryRequest struct {
+	Query     string `json:"query"`
+	Limit     int    `json:"limit,omitempty"`
+	Start     string `json:"start,omitempty"` // RFC3339 or Loki ns epoch
+	End       string `json:"end,omitempty"`
+	Direction string `json:"direction,omitempty"` // forward | backward
+}
+
 // QueryOutput handles POST /api/v1/logging/outputs/{id}/query/.
-// Returns 501 because querying log backends requires per-backend client wiring.
+// DIR-06: Loki outputs are queryable via the Loki HTTP API; other backends
+// still return 501 until their clients land.
 func (h *LoggingHandler) QueryOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
 		return
 	}
-	if _, err := h.queries.GetLoggingOutputByID(r.Context(), id); err != nil {
+	output, err := h.queries.GetLoggingOutputByID(r.Context(), id)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
 		return
 	}
-	// TODO: Implement per-backend log query (Loki/ES/etc) once a query client
-	// is wired through. For now respond with a clear not-implemented status.
-	RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "Querying logs from this output backend is not yet implemented")
+	if output.ClusterID.Valid {
+		if !h.authz.authorizeClusterAction(w, r, output.ClusterID.Bytes, rbac.ResourceLogging, rbac.VerbRead) {
+			return
+		}
+	}
+	var req loggingQueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	switch strings.ToLower(output.OutputType) {
+	case "loki":
+		result, qerr := queryLokiOutput(r.Context(), output.Configuration, req)
+		if qerr != nil {
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, qerr.Error())
+			return
+		}
+		RespondJSON(w, http.StatusOK, result)
+		return
+	default:
+		RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented,
+			fmt.Sprintf("Querying logs from output type %q is not yet implemented", output.OutputType))
+	}
 }
 
 // EnablePipeline handles POST /api/v1/logging/pipelines/{id}/enable/.

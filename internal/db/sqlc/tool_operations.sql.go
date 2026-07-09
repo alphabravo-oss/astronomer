@@ -301,9 +301,18 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND (
+      status = 'pending'
+      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+  )
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
 
+// Atomic claim (CORR-R01): only transition an op that is still claimable —
+// either 'pending', or a 'running' op whose lease is stale (started_at older
+// than the 1-minute fresh-running window). Under HA (server.replicaCount>1)
+// two reconcilers can ListPending the same row; the first UPDATE wins and the
+// second gets pgx.ErrNoRows so claimLatestOperations skips it.
 func (q *Queries) MarkToolOperationRunning(ctx context.Context, id uuid.UUID) (ToolOperation, error) {
 	row := q.db.QueryRow(ctx, markToolOperationRunning, id)
 	var i ToolOperation

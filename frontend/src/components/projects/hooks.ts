@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as api from '@/lib/api/project-detail';
 import { queryKeys } from '@/lib/hooks';
+import { can } from '@/lib/permissions';
 import type {
   ProjectPolicyPatch,
   CloudCredentialWriteRequest,
@@ -270,36 +271,22 @@ export function useDeleteClusterTemplate() {
 // ============================================================
 
 /** Shape of the current user we care about for permission gating. */
-type RoleHolder = { globalRoles?: string[]; is_superuser?: boolean; isSuperuser?: boolean } | null | undefined;
+type RoleHolder = Parameters<typeof can>[0];
 
 /**
- * Roughly model the backend's RBAC: admin/superadmin can do anything,
- * else the user needs to hold a role granting the named scope. We don't
- * yet have a richer client-side policy evaluator, so this is a best-effort
- * check — the server is still the source of truth and any mutation that
- * the UI failed to gate will surface as a 403 toast.
+ * UX-02: use the real rule-based evaluator (`can` / roleRules), not role-name
+ * string includes. Server remains source of truth for mutations.
  */
-export function hasPermission(user: RoleHolder, role: string): boolean {
-  if (!user) return false;
-  // Superusers (e.g. the bootstrap admin) bypass role checks — the server
-  // grants them everything, but /auth/me reports is_superuser with empty
-  // named roles, so the string-based check below would wrongly deny them.
-  if (user.is_superuser || user.isSuperuser) return true;
-  const roles = user.globalRoles || [];
-  if (roles.includes('admin') || roles.includes('superadmin')) return true;
-  return roles.includes(role);
-}
-
 export function canEditProject(user: RoleHolder): boolean {
-  return hasPermission(user, 'projects:update');
+  return can(user, 'projects', 'update');
 }
 
 export function canReadClusterTemplates(user: RoleHolder): boolean {
-  return hasPermission(user, 'cluster_templates:read') || hasPermission(user, 'cluster_templates:write');
+  return can(user, 'cluster_templates', 'read') || can(user, 'cluster_templates', 'update');
 }
 
 export function canWriteClusterTemplates(user: RoleHolder): boolean {
-  return hasPermission(user, 'cluster_templates:write');
+  return can(user, 'cluster_templates', 'update') || can(user, 'cluster_templates', 'create');
 }
 
 // ============================================================

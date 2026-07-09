@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -21,7 +20,7 @@ type casFakeQuerier struct {
 	beforeCAS func()
 }
 
-func (f *casFakeQuerier) UpdateClusterRegistrationPhaseCAS(_ context.Context, id uuid.UUID, expectedPhase, nextPhase string, startedAt, completedAt pgtype.Timestamptz) (sqlc.UpdateClusterRegistrationPhaseRow, error) {
+func (f *casFakeQuerier) UpdateClusterRegistrationPhaseCAS(_ context.Context, arg sqlc.UpdateClusterRegistrationPhaseCASParams) (sqlc.UpdateClusterRegistrationPhaseCASRow, error) {
 	if f.beforeCAS != nil {
 		hook := f.beforeCAS
 		f.beforeCAS = nil
@@ -29,20 +28,20 @@ func (f *casFakeQuerier) UpdateClusterRegistrationPhaseCAS(_ context.Context, id
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	r, ok := f.clusters[id]
+	r, ok := f.clusters[arg.ID]
 	if !ok {
-		return sqlc.UpdateClusterRegistrationPhaseRow{}, pgx.ErrNoRows
+		return sqlc.UpdateClusterRegistrationPhaseCASRow{}, pgx.ErrNoRows
 	}
-	if r.RegistrationPhase != expectedPhase {
+	if r.RegistrationPhase != arg.RegistrationPhase_2 {
 		// CAS miss: the row moved off the phase the caller read.
-		return sqlc.UpdateClusterRegistrationPhaseRow{}, pgx.ErrNoRows
+		return sqlc.UpdateClusterRegistrationPhaseCASRow{}, pgx.ErrNoRows
 	}
-	r.RegistrationPhase = nextPhase
-	if !r.RegistrationStartedAt.Valid && startedAt.Valid {
-		r.RegistrationStartedAt = startedAt
+	r.RegistrationPhase = arg.RegistrationPhase
+	if !r.RegistrationStartedAt.Valid && arg.RegistrationStartedAt.Valid {
+		r.RegistrationStartedAt = arg.RegistrationStartedAt
 	}
-	r.RegistrationCompletedAt = completedAt
-	return sqlc.UpdateClusterRegistrationPhaseRow{
+	r.RegistrationCompletedAt = arg.RegistrationCompletedAt
+	return sqlc.UpdateClusterRegistrationPhaseCASRow{
 		ID:                      r.ID,
 		RegistrationPhase:       r.RegistrationPhase,
 		RegistrationStartedAt:   r.RegistrationStartedAt,

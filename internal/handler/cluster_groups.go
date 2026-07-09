@@ -634,6 +634,11 @@ func (h *ClusterGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListClusters handles GET /api/v1/cluster-groups/{id}/clusters/.
+//
+// PERF-03: the underlying SQL is still unbounded (Delete needs a full
+// audit snapshot of the subtree), so the list path clamps in-process
+// after fetch. Clients can pass ?limit= (capped by queryLimit) to bound
+// the response; without a limit we default to the ordinary list cap.
 func (h *ClusterGroupHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -652,6 +657,13 @@ func (h *ClusterGroupHandler) ListClusters(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters in group")
 		return
+	}
+	// Clamp the response so a huge group tree can't force multi-MB JSON
+	// into memory for every list call. Prefer an explicit ?limit=; otherwise
+	// fall back to the ordinary list cap (200).
+	limit := queryLimit(r, defaultLimitCap)
+	if len(clusters) > limit {
+		clusters = clusters[:limit]
 	}
 	type clusterRef struct {
 		ID   string `json:"id"`

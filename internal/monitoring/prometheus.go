@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 type BackendConfig struct {
@@ -49,12 +51,15 @@ func NewClient(cfg BackendConfig) (*Client, error) {
 			return nil, fmt.Errorf("decode auth config: %w", err)
 		}
 	}
+	// SEC-R04: dial-guarded client. Prometheus backends are typically
+	// in-cluster (private), so AllowPrivate is on — loopback, link-local,
+	// and cloud metadata (169.254.169.254) remain blocked.
 	return &Client{
 		baseURL:    baseURL,
 		tenantID:   cfg.TenantID,
 		authType:   cfg.AuthType,
 		authConfig: authCfg,
-		httpClient: &http.Client{Timeout: timeout},
+		httpClient: httpclient.SafeClientAllowPrivate(timeout),
 	}, nil
 }
 

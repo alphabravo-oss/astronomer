@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // chartArchiveMaxBytes caps the tarball size we accept. kube-prom-stack
@@ -155,6 +156,12 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 		target = base + "/" + strings.TrimLeft(target, "/")
 	}
 
+	// SEC-R03: pre-filter + dial-time guard so malicious chart URLs in a
+	// repo index cannot SSRF loopback/private/metadata.
+	if err := httpclient.GuardPublicHost(target); err != nil {
+		return nil, fmt.Errorf("chart URL blocked: %w", err)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err
@@ -171,7 +178,7 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 		}
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := httpclient.SafeClient(60 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

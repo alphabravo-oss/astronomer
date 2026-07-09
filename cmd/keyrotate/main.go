@@ -176,64 +176,100 @@ var jsonbExemptColumns = map[string]string{
 	"dex_connectors.config": "encrypted fields live inside per-connector-type JSONB; re-saved via PATCH /api/v1/dex/connectors/{id}",
 }
 
+// selectBatchSQL builds the paged SELECT used by rewriteColumn (CORR-04).
+// Exported for tests so LIMIT/OFFSET batching cannot silently regress.
+func selectBatchSQL(t target) string {
+	return fmt.Sprintf(
+		"SELECT %s, %s FROM %s WHERE %s IS NOT NULL AND %s <> '' ORDER BY %s LIMIT $1 OFFSET $2",
+		t.idCol, t.column, t.table, t.column, t.column, t.idCol,
+	)
+}
+
+// casUpdateSQL builds the ciphertext CAS UPDATE (WHERE id AND col = old_ct).
+func casUpdateSQL(t target) string {
+	return fmt.Sprintf(
+		"UPDATE %s SET %s = $1 WHERE %s = $2 AND %s = $3",
+		t.table, t.column, t.idCol, t.column,
+	)
+}
+
 func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.Encryptor, t target, batchSize int, dryRun bool) stats {
 	s := stats{}
 	log = log.With("table", t.table, "column", t.column)
-
-	rows, err := db.QueryContext(ctx,
-		fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s IS NOT NULL AND %s <> ''",
-			t.idCol, t.column, t.table, t.column, t.column))
-	if err != nil {
-		log.Error("scan select", "err", err)
-		s.failed++
-		return s
-	}
-	type row struct {
-		id string
-		ct string
-	}
-	var batch []row
-	for rows.Next() {
-		var id, ct string
-		if err := rows.Scan(&id, &ct); err != nil {
-			log.Error("row scan", "err", err)
-			s.failed++
-			continue
-		}
-		batch = append(batch, row{id: id, ct: ct})
-	}
-	if err := rows.Close(); err != nil {
-		log.Error("rows close", "err", err)
+	if batchSize < 1 {
+		batchSize = 100
 	}
 
-	for _, r := range batch {
-		s.scanned++
-		plain, err := enc.Decrypt(r.ct)
+	// CORR-04: page with LIMIT/OFFSET so --batch-size is honored and large
+	// tables (sso_sessions) do not load entirely into memory. Each rewrite
+	// CAS-updates on the old ciphertext so a concurrent server write is not
+	// silently overwritten with re-encrypted stale plaintext.
+	offset := 0
+	for {
+		rows, err := db.QueryContext(ctx, selectBatchSQL(t), batchSize, offset)
 		if err != nil {
-			log.Error("decrypt failed — no configured key signed this ciphertext",
-				"id", r.id, "err", err)
+			log.Error("scan select", "err", err)
 			s.failed++
-			continue
+			return s
 		}
-		newCT, err := enc.Encrypt(plain)
-		if err != nil {
-			log.Error("re-encrypt failed", "id", r.id, "err", err)
-			s.failed++
-			continue
+		type row struct {
+			id string
+			ct string
 		}
-		if dryRun {
+		var batch []row
+		for rows.Next() {
+			var id, ct string
+			if err := rows.Scan(&id, &ct); err != nil {
+				log.Error("row scan", "err", err)
+				s.failed++
+				continue
+			}
+			batch = append(batch, row{id: id, ct: ct})
+		}
+		if err := rows.Close(); err != nil {
+			log.Error("rows close", "err", err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+		offset += len(batch)
+
+		for _, r := range batch {
+			s.scanned++
+			plain, err := enc.Decrypt(r.ct)
+			if err != nil {
+				log.Error("decrypt failed — no configured key signed this ciphertext",
+					"id", r.id, "err", err)
+				s.failed++
+				continue
+			}
+			newCT, err := enc.Encrypt(plain)
+			if err != nil {
+				log.Error("re-encrypt failed", "id", r.id, "err", err)
+				s.failed++
+				continue
+			}
+			if dryRun {
+				s.rewrote++
+				continue
+			}
+			res, err := db.ExecContext(ctx, casUpdateSQL(t), newCT, r.id, r.ct)
+			if err != nil {
+				log.Error("update failed", "id", r.id, "err", err)
+				s.failed++
+				continue
+			}
+			n, _ := res.RowsAffected()
+			if n == 0 {
+				// Concurrent writer changed ciphertext — skip rather than clobber.
+				log.Info("cas miss — row changed under us, skipping", "id", r.id)
+				continue
+			}
 			s.rewrote++
-			continue
 		}
-		_, err = db.ExecContext(ctx,
-			fmt.Sprintf("UPDATE %s SET %s = $1 WHERE %s = $2", t.table, t.column, t.idCol),
-			newCT, r.id)
-		if err != nil {
-			log.Error("update failed", "id", r.id, "err", err)
-			s.failed++
-			continue
+		if len(batch) < batchSize {
+			break
 		}
-		s.rewrote++
 	}
 	return s
 }

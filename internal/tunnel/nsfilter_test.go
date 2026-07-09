@@ -251,3 +251,25 @@ func TestNamespaceFilterContextRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip failed: ok=%v got=%v", ok, got)
 	}
 }
+
+func TestWatchEventAllowed_NamespaceFilter(t *testing.T) {
+	allowed := allowSet("team-a")
+	okEvent := []byte(`{"type":"ADDED","object":{"kind":"Pod","metadata":{"namespace":"team-a","name":"p1"}}}`)
+	keep, err := watchEventAllowed(okEvent, allowed)
+	if err != nil || !keep {
+		t.Fatalf("team-a event: keep=%v err=%v", keep, err)
+	}
+	dropEvent := []byte(`{"type":"ADDED","object":{"kind":"Pod","metadata":{"namespace":"team-b","name":"p2"}}}`)
+	keep, err = watchEventAllowed(dropEvent, allowed)
+	if err != nil {
+		t.Fatalf("team-b event err: %v", err)
+	}
+	if keep {
+		t.Fatal("expected team-b event dropped")
+	}
+	bookmark := []byte(`{"type":"BOOKMARK","object":{"metadata":{}}}`)
+	keep, err = watchEventAllowed(bookmark, allowed)
+	if err != nil || !keep {
+		t.Fatalf("bookmark: keep=%v err=%v", keep, err)
+	}
+}

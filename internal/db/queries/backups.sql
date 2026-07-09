@@ -64,8 +64,11 @@ INSERT INTO backups (
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
--- name: UpdateBackupStarted :exec
-UPDATE backups SET status = 'running', started_at = now() WHERE id = $1;
+-- name: UpdateBackupStarted :execrows
+-- CORR-05: only transition out of non-terminal pending/queued states so a
+-- concurrent reconciler cannot re-stamp a completed/failed backup as running.
+UPDATE backups SET status = 'running', started_at = now()
+WHERE id = $1 AND status IN ('pending', 'queued', 'created');
 
 -- name: UpdateBackupCompleted :exec
 UPDATE backups SET status = 'completed', completed_at = now(), file_path = $2, file_size_bytes = $3 WHERE id = $1;
@@ -159,8 +162,10 @@ INSERT INTO restore_operations (
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
--- name: UpdateRestoreOperationStarted :exec
-UPDATE restore_operations SET status = 'running', started_at = now() WHERE id = $1;
+-- name: UpdateRestoreOperationStarted :execrows
+-- CORR-05 / CORR-R03: CAS status transition for restores (see UpdateBackupStarted).
+UPDATE restore_operations SET status = 'running', started_at = now()
+WHERE id = $1 AND status IN ('pending', 'queued', 'created');
 
 -- name: UpdateRestoreOperationCompleted :exec
 UPDATE restore_operations SET status = 'completed', completed_at = now() WHERE id = $1;

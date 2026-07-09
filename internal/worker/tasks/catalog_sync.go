@@ -216,40 +216,98 @@ func syncRepositoryIndex(ctx context.Context, repositoryID uuid.UUID, repository
 				return err
 			}
 		}
-		existingVersions, err := runtimeDeps.Queries.ListChartVersions(ctx, sqlc.ListChartVersionsParams{
-			ChartID: chart.ID,
-			Limit:   1000,
-			Offset:  0,
+		// CORR-R04: GC every version not in the current index. Must not
+		// advance OFFSET while deleting — deletes compact the list and a
+		// naive offset+=pageSize leaves orphans past the first page.
+		if err := gcPagedOrphans(catalogGCPageSize, func(limit, offset int32) (int, int, error) {
+			existingVersions, err := runtimeDeps.Queries.ListChartVersions(ctx, sqlc.ListChartVersionsParams{
+				ChartID: chart.ID,
+				Limit:   limit,
+				Offset:  offset,
+			})
+			if err != nil {
+				return 0, 0, err
+			}
+			deleted := 0
+			for _, existing := range existingVersions {
+				if _, ok := seenVersions[existing.Version]; ok {
+					continue
+				}
+				if err := runtimeDeps.Queries.DeleteHelmChartVersion(ctx, existing.ID); err != nil {
+					return 0, 0, err
+				}
+				deleted++
+			}
+			return len(existingVersions), deleted, nil
+		}); err != nil {
+			return err
+		}
+	}
+	// CORR-R04: GC charts removed from the index (same offset-stable algorithm).
+	if err := gcPagedOrphans(catalogGCPageSize, func(limit, offset int32) (int, int, error) {
+		existingCharts, err := runtimeDeps.Queries.ListChartsByRepository(ctx, sqlc.ListChartsByRepositoryParams{
+			RepositoryID: repositoryID,
+			Limit:        limit,
+			Offset:       offset,
 		})
+		if err != nil {
+			return 0, 0, err
+		}
+		deleted := 0
+		for _, existing := range existingCharts {
+			if _, ok := seenCharts[existing.Name]; ok {
+				continue
+			}
+			if err := runtimeDeps.Queries.DeleteHelmChart(ctx, existing.ID); err != nil {
+				return 0, 0, err
+			}
+			deleted++
+		}
+		return len(existingCharts), deleted, nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// catalogGCPageSize is the page size for CORR-R04 catalog GC list queries.
+const catalogGCPageSize int32 = 1000
+
+// gcPagedOrphans walks a paginated list and deletes orphans. page(limit, offset)
+// returns (pageLen, deletedCount, err).
+//
+// Algorithm (delete-stable OFFSET):
+//   - If the page deleted any rows, re-query the same offset (rows above
+//     compact into this window).
+//   - If the page deleted nothing and is a full page of keepers, advance offset.
+//   - If the page deleted nothing and is short, we are past the last orphan.
+//
+// A naive "for offset += pageSize" loop after deletes silently orphans every
+// row past the first page when most/all rows need GC (N>pageSize).
+func gcPagedOrphans(pageSize int32, page func(limit, offset int32) (pageLen int, deleted int, err error)) error {
+	if pageSize < 1 {
+		pageSize = 1000
+	}
+	var offset int32
+	for {
+		pageLen, deleted, err := page(pageSize, offset)
 		if err != nil {
 			return err
 		}
-		for _, existing := range existingVersions {
-			if _, ok := seenVersions[existing.Version]; ok {
-				continue
-			}
-			if err := runtimeDeps.Queries.DeleteHelmChartVersion(ctx, existing.ID); err != nil {
-				return err
-			}
+		if pageLen == 0 {
+			return nil
 		}
-	}
-	existingCharts, err := runtimeDeps.Queries.ListChartsByRepository(ctx, sqlc.ListChartsByRepositoryParams{
-		RepositoryID: repositoryID,
-		Limit:        1000,
-		Offset:       0,
-	})
-	if err != nil {
-		return err
-	}
-	for _, existing := range existingCharts {
-		if _, ok := seenCharts[existing.Name]; ok {
+		if deleted > 0 {
+			// Same offset again — deleted rows left a hole that later orphans
+			// will fill into this page on the next query.
 			continue
 		}
-		if err := runtimeDeps.Queries.DeleteHelmChart(ctx, existing.ID); err != nil {
-			return err
+		if int32(pageLen) < pageSize {
+			return nil
 		}
+		// Full page of keepers only — skip past them.
+		offset += pageSize
 	}
-	return nil
 }
 
 // fetchChartAssets pulls the chart .tgz and extracts the three things the UI

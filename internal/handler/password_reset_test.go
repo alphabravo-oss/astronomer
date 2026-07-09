@@ -239,7 +239,7 @@ func TestPasswordReset_CompleteVerifiesToken(t *testing.T) {
 
 	// Complete with the right token.
 	rec = httptest.NewRecorder()
-	body, _ = json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew123"})
+	body, _ = json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew1234X"})
 	req = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 	h.PasswordResetComplete(rec, req)
 	if rec.Code != http.StatusOK {
@@ -273,7 +273,7 @@ func TestPasswordReset_CompleteRejectsExpiredToken(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	body, _ := json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew123"})
+	body, _ := json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew1234X"})
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 	h.PasswordResetComplete(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -301,7 +301,7 @@ func TestPasswordReset_CompleteRejectsTokenAfterPasswordChange(t *testing.T) {
 	q.usersByID[user.ID] = user
 
 	rec := httptest.NewRecorder()
-	body, _ := json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew123"})
+	body, _ := json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew1234X"})
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 	h.PasswordResetComplete(rec, req)
 	if rec.Code != http.StatusBadRequest {

@@ -38,10 +38,16 @@ helm upgrade --install astronomer ./deploy/chart \
   --set dex.clientSecret=<random-dex-client-secret> \
   --set managementBackup.s3.bucket=my-astronomer-backups \
   --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
+  --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
   --set-file secrets.encryptionKey=./prod-fernet-key \
   --set-file secrets.secretKey=./prod-jwt-key \
   --set-file bootstrap.password=./prod-bootstrap-password
 ```
+
+> **GitOps note:** pin `bootstrap.password` (or `bootstrap.existingSecret`) and
+> the key-wrap Secret name on every render. Empty bootstrap password re-rolls
+> under `helm template` / Argo CD; empty wrap name fails production preflight
+> while backups are enabled. See [Bootstrap credentials](#bootstrap-credentials).
 
 `values.schema.json` validates common types before Helm renders templates, and
 `values-production.yaml` will fail if any of the following are still unset —
@@ -63,15 +69,35 @@ they're the bare minimum a production install needs:
 - `dex.clientSecret` when bundled Dex is enabled
 - `managementBackup.s3.bucket` and `managementBackup.s3.credentialsSecretRef.name`
   when the production backup CronJob is enabled
+- `managementBackup.encryptionKeyBackup.wrappingSecretRef.name` when backups are
+  enabled (or set `encryptionKeyBackup.enabled=false` to explicitly opt out —
+  restored Fernet data will be undecryptable on a new cluster)
+- `bootstrap.password` or `bootstrap.existingSecret` (GitOps pin; see below)
 
 ### Bootstrap credentials
 
 The bootstrap admin logs in with `bootstrap.email`. If `bootstrap.password` is
 set, the server uses that initial password. If it is empty, the chart generates
 a random password once, stores it in the `<release>-bootstrap` Secret, and keeps
-that Secret across upgrades.
+that Secret across upgrades **when Helm can `lookup` the live Secret**.
 
-Retrieve the generated password with:
+#### GitOps / `helm template` pin (required in production)
+
+Under pure GitOps (Argo CD, Flux) or any offline `helm template` path, Helm's
+`lookup` returns nil, so an empty `bootstrap.password` re-rolls `randAlphaNum`
+on **every** sync and silently rotates the admin password. Production
+preflight therefore **refuses** the render unless you pin one of:
+
+- `bootstrap.password` — pass via `--set-file` / sealed-secret / external
+  secret operator (do **not** commit the value to git), or
+- `bootstrap.existingSecret` — name of a pre-created Secret with a `password`
+  key (chart does not manage the Secret; server wires
+  `ASTRONOMER_BOOTSTRAP_PASSWORD` to it).
+
+`values-production.yaml` leaves both empty on purpose so a bare
+`-f values-production.yaml` without pins fails closed.
+
+Retrieve a chart-generated (dev) password with:
 
 ```bash
 kubectl -n <namespace> get secret <release>-bootstrap \

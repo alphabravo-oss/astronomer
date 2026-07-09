@@ -71,7 +71,10 @@ const (
 // real database. *sqlc.Queries satisfies this naturally.
 type ClusterQuerier interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
-	UpdateClusterStatus(ctx context.Context, arg sqlc.UpdateClusterStatusParams) error
+	// UpdateClusterStatusOnHeartbeat is the authoritative status writer for
+	// this publisher (CORR-02): it re-checks the 2m liveness window at write
+	// time so a mid-sweep reconnect is not clobbered back to disconnected.
+	UpdateClusterStatusOnHeartbeat(ctx context.Context, arg sqlc.UpdateClusterStatusOnHeartbeatParams) (int64, error)
 }
 
 // MetricsProvider is the minimal interface the publisher uses to fetch a
@@ -281,14 +284,19 @@ func (p *Publisher) sweepStatuses(ctx context.Context) {
 		if next == "" || next == c.Status {
 			continue
 		}
-		if err := p.queries.UpdateClusterStatus(ctx, sqlc.UpdateClusterStatusParams{
+		n, err := p.queries.UpdateClusterStatusOnHeartbeat(ctx, sqlc.UpdateClusterStatusOnHeartbeatParams{
 			ID:     c.ID,
 			Status: next,
-		}); err != nil {
+		})
+		if err != nil {
 			p.log.Debug("status sweep: update failed",
 				slog.String("cluster_id", c.ID.String()),
 				slog.String("error", err.Error()),
 			)
+			continue
+		}
+		// CAS miss (0 rows): heartbeat moved under us — do not emit a false event.
+		if n == 0 {
 			continue
 		}
 		p.bus.Publish(events.TypeClusterStatusChanged, map[string]any{

@@ -277,6 +277,10 @@ type ClusterDecommissionQuerier interface {
 	DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Argo CD managed-cluster mappings + an enumerator so we can audit
 	// the orphans (upstream Argo Secrets that need manual unregister).
+	// DIR-10: decommission deliberately records orphans rather than
+	// auto-deleting upstream Argo cluster Secrets; operators unregister
+	// via the ArgoCD UI/API when they want the AppSet target removed.
+	// Optional future: auto-unregister when a platform setting is set.
 	ListArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ArgocdManagedCluster, error)
 	DeleteArgoCDManagedClustersByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 

@@ -245,7 +245,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		}
 		// TODO(total): ListCatalogsForProject returns the full unpaged set;
 		// no COUNT query exists, so total is the returned length.
-		RespondList(w, rows, NewPagination(len(rows), int(limit), int(offset), len(rows)))
+		RespondList(w, redactHelmRepositories(rows), NewPagination(len(rows), int(limit), int(offset), len(rows)))
 		return
 	}
 
@@ -263,7 +263,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count repositories")
 			return
 		}
-		RespondPaginated(w, r, rows, total)
+	RespondPaginated(w, r, redactHelmRepositories(rows), total)
 		return
 	}
 
@@ -287,7 +287,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, repos, total)
+	RespondPaginated(w, r, redactHelmRepositories(repos), total)
 }
 
 // CreateRepoRequest represents the request body for creating a helm repository.
@@ -319,6 +319,14 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if req.RepoType == "" && IsOCIRepo(req.URL) {
 		req.RepoType = "oci"
 	}
+	// DIR-07: accept git-sourced chart repos (clone/index path lands in worker).
+	if strings.EqualFold(req.RepoType, "git") {
+		req.RepoType = "git"
+		if strings.TrimSpace(req.URL) == "" {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "git repository URL is required")
+			return
+		}
+	}
 
 	repo, err := h.queries.CreateHelmRepository(r.Context(), sqlc.CreateHelmRepositoryParams{
 		Name:        req.Name,
@@ -342,7 +350,7 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Location", "/api/v1/catalog/repositories/"+repo.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, repo)
+	RespondJSON(w, http.StatusCreated, redactHelmRepository(repo))
 }
 
 // GetRepo handles GET /api/v1/catalog/repositories/{id}/.
@@ -359,7 +367,8 @@ func (h *CatalogHandler) GetRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, repo)
+	// SEC-01: never return live registry passwords/tokens on GET.
+	RespondJSON(w, http.StatusOK, redactHelmRepository(repo))
 }
 
 // UpdateRepoRequest represents the request body for updating a helm repository.
@@ -391,6 +400,12 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 		req.AuthConfig = json.RawMessage(`{}`)
 	}
 
+	// SEC-01: when the client echoes the redaction sentinel, keep existing secrets.
+	existing, existingErr := h.queries.GetHelmRepositoryByID(r.Context(), id)
+	if existingErr == nil {
+		req.AuthConfig = mergeAuthConfigPreservingSentinel(existing.AuthConfig, req.AuthConfig)
+	}
+
 	repo, err := h.queries.UpdateHelmRepository(r.Context(), sqlc.UpdateHelmRepositoryParams{
 		ID:          id,
 		Name:        req.Name,
@@ -413,7 +428,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 		"auth_type": repo.AuthType,
 	})
 
-	RespondJSON(w, http.StatusOK, repo)
+	RespondJSON(w, http.StatusOK, redactHelmRepository(repo))
 }
 
 // DeleteRepo handles DELETE /api/v1/catalog/repositories/{id}/.
@@ -567,12 +582,16 @@ func applyRepoIndexAuth(req *http.Request, repo sqlc.HelmRepository) {
 
 func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.HelmRepository) (chartCount, versionCount int, err error) {
 	indexURL := strings.TrimRight(repo.Url, "/") + "/index.yaml"
+	// SEC-02: same SSRF posture as the worker catalog_sync path.
+	if err := httpclient.GuardPublicHost(indexURL); err != nil {
+		return 0, 0, fmt.Errorf("catalog repository host is not a permitted public address")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
 	if err != nil {
 		return 0, 0, fmt.Errorf("build index request: %w", err)
 	}
 	applyRepoIndexAuth(req, repo)
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := httpclient.SafeClient(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, 0, fmt.Errorf("fetch index: %w", err)
@@ -1310,7 +1329,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
 			return
 		}
-		client := &http.Client{Timeout: 10 * time.Second}
+		client := httpclient.SafeClient(10 * time.Second)
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, pingURL, nil)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
@@ -1342,7 +1361,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
 		return
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpclient.SafeClient(10 * time.Second)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
@@ -1365,6 +1384,89 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Connection successful."})
+}
+
+// redactHelmRepository strips secret fields from auth_config for API responses
+// (SEC-01). Mirrors webhook SecretSentinel: clients that echo the sentinel on
+// PUT leave the stored secret unchanged.
+func redactHelmRepository(repo sqlc.HelmRepository) sqlc.HelmRepository {
+	out := repo
+	out.AuthConfig = redactAuthConfigJSON(repo.AuthConfig)
+	return out
+}
+
+func redactHelmRepositories(repos []sqlc.HelmRepository) []sqlc.HelmRepository {
+	if len(repos) == 0 {
+		return repos
+	}
+	out := make([]sqlc.HelmRepository, len(repos))
+	for i := range repos {
+		out[i] = redactHelmRepository(repos[i])
+	}
+	return out
+}
+
+func redactAuthConfigJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
+		return json.RawMessage(`{}`)
+	}
+	secretKeys := []string{"password", "token", "bearer", "secret", "client_secret", "access_token", "refresh_token"}
+	for _, k := range secretKeys {
+		if v, ok := m[k]; ok {
+			if s, isStr := v.(string); isStr && s != "" {
+				m[k] = SecretSentinel
+			}
+		}
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+// mergeAuthConfigPreservingSentinel keeps existing secret values when the
+// request carries SecretSentinel (UI "leave unchanged" pattern).
+func mergeAuthConfigPreservingSentinel(existing, incoming json.RawMessage) json.RawMessage {
+	if len(incoming) == 0 {
+		return existing
+	}
+	var in map[string]any
+	if err := json.Unmarshal(incoming, &in); err != nil || in == nil {
+		return existing
+	}
+	var ex map[string]any
+	_ = json.Unmarshal(existing, &ex)
+	if ex == nil {
+		ex = map[string]any{}
+	}
+	secretKeys := []string{"password", "token", "bearer", "secret", "client_secret", "access_token", "refresh_token"}
+	for _, k := range secretKeys {
+		v, ok := in[k]
+		if !ok {
+			continue
+		}
+		s, isStr := v.(string)
+		if !isStr {
+			continue
+		}
+		if s == SecretSentinel || s == "" {
+			if old, ok := ex[k]; ok {
+				in[k] = old
+			} else {
+				delete(in, k)
+			}
+		}
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		return existing
+	}
+	return b
 }
 
 // isOCIRepoSpec reports whether the stored repository should be treated as
@@ -1444,6 +1546,42 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 		"version":        version.Version,
 		"default_values": version.DefaultValues,
 		"values_schema":  version.ValuesSchema,
+	})
+}
+
+// ListInstalledChartRevisions handles GET /api/v1/catalog/installed/{id}/revisions/.
+// DIR-12: returns helm release history via the agent tunnel.
+func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid release ID")
+		return
+	}
+	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
+	if h.helm == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Helm requester not configured")
+		return
+	}
+	result, err := h.helm.History(r.Context(), installed.ClusterID.String(), installed.ReleaseName, installed.Namespace)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, err.Error())
+		return
+	}
+	revs := result.Revisions
+	if revs == nil {
+		revs = []protocol.HelmRevision{}
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{
+		"release_name": installed.ReleaseName,
+		"namespace":    installed.Namespace,
+		"revisions":    revs,
 	})
 }
 

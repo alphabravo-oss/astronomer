@@ -66,7 +66,7 @@ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("load gatekeeper bundle: %w", err)
 		}
-		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 1000, Offset: 0})
+		clusters, err := listAllClustersPaged(ctx, runtimeDeps.Queries.ListClusters)
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}

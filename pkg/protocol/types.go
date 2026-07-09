@@ -39,6 +39,7 @@ const (
 	MsgHelmUninstall MessageType = "HELM_UNINSTALL"
 	MsgHelmRollback  MessageType = "HELM_ROLLBACK"
 	MsgHelmStatus    MessageType = "HELM_STATUS"
+	MsgHelmHistory   MessageType = "HELM_HISTORY"
 	MsgHelmResult    MessageType = "HELM_RESULT"
 
 	// Pod operations
@@ -455,6 +456,18 @@ type HelmResultPayload struct {
 	Status      string `json:"status,omitempty"`
 	Revision    int    `json:"revision,omitempty"`
 	Error       string `json:"error,omitempty"`
+	// Revisions is populated by HELM_HISTORY (DIR-12).
+	Revisions []HelmRevision `json:"revisions,omitempty"`
+}
+
+// HelmRevision is one entry from helm history.
+type HelmRevision struct {
+	Revision    int    `json:"revision"`
+	Updated     string `json:"updated,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Chart       string `json:"chart,omitempty"`
+	AppVersion  string `json:"app_version,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // ErrorPayload carries error details.

@@ -12,10 +12,14 @@
 # Output format: one image per line, sorted, comments stripped.
 # Example line: postgres:16-alpine
 #
-# The script renders the chart with the agent included so the agent
-# image (used by member-cluster install) is captured too — it doesn't
-# appear in the management-plane Deployments, only in the install
-# template the server hands out at registration time.
+# The script renders the chart twice:
+#   1) default values (dev / first-touch)
+#   2) production-like optional components (Dex, management backup with a
+#      dummy S3 target + key wrap, management logging) so air-gapped prod
+#      installs don't miss dex / pgdump-s3 / fluent-bit.
+# Results are unioned. The agent image is added explicitly because it only
+# appears in the member-cluster install template the server hands out at
+# registration time — never in a management-plane Deployment.
 
 set -euo pipefail
 
@@ -30,15 +34,40 @@ if [[ ! -d "$CHART_DIR" ]]; then
     exit 2
 fi
 
-# Render with defaults — production-mode renders depend on operator
-# secrets so they'd 502 here; the image set is identical between modes
-# because no production-only image is conditionally rendered.
-images="$(
-    helm template astronomer "$CHART_DIR" -f "$CHART_DIR/values.yaml" 2>/dev/null \
-    | grep -oE 'image: "?[^"]+"?' \
-    | sed -E 's/^image: //; s/^"//; s/"$//' \
-    | sort -u
+# Pull every `image:` reference out of a helm template render.
+extract_images() {
+    # shellcheck disable=SC2068
+    helm template astronomer "$CHART_DIR" $@ 2>/dev/null \
+        | grep -oE 'image: "?[^"]+"?' \
+        | sed -E 's/^image: //; s/^"//; s/"$//'
+}
+
+# Default (dev) render — covers server/worker/migrate/frontend/postgres/
+# redis/shell/busybox/argocd and anything else on by default.
+dev_images="$(extract_images -f "$CHART_DIR/values.yaml" || true)"
+
+# Production-like optional components. These stay off in values.yaml so a
+# laptop install doesn't pull them, but values-production.yaml (or an
+# operator --set) turns them on. Use dummy S3/key-wrap/logging values so
+# production preflight doesn't refuse the render; we only care about the
+# image refs that appear when the CronJobs / DaemonSet / Dex Deployment
+# are active.
+prod_like_images="$(
+    extract_images \
+        -f "$CHART_DIR/values.yaml" \
+        --set dex.enabled=true \
+        --set managementBackup.enabled=true \
+        --set managementBackup.s3.bucket=airgap-extract-dummy \
+        --set managementBackup.s3.credentialsSecretRef.name=airgap-extract-dummy \
+        --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=airgap-extract-dummy \
+        --set managementRestoreDrill.enabled=true \
+        --set managementRestoreDrill.decryptCheck.wrappingSecretRef.name=airgap-extract-dummy \
+        --set managementLogging.enabled=true \
+        --set managementLogging.endpoint=http://loki.observability.svc:3100 \
+        || true
 )"
+
+images="$(printf '%s\n%s' "$dev_images" "$prod_like_images" | sed '/^$/d' | sort -u)"
 
 # The agent image isn't in any Deployment — it's referenced when the
 # server renders the install.yaml that operators apply in a new member
@@ -63,6 +92,8 @@ cat <<EOF
 #
 # Regenerated via: make images.txt
 # Source:          $CHART_DIR/values.yaml + helm template
+#                  (default render ∪ production-like optional components:
+#                   dex, managementBackup/pgdump-s3, managementLogging/fluent-bit)
 #
 # Air-gapped install procedure:
 #   1) grep -v '^#' deploy/chart/images.txt > /tmp/images.txt

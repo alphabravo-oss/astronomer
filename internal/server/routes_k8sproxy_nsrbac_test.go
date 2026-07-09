@@ -85,39 +85,41 @@ func TestK8sProxyNamespaceScopedListGate(t *testing.T) {
 			want:     denied,
 		},
 		{
-			name:     "scoped cluster-wide watch still denied (flag on)",
+			// F7-b: cluster-wide watches are admitted when the user holds list
+			// in ≥1 namespace; the tunnel filters frames to that allow-set.
+			name:     "scoped cluster-wide watch admitted when flag on (F7-b)",
 			flagOn:   true,
 			method:   http.MethodGet,
 			path:     base + "/api/v1/pods?watch=true",
 			bindings: namespaceScopedListBindings(clusterID, "team-a", rbac.ResourcePods),
-			want:     denied,
+			want:     admitted,
 		},
 		{
-			name:     "scoped cluster-wide /watch/ path still denied (flag on)",
+			name:     "scoped cluster-wide /watch/ path admitted when flag on (F7-b)",
 			flagOn:   true,
 			method:   http.MethodGet,
 			path:     base + "/api/v1/watch/pods",
 			bindings: namespaceScopedListBindings(clusterID, "team-a", rbac.ResourcePods),
-			want:     denied,
+			want:     admitted,
 		},
 		{
 			// Bypass guard: the apiserver parses ?watch with strconv.ParseBool,
-			// so ?watch=TRUE is a watch. It must NOT be misclassified as a
-			// unary list and admitted by the gate.
-			name:     "scoped cluster-wide watch=TRUE (uppercase) still denied (flag on)",
+			// so ?watch=TRUE is a watch and must use the F7-b gate (not be
+			// misclassified as a denied unary list).
+			name:     "scoped cluster-wide watch=TRUE (uppercase) admitted when flag on (F7-b)",
 			flagOn:   true,
 			method:   http.MethodGet,
 			path:     base + "/api/v1/pods?watch=TRUE",
 			bindings: namespaceScopedListBindings(clusterID, "team-a", rbac.ResourcePods),
-			want:     denied,
+			want:     admitted,
 		},
 		{
-			name:     "scoped cluster-wide watch=t (short) still denied (flag on)",
+			name:     "scoped cluster-wide watch=t (short) admitted when flag on (F7-b)",
 			flagOn:   true,
 			method:   http.MethodGet,
 			path:     base + "/api/v1/pods?watch=t",
 			bindings: namespaceScopedListBindings(clusterID, "team-a", rbac.ResourcePods),
-			want:     denied,
+			want:     admitted,
 		},
 		{
 			name:     "scoped cluster-wide mutation still denied (flag on)",

@@ -448,6 +448,20 @@ rendered manifest.
       {{- if not .Values.managementBackup.s3.credentialsSecretRef.name }}
         {{- $errs = append $errs "  - managementBackup.s3.credentialsSecretRef.name is empty but managementBackup.enabled=true — provide the S3 credentials Secret (see values-production.yaml) or set managementBackup.enabled=false to explicitly opt out." }}
       {{- end }}
+      {{- /* OPS-01: key wrap custody is required when backups are enabled so a
+           restore onto a new cluster can decrypt Fernet columns. Empty
+           wrappingSecretRef leaves CronJobs green but key backup inert. */ -}}
+      {{- $keyBackupOn := true }}
+      {{- if hasKey .Values.managementBackup "encryptionKeyBackup" }}
+        {{- if hasKey .Values.managementBackup.encryptionKeyBackup "enabled" }}
+          {{- $keyBackupOn = .Values.managementBackup.encryptionKeyBackup.enabled }}
+        {{- end }}
+      {{- end }}
+      {{- if $keyBackupOn }}
+        {{- if not (and .Values.managementBackup.encryptionKeyBackup .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name) }}
+          {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.wrappingSecretRef.name is empty but managementBackup.enabled=true — production DR requires encryption-key custody (see values-production.yaml and docs/management-plane-dr-runbook.md). Create a separate wrap Secret and set the name, or set managementBackup.encryptionKeyBackup.enabled=false to explicitly opt out of key backup (restored Fernet data will be undecryptable on a new cluster)." }}
+        {{- end }}
+      {{- end }}
     {{- end }}
     {{- if gt (len $errs) 0 }}
       {{- $msg := printf "\n\nAstronomer production preflight failed:\n%s\n\nSee deploy/chart/README.md and deploy/chart/values-production.yaml for the expected wiring." (join "\n" $errs) }}

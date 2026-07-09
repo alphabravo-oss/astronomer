@@ -382,6 +382,14 @@ func launchFleetOperation(ctx context.Context, deps FleetOrchestrateDeps, op sql
 	if err != nil {
 		return fmt.Errorf("list clusters for selector: %w", err)
 	}
+	// CORR-R05: SQL LIMIT 10000 — a full page means silent truncation risk.
+	const fleetSelectorHardCap = 10000
+	if len(rows) >= fleetSelectorHardCap {
+		return failOperation(ctx, deps, op, fmt.Sprintf(
+			"fleet selector evaluation hard-capped at %d non-decommissioned clusters; narrow the selector or raise the cap",
+			fleetSelectorHardCap,
+		))
+	}
 	candidates := make([]FleetClusterCandidate, 0, len(rows))
 	for _, r := range rows {
 		var groupIDs []string

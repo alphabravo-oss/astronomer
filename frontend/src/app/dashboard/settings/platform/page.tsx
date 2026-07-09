@@ -52,6 +52,10 @@ const DEFAULTS: PlatformSettingsGrouped = {
     defaultTtlSeconds: 86400,
     maxTtlSeconds: 2592000,
   },
+  session: {
+    // Matches backend registry default (480 minutes = 8h absolute JWT TTL).
+    timeoutMinutes: 480,
+  },
   telemetry: {
     enabled: false,
     endpoint: '',
@@ -79,6 +83,7 @@ const FLAT_KEYS: Record<string, (g: PlatformSettingsGrouped) => unknown> = {
   'features.backups': (g) => g.features.backups,
   'tokens.default_ttl_seconds': (g) => g.tokens.defaultTtlSeconds,
   'tokens.max_ttl_seconds': (g) => g.tokens.maxTtlSeconds,
+  'session.timeout_minutes': (g) => g.session.timeoutMinutes,
   'telemetry.enabled': (g) => g.telemetry.enabled,
   'telemetry.endpoint': (g) => g.telemetry.endpoint,
   'registration.tls_mode': (g) => g.registration.tlsMode,
@@ -115,6 +120,9 @@ function hydrate(flat: Array<{ key: string; value: unknown }>): PlatformSettings
     tokens: {
       defaultTtlSeconds: get('tokens.default_ttl_seconds', DEFAULTS.tokens.defaultTtlSeconds),
       maxTtlSeconds: get('tokens.max_ttl_seconds', DEFAULTS.tokens.maxTtlSeconds),
+    },
+    session: {
+      timeoutMinutes: Number(get('session.timeout_minutes', DEFAULTS.session.timeoutMinutes)),
     },
     telemetry: {
       enabled: get('telemetry.enabled', DEFAULTS.telemetry.enabled),
@@ -388,6 +396,27 @@ function PlatformSettingsForm() {
           {form.tokens.maxTtlSeconds >= 86400
             ? `Max ≈ ${Math.round(form.tokens.maxTtlSeconds / 86400)} day(s)`
             : `Max ≈ ${Math.round(form.tokens.maxTtlSeconds / 3600)} hour(s)`}
+        </p>
+      </Section>
+
+      <Section
+        title="Browser session"
+        description="JWT access-token lifetime for interactive logins (password, SSO, TOTP). Absolute TTL at mint/refresh — not an idle timeout."
+      >
+        <NumberField
+          label="Access token lifetime (minutes)"
+          value={form.session.timeoutMinutes}
+          onChange={(v) => setForm({ ...form, session: { ...form.session, timeoutMinutes: v } })}
+          min={5}
+        />
+        <p className="text-xs text-muted-foreground">
+          Absolute JWT <span className="font-mono">exp</span> applied on every mint and refresh
+          (setting key <span className="font-mono">session.timeout_minutes</span>). Activity does
+          not slide the access token; use refresh to obtain a new one under this same cap.
+          Compliance baselines may pin this value (e.g. 15–20 minutes).
+          {form.session.timeoutMinutes >= 60
+            ? ` Current ≈ ${Math.round(form.session.timeoutMinutes / 60)} hour(s).`
+            : ` Current = ${form.session.timeoutMinutes} minute(s).`}
         </p>
       </Section>
 

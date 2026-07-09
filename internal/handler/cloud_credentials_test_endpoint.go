@@ -51,11 +51,11 @@ type DefaultCloudTester struct {
 	HTTPClient *http.Client
 }
 
-// NewDefaultCloudTester builds a tester with a shared http.Client
-// configured for the 10s budget.
+// NewDefaultCloudTester builds a tester with SafeClient (SEC-03 dial-time
+// public-IP enforcement). Tests may inject HTTPClient for httptest.
 func NewDefaultCloudTester() *DefaultCloudTester {
 	return &DefaultCloudTester{
-		HTTPClient: &http.Client{Timeout: defaultCloudTesterTimeout},
+		HTTPClient: httpclient.SafeClient(defaultCloudTesterTimeout),
 	}
 }
 
@@ -307,7 +307,9 @@ func (t *DefaultCloudTester) httpClient() *http.Client {
 	if t.HTTPClient != nil {
 		return t.HTTPClient
 	}
-	return &http.Client{Timeout: defaultCloudTesterTimeout}
+	// SEC-03: operator-supplied token_uri/AAD endpoints must use dial-time
+	// public-IP enforcement (not a plain client after GuardPublicHost only).
+	return httpclient.SafeClient(defaultCloudTesterTimeout)
 }
 
 // summariseAWSError extracts the <Message> element from an AWS XML

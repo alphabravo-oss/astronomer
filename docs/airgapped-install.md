@@ -36,8 +36,13 @@ grep -v '^#' deploy/chart/images.txt > /tmp/images.txt
 cat /tmp/images.txt
 ```
 
-You should see ~9 images: server, worker, migrate, agent, frontend,
-postgres, redis, kubectl, busybox.
+You should see the first-party images (server, worker, migrate, agent,
+frontend, shell) plus third-party deps used by default *and* by production
+optional components: postgres, redis/valkey, busybox, Argo CD, **Dex**,
+**pgdump-s3** (management backup / restore drill), and **fluent-bit**
+(management logging). The extractor unions a default render with a
+production-like render so air-gapped prod installs don't miss Dex/backup/
+logging images that stay off in bare `values.yaml`.
 
 ## Step 2 — Mirror images into your internal registry
 

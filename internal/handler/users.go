@@ -65,6 +65,8 @@ type ResetPasswordRequest struct {
 
 // CreateUser handles POST /api/v1/users/.
 func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	// Store wiring check first so route-security tests (empty body, RBAC
+	// already passed) still observe 503 when the querier is unwired.
 	if h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
 		return
@@ -85,6 +87,12 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Password is required")
+		return
+	}
+	// DIR-04 / AUTH-R01: enforce live platform password policy when settings
+	// are wired; fall back to DefaultPasswordPolicy.
+	if err := auth.ValidatePassword(req.Password, h.passwordPolicy(r.Context())); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -269,6 +277,9 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 		}
 		req.Password = tmp
 		generated = true
+	} else if err := auth.ValidatePassword(req.Password, h.passwordPolicy(r.Context())); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {

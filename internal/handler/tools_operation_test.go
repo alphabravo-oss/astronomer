@@ -37,6 +37,10 @@ func (h *toolHelmStub) Status(ctx context.Context, clusterID, releaseName, names
 	return h.statusResult, h.statusErr
 }
 
+func (h *toolHelmStub) History(ctx context.Context, clusterID, releaseName, namespace string) (*protocol.HelmResultPayload, error) {
+	return h.statusResult, h.statusErr
+}
+
 type toolQueryRecorder struct {
 	clusterID       uuid.UUID
 	installedBySlug map[string]sqlc.InstalledChart
@@ -401,6 +405,8 @@ func TestExecuteOperationUpgradePersistsHelmRevision(t *testing.T) {
 
 func TestCheckToolReleaseReadyReflectsReadiness(t *testing.T) {
 	t.Parallel()
+	restore := setReadinessProbeConfig(2, time.Millisecond)
+	t.Cleanup(restore)
 
 	clusterID := uuid.New()
 	env := toolOperationEnvelope{
@@ -411,15 +417,13 @@ func TestCheckToolReleaseReadyReflectsReadiness(t *testing.T) {
 	}
 	op := sqlc.ToolOperation{ID: uuid.New(), OperationType: "install"}
 
-	// Not-ready release: helm reports a non-"deployed" status. The Helm
-	// apply already committed, so readiness must NOT fail the operation;
-	// it records a warning and lets the drift sweep reconcile readiness.
+	// DIR-11: sustained not-ready fails the operation after probes.
 	notReady := newToolQueryRecorder(clusterID)
 	hNotReady := &ToolHandler{queries: notReady, helm: &toolHelmStub{
 		statusResult: &protocol.HelmResultPayload{Success: true, Status: "pending-install"},
 	}}
-	if err := hNotReady.checkToolReleaseReady(context.Background(), op, env); err != nil {
-		t.Fatalf("checkToolReleaseReady() error = %v, want nil", err)
+	if err := hNotReady.checkToolReleaseReady(context.Background(), op, env); err == nil {
+		t.Fatal("checkToolReleaseReady() error = nil, want readiness failure")
 	}
 	if !hasReadinessEvent(notReady.events, "warn") {
 		t.Fatalf("expected a readiness warn event, got %+v", notReady.events)

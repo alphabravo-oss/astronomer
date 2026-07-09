@@ -146,6 +146,21 @@ var settingsRegistry = map[string]settingSpec{
 	// login time via its TOTP policy resolver, so flipping it takes
 	// effect without a redeploy.
 	"totp.required": {Type: typeBool, Default: false, Description: "Enforce TOTP/2FA enrollment for all local-password users at login"},
+	// DIR-05: compliance baselines pin session.timeout_minutes; JWT mint/refresh
+	// must honor this setting (not only boot-config SessionTimeoutMinutes).
+	// AUTH-R02: this is absolute JWT access-token TTL (exp at mint/refresh), not
+	// an idle/sliding timeout — activity does not extend the access token past exp.
+	"session.timeout_minutes": {Type: typeInt, Default: 480, Description: "Absolute access-token lifetime in minutes (JWT exp at mint/refresh). Not idle timeout — activity does not slide the access token; refresh may issue a new access token under the same setting", MinInt: 5, MaxInt: 10080},
+	// DIR-04: local-password policy for create/change/reset.
+	"password.min_length":          {Type: typeInt, Default: 12, Description: "Minimum password length for local accounts", MinInt: 8, MaxInt: 128},
+	"password.require_uppercase":   {Type: typeBool, Default: true, Description: "Require at least one uppercase letter in local passwords"},
+	"password.require_lowercase":   {Type: typeBool, Default: true, Description: "Require at least one lowercase letter in local passwords"},
+	"password.require_digit":       {Type: typeBool, Default: true, Description: "Require at least one digit in local passwords"},
+	"password.require_special":     {Type: typeBool, Default: false, Description: "Require at least one non-alphanumeric character in local passwords"},
+	// DIR-08: Alertmanager route timing (rendered into AM config).
+	"alertmanager.group_wait":      {Type: typeString, Default: "30s", Description: "Alertmanager group_wait duration (e.g. 30s)"},
+	"alertmanager.group_interval":  {Type: typeString, Default: "5m", Description: "Alertmanager group_interval duration (e.g. 5m)"},
+	"alertmanager.repeat_interval": {Type: typeString, Default: "3h", Description: "Alertmanager repeat_interval duration (e.g. 3h)"},
 	// Migration 058 — dashboard widget iframe allow-list. Comma-
 	// separated list of hosts grafana_panel + url_iframe widget specs
 	// may point at. Empty (the default) blocks every iframe widget;

@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // MaxPayloadBytes caps the body the sender will ship in one POST. A
@@ -148,11 +150,14 @@ type Sender struct {
 	overrides OverrideLookup
 }
 
-// NewSender wires the default *http.Client. The dispatcher constructs
-// one Sender for the lifetime of the worker.
+// NewSender wires the outbound HTTP client. When client is nil, a
+// dial-guarded SafeClient (30s) is used so operator-configured webhook
+// URLs cannot rebind to loopback/private/metadata (SEC-R02). Callers
+// that need private on-prem receivers must pass an explicit
+// httpclient.SafeClientAllowPrivate (or DisableGuardForTest in tests).
 func NewSender(client HTTPDoer) *Sender {
 	if client == nil {
-		client = &http.Client{}
+		client = httpclient.SafeClient(30 * time.Second)
 	}
 	return &Sender{client: client, now: time.Now}
 }

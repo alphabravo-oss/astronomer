@@ -90,6 +90,51 @@ func (q *Queries) AggregateFleetVulnerabilities(ctx context.Context) (AggregateF
 	return i, err
 }
 
+const aggregateVulnerabilitiesPerCluster = `-- name: AggregateVulnerabilitiesPerCluster :many
+SELECT
+    cluster_id,
+    COALESCE(SUM(critical_count), 0)::bigint AS critical,
+    COALESCE(SUM(high_count), 0)::bigint AS high,
+    COUNT(*)::bigint AS report_count
+FROM image_vulnerability_reports
+GROUP BY cluster_id
+`
+
+type AggregateVulnerabilitiesPerClusterRow struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	Critical    int64     `json:"critical"`
+	High        int64     `json:"high"`
+	ReportCount int64     `json:"report_count"`
+}
+
+// Per-cluster critical/high/report_count aggregate for the whole fleet
+// in one pass. Batched equivalent of AggregateClusterVulnerabilities so
+// the compliance-posture rollup avoids one query per cluster.
+func (q *Queries) AggregateVulnerabilitiesPerCluster(ctx context.Context) ([]AggregateVulnerabilitiesPerClusterRow, error) {
+	rows, err := q.db.Query(ctx, aggregateVulnerabilitiesPerCluster)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AggregateVulnerabilitiesPerClusterRow{}
+	for rows.Next() {
+		var i AggregateVulnerabilitiesPerClusterRow
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.Critical,
+			&i.High,
+			&i.ReportCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countVulnerabilitiesForReport = `-- name: CountVulnerabilitiesForReport :one
 SELECT COUNT(*)::bigint FROM image_vulnerabilities
 WHERE report_id = $1::uuid

@@ -81,6 +81,10 @@ func (h *sleepyHelmStub) Do(ctx context.Context, clusterID string, msgType proto
 	return &protocol.HelmResultPayload{Success: true, Status: "uninstalled"}, nil
 }
 
+func (h *sleepyHelmStub) History(context.Context, string, string, string) (*protocol.HelmResultPayload, error) {
+	return &protocol.HelmResultPayload{Success: true}, nil
+}
+
 func (h *sleepyHelmStub) Status(context.Context, string, string, string) (*protocol.HelmResultPayload, error) {
 	return &protocol.HelmResultPayload{}, nil
 }

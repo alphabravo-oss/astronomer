@@ -60,19 +60,29 @@ func HandleMonitoringReconcile(ctx context.Context, t *asynq.Task) error {
 			return nil
 		}
 
-		clusters, err := runtimeDeps.Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 1000, Offset: 0})
+		clusters, err := listAllClustersPaged(ctx, runtimeDeps.Queries.ListClusters)
 		if err != nil {
 			return fmt.Errorf("list clusters: %w", err)
 		}
 
-		for _, cluster := range clusters {
-			if p.ClusterID != "" && cluster.ID.String() != p.ClusterID {
-				continue
+		// PERF-01/02: page full fleet + fan-out so 100–500+ clusters stay
+		// within the reconcile tick (serial loop previously overran).
+		if p.ClusterID != "" {
+			for _, cluster := range clusters {
+				if cluster.ID.String() != p.ClusterID {
+					continue
+				}
+				if err := reconcileClusterMonitoring(ctx, client, cluster, backend, backendHealthy); err != nil {
+					runtimeLogger().WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
+				}
 			}
+			return nil
+		}
+		fanOutClusters(ctx, clusters, 30*time.Second, func(ctx context.Context, cluster sqlc.Cluster) {
 			if err := reconcileClusterMonitoring(ctx, client, cluster, backend, backendHealthy); err != nil {
 				runtimeLogger().WarnContext(ctx, "cluster monitoring reconcile failed", "cluster_id", cluster.ID.String(), "error", err)
 			}
-		}
+		})
 
 		return nil
 	})

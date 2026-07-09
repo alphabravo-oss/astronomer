@@ -27,6 +27,9 @@ func (q *fakeClusterQuerier) ListClusters(_ context.Context, arg sqlc.ListCluste
 	return q.clusters, nil
 }
 
+func (q *fakeClusterQuerier) UpdateClusterStatusOnHeartbeat(context.Context, sqlc.UpdateClusterStatusOnHeartbeatParams) (int64, error) {
+	return 1, nil
+}
 func (q *fakeClusterQuerier) UpdateClusterStatus(context.Context, sqlc.UpdateClusterStatusParams) error {
 	return nil
 }

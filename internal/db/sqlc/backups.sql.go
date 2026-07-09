@@ -977,13 +977,19 @@ func (q *Queries) UpdateBackupScheduleLastBackup(ctx context.Context, arg Update
 	return err
 }
 
-const updateBackupStarted = `-- name: UpdateBackupStarted :exec
-UPDATE backups SET status = 'running', started_at = now() WHERE id = $1
+const updateBackupStarted = `-- name: UpdateBackupStarted :execrows
+UPDATE backups SET status = 'running', started_at = now()
+WHERE id = $1 AND status IN ('pending', 'queued', 'created')
 `
 
-func (q *Queries) UpdateBackupStarted(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, updateBackupStarted, id)
-	return err
+// CORR-05: only transition out of non-terminal pending/queued states so a
+// concurrent reconciler cannot re-stamp a completed/failed backup as running.
+func (q *Queries) UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, updateBackupStarted, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateBackupStorageConfig = `-- name: UpdateBackupStorageConfig :one
@@ -1110,11 +1116,16 @@ func (q *Queries) UpdateRestoreOperationFailed(ctx context.Context, arg UpdateRe
 	return err
 }
 
-const updateRestoreOperationStarted = `-- name: UpdateRestoreOperationStarted :exec
-UPDATE restore_operations SET status = 'running', started_at = now() WHERE id = $1
+const updateRestoreOperationStarted = `-- name: UpdateRestoreOperationStarted :execrows
+UPDATE restore_operations SET status = 'running', started_at = now()
+WHERE id = $1 AND status IN ('pending', 'queued', 'created')
 `
 
-func (q *Queries) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, updateRestoreOperationStarted, id)
-	return err
+// CORR-05 / CORR-R03: CAS status transition for restores (see UpdateBackupStarted).
+func (q *Queries) UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, updateRestoreOperationStarted, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

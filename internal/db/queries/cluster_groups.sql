@@ -50,6 +50,10 @@ SELECT id, name, slug, description, parent_id, color, icon, enabled, created_by,
 ORDER BY depth, name;
 
 -- name: ListClustersInGroupTree :many
+-- PERF-03: callers that only need a page should clamp after fetch (handler
+-- ListClusters uses queryLimit). Delete uses the full result for audit.
+-- A hard safety LIMIT keeps a pathological tree from materializing unbounded
+-- rows into the Go process even when the handler forgets to clamp.
 WITH RECURSIVE subtree AS (
     SELECT cg.id FROM cluster_groups cg WHERE cg.id = $1 AND cg.enabled = true
     UNION ALL
@@ -59,7 +63,8 @@ WITH RECURSIVE subtree AS (
 )
 SELECT cl.id, cl.name FROM clusters cl
 INNER JOIN subtree s ON cl.group_id = s.id
-ORDER BY cl.name ASC;
+ORDER BY cl.name ASC
+LIMIT 5000;
 
 -- name: CountClustersInGroup :one
 SELECT COUNT(*)::bigint FROM clusters WHERE group_id = sqlc.arg(group_id)::uuid;

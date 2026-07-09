@@ -374,6 +374,70 @@ func TestProductionRequiresBackupsWired(t *testing.T) {
 	}
 }
 
+// OPS-01: production with backups enabled must also require encryption-key
+// wrap custody. S3-only wiring leaves CronJobs green but key backup inert —
+// a restore onto a new cluster then cannot decrypt Fernet columns.
+func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+
+	// S3 wired, wrapping secret empty → preflight must refuse.
+	s3Only := append([]string{}, productionWiringSets...)
+	s3Only = append(s3Only,
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws",
+	)
+	errOut := helmTemplateExpectError(t, []string{prodValues}, s3Only...)
+	if !strings.Contains(errOut, "wrappingSecretRef") && !strings.Contains(errOut, "encryptionKeyBackup") {
+		t.Fatalf("production render with S3 but no key wrap did not mention wrappingSecretRef/encryptionKeyBackup:\n%s", errOut)
+	}
+
+	// Explicit opt-out of key backup (still with S3) → render must succeed,
+	// but the key-backup path stays inert.
+	optOut := append([]string{}, s3Only...)
+	optOut = append(optOut, "managementBackup.encryptionKeyBackup.enabled=false")
+	out := helmTemplateWithValueFiles(t, []string{prodValues}, optOut...)
+	if !strings.Contains(out, "name: astronomer-management-backup") {
+		t.Fatalf("S3-wired backup CronJob should render when key backup is explicitly disabled:\n%s", out)
+	}
+	if strings.Contains(out, "- name: KEYBACKUP_ENABLED") {
+		t.Fatalf("encryptionKeyBackup.enabled=false must not arm KEYBACKUP_ENABLED:\n%s", out)
+	}
+
+	// Full wiring (S3 + wrap) → backup CronJob renders with key-backup armed.
+	full := append([]string{}, s3Only...)
+	full = append(full, "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap")
+	out = helmTemplateWithValueFiles(t, []string{prodValues}, full...)
+	if !strings.Contains(out, "name: astronomer-management-backup") {
+		t.Fatalf("fully-wired production backup CronJob missing:\n%s", out)
+	}
+	if !strings.Contains(out, "- name: KEYBACKUP_ENABLED") {
+		t.Fatalf("fully-wired production render should arm key backup:\n%s", out)
+	}
+	if !strings.Contains(out, `secretName: "astronomer-key-wrap"`) {
+		t.Fatalf("fully-wired production render should mount wrapping secret:\n%s", out)
+	}
+}
+
+// OPS-01: production with backups + S3 wired but no key-wrap secret must fail.
+func TestProductionRequiresEncryptionKeyWrapWhenBackupsEnabled(t *testing.T) {
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
+		// wrap name left empty on purpose
+	)
+	errOut := helmTemplateExpectError(t, []string{prodValues}, sets...)
+	if !strings.Contains(errOut, "wrappingSecretRef") && !strings.Contains(errOut, "encryptionKeyBackup") {
+		t.Fatalf("production render with S3 but no key wrap must fail on wrap custody:\n%s", errOut)
+	}
+
+	// With wrap wired, production render succeeds.
+	okSets := append([]string{}, sets...)
+	okSets = append(okSets, "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap")
+	_ = helmTemplateWithValueFiles(t, []string{prodValues}, okSets...)
+}
+
 // O-06: the restore-drill schema floor must track the real max migration so a
 // stale backup can't pass the drill. Fail if values.yaml is >10 versions behind.
 func TestSchemaFloorTracksMaxMigration(t *testing.T) {

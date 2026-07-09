@@ -62,15 +62,58 @@ func GuardPublicHost(rawURL string) error {
 	return nil
 }
 
+// cgnatNet is RFC 6598 Carrier-Grade NAT shared address space (100.64.0.0/10).
+// It is not covered by net.IP.IsPrivate (RFC 1918 only) but must not be
+// reachable via operator-supplied URL fetches (SEC-R08).
+var cgnatNet = func() *net.IPNet {
+	_, n, err := net.ParseCIDR("100.64.0.0/10")
+	if err != nil {
+		panic("httpclient: invalid CGNAT CIDR: " + err.Error())
+	}
+	return n
+}()
+
+// isCGNAT reports whether ip is in RFC 6598 100.64.0.0/10.
+func isCGNAT(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	return cgnatNet.Contains(ip)
+}
+
 // isPublicIP reports whether ip is a routable public address, rejecting the
-// address classes an SSRF probe must never reach.
+// address classes an SSRF probe must never reach (loopback, unspecified,
+// link-local/metadata, private/RFC-1918, CGNAT/RFC-6598, multicast).
 func isPublicIP(ip net.IP) bool {
 	if ip.IsLoopback() ||
 		ip.IsUnspecified() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
 		ip.IsMulticast() ||
-		ip.IsPrivate() {
+		ip.IsPrivate() ||
+		isCGNAT(ip) {
+		return false
+	}
+	return true
+}
+
+// isDialAllowed reports whether a dial to ip is permitted under the given
+// policy. When allowPrivate is false this is equivalent to isPublicIP.
+// When allowPrivate is true, RFC 1918 and CGNAT destinations are allowed
+// (in-cluster Prom/Argo/Vault) but loopback, link-local (including cloud
+// metadata 169.254.169.254), unspecified, and multicast remain blocked.
+func isDialAllowed(ip net.IP, allowPrivate bool) bool {
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() ||
+		ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() {
+		return false
+	}
+	if !allowPrivate && (ip.IsPrivate() || isCGNAT(ip)) {
 		return false
 	}
 	return true
