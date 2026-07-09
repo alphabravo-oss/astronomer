@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vet run verify sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check \
+.PHONY: help build test lint fmt vet run verify verify-enterprise sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -85,15 +85,12 @@ vet: ## Vet Go source files
 openapi-embed: ## Sync the served spec asset from the source-of-truth docs/openapi.yaml
 	cp docs/openapi.yaml internal/handler/assets/openapi.yaml
 
-verify: ## Run the api-contract CI gate locally (mirrors .github/workflows/api-contract.yaml)
-	go build ./...
-	go vet ./...
-	go test ./internal/handler/ ./internal/server/ ./internal/auth/ ./internal/server/middleware/ -count=1
-	node scripts/openapi-coverage.mjs --check
-	node scripts/generate-openapi-types.mjs --check
-	@diff -q docs/openapi.yaml internal/handler/assets/openapi.yaml >/dev/null || { echo "FAIL: internal/handler/assets/openapi.yaml is stale — run 'make openapi-embed'"; exit 1; }
-	go test ./internal/server/ -run RouteTable -count=1
-	go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1
+verify: ## Run the focused API contract gate used by CI
+	./scripts/verify-enterprise.sh api-contract
+
+VERIFY_SCOPE ?= all
+verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
+	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
 
 run: ## Run the server locally
 	go run -ldflags '$(LDFLAGS)' ./cmd/server

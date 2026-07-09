@@ -1,10 +1,7 @@
 name: api-contract
 
-# API contract gate. Proves the Go API surface still builds, vets, and passes
-# its handler/server/auth/middleware tests, AND that the OpenAPI spec, generated
-# TypeScript types, the golden route table, and the apierror catalog are all in
-# sync with the committed tree. Each command is a separate, clearly-named step so
-# a non-zero exit pins the failure to one contract.
+# Focused API contract gate. The authoritative command is also used by
+# `make verify`; detailed command output is retained as a failure artifact.
 on:
   pull_request:
     branches: [main]
@@ -19,6 +16,7 @@ jobs:
   api-contract:
     name: api contract gate
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -40,23 +38,16 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Go build
-        run: go build ./...
+      - name: Run authoritative API contract gate
+        run: ./scripts/verify-enterprise.sh api-contract
+        env:
+          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-api-contract
 
-      - name: Go vet
-        run: go vet ./...
-
-      - name: API package tests
-        run: go test ./internal/handler/ ./internal/server/ ./internal/auth/ ./internal/server/middleware/ -count=1
-
-      - name: OpenAPI coverage check
-        run: node scripts/openapi-coverage.mjs --check
-
-      - name: OpenAPI generated types check
-        run: node scripts/generate-openapi-types.mjs --check
-
-      - name: Route table golden check
-        run: go test ./internal/server/ -run RouteTable -count=1
-
-      - name: Apierror catalog coverage (lint)
-        run: go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1
+      - name: Upload failed API contract reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-contract-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/astronomer-verify-api-contract
+          if-no-files-found: warn
+          retention-days: 14

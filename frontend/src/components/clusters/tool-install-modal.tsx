@@ -21,6 +21,8 @@ interface ToolInstallModalProps {
   confirmDecision?: PermissionDecision;
 }
 
+const EMPTY_TOOL_FIELDS: ToolFormField[] = [];
+
 // setPath writes value into a nested object at a dot-path, creating intermediate
 // objects as needed: setPath({}, "a.b.c", 1) => { a: { b: { c: 1 } } }.
 function setPath(root: Record<string, unknown>, path: string, value: unknown) {
@@ -84,7 +86,7 @@ export function ToolInstallModal({
   installing,
   confirmDecision,
 }: ToolInstallModalProps) {
-  const fields = tool.form_schema?.fields ?? [];
+  const fields = tool.form_schema?.fields ?? EMPTY_TOOL_FIELDS;
   const hasForm = fields.length > 0;
   const [mode, setMode] = useState<'form' | 'yaml'>(hasForm ? 'form' : 'yaml');
 
