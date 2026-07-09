@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -178,18 +179,62 @@ func TestPreflightHookRBACSurvivesUntilJobAndIsLeastPrivilege(t *testing.T) {
 
 	clusterRole := findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight")
 	assertExactRBACRules(t, clusterRole, []rbacRuleContract{
-		{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, verbs: []string{"get"}},
-		{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, verbs: []string{"get"}},
+		{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, resourceNames: []string{"gateways.gateway.networking.k8s.io", "httproutes.gateway.networking.k8s.io"}, verbs: []string{"get"}},
+		{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, resourceNames: []string{"nginx"}, verbs: []string{"get"}},
 	})
 	role := findRenderedDoc(t, docs, "Role", "astronomer-preflight")
 	if got := stringAt(role, "metadata", "namespace"); got != "default" {
 		t.Fatalf("preflight Role namespace = %q, want rendered release namespace default", got)
 	}
-	assertExactRBACRules(t, role, []rbacRuleContract{
-		{apiGroups: []string{""}, resources: []string{"secrets"}, verbs: []string{"get"}},
-	})
+	assertExactRBACRules(t, role, nil)
 	assertExactPreflightBinding(t, findRenderedDoc(t, docs, "ClusterRoleBinding", "astronomer-preflight"), "ClusterRole")
 	assertExactPreflightBinding(t, findRenderedDoc(t, docs, "RoleBinding", "astronomer-preflight"), "Role")
+}
+
+func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
+	t.Run("cert-manager only", func(t *testing.T) {
+		docs := parseRenderedDocs(t, helmTemplate(t, "gateway.enabled=false", "tls.source=selfSigned"))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, resourceNames: []string{"issuers.cert-manager.io", "certificates.cert-manager.io"}, verbs: []string{"get"}},
+		})
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+	})
+
+	t.Run("cert-manager explicit opt out", func(t *testing.T) {
+		sets := []string{"gateway.enabled=false", "tls.source=selfSigned", "tls.requireCertManager=false"}
+		docs := parseRenderedDocs(t, helmTemplate(t, sets...))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+		script := renderedPreflightScript(t, nil, sets...)
+		if strings.Contains(script, `kube_read "cert-manager CRD`) {
+			t.Fatal("tls.requireCertManager=false rendered cert-manager API reads")
+		}
+	})
+
+	t.Run("production references and external PVC", func(t *testing.T) {
+		prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+		sets := append([]string{}, productionWiringSets...)
+		sets = append(sets,
+			"managementBackup.enabled=false",
+			"tls.additionalTrustedCAs.enabled=true",
+			"tls.additionalTrustedCAs.existingSecret=trusted-ca",
+		)
+		docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{prodValues}, sets...))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, resourceNames: []string{"gateways.gateway.networking.k8s.io", "httproutes.gateway.networking.k8s.io"}, verbs: []string{"get"}},
+			{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, resourceNames: []string{"nginx"}, verbs: []string{"get"}},
+		})
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"persistentvolumeclaims"}, resourceNames: []string{"data-astronomer-postgres-0"}, verbs: []string{"get"}},
+		})
+	})
+
+	t.Run("no live reads", func(t *testing.T) {
+		docs := parseRenderedDocs(t, helmTemplate(t, "gateway.enabled=false", "tls.source=none"))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+	})
 }
 
 func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
@@ -219,10 +264,257 @@ func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
 	}
 }
 
+func TestPreflightKubernetesReadsUseBoundedExplicitSemantics(t *testing.T) {
+	defaultScript := renderedPreflightScript(t, nil)
+	for _, want := range []string{
+		"PREFLIGHT_READ_ATTEMPTS=10",
+		"PREFLIGHT_READ_DELAY_SECONDS=1",
+		"kube_read()",
+		"return 0",
+		"return 1",
+		"return 2",
+		"Kubernetes API read not ready",
+		"Check preflight ServiceAccount RBAC propagation",
+	} {
+		if !strings.Contains(defaultScript, want) {
+			t.Fatalf("preflight script missing bounded-read contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1",
+		"kubectl get pvc \"${legacy_pvc}\" -n \"default\" >/dev/null 2>&1",
+		"2>/dev/null | base64 -d 2>/dev/null",
+	} {
+		if strings.Contains(defaultScript, forbidden) {
+			t.Fatalf("preflight script still suppresses kubectl diagnostics via %q", forbidden)
+		}
+	}
+
+	certScript := renderedPreflightScript(t, nil, "gateway.enabled=false", "tls.source=selfSigned")
+	for _, want := range []string{
+		`kube_read "cert-manager CRD issuers.cert-manager.io"`,
+		`kube_read "cert-manager CRD certificates.cert-manager.io"`,
+	} {
+		if !strings.Contains(certScript, want) {
+			t.Fatalf("cert-manager preflight does not use generic bounded read: missing %q", want)
+		}
+	}
+
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+	prodSets := append([]string{}, productionWiringSets...)
+	prodSets = append(prodSets,
+		"managementBackup.enabled=false",
+		"tls.additionalTrustedCAs.enabled=true",
+		"tls.additionalTrustedCAs.existingSecret=trusted-ca",
+	)
+	prodScript := renderedPreflightScript(t, []string{prodValues}, prodSets...)
+	for _, want := range []string{
+		`kube_read "additional trusted CA Secret trusted-ca"`,
+		`kube_read "Postgres DSN Secret ${dsn_secret} key ${dsn_key}"`,
+		`kube_read "legacy bundled Postgres PVC ${legacy_pvc}"`,
+	} {
+		if !strings.Contains(prodScript, want) {
+			t.Fatalf("production preflight does not use generic bounded read: missing %q", want)
+		}
+	}
+	if strings.Contains(prodScript, "set -x") {
+		t.Fatal("preflight script must not enable shell tracing around DSN material")
+	}
+}
+
+func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+	prodSets := append([]string{}, productionWiringSets...)
+	prodSets = append(prodSets, "managementBackup.enabled=false")
+
+	tests := []struct {
+		name        string
+		valueFiles  []string
+		sets        []string
+		mode        string
+		wantSuccess bool
+		wantText    string
+		wantCalls   int
+	}{
+		{
+			name:        "authorization propagation eventually succeeds",
+			mode:        "eventual",
+			wantSuccess: true,
+			wantText:    "Gateway API prerequisites found.",
+			wantCalls:   5,
+		},
+		{
+			name:      "permanent forbidden fails closed after bound",
+			mode:      "forbidden",
+			wantText:  "Kubernetes API read failed for Gateway API CRD gateways.gateway.networking.k8s.io after 10 attempts.",
+			wantCalls: 10,
+		},
+		{
+			name:      "transport failure fails closed after bound",
+			mode:      "transport",
+			wantText:  "Unable to connect to the server",
+			wantCalls: 10,
+		},
+		{
+			name:      "actual missing Gateway CRD is terminal absence",
+			mode:      "gateway-missing",
+			wantText:  "Gateway API CRD gateways.gateway.networking.k8s.io is missing.",
+			wantCalls: 1,
+		},
+		{
+			name:      "actual missing cert-manager CRD",
+			sets:      []string{"gateway.enabled=false", "tls.source=selfSigned"},
+			mode:      "cert-missing",
+			wantText:  "requires cert-manager",
+			wantCalls: 1,
+		},
+		{
+			name:      "trusted CA Secret forbidden is not missing",
+			sets:      []string{"gateway.enabled=false", "tls.source=none", "tls.additionalTrustedCAs.enabled=true", "tls.additionalTrustedCAs.existingSecret=trusted-ca"},
+			mode:      "trusted-forbidden",
+			wantText:  "could not verify additional trusted CA Secret trusted-ca because the Kubernetes API read never became usable.",
+			wantCalls: 10,
+		},
+		{
+			name:        "legacy PVC genuine absence is allowed",
+			sets:        []string{"gateway.enabled=false", "tls.source=none", "postgres.bundled.enabled=false", "postgres.external.dsn=postgres://user:password@db.example.invalid/astronomer?sslmode=require"},
+			mode:        "legacy-missing",
+			wantSuccess: true,
+			wantText:    "No legacy bundled Postgres PVC detected; preflight passes.",
+			wantCalls:   1,
+		},
+		{
+			name:      "legacy PVC forbidden fails closed",
+			sets:      []string{"gateway.enabled=false", "tls.source=none", "postgres.bundled.enabled=false", "postgres.external.dsn=postgres://user:password@db.example.invalid/astronomer?sslmode=require"},
+			mode:      "legacy-forbidden",
+			wantText:  "could not determine whether legacy bundled Postgres PVC",
+			wantCalls: 10,
+		},
+		{
+			name:       "DSN Secret forbidden is not missing",
+			valueFiles: []string{prodValues},
+			sets:       prodSets,
+			mode:       "dsn-forbidden",
+			wantText:   "could not read postgres DSN secret/astronomer-postgres-dsn because the Kubernetes API read never became usable.",
+			wantCalls:  13,
+		},
+		{
+			name:        "DSN Secret success validates TLS without disclosure",
+			valueFiles:  []string{prodValues},
+			sets:        prodSets,
+			mode:        "dsn-success",
+			wantSuccess: true,
+			wantText:    "Production Postgres DSN TLS check passed.",
+			wantCalls:   5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script := renderedPreflightScript(t, tt.valueFiles, tt.sets...)
+			output, calls, err := runRenderedPreflightScript(t, script, tt.mode)
+			if tt.wantSuccess && err != nil {
+				t.Fatalf("preflight unexpectedly failed: %v\n%s", err, output)
+			}
+			if !tt.wantSuccess && err == nil {
+				t.Fatalf("preflight unexpectedly passed:\n%s", output)
+			}
+			if !strings.Contains(output, tt.wantText) {
+				t.Fatalf("preflight output missing %q:\n%s", tt.wantText, output)
+			}
+			if calls != tt.wantCalls {
+				t.Fatalf("kubectl calls = %d, want %d; output:\n%s", calls, tt.wantCalls, output)
+			}
+			if strings.Contains(output, "user:password") {
+				t.Fatalf("preflight output disclosed DSN material:\n%s", output)
+			}
+		})
+	}
+}
+
+func renderedPreflightScript(t *testing.T, valueFiles []string, sets ...string) string {
+	t.Helper()
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, valueFiles, sets...))
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight")
+	container := findContainer(t, podSpecFor(job), "containers", "preflight")
+	command := stringListValue(container["command"])
+	if len(command) != 3 || command[0] != "/bin/sh" || command[1] != "-ec" {
+		t.Fatalf("preflight command = %v, want /bin/sh -ec <script>", command)
+	}
+	return command[2]
+}
+
+func runRenderedPreflightScript(t *testing.T, script, mode string) (string, int, error) {
+	t.Helper()
+	binDir := t.TempDir()
+	countFile := filepath.Join(binDir, "kubectl-count")
+	kubectl := `#!/bin/sh
+count=0
+if [ -f "$FAKE_KUBECTL_COUNT_FILE" ]; then count=$(cat "$FAKE_KUBECTL_COUNT_FILE"); fi
+count=$((count + 1))
+printf '%s' "$count" >"$FAKE_KUBECTL_COUNT_FILE"
+args="$*"
+not_found() { echo "Error from server (NotFound): requested object not found" >&2; exit 1; }
+forbidden() { echo "Error from server (Forbidden): serviceaccount astronomer-preflight cannot get requested resource" >&2; exit 1; }
+transport() { echo "Unable to connect to the server: dial tcp: connection refused" >&2; exit 1; }
+case "$FAKE_KUBECTL_MODE" in
+  eventual)
+    if [ "$count" -le 2 ]; then forbidden; fi
+    ;;
+  forbidden) forbidden ;;
+  transport) transport ;;
+  gateway-missing)
+    echo "$args" | grep -q 'get crd gateways.gateway.networking.k8s.io' && not_found
+    ;;
+  cert-missing)
+    echo "$args" | grep -q 'get crd issuers.cert-manager.io' && not_found
+    ;;
+  trusted-forbidden)
+    echo "$args" | grep -q 'get secret trusted-ca' && forbidden
+    ;;
+  dsn-forbidden)
+    echo "$args" | grep -q 'get secret astronomer-postgres-dsn' && forbidden
+    ;;
+  dsn-success)
+    echo "$args" | grep -q 'get pvc data-astronomer-postgres-0' && not_found
+    ;;
+  legacy-missing)
+    echo "$args" | grep -q 'get pvc data-astronomer-postgres-0' && not_found
+    ;;
+  legacy-forbidden)
+    echo "$args" | grep -q 'get pvc data-astronomer-postgres-0' && forbidden
+    ;;
+esac
+case "$args" in
+  *jsonpath=*) printf '%s' 'postgres://user:password@db.example.invalid/astronomer?sslmode=require' | base64 ;;
+  *) echo 'resource/example' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(binDir, "kubectl"), []byte(kubectl), 0o755); err != nil {
+		t.Fatalf("write fake kubectl: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "sleep"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake sleep: %v", err)
+	}
+	cmd := exec.Command("/bin/sh", "-ec", script)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"FAKE_KUBECTL_MODE="+mode,
+		"FAKE_KUBECTL_COUNT_FILE="+countFile,
+	)
+	output, err := cmd.CombinedOutput()
+	calls := 0
+	if raw, readErr := os.ReadFile(countFile); readErr == nil {
+		calls, _ = strconv.Atoi(string(raw))
+	}
+	return string(output), calls, err
+}
+
 type rbacRuleContract struct {
-	apiGroups []string
-	resources []string
-	verbs     []string
+	apiGroups     []string
+	resources     []string
+	resourceNames []string
+	verbs         []string
 }
 
 func assertExactRBACRules(t *testing.T, role renderedDoc, want []rbacRuleContract) {
@@ -239,11 +531,18 @@ func assertExactRBACRules(t *testing.T, role renderedDoc, want []rbacRuleContrac
 		if !ok {
 			t.Fatalf("%s/%s rule %d is malformed", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i)
 		}
-		for field, expected := range map[string][]string{
-			"apiGroups": want[i].apiGroups,
-			"resources": want[i].resources,
-			"verbs":     want[i].verbs,
-		} {
+		expectedFields := map[string][]string{
+			"apiGroups":     want[i].apiGroups,
+			"resources":     want[i].resources,
+			"resourceNames": want[i].resourceNames,
+			"verbs":         want[i].verbs,
+		}
+		for field := range rule {
+			if _, allowed := expectedFields[field]; !allowed {
+				t.Errorf("%s/%s rule %d has unexpected field %q", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i, field)
+			}
+		}
+		for field, expected := range expectedFields {
 			got := stringListValue(rule[field])
 			if !reflect.DeepEqual(got, expected) {
 				t.Errorf("%s/%s rule %d %s = %v, want exactly %v", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i, field, got, expected)

@@ -308,8 +308,21 @@ considers non-Job hooks complete as soon as they are created, so a
 `hook-succeeded` policy would remove the ServiceAccount and RBAC before the Job
 could use them. On every subsequent install or upgrade,
 `before-hook-creation` replaces the retained resources with the rules from the
-new chart before running the Job. The permissions are limited to `get` on
-CRDs, GatewayClasses, and namespace-local Secrets.
+new chart before running the Job. The permissions are limited to `get` on the
+exact CRDs and GatewayClass enabled by the rendered configuration, the exact
+referenced namespace-local Secrets, and the exact legacy PVC name checked in
+external-Postgres mode. Rules for disabled checks are not rendered.
+
+Kubernetes authorization caches can take a few seconds to observe newly
+created hook RBAC. To avoid reporting that propagation window as a missing
+prerequisite, every preflight API read is bounded to 10 attempts, one second
+apart. Only an explicit Kubernetes `NotFound` response means an object is
+absent. Authorization failures, API discovery failures, and transport errors
+retain their server diagnostic, are retried, and then fail closed as an API
+read failure. These semantics apply to Gateway and cert-manager CRDs,
+GatewayClasses, referenced Secrets, and the legacy Postgres PVC. Genuine PVC
+absence is the only optional-object case. Secret data, including the Postgres
+DSN, is never printed in retry or failure output.
 
 If any of those checks fail, Helm stops with a clear error instead of creating
 an unusable release. The intended model is:

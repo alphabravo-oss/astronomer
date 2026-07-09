@@ -251,7 +251,9 @@ What happens:
    Do not add `hook-succeeded` or manually delete these resources during an
    install/upgrade: Helm treats non-Job hooks as immediately successful and
    would remove the authorization before the Job starts. The retained rules
-   allow only `get` on CRDs, GatewayClasses, and namespace-local Secrets.
+   allow only `get`, constrained by `resourceNames` to the exact CRDs,
+   GatewayClass, referenced namespace-local Secrets, and legacy PVC rendered
+   for enabled checks. Rules for disabled checks are omitted.
 2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present
@@ -260,6 +262,16 @@ What happens:
    - `schema_migrations` connectivity + dirty-flag check
    - Bundled-Postgres PVC absence (when externalised)
    - Any additional `tls.additionalTrustedCAs` Secret exists
+
+   Every Kubernetes API read is limited to 10 attempts, one second apart, so
+   newly replaced hook RBAC can propagate before preflight decides the result.
+   Only an explicit Kubernetes `NotFound` response is treated as absence.
+   `Forbidden`, API discovery, and transport failures preserve the API
+   diagnostic, retry, and then stop the upgrade as an authorization or API
+   availability failure. The legacy bundled-Postgres PVC is the only resource
+   whose genuine absence is a successful result. Preflight never prints
+   Secret data or the Postgres DSN.
+
 3. **Migrate Job** runs next, applying any new schema migrations. Helm
    waits for completion before proceeding (init container in the server
    Deployment also runs migrate, but the Job is the canonical owner).
