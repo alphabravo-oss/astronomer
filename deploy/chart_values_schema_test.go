@@ -10,6 +10,10 @@ import (
 )
 
 func helmTemplateExpectError(t *testing.T, valueFiles []string, sets ...string) string {
+	return helmTemplateExpectErrorWithFlags(t, valueFiles, nil, sets...)
+}
+
+func helmTemplateExpectErrorWithFlags(t *testing.T, valueFiles, flags []string, sets ...string) string {
 	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skipf("helm binary not on PATH (%v); skipping chart-render test", err)
@@ -21,6 +25,7 @@ func helmTemplateExpectError(t *testing.T, valueFiles []string, sets ...string) 
 	chartDir := filepath.Join(filepath.Dir(here), "chart")
 	valuesFile := filepath.Join(chartDir, "values.yaml")
 	args := []string{"template", "astronomer", chartDir, "-f", valuesFile}
+	args = append(args, flags...)
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)
 	}
@@ -60,6 +65,7 @@ func TestValuesSchemaRequiresProductionWiring(t *testing.T) {
 		"/managementBackup/s3/bucket",
 		"/networkPolicy/externalPostgresEgressCIDRs",
 		"/networkPolicy/externalRedisEgressCIDRs",
+		"/networkPolicy/kubernetesAPIEgressCIDRs",
 		"/gateway/hosts",
 		"/tls/secretName",
 		"/dex/clientSecret",
@@ -96,12 +102,68 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32",
+		"networkPolicy.kubernetesAPIEgressCIDRs[1]=10.40.0.0/16",
 	)
 	assertRenderedContains(t, out,
 		"ENV: \"production\"",
 		"SERVER_URL: \"https://astronomer.example.com\"",
 		"name: astronomer-management-backup",
 	)
+}
+
+func TestProductionPreflightNetworkPolicyRequiresNarrowAPICIDRs(t *testing.T) {
+	_, here, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	prodValues := filepath.Join(filepath.Dir(here), "chart", "values-production.yaml")
+	setsWithoutAPI := make([]string, 0, len(productionWiringSets)+1)
+	for _, set := range productionWiringSets {
+		if !strings.HasPrefix(set, "networkPolicy.kubernetesAPIEgressCIDRs") {
+			setsWithoutAPI = append(setsWithoutAPI, set)
+		}
+	}
+	setsWithoutAPI = append(setsWithoutAPI, "managementBackup.enabled=false")
+
+	schemaErr := helmTemplateExpectError(t, []string{prodValues}, setsWithoutAPI...)
+	if !strings.Contains(schemaErr, "/networkPolicy/kubernetesAPIEgressCIDRs") {
+		t.Fatalf("production schema error does not identify missing API CIDRs:\n%s", schemaErr)
+	}
+
+	renderErr := helmTemplateExpectErrorWithFlags(t, []string{prodValues}, []string{"--skip-schema-validation"}, setsWithoutAPI...)
+	for _, want := range []string{
+		"networkPolicy.kubernetesAPIEgressCIDRs must contain",
+		"kubernetes.default Service ClusterIP",
+		"CNI DNAT ordering varies",
+	} {
+		if !strings.Contains(renderErr, want) {
+			t.Fatalf("production render-time preflight error missing %q:\n%s", want, renderErr)
+		}
+	}
+
+	singleAPI := append([]string{}, setsWithoutAPI...)
+	singleAPI = append(singleAPI, "networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32")
+	singleErr := helmTemplateExpectError(t, []string{prodValues}, singleAPI...)
+	if !strings.Contains(singleErr, "/networkPolicy/kubernetesAPIEgressCIDRs") || !strings.Contains(singleErr, "minItems: got 1, want 2") {
+		t.Fatalf("production schema must require Service and endpoint CIDR entries:\n%s", singleErr)
+	}
+
+	for _, cidr := range []string{"0.0.0.0/0", "::/0"} {
+		t.Run("reject "+cidr, func(t *testing.T) {
+			broadSets := append([]string{}, productionWiringSets...)
+			broadSets = append(broadSets,
+				"managementBackup.enabled=false",
+				"networkPolicy.externalEgressCIDRs[0]="+cidr,
+			)
+			broadErr := helmTemplateExpectError(t, []string{prodValues}, broadSets...)
+			for _, want := range []string{"must not contain 0.0.0.0/0 or ::/0", "not a production fallback"} {
+				if !strings.Contains(broadErr, want) {
+					t.Fatalf("production broad-CIDR rejection missing %q:\n%s", want, broadErr)
+				}
+			}
+		})
+	}
 }
 
 func TestEventRelayQueueCapacitySchemaAndServerWiring(t *testing.T) {

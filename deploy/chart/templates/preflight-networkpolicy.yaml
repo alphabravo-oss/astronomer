@@ -1,0 +1,83 @@
+{{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
+{{- /*
+  The retained namespace default-deny selects hook pods during upgrades. This
+  earlier hook policy therefore has to exist before the preflight Job (weight
+  -5) starts. It intentionally follows the same lifecycle as preflight RBAC:
+  retain after the Job, then replace by stable name before the next release.
+
+  NetworkPolicy treatment of Service DNAT varies by CNI. Operators must put
+  both the kubernetes.default Service ClusterIP and the API endpoint/node
+  networks in kubernetesAPIEgressCIDRs; allowing both ports covers pre-DNAT
+  Service port 443 and the common post-DNAT API port 6443.
+*/}}
+{{- $legacyCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) }}
+{{- $apiCIDRs := list }}
+{{- range $cidr := .Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list) }}
+  {{- if not (has $cidr $apiCIDRs) }}
+    {{- $apiCIDRs = append $apiCIDRs $cidr }}
+  {{- end }}
+{{- end }}
+{{- range $cidr := $legacyCIDRs }}
+  {{- if not (has $cidr $apiCIDRs) }}
+    {{- $apiCIDRs = append $apiCIDRs $cidr }}
+  {{- end }}
+{{- end }}
+{{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
+{{- $postgresCIDRs := list }}
+{{- if $externalPostgres }}
+  {{- range $cidr := .Values.networkPolicy.externalPostgresEgressCIDRs | default (list) }}
+    {{- if not (has $cidr $postgresCIDRs) }}
+      {{- $postgresCIDRs = append $postgresCIDRs $cidr }}
+    {{- end }}
+  {{- end }}
+  {{- range $cidr := $legacyCIDRs }}
+    {{- if not (has $cidr $postgresCIDRs) }}
+      {{- $postgresCIDRs = append $postgresCIDRs $cidr }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-preflight
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "preflight") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    # Portable DNS pattern used by the chart's other component policies.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- range $cidr := $postgresCIDRs }}
+    # External Postgres connectivity check in the preflight init container.
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $.Values.postgres.port }}
+    {{- end }}
+    {{- range $cidr := $apiCIDRs }}
+    # kubernetes.default:443 before DNAT / API endpoint:6443 after DNAT.
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+{{- end }}

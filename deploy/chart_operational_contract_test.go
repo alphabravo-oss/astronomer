@@ -46,6 +46,8 @@ var productionWiringSets = []string{
 	"dex.clientSecret=prod-dex-client-secret",
 	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32",
+	"networkPolicy.kubernetesAPIEgressCIDRs[1]=10.40.0.0/16",
 }
 
 type renderedDoc map[string]any
@@ -78,13 +80,16 @@ func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing
 		"Job/astronomer-preflight": "pre-install,pre-upgrade",
 		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
 		// hook-weight) so a fresh install doesn't deadlock on the main SA not
-		// existing yet — see templates/preflight-rbac.yaml. These are the only
-		// non-Job hook resources the chart is allowed to ship.
+		// existing yet — see templates/preflight-rbac.yaml. The matching hook
+		// NetworkPolicy restores only the preflight pod's required egress under
+		// retained default deny. These are the only non-Job hook resources the
+		// chart is allowed to ship.
 		"ServiceAccount/astronomer-preflight":     "pre-install,pre-upgrade",
 		"ClusterRole/astronomer-preflight":        "pre-install,pre-upgrade",
 		"ClusterRoleBinding/astronomer-preflight": "pre-install,pre-upgrade",
 		"Role/astronomer-preflight":               "pre-install,pre-upgrade",
 		"RoleBinding/astronomer-preflight":        "pre-install,pre-upgrade",
+		"NetworkPolicy/astronomer-preflight":      "pre-install,pre-upgrade",
 	}
 	seen := map[string]bool{}
 
@@ -255,7 +260,7 @@ func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
 	}
 
 	disabledDocs := parseRenderedDocs(t, helmTemplate(t, "preflight.enabled=false"))
-	for _, kind := range []string{"Job", "ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding"} {
+	for _, kind := range []string{"Job", "ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding", "NetworkPolicy"} {
 		for _, doc := range disabledDocs {
 			if stringValue(doc["kind"]) == kind && stringAt(doc, "metadata", "name") == "astronomer-preflight" {
 				t.Errorf("preflight.enabled=false unexpectedly rendered %s/astronomer-preflight", kind)

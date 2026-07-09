@@ -1,8 +1,11 @@
 package deploy
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -136,11 +139,13 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.43.0.1/32",
+		"networkPolicy.kubernetesAPIEgressCIDRs[1]=10.40.0.0/16",
 	)
 	if strings.Contains(out, `cidr: "0.0.0.0/0"`) {
 		t.Fatalf("production render should not include broad external egress:\n%s", out)
 	}
-	for _, want := range []string{`cidr: "10.20.0.0/16"`, `cidr: "10.30.0.0/16"`} {
+	for _, want := range []string{`cidr: "10.20.0.0/16"`, `cidr: "10.30.0.0/16"`, `cidr: "10.43.0.1/32"`, `cidr: "10.40.0.0/16"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("production render missing %q:\n%s", want, out)
 		}
@@ -152,6 +157,156 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 			t.Fatalf("production render should not include bundled %s NetworkPolicy when bundled Postgres/Redis are disabled", absent)
 		}
 	}
+}
+
+func TestPreflightNetworkPolicyHookIsDeterministicAndLeastPrivilege(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	policy := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-preflight")
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight")
+	if got := stringAt(policy, "metadata", "namespace"); got != "default" {
+		t.Fatalf("preflight NetworkPolicy namespace = %q, want rendered release namespace default", got)
+	}
+
+	annotations := nestedMap(policy, "metadata", "annotations")
+	if got := stringValue(annotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+		t.Fatalf("preflight NetworkPolicy hook = %q, want pre-install,pre-upgrade", got)
+	}
+	policyWeight, err := strconv.Atoi(stringValue(annotations["helm.sh/hook-weight"]))
+	if err != nil || policyWeight != -10 {
+		t.Fatalf("preflight NetworkPolicy weight = %q, want -10", stringValue(annotations["helm.sh/hook-weight"]))
+	}
+	if got := stringValue(annotations["helm.sh/hook-delete-policy"]); got != "before-hook-creation" {
+		t.Fatalf("preflight NetworkPolicy delete policy = %q, want before-hook-creation", got)
+	}
+	jobWeight, err := strconv.Atoi(stringValue(nestedMap(job, "metadata", "annotations")["helm.sh/hook-weight"]))
+	if err != nil {
+		t.Fatalf("parse preflight Job weight: %v", err)
+	}
+	if policyWeight >= jobWeight {
+		t.Fatalf("preflight NetworkPolicy weight %d must be before Job weight %d", policyWeight, jobWeight)
+	}
+
+	selector := nestedMap(policy, "spec", "podSelector", "matchLabels")
+	wantSelector := map[string]any{
+		"app.kubernetes.io/name":      "astronomer",
+		"app.kubernetes.io/instance":  "astronomer",
+		"app.kubernetes.io/component": "preflight",
+	}
+	if !reflect.DeepEqual(selector, wantSelector) {
+		t.Fatalf("preflight NetworkPolicy selector = %#v, want exactly %#v", selector, wantSelector)
+	}
+	rawTypes, _ := nestedMap(policy, "spec")["policyTypes"].([]any)
+	if got := stringListValue(rawTypes); !reflect.DeepEqual(got, []string{"Egress"}) {
+		t.Fatalf("preflight NetworkPolicy policyTypes = %v, want exactly Egress", got)
+	}
+
+	// Bundled Postgres has no DB init-container, so the dev policy contains
+	// only portable DNS and API access inherited from legacy dev CIDRs.
+	wantEgress := []string{
+		"*:UDP/53,TCP/53",
+		"0.0.0.0/0:TCP/443,TCP/6443",
+	}
+	if got := preflightEgressContracts(t, policy); !reflect.DeepEqual(got, wantEgress) {
+		t.Fatalf("default preflight egress = %v, want exactly %v", got, wantEgress)
+	}
+}
+
+func TestPreflightNetworkPolicyExternalPostgresAndCIDRUnion(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"postgres.bundled.enabled=false",
+		"postgres.port=6432",
+		"postgres.external.dsn=postgres://user:password@db.example.invalid:6432/astronomer?sslmode=require",
+		"networkPolicy.externalEgressCIDRs[0]=10.10.0.0/16",
+		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/16",
+	))
+	policy := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-preflight")
+	want := []string{
+		"*:UDP/53,TCP/53",
+		"10.20.0.0/16:TCP/6432",
+		"10.10.0.0/16:TCP/6432",
+		"10.40.0.0/16:TCP/443,TCP/6443",
+		"10.10.0.0/16:TCP/443,TCP/6443",
+	}
+	got := preflightEgressContracts(t, policy)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("external-Postgres preflight egress = %v, want exactly %v", got, want)
+	}
+	for _, forbidden := range []string{"TCP/80", "TCP/5432", "TCP/6379", "UDP/443", "TCP/6432,TCP/443"} {
+		if strings.Contains(strings.Join(got, "\n"), forbidden) {
+			t.Fatalf("rendered policy unexpectedly includes forbidden/general egress %q", forbidden)
+		}
+	}
+}
+
+func TestPreflightNetworkPolicyDisabledModes(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		set  string
+	}{
+		{name: "network policy disabled", set: "networkPolicy.enabled=false"},
+		{name: "default deny disabled", set: "networkPolicy.defaultDeny=false"},
+		{name: "preflight disabled", set: "preflight.enabled=false"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			docs := parseRenderedDocs(t, helmTemplate(t, tt.set))
+			if renderedDocExists(docs, "NetworkPolicy", "astronomer-preflight") {
+				t.Fatal("preflight NetworkPolicy rendered when its selecting/default-deny contract is disabled")
+			}
+		})
+	}
+}
+
+func TestPreflightNetworkPolicyDoesNotInventAPIFallback(t *testing.T) {
+	valuesPath := filepath.Join(t.TempDir(), "no-preflight-api-cidrs.yaml")
+	values := []byte("networkPolicy:\n  externalEgressCIDRs: []\n  kubernetesAPIEgressCIDRs: []\n")
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("write values override: %v", err)
+	}
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{valuesPath}))
+	policy := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-preflight")
+	want := []string{"*:UDP/53,TCP/53"}
+	if got := preflightEgressContracts(t, policy); !reflect.DeepEqual(got, want) {
+		t.Fatalf("preflight policy invented fallback egress: got %v, want %v", got, want)
+	}
+}
+
+func preflightEgressContracts(t *testing.T, policy renderedDoc) []string {
+	t.Helper()
+	rawRules, ok := nestedMap(policy, "spec")["egress"].([]any)
+	if !ok {
+		t.Fatalf("%s egress is missing or malformed", stringAt(policy, "metadata", "name"))
+	}
+	result := make([]string, 0, len(rawRules))
+	for i, rawRule := range rawRules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			t.Fatalf("egress rule %d is malformed: %#v", i, rawRule)
+		}
+		cidr := "*"
+		if rawTo, exists := rule["to"]; exists {
+			to, ok := rawTo.([]any)
+			if !ok || len(to) != 1 {
+				t.Fatalf("egress rule %d to = %#v, want one ipBlock", i, rawTo)
+			}
+			destination, _ := to[0].(map[string]any)
+			cidr = stringValue(nestedMap(destination, "ipBlock")["cidr"])
+			if cidr == "" {
+				t.Fatalf("egress rule %d has no CIDR", i)
+			}
+		}
+		rawPorts, ok := rule["ports"].([]any)
+		if !ok || len(rawPorts) == 0 {
+			t.Fatalf("egress rule %d ports = %#v", i, rule["ports"])
+		}
+		ports := make([]string, 0, len(rawPorts))
+		for _, rawPort := range rawPorts {
+			port, _ := rawPort.(map[string]any)
+			ports = append(ports, fmt.Sprintf("%s/%v", stringValue(port["protocol"]), port["port"]))
+		}
+		result = append(result, cidr+":"+strings.Join(ports, ","))
+	}
+	return result
 }
 
 func assertPolicyTypes(t *testing.T, policy renderedDoc, wants ...string) {

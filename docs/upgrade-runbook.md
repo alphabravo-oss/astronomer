@@ -245,15 +245,38 @@ helm upgrade astronomer ./deploy/chart \
 
 What happens:
 
-1. **Preflight RBAC** is replaced first (`pre-upgrade` hooks, weight `-10`).
-   The dedicated ServiceAccount, Role/ClusterRole, and bindings intentionally
-   use only `before-hook-creation`, so they remain available to the later Job.
+1. **Preflight prerequisites** are replaced first (`pre-upgrade` hooks, weight
+   `-10`). The dedicated ServiceAccount, Role/ClusterRole, bindings, and
+   default-deny allow NetworkPolicy intentionally use only
+   `before-hook-creation`, so they remain available to the later Job.
    Do not add `hook-succeeded` or manually delete these resources during an
    install/upgrade: Helm treats non-Job hooks as immediately successful and
    would remove the authorization before the Job starts. The retained rules
    allow only `get`, constrained by `resourceNames` to the exact CRDs,
    GatewayClass, referenced namespace-local Secrets, and legacy PVC rendered
    for enabled checks. Rules for disabled checks are omitted.
+
+   The NetworkPolicy selects only preflight pods. It permits DNS on TCP/UDP 53,
+   the external Postgres check on the configured database port, and Kubernetes
+   API access on TCP 443/6443. Before production upgrades, ensure
+   `networkPolicy.kubernetesAPIEgressCIDRs` covers both the
+   `kubernetes.default` Service ClusterIP and API endpoint/node networks. CNIs
+   differ on whether policy sees Service traffic before or after DNAT.
+
+   Inventory both address classes before setting the CIDRs:
+
+   ```bash
+   kubectl -n default get service kubernetes \
+     -o jsonpath='{.spec.clusterIP}{"\n"}'
+   kubectl -n default get endpointslice \
+     -l kubernetes.io/service-name=kubernetes -o wide
+   kubectl get nodes -o wide
+   ```
+
+   Prefer an exact `/32` (`/128` for IPv6) for the Service address and the
+   narrowest provider-supported endpoint or node ranges. Confirm managed
+   control-plane addresses with the provider when they are not exposed by the
+   EndpointSlice.
 2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present

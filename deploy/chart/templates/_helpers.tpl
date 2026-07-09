@@ -463,6 +463,20 @@ rendered manifest.
         {{- end }}
       {{- end }}
     {{- end }}
+    {{- /* The retained namespace default-deny already selects Helm hook pods
+           during upgrades. The preflight allow-policy cannot safely infer API
+           addresses because NetworkPolicy may evaluate Service traffic before
+           or after DNAT depending on the CNI. Require both address classes to
+           be supplied explicitly by the operator. */ -}}
+    {{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
+      {{- if lt (len (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list))) 2 }}
+        {{- $errs = append $errs "  - networkPolicy.kubernetesAPIEgressCIDRs must contain at least two entries covering the kubernetes.default Service ClusterIP CIDR/address and Kubernetes API endpoint or node network when production preflight runs under default deny. CNI DNAT ordering varies, so both pre-DNAT Service and post-DNAT endpoint destinations must be covered." }}
+      {{- end }}
+      {{- $preflightCIDRs := concat (.Values.networkPolicy.externalEgressCIDRs | default (list)) (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list)) (.Values.networkPolicy.externalPostgresEgressCIDRs | default (list)) }}
+      {{- if or (has "0.0.0.0/0" $preflightCIDRs) (has "::/0" $preflightCIDRs) }}
+        {{- $errs = append $errs "  - production preflight NetworkPolicy CIDRs must not contain 0.0.0.0/0 or ::/0. Configure narrow kubernetesAPIEgressCIDRs and externalPostgresEgressCIDRs; externalEgressCIDRs is a development compatibility bucket, not a production fallback." }}
+      {{- end }}
+    {{- end }}
     {{- if gt (len $errs) 0 }}
       {{- $msg := printf "\n\nAstronomer production preflight failed:\n%s\n\nSee deploy/chart/README.md and deploy/chart/values-production.yaml for the expected wiring." (join "\n" $errs) }}
       {{- fail $msg }}

@@ -34,6 +34,7 @@ helm upgrade --install astronomer ./deploy/chart \
   --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
   --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
   --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
+  --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.43.0.1/32,10.40.0.0/16}' \
   --set bootstrap.email=admin@example.com \
   --set dex.clientSecret=<random-dex-client-secret> \
   --set managementBackup.s3.bucket=my-astronomer-backups \
@@ -58,6 +59,8 @@ they're the bare minimum a production install needs:
   password-gated)
 - `networkPolicy.externalPostgresEgressCIDRs` and
   `networkPolicy.externalRedisEgressCIDRs` when NetworkPolicy is enabled
+- `networkPolicy.kubernetesAPIEgressCIDRs`, covering both the
+  `kubernetes.default` Service ClusterIP and API endpoint/node networks
 - `gateway.hosts` (at least one hostname)
 - `tls.source` — must be `selfSigned`, `letsEncrypt`, or `secret` (not `none`)
 - `tls.letsEncrypt.email` — required when `tls.source=letsEncrypt`
@@ -312,6 +315,23 @@ new chart before running the Job. The permissions are limited to `get` on the
 exact CRDs and GatewayClass enabled by the rendered configuration, the exact
 referenced namespace-local Secrets, and the exact legacy PVC name checked in
 external-Postgres mode. Rules for disabled checks are not rendered.
+
+When default deny is enabled, a retained preflight NetworkPolicy is created at
+the same `-10` hook weight and replaced by stable name on every release. It
+selects only the preflight pod labels and permits the flows that pod actually
+uses: DNS on TCP/UDP 53, external Postgres on the configured Postgres port when
+the database connectivity init container is enabled, and Kubernetes API access
+on TCP 443/6443. Development may source the narrow port rules from the legacy
+`externalEgressCIDRs` bucket. Production requires dedicated Postgres and API
+CIDRs and rejects `0.0.0.0/0` and `::/0` rather than falling back to unrestricted
+egress.
+
+NetworkPolicy handling of Kubernetes Service DNAT varies by CNI. Populate
+`kubernetesAPIEgressCIDRs` with both the `kubernetes.default` Service ClusterIP
+(prefer an exact `/32` or `/128`) and every API endpoint or node network the
+Service can translate to. Port 443 covers evaluation before DNAT; port 6443
+covers the common post-DNAT API endpoint. Validate the CIDRs against the
+production cluster's Service and endpoint data before upgrading.
 
 Kubernetes authorization caches can take a few seconds to observe newly
 created hook RBAC. To avoid reporting that propagation window as a missing

@@ -258,9 +258,11 @@ metrics:
 # Production starts from namespace default-deny and intentionally clears the
 # dev-friendly broad external egress bucket. Set the narrow CIDR buckets for
 # your managed Postgres, Redis, Kubernetes API, outbound HTTPS, and IdP/LDAP
-# networks during install. The schema requires Postgres/Redis CIDRs because
-# production values also require external Postgres/Redis; without those egress
-# buckets the server and worker pods render successfully but cannot connect.
+# networks during install. The schema requires Postgres, Redis, and Kubernetes
+# API CIDRs. For the API, include both the kubernetes.default Service ClusterIP
+# and the API endpoint or node networks because CNI Service-DNAT ordering
+# varies; the preflight hook permits only TCP 443/6443 to this union.
+# Unrestricted 0.0.0.0/0 and ::/0 preflight destinations are rejected.
 networkPolicy:
   enabled: true
   defaultDeny: true
@@ -268,6 +270,7 @@ networkPolicy:
   externalHTTPSEgressCIDRs: []
   externalPostgresEgressCIDRs: []
   externalRedisEgressCIDRs: []
+  # Required: Service ClusterIP (/32 is preferred) plus API endpoint/node CIDRs.
   kubernetesAPIEgressCIDRs: []
   identityProviderEgressCIDRs: []
 

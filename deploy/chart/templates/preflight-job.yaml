@@ -18,8 +18,9 @@ spec:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 8 }}
     spec:
       restartPolicy: Never
-      # Dedicated hook SA (templates/preflight-rbac.yaml, hook-weight -10) so a
-      # fresh install doesn't deadlock on the main SA not existing yet.
+      # Dedicated hook SA/RBAC and default-deny allow NetworkPolicy are created
+      # at hook-weight -10 so this later -5 Job can authenticate and reach the
+      # API on both fresh installs and upgrades.
       serviceAccountName: {{ include "astronomer.serviceAccountName" . }}-preflight
       {{- with .Values.preflight.podSecurityContext }}
       securityContext:
