@@ -103,3 +103,20 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		"name: astronomer-management-backup",
 	)
 }
+
+func TestEventRelayQueueCapacitySchemaAndServerWiring(t *testing.T) {
+	errOut := helmTemplateExpectError(t, nil, "server.eventRelayQueueCapacity=65537")
+	if !strings.Contains(errOut, "eventRelayQueueCapacity") || !strings.Contains(errOut, "maximum") {
+		t.Fatalf("event relay hard-max schema error missing capacity details:\n%s", errOut)
+	}
+
+	out := helmTemplate(t, "server.eventRelayQueueCapacity=2048")
+	for _, want := range []string{
+		"name: EVENT_RELAY_QUEUE_CAPACITY",
+		`value: "2048"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("server render missing %q", want)
+		}
+	}
+}

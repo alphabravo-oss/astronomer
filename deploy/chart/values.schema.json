@@ -540,6 +540,7 @@
         "resources": { "type": "object" },
         "podSecurityContext": { "type": "object" },
         "securityContext": { "type": "object" },
+        "eventRelayQueueCapacity": { "type": "integer", "minimum": 1, "maximum": 65536 },
         "env": { "type": "object" }
       }
     },

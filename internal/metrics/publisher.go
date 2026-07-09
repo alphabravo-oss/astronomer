@@ -17,7 +17,9 @@
 //     fanned out as cluster.status_changed.
 //
 // Errors are intentionally swallowed at this layer; the publisher must never
-// crash the server and must never block the bus.
+// crash the server. Bus.Publish completes after local broadcast plus a bounded,
+// nonblocking Redis-relay enqueue, so Redis latency cannot stall a fleet-wide
+// metrics pass. Relay queue overload is intentionally lossy and observable.
 package metrics
 
 import (

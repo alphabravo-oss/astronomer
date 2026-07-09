@@ -116,7 +116,6 @@ func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log
 	}
 }
 
-
 // emailNotifierAdapter wraps *email.Enqueuer in the handler-local
 // EmailNotifier surface. The two-type indirection keeps the handler
 // package free of any email package imports (so the test fakes don't
@@ -1063,9 +1062,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if cfg.RedisURL != "" {
 		if opt, rerr := asynq.ParseRedisURI(cfg.RedisURL); rerr == nil {
 			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
-				bus.AttachRedis(client, events.DefaultRedisChannel, logger)
+				bus.AttachRedis(client, events.DefaultRedisChannel, logger,
+					events.WithRedisRelayQueueCapacity(cfg.EventRelayQueueCapacity))
 				go bus.StartRedisRelay(ctx)
-				logger.Info("events bus redis fan-out enabled", "channel", events.DefaultRedisChannel)
+				logger.Info("events bus redis fan-out enabled",
+					"channel", events.DefaultRedisChannel,
+					"queue_capacity", bus.RelayStatus().Capacity)
 			}
 		}
 	}

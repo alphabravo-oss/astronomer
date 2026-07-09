@@ -11,6 +11,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"sync"
@@ -86,7 +87,24 @@ const (
 // DefaultRedisChannel is the pub/sub channel for cross-pod event fan-out.
 const DefaultRedisChannel = "astronomer:events:v1"
 
+const (
+	// DefaultRedisRelayQueueCapacity absorbs ordinary event bursts without
+	// allowing a Redis outage to grow process memory without bound.
+	DefaultRedisRelayQueueCapacity = 1024
+	// MaxRedisRelayQueueCapacity is the hard operator-configurable ceiling.
+	MaxRedisRelayQueueCapacity = 65536
+
+	redisRelayPublishTimeout  = 2 * time.Second
+	redisRelayShutdownTimeout = 500 * time.Millisecond
+	redisRelayRetryBackoff    = 50 * time.Millisecond
+	redisRelayMaxAttempts     = 2
+	redisRelayLogInterval     = 30 * time.Second
+)
+
 // Event is a single push payload. Data is opaque JSON-marshalable per Type.
+// Publishers must treat Data and any referenced maps/slices as immutable after
+// Publish returns: Redis serialization is intentionally owned by the
+// asynchronous relay worker so Publish never pays serialization/Redis latency.
 type Event struct {
 	ID   uint64    `json:"id"`
 	Type Type      `json:"type"`
@@ -107,10 +125,23 @@ type Bus struct {
 	subs   map[*subscription]struct{}
 	nextID atomic.Uint64
 
-	rdb     redis.UniversalClient
-	channel string
-	origin  string
-	log     *slog.Logger
+	relayMu    sync.RWMutex
+	rdb        redis.UniversalClient
+	channel    string
+	origin     string
+	log        *slog.Logger
+	relayQueue chan Event
+	relayDone  chan struct{}
+
+	relayStarted     atomic.Bool
+	relayAttached    atomic.Bool
+	relayAccepting   atomic.Bool
+	relayHealthy     atomic.Bool
+	relayEnqueued    atomic.Uint64
+	relayPublished   atomic.Uint64
+	relayDropped     atomic.Uint64
+	relayLastSuccess atomic.Int64
+	nextFailureLogAt atomic.Int64
 }
 
 type subscription struct {
@@ -124,6 +155,35 @@ type redisWire struct {
 	Time   time.Time       `json:"time"`
 	Data   json.RawMessage `json:"data,omitempty"`
 	Origin string          `json:"origin"`
+}
+
+type redisRelayConfig struct {
+	queueCapacity int
+}
+
+// RedisRelayOption configures the bounded Redis fan-out worker.
+type RedisRelayOption func(*redisRelayConfig)
+
+// WithRedisRelayQueueCapacity configures the bounded outbound queue. Values at
+// or below zero use the safe default; values above the hard maximum are
+// clamped so an environment typo cannot create unbounded memory pressure.
+func WithRedisRelayQueueCapacity(capacity int) RedisRelayOption {
+	return func(cfg *redisRelayConfig) {
+		cfg.queueCapacity = capacity
+	}
+}
+
+// RedisRelayStatus is a point-in-time operational view of the bounded relay.
+// Prometheus exposes the same health and throughput signals for alerting.
+type RedisRelayStatus struct {
+	Running     bool
+	Healthy     bool
+	QueueDepth  int
+	Capacity    int
+	Enqueued    uint64
+	Published   uint64
+	Dropped     uint64
+	LastSuccess time.Time
 }
 
 // NewBus constructs a Bus.
@@ -141,37 +201,74 @@ func NewBus() *Bus {
 
 // AttachRedis enables cross-pod fan-out. Safe to call once at startup.
 // rdb may be a *redis.Client or other UniversalClient.
-func (b *Bus) AttachRedis(rdb redis.UniversalClient, channel string, log *slog.Logger) {
+func (b *Bus) AttachRedis(rdb redis.UniversalClient, channel string, log *slog.Logger, opts ...RedisRelayOption) {
 	if b == nil || rdb == nil {
 		return
+	}
+	cfg := redisRelayConfig{queueCapacity: DefaultRedisRelayQueueCapacity}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+	requestedCapacity := cfg.queueCapacity
+	if cfg.queueCapacity <= 0 {
+		cfg.queueCapacity = DefaultRedisRelayQueueCapacity
+	}
+	if cfg.queueCapacity > MaxRedisRelayQueueCapacity {
+		cfg.queueCapacity = MaxRedisRelayQueueCapacity
 	}
 	if channel == "" {
 		channel = DefaultRedisChannel
 	}
+	b.relayMu.Lock()
+	defer b.relayMu.Unlock()
 	if log != nil {
 		b.log = log
 	}
+	if requestedCapacity > MaxRedisRelayQueueCapacity && b.log != nil {
+		b.log.Warn("events redis relay queue capacity exceeds hard maximum; clamping",
+			"requested_capacity", requestedCapacity,
+			"effective_capacity", cfg.queueCapacity)
+	}
 	b.rdb = rdb
 	b.channel = channel
+	b.relayQueue = make(chan Event, cfg.queueCapacity)
+	b.relayAttached.Store(true)
+	b.relayAccepting.Store(true)
+	observability.SetEventRelayQueue(0, cfg.queueCapacity)
+	observability.SetEventRelayHealth(false)
 }
 
 // StartRedisRelay subscribes to the Redis channel and re-injects remote events
 // into the local bus with Remote=true. Blocks until ctx is cancelled.
 func (b *Bus) StartRedisRelay(ctx context.Context) {
-	if b == nil || b.rdb == nil {
+	if b == nil {
 		return
 	}
+	b.relayMu.RLock()
+	rdb := b.rdb
 	ch := b.channel
+	b.relayMu.RUnlock()
+	if rdb == nil {
+		return
+	}
 	if ch == "" {
 		ch = DefaultRedisChannel
 	}
-	pubsub := b.rdb.Subscribe(ctx, ch)
+	relayCtx, cancel := context.WithCancel(ctx)
+	done := b.startRedisPublisher(relayCtx)
+	defer func() {
+		cancel()
+		<-done
+	}()
+	pubsub := rdb.Subscribe(relayCtx, ch)
 	defer func() { _ = pubsub.Close() }()
 
 	msgCh := pubsub.Channel()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-relayCtx.Done():
 			return
 		case msg, ok := <-msgCh:
 			if !ok {
@@ -182,8 +279,8 @@ func (b *Bus) StartRedisRelay(ctx context.Context) {
 			}
 			var wire redisWire
 			if err := json.Unmarshal([]byte(msg.Payload), &wire); err != nil {
-				if b.log != nil {
-					b.log.Debug("events redis: bad payload", "error", err)
+				if log := b.logger(); log != nil {
+					log.Debug("events redis: bad payload", "error", err)
 				}
 				continue
 			}
@@ -228,7 +325,7 @@ func (b *Bus) Publish(t Type, data any) {
 		Origin: b.origin,
 	}
 	b.broadcastLocal(e)
-	b.publishRedis(e)
+	b.enqueueRedis(e)
 }
 
 // PublishRemote injects an already-built remote event for tests (Remote=true).
@@ -259,37 +356,239 @@ func (b *Bus) broadcastLocal(e Event) {
 	b.mu.RUnlock()
 }
 
-func (b *Bus) publishRedis(e Event) {
-	if b.rdb == nil {
+func (b *Bus) enqueueRedis(e Event) {
+	if !b.relayAccepting.Load() {
+		if b.relayAttached.Load() {
+			b.recordRelayDrop("relay_not_running")
+		}
 		return
 	}
-	ch := b.channel
-	if ch == "" {
-		ch = DefaultRedisChannel
+	b.relayMu.RLock()
+	queue := b.relayQueue
+	b.relayMu.RUnlock()
+	if queue == nil {
+		return
 	}
-	var dataRaw json.RawMessage
-	if e.Data != nil {
-		raw, err := json.Marshal(e.Data)
-		if err != nil {
+	select {
+	case queue <- e:
+		b.relayEnqueued.Add(1)
+		observability.RecordEventRelayResult(observability.EventRelayResultEnqueued)
+		observability.SetEventRelayQueue(len(queue), cap(queue))
+	default:
+		b.recordRelayDrop("queue_full")
+	}
+}
+
+func (b *Bus) startRedisPublisher(ctx context.Context) <-chan struct{} {
+	b.relayMu.Lock()
+	if b.relayDone != nil {
+		done := b.relayDone
+		b.relayMu.Unlock()
+		return done
+	}
+	done := make(chan struct{})
+	b.relayDone = done
+	queue := b.relayQueue
+	rdb := b.rdb
+	channel := b.channel
+	if channel == "" {
+		channel = DefaultRedisChannel
+	}
+	b.relayMu.Unlock()
+	if queue == nil || rdb == nil {
+		close(done)
+		return done
+	}
+
+	b.relayStarted.Store(true)
+	b.relayAccepting.Store(true)
+	b.relayHealthy.Store(true)
+	observability.SetEventRelayHealth(true)
+	go b.runRedisPublisher(ctx, rdb, channel, queue, done)
+	return done
+}
+
+func (b *Bus) runRedisPublisher(ctx context.Context, rdb redis.UniversalClient, channel string, queue <-chan Event, done chan<- struct{}) {
+	defer close(done)
+	defer func() {
+		b.relayAccepting.Store(false)
+		b.relayStarted.Store(false)
+		b.relayHealthy.Store(false)
+		observability.SetEventRelayHealth(false)
+		observability.SetEventRelayQueue(len(queue), cap(queue))
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			b.relayAccepting.Store(false)
+			b.drainRedisQueue(rdb, channel, queue)
 			return
+		default:
+		}
+		select {
+		case <-ctx.Done():
+			b.relayAccepting.Store(false)
+			b.drainRedisQueue(rdb, channel, queue)
+			return
+		case event := <-queue:
+			observability.SetEventRelayQueue(len(queue), cap(queue))
+			b.publishRedisEvent(ctx, rdb, channel, event)
+		}
+	}
+}
+
+func (b *Bus) drainRedisQueue(rdb redis.UniversalClient, channel string, queue <-chan Event) {
+	drainCtx, cancel := context.WithTimeout(context.Background(), redisRelayShutdownTimeout)
+	defer cancel()
+	for {
+		select {
+		case event := <-queue:
+			observability.SetEventRelayQueue(len(queue), cap(queue))
+			b.publishRedisEvent(drainCtx, rdb, channel, event)
+		case <-drainCtx.Done():
+			b.dropQueuedRelayEvents(queue, "shutdown_timeout")
+			return
+		default:
+			return
+		}
+	}
+}
+
+func (b *Bus) dropQueuedRelayEvents(queue <-chan Event, reason string) {
+	for {
+		select {
+		case <-queue:
+			b.recordRelayDrop(reason)
+		default:
+			observability.SetEventRelayQueue(0, cap(queue))
+			return
+		}
+	}
+}
+
+func (b *Bus) publishRedisEvent(parent context.Context, rdb redis.UniversalClient, channel string, event Event) bool {
+	var dataRaw json.RawMessage
+	if event.Data != nil {
+		raw, err := json.Marshal(event.Data)
+		if err != nil {
+			b.recordRelayDrop("serialization_failed")
+			b.logRelayFailure("events redis serialization failed", err)
+			return false
 		}
 		dataRaw = raw
 	}
 	payload, err := json.Marshal(redisWire{
-		ID:     e.ID,
-		Type:   e.Type,
-		Time:   e.Time,
+		ID:     event.ID,
+		Type:   event.Type,
+		Time:   event.Time,
 		Data:   dataRaw,
-		Origin: e.Origin,
+		Origin: event.Origin,
 	})
 	if err != nil {
-		return
+		b.recordRelayDrop("serialization_failed")
+		b.logRelayFailure("events redis serialization failed", err)
+		return false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if err := b.rdb.Publish(ctx, ch, payload).Err(); err != nil && b.log != nil {
-		b.log.Debug("events redis publish failed", "error", err)
+
+	var publishErr error
+	for attempt := 1; attempt <= redisRelayMaxAttempts; attempt++ {
+		if err := parent.Err(); err != nil {
+			publishErr = err
+			break
+		}
+		attemptCtx, cancel := context.WithTimeout(parent, redisRelayPublishTimeout)
+		started := time.Now()
+		publishErr = rdb.Publish(attemptCtx, channel, payload).Err()
+		observability.ObserveEventRelayPublish(started)
+		cancel()
+		if publishErr == nil {
+			now := time.Now().UTC()
+			b.relayPublished.Add(1)
+			b.relayLastSuccess.Store(now.UnixNano())
+			b.relayHealthy.Store(true)
+			observability.RecordEventRelayResult(observability.EventRelayResultPublished)
+			observability.SetEventRelayHealth(true)
+			observability.SetEventRelayLastSuccess(now)
+			return true
+		}
+		if attempt < redisRelayMaxAttempts {
+			timer := time.NewTimer(redisRelayRetryBackoff)
+			select {
+			case <-parent.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				publishErr = parent.Err()
+				attempt = redisRelayMaxAttempts
+			case <-timer.C:
+			}
+		}
 	}
+
+	b.relayHealthy.Store(false)
+	observability.SetEventRelayHealth(false)
+	b.recordRelayDrop("publish_failed")
+	if publishErr == nil {
+		publishErr = errors.New("redis publish failed")
+	}
+	b.logRelayFailure("events redis publish failed", publishErr)
+	return false
+}
+
+func (b *Bus) recordRelayDrop(reason string) {
+	b.relayDropped.Add(1)
+	observability.RecordEventRelayResult(observability.EventRelayResultDropped)
+	observability.RecordDroppedEvent("events_redis_relay", reason)
+}
+
+func (b *Bus) logRelayFailure(message string, err error) {
+	now := time.Now()
+	nowUnix := now.UnixNano()
+	for {
+		next := b.nextFailureLogAt.Load()
+		if next > nowUnix {
+			return
+		}
+		if b.nextFailureLogAt.CompareAndSwap(next, now.Add(redisRelayLogInterval).UnixNano()) {
+			if log := b.logger(); log != nil {
+				log.Debug(message, "error", err, "log_suppression_window", redisRelayLogInterval)
+			}
+			return
+		}
+	}
+}
+
+func (b *Bus) logger() *slog.Logger {
+	b.relayMu.RLock()
+	defer b.relayMu.RUnlock()
+	return b.log
+}
+
+// RelayStatus returns a lock-free status snapshot suitable for health/debug
+// endpoints without exposing queue contents.
+func (b *Bus) RelayStatus() RedisRelayStatus {
+	if b == nil {
+		return RedisRelayStatus{}
+	}
+	b.relayMu.RLock()
+	queue := b.relayQueue
+	b.relayMu.RUnlock()
+	status := RedisRelayStatus{
+		Running:   b.relayStarted.Load(),
+		Healthy:   b.relayHealthy.Load(),
+		Enqueued:  b.relayEnqueued.Load(),
+		Published: b.relayPublished.Load(),
+		Dropped:   b.relayDropped.Load(),
+	}
+	if queue != nil {
+		status.QueueDepth = len(queue)
+		status.Capacity = cap(queue)
+	}
+	if value := b.relayLastSuccess.Load(); value > 0 {
+		status.LastSuccess = time.Unix(0, value).UTC()
+	}
+	return status
 }
 
 // Subscribe returns a channel that receives events until ctx is cancelled.

@@ -33,6 +33,26 @@ func TestLoadDefaultsWorkerMetricsAddr(t *testing.T) {
 	}
 }
 
+func TestEventRelayQueueCapacityConfig(t *testing.T) {
+	t.Setenv("EVENT_RELAY_QUEUE_CAPACITY", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EventRelayQueueCapacity != 1024 {
+		t.Fatalf("default EventRelayQueueCapacity = %d, want 1024", cfg.EventRelayQueueCapacity)
+	}
+
+	t.Setenv("EVENT_RELAY_QUEUE_CAPACITY", "2048")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EventRelayQueueCapacity != 2048 {
+		t.Fatalf("configured EventRelayQueueCapacity = %d, want 2048", cfg.EventRelayQueueCapacity)
+	}
+}
+
 // The opt-in feature flags must be bound so AutomaticEnv resolves them —
 // without a BindEnv entry viper never reads the env var and the flag is stuck
 // off (regression: control-plane snapshots + native RBAC could not be enabled).

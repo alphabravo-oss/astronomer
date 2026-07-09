@@ -11,6 +11,10 @@ import (
 type Config struct {
 	DatabaseURL string `mapstructure:"database_url"`
 	RedisURL    string `mapstructure:"redis_url"`
+	// EventRelayQueueCapacity bounds local events waiting for cross-replica
+	// Redis fan-out. The events package applies a hard maximum even when an
+	// environment value is larger.
+	EventRelayQueueCapacity int `mapstructure:"event_relay_queue_capacity"`
 
 	// pgxpool sizing — operator-tunable via the chart's `database.*`
 	// values. Zero values fall through to the
@@ -220,6 +224,7 @@ func Load() (*Config, error) {
 		"agent_image_tag",
 		"database_url",
 		"redis_url",
+		"event_relay_queue_capacity",
 		"secret_key",
 		"server_url",
 		"audit_log_retention_months",
@@ -263,6 +268,7 @@ func Load() (*Config, error) {
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "database_url", Value: "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable"},
 		envconfig.Default{Key: "redis_url", Value: "redis://localhost:6379/0"},
+		envconfig.Default{Key: "event_relay_queue_capacity", Value: 1024},
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},

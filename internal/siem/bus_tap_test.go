@@ -155,6 +155,42 @@ func TestBusTap_EnqueuesMatchingForwarders(t *testing.T) {
 	}
 }
 
+func TestBusTap_SkipsRemoteDuplicate(t *testing.T) {
+	q := &fakeTapQuerier{
+		forwarders: []sqlc.SiemForwarder{
+			{ID: mustUUID(), Name: "cluster-events", EventFilters: json.RawMessage(`["cluster."]`), Enabled: true},
+		},
+	}
+	tap := NewBusTap(q, nil, matchByPrefix, nil)
+	tap.SetCacheTTL(time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tap.Start(ctx)
+	event := events.Event{ID: 42, Type: events.TypeClusterConnected, Time: time.Now().UTC()}
+	tap.HandleEvent(ctx, event)
+	event.Remote = true
+	tap.HandleEvent(ctx, event)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		q.mu.Lock()
+		count := len(q.enqueued)
+		q.mu.Unlock()
+		if count == 1 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	// Give a wrongly-enqueued remote duplicate time to reach the inserter; the
+	// assertion must not pass merely because it observed the first item early.
+	time.Sleep(20 * time.Millisecond)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if got := len(q.enqueued); got != 1 {
+		t.Fatalf("SIEM enqueues = %d, want one origin delivery and no remote duplicate", got)
+	}
+}
+
 func TestBusTap_DropsOldestWhenFull(t *testing.T) {
 	fid := mustUUID()
 	q := &fakeTapQuerier{

@@ -120,6 +120,10 @@ spec:
             # disables and non-owning replicas 503). Readiness fails loudly if not.
             - name: SERVER_REPLICAS
               value: {{ .Values.server.replicaCount | quote }}
+            # EVENT-01: Publish never waits on Redis. This is the bounded
+            # per-pod relay queue; the process also enforces a hard maximum.
+            - name: EVENT_RELAY_QUEUE_CAPACITY
+              value: {{ .Values.server.eventRelayQueueCapacity | quote }}
             - name: ASTRONOMER_BOOTSTRAP_PASSWORD
               valueFrom:
                 secretKeyRef:

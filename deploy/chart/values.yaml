@@ -148,6 +148,10 @@ server:
     prometheus.io/path: /metrics
     prometheus.io/port: "9090"
   env: {}
+  # Bounded per-pod handoff for cross-replica SSE fan-out. A full queue drops
+  # only the Redis copy; local SSE/webhook/SIEM delivery has already happened.
+  # The server clamps values above 65536 even outside Helm.
+  eventRelayQueueCapacity: 1024
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534

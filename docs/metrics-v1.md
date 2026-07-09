@@ -93,9 +93,25 @@ metrics when available:
 Current bounded label values include:
 
 - `component=events_bus`, `reason=slow_subscriber`
+- `component=events_redis_relay`, `reason=queue_full|relay_not_running|serialization_failed|publish_failed|shutdown_timeout`
 - `component=agent_tunnel_send`, `reason=channel_full`
 - `component=agent_exec_resize`, `reason=channel_full`
 - `component=tunnel_stream_route`, `reason=channel_full`
+
+## Cross-replica Event Relay Metrics
+
+- `astronomer_event_relay_queue_depth{astronomer_instance_id}`
+- `astronomer_event_relay_queue_capacity{astronomer_instance_id}`
+- `astronomer_event_relay_events_total{astronomer_instance_id,result}` where
+  `result` is `enqueued`, `published`, or `dropped`
+- `astronomer_event_relay_publish_duration_seconds_bucket{astronomer_instance_id}`
+- `astronomer_event_relay_healthy{astronomer_instance_id}`
+- `astronomer_event_relay_last_success_timestamp_seconds{astronomer_instance_id}`
+
+The health gauge is `1` while the single bounded relay worker is running and
+its most recent Redis publish succeeded. It becomes `0` after a publish failure
+or worker shutdown. Last-success remains zero until the first successful
+publish.
 
 ## Exposure
 
