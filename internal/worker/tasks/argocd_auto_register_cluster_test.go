@@ -20,6 +20,7 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 )
 
@@ -259,6 +260,9 @@ func TestArgoCDAutoRegisterSweepSkippedOnNonLeader(t *testing.T) {
 }
 
 func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
+	// This test intentionally dials the loopback httptest Argo CD upstream.
+	defer httpclient.DisableGuardForTest()()
+
 	ResetArgoCDAutoRegister()
 	t.Cleanup(ResetArgoCDAutoRegister)
 	clusterID := uuid.New()

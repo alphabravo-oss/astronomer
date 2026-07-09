@@ -163,7 +163,7 @@ func TestRegisterClusterWithArgoCD_StampsLabels(t *testing.T) {
 
 	clusterLabels := json.RawMessage(`{"tier":"prod","environment":"us-east"}`)
 	queries := &argocdManagedClusterQueryStub{
-		instance: sqlc.ArgocdInstance{ID: instanceID, ApiUrl: "ignored", AuthTokenEncrypted: "upstream"},
+		instance: sqlc.ArgocdInstance{ID: instanceID, ApiUrl: "ignored", AuthTokenEncrypted: "upstream", VerifySsl: true},
 		cluster: sqlc.Cluster{
 			ID:                clusterID,
 			Name:              "prod-1",
@@ -212,6 +212,7 @@ func TestRegisterClusterWithArgoCD_StampsLabels(t *testing.T) {
 	})
 
 	h := NewArgoCDHandler(queries)
+	h.http = upstream.Client()
 	h.SetKubernetesClient(k8s)
 
 	body := `{"bearer_token":"remote-token","insecure":true}`

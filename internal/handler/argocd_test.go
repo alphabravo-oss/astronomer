@@ -205,6 +205,7 @@ func newArgoCDFixture(t *testing.T, handler http.HandlerFunc) (*ArgoCDHandler, *
 		ApiUrl:             srv.URL,
 		AuthTokenEncrypted: "test-token",
 		IsHealthy:          true,
+		VerifySsl:          true,
 	}
 
 	h := NewArgoCDHandler(rec)
