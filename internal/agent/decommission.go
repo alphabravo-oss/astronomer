@@ -637,21 +637,27 @@ func (h *DecommissionHandler) removeAgentClusterRBAC(ctx context.Context, key, v
 }
 
 // removeAgentSingletons deletes the namespaced singletons in astronomer-system
-// in credential-first priority: the LIVE token Secret first, then the CA
-// Secret, ConfigMap, Service, NetworkPolicy, PDB, ServiceAccount. Each gated
+// in credential-first priority: active identity, bootstrap, and legacy token
+// Secrets first, then the CA Secret, ConfigMap, Service, NetworkPolicy, PDB,
+// ServiceAccount. Each gated
 // on part-of=astronomer. (These would also cascade with the astronomer-system
 // namespace delete, but that delete needs cluster-scoped permission a non-admin
 // profile lacks.) Whether the namespaced delete here succeeds depends on the
 // profile's self-management Role grants; a profile that cannot delete the Secret
-// reports Forbidden (captured as a step, non-fatal). The live credential is NOT
+// reports Forbidden (captured as a step, non-fatal). Credential material is NOT
 // left usable regardless: the server defers and runs revoke_agent_token, which
-// hard-revokes the durable token DB-side so a residual Secret is inert.
+// hard-revokes the durable token DB-side so residual Secrets are inert.
 func (h *DecommissionHandler) removeAgentSingletons(ctx context.Context, ns, key, val string, dryRun bool) protocol.DecommissionStepResult {
 	o := &guardOutcome{}
 	core := h.clientset.CoreV1()
 
-	// Secret astronomer-agent-token — the live credential — FIRST.
-	for _, secret := range []string{"astronomer-agent-token", "astronomer-agent-ca"} {
+	// Credential Secrets — active identity first — then the CA bundle.
+	for _, secret := range []string{
+		"astronomer-agent-identity",
+		"astronomer-agent-registration-token",
+		"astronomer-agent-token",
+		"astronomer-agent-ca",
+	} {
 		obj, err := core.Secrets(ns).Get(ctx, secret, metav1.GetOptions{})
 		var labels map[string]string
 		if obj != nil {

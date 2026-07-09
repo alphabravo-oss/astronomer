@@ -128,7 +128,7 @@ func newClusterCreateCmd() *cobra.Command {
 		Long: `create posts to /api/v1/clusters/ and prints the new cluster's
 ID + registration phase. The next steps for the operator:
 
-  astro cluster manifest <id> | kubectl --context=<target> apply -f -
+  astro cluster manifest <id> | kubectl --context=<target> apply --server-side --field-manager=astronomer-bootstrap -f -
 
 That installs the agent into the target cluster, which then connects
 back. Run "astro cluster get <id>" to watch the registration phase

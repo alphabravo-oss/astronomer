@@ -22,6 +22,7 @@ func testConfig() *AgentConfig {
 		ClusterID:         "test-cluster",
 		AgentToken:        "test-token",
 		AgentID:           "agent-1",
+		CredentialSource:  CredentialSourceEnvironment,
 		ReconnectBackoff:  5,
 		MaxReconnect:      300,
 		HeartbeatInterval: 30,
@@ -62,6 +63,83 @@ func TestDurableTokenActivatesOnlyAfterPersistenceAndRetriesBeforeReconnect(t *t
 	}
 	if cfg.AgentToken != newToken || tc.pendingAgentToken != "" {
 		t.Fatal("persisted durable token was not activated before reconnect")
+	}
+}
+
+func TestAcceptedLegacyCredentialMigratesWhenACKTokenIsEmptyOrSame(t *testing.T) {
+	for _, ackToken := range []string{"", testLegacyToken} {
+		t.Run(ackToken, func(t *testing.T) {
+			cfg := testConfig()
+			cfg.AgentToken = testLegacyToken
+			cfg.CredentialSource = credentialSourceLegacy
+			tc := NewTunnelClient(cfg, testLogger())
+			var persisted string
+			tc.tokenPersister = func(_ context.Context, _ *AgentConfig, token string) error {
+				persisted = token
+				return nil
+			}
+			migrated, err := tc.persistAcceptedAgentToken(context.Background(), ackToken)
+			if err != nil || !migrated {
+				t.Fatalf("migration = %t, err = %v", migrated, err)
+			}
+			if persisted != testLegacyToken || cfg.CredentialSource != CredentialSourceIdentity {
+				t.Fatalf("persisted=%q source=%q", persisted, cfg.CredentialSource)
+			}
+		})
+	}
+}
+
+func TestAcceptedBootstrapPersistsACKDurableIdentity(t *testing.T) {
+	cfg := testConfig()
+	cfg.AgentToken = testBootstrapToken
+	cfg.CredentialSource = credentialSourceBootstrap
+	tc := NewTunnelClient(cfg, testLogger())
+	var persisted string
+	tc.tokenPersister = func(_ context.Context, _ *AgentConfig, token string) error {
+		persisted = token
+		return nil
+	}
+	migrated, err := tc.persistAcceptedAgentToken(context.Background(), testIdentityToken)
+	if err != nil || !migrated {
+		t.Fatalf("bootstrap migration = %t, err = %v", migrated, err)
+	}
+	if persisted != testIdentityToken || cfg.AgentToken != testIdentityToken || cfg.CredentialSource != CredentialSourceIdentity {
+		t.Fatalf("persisted=%q token=%q source=%q", persisted, cfg.AgentToken, cfg.CredentialSource)
+	}
+}
+
+func TestPersistenceAttemptHasInternalDeadlineAndHonorsCancellation(t *testing.T) {
+	oldTimeout := credentialWriteTimeout
+	credentialWriteTimeout = 25 * time.Millisecond
+	defer func() { credentialWriteTimeout = oldTimeout }()
+
+	for _, tt := range []struct {
+		name   string
+		ctx    func() context.Context
+		maxRun time.Duration
+	}{
+		{name: "internal deadline", ctx: context.Background, maxRun: time.Second},
+		{name: "parent cancellation", ctx: func() context.Context { ctx, cancel := context.WithCancel(context.Background()); cancel(); return ctx }, maxRun: 100 * time.Millisecond},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig()
+			oldToken := cfg.AgentToken
+			tc := NewTunnelClient(cfg, testLogger())
+			tc.tokenPersister = func(ctx context.Context, _ *AgentConfig, _ string) error {
+				<-ctx.Done()
+				return ctx.Err()
+			}
+			start := time.Now()
+			if err := tc.persistAndActivateAgentToken(tt.ctx(), testIdentityToken); err == nil {
+				t.Fatal("blocked persistence must return a context error")
+			}
+			if elapsed := time.Since(start); elapsed > tt.maxRun {
+				t.Fatalf("persistence took %s, want <= %s", elapsed, tt.maxRun)
+			}
+			if cfg.AgentToken != oldToken || tc.pendingAgentToken != testIdentityToken {
+				t.Fatal("timed-out persistence changed live identity or lost retry material")
+			}
+		})
 	}
 }
 

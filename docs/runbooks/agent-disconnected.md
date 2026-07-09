@@ -28,7 +28,7 @@
    Look for:
    - Repeated `dial server` failures → network / DNS issue
    - `force-closing tunnel due to congestion` (T33) → server send-buffer saturated
-   - `credential_source=durable_secret` plus rejection → durable token binding/revocation issue
+   - `credential_source=durable_identity` plus rejection → durable token binding/revocation issue
    - `credential_source=bootstrap_secret` plus rejection → expired or wrong-cluster registration bootstrap
    - durable Secret read error → fix API/RBAC; the agent intentionally does not downgrade to bootstrap
 

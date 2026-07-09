@@ -487,7 +487,7 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 		`Namespace-scoped workload operations`,
 		// Existing durable Secret access is always scoped to one name.
 		`name: astronomer-agent-token`,
-		`resourceNames: ["astronomer-agent-token"]`,
+		`resourceNames: ["astronomer-agent-identity", "astronomer-agent-token"]`,
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Fatalf("manifest missing %q:\n%s", want, manifest)
@@ -540,6 +540,9 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 	if strings.Contains(manifest, "kubectl.kubernetes.io/last-applied-configuration") {
 		t.Fatal("rendered manifest must not contain a client-side last-applied annotation")
 	}
+	if strings.Contains(manifest, "ASTRONOMER_AGENT_TOKEN") {
+		t.Fatal("current in-cluster manifest must resolve credentials through exact-name API reads, not token env")
+	}
 
 	type rule struct {
 		Resources     []string `yaml:"resources"`
@@ -549,9 +552,11 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 	type doc struct {
 		Kind     string `yaml:"kind"`
 		Metadata struct {
-			Name string `yaml:"name"`
+			Name   string            `yaml:"name"`
+			Labels map[string]string `yaml:"labels"`
 		} `yaml:"metadata"`
 		StringData map[string]string `yaml:"stringData"`
+		Data       map[string]string `yaml:"data"`
 		Rules      []rule            `yaml:"rules"`
 	}
 	var tokenRole []rule
@@ -570,6 +575,14 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 			if d.Metadata.Name == "astronomer-agent-registration-token" && d.StringData["token"] != "registration-material" {
 				t.Fatal("bootstrap Secret does not contain rendered registration material")
 			}
+			if d.Metadata.Name == "astronomer-agent-identity" {
+				if len(d.StringData) != 0 || len(d.Data) != 0 {
+					t.Fatal("installer identity container must not contain token data")
+				}
+				if d.Metadata.Labels["astronomer.io/agent-credential-purpose"] != "durable-identity-container" {
+					t.Fatal("identity container purpose label is missing")
+				}
+			}
 		}
 		if d.Kind == "Role" && d.Metadata.Name == "astronomer-agent-token" {
 			tokenRole = d.Rules
@@ -578,11 +591,14 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 	if !secretNames["astronomer-agent-registration-token"] {
 		t.Fatal("installer-owned bootstrap Secret is missing")
 	}
+	if !secretNames["astronomer-agent-identity"] {
+		t.Fatal("installer-owned empty identity container is missing")
+	}
 	if secretNames["astronomer-agent-token"] {
-		t.Fatal("agent-owned durable Secret must be absent from installer manifest")
+		t.Fatal("legacy durable Secret must be absent from current installer manifest")
 	}
 	if len(tokenRole) != 2 {
-		t.Fatalf("durable token Role has %d rules, want named access plus isolated create", len(tokenRole))
+		t.Fatalf("credential Role has %d rules, want exact-name get plus patch", len(tokenRole))
 	}
 
 	allows := func(verb, name string) bool {
@@ -596,19 +612,24 @@ func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testin
 		}
 		return false
 	}
-	for _, verb := range []string{"get", "update", "patch"} {
-		if !allows(verb, "astronomer-agent-token") {
-			t.Fatalf("durable Secret must allow %s", verb)
+	for _, verb := range []string{"get", "patch"} {
+		if !allows(verb, "astronomer-agent-identity") {
+			t.Fatalf("active identity must allow %s", verb)
 		}
 		if allows(verb, "arbitrary-secret") {
 			t.Fatalf("arbitrary existing Secret unexpectedly allows %s", verb)
 		}
 	}
-	if allows("delete", "astronomer-agent-token") {
-		t.Fatal("token persistence Role must not grant delete")
+	if !allows("get", "astronomer-agent-registration-token") || allows("patch", "astronomer-agent-registration-token") {
+		t.Fatal("bootstrap must be exact-name read-only")
 	}
-	if !allows("create", "astronomer-agent-token") {
-		t.Fatal("fresh adoption requires Secret create")
+	if !allows("get", "astronomer-agent-token") || !allows("patch", "astronomer-agent-token") {
+		t.Fatal("legacy identity requires exact-name read plus annotation scrub patch")
+	}
+	for _, verb := range []string{"create", "update", "list", "watch", "delete"} {
+		if allows(verb, "astronomer-agent-identity") || allows(verb, "arbitrary-secret") {
+			t.Fatalf("credential Role unexpectedly allows %s", verb)
+		}
 	}
 }
 

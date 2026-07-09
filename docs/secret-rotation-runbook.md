@@ -32,7 +32,7 @@ What survives `pg_restore` from the nightly dump (cross-reference with
   server reads whatever is in its Helm secret.
 - **Agent credentials**: token hashes and registration state are restored with
   the database. The agent's durable plaintext exists only in its managed
-  cluster's `astronomer-agent-token` Secret and is **not** in the dump — see the
+  cluster's `astronomer-agent-identity` Secret and is **not** in the dump — see the
   agent rotation section below.
 
 ---
@@ -215,8 +215,11 @@ Adopted agents use two separate Secrets in `astronomer-system`:
 
 - `astronomer-agent-registration-token` is installer-owned, short-lived
   bootstrap material. Server-side manifest reapply may refresh it.
-- `astronomer-agent-token` is agent-owned durable identity. It is absent from
-  the install manifest and survives every bootstrap reapply.
+- `astronomer-agent-identity` is the active durable identity. The installer owns
+  its empty labeled container; the agent owns only `data.token`, so every
+  bootstrap reapply preserves it.
+- `astronomer-agent-token` is legacy migration input and is ignored after an
+  accepted migration into the active identity.
 
 Do not patch either Secret with a token returned by an API or database query.
 Request durable rotation through the control plane:
@@ -228,7 +231,7 @@ curl -fsSL -X POST \
 ```
 
 The next authenticated CONNECT delivers the replacement credential in its ACK.
-The agent writes only `astronomer-agent-token`, reconnects with it, and the
+The agent patches only `data.token` on `astronomer-agent-identity`, reconnects with it, and the
 server retires the previous hash after adoption. Verify the cluster reconnects
 and `agent_last_seen_at` advances. If durable persistence fails, inspect the
 agent's `credential_source` diagnostic and its name-scoped Secret RBAC; never
@@ -244,7 +247,7 @@ kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 ```
 
 See [agent-credential-ownership.md](agent-credential-ownership.md) for ownership,
-upgrade compatibility, and the Kubernetes named-create RBAC limitation.
+upgrade compatibility, and the exact-name RBAC contract.
 
 ---
 

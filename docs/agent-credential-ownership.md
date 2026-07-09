@@ -1,58 +1,56 @@
 # Agent credential ownership
 
-The registration manifest and running agent own different Kubernetes Secret
-objects. This boundary is intentional and must not be collapsed into two keys
-on one object.
+Agent registration uses three distinct Secret names so installer reapply and
+agent rotation cannot compete for active credential material.
 
 | Secret | Owner | Purpose | Mutation path |
 | --- | --- | --- | --- |
-| `astronomer-agent-registration-token` | installer field manager `astronomer-bootstrap` | Short-lived first-connect/recovery bootstrap | Server-side manifest apply only |
-| `astronomer-agent-token` | agent ServiceAccount | Durable adopted identity and rotations | Agent create/update only |
+| `astronomer-agent-registration-token` | installer field manager `astronomer-bootstrap` | Short-lived first-connect/recovery bootstrap | Current manifest SSA |
+| `astronomer-agent-identity` | installer owns the empty labeled container; agent field manager `astronomer-agent-identity` owns only `data.token` | Active durable identity and rotations | Installer SSA for container fields; exact-name agent SSA PATCH for token |
+| `astronomer-agent-token` | legacy installer/agent | Pre-AGENT-02 durable migration input only | Cached old manifests may write it; current agent only reads it and scrubs the known last-applied annotation after accepted migration |
 
-Always apply the registration manifest with:
+Always apply the current registration manifest with:
 
 ```bash
 kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 ```
 
-The durable Secret is absent from rendered YAML. Reapply before or after the
-registration token expires therefore cannot overwrite or delete durable state,
-and client-side `last-applied-configuration` annotations are not created by the
-supported install command. Existing installations already using
-`astronomer-agent-token` migrate in place: startup reads that object first and
-continues using it.
+The current manifest creates `astronomer-agent-identity` with metadata, type,
+and `astronomer.io/agent-credential-purpose=durable-identity-container`, but no
+`data.token`. Reapply therefore cannot overwrite active identity. The agent
+uses force ownership only on its minimal SSA document containing
+`data.token`; it never applies installer labels/type and never creates, updates,
+lists, watches, or deletes Secrets.
 
-At startup the agent reads `astronomer-agent-token`. A valid value is preferred
-even if bootstrap material was recreated. Only Kubernetes `NotFound` permits
-bootstrap fallback. Forbidden, timeout, malformed data, and other read errors
-fail closed. Diagnostics report `credential_source=durable_secret`,
-`bootstrap_secret`, or `environment` without reporting credential material.
-The server remains authoritative for expiry and cluster binding; a wrong-cluster
-durable credential is rejected and is never replaced with bootstrap implicitly.
+At startup a valid active identity wins. Only an empty identity bearing the
+expected purpose label may fall through: first to the exact legacy Secret, then
+to the exact bootstrap Secret. Missing identity containers, malformed identity,
+and non-NotFound reads fail closed. Kubernetes-hosted agents do not use the token
+environment variable. Environment fallback exists only for explicit off-cluster
+compatibility.
 
-## Kubernetes RBAC create limitation
+Legacy material migrates only after the server returns `Accepted=true`, which
+proves cluster binding. The accepted token is patched into the new identity even
+when the ACK token is empty or unchanged. Wrong-cluster rejection never writes.
+Known `kubectl.kubernetes.io/last-applied-configuration` annotations are removed
+from new and legacy identity with a static merge-null patch; their contents are
+never copied or logged. Cached old manifests can continue changing the ignored
+legacy Secret but cannot affect the active identity name.
 
-Kubernetes RBAC cannot restrict `create` by `resourceNames`: create
-authorization occurs before an existing resource name can be selected. The
-generated Role therefore has two deliberately separate rules:
+## Kubernetes RBAC contract
 
-- `get`, `update`, and `patch` are restricted to
-  `resourceNames: ["astronomer-agent-token"]`;
-- `create` is the minimum unscoped Secret verb required for first adoption.
+The generated credential Role grants:
 
-The credential Role grants no list, watch, or delete and cannot read or change
-any other existing Secret. Explicit `operator` and `admin` privilege profiles
-retain their separately documented broader Secret access; this credential Role
-does not widen the default `viewer` profile. Environments requiring enforcement
-of the create name must add
-a fail-closed admission policy (Gatekeeper, Kyverno, or an equivalent validating
-webhook) that permits Secret CREATE by
-`system:serviceaccount:astronomer-system:<agent-service-account>` only when
-`object.metadata.namespace == "astronomer-system"` and
-`object.metadata.name == "astronomer-agent-token"`. Apply and test that policy
-before installing the agent; do not replace it with broad Secret write access.
+- exact-name `get` for bootstrap, active identity, and legacy identity;
+- exact-name `patch` for active identity and legacy annotation cleanup.
 
-Kubernetes 1.25 remains supported, so the bootstrap manifest does not embed the
-newer ValidatingAdmissionPolicy API, which is unavailable across the full
-supported version range. This documented external admission guard is the
-portable compensation for clusters that require named-create enforcement.
+It grants no Secret `create`, `update`, `list`, `watch`, or `delete`. This design
+follows real API-server evidence: SSA PATCH cannot create an absent Secret
+without create permission, so the installer must pre-create the empty identity
+container. No arbitrary Secret write or compensating admission policy is needed.
+
+## Tunnel compatibility
+
+The deployed `connect` command owns bootstrap adoption, durable handoff, and
+rotation. `connect2` is experimental and has no ACK credential channel; it
+fails closed unless startup selected `credential_source=durable_identity`.

@@ -25,15 +25,18 @@ type AgentConfig struct {
 
 	BootstrapTokenSecretName string `mapstructure:"bootstrap_token_secret_name"` // Installer-owned bootstrap Secret
 	BootstrapTokenSecretKey  string `mapstructure:"bootstrap_token_secret_key"`  // Bootstrap token key
-	DurableTokenSecretName   string `mapstructure:"durable_token_secret_name"`   // Agent-owned durable Secret
-	DurableTokenSecretKey    string `mapstructure:"durable_token_secret_key"`    // Durable token key
+	IdentityTokenSecretName  string `mapstructure:"identity_token_secret_name"`  // Active durable identity container
+	IdentityTokenSecretKey   string `mapstructure:"identity_token_secret_key"`   // Agent-owned token field
+	LegacyTokenSecretName    string `mapstructure:"legacy_token_secret_name"`    // Pre-AGENT-02 durable Secret
+	LegacyTokenSecretKey     string `mapstructure:"legacy_token_secret_key"`     // Legacy durable token key
 	// TokenSecretName/Key preserve the pre-AGENT-02 environment override. When
-	// explicitly set they override the durable fields; they never refer to the
-	// installer-owned bootstrap Secret.
+	// explicitly set they override the legacy fields; active identity always uses
+	// the fixed, separately-owned identity fields.
 	TokenSecretName string `mapstructure:"token_secret_name"`
 	TokenSecretKey  string `mapstructure:"token_secret_key"`
-	// CredentialSource is diagnostic state only (durable_secret, bootstrap_secret,
-	// or environment). It never contains credential material.
+	// CredentialSource is diagnostic state only (durable_identity,
+	// legacy_durable_secret, bootstrap_secret, or environment). It never contains
+	// credential material.
 	CredentialSource string `mapstructure:"-"`
 
 	ReconnectBackoff  int    `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
@@ -95,8 +98,10 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "agent_id", Value: ""},
 		envconfig.Default{Key: "bootstrap_token_secret_name", Value: "astronomer-agent-registration-token"},
 		envconfig.Default{Key: "bootstrap_token_secret_key", Value: "token"},
-		envconfig.Default{Key: "durable_token_secret_name", Value: "astronomer-agent-token"},
-		envconfig.Default{Key: "durable_token_secret_key", Value: "token"},
+		envconfig.Default{Key: "identity_token_secret_name", Value: "astronomer-agent-identity"},
+		envconfig.Default{Key: "identity_token_secret_key", Value: "token"},
+		envconfig.Default{Key: "legacy_token_secret_name", Value: "astronomer-agent-token"},
+		envconfig.Default{Key: "legacy_token_secret_key", Value: "token"},
 		envconfig.Default{Key: "token_secret_name", Value: ""},
 		envconfig.Default{Key: "token_secret_key", Value: ""},
 		envconfig.Default{Key: "reconnect_backoff", Value: 5},
@@ -129,13 +134,21 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		return nil, fmt.Errorf("ASTRONOMER_CLUSTER_ID is required")
 	}
 	if cfg.TokenSecretName != "" {
-		cfg.DurableTokenSecretName = cfg.TokenSecretName
+		cfg.LegacyTokenSecretName = cfg.TokenSecretName
 	}
 	if cfg.TokenSecretKey != "" {
-		cfg.DurableTokenSecretKey = cfg.TokenSecretKey
+		cfg.LegacyTokenSecretKey = cfg.TokenSecretKey
 	}
-	if cfg.DurableTokenSecretName == "" || cfg.DurableTokenSecretKey == "" {
-		return nil, fmt.Errorf("durable agent token Secret name and key are required")
+	cfg.BootstrapTokenSecretName = strings.TrimSpace(cfg.BootstrapTokenSecretName)
+	cfg.BootstrapTokenSecretKey = strings.TrimSpace(cfg.BootstrapTokenSecretKey)
+	cfg.IdentityTokenSecretName = strings.TrimSpace(cfg.IdentityTokenSecretName)
+	cfg.IdentityTokenSecretKey = strings.TrimSpace(cfg.IdentityTokenSecretKey)
+	cfg.LegacyTokenSecretName = strings.TrimSpace(cfg.LegacyTokenSecretName)
+	cfg.LegacyTokenSecretKey = strings.TrimSpace(cfg.LegacyTokenSecretKey)
+	if cfg.BootstrapTokenSecretName == "" || cfg.BootstrapTokenSecretKey == "" ||
+		cfg.IdentityTokenSecretName == "" || cfg.IdentityTokenSecretKey == "" ||
+		cfg.LegacyTokenSecretName == "" || cfg.LegacyTokenSecretKey == "" {
+		return nil, fmt.Errorf("bootstrap, identity, and legacy agent token Secret names and keys are required")
 	}
 	credentialCtx, cancel := context.WithTimeout(context.Background(), credentialReadTimeout)
 	defer cancel()
@@ -143,7 +156,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		return nil, err
 	}
 	if cfg.AgentToken == "" {
-		return nil, fmt.Errorf("ASTRONOMER_AGENT_TOKEN is required when no durable agent token exists")
+		return nil, fmt.Errorf("agent credential is required; off-cluster compatibility may set ASTRONOMER_AGENT_TOKEN")
 	}
 	log.Info("agent credential selected", "credential_source", cfg.CredentialSource)
 	cfg.PrivilegeProfile = resolveConfiguredPrivilegeProfile(cfg.PrivilegeProfile, privilegeProfileExplicit, log)

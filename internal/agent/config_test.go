@@ -51,14 +51,17 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.BootstrapTokenSecretName != "astronomer-agent-registration-token" {
 		t.Errorf("BootstrapTokenSecretName = %q", cfg.BootstrapTokenSecretName)
 	}
-	if cfg.DurableTokenSecretName != "astronomer-agent-token" {
-		t.Errorf("DurableTokenSecretName = %q", cfg.DurableTokenSecretName)
+	if cfg.IdentityTokenSecretName != "astronomer-agent-identity" {
+		t.Errorf("IdentityTokenSecretName = %q", cfg.IdentityTokenSecretName)
 	}
-	if cfg.BootstrapTokenSecretKey != "token" || cfg.DurableTokenSecretKey != "token" {
-		t.Errorf("credential keys = bootstrap:%q durable:%q, want token", cfg.BootstrapTokenSecretKey, cfg.DurableTokenSecretKey)
+	if cfg.LegacyTokenSecretName != "astronomer-agent-token" {
+		t.Errorf("LegacyTokenSecretName = %q", cfg.LegacyTokenSecretName)
 	}
-	if cfg.CredentialSource != credentialSourceEnvironment {
-		t.Errorf("CredentialSource = %q, want %q", cfg.CredentialSource, credentialSourceEnvironment)
+	if cfg.BootstrapTokenSecretKey != "token" || cfg.IdentityTokenSecretKey != "token" || cfg.LegacyTokenSecretKey != "token" {
+		t.Errorf("credential keys = bootstrap:%q identity:%q legacy:%q, want token", cfg.BootstrapTokenSecretKey, cfg.IdentityTokenSecretKey, cfg.LegacyTokenSecretKey)
+	}
+	if cfg.CredentialSource != CredentialSourceEnvironment {
+		t.Errorf("CredentialSource = %q, want %q", cfg.CredentialSource, CredentialSourceEnvironment)
 	}
 }
 
@@ -185,11 +188,34 @@ func TestLoadAgentConfig_CustomValues(t *testing.T) {
 	if cfg.PrivilegeProfile != "operator" {
 		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, "operator")
 	}
-	if cfg.DurableTokenSecretName != "custom-secret" {
-		t.Errorf("DurableTokenSecretName = %q, want %q", cfg.DurableTokenSecretName, "custom-secret")
+	if cfg.LegacyTokenSecretName != "custom-secret" {
+		t.Errorf("LegacyTokenSecretName = %q, want %q", cfg.LegacyTokenSecretName, "custom-secret")
 	}
-	if cfg.DurableTokenSecretKey != "agent-token" {
-		t.Errorf("DurableTokenSecretKey = %q, want %q", cfg.DurableTokenSecretKey, "agent-token")
+	if cfg.LegacyTokenSecretKey != "agent-token" {
+		t.Errorf("LegacyTokenSecretKey = %q, want %q", cfg.LegacyTokenSecretKey, "agent-token")
+	}
+}
+
+func TestLoadAgentConfigRejectsEmptyCredentialSecretCoordinates(t *testing.T) {
+	for _, envName := range []string{
+		"ASTRONOMER_BOOTSTRAP_TOKEN_SECRET_NAME",
+		"ASTRONOMER_BOOTSTRAP_TOKEN_SECRET_KEY",
+		"ASTRONOMER_IDENTITY_TOKEN_SECRET_NAME",
+		"ASTRONOMER_IDENTITY_TOKEN_SECRET_KEY",
+		"ASTRONOMER_LEGACY_TOKEN_SECRET_NAME",
+		"ASTRONOMER_LEGACY_TOKEN_SECRET_KEY",
+	} {
+		t.Run(envName, func(t *testing.T) {
+			t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+			t.Setenv("ASTRONOMER_CLUSTER_ID", "test-cluster")
+			t.Setenv("ASTRONOMER_AGENT_TOKEN", "test-token-abc")
+			t.Setenv(envName, "  \t")
+
+			_, err := LoadAgentConfig()
+			if err == nil || err.Error() != "bootstrap, identity, and legacy agent token Secret names and keys are required" {
+				t.Fatalf("LoadAgentConfig error = %v", err)
+			}
+		})
 	}
 }
 
@@ -217,7 +243,7 @@ func TestLoadAgentConfig_MissingRequired(t *testing.T) {
 				"ASTRONOMER_SERVER_URL": "wss://example.com",
 				"ASTRONOMER_CLUSTER_ID": "test-cluster",
 			},
-			wantErr: "ASTRONOMER_AGENT_TOKEN is required when no durable agent token exists",
+			wantErr: "agent credential is required; off-cluster compatibility may set ASTRONOMER_AGENT_TOKEN",
 		},
 	}
 
