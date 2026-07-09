@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ const (
 	RBACEpochKey  = "astronomer:security-cache-invalidation:rbac:epoch"
 	WireVersion   = 1
 	DefaultPeriod = 500 * time.Millisecond
+	writeTimeout  = 2 * time.Second
 )
 
 // Kind identifies the narrow local invalidation to apply.
@@ -32,9 +34,16 @@ type Kind string
 const (
 	KindJWTJTI   Kind = "jwt_jti"
 	KindJWTUser  Kind = "jwt_user"
+	KindJWTAll   Kind = "jwt_all"
 	KindRBACUser Kind = "rbac_user"
 	KindRBACAll  Kind = "rbac_all"
 )
+
+type pendingInvalidation struct {
+	kind      Kind
+	subjectID string
+	inFlight  bool
+}
 
 // Message is the stable, secret-free Redis wire contract.
 type Message struct {
@@ -72,8 +81,16 @@ type Coordinator struct {
 	healthy atomic.Bool
 	started atomic.Bool
 	lastLog atomic.Int64
+	flushMu sync.Mutex
 	mu      sync.Mutex
 	epochs  map[string]int64
+	pending map[string][]pendingInvalidation
+	recover map[string]int64
+	// conservativeGeneration advances whenever health is lost. Reconciliation
+	// must clear both local cache domains and record that generation before
+	// positive cache hits may resume.
+	conservativeGeneration uint64
+	reconciledGeneration   uint64
 }
 
 var (
@@ -129,7 +146,12 @@ func New(rdb redis.UniversalClient, target LocalTarget, origin string, period ti
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Coordinator{rdb: rdb, target: target, origin: origin, period: period, log: log, epochs: map[string]int64{"jwt": 0, "rbac": 0}}
+	return &Coordinator{
+		rdb: rdb, target: target, origin: origin, period: period, log: log,
+		epochs:  map[string]int64{"jwt": 0, "rbac": 0},
+		pending: map[string][]pendingInvalidation{"jwt": nil, "rbac": nil},
+		recover: map[string]int64{"jwt": 0, "rbac": 0},
+	}
 }
 
 // NewLocalOnly explicitly enables process-local cache use. It is appropriate
@@ -149,9 +171,12 @@ func RecordBypass(cache, reason string) {
 	bypassTotal.WithLabelValues(cache, reason).Inc()
 }
 
-// Broadcast runs after the caller has invalidated its local cache. Epoch
-// increment precedes publish so a lost Pub/Sub message is recovered by polling.
-func (c *Coordinator) Broadcast(ctx context.Context, kind Kind, subjectID string) error {
+// Broadcast runs after the caller has invalidated its local cache. It records
+// the mutation in a bounded in-memory pending queue before attempting Redis
+// with a post-commit context independent of request cancellation. The pending
+// entry is retained until INCR durably advances the domain epoch; publication
+// is then best-effort because polling that epoch provides the recovery path.
+func (c *Coordinator) Broadcast(_ context.Context, kind Kind, subjectID string) error {
 	if c == nil || c.rdb == nil {
 		return nil
 	}
@@ -159,28 +184,13 @@ func (c *Coordinator) Broadcast(ctx context.Context, kind Kind, subjectID string
 	if err != nil {
 		return err
 	}
-	if kind != KindRBACAll && subjectID == "" {
+	if requiresSubject(kind) && subjectID == "" {
 		return fmt.Errorf("subject_id is required for invalidation kind %q", kind)
 	}
-	epoch, err := c.rdb.Incr(ctx, epochKey(domain)).Result()
-	if err != nil {
-		c.markUnhealthy("epoch increment failed", err)
-		publishTotal.WithLabelValues(string(kind), "error").Inc()
-		return fmt.Errorf("increment %s invalidation epoch: %w", domain, err)
-	}
-	msg := Message{Version: WireVersion, Kind: kind, SubjectID: subjectID, Epoch: epoch, Origin: c.origin, Time: time.Now().UTC()}
-	payload, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	if err := c.rdb.Publish(ctx, Channel, payload).Err(); err != nil {
-		c.markUnhealthy("publish failed", err)
-		publishTotal.WithLabelValues(string(kind), "error").Inc()
-		return fmt.Errorf("publish invalidation: %w", err)
-	}
-	c.setEpoch(domain, epoch)
-	publishTotal.WithLabelValues(string(kind), "ok").Inc()
-	return nil
+	c.enqueue(domain, kind, subjectID)
+	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+	defer cancel()
+	return c.flushPending(ctx)
 }
 
 func (c *Coordinator) Run(ctx context.Context) {
@@ -196,14 +206,13 @@ func (c *Coordinator) Run(ctx context.Context) {
 			c.wait(ctx)
 			continue
 		}
-		wasHealthy := c.Healthy()
-		if err := c.reconcile(ctx, !wasHealthy); err != nil {
+		if err := c.maintain(ctx, true); err != nil {
 			c.markUnhealthy("initial epoch reconciliation failed", err)
 			_ = pubsub.Close()
 			c.wait(ctx)
 			continue
 		}
-		c.setHealthy(true)
+		c.setHealthyIfQuiescent()
 		messages := pubsub.Channel(redis.WithChannelHealthCheckInterval(c.period))
 		ticker := time.NewTicker(c.period)
 		connected := true
@@ -219,16 +228,23 @@ func (c *Coordinator) Run(ctx context.Context) {
 				}
 				c.handlePayload([]byte(msg.Payload))
 			case <-ticker.C:
-				if err := c.reconcile(ctx, false); err != nil {
-					c.markUnhealthy("epoch reconciliation failed", err)
-					connected = false
+				if err := c.maintain(ctx, false); err != nil {
+					c.markUnhealthy("security cache maintenance failed", err)
+					continue
 				}
+				c.setHealthyIfQuiescent()
 			}
 		}
 		ticker.Stop()
 		_ = pubsub.Close()
 		c.wait(ctx)
 	}
+}
+
+func (c *Coordinator) maintain(ctx context.Context, reconnect bool) error {
+	flushErr := c.flushPending(ctx)
+	reconcileErr := c.reconcile(ctx, reconnect)
+	return errors.Join(flushErr, reconcileErr)
 }
 
 func (c *Coordinator) wait(ctx context.Context) {
@@ -243,23 +259,52 @@ func (c *Coordinator) reconcile(ctx context.Context, reconnect bool) error {
 	if err != nil {
 		return err
 	}
-	remote := map[string]int64{"jwt": redisInt(values[0]), "rbac": redisInt(values[1])}
-	if reconnect {
+	if len(values) != 2 {
+		return fmt.Errorf("epoch reconciliation returned %d values, want 2", len(values))
+	}
+	jwtEpoch, err := strictRedisEpoch(values[0])
+	if err != nil {
+		return fmt.Errorf("invalid JWT epoch: %w", err)
+	}
+	rbacEpoch, err := strictRedisEpoch(values[1])
+	if err != nil {
+		return fmt.Errorf("invalid RBAC epoch: %w", err)
+	}
+	remote := map[string]int64{"jwt": jwtEpoch, "rbac": rbacEpoch}
+	c.mu.Lock()
+	conservativeGeneration := c.conservativeGeneration
+	needsConservative := conservativeGeneration > c.reconciledGeneration
+	c.mu.Unlock()
+	if reconnect || needsConservative {
 		// Invalidate before re-enabling cache hits even when epochs are equal: a
 		// disconnect may have overlapped an unobservable mutation.
 		c.invalidateJWTAll()
 		c.invalidateRBACAll()
 	}
 	for _, domain := range []string{"jwt", "rbac"} {
-		if remote[domain] > c.epoch(domain) {
+		local := c.epoch(domain)
+		if remote[domain] < local {
+			return fmt.Errorf("%s epoch regressed from %d to %d", domain, local, remote[domain])
+		}
+		required := c.recoveryEpoch(domain)
+		if remote[domain] < required {
+			return fmt.Errorf("%s epoch %d has not reached durable pending epoch %d", domain, remote[domain], required)
+		}
+		if remote[domain] > local || required > 0 {
 			if domain == "jwt" {
 				c.invalidateJWTAll()
 			} else {
 				c.invalidateRBACAll()
 			}
-			c.setEpoch(domain, remote[domain])
 		}
+		c.setEpoch(domain, remote[domain])
+		c.clearRecovery(domain, remote[domain])
 	}
+	c.mu.Lock()
+	if conservativeGeneration > c.reconciledGeneration {
+		c.reconciledGeneration = conservativeGeneration
+	}
+	c.mu.Unlock()
 	return nil
 }
 
@@ -274,7 +319,7 @@ func (c *Coordinator) handlePayload(payload []byte) {
 		receiveTotal.WithLabelValues(string(msg.Kind), "invalid").Inc()
 		return
 	}
-	if msg.Kind != KindRBACAll && msg.SubjectID == "" {
+	if requiresSubject(msg.Kind) && msg.SubjectID == "" {
 		receiveTotal.WithLabelValues(string(msg.Kind), "invalid").Inc()
 		return
 	}
@@ -298,6 +343,8 @@ func (c *Coordinator) handlePayload(payload []byte) {
 			c.target.InvalidateJWTJTILocal(msg.SubjectID)
 		case KindJWTUser:
 			c.target.InvalidateJWTUserLocal(msg.SubjectID)
+		case KindJWTAll:
+			c.target.InvalidateJWTAllLocal()
 		case KindRBACUser:
 			c.target.InvalidateRBACUserLocal(msg.SubjectID)
 		case KindRBACAll:
@@ -326,7 +373,11 @@ func (c *Coordinator) invalidateRBACAll() {
 }
 
 func (c *Coordinator) markUnhealthy(message string, err error) {
-	c.setHealthy(false)
+	c.mu.Lock()
+	c.conservativeGeneration++
+	c.healthy.Store(false)
+	c.mu.Unlock()
+	healthGauge.Set(0)
 	now := time.Now().UnixNano()
 	last := c.lastLog.Load()
 	if last == 0 || time.Duration(now-last) >= 30*time.Second {
@@ -342,6 +393,18 @@ func (c *Coordinator) setHealthy(v bool) {
 		healthGauge.Set(1)
 	} else {
 		healthGauge.Set(0)
+	}
+}
+
+func (c *Coordinator) setHealthyIfQuiescent() {
+	c.mu.Lock()
+	quiescent := len(c.pending["jwt"]) == 0 && len(c.pending["rbac"]) == 0 && c.recover["jwt"] == 0 && c.recover["rbac"] == 0 && c.conservativeGeneration == c.reconciledGeneration
+	if quiescent {
+		c.healthy.Store(true)
+	}
+	c.mu.Unlock()
+	if quiescent {
+		healthGauge.Set(1)
 	}
 }
 
@@ -361,14 +424,133 @@ func (c *Coordinator) setEpoch(domain string, epoch int64) {
 	epochGauge.WithLabelValues(domain).Set(float64(value))
 }
 
+func (c *Coordinator) enqueue(domain string, kind Kind, subjectID string) {
+	c.mu.Lock()
+	queue := c.pending[domain]
+	if len(queue) > 0 && !queue[len(queue)-1].inFlight {
+		queue[len(queue)-1] = mergePending(domain, queue[len(queue)-1], pendingInvalidation{kind: kind, subjectID: subjectID})
+	} else {
+		queue = append(queue, pendingInvalidation{kind: kind, subjectID: subjectID})
+	}
+	c.pending[domain] = queue
+	c.healthy.Store(false)
+	c.mu.Unlock()
+	healthGauge.Set(0)
+}
+
+func mergePending(domain string, existing, next pendingInvalidation) pendingInvalidation {
+	if existing.kind == next.kind && existing.subjectID == next.subjectID {
+		return existing
+	}
+	if domain == "jwt" {
+		return pendingInvalidation{kind: KindJWTAll}
+	}
+	return pendingInvalidation{kind: KindRBACAll}
+}
+
+func (c *Coordinator) flushPending(ctx context.Context) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
+	c.flushMu.Lock()
+	defer c.flushMu.Unlock()
+	for {
+		domain, item, ok := c.claimPending()
+		if !ok {
+			return nil
+		}
+		epoch, err := c.rdb.Incr(ctx, epochKey(domain)).Result()
+		if err != nil {
+			c.releasePending(domain)
+			c.markUnhealthy("epoch increment failed", err)
+			publishTotal.WithLabelValues(string(item.kind), "error").Inc()
+			return fmt.Errorf("increment %s invalidation epoch: %w", domain, err)
+		}
+		c.recordDurable(domain, epoch)
+		c.invalidateDomain(domain)
+
+		msg := Message{Version: WireVersion, Kind: item.kind, SubjectID: item.subjectID, Epoch: epoch, Origin: c.origin, Time: time.Now().UTC()}
+		payload, err := json.Marshal(msg)
+		if err != nil {
+			c.markUnhealthy("encode invalidation failed", err)
+			publishTotal.WithLabelValues(string(item.kind), "error").Inc()
+			return fmt.Errorf("encode invalidation: %w", err)
+		}
+		if err := c.rdb.Publish(ctx, Channel, payload).Err(); err != nil {
+			c.markUnhealthy("publish failed", err)
+			publishTotal.WithLabelValues(string(item.kind), "error").Inc()
+			return fmt.Errorf("publish invalidation: %w", err)
+		}
+		publishTotal.WithLabelValues(string(item.kind), "ok").Inc()
+	}
+}
+
+func (c *Coordinator) claimPending() (string, pendingInvalidation, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, domain := range []string{"jwt", "rbac"} {
+		if len(c.pending[domain]) == 0 {
+			continue
+		}
+		c.pending[domain][0].inFlight = true
+		return domain, c.pending[domain][0], true
+	}
+	return "", pendingInvalidation{}, false
+}
+
+func (c *Coordinator) releasePending(domain string) {
+	c.mu.Lock()
+	if len(c.pending[domain]) > 0 {
+		c.pending[domain][0].inFlight = false
+	}
+	c.mu.Unlock()
+}
+
+func (c *Coordinator) recordDurable(domain string, epoch int64) {
+	c.mu.Lock()
+	if len(c.pending[domain]) > 0 && c.pending[domain][0].inFlight {
+		c.pending[domain] = c.pending[domain][1:]
+	}
+	if epoch > c.recover[domain] {
+		c.recover[domain] = epoch
+	}
+	c.mu.Unlock()
+}
+
+func (c *Coordinator) recoveryEpoch(domain string) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.recover[domain]
+}
+
+func (c *Coordinator) clearRecovery(domain string, observed int64) {
+	c.mu.Lock()
+	if c.recover[domain] > 0 && observed >= c.recover[domain] {
+		c.recover[domain] = 0
+	}
+	c.mu.Unlock()
+}
+
+func (c *Coordinator) invalidateDomain(domain string) {
+	if domain == "jwt" {
+		c.invalidateJWTAll()
+	} else {
+		c.invalidateRBACAll()
+	}
+}
+
 func domainFor(kind Kind) (string, error) {
 	switch kind {
-	case KindJWTJTI, KindJWTUser:
+	case KindJWTJTI, KindJWTUser, KindJWTAll:
 		return "jwt", nil
 	case KindRBACUser, KindRBACAll:
 		return "rbac", nil
 	}
 	return "", fmt.Errorf("unsupported invalidation kind %q", kind)
+}
+
+func requiresSubject(kind Kind) bool {
+	return kind != KindJWTAll && kind != KindRBACAll
 }
 
 func epochKey(domain string) string {
@@ -378,18 +560,33 @@ func epochKey(domain string) string {
 	return RBACEpochKey
 }
 
-func redisInt(v any) int64 {
-	switch n := v.(type) {
-	case int64:
-		return n
-	case string:
-		var out int64
-		_, _ = fmt.Sscan(n, &out)
-		return out
-	case []byte:
-		var out int64
-		_, _ = fmt.Sscan(string(n), &out)
-		return out
+func strictRedisEpoch(v any) (int64, error) {
+	if v == nil {
+		return 0, nil
 	}
-	return 0
+	var raw string
+	switch value := v.(type) {
+	case string:
+		raw = value
+	case []byte:
+		raw = string(value)
+	case int64:
+		if value < 0 {
+			return 0, fmt.Errorf("negative value")
+		}
+		return value, nil
+	default:
+		return 0, fmt.Errorf("unsupported value type %T", v)
+	}
+	if raw == "" {
+		return 0, fmt.Errorf("empty value")
+	}
+	epoch, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("not an integer")
+	}
+	if epoch < 0 {
+		return 0, fmt.Errorf("negative value")
+	}
+	return epoch, nil
 }

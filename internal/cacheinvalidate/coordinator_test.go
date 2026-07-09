@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -22,6 +23,31 @@ type recordingTarget struct {
 	events []string
 	onAll  func(string)
 }
+
+type commandFailureHook struct {
+	command string
+	fail    atomic.Bool
+	once    bool
+}
+
+func (h *commandFailureHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (h *commandFailureHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		if strings.EqualFold(cmd.Name(), h.command) && h.fail.Load() {
+			if !h.once || h.fail.CompareAndSwap(true, false) {
+				return errors.New("injected " + h.command + " failure")
+			}
+		}
+		return next(ctx, cmd)
+	}
+}
+func (h *commandFailureHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+
+// Compile-time guard: hooks share the redis client with the coordinator, so
+// failures can be scoped to INCR or PUBLISH without disturbing SUBSCRIBE/MGET.
+var _ redis.Hook = (*commandFailureHook)(nil)
 
 func (t *recordingTarget) add(event string) {
 	t.mu.Lock()
@@ -143,6 +169,157 @@ func TestMissedMessageDetectedByEpochReconciliation(t *testing.T) {
 		}
 		return false
 	})
+}
+
+func TestCanceledCallerContextStillDurablyInvalidatesRemote(t *testing.T) {
+	_, clientA := newRedis(t)
+	clientB := redis.NewClient(clientA.Options())
+	t.Cleanup(func() { _ = clientB.Close() })
+	targetA, targetB := &recordingTarget{}, &recordingTarget{}
+	a := New(clientA, targetA, "pod-a", 20*time.Millisecond, nil)
+	b := New(clientB, targetB, "pod-b", 20*time.Millisecond, nil)
+	runCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go a.Run(runCtx)
+	go b.Run(runCtx)
+	waitFor(t, time.Second, func() bool { return a.Healthy() && b.Healthy() })
+	targetA.reset()
+	targetB.reset()
+
+	requestCtx, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+	if err := a.Broadcast(requestCtx, KindJWTUser, "user-after-commit"); err != nil {
+		t.Fatalf("Broadcast with canceled request context: %v", err)
+	}
+	waitFor(t, time.Second, func() bool {
+		for _, event := range targetB.snapshot() {
+			if event == "jwt:user:user-after-commit" || event == "jwt:all" {
+				return true
+			}
+		}
+		return false
+	})
+	if epoch, err := clientA.Get(context.Background(), JWTEpochKey).Int64(); err != nil || epoch < 1 {
+		t.Fatalf("durable JWT epoch = %d, err = %v", epoch, err)
+	}
+}
+
+func TestTransientINCRFailureRetriesPendingBeforeHealthRecovery(t *testing.T) {
+	_, clientA := newRedis(t)
+	hook := &commandFailureHook{command: "incr"}
+	hook.fail.Store(true)
+	clientA.AddHook(hook)
+	clientB := redis.NewClient(clientA.Options())
+	t.Cleanup(func() { _ = clientB.Close() })
+	targetA, targetB := &recordingTarget{}, &recordingTarget{}
+	a := New(clientA, targetA, "pod-a", 20*time.Millisecond, nil)
+	b := New(clientB, targetB, "pod-b", 20*time.Millisecond, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.Run(ctx)
+	go b.Run(ctx)
+	waitFor(t, time.Second, func() bool { return a.Healthy() && b.Healthy() })
+	targetA.reset()
+	targetB.reset()
+
+	if err := a.Broadcast(ctx, KindRBACUser, "transient-user"); err == nil {
+		t.Fatal("expected injected INCR failure")
+	}
+	if a.Healthy() {
+		t.Fatal("origin became healthy before pending mutation was durable")
+	}
+	a.mu.Lock()
+	pendingBeforeRetry := len(a.pending["rbac"])
+	recoveryBeforeRetry := a.recover["rbac"]
+	a.mu.Unlock()
+	if pendingBeforeRetry == 0 || recoveryBeforeRetry != 0 {
+		t.Fatalf("failed INCR pending=%d recovery=%d, want pending and no durable epoch", pendingBeforeRetry, recoveryBeforeRetry)
+	}
+
+	hook.fail.Store(false)
+	waitFor(t, time.Second, func() bool {
+		for _, event := range targetB.snapshot() {
+			if event == "rbac:user:transient-user" || event == "rbac:all" {
+				return true
+			}
+		}
+		return false
+	})
+	waitFor(t, time.Second, a.Healthy)
+	if epoch, err := clientA.Get(context.Background(), RBACEpochKey).Int64(); err != nil || epoch < 1 {
+		t.Fatalf("durable RBAC epoch = %d, err = %v", epoch, err)
+	}
+}
+
+func TestPublishFailureRecoveredByEpochBeforeOriginHealthy(t *testing.T) {
+	_, clientA := newRedis(t)
+	hook := &commandFailureHook{command: "publish", once: true}
+	hook.fail.Store(true)
+	clientA.AddHook(hook)
+	clientB := redis.NewClient(clientA.Options())
+	t.Cleanup(func() { _ = clientB.Close() })
+	targetA, targetB := &recordingTarget{}, &recordingTarget{}
+	a := New(clientA, targetA, "pod-a", 20*time.Millisecond, nil)
+	b := New(clientB, targetB, "pod-b", 20*time.Millisecond, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.Run(ctx)
+	go b.Run(ctx)
+	waitFor(t, time.Second, func() bool { return a.Healthy() && b.Healthy() })
+	targetA.reset()
+	targetB.reset()
+	var originClearedWhileUnhealthy atomic.Bool
+	targetA.mu.Lock()
+	targetA.onAll = func(string) {
+		if !a.Healthy() {
+			originClearedWhileUnhealthy.Store(true)
+		}
+	}
+	targetA.mu.Unlock()
+
+	if err := a.Broadcast(ctx, KindJWTJTI, "lost-publish-jti"); err == nil {
+		t.Fatal("expected injected Publish failure")
+	}
+	if a.Healthy() {
+		t.Fatal("origin became healthy before durable epoch reconciliation")
+	}
+	if epoch, err := clientA.Get(context.Background(), JWTEpochKey).Int64(); err != nil || epoch < 1 {
+		t.Fatalf("Publish failure did not retain durable epoch: epoch=%d err=%v", epoch, err)
+	}
+	waitFor(t, time.Second, func() bool {
+		for _, event := range targetB.snapshot() {
+			if event == "jwt:all" {
+				return true
+			}
+		}
+		return false
+	})
+	waitFor(t, time.Second, a.Healthy)
+	if !originClearedWhileUnhealthy.Load() {
+		t.Fatal("origin did not conservatively invalidate before health recovery")
+	}
+}
+
+func TestMalformedRedisEpochKeepsCoordinatorUnhealthy(t *testing.T) {
+	for _, value := range []string{"not-an-integer", "1.5", "-1", ""} {
+		t.Run(strconv.Quote(value), func(t *testing.T) {
+			mini, client := newRedis(t)
+			mini.Set(JWTEpochKey, value)
+			target := &recordingTarget{}
+			c := New(client, target, "pod", 20*time.Millisecond, nil)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if err := c.reconcile(ctx, false); err == nil {
+				t.Fatalf("reconciliation accepted malformed epoch %q", value)
+			}
+			go c.Run(ctx)
+			waitFor(t, time.Second, c.Started)
+			time.Sleep(80 * time.Millisecond)
+			if c.Healthy() {
+				t.Fatalf("coordinator accepted malformed epoch %q", value)
+			}
+		})
+	}
 }
 
 func TestDisconnectUnhealthyAndReconnectInvalidatesBeforeHealthy(t *testing.T) {
