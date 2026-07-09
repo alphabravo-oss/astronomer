@@ -8,13 +8,13 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 230
-- Frontend source lines: 75635
-- Go source files under `internal/` excluding generated sqlc and tests: 356
-- Go source files scanned for sqlc query references excluding generated sqlc: 698
-- sqlc query declarations: 769
-- Component files scanned: 70
-- Helm top-level values scanned: 32
+- Frontend source files: 314
+- Frontend source lines: 89887
+- Go source files under `internal/` excluding generated sqlc and tests: 418
+- Go source files scanned for sqlc query references excluding generated sqlc: 963
+- sqlc query declarations: 878
+- Component files scanned: 102
+- Helm top-level values scanned: 33
 
 ## Hard Gates
 
@@ -89,28 +89,50 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- None.
+- `bearerToken` in [`internal/handler/scim.go:196`](internal/handler/scim.go:196), [`internal/server/routes.go:1899`](internal/server/routes.go:1899)
+- `decodeRoleRules` in [`internal/handler/rbac.go:971`](internal/handler/rbac.go:971), [`internal/server/middleware/rbac_queries.go:261`](internal/server/middleware/rbac_queries.go:261)
+- `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
+- `requireSuperuser` in [`internal/handler/authorization.go:87`](internal/handler/authorization.go:87), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
+- `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:165`](internal/server/middleware/read_audit.go:165)
 
 ### Dead-Code Candidates
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
-- None.
+- `ArchiveAuditLogsForCluster` declared at [`internal/db/queries/cluster_decommission.sql:193`](internal/db/queries/cluster_decommission.sql:193) has no non-generated Go reference
+- `CountBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:29`](internal/db/queries/catalog_blessed.sql:29) has no non-generated Go reference
+- `GetBlessedChart` declared at [`internal/db/queries/catalog_blessed.sql:26`](internal/db/queries/catalog_blessed.sql:26) has no non-generated Go reference
+- `GetXClusterAnomalyBaseline` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:11`](internal/db/queries/xcluster_anomaly_baselines.sql:11) has no non-generated Go reference
+- `ListBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:23`](internal/db/queries/catalog_blessed.sql:23) has no non-generated Go reference
+- `ListScansByClusterAndType` declared at [`internal/db/queries/security.sql:96`](internal/db/queries/security.sql:96) has no non-generated Go reference
+- `ListXClusterAnomalyBaselines` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:5`](internal/db/queries/xcluster_anomaly_baselines.sql:5) has no non-generated Go reference
 
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.
 
-- `@/components/resources/configmap-dialog` (frontend/src/components/resources/configmap-dialog.tsx) has no absolute `@/components/...` import
-- `@/components/resources/secret-dialog` (frontend/src/components/resources/secret-dialog.tsx) has no absolute `@/components/...` import
+- `@/components/auth/connector-form.test` (frontend/src/components/auth/connector-form.test.tsx) has no absolute `@/components/...` import
+- `@/components/backups/restore-modal.test` (frontend/src/components/backups/restore-modal.test.tsx) has no absolute `@/components/...` import
+- `@/components/dashboards/widget-grid.test` (frontend/src/components/dashboards/widget-grid.test.tsx) has no absolute `@/components/...` import
+- `@/components/extensions/declarative.test` (frontend/src/components/extensions/declarative.test.ts) has no absolute `@/components/...` import
+- `@/components/extensions/DeclarativeWidget.test` (frontend/src/components/extensions/DeclarativeWidget.test.tsx) has no absolute `@/components/...` import
+- `@/components/extensions/ExtensionNavItems.test` (frontend/src/components/extensions/ExtensionNavItems.test.tsx) has no absolute `@/components/...` import
+- `@/components/extensions/ExtensionProvider.test` (frontend/src/components/extensions/ExtensionProvider.test.tsx) has no absolute `@/components/...` import
+- `@/components/extensions/ExtensionSlot.test` (frontend/src/components/extensions/ExtensionSlot.test.tsx) has no absolute `@/components/...` import
+- `@/components/extensions/ExtForm.test` (frontend/src/components/extensions/ExtForm.test.tsx) has no absolute `@/components/...` import
+- `@/components/extensions/SandboxedExtension.test` (frontend/src/components/extensions/SandboxedExtension.test.tsx) has no absolute `@/components/...` import
+- `@/components/fleet/selector-builder.test` (frontend/src/components/fleet/selector-builder.test.tsx) has no absolute `@/components/...` import
+- `@/components/resources/key-value-editor` (frontend/src/components/resources/key-value-editor.tsx) has no absolute `@/components/...` import
+- `@/components/ui/yaml-view-dialog.test` (frontend/src/components/ui/yaml-view-dialog.test.tsx) has no absolute `@/components/...` import
+- `@/components/workloads/pod-terminal.test` (frontend/src/components/workloads/pod-terminal.test.tsx) has no absolute `@/components/...` import
 
 Owner: deployment/platform. Classification rule: keep if consumed by tests, docs, subcharts, or future production overrides; otherwise remove from values and schema together.
 
-- None.
+- `argo-cd` is a top-level `deploy/chart/values.yaml` key with no direct template reference
 
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 0
-- Dead-code candidates: 2
+- Duplicate-code candidates: 5
+- Dead-code candidates: 22
 
 ## Definition Of Done For Each Candidate
 

@@ -11,6 +11,14 @@
       "validation": "apiserver_allowlist:reconcile_all is registered and scheduled every 15 minutes to reconcile active allowlists."
     },
     {
+      "file": "internal/handler/alerting.go",
+      "function": "TestChannel",
+      "classification": "best-effort",
+      "owner": "backend/notifications",
+      "reason": "This endpoint is an explicit delivery diagnostic and does not commit product state. An enqueue failure is returned to the caller, while a successfully accepted notification task uses the normal dispatcher retries.",
+      "validation": "NewNotificationSendTask places the task on the critical queue with MaxRetry(3). There is intentionally no durable delivery receipt or repair sweep for a test notification, so the operator must re-run a failed diagnostic."
+    },
+    {
       "file": "internal/handler/cluster_registries.go",
       "function": "enqueueApply",
       "classification": "repair-backed",
@@ -25,6 +33,14 @@
       "owner": "backend/templates",
       "reason": "Production server wiring sets taskOutbox on ClusterTemplateHandler; the direct enqueue is a fallback only when the durable outbox is unavailable.",
       "validation": "internal/server/server.go wires SetTaskOutbox(queries), and cluster_template:drift_check is also scheduled on the tunnel queue for repair."
+    },
+    {
+      "file": "internal/handler/clusters.go",
+      "function": "enqueueArgoCDAutoRegister",
+      "classification": "repair-backed",
+      "owner": "backend/argocd",
+      "reason": "The cluster and its label mutation are durable before this best-effort acceleration task. Missing direct delivery leaves the cluster eligible for the periodic selector-based auto-adoption reconciliation.",
+      "validation": "argocd:auto_register_cluster is registered and scheduled every five minutes; its fleet sweep pages all clusters, re-evaluates the persisted selector and labels, and repairs managed-cluster state."
     },
     {
       "file": "internal/handler/clusters.go",
@@ -76,6 +92,14 @@
     },
     {
       "file": "internal/handler/projects.go",
+      "function": "dispatchProjectReconcile",
+      "classification": "outbox-backed",
+      "owner": "backend/projects",
+      "reason": "The transactional namespace mutation persists the project_namespaces sidecar before dispatch. When no live requester is available, this path writes task_outbox with a stable project/cluster/namespace/op dedupe key before reaching the direct Redis fallback.",
+      "validation": "Production server wiring calls SetTaskOutbox, dispatchProjectReconcile uses enqueueProjectTaskOutbox, and the existing project async tests assert the same helper's payload, queue, dedupe key, and delivery-attempt contract."
+    },
+    {
+      "file": "internal/handler/projects.go",
       "function": "upsertAndEnqueue",
       "classification": "outbox-backed",
       "owner": "backend/projects",
@@ -99,12 +123,28 @@
       "validation": "Callers remain responsible for their own durable intent or best-effort classification."
     },
     {
+      "file": "internal/worker/tasks/alert_evaluation.go",
+      "function": "dispatchAlertNotifications",
+      "classification": "best-effort",
+      "owner": "backend/alerting",
+      "reason": "The firing or resolved alert event is persisted before outbound channel fan-out, so alert state remains visible even when a notification enqueue fails. Channel failures are intentionally isolated so they cannot abort evaluation of other rules or channels.",
+      "validation": "Enqueue failures are logged with event and channel identifiers; successfully accepted notification:send tasks run on the critical queue with MaxRetry(3). There is no claimed notification-delivery repair path, so outbound delivery remains explicitly best-effort."
+    },
+    {
       "file": "internal/worker/tasks/cluster_template_apply.go",
       "function": "HandleClusterTemplateDriftCheck",
       "classification": "repair-backed",
       "owner": "backend/templates",
       "reason": "This direct enqueue happens inside the recovery sweep for failed template applications. If delivery fails, the durable failed row remains eligible for the next sweep after backoff.",
       "validation": "cluster_template:drift_check is scheduled on the tunnel queue and guards repeated failures with failedApplyMinBackoff."
+    },
+    {
+      "file": "internal/worker/tasks/gitops_sync.go",
+      "function": "enqueueDecommission",
+      "classification": "repair-backed",
+      "owner": "backend/gitops",
+      "reason": "The path creates a durable cluster_decommissions operation before dispatch and prefers a deduplicated task_outbox row. If both outbox and direct acceleration are unavailable, the pending operation remains eligible for repair.",
+      "validation": "cluster:decommission_all is scheduled every minute on the tunnel queue, re-enqueues pending rows, and the reconciler uses a lease claim plus persisted idempotent phase state; TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue verifies the normal outbox contract."
     },
     {
       "file": "internal/worker/tasks/security_scan.go",

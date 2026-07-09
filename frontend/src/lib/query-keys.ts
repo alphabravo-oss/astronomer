@@ -117,7 +117,15 @@ export const queryKeys = {
     dbApp: (appId: string) => ['argocd', 'db-app', appId] as const,
     appManifests: (appId: string) => ['argocd', 'app-manifests', appId] as const,
     appHistory: (appId: string) => ['argocd', 'app-history', appId] as const,
+    // Prefix used to invalidate every Argo operation list variant.
     operations: ['argocd', 'operations'] as const,
+    operationList: (params?: {
+      targetType?: string;
+      targetKey?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    }) => [...queryKeys.argocd.operations, 'list', params] as const,
     appOperations: (appId: string) => ['argocd', 'operations', 'for-app', appId] as const,
     projects: (instanceId: string) => ['argocd', 'projects', instanceId] as const,
     repos: (instanceId: string) => ['argocd', 'repos', instanceId] as const,

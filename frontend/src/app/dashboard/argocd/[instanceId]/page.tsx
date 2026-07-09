@@ -308,7 +308,7 @@ function OverviewTab({
   // Distinct key from the Operations tab (which pulls limit:100) so the two
   // caches don't clobber each other's page size.
   const { data: recentOps } = useQuery({
-    queryKey: ['argocd', 'operations', 'recent'] as const,
+    queryKey: queryKeys.argocd.operationList({ limit: 5 }),
     queryFn: () => listArgoOperations({ limit: 5 }),
     refetchInterval: 15000,
   });
@@ -1384,7 +1384,7 @@ function OperationsTab({ instanceId: _instanceId }: { instanceId: string }) {
   // instance ID server-side. We still tag them with the app name when we
   // can resolve it from the DB-app list.
   const { data: ops = [], isLoading } = useQuery({
-    queryKey: queryKeys.argocd.operations,
+    queryKey: queryKeys.argocd.operationList({ limit: 100 }),
     queryFn: () => listArgoOperations({ limit: 100 }),
     refetchInterval: 10000,
   });

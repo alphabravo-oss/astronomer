@@ -147,6 +147,11 @@ describe('useResourceWatch — pods SSE transport', () => {
 
 describe('useResourceWatch — proxy fetch-stream transport', () => {
   const key = ['clusters', 'c1', 'workloads', 'deployments'];
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
 
   function streamResponse(lines: string[]): Response {
     const encoder = new TextEncoder();
@@ -209,6 +214,33 @@ describe('useResourceWatch — proxy fetch-stream transport', () => {
     );
     await waitFor(() => expect(result.current.status).toBe('fallback'));
     expect(result.current.live).toBe(false);
+  });
+
+  it('aborts the proxy request when the hook unmounts', async () => {
+    const { wrapper } = makeWrapper();
+    let requestSignal: AbortSignal | undefined;
+    global.fetch = jest.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+      });
+    }) as typeof fetch;
+
+    const { unmount } = renderHook(
+      () =>
+        useResourceWatch({
+          clusterId: 'c1',
+          queryKey: key,
+          source: { kind: 'proxy', path: 'apis/apps/v1/deployments' },
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(requestSignal).toBeDefined());
+
+    unmount();
+    expect(requestSignal?.aborted).toBe(true);
   });
 
   function streamResponseLocal(lines: string[]): Response {
