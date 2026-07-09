@@ -48,6 +48,8 @@ func (q routeSecurityRBACQuerier) GetUserBindings(_ context.Context, _ string) (
 type routeSecurityArgoTokenQuerier struct {
 	tokenHash string
 	clusterID uuid.UUID
+	row       *sqlc.ArgocdClusterProxyToken
+	mu        sync.Mutex
 	touched   int
 }
 
@@ -55,12 +57,29 @@ func (q *routeSecurityArgoTokenQuerier) GetArgoCDClusterProxyTokenByHash(_ conte
 	if tokenHash != q.tokenHash {
 		return sqlc.ArgocdClusterProxyToken{}, errRouteSecurityNotFound{}
 	}
-	return sqlc.ArgocdClusterProxyToken{ID: uuid.New(), ClusterID: q.clusterID}, nil
+	if q.row != nil {
+		return *q.row, nil
+	}
+	return sqlc.ArgocdClusterProxyToken{
+		ID:        uuid.New(),
+		ClusterID: q.clusterID,
+		Purpose:   "argocd_cluster_proxy",
+		TokenHash: q.tokenHash,
+		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	}, nil
 }
 
 func (q *routeSecurityArgoTokenQuerier) TouchArgoCDClusterProxyToken(_ context.Context, _ uuid.UUID) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.touched++
 	return nil
+}
+
+func (q *routeSecurityArgoTokenQuerier) touchCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.touched
 }
 
 type errRouteSecurityNotFound struct{}
@@ -1965,28 +1984,165 @@ func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
 	}
 }
 
-func TestInternalArgoCDProxyRouterServesTokenlessRequests(t *testing.T) {
+func TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier(t *testing.T) {
 	clusterID := uuid.New()
 	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
 		Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
 	})
 	base := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
-	// The internal listener is network-isolated, not token-gated: a tokenless
-	// PATCH (ArgoCD's apply path) must reach the proxy handler (503 — no tunnel),
-	// not 401. This is exactly what the public route rejects.
+	// Cover the Kubernetes traffic shapes ArgoCD emits: discovery, resource
+	// cache reads, Secret lists, apply, and upgrade-style CONNECT requests.
 	for _, tc := range []struct {
 		method, path string
 	}{
-		{http.MethodPatch, base + "/api/v1/namespaces/trivy-system"},
+		{http.MethodGet, base + "/api"},
+		{http.MethodGet, base + "/apis"},
 		{http.MethodGet, base + "/openapi/v2"},
 		{http.MethodGet, base + "/api/v1/secrets"},
+		{http.MethodPatch, base + "/api/v1/namespaces/trivy-system"},
+		{http.MethodConnect, base + "/api/v1/namespaces/default/pods/example/exec"},
 	} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("%s %s: status = %d, want %d (handler reached, no token); body=%s", tc.method, tc.path, rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s: status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusUnauthorized, rec.Body.String())
 		}
 	}
+}
+
+func TestInternalArgoCDProxyRouterRejectsInvalidTokenForms(t *testing.T) {
+	clusterID := uuid.New()
+	validToken := auth.ArgoCDClusterProxyTokenPrefix + "valid-token"
+	tokens := &routeSecurityArgoTokenQuerier{
+		tokenHash: auth.HashArgoCDClusterProxyToken(validToken),
+		clusterID: clusterID,
+	}
+	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
+		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+		ArgoCDProxyTokens: tokens,
+	})
+	path := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s/apis/apps/v1/deployments"
+
+	for _, tc := range []struct {
+		name, authorization string
+	}{
+		{name: "missing"},
+		{name: "wrong scheme", authorization: "Basic " + validToken},
+		{name: "wrong prefix", authorization: "Bearer user-token"},
+		{name: "unknown hash", authorization: "Bearer " + auth.ArgoCDClusterProxyTokenPrefix + "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			if tc.authorization != "" {
+				req.Header.Set("Authorization", tc.authorization)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+			}
+		})
+	}
+	if tokens.touchCount() != 0 {
+		t.Fatalf("invalid tokens touched %d rows, want 0", tokens.touchCount())
+	}
+}
+
+func TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows(t *testing.T) {
+	clusterID := uuid.New()
+	otherClusterID := uuid.New()
+	token := auth.ArgoCDClusterProxyTokenPrefix + "row-validation-token"
+	tokenHash := auth.HashArgoCDClusterProxyToken(token)
+	baseRow := sqlc.ArgocdClusterProxyToken{
+		ID:        uuid.New(),
+		ClusterID: clusterID,
+		Purpose:   "argocd_cluster_proxy",
+		TokenHash: tokenHash,
+		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*sqlc.ArgocdClusterProxyToken)
+	}{
+		{name: "cross cluster", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.ClusterID = otherClusterID }},
+		{name: "expired", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.ExpiresAt.Time = time.Now().Add(-time.Minute) }},
+		{name: "revoked", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.IsRevoked = true }},
+		{name: "wrong purpose", mutate: func(row *sqlc.ArgocdClusterProxyToken) { row.Purpose = "different" }},
+		{name: "hash mismatch", mutate: func(row *sqlc.ArgocdClusterProxyToken) {
+			row.TokenHash = auth.HashArgoCDClusterProxyToken(token + "-other")
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			row := baseRow
+			tc.mutate(&row)
+			tokens := &routeSecurityArgoTokenQuerier{tokenHash: tokenHash, clusterID: clusterID, row: &row}
+			handler := NewInternalArgoCDProxyRouter(RouterDependencies{
+				Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+				ArgoCDProxyTokens: tokens,
+			})
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/argocd/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+			}
+			if tokens.touchCount() != 0 {
+				t.Fatalf("touch count = %d, want 0", tokens.touchCount())
+			}
+		})
+	}
+}
+
+func TestInternalArgoCDProxyRouterAcceptsValidClusterToken(t *testing.T) {
+	clusterID := uuid.New()
+	token := auth.ArgoCDClusterProxyTokenPrefix + "valid-internal-token"
+	tokens := &routeSecurityArgoTokenQuerier{tokenHash: auth.HashArgoCDClusterProxyToken(token), clusterID: clusterID}
+	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
+		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+		ArgoCDProxyTokens: tokens,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/internal/argocd/clusters/"+clusterID.String()+"/k8s/openapi/v2", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want proxy handler %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	}
+	if tokens.touchCount() != 1 {
+		t.Fatalf("touch count = %d, want 1", tokens.touchCount())
+	}
+}
+
+func TestInternalArgoCDProxyRouterRetainsRateLimit(t *testing.T) {
+	clusterID := uuid.New()
+	token := auth.ArgoCDClusterProxyTokenPrefix + "rate-limit-token"
+	tokens := &routeSecurityArgoTokenQuerier{tokenHash: auth.HashArgoCDClusterProxyToken(token), clusterID: clusterID}
+	handler := NewInternalArgoCDProxyRouter(RouterDependencies{
+		Proxy:             tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+		ArgoCDProxyTokens: tokens,
+	})
+	path := "/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s/api/v1/pods"
+	for i := 0; i < 1200; i++ {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code == http.StatusTooManyRequests {
+			if i < 1000 {
+				t.Fatalf("rate limit tripped after %d requests, before the documented burst of 1000", i)
+			}
+			if rec.Header().Get("Retry-After") == "" {
+				t.Fatal("rate-limited response must include Retry-After")
+			}
+			return
+		}
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("request %d status = %d, want %d; body=%s", i+1, rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+		}
+	}
+	t.Fatal("ArgoCD proxy did not enforce its rate limit within 1200 immediate requests")
 }
 
 func TestArgoCDInternalK8sProxyRequiresClusterScopedToken(t *testing.T) {
@@ -2025,8 +2181,8 @@ func TestArgoCDInternalK8sProxyRequiresClusterScopedToken(t *testing.T) {
 	if validRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("valid status = %d, want proxy handler %d; body=%s", validRec.Code, http.StatusServiceUnavailable, validRec.Body.String())
 	}
-	if tokens.touched != 1 {
-		t.Fatalf("touch count = %d, want 1", tokens.touched)
+	if tokens.touchCount() != 1 {
+		t.Fatalf("touch count = %d, want 1", tokens.touchCount())
 	}
 }
 
@@ -2034,7 +2190,7 @@ func TestArgoCDInternalK8sProxyMutationsAreAudited(t *testing.T) {
 	clusterID := uuid.New()
 	token := auth.ArgoCDClusterProxyTokenPrefix + "audit-test-token"
 	audit := &routeSecurityAuditWriter{}
-	router := NewRouter(&config.Config{}, RouterDependencies{
+	router := NewInternalArgoCDProxyRouter(RouterDependencies{
 		AuditWriter: audit,
 		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
 		ArgoCDProxyTokens: &routeSecurityArgoTokenQuerier{

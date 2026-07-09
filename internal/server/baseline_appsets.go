@@ -453,10 +453,10 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent, exc
 							},
 							// ServerSideApply has the apiserver perform the merge — the
 							// recommended mode for proxied/aggregated clusters. (Note: it
-							// does NOT avoid ArgoCD's anonymous openapi/discovery/apply
-							// requests through the tunnel; that's handled by the
-							// network-isolated internal proxy listener, not by a sync
-							// option — see NewInternalArgoCDProxyRouter.)
+							// does NOT change how ArgoCD authenticates openapi,
+							// discovery, or apply requests through the tunnel; those
+							// carry the cluster Secret's bearer token and are checked by
+							// NewInternalArgoCDProxyRouter.)
 							"syncOptions": []any{"CreateNamespace=true", "ServerSideApply=true"},
 						},
 					},

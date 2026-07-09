@@ -211,8 +211,8 @@ func resolveCallbackBaseURL(ctx context.Context, _ *config.Config, queries *sqlc
 type Server struct {
 	httpServer *http.Server
 	handler    http.Handler
-	// internalArgoCDHandler serves the dedicated, network-isolated
-	// ArgoCD->cluster proxy on a separate (non-public) port. nil in
+	// internalArgoCDHandler serves the dedicated, authenticated and
+	// network-isolated ArgoCD->cluster proxy on a separate non-public port. nil in
 	// lightweight test servers.
 	internalArgoCDHandler http.Handler
 	logger                *slog.Logger
@@ -1914,10 +1914,10 @@ func (s *Server) Start(addr string) error {
 	return s.httpServer.Serve(ln)
 }
 
-// StartInternalArgoCDProxy serves the network-isolated ArgoCD->cluster proxy on
-// its own listener. addr must be a non-public port (the deployment maps the
-// public ingress only to the main :8000 listener, and a NetworkPolicy restricts
-// this port to the argocd namespace). Blocks until the listener errors.
+// StartInternalArgoCDProxy serves the authenticated, network-isolated
+// ArgoCD->cluster proxy on its own listener. addr must be a non-public port (the
+// deployment maps public ingress only to :8000, and a NetworkPolicy restricts
+// this port to the ArgoCD namespace). Blocks until the listener errors.
 func (s *Server) StartInternalArgoCDProxy(addr string) error {
 	if s.internalArgoCDHandler == nil || strings.TrimSpace(addr) == "" {
 		return nil

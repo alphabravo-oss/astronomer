@@ -125,12 +125,12 @@ spec:
         - protocol: TCP
           port: 9090
     {{- end }}
-    # Internal ArgoCD->cluster proxy (port 8090). This listener is NOT
-    # token-gated (ArgoCD's apply path is anonymous), so its only authentication
-    # is this network isolation: only ArgoCD's own pods may reach it. The
+    # Internal ArgoCD->cluster proxy (port 8090). Requests are authenticated
+    # with the cluster-scoped token from ArgoCD's cluster Secret. This policy is
+    # a second control limiting network reachability to bundled ArgoCD pods. The
     # application-controller performs cluster syncs; argocd-server connects here
-    # to validate a cluster's reachability when it is registered (cluster upsert),
-    # so both must be allowed or registration hangs. The public ingress never maps 8090.
+    # to validate reachability during cluster upsert, so both must be allowed.
+    # The public ingress never maps 8090.
     - from:
         - namespaceSelector:
             matchLabels:

@@ -39,6 +39,14 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Alias of bearerJWT; session JWT or personal API token.
+    argoCDClusterProxyToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Dedicated `astro_argocd_*` machine credential stored in the bundled
+        ArgoCD cluster Secret. It is hash-validated, expiration/revocation
+        checked, and bound to the cluster ID in the request path.
   schemas:
     Error:
       type: object
@@ -20463,16 +20471,20 @@ paths:
       (tunnel.ProxyHandler.HandleK8sProxy). It does NOT accept user JWTs or user
       API tokens: the bearer token is a cluster-scoped opaque proxy token,
       validated by SHA-256 hash against `argocd_cluster_proxy_tokens` before the
-      shared tunnel proxy runs. Mutations are audited as `argocd.k8s_proxy.forwarded`.
-      Rate-limited under the argocd-proxy class. CONNECT is accepted but not
-      representable in OpenAPI.
+      shared tunnel proxy runs; purpose, cluster binding, expiration, and
+      revocation are also checked. Production registrations default to the
+      private `:8090` listener. The same path remains on `:8000` for existing
+      explicitly configured cluster Secrets, with the identical token gate.
+      Mutations are audited as `argocd.k8s_proxy.forwarded`. Rate-limited under
+      the argocd-proxy class. CONNECT is accepted but not representable in
+      OpenAPI.
     get:
       operationId: argocdInternalK8sProxyGet
       summary: ArgoCD-to-cluster Kubernetes apiserver proxy
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20519,7 +20531,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20566,7 +20578,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20613,7 +20625,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20669,7 +20681,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20725,7 +20737,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20777,7 +20789,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.
@@ -20824,7 +20836,7 @@ paths:
       tags:
         - tunnel-proxy-argocd-ui
       security:
-        - bearerJWT: []
+        - argoCDClusterProxyToken: []
       responses:
         '200':
           description: Proxied apiserver response.

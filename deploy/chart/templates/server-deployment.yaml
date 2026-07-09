@@ -95,8 +95,8 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
-            # Network-isolated ArgoCD->cluster proxy. Never mapped by the public
-            # ingress; the NetworkPolicy restricts it to the argocd namespace.
+            # Token-authenticated, network-isolated ArgoCD->cluster proxy. Never
+            # mapped by public ingress; NetworkPolicy restricts it to ArgoCD.
             - name: argocd-proxy
               containerPort: 8090
               protocol: TCP

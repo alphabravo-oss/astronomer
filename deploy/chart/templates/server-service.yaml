@@ -11,8 +11,8 @@ spec:
       port: {{ .Values.server.service.port }}
       targetPort: http
       protocol: TCP
-    # Internal ArgoCD->cluster proxy port (not exposed via ingress; the
-    # NetworkPolicy restricts ingress to the argocd namespace).
+    # Authenticated internal ArgoCD->cluster proxy port (not exposed via
+    # ingress; NetworkPolicy also restricts it to the ArgoCD namespace).
     - name: argocd-proxy
       port: 8090
       targetPort: argocd-proxy

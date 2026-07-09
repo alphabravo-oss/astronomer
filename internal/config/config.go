@@ -132,16 +132,14 @@ type Config struct {
 
 	// ArgoCDClusterProxyBaseURL is the base URL upstream ArgoCD should use
 	// when talking to Astronomer-managed remote clusters through the tunnel
-	// proxy. The registration handler appends /api/v1/clusters/{id}/k8s.
+	// proxy. The registration handler appends the internal ArgoCD cluster path.
 	ArgoCDClusterProxyBaseURL string `mapstructure:"argocd_cluster_proxy_base_url"`
 
 	// ArgoCDInternalProxyAddr is a dedicated, non-public listen address serving
-	// ONLY the ArgoCD->adopted-cluster k8s proxy. ArgoCD's GitOps apply path
-	// sends no per-request credential (kubectl treats discovery/apply as
-	// anonymous), so this route cannot be token-gated. Instead it runs on its
-	// own port that the public ingress never maps and a NetworkPolicy restricts
-	// to the argocd namespace — network isolation IS the authentication. The
-	// public :8000 listener keeps the token-gated route for any other caller.
+	// ONLY the ArgoCD->adopted-cluster k8s proxy. Every request must carry the
+	// cluster-scoped bearer token stored in ArgoCD's cluster Secret. The port is
+	// not mapped by public ingress and NetworkPolicy restricts it to bundled
+	// ArgoCD pods, providing defense in depth around the application-layer token.
 	ArgoCDInternalProxyAddr string `mapstructure:"argocd_internal_proxy_addr"`
 
 	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
@@ -288,8 +286,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://astro-argocd-server.astronomer.svc.cluster.local:80"},
-		// Adopted clusters register against the dedicated internal proxy port
-		// (network-isolated, tokenless) — not the public :8000 listener.
+		// Adopted clusters register against the authenticated, network-isolated
+		// internal proxy port — not the public :8000 listener.
 		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8090"},
 		envconfig.Default{Key: "argocd_internal_proxy_addr", Value: ":8090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
