@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -69,7 +70,7 @@ func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
 	return docs
 }
 
-func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
+func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	allowedHooks := map[string]string{
 		"Job/astronomer-migrate":   "post-install,post-upgrade",
@@ -106,7 +107,7 @@ func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
 		key := fmt.Sprintf("%s/%s", stringValue(doc["kind"]), name)
 		want, ok := allowedHooks[key]
 		if !ok {
-			t.Fatalf("only short-lived migration/preflight Jobs may use Helm hooks; found hook on %s", key)
+			t.Fatalf("only lifecycle Jobs and dedicated preflight prerequisites may use Helm hooks; found hook on %s", key)
 		}
 		if hook != want {
 			t.Fatalf("%s hook mismatch: got %q, want %q", key, hook, want)
@@ -119,6 +120,184 @@ func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
 			t.Fatalf("expected Helm hook resource %s was not rendered", key)
 		}
 	}
+}
+
+func TestPreflightHookRBACSurvivesUntilJobAndIsLeastPrivilege(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight")
+	jobAnnotations := nestedMap(job, "metadata", "annotations")
+	if got := stringValue(jobAnnotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+		t.Fatalf("preflight Job hook = %q, want pre-install,pre-upgrade", got)
+	}
+	if got := stringValue(jobAnnotations["helm.sh/hook-weight"]); got != "-5" {
+		t.Fatalf("preflight Job hook weight = %q, want -5", got)
+	}
+	jobWeight, err := strconv.Atoi(stringValue(jobAnnotations["helm.sh/hook-weight"]))
+	if err != nil {
+		t.Fatalf("parse preflight Job hook weight: %v", err)
+	}
+	if got := stringValue(jobAnnotations["helm.sh/hook-delete-policy"]); got != "before-hook-creation" {
+		t.Fatalf("preflight Job delete policy = %q, want before-hook-creation", got)
+	}
+	if got := stringAt(podSpecFor(job), "serviceAccountName"); got != "astronomer-preflight" {
+		t.Fatalf("preflight Job serviceAccountName = %q, want astronomer-preflight", got)
+	}
+
+	for _, target := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "ServiceAccount", name: "astronomer-preflight"},
+		{kind: "ClusterRole", name: "astronomer-preflight"},
+		{kind: "ClusterRoleBinding", name: "astronomer-preflight"},
+		{kind: "Role", name: "astronomer-preflight"},
+		{kind: "RoleBinding", name: "astronomer-preflight"},
+	} {
+		doc := findRenderedDoc(t, docs, target.kind, target.name)
+		annotations := nestedMap(doc, "metadata", "annotations")
+		if got := stringValue(annotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+			t.Errorf("%s/%s hook = %q, want pre-install,pre-upgrade", target.kind, target.name, got)
+		}
+		if got := stringValue(annotations["helm.sh/hook-weight"]); got != "-10" {
+			t.Errorf("%s/%s hook weight = %q, want -10", target.kind, target.name, got)
+		}
+		prerequisiteWeight, err := strconv.Atoi(stringValue(annotations["helm.sh/hook-weight"]))
+		if err != nil {
+			t.Errorf("parse %s/%s hook weight: %v", target.kind, target.name, err)
+		} else if prerequisiteWeight >= jobWeight {
+			t.Errorf("%s/%s hook weight %d must run before Job weight %d", target.kind, target.name, prerequisiteWeight, jobWeight)
+		}
+		policy := stringValue(annotations["helm.sh/hook-delete-policy"])
+		if policy != "before-hook-creation" {
+			t.Errorf("%s/%s delete policy = %q, want exactly before-hook-creation", target.kind, target.name, policy)
+		}
+		if strings.Contains(policy, "hook-succeeded") || strings.Contains(policy, "hook-failed") {
+			t.Errorf("%s/%s policy %q can delete prerequisite RBAC before the Job runs", target.kind, target.name, policy)
+		}
+	}
+
+	clusterRole := findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight")
+	assertExactRBACRules(t, clusterRole, []rbacRuleContract{
+		{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, verbs: []string{"get"}},
+		{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, verbs: []string{"get"}},
+	})
+	role := findRenderedDoc(t, docs, "Role", "astronomer-preflight")
+	if got := stringAt(role, "metadata", "namespace"); got != "default" {
+		t.Fatalf("preflight Role namespace = %q, want rendered release namespace default", got)
+	}
+	assertExactRBACRules(t, role, []rbacRuleContract{
+		{apiGroups: []string{""}, resources: []string{"secrets"}, verbs: []string{"get"}},
+	})
+	assertExactPreflightBinding(t, findRenderedDoc(t, docs, "ClusterRoleBinding", "astronomer-preflight"), "ClusterRole")
+	assertExactPreflightBinding(t, findRenderedDoc(t, docs, "RoleBinding", "astronomer-preflight"), "Role")
+}
+
+func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	for _, kind := range []string{"ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding"} {
+		doc := findRenderedDoc(t, docs, kind, "astronomer-preflight")
+		annotations := nestedMap(doc, "metadata", "annotations")
+		// Stable names plus both lifecycle events let Helm remove any RBAC left by
+		// the current release and recreate it from the upgrading chart. The exact
+		// policy is critical: adding hook-succeeded reintroduces the race with the
+		// later-weighted Job.
+		if got := stringValue(annotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+			t.Errorf("%s upgrade hook = %q, want pre-install,pre-upgrade", kind, got)
+		}
+		if got := stringValue(annotations["helm.sh/hook-delete-policy"]); got != "before-hook-creation" {
+			t.Errorf("%s upgrade replacement policy = %q, want before-hook-creation", kind, got)
+		}
+	}
+
+	disabledDocs := parseRenderedDocs(t, helmTemplate(t, "preflight.enabled=false"))
+	for _, kind := range []string{"Job", "ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding"} {
+		for _, doc := range disabledDocs {
+			if stringValue(doc["kind"]) == kind && stringAt(doc, "metadata", "name") == "astronomer-preflight" {
+				t.Errorf("preflight.enabled=false unexpectedly rendered %s/astronomer-preflight", kind)
+			}
+		}
+	}
+}
+
+type rbacRuleContract struct {
+	apiGroups []string
+	resources []string
+	verbs     []string
+}
+
+func assertExactRBACRules(t *testing.T, role renderedDoc, want []rbacRuleContract) {
+	t.Helper()
+	rawRules, ok := role["rules"].([]any)
+	if !ok {
+		t.Fatalf("%s/%s rules are missing or malformed", stringValue(role["kind"]), stringAt(role, "metadata", "name"))
+	}
+	if len(rawRules) != len(want) {
+		t.Fatalf("%s/%s has %d rules, want exactly %d", stringValue(role["kind"]), stringAt(role, "metadata", "name"), len(rawRules), len(want))
+	}
+	for i, rawRule := range rawRules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			t.Fatalf("%s/%s rule %d is malformed", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i)
+		}
+		for field, expected := range map[string][]string{
+			"apiGroups": want[i].apiGroups,
+			"resources": want[i].resources,
+			"verbs":     want[i].verbs,
+		} {
+			got := stringListValue(rule[field])
+			if !reflect.DeepEqual(got, expected) {
+				t.Errorf("%s/%s rule %d %s = %v, want exactly %v", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i, field, got, expected)
+			}
+		}
+	}
+}
+
+func assertExactPreflightBinding(t *testing.T, binding renderedDoc, roleKind string) {
+	t.Helper()
+	if roleKind == "Role" {
+		if got := stringAt(binding, "metadata", "namespace"); got != "default" {
+			t.Errorf("RoleBinding/astronomer-preflight namespace = %q, want rendered release namespace default", got)
+		}
+	}
+	roleRef := nestedMap(binding, "roleRef")
+	if got := stringValue(roleRef["apiGroup"]); got != "rbac.authorization.k8s.io" {
+		t.Errorf("%s roleRef.apiGroup = %q, want rbac.authorization.k8s.io", stringValue(binding["kind"]), got)
+	}
+	if got := stringValue(roleRef["kind"]); got != roleKind {
+		t.Errorf("%s roleRef.kind = %q, want %q", stringValue(binding["kind"]), got, roleKind)
+	}
+	if got := stringValue(roleRef["name"]); got != "astronomer-preflight" {
+		t.Errorf("%s roleRef.name = %q, want astronomer-preflight", stringValue(binding["kind"]), got)
+	}
+	rawSubjects, ok := binding["subjects"].([]any)
+	if !ok || len(rawSubjects) != 1 {
+		t.Fatalf("%s subjects = %v, want exactly one ServiceAccount subject", stringValue(binding["kind"]), binding["subjects"])
+	}
+	subject, ok := rawSubjects[0].(map[string]any)
+	if !ok {
+		t.Fatalf("%s subject is malformed", stringValue(binding["kind"]))
+	}
+	if got := stringValue(subject["kind"]); got != "ServiceAccount" {
+		t.Errorf("%s subject kind = %q, want ServiceAccount", stringValue(binding["kind"]), got)
+	}
+	if got := stringValue(subject["name"]); got != "astronomer-preflight" {
+		t.Errorf("%s subject name = %q, want astronomer-preflight", stringValue(binding["kind"]), got)
+	}
+	if got := stringValue(subject["namespace"]); got != "default" {
+		t.Errorf("%s subject namespace = %q, want rendered release namespace default", stringValue(binding["kind"]), got)
+	}
+}
+
+func stringListValue(value any) []string {
+	raw, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		result = append(result, stringValue(item))
+	}
+	return result
 }
 
 func TestServiceAccountAndRuntimeRBACAreManagedReleaseResources(t *testing.T) {

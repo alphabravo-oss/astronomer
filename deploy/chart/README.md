@@ -301,6 +301,16 @@ Before install or upgrade, the preflight hook validates:
 - the `httproutes.gateway.networking.k8s.io` CRD exists
 - `gateway.className` resolves to an existing `GatewayClass`
 
+The Job uses a dedicated, least-privilege ServiceAccount and RBAC hooks. Helm
+creates those prerequisites at hook weight `-10`, before the Job at weight
+`-5`, and retains them after success. This retention is intentional: Helm
+considers non-Job hooks complete as soon as they are created, so a
+`hook-succeeded` policy would remove the ServiceAccount and RBAC before the Job
+could use them. On every subsequent install or upgrade,
+`before-hook-creation` replaces the retained resources with the rules from the
+new chart before running the Job. The permissions are limited to `get` on
+CRDs, GatewayClasses, and namespace-local Secrets.
+
 If any of those checks fail, Helm stops with a clear error instead of creating
 an unusable release. The intended model is:
 

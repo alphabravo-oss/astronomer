@@ -245,7 +245,14 @@ helm upgrade astronomer ./deploy/chart \
 
 What happens:
 
-1. **Preflight Job** runs first (`pre-upgrade` hook, weight `-5`). This
+1. **Preflight RBAC** is replaced first (`pre-upgrade` hooks, weight `-10`).
+   The dedicated ServiceAccount, Role/ClusterRole, and bindings intentionally
+   use only `before-hook-creation`, so they remain available to the later Job.
+   Do not add `hook-succeeded` or manually delete these resources during an
+   install/upgrade: Helm treats non-Job hooks as immediately successful and
+   would remove the authorization before the Job starts. The retained rules
+   allow only `get` on CRDs, GatewayClasses, and namespace-local Secrets.
+2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present
    - cert-manager CRDs present (if `tls.source` needs them)
@@ -253,12 +260,12 @@ What happens:
    - `schema_migrations` connectivity + dirty-flag check
    - Bundled-Postgres PVC absence (when externalised)
    - Any additional `tls.additionalTrustedCAs` Secret exists
-2. **Migrate Job** runs next, applying any new schema migrations. Helm
+3. **Migrate Job** runs next, applying any new schema migrations. Helm
    waits for completion before proceeding (init container in the server
    Deployment also runs migrate, but the Job is the canonical owner).
-3. **Server / worker / frontend rolling restart**. PDBs enforce
+4. **Server / worker / frontend rolling restart**. PDBs enforce
    quorum-safe drains.
-4. **Argo CD self-manage** picks up any chart values changes that affect
+5. **Argo CD self-manage** picks up any chart values changes that affect
    it, sometime within its next sync window.
 
 ### Step 3 — verify
