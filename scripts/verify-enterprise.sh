@@ -204,6 +204,7 @@ verify_helm() {
     --set dex.clientSecret=prod-dex-client-secret \
     --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
     --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
+    --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.40.0.0/14}' \
     --set managementBackup.s3.bucket=astronomer-backups \
     --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
     --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap

@@ -52,6 +52,29 @@ var productionWiringSets = []string{
 	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 }
 
+func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) {
+	scriptPath := filepath.Join(repoRoot(t), "scripts", "verify-enterprise.sh")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read enterprise verifier: %v", err)
+	}
+	script := string(raw)
+	start := strings.Index(script, `step "Fully wired production Helm render"`)
+	end := strings.Index(script, `step "Helm chart contract tests"`)
+	if start < 0 || end <= start {
+		t.Fatal("enterprise verifier production Helm render block is missing or malformed")
+	}
+	productionBlock := script[start:end]
+	arrayIndex := regexp.MustCompile(`\[[0-9]+\]`)
+	for _, set := range productionWiringSets {
+		key := strings.SplitN(set, "=", 2)[0]
+		canonicalKey := arrayIndex.ReplaceAllString(key, "")
+		if !strings.Contains(productionBlock, canonicalKey+"=") {
+			t.Errorf("enterprise verifier production render is missing productionWiringSets key %q", canonicalKey)
+		}
+	}
+}
+
 type renderedDoc map[string]any
 
 func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
