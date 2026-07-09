@@ -15,6 +15,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
@@ -57,6 +58,37 @@ type busPublisherAdapter struct{ bus *events.Bus }
 
 func (a busPublisherAdapter) Publish(eventType string, data any) {
 	a.bus.Publish(events.Type(eventType), data)
+}
+
+type securityCacheTarget struct {
+	jwt  *auth.JWTManager
+	rbac *appmiddleware.RBACCache
+}
+
+func (t securityCacheTarget) InvalidateJWTJTILocal(jti string) {
+	if t.jwt != nil {
+		t.jwt.InvalidateJWTJTILocal(jti)
+	}
+}
+func (t securityCacheTarget) InvalidateJWTUserLocal(userID string) {
+	if t.jwt != nil {
+		t.jwt.InvalidateJWTUserLocal(userID)
+	}
+}
+func (t securityCacheTarget) InvalidateJWTAllLocal() {
+	if t.jwt != nil {
+		t.jwt.InvalidateJWTAllLocal()
+	}
+}
+func (t securityCacheTarget) InvalidateRBACUserLocal(userID string) {
+	if t.rbac != nil {
+		t.rbac.InvalidateRBACUserLocal(userID)
+	}
+}
+func (t securityCacheTarget) InvalidateRBACAllLocal() {
+	if t.rbac != nil {
+		t.rbac.InvalidateRBACAllLocal()
+	}
 }
 
 // runServerReconcilerLeader holds a Postgres advisory lock and starts server
@@ -456,6 +488,23 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", cfg.RedisURL, redisErr)
 	}
 	queue := asynq.NewClient(redisOpt)
+	var securityCacheCoordinator *cacheinvalidate.Coordinator
+	securityTarget := securityCacheTarget{jwt: jwtManager, rbac: rbacQuerier.Cache()}
+	if redisClient, ok := redisOpt.MakeRedisClient().(redis.UniversalClient); ok && redisClient != nil {
+		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
+		go securityCacheCoordinator.Run(ctx)
+		go func() { <-ctx.Done(); _ = redisClient.Close() }()
+	} else if cfg.ServerReplicas > 1 {
+		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
+		logger.Error("distributed security cache invalidation is unavailable in a multi-replica deployment")
+	} else {
+		securityCacheCoordinator = cacheinvalidate.NewLocalOnly(securityTarget, os.Getenv("HOSTNAME"), logger)
+		logger.Warn("distributed security cache invalidation is disabled; using local-only caches")
+	}
+	jwtManager.SetCacheInvalidationCoordinator(securityCacheCoordinator)
+	if securityTarget.rbac != nil {
+		securityTarget.rbac.SetInvalidationCoordinator(securityCacheCoordinator)
+	}
 	// Phase B5 — give the security handler the asynq queue. The handler's
 	// IngestEnqueuer interface is satisfied directly by *asynq.Client.
 	securityHandler.SetIngestQueue(queue)
@@ -1134,7 +1183,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetK8sRequester(requester)
 			return h
 		}(),
-		Readyz:    newReadinessHandler(database, queue, hub).withLocatorError(locatorReadinessErr),
+		Readyz: newReadinessHandler(database, queue, hub).
+			withLocatorError(locatorReadinessErr).
+			withSecurityCacheCoordinator(securityCacheCoordinator, cfg.ServerReplicas > 1),
 		DexConfig: dexHandler,
 		RBAC: func() *handler.RBACHandler {
 			h := handler.NewRBACHandler(queries)
@@ -1248,7 +1299,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// SCIM 2.0 provisioning (migration 114). Bearer-token-authed
 		// /scim/v2/* User CRUD + read-only Group list, mapped onto the
 		// existing users + identity_group_mappings tables.
-		SCIM: handler.NewSCIMHandler(queries),
+		SCIM: func() *handler.SCIMHandler {
+			h := handler.NewSCIMHandler(queries)
+			h.SetJWTManager(jwtManager)
+			if cache := rbacQuerier.Cache(); cache != nil {
+				h.SetRBACCacheInvalidator(cache)
+			}
+			return h
+		}(),
 		// Operator-facing admin surface to mint/list/revoke the static
 		// bearer tokens the /scim/v2/* chain authenticates against.
 		SCIMTokenAdmin: handler.NewSCIMTokenAdminHandler(queries),

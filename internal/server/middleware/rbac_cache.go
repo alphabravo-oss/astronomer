@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"container/list"
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -115,8 +117,9 @@ type RBACCache struct {
 	// deterministically). Production callers leave it as time.Now.
 	now func() time.Time
 
-	entries map[string]*rbacCacheEntry
-	lru     *list.List // front = most recently used; back = LRU
+	entries     map[string]*rbacCacheEntry
+	lru         *list.List // front = most recently used; back = LRU
+	coordinator cacheinvalidate.Broadcaster
 }
 
 // NewRBACCache constructs a cache with sensible defaults
@@ -161,6 +164,12 @@ func (c *RBACCache) Get(userID string) ([]rbac.RoleBinding, bool) {
 		return nil, false
 	}
 	c.mu.RLock()
+	coordinator := c.coordinator
+	if coordinator != nil && !coordinator.Healthy() {
+		c.mu.RUnlock()
+		cacheinvalidate.RecordBypass("rbac", "coordinator_unhealthy")
+		return nil, false
+	}
 	entry, ok := c.entries[userID]
 	if !ok {
 		c.mu.RUnlock()
@@ -214,6 +223,9 @@ func (c *RBACCache) Put(userID string, bindings []rbac.RoleBinding) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.coordinator != nil && !c.coordinator.Healthy() {
+		return
+	}
 
 	now := c.now()
 	if existing, ok := c.entries[userID]; ok {
@@ -260,6 +272,21 @@ func (c *RBACCache) evictLocked() {
 // re-fetches and observes the change without waiting for the TTL. No-op when
 // userID is empty (anonymous) or has no entry.
 func (c *RBACCache) Invalidate(userID string) {
+	c.InvalidateRBACUserLocal(userID)
+	if c == nil || userID == "" {
+		return
+	}
+	c.mu.RLock()
+	coordinator := c.coordinator
+	c.mu.RUnlock()
+	if coordinator != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		_ = coordinator.Broadcast(ctx, cacheinvalidate.KindRBACUser, userID)
+		cancel()
+	}
+}
+
+func (c *RBACCache) InvalidateRBACUserLocal(userID string) {
 	if c == nil || userID == "" {
 		return
 	}
@@ -273,6 +300,21 @@ func (c *RBACCache) Invalidate(userID string) {
 // InvalidateAll drops every cached entry. Used by tests and by callers that
 // just edited a role definition (which affects every user bound to it).
 func (c *RBACCache) InvalidateAll() {
+	c.InvalidateRBACAllLocal()
+	if c == nil {
+		return
+	}
+	c.mu.RLock()
+	coordinator := c.coordinator
+	c.mu.RUnlock()
+	if coordinator != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		_ = coordinator.Broadcast(ctx, cacheinvalidate.KindRBACAll, "")
+		cancel()
+	}
+}
+
+func (c *RBACCache) InvalidateRBACAllLocal() {
 	if c == nil {
 		return
 	}
@@ -281,6 +323,18 @@ func (c *RBACCache) InvalidateAll() {
 	c.entries = make(map[string]*rbacCacheEntry, c.capacity)
 	c.lru.Init()
 	c.bindingCount = 0
+}
+
+func (c *RBACCache) SetInvalidationCoordinator(coordinator cacheinvalidate.Broadcaster) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.coordinator = coordinator
+	c.entries = make(map[string]*rbacCacheEntry, c.capacity)
+	c.lru.Init()
+	c.bindingCount = 0
+	c.mu.Unlock()
 }
 
 // Len returns the number of entries currently cached. Test-only.

@@ -936,6 +936,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 					auditDetail["revoked"] = true
 					jtiForSLO = claims.ID
 					userIDForSLO = claims.UserID
+					h.jwt.InvalidateJTI(r.Context(), claims.ID)
 				}
 				// Terminate the entire session, not just this access token.
 				// The refresh token (7-day lifetime) carries a JTI we don't
@@ -952,11 +953,9 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 					if h.log != nil {
 						h.log.Warn("failed to invalidate user tokens on logout", "user_id", claims.UserID.String(), "error", err)
 					}
+				} else {
+					h.jwt.InvalidateUser(r.Context(), claims.UserID)
 				}
-				// Drop the cached "this JTI is valid" entries so an in-flight
-				// validator running in another worker doesn't accept the
-				// just-revoked token (or a pre-cutoff refresh) before TTL expiry.
-				h.jwt.InvalidateCache()
 			}
 		}
 	}
@@ -1247,6 +1246,15 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update password")
 		return
+	}
+	if h.revocation != nil {
+		if err := h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
+			ID: userID, TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		}); err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Password changed but session invalidation failed")
+			return
+		}
+		h.jwt.InvalidateUser(r.Context(), userID)
 	}
 
 	// If an admin has marked this account for forced rotation, clear the flag

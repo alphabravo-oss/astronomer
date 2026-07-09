@@ -10,8 +10,8 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 314
 - Frontend source lines: 89889
-- Go source files under `internal/` excluding generated sqlc and tests: 421
-- Go source files scanned for sqlc query references excluding generated sqlc: 974
+- Go source files under `internal/` excluding generated sqlc and tests: 422
+- Go source files scanned for sqlc query references excluding generated sqlc: 977
 - sqlc query declarations: 878
 - Component files scanned: 102
 - Helm top-level values scanned: 33
@@ -89,7 +89,7 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:196`](internal/handler/scim.go:196), [`internal/server/routes.go:1912`](internal/server/routes.go:1912)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:1912`](internal/server/routes.go:1912)
 - `decodeRoleRules` in [`internal/handler/rbac.go:971`](internal/handler/rbac.go:971), [`internal/server/middleware/rbac_queries.go:261`](internal/server/middleware/rbac_queries.go:261)
 - `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
 - `requireSuperuser` in [`internal/handler/authorization.go:87`](internal/handler/authorization.go:87), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)

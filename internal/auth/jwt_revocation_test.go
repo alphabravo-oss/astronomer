@@ -2,13 +2,23 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 )
+
+type fakeCacheCoordinator struct{ healthy bool }
+
+func (f *fakeCacheCoordinator) Healthy() bool { return f.healthy }
+func (f *fakeCacheCoordinator) Broadcast(context.Context, cacheinvalidate.Kind, string) error {
+	return nil
+}
 
 // fakeRevocationChecker is the in-memory test backend for the
 // JTI deny-list + per-user cutoff. Threadsafe so the cache-coherence
@@ -145,6 +155,32 @@ func TestValidateToken_NoCheckerLeavesValidationUntouched(t *testing.T) {
 	}
 	if _, err := mgr.ValidateToken(token); err != nil {
 		t.Fatalf("validate without checker: %v", err)
+	}
+}
+
+func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t *testing.T) {
+	for _, failure := range []string{"jti", "user_cutoff"} {
+		t.Run(failure, func(t *testing.T) {
+			mgr := NewJWTManager("test-secret", 60)
+			checker := newFakeRevocationChecker()
+			if failure == "jti" {
+				checker.revErr = errors.New("db unavailable")
+			} else {
+				checker.cutoffErr = errors.New("db unavailable")
+			}
+			mgr.SetRevocationChecker(checker)
+			coordinator := &fakeCacheCoordinator{healthy: true}
+			mgr.SetCacheInvalidationCoordinator(coordinator)
+			token, _ := mgr.GenerateAccessToken(uuid.New())
+			if _, err := mgr.ValidateToken(token); err != nil {
+				t.Fatalf("healthy coordinator changed existing fail-open behavior: %v", err)
+			}
+
+			coordinator.healthy = false
+			if _, err := mgr.ValidateToken(token); err == nil {
+				t.Fatal("unhealthy coordinator plus DB error must reject")
+			}
+		})
 	}
 }
 

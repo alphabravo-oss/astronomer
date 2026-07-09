@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
@@ -103,9 +104,10 @@ type JWTManager struct {
 	// per request. The cache stores positive verdicts (token still
 	// valid) for a short TTL; negative verdicts are NEVER cached — a
 	// freshly-revoked token must be rejected on its next use.
-	cacheMu  sync.RWMutex
-	cacheTTL time.Duration
-	cache    map[string]validationCacheEntry
+	cacheMu          sync.RWMutex
+	cacheTTL         time.Duration
+	cache            map[string]validationCacheEntry
+	cacheCoordinator cacheinvalidate.Broadcaster
 }
 
 // JWTValidationCacheTTL is the default TTL for the "this JTI is still
@@ -117,6 +119,7 @@ const JWTValidationCacheTTL = 30 * time.Second
 
 type validationCacheEntry struct {
 	expiresAt time.Time
+	userID    uuid.UUID
 }
 
 // NewJWTManager creates a new JWT manager. secretKey is a comma-separated
@@ -181,6 +184,18 @@ func (m *JWTManager) SetValidationCacheTTL(d time.Duration) {
 	m.cacheMu.Lock()
 	m.cacheTTL = d
 	m.cache = make(map[string]validationCacheEntry) // drop stale entries
+	m.cacheMu.Unlock()
+}
+
+// SetCacheInvalidationCoordinator enables cross-replica invalidation and
+// fail-closed positive-cache bypass while coordinator health is degraded.
+func (m *JWTManager) SetCacheInvalidationCoordinator(c cacheinvalidate.Broadcaster) {
+	if m == nil {
+		return
+	}
+	m.cacheMu.Lock()
+	m.cacheCoordinator = c
+	m.cache = make(map[string]validationCacheEntry)
 	m.cacheMu.Unlock()
 }
 
@@ -429,6 +444,9 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 			//
 			// We do NOT cache this outcome — the next request will
 			// retry.
+			if m.securityCacheUnhealthy() {
+				return fmt.Errorf("invalid token: revocation state unavailable")
+			}
 			return nil
 		}
 		if revoked {
@@ -439,6 +457,9 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	cutoff, set, err := checker.UserTokensInvalidatedAt(ctx, claims.UserID)
 	if err != nil {
 		// Same fail-open rationale as above.
+		if m.securityCacheUnhealthy() {
+			return fmt.Errorf("invalid token: user revocation state unavailable")
+		}
 		return nil
 	}
 	if set && claims.IssuedAt != nil && !claims.IssuedAt.IsZero() {
@@ -450,16 +471,31 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	}
 
 	if jti != "" {
-		m.cachePut(jti)
+		m.cachePut(jti, claims.UserID)
 	}
 	return nil
+}
+
+func (m *JWTManager) securityCacheUnhealthy() bool {
+	if m == nil {
+		return true
+	}
+	m.cacheMu.RLock()
+	coordinator := m.cacheCoordinator
+	m.cacheMu.RUnlock()
+	return coordinator != nil && !coordinator.Healthy()
 }
 
 func (m *JWTManager) cacheHit(jti string) bool {
 	m.cacheMu.RLock()
 	entry, ok := m.cache[jti]
 	ttl := m.cacheTTL
+	coordinator := m.cacheCoordinator
 	m.cacheMu.RUnlock()
+	if coordinator != nil && !coordinator.Healthy() {
+		cacheinvalidate.RecordBypass("jwt", "coordinator_unhealthy")
+		return false
+	}
 	if !ok || ttl <= 0 {
 		return false
 	}
@@ -470,13 +506,13 @@ func (m *JWTManager) cacheHit(jti string) bool {
 	return true
 }
 
-func (m *JWTManager) cachePut(jti string) {
+func (m *JWTManager) cachePut(jti string, userID uuid.UUID) {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	if m.cacheTTL <= 0 {
+	if m.cacheTTL <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
 		return
 	}
-	m.cache[jti] = validationCacheEntry{expiresAt: time.Now().Add(m.cacheTTL)}
+	m.cache[jti] = validationCacheEntry{expiresAt: time.Now().Add(m.cacheTTL), userID: userID}
 }
 
 // InvalidateCache drops every entry from the positive-result cache.
@@ -484,6 +520,66 @@ func (m *JWTManager) cachePut(jti string) {
 // validation doesn't survive the revocation. Cheap — the cache is
 // usually <1k entries.
 func (m *JWTManager) InvalidateCache() {
+	m.InvalidateJWTAllLocal()
+}
+
+// InvalidateJTI invalidates locally before broadcasting the committed JTI
+// revocation to sibling replicas.
+func (m *JWTManager) InvalidateJTI(ctx context.Context, jti string) {
+	m.InvalidateJWTJTILocal(jti)
+	if m == nil || jti == "" {
+		return
+	}
+	m.cacheMu.RLock()
+	coordinator := m.cacheCoordinator
+	m.cacheMu.RUnlock()
+	if coordinator != nil {
+		_ = coordinator.Broadcast(ctx, cacheinvalidate.KindJWTJTI, jti)
+	}
+}
+
+// InvalidateUser invalidates locally before broadcasting a committed user
+// cutoff/password/deactivation mutation.
+func (m *JWTManager) InvalidateUser(ctx context.Context, userID uuid.UUID) {
+	m.InvalidateJWTUserLocal(userID.String())
+	if m == nil || userID == uuid.Nil {
+		return
+	}
+	m.cacheMu.RLock()
+	coordinator := m.cacheCoordinator
+	m.cacheMu.RUnlock()
+	if coordinator != nil {
+		_ = coordinator.Broadcast(ctx, cacheinvalidate.KindJWTUser, userID.String())
+	}
+}
+
+func (m *JWTManager) InvalidateJWTJTILocal(jti string) {
+	if m == nil || jti == "" {
+		return
+	}
+	m.cacheMu.Lock()
+	delete(m.cache, jti)
+	m.cacheMu.Unlock()
+}
+
+func (m *JWTManager) InvalidateJWTUserLocal(userID string) {
+	if m == nil || userID == "" {
+		return
+	}
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		return
+	}
+	m.cacheMu.Lock()
+	for jti, entry := range m.cache {
+		if entry.userID == id {
+			delete(m.cache, jti)
+		}
+	}
+	m.cacheMu.Unlock()
+}
+
+func (m *JWTManager) InvalidateJWTAllLocal() {
 	if m == nil {
 		return
 	}
