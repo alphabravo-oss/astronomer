@@ -2,9 +2,10 @@
 # Reproducible live-apiserver acceptance matrix for agent credential ownership.
 #
 # The script never prints Secret data. It uses a disposable namespace and
-# deletes it on exit. Set AGENT_IDENTITY_TEST_CONTEXT to select a context.
-# `--if-available` turns missing kubectl/context connectivity into an explicit
-# skip for the standard enterprise gate; direct invocation fails instead.
+# deletes it on exit. AGENT_IDENTITY_TEST_CONTEXT is mandatory. The standard
+# enterprise gate passes `--if-available`, which skips only when that variable
+# is absent. Once a context is explicit, missing tools, connectivity failures,
+# and acceptance failures are always fatal.
 
 set -Eeuo pipefail
 
@@ -12,32 +13,28 @@ optional=false
 if [[ "${1:-}" == "--if-available" ]]; then
   optional=true
 elif [[ $# -ne 0 ]]; then
-  printf 'Usage: %s [--if-available]\n' "$0" >&2
+  printf 'Usage: AGENT_IDENTITY_TEST_CONTEXT=<context> %s [--if-available]\n' "$0" >&2
   exit 2
 fi
 
-skip_or_fail() {
-  if [[ "$optional" == true ]]; then
-    printf 'SKIP: %s\n' "$1"
-    exit 0
-  fi
+fail() {
   printf 'FAIL: %s\n' "$1" >&2
   exit 1
 }
 
-command -v kubectl >/dev/null 2>&1 || skip_or_fail "kubectl is unavailable"
-command -v python3 >/dev/null 2>&1 || skip_or_fail "python3 is unavailable"
-
 context="${AGENT_IDENTITY_TEST_CONTEXT:-}"
 if [[ -z "$context" ]]; then
   if [[ "$optional" == true ]]; then
-    skip_or_fail "AGENT_IDENTITY_TEST_CONTEXT is not explicitly set"
+    printf 'SKIP: AGENT_IDENTITY_TEST_CONTEXT is not explicitly set\n'
+    exit 0
   fi
-  context="$(kubectl config current-context 2>/dev/null || true)"
+  fail "AGENT_IDENTITY_TEST_CONTEXT is required"
 fi
-[[ -n "$context" ]] || skip_or_fail "no Kubernetes context is configured"
+
+command -v kubectl >/dev/null 2>&1 || fail "kubectl is unavailable"
+command -v python3 >/dev/null 2>&1 || fail "python3 is unavailable"
 kubectl --context "$context" version --request-timeout=10s >/dev/null 2>&1 \
-  || skip_or_fail "Kubernetes context $context is unreachable"
+  || fail "Kubernetes context $context is unreachable"
 
 namespace="astronomer-agent-identity-${RANDOM}-$$"
 service_account="astronomer-agent"
@@ -48,11 +45,6 @@ cleanup() {
     --ignore-not-found --wait=false >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-
-fail() {
-  printf 'FAIL: %s\n' "$1" >&2
-  exit 1
-}
 
 phase() {
   printf '  - %s\n' "$1"

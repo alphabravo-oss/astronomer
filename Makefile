@@ -92,7 +92,7 @@ VERIFY_SCOPE ?= all
 verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
 	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
 
-verify-agent-identity-live: ## Run live API-server credential SSA/RBAC acceptance (AGENT_IDENTITY_TEST_CONTEXT optional)
+verify-agent-identity-live: ## Run live credential SSA/RBAC acceptance (AGENT_IDENTITY_TEST_CONTEXT required)
 	./scripts/verify-agent-identity-rbac.sh
 
 run: ## Run the server locally
