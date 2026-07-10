@@ -171,18 +171,20 @@ func TestValidateMutationRejectsNestedJSONWrapperSmuggling(t *testing.T) {
 	}
 }
 
-func TestSanitizeMalformedAndOversizedWrappersFailClosed(t *testing.T) {
-	for name, value := range map[string]string{
-		"malformed object": `{"token":"` + policyCanary,
-		"malformed array":  `[ordinary bracket text`,
-		"oversized":        `{"safe":"` + strings.Repeat("x", maxStructuredStringLen) + `"}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			got := Sanitize(map[string]any{"message": value}).(map[string]any)["message"]
-			if got != Marker {
-				t.Fatalf("wrapper sanitized to %#v, want marker", got)
-			}
-		})
+func TestSanitizeArbitraryBracketTextRoundTripsWithoutCredentialLeak(t *testing.T) {
+	for _, ordinary := range []string{`[ordinary bracket text`, `"quoted prose that is not JSON`} {
+		if got := Sanitize(map[string]any{"description": ordinary}).(map[string]any)["description"]; got != ordinary {
+			t.Fatalf("ordinary bracket/quote text = %#v", got)
+		}
+	}
+	malformed := `{"token":"` + policyCanary
+	got := Sanitize(map[string]any{"message": malformed}).(map[string]any)["message"].(string)
+	if strings.Contains(got, policyCanary) || !strings.Contains(got, Marker) {
+		t.Fatalf("malformed diagnostic was not safely preserved: %q", got)
+	}
+	oversized := `[ordinary ` + strings.Repeat("x", maxStructuredStringLen) + ` text`
+	if got := Sanitize(map[string]any{"description": oversized}).(map[string]any)["description"]; got != oversized {
+		t.Fatal("oversized ordinary bracket text did not round-trip")
 	}
 }
 
@@ -194,6 +196,36 @@ func TestSanitizePrefixedCredentialURLsAndCloudSignatures(t *testing.T) {
 	}
 	if !strings.Contains(got, "upstream failed at https://example.test/object") || !strings.Contains(got, Marker) {
 		t.Fatalf("safe diagnostic context lost: %q", got)
+	}
+}
+
+func TestSanitizeEmbeddedHTTPURLsCaseInsensitively(t *testing.T) {
+	got := SanitizeString("clone HTTP://user:pass@example.test/repo?AWSAccessKeyId=" + policyCanary + "#fragment then continue")
+	for _, forbidden := range []string{policyCanary, "user:pass", "AWSAccessKeyId", "#fragment"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("case-insensitive URL sanitizer leaked %q: %s", forbidden, got)
+		}
+	}
+	if !strings.Contains(strings.ToLower(got), "http://example.test/repo") || !strings.Contains(got, "then continue") {
+		t.Fatalf("URL sanitizer lost diagnostics: %s", got)
+	}
+}
+
+func TestSanitizeDurableReasonStructuredAndProse(t *testing.T) {
+	ordinary := `[maintenance "quoted" note`
+	got, err := SanitizeDurableReason(ordinary)
+	if err != nil || got != ordinary {
+		t.Fatalf("ordinary reason = %q, %v", got, err)
+	}
+	structured := `{"apiKey":"` + policyCanary + `","nested":{"privateKey":"` + policyCanary + `","credential":"` + policyCanary + `"},"note":"Bearer ` + policyCanary + `"}`
+	got, err = SanitizeDurableReason(structured)
+	if err != nil || strings.Contains(got, policyCanary) || !strings.Contains(got, Marker) {
+		t.Fatalf("structured reason = %q, %v", got, err)
+	}
+	plain := "apiKey=" + policyCanary + " privateKey=" + policyCanary + " credential=" + policyCanary + " token=" + policyCanary + " Bearer " + policyCanary
+	got, err = SanitizeDurableReason(plain)
+	if err != nil || strings.Contains(got, policyCanary) {
+		t.Fatalf("plain reason = %q, %v", got, err)
 	}
 }
 
@@ -264,7 +296,7 @@ func TestValidateApplicationSetGeneratorAndAnnotationBounds(t *testing.T) {
 		map[string]any{"metadata": map[string]any{"annotations": map[string]any{"argocd.argoproj.io/sync-wave": "1000"}}},
 	}
 	for i, payload := range unsafe {
-		if err := ValidateMutation(payload); err == nil {
+		if err := ValidateApplicationSetMutation(payload); err == nil {
 			t.Errorf("unsafe ApplicationSet payload %d accepted", i)
 		}
 	}
@@ -278,12 +310,83 @@ func TestValidateApplicationSetGeneratorRejectsCredentialScalars(t *testing.T) {
 		"fetch https://storage.example/object?X-Amz-Signature=" + policyCanary,
 	} {
 		payload := map[string]any{"spec": map[string]any{"generators": []any{map[string]any{"list": map[string]any{"elements": []any{map[string]any{"note": scalar}}}}}}}
-		if err := ValidateMutation(payload); err == nil {
+		if err := ValidateApplicationSetMutation(payload); err == nil {
 			t.Errorf("credential generator scalar %q accepted", scalar)
 		}
 	}
-	if err := ValidateMutation(map[string]any{"spec": map[string]any{"generators": []any{map[string]any{"list": map[string]any{"elements": []any{map[string]any{"credential": "opaque"}}}}}}}); err == nil {
+	if err := ValidateApplicationSetMutation(map[string]any{"spec": map[string]any{"generators": []any{map[string]any{"list": map[string]any{"elements": []any{map[string]any{"credential": "opaque"}}}}}}}); err == nil {
 		t.Fatal("singular credential key accepted")
+	}
+}
+
+func TestValidateApplicationSetClosedGeneratorUnion(t *testing.T) {
+	wrap := func(generators ...any) map[string]any {
+		return map[string]any{"spec": map[string]any{"generators": generators}}
+	}
+	list := map[string]any{"list": map[string]any{"elements": []any{map[string]any{"cluster": "prod", "url": "https://kube.example"}}}}
+	git := map[string]any{"git": map[string]any{
+		"repoURL": "ssh://git@git.example/team/repo.git", "revision": "main",
+		"directories": []any{map[string]any{"path": "apps/*", "exclude": false}},
+		"values":      map[string]any{"region": "east"},
+	}}
+	clusters := map[string]any{"clusters": map[string]any{
+		"selector": map[string]any{"matchLabels": map[string]any{"environment": "prod"}},
+		"values":   map[string]any{"tier": "critical"},
+	}}
+	matrix := map[string]any{"matrix": map[string]any{"generators": []any{git, list}}}
+	merge := map[string]any{"merge": map[string]any{"mergeKeys": []any{"cluster"}, "generators": []any{clusters, matrix}}}
+	nestedList := map[string]any{"list": map[string]any{"elements": []any{map[string]any{"x": "y"}}}}
+	nestedGit := map[string]any{"git": map[string]any{"repoURL": "https://git.example/repo", "files": []any{map[string]any{"path": "token=" + policyCanary}}}}
+	safe := wrap(merge)
+	if err := ValidateApplicationSetMutation(safe); err != nil {
+		t.Fatalf("safe recursive generator union rejected: %v", err)
+	}
+	unsafe := map[string]any{
+		"unknown":            wrap(map[string]any{"plugin": map[string]any{}}),
+		"casing":             wrap(map[string]any{"List": map[string]any{"elements": []any{map[string]any{"x": "y"}}}}),
+		"duplicate branches": wrap(map[string]any{"list": map[string]any{"elements": []any{map[string]any{"x": "y"}}}, "git": map[string]any{"repoURL": "https://git.example/repo"}}),
+		"list secret":        wrap(map[string]any{"list": map[string]any{"elements": []any{map[string]any{"note": "apiKey=" + policyCanary}}}}),
+		"cluster secret":     wrap(map[string]any{"clusters": map[string]any{"values": map[string]any{"privateKey": policyCanary}}}),
+		"git secret":         wrap(map[string]any{"git": map[string]any{"repoURL": "https://git.example/repo", "values": map[string]any{"note": "Bearer " + policyCanary}}}),
+		"nested secret":      wrap(map[string]any{"matrix": map[string]any{"generators": []any{nestedList, nestedGit}}}),
+	}
+	for name, payload := range unsafe {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateApplicationSetMutation(payload); err == nil {
+				t.Fatal("unsafe generator union accepted")
+			}
+		})
+	}
+}
+
+func TestValidateMutationRFC6902SourceArraysAndRefs(t *testing.T) {
+	safe := []byte(`[
+		{"op":"add","path":"/spec/sources/-","value":{"repoURL":"https://git.example/values","ref":"values"}},
+		{"op":"add","path":"/spec/sources/-","value":{"repoURL":"https://charts.example/repo","chart":"platform","helm":{"valueFiles":["$values/prod.yaml","defaults.yaml"]}}},
+		{"op":"replace","path":"/spec/sources/0/targetRevision","value":"main"},
+		{"op":"add","path":"/spec/sources/1/helm/valueFiles/-","value":"$values/region.yaml"},
+		{"op":"copy","from":"/spec/sources/0/targetRevision","path":"/spec/sources/1/targetRevision"}
+	]`)
+	if err := ValidateMutationJSON(safe); err != nil {
+		t.Fatalf("safe indexed source patch rejected: %v", err)
+	}
+	if err := ValidateMutationJSON([]byte(`[{"op":"add","path":"/spec/sources/0/helm/valueFiles/-","value":"defaults/prod.yaml"}]`)); err != nil {
+		t.Fatalf("safe relative indexed valueFile rejected: %v", err)
+	}
+	unsafe := []string{
+		`[{"op":"add","path":"/spec/sources/0/helm/values","value":"token=secret"}]`,
+		`[{"op":"add","path":"/spec/sources/0/helm/valueFiles/-","value":"$values/../secret.yaml"}]`,
+		`[{"op":"add","path":"/spec/sources/0/helm/valueFiles/-","value":"$missing/prod.yaml"}]`,
+		`[{"op":"copy","from":"/spec/sources/0/helm/valueFiles/0","path":"/metadata/name"}]`,
+		`[{"op":"move","from":"/spec/sources/0","path":"/spec/sources/1"}]`,
+		`[{"op":"add","path":"/spec/sources/~2/targetRevision","value":"main"}]`,
+		`[{"op":"add","path":"/spec/sources/../targetRevision","value":"main"}]`,
+		`[{"op":"add","path":"/spec/sources/0/helm/values~1inline","value":"secret"}]`,
+	}
+	for _, raw := range unsafe {
+		if err := ValidateMutationJSON([]byte(raw)); err == nil {
+			t.Errorf("unsafe source patch accepted: %s", raw)
+		}
 	}
 }
 

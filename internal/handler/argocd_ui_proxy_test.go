@@ -312,8 +312,8 @@ func TestArgoCDUIProxyRejectsUnsafeMutationBodiesBeforeUpstream(t *testing.T) {
 		"non json":             {contentType: "text/plain", body: []byte(argoProxyCanary), wantStatus: http.StatusUnsupportedMediaType},
 		"gzip":                 {contentType: "application/json", contentEncoding: "gzip", body: gzipTestBytes(t, []byte(`{"spec":{"sources":[{"repoURL":"https://git.example/repo","helm":{"values":"`+argoProxyCanary+`"}}]}}`)), wantStatus: http.StatusBadRequest},
 		"unsupported encoding": {contentType: "application/json", contentEncoding: "br", body: []byte(`{"safe":true}`), wantStatus: http.StatusBadRequest},
-		"generator bearer":     {contentType: "application/json", body: []byte(`{"spec":{"generators":[{"list":{"elements":[{"note":"Bearer ` + argoProxyCanary + `"}]}}]}}`), wantStatus: http.StatusBadRequest},
 		"value file traversal": {contentType: "application/json", body: []byte(`{"spec":{"sources":[{"repoURL":"https://charts.example/repo","chart":"platform","helm":{"valueFiles":["$values/../secret.yaml"]}},{"repoURL":"https://git.example/values","ref":"values"}]}}`), wantStatus: http.StatusBadRequest},
+		"indexed missing ref":  {contentType: "application/json-patch+json", body: []byte(`[{"op":"add","path":"/spec/sources/0/helm/valueFiles/-","value":"$values/prod.yaml"}]`), wantStatus: http.StatusBadRequest},
 	} {
 		t.Run(name, func(t *testing.T) {
 			upstreamCalls := 0
@@ -354,6 +354,33 @@ func TestArgoCDUIProxyRejectsUnsafeMutationBodiesBeforeUpstream(t *testing.T) {
 	}
 }
 
+func TestArgoCDUIProxyRejectsClosedGeneratorUnionViolationsBeforeUpstream(t *testing.T) {
+	for name, body := range map[string]string{
+		"unknown":         `{"spec":{"generators":[{"plugin":{}}]}}`,
+		"casing":          `{"spec":{"generators":[{"List":{"elements":[{"name":"prod"}]}}]}}`,
+		"duplicate":       `{"spec":{"generators":[{"list":{"elements":[{"name":"prod"}]},"git":{"repoURL":"https://git.example/repo"}}]}}`,
+		"duplicate exact": `{"spec":{"generators":[{"list":{"elements":[{"name":"prod"}]},"list":{"elements":[{"name":"stage"}]}}]}}`,
+		"nested secret":   `{"spec":{"generators":[{"matrix":{"generators":[{"list":{"elements":[{"name":"prod"}]}},{"git":{"repoURL":"https://git.example/repo","values":{"note":"apiKey=` + argoProxyCanary + `"}}}]}}]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
+			defer upstream.Close()
+			proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPatch, "/argocd/api/v1/applicationsets/demo", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			proxy.ServeHTTP(rr, req)
+			if rr.Code != http.StatusBadRequest || calls != 0 || strings.Contains(rr.Body.String(), argoProxyCanary) {
+				t.Fatalf("status=%d calls=%d body=%s", rr.Code, calls, rr.Body.String())
+			}
+		})
+	}
+}
+
 func TestArgoCDUIProxyAllowsSchemaScopedProjectWildcardAndSafeValueRepositories(t *testing.T) {
 	for name, tc := range map[string]struct {
 		path string
@@ -366,6 +393,14 @@ func TestArgoCDUIProxyAllowsSchemaScopedProjectWildcardAndSafeValueRepositories(
 		"multi-source value repository": {
 			path: "/argocd/api/v1/applications/demo",
 			body: `{"spec":{"sources":[{"repoURL":"https://charts.example/repo","chart":"platform","helm":{"valueFiles":["$values/prod.yaml","defaults.yaml"]}},{"repoURL":"git@github.com:team/values.git","targetRevision":"main","ref":"values"}]}}`,
+		},
+		"recursive generator union": {
+			path: "/argocd/api/v1/applicationsets/demo",
+			body: `{"spec":{"generators":[{"merge":{"mergeKeys":["cluster"],"generators":[{"clusters":{"values":{"tier":"critical"}}},{"matrix":{"generators":[{"git":{"repoURL":"https://git.example/repo","directories":[{"path":"apps/*"}],"values":{"region":"east"}}},{"list":{"elements":[{"cluster":"prod"}]}}]}}]}}]}}`,
+		},
+		"indexed source patch": {
+			path: "/argocd/api/v1/applications/demo",
+			body: `[{"op":"add","path":"/spec/sources/-","value":{"repoURL":"https://git.example/values","ref":"values"}},{"op":"add","path":"/spec/sources/-","value":{"repoURL":"https://charts.example/repo","chart":"platform","helm":{"valueFiles":["$values/prod.yaml"]}}},{"op":"replace","path":"/spec/sources/1/targetRevision","value":"main"}]`,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -391,10 +426,10 @@ func TestArgoCDUIProxyAllowsSchemaScopedProjectWildcardAndSafeValueRepositories(
 	}
 }
 
-func TestArgoCDUIProxyMalformedAndOversizedWrapperResponsesFailClosedWithoutLogLeak(t *testing.T) {
+func TestArgoCDUIProxyArbitraryBracketResponsesRoundTripWithoutLogLeak(t *testing.T) {
 	for name, message := range map[string]string{
-		"malformed": `{"token":"` + argoProxyCanary,
-		"oversized": `{"safe":"` + strings.Repeat("x", (1<<20)+1) + `"}`,
+		"malformed credential": `{"token":"` + argoProxyCanary,
+		"ordinary brackets":    `[maintenance window`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -409,8 +444,11 @@ func TestArgoCDUIProxyMalformedAndOversizedWrapperResponsesFailClosedWithoutLogL
 			}
 			rr := httptest.NewRecorder()
 			proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
-			if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), argoProxyCanary) || !strings.Contains(rr.Body.String(), "[redacted]") {
+			if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), argoProxyCanary) {
 				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if name == "ordinary brackets" && !strings.Contains(rr.Body.String(), "[maintenance window") {
+				t.Fatalf("ordinary description did not round-trip: %s", rr.Body.String())
 			}
 			if strings.Contains(logs.String(), argoProxyCanary) {
 				t.Fatalf("proxy log leaked canary: %s", logs.String())

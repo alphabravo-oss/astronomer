@@ -22,7 +22,8 @@ import (
 const Marker = redaction.Marker
 
 const (
-	maxDocumentDepth       = 12
+	maxDocumentDepth       = 24
+	maxGeneratorDepth      = 8
 	maxStructuredStringLen = 1 << 20
 	maxGeneratorEntries    = 64
 	maxGeneratorScalarLen  = 512
@@ -126,11 +127,11 @@ func sanitizeStringDocument(value string, ctx sanitizeContext) string {
 	trimmed := strings.TrimSpace(value)
 	if looksLikeJSONWrapper(trimmed) {
 		if len(value) > maxStructuredStringLen {
-			return Marker
+			return sanitizeString(value)
 		}
 		decoded, err := decodeJSONDocument([]byte(trimmed))
 		if err != nil {
-			return Marker
+			return sanitizeString(value)
 		}
 		if text, ok := decoded.(string); ok && !looksLikeJSONWrapper(strings.TrimSpace(text)) {
 			return sanitizeString(value)
@@ -265,7 +266,13 @@ func sanitizeString(value string) string {
 	value = embeddedHTTPURL.ReplaceAllStringFunc(value, sanitizeURLDiagnostic)
 	value = cloudCredential.ReplaceAllString(value, "$1="+Marker)
 	value = credentialAssignment.ReplaceAllString(value, "$1="+Marker)
+	value = sensitiveAssignment.ReplaceAllString(value, "$1$2"+Marker)
+	value = quotedSensitiveAssignment.ReplaceAllString(value, "$1"+Marker)
 	return redaction.String(value)
+}
+
+func hasSensitiveDiagnostic(value string) bool {
+	return redaction.String(value) != value || cloudCredential.MatchString(value) || credentialAssignment.MatchString(value) || sensitiveAssignment.MatchString(value)
 }
 
 func sanitizeURLDiagnostic(value string) string {
@@ -300,10 +307,43 @@ func SanitizeString(value string) string {
 	return sanitizeString(value)
 }
 
+// SanitizeDurableReason sanitizes operator-provided text before it can enter
+// operation payloads, retry state, audit events or timelines. Complete JSON
+// objects/arrays receive recursive key-aware sanitation; prose that merely
+// begins with a bracket or quote remains prose.
+func SanitizeDurableReason(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) > maxStructuredStringLen {
+		return "", fmt.Errorf("reason exceeds sanitation limit")
+	}
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		if decoded, err := decodeJSONDocument([]byte(trimmed)); err == nil {
+			safe := sanitizeArgoValue(decoded, sanitizeContext{})
+			raw, err := json.Marshal(safe)
+			if err != nil {
+				return "", fmt.Errorf("sanitize structured reason: %w", err)
+			}
+			return string(raw), nil
+		}
+	}
+	safe := sanitizeString(trimmed)
+	return safe, nil
+}
+
 // ValidateMutation rejects Application source forms that can persist secret
 // material or bypass the closed typed source model. It accepts safe ordinary
 // action bodies (for example sync revision/prune) and reference-only sources.
 func ValidateMutation(value any) error {
+	return validateMutation(value, mutationContext{})
+}
+
+// ValidateApplicationSetMutation applies the closed generator union in
+// addition to the shared Argo mutation policy.
+func ValidateApplicationSetMutation(value any) error {
+	return validateMutation(value, mutationContext{applicationSet: true})
+}
+
+func validateMutation(value any, ctx mutationContext) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("encode Argo mutation for validation: %w", err)
@@ -312,7 +352,7 @@ func ValidateMutation(value any) error {
 	if err != nil {
 		return fmt.Errorf("decode Argo mutation for validation: %w", err)
 	}
-	return validateMutationValue(decoded, mutationContext{})
+	return validateMutationValue(decoded, ctx)
 }
 
 // ValidateMutationJSON validates one complete JSON request document.
@@ -325,12 +365,29 @@ func ValidateMutationJSON(raw []byte) error {
 // accepted merely because an unrelated payload happens to contain a
 // `destinations[].server` shape.
 func ValidateMutationJSONForPath(raw []byte, requestPath string) error {
-	return validateMutationJSON(raw, mutationContext{allowProjectDestinationWildcard: isProjectRequestPath(requestPath)})
+	return validateMutationJSON(raw, mutationContext{
+		allowProjectDestinationWildcard: isProjectRequestPath(requestPath),
+		applicationSet:                  isApplicationSetRequestPath(requestPath),
+	})
+}
+
+func isApplicationSetRequestPath(requestPath string) bool {
+	clean := strings.TrimSuffix(strings.Split(requestPath, "?")[0], "/")
+	parts := strings.Split(strings.Trim(clean, "/"), "/")
+	for i := 0; i+2 < len(parts); i++ {
+		if parts[i] == "api" && parts[i+1] == "v1" && parts[i+2] == "applicationsets" {
+			return true
+		}
+	}
+	return false
 }
 
 func validateMutationJSON(raw []byte, ctx mutationContext) error {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
+	}
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return fmt.Errorf("invalid Argo JSON mutation: %w", err)
 	}
 	value, err := decodeJSONDocument(raw)
 	if err != nil {
@@ -342,6 +399,56 @@ func validateMutationJSON(raw []byte, ctx mutationContext) error {
 		return fmt.Errorf("Argo JSON mutation must be an object or array")
 	}
 	return validateMutationValue(value, ctx)
+}
+
+func rejectDuplicateJSONKeys(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	var inspectValue func() error
+	inspectValue = func() error {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		delim, ok := token.(json.Delim)
+		if !ok {
+			return nil
+		}
+		switch delim {
+		case '{':
+			seen := map[string]struct{}{}
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return err
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return fmt.Errorf("JSON object key is not a string")
+				}
+				folded := strings.ToLower(key)
+				if _, duplicate := seen[folded]; duplicate {
+					return fmt.Errorf("duplicate or case-colliding JSON key %q", key)
+				}
+				seen[folded] = struct{}{}
+				if err := inspectValue(); err != nil {
+					return err
+				}
+			}
+			_, err = decoder.Token()
+			return err
+		case '[':
+			for decoder.More() {
+				if err := inspectValue(); err != nil {
+					return err
+				}
+			}
+			_, err = decoder.Token()
+			return err
+		default:
+			return fmt.Errorf("unexpected JSON delimiter")
+		}
+	}
+	return inspectValue()
 }
 
 func isProjectRequestPath(requestPath string) bool {
@@ -377,6 +484,8 @@ type mutationContext struct {
 	path                            string
 	depth                           int
 	allowProjectDestinationWildcard bool
+	applicationSet                  bool
+	patchSourceRefs                 map[string]struct{}
 }
 
 func validateMutationValue(value any, ctx mutationContext) error {
@@ -396,6 +505,11 @@ func validateMutationValue(value any, ctx mutationContext) error {
 			}
 			inSource := ctx.inSource || normalized == "source"
 			childInSource := inSource || normalized == "sources"
+			if normalized == "generators" && ctx.applicationSet {
+				if err := validateApplicationSetGenerators(item, path, ctx.depth+1); err != nil {
+					return err
+				}
+			}
 			if normalized == "source" && !emptyJSONValue(item) {
 				if err := validateClosedSourceObject(item, path, false, nil); err != nil {
 					return err
@@ -452,11 +566,6 @@ func validateMutationValue(value any, ctx mutationContext) error {
 					return err
 				}
 			}
-			if normalized == "elements" || (normalized == "values" && strings.Contains(strings.ToLower(ctx.path), "clusters")) {
-				if err := validateGeneratorValues(item, path); err != nil {
-					return err
-				}
-			}
 			if inSource && strings.Contains(normalized, "env") && !emptyJSONValue(item) {
 				return fmt.Errorf("Argo mutation environment fields are not admitted")
 			}
@@ -470,13 +579,16 @@ func validateMutationValue(value any, ctx mutationContext) error {
 					}
 				}
 			}
-			if err := validateMutationValue(item, mutationContext{inSource: childInSource, path: path, depth: ctx.depth + 1, allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard}); err != nil {
+			if err := validateMutationValue(item, mutationContext{inSource: childInSource, path: path, depth: ctx.depth + 1, allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard, applicationSet: ctx.applicationSet, patchSourceRefs: ctx.patchSourceRefs}); err != nil {
 				return err
 			}
 		}
 	case []any:
+		if refs := collectJSONPatchSourceRefs(typed); len(refs) > 0 {
+			ctx.patchSourceRefs = refs
+		}
 		for i, item := range typed {
-			if err := validateMutationValue(item, mutationContext{inSource: ctx.inSource, path: fmt.Sprintf("%s[%d]", ctx.path, i), depth: ctx.depth + 1, allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard}); err != nil {
+			if err := validateMutationValue(item, mutationContext{inSource: ctx.inSource, path: fmt.Sprintf("%s[%d]", ctx.path, i), depth: ctx.depth + 1, allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard, applicationSet: ctx.applicationSet, patchSourceRefs: ctx.patchSourceRefs}); err != nil {
 				return err
 			}
 		}
@@ -499,7 +611,7 @@ func validateEncodedMutationDocument(text string, ctx mutationContext) error {
 	for depth := ctx.depth + 1; depth <= maxDocumentDepth; depth++ {
 		wrapped, ok := decoded.(string)
 		if !ok {
-			return validateMutationValue(decoded, mutationContext{depth: depth, allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard})
+			return validateMutationValue(decoded, mutationContext{depth: depth, allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard, applicationSet: ctx.applicationSet, patchSourceRefs: ctx.patchSourceRefs})
 		}
 		if len(wrapped) > maxStructuredStringLen {
 			return fmt.Errorf("encoded Argo mutation exceeds inspection limit")
@@ -531,40 +643,255 @@ func validateJSONPatchObject(object map[string]any, ctx mutationContext) error {
 	if !hasOperation || !hasPath {
 		return nil
 	}
+	if op != strings.ToLower(strings.TrimSpace(op)) {
+		return fmt.Errorf("Argo JSON patch operation must use canonical casing")
+	}
+	switch op {
+	case "add", "replace", "remove", "test", "copy", "move":
+	default:
+		return fmt.Errorf("Argo JSON patch contains an unsupported operation")
+	}
 	var value any
-	if !strings.EqualFold(op, "remove") {
+	if op != "remove" {
 		value = object["value"]
 	}
-	if err := validateJSONPointerMutation(path, value, ctx); err != nil {
+	if err := validateJSONPointerMutation(path, value, op, false, ctx); err != nil {
 		return err
 	}
 	if from, ok := object["from"].(string); ok && strings.TrimSpace(from) != "" {
-		// A move/copy can disclose a sensitive source even when its destination
-		// is otherwise harmless, so validate the source path as non-empty.
-		if err := validateJSONPointerMutation(from, Marker, ctx); err != nil {
+		if op != "move" && op != "copy" {
+			return fmt.Errorf("Argo JSON patch from is valid only for move/copy")
+		}
+		if err := validateJSONPointerMutation(from, nil, op, true, ctx); err != nil {
 			return err
 		}
+	} else if op == "move" || op == "copy" {
+		return fmt.Errorf("Argo JSON patch move/copy requires from")
 	}
 	return nil
 }
 
-func validateJSONPointerMutation(pointer string, value any, ctx mutationContext) error {
+func validateJSONPointerMutation(pointer string, value any, operation string, from bool, ctx mutationContext) error {
 	if pointer == "" {
 		return validateMutationValue(value, ctx)
 	}
-	if !strings.HasPrefix(pointer, "/") {
-		return fmt.Errorf("Argo JSON patch contains an invalid path")
+	segments, err := decodeJSONPointer(pointer)
+	if err != nil {
+		return err
 	}
-	segments := strings.Split(strings.TrimPrefix(pointer, "/"), "/")
+	if sourcePointer(segments) {
+		if err := validateSourceJSONPointer(segments, value, operation, from, ctx.patchSourceRefs); err != nil {
+			return fmt.Errorf("Argo JSON patch targets a non-admitted source field: %w", err)
+		}
+		return nil
+	}
 	nested := value
 	for i := len(segments) - 1; i >= 0; i-- {
-		segment := strings.ReplaceAll(strings.ReplaceAll(segments[i], "~1", "/"), "~0", "~")
-		nested = map[string]any{segment: nested}
+		nested = map[string]any{segments[i]: nested}
 	}
-	if err := validateMutationValue(nested, mutationContext{allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard}); err != nil {
+	if err := validateMutationValue(nested, mutationContext{allowProjectDestinationWildcard: ctx.allowProjectDestinationWildcard, applicationSet: ctx.applicationSet, patchSourceRefs: ctx.patchSourceRefs}); err != nil {
 		return fmt.Errorf("Argo JSON patch targets a non-admitted field")
 	}
 	return nil
+}
+
+func decodeJSONPointer(pointer string) ([]string, error) {
+	if !strings.HasPrefix(pointer, "/") {
+		return nil, fmt.Errorf("Argo JSON patch contains an invalid path")
+	}
+	raw := strings.Split(strings.TrimPrefix(pointer, "/"), "/")
+	segments := make([]string, len(raw))
+	for i, segment := range raw {
+		var out strings.Builder
+		for j := 0; j < len(segment); j++ {
+			if segment[j] != '~' {
+				out.WriteByte(segment[j])
+				continue
+			}
+			if j+1 >= len(segment) || (segment[j+1] != '0' && segment[j+1] != '1') {
+				return nil, fmt.Errorf("Argo JSON patch contains an invalid escape")
+			}
+			j++
+			if segment[j] == '0' {
+				out.WriteByte('~')
+			} else {
+				out.WriteByte('/')
+			}
+		}
+		segments[i] = out.String()
+		if segments[i] == ".." {
+			return nil, fmt.Errorf("Argo JSON patch traversal segments are not admitted")
+		}
+	}
+	return segments, nil
+}
+
+func sourcePointer(segments []string) bool {
+	return len(segments) >= 2 && segments[0] == "spec" && (segments[1] == "source" || segments[1] == "sources")
+}
+
+func validArrayPointer(value string, appendAllowed bool) bool {
+	if appendAllowed && value == "-" {
+		return true
+	}
+	if value == "" {
+		return false
+	}
+	if len(value) > 1 && value[0] == '0' {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func validateSourceJSONPointer(segments []string, value any, operation string, from bool, refs map[string]struct{}) error {
+	removing := operation == "remove"
+	copying := operation == "copy" || operation == "move"
+	if from {
+		if len(segments) == 4 && segments[1] == "sources" && validArrayPointer(segments[2], false) && segments[3] == "targetRevision" {
+			return nil
+		}
+		if len(segments) == 3 && segments[1] == "source" && segments[2] == "targetRevision" {
+			return nil
+		}
+		return fmt.Errorf("move/copy from source fields is admitted only for targetRevision")
+	}
+	if removing {
+		return nil
+	}
+	if segments[1] == "source" {
+		switch {
+		case len(segments) == 2:
+			return validateClosedSourceObject(value, "spec.source", false, nil)
+		case len(segments) == 3 && segments[2] == "targetRevision":
+			return validatePatchScalar(value, copying)
+		case len(segments) == 3 && segments[2] == "repoURL":
+			text, ok := value.(string)
+			if !ok || ValidateRepositoryURL(text) != nil {
+				return fmt.Errorf("repoURL is unsafe")
+			}
+			return nil
+		default:
+			return fmt.Errorf("single-source patch path is not admitted")
+		}
+	}
+	if len(segments) == 2 {
+		return validateMutationValue(map[string]any{"sources": value}, mutationContext{})
+	}
+	if !validArrayPointer(segments[2], operation == "add") {
+		return fmt.Errorf("sources index is invalid")
+	}
+	switch {
+	case len(segments) == 3:
+		if copying {
+			return fmt.Errorf("copy/move of an opaque source is not admitted")
+		}
+		return validateClosedSourceObject(value, "spec.sources[patch]", true, refs)
+	case len(segments) == 4 && segments[3] == "targetRevision":
+		return validatePatchScalar(value, copying)
+	case len(segments) == 4 && segments[3] == "repoURL":
+		text, ok := value.(string)
+		if !ok || ValidateRepositoryURL(text) != nil {
+			return fmt.Errorf("repoURL is unsafe")
+		}
+		return nil
+	case len(segments) == 4 && segments[3] == "ref":
+		text, ok := value.(string)
+		if !ok || !safeSourceRef.MatchString(text) {
+			return fmt.Errorf("source ref is invalid")
+		}
+		return nil
+	case len(segments) == 5 && segments[3] == "helm" && segments[4] == "valueFiles":
+		files, ok := value.([]any)
+		if !ok || len(files) > maxGeneratorEntries {
+			return fmt.Errorf("valueFiles must be a bounded array")
+		}
+		for _, raw := range files {
+			file, ok := raw.(string)
+			if !ok || validateHelmValueFile(file, refs) != nil {
+				return fmt.Errorf("valueFiles contains an unsafe reference")
+			}
+		}
+		return nil
+	case len(segments) == 6 && segments[3] == "helm" && segments[4] == "valueFiles" && validArrayPointer(segments[5], operation == "add"):
+		file, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("valueFiles item must be a string")
+		}
+		return validateHelmValueFile(file, refs)
+	default:
+		return fmt.Errorf("multi-source patch path is not admitted")
+	}
+}
+
+func validatePatchScalar(value any, copying bool) error {
+	if copying && value == nil {
+		return nil
+	}
+	text, ok := value.(string)
+	if !ok || len(text) > maxGeneratorScalarLen || strings.ContainsAny(text, "\r\n") || hasSensitiveDiagnostic(text) || embeddedCredentialURL(text) {
+		return fmt.Errorf("patch scalar is unsafe")
+	}
+	return nil
+}
+
+func collectJSONPatchSourceRefs(items []any) map[string]struct{} {
+	refs := map[string]struct{}{}
+	for _, item := range items {
+		object, ok := item.(map[string]any)
+		if !ok || object["op"] != "remove" {
+			continue
+		}
+		pointer, _ := object["path"].(string)
+		segments, err := decodeJSONPointer(pointer)
+		if err == nil && sourcePointer(segments) && segments[1] == "sources" && len(segments) <= 3 {
+			// Without reading current upstream state we cannot prove that a
+			// removed source is not the sibling ref used elsewhere in the patch.
+			return refs
+		}
+	}
+	for _, item := range items {
+		object, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		op, _ := object["op"].(string)
+		if op != "add" && op != "replace" {
+			continue
+		}
+		pointer, _ := object["path"].(string)
+		segments, err := decodeJSONPointer(pointer)
+		if err != nil || !sourcePointer(segments) || segments[1] != "sources" {
+			continue
+		}
+		value := object["value"]
+		if len(segments) == 2 {
+			if sources, ok := value.([]any); ok {
+				if found, err := collectSourceRefs(sources); err == nil {
+					for ref := range found {
+						refs[ref] = struct{}{}
+					}
+				}
+			}
+		}
+		if len(segments) == 3 {
+			if source, ok := value.(map[string]any); ok {
+				if ref, ok := source["ref"].(string); ok && safeSourceRef.MatchString(ref) {
+					refs[ref] = struct{}{}
+				}
+			}
+		}
+		if len(segments) == 4 && segments[3] == "ref" {
+			if ref, ok := value.(string); ok && safeSourceRef.MatchString(ref) {
+				refs[ref] = struct{}{}
+			}
+		}
+	}
+	return refs
 }
 
 func validateClosedSourceObject(value any, sourcePath string, multiSource bool, refs map[string]struct{}) error {
@@ -693,10 +1020,13 @@ var (
 	safeTemplateScalar        = regexp.MustCompile(`^\{\{[a-zA-Z0-9_.-]{1,128}\}\}$`)
 	safeNotificationRecipient = regexp.MustCompile(`^[a-zA-Z0-9_.@+-]{1,256}$`)
 	safeSourceRef             = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,62}$`)
+	safeGeneratorKey          = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
 	safeSCPRepository         = regexp.MustCompile(`^git@([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):([A-Za-z0-9._/-]{1,512})$`)
-	embeddedHTTPURL           = regexp.MustCompile(`https?://[^\s<>'"]+`)
-	cloudCredential           = regexp.MustCompile(`(?i)\b(x-amz-(?:credential|signature|security-token)|googleaccessid|signature|sig|x-goog-signature)\s*=\s*[^&\s,;]+`)
+	embeddedHTTPURL           = regexp.MustCompile(`(?i)https?://[^\s<>'"]+`)
+	cloudCredential           = regexp.MustCompile(`(?i)\b(x-amz-(?:credential|signature|security-token)|awsaccesskeyid|googleaccessid|signature|sig|x-goog-signature)\s*=\s*[^&\s,;]+`)
 	credentialAssignment      = regexp.MustCompile(`(?i)\b(credential|credentials)\s*=\s*[^&\s,;]+`)
+	sensitiveAssignment       = regexp.MustCompile(`(?i)\b(api[_-]?key|private[_-]?key|client[_-]?key|secret[_-]?key)(\s*[:=]\s*)[^&\s,;]+`)
+	quotedSensitiveAssignment = regexp.MustCompile(`(?i)(["'](?:api[_-]?key|private[_-]?key|client[_-]?key|secret[_-]?key|credential|credentials|token|bearer|awsaccesskeyid)["']\s*:\s*["'])[^"'\s,;}]+`)
 )
 
 // ValidateCredentialFreeURL is the shared write boundary for Argo endpoint,
@@ -794,6 +1124,216 @@ func ValidateSourceRepoPattern(raw string) error {
 	return ValidateRepositoryURL(pattern)
 }
 
+func validateApplicationSetGenerators(value any, generatorPath string, depth int) error {
+	if depth > maxGeneratorDepth {
+		return fmt.Errorf("ApplicationSet generators exceed maximum depth")
+	}
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 || len(items) > maxGeneratorEntries {
+		return fmt.Errorf("%s must be a bounded non-empty generator array", generatorPath)
+	}
+	for i, item := range items {
+		generator, ok := item.(map[string]any)
+		if !ok || len(generator) != 1 {
+			return fmt.Errorf("%s[%d] must select exactly one generator branch", generatorPath, i)
+		}
+		for branch, config := range generator {
+			branchPath := fmt.Sprintf("%s[%d].%s", generatorPath, i, branch)
+			switch branch {
+			case "list":
+				object, err := closedObject(config, branchPath, "elements")
+				if err != nil {
+					return err
+				}
+				if err := validateGeneratorValues(object["elements"], branchPath+".elements"); err != nil {
+					return err
+				}
+			case "clusters":
+				object, err := closedObject(config, branchPath, "selector", "values")
+				if err != nil {
+					return err
+				}
+				if rawValues, exists := object["values"]; exists && !emptyJSONValue(rawValues) {
+					if err := validateGeneratorValues(rawValues, branchPath+".values"); err != nil {
+						return err
+					}
+				}
+				if selector, exists := object["selector"]; exists && !emptyJSONValue(selector) {
+					if err := validateGeneratorSelector(selector, branchPath+".selector"); err != nil {
+						return err
+					}
+				}
+			case "git":
+				object, err := closedObject(config, branchPath, "repoURL", "revision", "files", "directories", "values")
+				if err != nil {
+					return err
+				}
+				repo, ok := object["repoURL"].(string)
+				if !ok || ValidateRepositoryURL(repo) != nil {
+					return fmt.Errorf("%s.repoURL must be a safe repository URL", branchPath)
+				}
+				if revision, exists := object["revision"]; exists && !emptyJSONValue(revision) {
+					if err := validateGeneratorScalar(revision, branchPath+".revision"); err != nil {
+						return err
+					}
+				}
+				if rawValues, exists := object["values"]; exists && !emptyJSONValue(rawValues) {
+					if err := validateGeneratorValues(rawValues, branchPath+".values"); err != nil {
+						return err
+					}
+				}
+				if err := validateGeneratorObjectArray(object["files"], branchPath+".files", "path"); err != nil {
+					return err
+				}
+				if err := validateGeneratorObjectArray(object["directories"], branchPath+".directories", "path", "exclude"); err != nil {
+					return err
+				}
+			case "matrix":
+				object, err := closedObject(config, branchPath, "generators")
+				if err != nil {
+					return err
+				}
+				children, ok := object["generators"].([]any)
+				if !ok || len(children) != 2 {
+					return fmt.Errorf("%s.generators must contain exactly two children", branchPath)
+				}
+				if err := validateApplicationSetGenerators(children, branchPath+".generators", depth+1); err != nil {
+					return err
+				}
+			case "merge":
+				object, err := closedObject(config, branchPath, "generators", "mergeKeys")
+				if err != nil {
+					return err
+				}
+				children, ok := object["generators"].([]any)
+				if !ok || len(children) < 2 || len(children) > maxGeneratorEntries {
+					return fmt.Errorf("%s.generators must contain at least two children", branchPath)
+				}
+				if err := validateApplicationSetGenerators(children, branchPath+".generators", depth+1); err != nil {
+					return err
+				}
+				keys, ok := object["mergeKeys"].([]any)
+				if !ok || len(keys) == 0 || len(keys) > 16 {
+					return fmt.Errorf("%s.mergeKeys must be a bounded non-empty array", branchPath)
+				}
+				seen := map[string]struct{}{}
+				for _, rawKey := range keys {
+					key, ok := rawKey.(string)
+					if !ok || !safeGeneratorKey.MatchString(key) {
+						return fmt.Errorf("%s.mergeKeys contains an invalid key", branchPath)
+					}
+					if _, duplicate := seen[key]; duplicate {
+						return fmt.Errorf("%s.mergeKeys contains a duplicate key", branchPath)
+					}
+					seen[key] = struct{}{}
+				}
+			default:
+				return fmt.Errorf("%s[%d] contains unknown or incorrectly-cased generator branch %q", generatorPath, i, branch)
+			}
+		}
+	}
+	return nil
+}
+
+func closedObject(value any, objectPath string, allowed ...string) (map[string]any, error) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s must be an object", objectPath)
+	}
+	set := make(map[string]struct{}, len(allowed))
+	for _, key := range allowed {
+		set[key] = struct{}{}
+	}
+	for key := range object {
+		if _, ok := set[key]; !ok {
+			return nil, fmt.Errorf("%s contains unknown or incorrectly-cased field %q", objectPath, key)
+		}
+	}
+	return object, nil
+}
+
+func validateGeneratorSelector(value any, selectorPath string) error {
+	object, err := closedObject(value, selectorPath, "matchLabels", "matchExpressions")
+	if err != nil {
+		return err
+	}
+	if labels, exists := object["matchLabels"]; exists && !emptyJSONValue(labels) {
+		if err := validateGeneratorValues(labels, selectorPath+".matchLabels"); err != nil {
+			return err
+		}
+	}
+	if expressions, exists := object["matchExpressions"]; exists && !emptyJSONValue(expressions) {
+		items, ok := expressions.([]any)
+		if !ok || len(items) > maxGeneratorEntries {
+			return fmt.Errorf("%s.matchExpressions has invalid shape", selectorPath)
+		}
+		for i, item := range items {
+			itemPath := fmt.Sprintf("%s.matchExpressions[%d]", selectorPath, i)
+			expression, err := closedObject(item, itemPath, "key", "operator", "values")
+			if err != nil {
+				return err
+			}
+			for _, field := range []string{"key", "operator"} {
+				if err := validateGeneratorScalar(expression[field], itemPath+"."+field); err != nil {
+					return err
+				}
+			}
+			if values, exists := expression["values"]; exists {
+				items, ok := values.([]any)
+				if !ok || len(items) > maxGeneratorEntries {
+					return fmt.Errorf("%s.values has invalid shape", itemPath)
+				}
+				for j, scalar := range items {
+					if err := validateGeneratorScalar(scalar, fmt.Sprintf("%s.values[%d]", itemPath, j)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateGeneratorObjectArray(value any, arrayPath string, allowed ...string) error {
+	if emptyJSONValue(value) {
+		return nil
+	}
+	items, ok := value.([]any)
+	if !ok || len(items) > maxGeneratorEntries {
+		return fmt.Errorf("%s has invalid shape", arrayPath)
+	}
+	for i, item := range items {
+		itemPath := fmt.Sprintf("%s[%d]", arrayPath, i)
+		object, err := closedObject(item, itemPath, allowed...)
+		if err != nil {
+			return err
+		}
+		for key, scalar := range object {
+			if err := validateGeneratorScalar(scalar, itemPath+"."+key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateGeneratorScalar(value any, scalarPath string) error {
+	switch scalar := value.(type) {
+	case nil, bool, json.Number, float64:
+		return nil
+	case string:
+		if len(scalar) > maxGeneratorScalarLen || strings.ContainsAny(scalar, "\r\n") {
+			return fmt.Errorf("%s contains an oversized generator scalar", scalarPath)
+		}
+		if hasSensitiveDiagnostic(scalar) || embeddedCredentialURL(scalar) {
+			return fmt.Errorf("%s contains credential-shaped generator data", scalarPath)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%s must be a scalar", scalarPath)
+	}
+}
+
 func validateGeneratorValues(value any, path string) error {
 	validateObject := func(object map[string]any) error {
 		if len(object) > maxGeneratorEntries {
@@ -803,20 +1343,11 @@ func validateGeneratorValues(value any, path string) error {
 			if shouldRedactKey(normalizeKey(key), "generator", "") {
 				return fmt.Errorf("%s contains a secret-shaped generator key", path)
 			}
-			switch scalar := item.(type) {
-			case nil, bool, json.Number, float64:
-			case string:
-				if len(scalar) > maxGeneratorScalarLen || strings.ContainsAny(scalar, "\r\n") {
-					return fmt.Errorf("%s contains an oversized generator scalar", path)
-				}
-				if redaction.String(scalar) != scalar || cloudCredential.MatchString(scalar) || credentialAssignment.MatchString(scalar) || embeddedCredentialURL(scalar) {
-					return fmt.Errorf("%s contains credential-shaped generator data", path)
-				}
-				if strings.Contains(scalar, "://") && ValidateCredentialFreeURL(scalar) != nil {
-					return fmt.Errorf("%s contains a credential-bearing generator URL", path)
-				}
-			default:
-				return fmt.Errorf("%s generator values must be scalars", path)
+			if err := validateGeneratorScalar(item, path+"."+key); err != nil {
+				return err
+			}
+			if scalar, ok := item.(string); ok && strings.Contains(scalar, "://") && ValidateCredentialFreeURL(scalar) != nil {
+				return fmt.Errorf("%s contains a credential-bearing generator URL", path)
 			}
 		}
 		return nil

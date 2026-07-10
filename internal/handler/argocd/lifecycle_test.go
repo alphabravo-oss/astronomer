@@ -257,6 +257,46 @@ func TestCreateApplicationSetWithClusterGenerator(t *testing.T) {
 	}
 }
 
+func TestCreateApplicationSetWithRecursiveMergeGenerator(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"merged"},"spec":{}}`))
+	})
+	list := ApplicationSetGenerator{List: &ListGenerator{Elements: []json.RawMessage{json.RawMessage(`{"cluster":"prod"}`)}}}
+	git := ApplicationSetGenerator{Git: &GitGenerator{RepoURL: "ssh://git@git.example/team/repo.git", Revision: "main", Directories: []GitGeneratorDirectory{{Path: "apps/*"}}, Values: map[string]string{"region": "east"}}}
+	matrix := ApplicationSetGenerator{Matrix: &MatrixGenerator{Generators: []ApplicationSetGenerator{git, list}}}
+	clusters := ApplicationSetGenerator{Cluster: &ClusterGenerator{Values: map[string]string{"tier": "critical"}}}
+	spec := ApplicationSetSpec{
+		Generators: []ApplicationSetGenerator{{Merge: &MergeGenerator{Generators: []ApplicationSetGenerator{clusters, matrix}, MergeKeys: []string{"cluster"}}}},
+		Template: ApplicationSetTemplate{Metadata: ApplicationMetadata{Name: "{{cluster}}-app"}, Spec: ApplicationSpec{
+			Project: "default", Source: &ApplicationSource{RepoURL: "https://git.example/repo"}, Destination: &ApplicationDestination{Server: "{{server}}", Namespace: "prod"},
+		}},
+	}
+	if _, err := c.CreateApplicationSet(context.Background(), "merged", spec); err != nil {
+		t.Fatalf("safe recursive merge generator rejected: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("upstream calls=%d", calls)
+	}
+}
+
+func TestCreateApplicationSetRejectsDuplicateTypedBranchesBeforeUpstream(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(http.ResponseWriter, *http.Request) { calls++ })
+	spec := ApplicationSetSpec{Generators: []ApplicationSetGenerator{{
+		List: &ListGenerator{Elements: []json.RawMessage{json.RawMessage(`{"name":"prod"}`)}},
+		Git:  &GitGenerator{RepoURL: "https://git.example/repo"},
+	}}}
+	if _, err := c.CreateApplicationSet(context.Background(), "unsafe", spec); err == nil {
+		t.Fatal("duplicate typed generator branches accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("unsafe generator made %d upstream calls", calls)
+	}
+}
+
 func TestRegisterCluster(t *testing.T) {
 	var seenPath string
 	var seenQuery string
