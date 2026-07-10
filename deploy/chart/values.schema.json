@@ -93,8 +93,24 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "replicaCount": { "type": "integer", "minimum": 1 },
-        "clientSecret": { "type": "string" },
-        "clientSecretRef": { "$ref": "#/definitions/secretKeyRef" },
+        "runtimeSecretName": { "type": "string", "maxLength": 253 },
+        "runtimeWriterServiceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "namespace": { "type": "string" }
+          },
+          "required": ["name", "namespace"]
+        },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requirePreparedConfig": { "type": "boolean" }
+          },
+          "required": ["requirePreparedConfig"]
+        },
         "image": { "$ref": "#/definitions/imageRef" }
       }
     },
@@ -380,35 +396,6 @@
           }
         },
         "required": ["postgres", "redis", "gateway", "tls", "secrets", "bootstrap", "networkPolicy"]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "config": {
-            "properties": {
-              "env": { "const": "production" }
-            },
-            "required": ["env"]
-          },
-          "dex": {
-            "properties": {
-              "enabled": { "const": true }
-            },
-            "required": ["enabled"]
-          }
-        },
-        "required": ["config", "dex"]
-      },
-      "then": {
-        "properties": {
-          "dex": {
-            "anyOf": [
-              { "required": ["clientSecret"], "properties": { "clientSecret": { "type": "string", "minLength": 1 } } },
-              { "required": ["clientSecretRef"], "properties": { "clientSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
-            ]
-          }
-        }
       }
     },
     {

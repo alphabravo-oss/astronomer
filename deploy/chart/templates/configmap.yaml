@@ -44,13 +44,13 @@ data:
   {{- end }}
   # Migration 045 — Dex bootstrap. When dex.enabled=true the server's boot
   # path auto-wires dex_settings to point at the in-chart Dex Deployment +
-  # ConfigMap so the first connector + Apply works without a manual settings
+  # retained runtime Secret so the first connector + Apply works without a manual settings
   # step. Empty / unset == bootstrap skipped (legacy operator-managed Dex).
   {{- if .Values.dex.enabled }}
   DEX_BUNDLED_ENABLED: "true"
   DEX_BUNDLED_NAMESPACE: {{ .Release.Namespace | quote }}
   DEX_BUNDLED_RELEASE_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
-  DEX_BUNDLED_CONFIGMAP_NAME: {{ printf "%s-dex-config" (include "astronomer.fullname" .) | quote }}
+  DEX_BUNDLED_RUNTIME_SECRET_NAME: {{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
   DEX_BUNDLED_ISSUER_URL: {{ include "astronomer.dex.issuerURL" . | quote }}
   {{- end }}
   {{- if and .Values.config.auth .Values.config.auth.localPasswordOnly }}

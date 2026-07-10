@@ -36,7 +36,6 @@ helm upgrade --install astronomer ./deploy/chart \
   --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
   --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.43.0.1/32,10.40.0.0/16}' \
   --set bootstrap.email=admin@example.com \
-  --set dex.clientSecret=<random-dex-client-secret> \
   --set managementBackup.s3.bucket=my-astronomer-backups \
   --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
@@ -69,7 +68,8 @@ they're the bare minimum a production install needs:
 - `secrets.secretKey` — JWT signing material
 - `config.serverURL` — external URL; seeds the Argo self-management hostname
 - `bootstrap.email` — the bootstrap admin login email
-- `dex.clientSecret` when bundled Dex is enabled
+- the retained Dex runtime Secret is created metadata-only by the chart and is
+  populated from Fernet-encrypted DB state by `POST /api/v1/auth/dex/apply/`
 - `managementBackup.s3.bucket` and `managementBackup.s3.credentialsSecretRef.name`
   when the production backup CronJob is enabled
 - `managementBackup.encryptionKeyBackup.wrappingSecretRef.name` when backups are

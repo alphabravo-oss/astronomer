@@ -68,7 +68,6 @@ func TestValuesSchemaRequiresProductionWiring(t *testing.T) {
 		"/networkPolicy/kubernetesAPIEgressCIDRs",
 		"/gateway/hosts",
 		"/tls/secretName",
-		"/dex/clientSecret",
 	} {
 		if !strings.Contains(errOut, want) {
 			t.Fatalf("schema error missing %q:\n%s", want, errOut)
@@ -95,7 +94,6 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 		// F8: production render requires a pinned bootstrap password (or an
 		// existingSecret) so a GitOps re-render can't rotate the admin password.
 		"bootstrap.password=prod-admin-initial",
-		"dex.clientSecret=prod-dex-client-secret",
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
 		// OPS-01: production preflight requires key-wrap when backups are on.

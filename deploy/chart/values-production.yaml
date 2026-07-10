@@ -220,15 +220,12 @@ secrets:
 # ── Dex (migration 045) ───────────────────────────────────────────────────
 # Production posture: Dex is the only source of truth for who can sign in.
 # The chart-templated Dex pod runs HA (2 replicas) and is auto-wired into
-# Astronomer's dex_settings on first boot. Operator MUST override
-# dex.clientSecret away from the chart's known weak default.
+# Astronomer's dex_settings on first boot. Runtime credentials are encrypted
+# in the management DB and rendered only into the retained runtime Secret.
 dex:
   enabled: true
   replicaCount: 2
-  clientSecret: ""    # required — replace with `openssl rand -hex 32` or similar
-  clientSecretRef:
-    name: ""
-    key: clientSecret
+  runtimeSecretName: ""
 
 # F8 (C-04): in production the render FAILS unless bootstrap.password is pinned
 # OR bootstrap.existingSecret is provided. This is deliberate — an empty

@@ -2,9 +2,9 @@ package server
 
 // Migration 045 — auto-wire dex_settings when the chart ships Dex in-band.
 //
-// When the operator runs the chart with `dex.enabled=true` the configmap
-// template sets DEX_BUNDLED_ENABLED=true plus the namespace / release-name /
-// configmap-name / issuer-url that match the templated objects. The server's
+// When the operator runs the chart with `dex.enabled=true` the runtime config
+// sets DEX_BUNDLED_ENABLED=true plus the namespace / release-name /
+// runtime-secret-name / issuer-url that match the templated objects. The server's
 // boot path then seeds the singleton dex_settings row to point at those
 // objects so the operator's first connector + Apply works without any manual
 // settings step.
@@ -32,11 +32,12 @@ import (
 // effect — the DexHandler still serves /settings + /apply, but no auto-seed
 // happens.
 const (
-	dexBootstrapEnv              = "DEX_BUNDLED_ENABLED"
-	dexBootstrapNamespaceEnv     = "DEX_BUNDLED_NAMESPACE"
-	dexBootstrapReleaseNameEnv   = "DEX_BUNDLED_RELEASE_NAME"
-	dexBootstrapConfigmapNameEnv = "DEX_BUNDLED_CONFIGMAP_NAME"
-	dexBootstrapIssuerURLEnv     = "DEX_BUNDLED_ISSUER_URL"
+	dexBootstrapEnv                  = "DEX_BUNDLED_ENABLED"
+	dexBootstrapNamespaceEnv         = "DEX_BUNDLED_NAMESPACE"
+	dexBootstrapReleaseNameEnv       = "DEX_BUNDLED_RELEASE_NAME"
+	dexBootstrapRuntimeSecretNameEnv = "DEX_BUNDLED_RUNTIME_SECRET_NAME"
+	dexBootstrapConfigmapNameEnv     = "DEX_BUNDLED_CONFIGMAP_NAME" // deprecated alias
+	dexBootstrapIssuerURLEnv         = "DEX_BUNDLED_ISSUER_URL"
 )
 
 // dexBootstrapSingletonID is the same UUID DexHandler uses for the singleton
@@ -115,18 +116,20 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 
 	namespace := envOr(env, dexBootstrapNamespaceEnv, "astronomer")
 	releaseName := envOr(env, dexBootstrapReleaseNameEnv, "astronomer-dex")
-	configmapName := envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-config")
+	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
+		envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
 
 	_, err = queries.UpsertDexSettings(ctx, sqlc.UpsertDexSettingsParams{
-		ID:            dexBootstrapSingletonID,
-		IssuerUrl:     issuer,
-		ClusterID:     pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
-		Namespace:     namespace,
-		ReleaseName:   releaseName,
-		ConfigmapName: configmapName,
-		PublicClients: []byte("[]"),
-		Expiry:        []byte("{}"),
-		Extra:         []byte("{}"),
+		ID:                     dexBootstrapSingletonID,
+		IssuerUrl:              issuer,
+		ClusterID:              pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
+		Namespace:              namespace,
+		ReleaseName:            releaseName,
+		ConfigmapName:          runtimeSecretName,
+		RuntimeSecretName:      runtimeSecretName,
+		PublicClientsEncrypted: "",
+		Expiry:                 []byte("{}"),
+		Extra:                  []byte("{}"),
 	})
 	if err != nil {
 		return false, err
@@ -136,7 +139,7 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		"issuer_url", issuer,
 		"namespace", namespace,
 		"release_name", releaseName,
-		"configmap_name", configmapName,
+		"runtime_secret_name", runtimeSecretName,
 	)
 	return true, nil
 }

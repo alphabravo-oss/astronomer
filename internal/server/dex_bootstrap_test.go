@@ -189,8 +189,8 @@ func TestDexBootstrap_UsesFallbackDefaultsForMissingEnv(t *testing.T) {
 	if q.upsertLastParam.ReleaseName != "astronomer-dex" {
 		t.Errorf("expected default release 'astronomer-dex'; got %q", q.upsertLastParam.ReleaseName)
 	}
-	if q.upsertLastParam.ConfigmapName != "astronomer-dex-config" {
-		t.Errorf("expected default configmap 'astronomer-dex-config'; got %q", q.upsertLastParam.ConfigmapName)
+	if q.upsertLastParam.RuntimeSecretName != "astronomer-dex-runtime" {
+		t.Errorf("expected default runtime Secret 'astronomer-dex-runtime'; got %q", q.upsertLastParam.RuntimeSecretName)
 	}
 	// Trailing slash on the issuer URL must be trimmed.
 	if q.upsertLastParam.IssuerUrl != "https://astronomer.example.com/dex" {

@@ -204,7 +204,6 @@ verify_helm() {
     --set secrets.encryptionKey=prod-encryption-key-prod-encryption-key12 \
     --set bootstrap.email=admin@example.com \
     --set bootstrap.password=prod-admin-initial \
-    --set dex.clientSecret=prod-dex-client-secret \
     --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
     --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
     --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.40.0.0/14}' \

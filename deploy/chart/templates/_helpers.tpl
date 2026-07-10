@@ -442,11 +442,6 @@ rendered manifest.
     {{- if and (not .Values.dex.enabled) (not (and .Values.config.auth (and .Values.config.auth.localPasswordOnly)) ) }}
       {{- $errs = append $errs "  - dex.enabled=false but config.auth.localPasswordOnly is not true. Either flip dex.enabled=true (recommended) or set config.auth.localPasswordOnly=true to confirm the install will only ever use local passwords (no SSO)." }}
     {{- end }}
-    {{- /* Production must replace the chart's known weak dex.clientSecret
-           default so the static-client secret is unique per install. */ -}}
-    {{- if and .Values.dex.enabled (not (or .Values.dex.clientSecret .Values.dex.clientSecretRef.name)) }}
-      {{- $errs = append $errs "  - dex.clientSecret or dex.clientSecretRef.name must be set; use a Secret reference for GitOps so the credential never enters Application values" }}
-    {{- end }}
     {{- /* Management-plane backups must be wired in production or the DR story
            is a no-op (RPO silently becomes infinite). managementBackup.enabled
            defaults true but the S3 target is empty, so a plain production render

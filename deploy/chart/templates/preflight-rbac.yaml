@@ -34,6 +34,12 @@
     {{- $secretNames = append $secretNames .Values.postgres.external.dsnSecretRef.name }}
   {{- end }}
 {{- end }}
+{{- if and .Values.dex.enabled .Values.dex.migration.requirePreparedConfig }}
+  {{- $dexRuntimeSecret := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName }}
+  {{- if not (has $dexRuntimeSecret $secretNames) }}
+    {{- $secretNames = append $secretNames $dexRuntimeSecret }}
+  {{- end }}
+{{- end }}
 {{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
 {{- $legacyPVC := printf "data-%s-postgres-0" (include "astronomer.fullname" .) }}
 {{- $hookAnnotations := dict

@@ -459,7 +459,7 @@ config:
 # Astronomer brokers all enterprise auth (Okta, Azure AD, LDAP, SAML, GitHub,
 # GitLab, etc.) through Dex (https://dexidp.io). The card-grid wizard at
 # /dashboard/settings/auth/connectors/new writes rows into dex_connectors;
-# DexHandler.Apply re-renders Dex's ConfigMap and triggers a rollout.
+# DexHandler.Apply reconciles Dex's retained runtime Secret and triggers a rollout.
 #
 # Set dex.enabled=true to deploy the in-cluster Dex; the server's bootstrap
 # (see internal/server/dex_bootstrap.go) auto-wires dex_settings so the first
@@ -480,15 +480,21 @@ dex:
   # astronomer.dex.issuerURL). Override only if Dex is reachable on a
   # different hostname than the rest of Astronomer.
   issuerURL: ""
-  # Static OAuth client secret used by the Astronomer server when talking to
-  # Dex. Empty = use the chart's shipped weak default which production-mode
-  # preflight refuses. Replace with a freshly-generated value in production.
-  clientSecret: ""
-  # Preferred GitOps contract. Dex reads this through staticClients.secretEnv;
-  # the secret value never enters a ConfigMap or Argo Application values.
-  clientSecretRef:
-    name: ""
-    key: "clientSecret"
+  # Stable Secret identity mounted read-only by Dex. The chart references but
+  # never templates this Secret: DexHandler is its sole writer and annotates it
+  # for Argo CD no-prune retention. Empty derives <release>-dex-runtime.
+  runtimeSecretName: ""
+  # Identity used by the tunnel-backed Kubernetes requester. All Secret verbs
+  # are exact-name scoped; Helm/Argo creates the metadata-only object.
+  runtimeWriterServiceAccount:
+    name: "astronomer-agent"
+    namespace: "astronomer-system"
+  migration:
+    # Upgrade safety gate. Leave true for upgrades: preflight refuses to switch
+    # the Deployment until config.yaml is already present in runtimeSecretName.
+    # Fresh installs with no prior Dex may explicitly set false and populate via
+    # the API before expecting Dex readiness.
+    requirePreparedConfig: true
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1001

@@ -43,7 +43,6 @@ var productionWiringSets = []string{
 	"bootstrap.email=admin@example.com",
 	// F8: production requires a pinned bootstrap password (or existingSecret).
 	"bootstrap.password=prod-admin-initial",
-	"dex.clientSecret=prod-dex-client-secret",
 	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
 	// This one CIDR intentionally covers both the example 10.43.0.1 Service

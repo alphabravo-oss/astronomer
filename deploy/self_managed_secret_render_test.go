@@ -28,9 +28,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		"--set", "redis.external.urlSecretRef.name=redis-credentials",
 		"--set", "redis.external.urlSecretRef.key=url",
 		"--set", "dex.enabled=true",
-		"--set", "dex.clientSecretRef.name=dex-credentials",
-		"--set", "dex.clientSecretRef.key=clientSecret",
-		"--set", "dex.clientSecret=INLINE-DEX-CANARY",
+		"--set", "dex.runtimeSecretName=dex-runtime",
 	}
 	command := exec.Command("helm", args...)
 	var stdout bytes.Buffer
@@ -45,8 +43,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		"core-credentials", "SIGNING_KEY", "FERNET_KEY",
 		"bootstrap-credentials", "initial-password",
 		"database-credentials", "dsn", "password",
-		"redis-credentials", "url",
-		"dex-credentials", "clientSecret", "secretEnv: ASTRONOMER_DEX_CLIENT_SECRET",
+		"redis-credentials", "url", "dex-runtime",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("render missing %q", want)
@@ -57,7 +54,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 			t.Fatalf("render contains legacy inline/owned credential output %q", forbidden)
 		}
 	}
-	for _, canary := range []string{"INLINE-SIGNING-CANARY", "INLINE-ENCRYPTION-CANARY", "INLINE-BOOTSTRAP-CANARY", "INLINE-DEX-CANARY"} {
+	for _, canary := range []string{"INLINE-SIGNING-CANARY", "INLINE-ENCRYPTION-CANARY", "INLINE-BOOTSTRAP-CANARY"} {
 		if strings.Contains(rendered, canary) {
 			t.Fatalf("reference-backed render leaked legacy inline canary %s", canary)
 		}
@@ -78,7 +75,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "secrets.encryptionKeyKey=FERNET_KEY",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "bootstrap.email=admin@example.com",
-		"--set", "dex.clientSecretRef.name=dex-credentials",
+		"--set", "dex.runtimeSecretName=dex-runtime",
 		"--set", "networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"--set", "networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
 		"--set", "networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
@@ -100,7 +97,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"redis-credentials":     2,
 		"core-credentials":      3,
 		"bootstrap-credentials": 1,
-		"dex-credentials":       1,
+		"dex-runtime":           2,
 		"backup-credentials":    2,
 		"backup-wrap":           2,
 	} {

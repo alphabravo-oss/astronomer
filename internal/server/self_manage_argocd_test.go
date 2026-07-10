@@ -658,9 +658,8 @@ func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing
 				if dex["replicaCount"] != float64(3) {
 					t.Fatalf("Dex runtime replicas not adopted: %#v", dex)
 				}
-				ref := dex["clientSecretRef"].(map[string]any)
-				if ref["name"] != "runtime-dex" || ref["key"] != "client-secret" {
-					t.Fatalf("Dex runtime client Secret ref not adopted: %#v", ref)
+				if dex["runtimeSecretName"] != "runtime-dex" {
+					t.Fatalf("Dex runtime Secret name not adopted: %#v", dex)
 				}
 			},
 		},
@@ -768,7 +767,7 @@ func TestCollectSelfManagedSecretReferencesCoversAuditedContracts(t *testing.T) 
 		"bootstrap":              map[string]any{"existingSecret": "bootstrap-secret"},
 		"postgres":               map[string]any{"passwordSecretRef": map[string]any{"name": "pg-password", "key": "password"}, "external": map[string]any{"dsnSecretRef": map[string]any{"name": "pg-dsn", "key": "dsn"}}},
 		"redis":                  map[string]any{"external": map[string]any{"urlSecretRef": map[string]any{"name": "redis-url", "key": "url"}, "passwordSecretRef": map[string]any{"name": "redis-password", "key": "password"}}},
-		"dex":                    map[string]any{"clientSecretRef": map[string]any{"name": "dex-client", "key": "clientSecret"}},
+		"dex":                    map[string]any{"runtimeSecretName": "dex-client"},
 		"tls":                    map[string]any{"secretName": "tls-listener", "additionalTrustedCAs": map[string]any{"existingSecret": "additional-ca"}},
 		"managementBackup":       map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}},
 		"managementRestoreDrill": map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}},
@@ -1178,7 +1177,7 @@ func applyAllSelfManagedSecretReferenceValues(values map[string]any) []string {
 	values["image"].(map[string]any)["pullSecrets"] = []any{map[string]any{"name": "registry-auth"}}
 	values["postgres"].(map[string]any)["passwordSecretRef"] = map[string]any{"name": "pg-password", "key": "password"}
 	values["redis"].(map[string]any)["external"].(map[string]any)["passwordSecretRef"] = map[string]any{"name": "redis-password", "key": "password"}
-	values["dex"].(map[string]any)["clientSecretRef"] = map[string]any{"name": "dex-client", "key": "clientSecret"}
+	values["dex"].(map[string]any)["runtimeSecretName"] = "dex-client"
 	values["tls"] = map[string]any{"source": "secret", "secretName": "tls-listener", "additionalTrustedCAs": map[string]any{"enabled": true, "existingSecret": "additional-ca"}}
 	values["managementBackup"] = map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}}
 	values["managementRestoreDrill"] = map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}}
@@ -1261,7 +1260,7 @@ func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
 		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
 	})
 
-	for _, fallback := range []string{"runtime-config", "dex-config"} {
+	for _, fallback := range []string{"runtime-config"} {
 		t.Run("initial "+fallback+" drift", func(t *testing.T) {
 			client, dyn, build, configMapName := selfManagedInitialFallbackSnapshotTestBuild(t, fallback == "dex-config")
 			configMap, _ := client.CoreV1().ConfigMaps(localAstronomerNamespace).Get(context.Background(), configMapName, metav1.GetOptions{})
@@ -1705,7 +1704,7 @@ func selfManagedRedisStatefulSetFixture(terminating bool) *appsv1.StatefulSet {
 
 func selfManagedDexDeploymentFixture(terminating bool) *appsv1.Deployment {
 	replicas := int32(3)
-	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex", Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "dex", Image: "dex.runtime/team/dex:v2.99.0", Env: []corev1.EnvVar{{Name: "ASTRONOMER_DEX_CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "runtime-dex"}, Key: "client-secret"}}}}}}}}}}
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex", Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "dex", Image: "dex.runtime/team/dex:v2.99.0", VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/etc/dex", ReadOnly: true}}}}, Volumes: []corev1.Volume{{Name: "config", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "runtime-dex"}}}}}}}}
 	setSelfManagedFixtureTerminating(&deployment.ObjectMeta, terminating)
 	return deployment
 }

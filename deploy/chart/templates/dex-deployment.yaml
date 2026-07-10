@@ -3,7 +3,7 @@ Dex deployment.
 
 The Astronomer server's DexHandler.Apply() flow restarts this Deployment
 (via a kubectl.kubernetes.io/restartedAt annotation patch on the pod
-template) whenever the ConfigMap changes. Dex's k8s storage backend
+template) whenever the retained runtime Secret changes. Dex's k8s storage backend
 persists state in CRDs in this namespace, so a restart is safe.
 
 Resource requests are intentionally modest — Dex serves a handful of
@@ -15,10 +15,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "astronomer.fullname" . }}-dex
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
 spec:
   replicas: {{ .Values.dex.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 6 }}
@@ -52,14 +59,6 @@ spec:
             - name: http
               containerPort: 5556
               protocol: TCP
-          {{- if .Values.dex.clientSecretRef.name }}
-          env:
-            - name: ASTRONOMER_DEX_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.dex.clientSecretRef.name | quote }}
-                  key: {{ .Values.dex.clientSecretRef.key | quote }}
-          {{- end }}
           volumeMounts:
             - name: config
               mountPath: /etc/dex
@@ -84,8 +83,11 @@ spec:
             {{- toYaml .Values.dex.resources | nindent 12 }}
       volumes:
         - name: config
-          configMap:
-            name: {{ include "astronomer.fullname" . }}-dex-config
+          secret:
+            secretName: {{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
+            items:
+              - key: config.yaml
+                path: config.yaml
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

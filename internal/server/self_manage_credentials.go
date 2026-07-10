@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/yaml"
 )
 
 func secretRefValues(ref selfManagedSecretRef) map[string]any {
@@ -248,32 +247,28 @@ func decomposableSelfManagedRedisURL(raw string) (*url.URL, int, bool) {
 	return parsed, database, true
 }
 
-func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface, deploy *appsv1.Deployment, configMap *corev1.ConfigMap) (map[string]any, error) {
+func selfManagedDexValues(deploy *appsv1.Deployment) (map[string]any, error) {
 	if deploy == nil {
 		return map[string]any{"enabled": false}, nil
 	}
-	ref, ok := deploymentEnvSecretRef(deploy, "dex", "ASTRONOMER_DEX_CLIENT_SECRET")
-	if !ok {
-		if configMap == nil {
-			return nil, fmt.Errorf("Dex client credential has no captured ConfigMap source")
+	runtimeSecretName := ""
+	for _, volume := range deploy.Spec.Template.Spec.Volumes {
+		if volume.Name == "config" && volume.Secret != nil {
+			runtimeSecretName = strings.TrimSpace(volume.Secret.SecretName)
+			break
 		}
-		secret, err := dexAstronomerStaticClientSecret(configMap.Data["config.yaml"])
-		if err != nil {
-			return nil, err
-		}
-		ref = selfManagedSecretRef{Name: selfManagedDexSecret, Key: "clientSecret"}
-		if err := ensureSelfManagedCredentialSecret(ctx, k8s, ref.Name, map[string][]byte{ref.Key: []byte(secret)}); err != nil {
-			return nil, fmt.Errorf("migrate Dex client secret: %w", err)
-		}
+	}
+	if runtimeSecretName == "" {
+		return nil, fmt.Errorf("bundled Dex Deployment has no runtime Secret volume source")
 	}
 	replicas := int32(1)
 	if deploy.Spec.Replicas != nil {
 		replicas = *deploy.Spec.Replicas
 	}
 	values := map[string]any{
-		"enabled":         true,
-		"replicaCount":    replicas,
-		"clientSecretRef": secretRefValues(ref),
+		"enabled":           true,
+		"replicaCount":      replicas,
+		"runtimeSecretName": runtimeSecretName,
 	}
 	foundImage := false
 	for _, container := range deploy.Spec.Template.Spec.Containers {
@@ -291,26 +286,6 @@ func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface, deploy 
 		return nil, fmt.Errorf("bundled Dex Deployment has no dex container image")
 	}
 	return values, nil
-}
-
-func dexAstronomerStaticClientSecret(raw string) (string, error) {
-	config := map[string]any{}
-	if err := yaml.Unmarshal([]byte(raw), &config); err != nil {
-		return "", fmt.Errorf("parse Dex ConfigMap: %w", err)
-	}
-	clients, _ := config["staticClients"].([]any)
-	for _, rawClient := range clients {
-		client, _ := rawClient.(map[string]any)
-		if strings.TrimSpace(fmt.Sprint(client["id"])) != "astronomer" {
-			continue
-		}
-		secret := strings.TrimSpace(fmt.Sprint(client["secret"]))
-		if secret == "" || secret == "<nil>" {
-			return "", fmt.Errorf("Dex static client astronomer has no migratable secret")
-		}
-		return secret, nil
-	}
-	return "", fmt.Errorf("Dex ConfigMap has no astronomer static client")
 }
 
 func ensureSelfManagedCredentialSecret(ctx context.Context, k8s kubernetes.Interface, name string, data map[string][]byte) error {

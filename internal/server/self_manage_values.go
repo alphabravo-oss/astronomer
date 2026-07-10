@@ -289,16 +289,7 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		}
 		redisValues["external"] = externalRedis
 	}
-	var dexConfigMap *corev1.ConfigMap
-	if dexDeployment != nil {
-		if _, ok := deploymentEnvSecretRef(dexDeployment, "dex", "ASTRONOMER_DEX_CLIENT_SECRET"); !ok {
-			dexConfigMap, err = k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-dex-config", metav1.GetOptions{})
-			if err != nil {
-				return "", fmt.Errorf("read Dex ConfigMap evidence: %w", err)
-			}
-		}
-	}
-	dexValues, err := selfManagedDexValues(ctx, k8s, dexDeployment, dexConfigMap)
+	dexValues, err := selfManagedDexValues(dexDeployment)
 	if err != nil {
 		return "", err
 	}
@@ -380,9 +371,6 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		objects = append(objects, secretEvidence...)
 		if runtimeConfigMap != nil {
 			objects = append(objects, selfManagedWorkloadEvidence("configmaps", runtimeConfigMap.Name, true, runtimeConfigMap))
-		}
-		if dexConfigMap != nil {
-			objects = append(objects, selfManagedWorkloadEvidence("configmaps", dexConfigMap.Name, true, dexConfigMap))
 		}
 		*snapshotOut = &selfManagedAdoptionSnapshot{RuntimeAdoption: true, BoundedAdoption: liveUpgradeAdoption, RequireControllerStopped: true, ReleaseName: deployedRelease.Name, ReleaseUID: deployedRelease.UID, ReleaseResourceVersion: deployedRelease.ResourceVersion, ReleaseVersion: deployedRelease.Version, Objects: objects}
 	}
