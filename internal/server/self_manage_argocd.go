@@ -124,6 +124,12 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	if err := waitForDeploymentReady(ctx, k8s, localArgoNamespace, localArgoServerDeployment); err != nil {
 		return fmt.Errorf("argocd-server not ready: %w", err)
 	}
+	// A legacy Application may contain plaintext in spec/status/history. Gate
+	// the entire reconcile before any Secret or Application mutation; the same
+	// check is repeated at the full-object scrub write boundary.
+	if err := preflightSelfManagedApplicationCredentialMigration(ctx, k8s, dyn); err != nil {
+		return err
+	}
 
 	token, tokenErr := loginToArgoCDWithInitialAdminSecret(ctx, k8s, localArgoAPIURL)
 	instance, err := ensureLocalArgoInstanceRow(ctx, queries, encryptor, localCluster.ID, token)
@@ -418,37 +424,39 @@ func selfManagedIngressValues(ingress *networkingv1.Ingress, fallbackHost string
 	return values
 }
 
-func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, name string) (map[string]any, int32, map[string]any, error) {
+func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, name string) (string, int32, string, error) {
 	deploy, err := k8s.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return nil, 0, nil, err
+		return "", 0, "", err
 	}
 	replicas := int32(1)
 	if deploy.Spec.Replicas != nil {
 		replicas = *deploy.Spec.Replicas
 	}
-	var mainImage map[string]any
-	var migrateImage map[string]any
+	var mainImage string
+	var migrateImage string
 	for _, c := range deploy.Spec.Template.Spec.Containers {
 		if c.Name == "server" || c.Name == "worker" || c.Name == "frontend" {
-			mainImage, err = parseImageRef(c.Image)
+			_, err = parseImageRef(c.Image)
 			if err != nil {
-				return nil, 0, nil, fmt.Errorf("deployment %s primary image: %w", name, err)
+				return "", 0, "", fmt.Errorf("deployment %s primary image: %w", name, err)
 			}
+			mainImage = c.Image
 			break
 		}
 	}
 	for _, c := range deploy.Spec.Template.Spec.InitContainers {
 		if c.Name == "migrate" {
-			migrateImage, err = parseImageRef(c.Image)
+			_, err = parseImageRef(c.Image)
 			if err != nil {
-				return nil, 0, nil, fmt.Errorf("deployment %s migrate image: %w", name, err)
+				return "", 0, "", fmt.Errorf("deployment %s migrate image: %w", name, err)
 			}
+			migrateImage = c.Image
 			break
 		}
 	}
-	if mainImage == nil {
-		return nil, 0, nil, fmt.Errorf("deployment %s has no primary image", name)
+	if mainImage == "" {
+		return "", 0, "", fmt.Errorf("deployment %s has no primary image", name)
 	}
 	return mainImage, replicas, migrateImage, nil
 }

@@ -81,18 +81,31 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	coreSecretName := coreSecret.Name
 	runtimeOverlay := map[string]any{}
 	if initialTakeover {
-		serverImage, serverReplicas, migrateImage, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-server")
+		globalRegistry, _, _ := unstructured.NestedString(values, "image", "registry")
+		serverRef, serverReplicas, migrateRef, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-server")
 		if err != nil {
 			return "", err
 		}
-		if migrateImage == nil {
+		if migrateRef == "" {
 			return "", fmt.Errorf("server Deployment has no migrate init-container image for safe takeover")
 		}
-		workerImage, workerReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-worker")
+		workerRef, workerReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-worker")
 		if err != nil {
 			return "", err
 		}
-		agentImage, err := parseImageRef(strings.TrimSpace(cfg.AgentImageRepository) + ":" + strings.TrimSpace(cfg.AgentImageTag))
+		serverImage, err := parseSelfManagedFirstPartyImageRef(serverRef, globalRegistry)
+		if err != nil {
+			return "", fmt.Errorf("adopt server image: %w", err)
+		}
+		workerImage, err := parseSelfManagedFirstPartyImageRef(workerRef, globalRegistry)
+		if err != nil {
+			return "", fmt.Errorf("adopt worker image: %w", err)
+		}
+		migrateImage, err := parseSelfManagedFirstPartyImageRef(migrateRef, globalRegistry)
+		if err != nil {
+			return "", fmt.Errorf("adopt migrate image: %w", err)
+		}
+		agentImage, err := parseSelfManagedFirstPartyImageRef(strings.TrimSpace(cfg.AgentImageRepository)+":"+strings.TrimSpace(cfg.AgentImageTag), globalRegistry)
 		if err != nil {
 			return "", fmt.Errorf("parse configured agent image: %w", err)
 		}
@@ -111,7 +124,11 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		}
 		runtimeOverlay["server"] = map[string]any{"replicaCount": serverReplicas}
 		runtimeOverlay["worker"] = map[string]any{"replicaCount": workerReplicas}
-		if frontendImage, frontendReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend"); err == nil {
+		if frontendRef, frontendReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend"); err == nil {
+			frontendImage, parseErr := parseImageRef(frontendRef)
+			if parseErr != nil {
+				return "", fmt.Errorf("adopt frontend image: %w", parseErr)
+			}
 			runtimeOverlay["frontend"] = map[string]any{"enabled": true, "replicaCount": frontendReplicas, "image": frontendImage}
 		}
 	}
@@ -202,13 +219,44 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	return valuesYAML, nil
 }
 
+func parseSelfManagedFirstPartyImageRef(ref, globalRegistry string) (map[string]any, error) {
+	image, err := parseImageRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	globalRegistry = strings.TrimSpace(globalRegistry)
+	if globalRegistry == "" {
+		return image, nil
+	}
+	if strings.Trim(globalRegistry, "/") != globalRegistry || strings.Contains(globalRegistry, "://") {
+		return nil, fmt.Errorf("global image registry %q is malformed", globalRegistry)
+	}
+	registry, _ := image["registry"].(string)
+	repository, _ := image["repository"].(string)
+	fullName := repository
+	if registry != "" {
+		fullName = registry + "/" + repository
+	}
+	prefix := globalRegistry + "/"
+	if !strings.HasPrefix(fullName, prefix) {
+		return nil, fmt.Errorf("image %q cannot be represented under global registry %q", ref, globalRegistry)
+	}
+	relativeRepository := strings.TrimPrefix(fullName, prefix)
+	if relativeRepository == "" || strings.HasPrefix(relativeRepository, "/") || strings.HasSuffix(relativeRepository, "/") {
+		return nil, fmt.Errorf("image %q has no repository relative to global registry %q", ref, globalRegistry)
+	}
+	image["registry"] = ""
+	image["repository"] = relativeRepository
+	return image, nil
+}
+
 func currentReferenceOnlySelfManagedValues(ctx context.Context, dyn dynamic.Interface) string {
 	current, err := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace).Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}
 	values, found, err := unstructured.NestedString(current.Object, "spec", "source", "helm", "values")
-	if err != nil || !found || validateSelfManagedHelmValues(values) != nil {
+	if err != nil || !found || validateReferenceOnlySelfManagedHelmValues(values) != nil {
 		return ""
 	}
 	return values

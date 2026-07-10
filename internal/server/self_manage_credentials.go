@@ -67,21 +67,34 @@ func protectSelfManagedSecret(ctx context.Context, k8s kubernetes.Interface, nam
 }
 
 func mergeCommaOptions(current string, required ...string) string {
-	parts := strings.Split(current, ",")
+	requiredKeys := map[string]struct{}{}
+	for _, option := range required {
+		requiredKeys[normalizedOptionKey(option)] = struct{}{}
+	}
 	seen := map[string]struct{}{}
-	result := make([]string, 0, len(parts)+len(required))
-	for _, part := range append(parts, required...) {
+	result := make([]string, 0, len(strings.Split(current, ","))+len(required))
+	for _, part := range strings.Split(current, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		if _, ok := seen[part]; ok {
+		if _, conflict := requiredKeys[normalizedOptionKey(part)]; conflict {
 			continue
 		}
-		seen[part] = struct{}{}
+		canonical := strings.ToLower(strings.ReplaceAll(part, " ", ""))
+		if _, ok := seen[canonical]; ok {
+			continue
+		}
+		seen[canonical] = struct{}{}
 		result = append(result, part)
 	}
+	result = append(result, required...)
 	return strings.Join(result, ",")
+}
+
+func normalizedOptionKey(option string) string {
+	key := strings.TrimSpace(strings.SplitN(option, "=", 2)[0])
+	return strings.ToLower(strings.ReplaceAll(key, " ", ""))
 }
 
 func deploymentEnvSecretRef(deploy *appsv1.Deployment, containerName, envName string) (selfManagedSecretRef, bool) {
@@ -185,19 +198,15 @@ func selfManagedExternalRedisValues(ctx context.Context, k8s kubernetes.Interfac
 		return nil, fmt.Errorf("current REDIS_URL is empty and has no Secret reference")
 	}
 	passwordRef, hasPasswordRef := deploymentEnvSecretRef(server, "server", "REDIS_PASSWORD")
+	if strings.Contains(redisURL, "$(REDIS_PASSWORD)") && !hasPasswordRef {
+		return nil, fmt.Errorf("REDIS_URL contains $(REDIS_PASSWORD) but server has no matching Secret reference")
+	}
 	parseValue := redisURL
 	if strings.Contains(parseValue, "$(REDIS_PASSWORD)") && hasPasswordRef {
 		parseValue = strings.ReplaceAll(parseValue, "$(REDIS_PASSWORD)", "reference-backed-placeholder")
-		parsed, err := url.Parse(parseValue)
-		if err != nil || parsed.Host == "" {
-			return nil, fmt.Errorf("parse reference-backed REDIS_URL")
-		}
-		database := 0
-		if rawDB := strings.TrimPrefix(parsed.EscapedPath(), "/"); rawDB != "" {
-			database, err = strconv.Atoi(rawDB)
-			if err != nil {
-				return nil, fmt.Errorf("parse REDIS_URL database: %w", err)
-			}
+		parsed, database, ok := decomposableSelfManagedRedisURL(parseValue)
+		if !ok {
+			return nil, fmt.Errorf("reference-backed REDIS_URL uses an unsupported scheme, path, query, or fragment")
 		}
 		return map[string]any{
 			"address":           parsed.Host,
@@ -206,21 +215,33 @@ func selfManagedExternalRedisValues(ctx context.Context, k8s kubernetes.Interfac
 			"passwordSecretRef": secretRefValues(passwordRef),
 		}, nil
 	}
-	parsed, parseErr := url.Parse(redisURL)
-	if parseErr == nil && parsed.Host != "" && parsed.User == nil {
-		database := 0
-		if rawDB := strings.TrimPrefix(parsed.EscapedPath(), "/"); rawDB != "" {
-			database, parseErr = strconv.Atoi(rawDB)
-		}
-		if parseErr == nil {
-			return map[string]any{"address": parsed.Host, "tls": parsed.Scheme == "rediss", "database": database}, nil
-		}
+	if parsed, database, ok := decomposableSelfManagedRedisURL(redisURL); ok && parsed.User == nil {
+		return map[string]any{"address": parsed.Host, "tls": parsed.Scheme == "rediss", "database": database}, nil
 	}
 	ref := selfManagedSecretRef{Name: selfManagedRedisSecret, Key: "url"}
 	if err := ensureSelfManagedCredentialSecret(ctx, k8s, ref.Name, map[string][]byte{ref.Key: []byte(redisURL)}); err != nil {
 		return nil, fmt.Errorf("migrate REDIS_URL to Secret: %w", err)
 	}
 	return map[string]any{"urlSecretRef": secretRefValues(ref)}, nil
+}
+
+func decomposableSelfManagedRedisURL(raw string) (*url.URL, int, bool) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "redis" && parsed.Scheme != "rediss") || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" {
+		return nil, 0, false
+	}
+	path := parsed.EscapedPath()
+	if path == "" || path == "/" {
+		return parsed, 0, true
+	}
+	if !strings.HasPrefix(path, "/") || strings.Contains(strings.TrimPrefix(path, "/"), "/") {
+		return nil, 0, false
+	}
+	database, err := strconv.Atoi(strings.TrimPrefix(path, "/"))
+	if err != nil || database < 0 {
+		return nil, 0, false
+	}
+	return parsed, database, true
 }
 
 func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface) (map[string]any, error) {

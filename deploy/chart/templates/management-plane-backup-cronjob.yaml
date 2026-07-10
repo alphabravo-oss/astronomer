@@ -159,6 +159,13 @@ spec:
                   # plaintext beside the data it protects.
                   if [ -n "${KEYBACKUP_ENABLED:-}" ]; then
                     echo "Backing up encryption-key Secret (wrapped) to ${KEYBACKUP_PREFIX}/"
+                    # Preserve the complete Secret bundle (OAuth and future
+                    # keys included), then add canonical filenames required by
+                    # the restore contract when operators use custom key names.
+                    find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+                    cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/
+                    cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.secretKeyKey }}" /var/run/astronomer-keys/SECRET_KEY
+                    cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.encryptionKeyKey }}" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
                     KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
                     KEY_ENC="${KEY_BUNDLE}.enc"
                     KEY_S3="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.enc"
@@ -224,6 +231,8 @@ spec:
                 {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
                 - name: encryption-keys
                   mountPath: /var/run/astronomer-keys
+                - name: encryption-keys-source
+                  mountPath: /var/run/astronomer-keys-source
                   readOnly: true
                 - name: wrapping-passphrase
                   mountPath: /var/run/astronomer-wrap
@@ -245,6 +254,9 @@ spec:
             # The Fernet/JWT key Secret, mounted read-only so the job can wrap
             # and back it up. Defaults to the chart's own <release>-secrets.
             - name: encryption-keys
+              emptyDir:
+                sizeLimit: 16Mi
+            - name: encryption-keys-source
               secret:
                 secretName: {{ .Values.managementBackup.encryptionKeyBackup.secretName | default (include "astronomer.secretsSecretName" .) | quote }}
             # Separately-held wrapping passphrase. Custody MUST be distinct from

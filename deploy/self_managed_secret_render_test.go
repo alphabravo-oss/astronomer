@@ -12,10 +12,10 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	args := []string{"template", "astronomer", chart,
 		"--set", "secrets.existingSecret=core-credentials",
-		"--set", "secrets.secretKey=INLINE-SIGNING-CANARY",
-		"--set", "secrets.encryptionKey=INLINE-ENCRYPTION-CANARY",
 		"--set", "secrets.secretKeyKey=SIGNING_KEY",
 		"--set", "secrets.encryptionKeyKey=FERNET_KEY",
+		"--set", "secrets.secretKey=INLINE-SIGNING-CANARY",
+		"--set", "secrets.encryptionKey=INLINE-ENCRYPTION-CANARY",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "bootstrap.password=INLINE-BOOTSTRAP-CANARY",
 		"--set", "bootstrap.existingSecretKey=initial-password",
@@ -74,6 +74,8 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "postgres.external.dsnSecretRef.name=database-credentials", "--set", "postgres.external.dsnSecretRef.key=dsn",
 		"--set", "redis.external.urlSecretRef.name=redis-credentials", "--set", "redis.external.urlSecretRef.key=url",
 		"--set", "secrets.existingSecret=core-credentials",
+		"--set", "secrets.secretKeyKey=SIGNING_KEY",
+		"--set", "secrets.encryptionKeyKey=FERNET_KEY",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "bootstrap.email=admin@example.com",
 		"--set", "dex.clientSecretRef.name=dex-credentials",
@@ -111,5 +113,34 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		if strings.Contains(rendered, legacy) {
 			t.Fatalf("reference-only production render owned legacy credential %q", legacy)
 		}
+	}
+	for _, canonicalItem := range []string{
+		`find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
+		`cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/`,
+		`/var/run/astronomer-keys-source/SIGNING_KEY" /var/run/astronomer-keys/SECRET_KEY`,
+		`/var/run/astronomer-keys-source/FERNET_KEY" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY`,
+	} {
+		if !strings.Contains(rendered, canonicalItem) {
+			t.Fatalf("backup key projection missing canonical item %q", canonicalItem)
+		}
+	}
+	cleanup := strings.Index(rendered, `find /var/run/astronomer-keys -mindepth 1`)
+	copyAll := strings.Index(rendered, `cp -aL /var/run/astronomer-keys-source/.`)
+	if cleanup < 0 || copyAll < 0 || cleanup > copyAll {
+		t.Fatal("backup key staging is not cleaned before the complete Secret copy")
+	}
+	// A Secret volume without items projects every key. The copy-all staging
+	// step above therefore retains an unrelated synthetic core key alongside
+	// the two canonical aliases without exposing any value in test output.
+	sourceStart := strings.Index(rendered, "- name: encryption-keys-source\n              secret:")
+	if sourceStart < 0 {
+		t.Fatal("backup has no complete source Secret projection")
+	}
+	sourceEnd := strings.Index(rendered[sourceStart:], "- name: wrapping-passphrase")
+	if sourceEnd < 0 {
+		t.Fatal("backup source Secret projection is malformed")
+	}
+	if strings.Contains(rendered[sourceStart:sourceStart+sourceEnd], "items:") {
+		t.Fatal("backup source projection filters unrelated core keys")
 	}
 }

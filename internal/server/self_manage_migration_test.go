@@ -11,14 +11,17 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
 
 	chartdeploy "github.com/alphabravocompany/astronomer-go/deploy"
@@ -44,7 +47,7 @@ redis:
 func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.T) {
 	ctx := context.Background()
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	kube := k8sfake.NewSimpleClientset()
+	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
 
 	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
@@ -63,8 +66,23 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if annotations[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting || hash == "" {
 		t.Fatalf("staged metadata = %#v", annotations)
 	}
+	staged.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.2.1", "prune": false}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	dyn.ClearActions()
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range dyn.Actions() {
+		if action.GetVerb() == "update" || action.GetVerb() == "patch" {
+			t.Fatalf("valid non-pruning manual operation was cancelled: %#v", action)
+		}
+	}
+	staged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	annotations[selfManagedApproveAnnotation] = "stale-" + hash
 	staged.SetAnnotations(annotations)
+	staged.Object["operation"] = map[string]any{"sync": map[string]any{"prune": true}}
 	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -78,12 +96,76 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if _, ok := staged.GetAnnotations()[selfManagedApproveAnnotation]; ok {
 		t.Fatal("stale approval was not sanitized")
 	}
+	if _, ok := staged.Object["operation"]; ok {
+		t.Fatal("unsafe pre-approval operation survived sanitation")
+	}
 
 	annotations = staged.GetAnnotations()
 	annotations[selfManagedApproveAnnotation] = hash
 	staged.SetAnnotations(annotations)
-	staged.Object["status"] = map[string]any{"health": map[string]any{"status": "Healthy"}}
 	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if pending.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+		t.Fatal("approval before acceptance sync activated prune")
+	}
+	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.2.1", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	if _, err := resource.Update(ctx, pending, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if pending.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+		t.Fatal("running non-pruning sync activated prune")
+	}
+	delete(pending.Object, "operation")
+	pending.Object["status"] = successfulSelfManagedAcceptanceStatus(t, pending)
+	if _, err := resource.Update(ctx, pending, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	for name, completedOperation := range map[string]map[string]any{
+		"completed prune": {"sync": map[string]any{"revision": "0.2.1", "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed force": {"sync": map[string]any{"revision": "0.2.1", "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+			_ = unstructured.SetNestedMap(candidate.Object, completedOperation, "status", "operationState", "operation")
+			if _, err := resource.Update(ctx, candidate, metav1.UpdateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+				t.Fatal(err)
+			}
+			candidate, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+			if candidate.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+				t.Fatal("destructive completed operation activated prune")
+			}
+			candidate.Object["status"] = successfulSelfManagedAcceptanceStatus(t, candidate)
+			if _, err := resource.Update(ctx, candidate, metav1.UpdateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	serverDeployment, _ := kube.AppsV1().Deployments(localArgoNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	serverDeployment.Status.UpdatedReplicas = 0
+	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(ctx, serverDeployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err == nil || !strings.Contains(err.Error(), "complete server rollout") {
+		t.Fatalf("partial rollout approval error = %v", err)
+	}
+	pending, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if pending.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+		t.Fatal("partial rollout armed automated sync")
+	}
+	serverDeployment.Status.UpdatedReplicas = 1
+	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(ctx, serverDeployment, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
@@ -129,6 +211,11 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 		}
 	}
 	changedValues := safeSelfManagedValuesForTest + "\nserver:\n  replicaCount: 2\n"
+	active, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	active.Object["operation"] = map[string]any{"sync": map[string]any{"prune": true}}
+	if _, err := resource.Update(ctx, active, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, changedValues); err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +231,39 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	}
 	if _, found, _ := unstructured.NestedMap(restaged.Object, "status"); !found {
 		t.Fatal("desired change cleared safe status")
+	}
+	if _, ok := restaged.Object["operation"]; ok {
+		t.Fatal("desired change retained a queued operation that bypasses approval")
+	}
+	restageAnnotations := restaged.GetAnnotations()
+	restageAnnotations[selfManagedApproveAnnotation] = restageAnnotations[selfManagedHashAnnotation]
+	restaged.SetAnnotations(restageAnnotations)
+	if _, err := resource.Update(ctx, restaged, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, changedValues); err != nil {
+		t.Fatal(err)
+	}
+	restaged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if restaged.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+		t.Fatal("stale Synced/Healthy status from previous values activated changed desired spec")
+	}
+}
+
+func successfulSelfManagedAcceptanceStatus(t *testing.T, application *unstructured.Unstructured) map[string]any {
+	t.Helper()
+	source, found, err := unstructured.NestedMap(application.Object, "spec", "source")
+	if err != nil || !found {
+		t.Fatalf("read staged source: %v", err)
+	}
+	destination, found, err := unstructured.NestedMap(application.Object, "spec", "destination")
+	if err != nil || !found {
+		t.Fatalf("read staged destination: %v", err)
+	}
+	return map[string]any{
+		"sync":           map[string]any{"status": "Synced", "comparedTo": map[string]any{"source": source, "destination": destination}},
+		"health":         map[string]any{"status": "Healthy"},
+		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": "0.2.1", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
 	}
 }
 
@@ -270,6 +390,21 @@ func TestSelfManagedCredentialSecretIsProtectedIdempotentAndRotationSafe(t *test
 	if len(secret.OwnerReferences) != 0 || secret.Annotations["argocd.argoproj.io/sync-options"] != "Prune=false,Delete=false" || secret.Annotations["argocd.argoproj.io/compare-options"] != "IgnoreExtraneous" {
 		t.Fatalf("credential metadata = %#v", secret.ObjectMeta)
 	}
+	secret.Annotations["argocd.argoproj.io/sync-options"] = "Prune=true, delete = true,Validate=true,PRUNE=TRUE"
+	secret.Annotations["argocd.argoproj.io/compare-options"] = "IgnoreExtraneous=false,Other=true"
+	if _, err := kube.CoreV1().Secrets(localArgoNamespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSelfManagedCredentialSecret(ctx, kube, selfManagedDatabaseSecret, data); err != nil {
+		t.Fatal(err)
+	}
+	secret, _ = kube.CoreV1().Secrets(localArgoNamespace).Get(ctx, selfManagedDatabaseSecret, metav1.GetOptions{})
+	if got := secret.Annotations["argocd.argoproj.io/sync-options"]; got != "Validate=true,Prune=false,Delete=false" {
+		t.Fatalf("ambiguous sync options survived: %q", got)
+	}
+	if got := secret.Annotations["argocd.argoproj.io/compare-options"]; got != "Other=true,IgnoreExtraneous" {
+		t.Fatalf("ambiguous compare options survived: %q", got)
+	}
 	kube.ClearActions()
 	if err := ensureSelfManagedCredentialSecret(ctx, kube, selfManagedDatabaseSecret, data); err != nil {
 		t.Fatal(err)
@@ -301,6 +436,50 @@ func TestSelfManagedCredentialSecretIsProtectedIdempotentAndRotationSafe(t *test
 	}
 }
 
+func TestSelfManagedRedisURLDecompositionPreservesUnsupportedURLs(t *testing.T) {
+	for name, rawURL := range map[string]string{
+		"query":          "redis://redis.example:6379/2?client_name=CANARY",
+		"fragment":       "rediss://redis.example:6380/3#CANARY",
+		"unknown scheme": "redis+sentinel://redis.example:26379/0",
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server", Namespace: localArgoNamespace}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server"}}}}}}
+			configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": rawURL}}
+			kube := k8sfake.NewSimpleClientset(configMap)
+			values, err := selfManagedExternalRedisValues(context.Background(), kube, server)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := values["urlSecretRef"]; !ok {
+				t.Fatalf("unsupported URL was lossy-decomposed: %#v", values)
+			}
+			secret, err := kube.CoreV1().Secrets(localArgoNamespace).Get(context.Background(), selfManagedRedisSecret, metav1.GetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := string(secret.Data["url"]); got != rawURL {
+				t.Fatalf("stored URL = %q, want exact %q", got, rawURL)
+			}
+		})
+	}
+	server := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server"}}}}}}
+	kube := k8sfake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": "rediss://redis.example:6380/4"}})
+	values, err := selfManagedExternalRedisValues(context.Background(), kube, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["address"] != "redis.example:6380" || values["database"] != 4 || values["tls"] != true {
+		t.Fatalf("supported Redis URL = %#v", values)
+	}
+	kube = k8sfake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": "redis://:$(REDIS_PASSWORD)@redis.example:6379/0"}})
+	if _, err := selfManagedExternalRedisValues(context.Background(), kube, server); err == nil || !strings.Contains(err.Error(), "no matching Secret reference") {
+		t.Fatalf("unresolved Redis placeholder error = %v", err)
+	}
+	if _, err := kube.CoreV1().Secrets(localArgoNamespace).Get(context.Background(), selfManagedRedisSecret, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatal("unresolved Redis placeholder was persisted as a usable URL")
+	}
+}
+
 func helmReleaseSecretFixture(t *testing.T, version int, status string, config map[string]any) *corev1.Secret {
 	t.Helper()
 	releaseJSON, err := json.Marshal(map[string]any{"config": config})
@@ -327,19 +506,79 @@ func helmReleaseSecretFixture(t *testing.T, version int, status string, config m
 
 func TestUnsafeSelfManagedApplicationScrubRequiresStoppedController(t *testing.T) {
 	const canary = "ARGO-PLAINTEXT-CANARY"
-	unsafe := selfManagedApplicationFixture(t, `bootstrap: {password: "`+canary+`"}`)
+	unsafe := selfManagedApplicationFixture(t, "server:\n  env:\n    AWS_SECRET_ACCESS_KEY: "+canary+"\n")
 	unsafe.SetFinalizers([]string{"resources-finalizer.argocd.argoproj.io", "unapproved.example/finalizer"})
-	unsafe.Object["operation"] = map[string]any{"sync": map[string]any{"source": unsafeSourceFixture(canary)}}
+	hybridSource := unsafeSourceFixture(safeSelfManagedValuesForTest)
+	hybridSource["plugin"] = map[string]any{"env": []any{map[string]any{"name": "AWS_SECRET_ACCESS_KEY", "value": canary}}}
+	unsafe.Object["operation"] = map[string]any{"sync": map[string]any{"source": hybridSource, "manifests": []any{"apiVersion: v1\nkind: Secret\nstringData:\n  token: " + canary}}, "info": []any{map[string]any{"name": "credential", "value": canary}}}
 	unsafe.Object["status"] = map[string]any{
-		"sync":           map[string]any{"comparedTo": map[string]any{"source": unsafeSourceFixture(canary)}},
-		"operationState": map[string]any{"syncResult": map[string]any{"source": unsafeSourceFixture(canary)}},
-		"history":        []any{map[string]any{"source": unsafeSourceFixture(canary)}},
+		"sync":           map[string]any{"comparedTo": map[string]any{"source": hybridSource}},
+		"operationState": map[string]any{"syncResult": map[string]any{"source": hybridSource}, "operation": map[string]any{"sync": map[string]any{"manifests": []any{canary}}}},
+		"history":        []any{map[string]any{"source": hybridSource}},
 	}
 	crd := applicationCRDWithoutStatusFixture()
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), unsafe, crd)
+	if got := currentReferenceOnlySelfManagedValues(context.Background(), dyn); got != "" {
+		t.Fatal("free-form env canary was misclassified as a canonical reference-only source")
+	}
 	one := int32(1)
-	kube := k8sfake.NewSimpleClientset(&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one}})
+	objects := []runtime.Object{&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one}}}
+	objects = append(objects, completeServerRolloutFixtures()...)
+	kube := k8sfake.NewSimpleClientset(objects...)
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
+	dyn.ClearActions()
+	kube.ClearActions()
+	if err := preflightSelfManagedApplicationCredentialMigration(context.Background(), kube, dyn); err == nil || !strings.Contains(err.Error(), "before any credential mutation") {
+		t.Fatalf("outer migration preflight error = %v", err)
+	}
+	for _, actions := range [][]testingAction{dynamicTestingActions(dyn.Actions()), kubeTestingActions(kube.Actions())} {
+		for _, action := range actions {
+			if action.verb == "update" || action.verb == "patch" || action.verb == "create" || action.verb == "delete" {
+				t.Fatalf("controller-on preflight mutated %s via %s", action.resource, action.verb)
+			}
+		}
+	}
+	serverRollout, _ := kube.AppsV1().Deployments(localArgoNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	serverRollout.Status.UpdatedReplicas = 0
+	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(context.Background(), serverRollout, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	dyn.ClearActions()
+	kube.ClearActions()
+	if err := preflightSelfManagedApplicationCredentialMigration(context.Background(), kube, dyn); err == nil || !strings.Contains(err.Error(), "complete server rollout") {
+		t.Fatalf("partial rollout preflight error = %v", err)
+	}
+	for _, actions := range [][]testingAction{dynamicTestingActions(dyn.Actions()), kubeTestingActions(kube.Actions())} {
+		for _, action := range actions {
+			if action.verb == "update" || action.verb == "patch" || action.verb == "create" || action.verb == "delete" {
+				t.Fatalf("partial-rollout refusal mutated %s via %s", action.resource, action.verb)
+			}
+		}
+	}
+	serverRollout.Status.UpdatedReplicas = 1
+	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(context.Background(), serverRollout, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	controller := true
+	zeroRS := int32(0)
+	oldLabels := map[string]string{"app.kubernetes.io/name": "astronomer", "app.kubernetes.io/instance": "astronomer", "app.kubernetes.io/component": "server", "pod-template-hash": "oldhash"}
+	oldRS := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-oldhash", Namespace: localArgoNamespace, UID: "old-rs-uid", Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: serverRollout.Name, UID: serverRollout.UID, Controller: &controller}}}, Spec: appsv1.ReplicaSetSpec{Replicas: &zeroRS, Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: oldLabels}}}}
+	if _, err := kube.AppsV1().ReplicaSets(localArgoNamespace).Create(context.Background(), oldRS, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	terminatingOld := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-oldhash-terminating", Namespace: localArgoNamespace, Labels: oldLabels, DeletionTimestamp: &metav1.Time{Time: time.Now()}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: oldRS.Name, UID: oldRS.UID, Controller: &controller}}}}
+	if _, err := kube.CoreV1().Pods(localArgoNamespace).Create(context.Background(), terminatingOld, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := preflightSelfManagedApplicationCredentialMigration(context.Background(), kube, dyn); err == nil || !strings.Contains(err.Error(), "old or unowned server Pod") {
+		t.Fatalf("terminating old Pod preflight error = %v", err)
+	}
+	if err := kube.CoreV1().Pods(localArgoNamespace).Delete(context.Background(), terminatingOld.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := kube.AppsV1().ReplicaSets(localArgoNamespace).Delete(context.Background(), oldRS.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	dyn.ClearActions()
 	if err := ensureSelfManagedAstronomerApplication(context.Background(), kube, dyn, cluster, safeSelfManagedValuesForTest); err == nil || !strings.Contains(err.Error(), "scale StatefulSet") {
 		t.Fatalf("active controller migration error = %v", err)
@@ -388,6 +627,20 @@ func TestUnsafeSelfManagedApplicationScrubRequiresStoppedController(t *testing.T
 	}
 }
 
+type testingAction struct{ verb, resource string }
+
+func dynamicTestingActions(actions []k8stesting.Action) []testingAction {
+	result := make([]testingAction, 0, len(actions))
+	for _, action := range actions {
+		result = append(result, testingAction{verb: action.GetVerb(), resource: action.GetResource().Resource})
+	}
+	return result
+}
+
+func kubeTestingActions(actions []k8stesting.Action) []testingAction {
+	return dynamicTestingActions(actions)
+}
+
 func TestUnsafeSelfManagedApplicationRefusesStatusSubresourceCRD(t *testing.T) {
 	unsafe := selfManagedApplicationFixture(t, `secrets: {secretKey: "CANARY"}`)
 	crd := applicationCRDWithoutStatusFixture()
@@ -396,7 +649,9 @@ func TestUnsafeSelfManagedApplicationRefusesStatusSubresourceCRD(t *testing.T) {
 	_ = unstructured.SetNestedSlice(crd.Object, versions, "spec", "versions")
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), unsafe, crd)
 	zero := int32(0)
-	kube := k8sfake.NewSimpleClientset(&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}})
+	objects := []runtime.Object{&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}}
+	objects = append(objects, completeServerRolloutFixtures()...)
+	kube := k8sfake.NewSimpleClientset(objects...)
 	err := ensureSelfManagedAstronomerApplication(context.Background(), kube, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, safeSelfManagedValuesForTest)
 	if err == nil || !strings.Contains(err.Error(), "enables the status subresource") {
 		t.Fatalf("status-subresource error = %v", err)
@@ -406,6 +661,25 @@ func TestUnsafeSelfManagedApplicationRefusesStatusSubresourceCRD(t *testing.T) {
 	if !strings.Contains(string(raw), "CANARY") {
 		t.Fatal("refusal unexpectedly mutated unsafe Application")
 	}
+}
+
+func completeServerRolloutFixtures() []runtime.Object {
+	one := int32(1)
+	controller := true
+	serverLabels := map[string]string{"app.kubernetes.io/name": "astronomer", "app.kubernetes.io/instance": "astronomer", "app.kubernetes.io/component": "server"}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-server", Namespace: localArgoNamespace, UID: "server-deployment-uid", Generation: 2, Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"}},
+		Spec:       appsv1.DeploymentSpec{Replicas: &one, Selector: &metav1.LabelSelector{MatchLabels: serverLabels}, Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: serverLabels}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server", Image: "server:v2"}}}}},
+		Status:     appsv1.DeploymentStatus{ObservedGeneration: 2, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1},
+	}
+	replicaSetTemplate := *deployment.Spec.Template.DeepCopy()
+	replicaSetTemplate.Labels["pod-template-hash"] = "newhash"
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-newhash", Namespace: localArgoNamespace, UID: "current-rs-uid", Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID, Controller: &controller}}},
+		Spec:       appsv1.ReplicaSetSpec{Replicas: &one, Template: replicaSetTemplate},
+	}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-newhash-abc", Namespace: localArgoNamespace, Labels: replicaSetTemplate.Labels, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID, Controller: &controller}}}}
+	return []runtime.Object{deployment, replicaSet, pod}
 }
 
 func selfManagedApplicationFixture(t *testing.T, values string) *unstructured.Unstructured {

@@ -9,10 +9,13 @@ import (
 	"reflect"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
@@ -20,6 +23,37 @@ import (
 	chartdeploy "github.com/alphabravocompany/astronomer-go/deploy"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+func preflightSelfManagedApplicationCredentialMigration(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface) error {
+	current, err := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace).Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	persistentCopyProbe := current.DeepCopy()
+	if operation, exists := current.Object["operation"]; !exists || !selfManagedApplicationHasUnsafeSourceCopies(map[string]any{"operation": operation}) {
+		unstructured.RemoveNestedField(persistentCopyProbe.Object, "operation")
+	}
+	if !selfManagedApplicationHasUnsafeSourceCopies(persistentCopyProbe.Object) {
+		return nil
+	}
+	if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
+		return fmt.Errorf("unsafe legacy Application migration requires a complete server rollout: %w", err)
+	}
+	statusSubresource, err := applicationStatusSubresourceEnabled(ctx, dyn)
+	if err != nil {
+		return fmt.Errorf("verify Application CRD status semantics before credential migration: %w", err)
+	}
+	if statusSubresource {
+		return fmt.Errorf("refuse credential migration: installed Application CRD enables the status subresource")
+	}
+	if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
+		return fmt.Errorf("unsafe legacy Application requires an operator-gated migration before any credential mutation: %w", err)
+	}
+	return nil
+}
 
 func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface, cluster sqlc.Cluster, valuesYAML string) error {
 	if err := validateSelfManagedHelmValues(valuesYAML); err != nil {
@@ -84,11 +118,34 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		return err
 	}
 	obj.SetFinalizers(approvedSelfManagedApplicationFinalizers(current.GetFinalizers()))
-	if !selfManagedApplicationHasUnsafeSourceCopies(current.Object) {
+	persistentCopyProbe := current.DeepCopy()
+	if operation, exists := current.Object["operation"]; !exists || !selfManagedApplicationHasUnsafeSourceCopies(map[string]any{"operation": operation}) {
+		unstructured.RemoveNestedField(persistentCopyProbe.Object, "operation")
+	}
+	if !selfManagedApplicationHasUnsafeSourceCopies(persistentCopyProbe.Object) {
 		currentSpec, _, _ := unstructured.NestedMap(current.Object, "spec")
 		annotations := current.GetAnnotations()
 		if annotations[selfManagedPhaseAnnotation] == selfManagedPhaseAwaiting && annotations[selfManagedHashAnnotation] == desiredHash {
+			operationSafe := selfManagedAwaitingOperationSafe(current, stagedSelfManagedSpec(desiredSpec))
 			if approved := annotations[selfManagedApproveAnnotation]; approved == desiredHash {
+				if !operationSafe {
+					updated := current.DeepCopy()
+					_ = unstructured.SetNestedMap(updated.Object, stagedSelfManagedSpec(desiredSpec), "spec")
+					unstructured.RemoveNestedField(updated.Object, "operation")
+					setSelfManagedApplicationMetadata(updated, selfManagedPhaseAwaiting, desiredHash)
+					updated.SetFinalizers(obj.GetFinalizers())
+					_, err = res.Update(ctx, updated, metav1.UpdateOptions{})
+					return err
+				}
+				if _, operationExists := current.Object["operation"]; operationExists {
+					return nil
+				}
+				if !selfManagedAcceptanceStatusReady(current, stagedSelfManagedSpec(desiredSpec)) {
+					return nil
+				}
+				if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
+					return fmt.Errorf("approved self-managed Application requires a complete server rollout before automated sync: %w", err)
+				}
 				updated := current.DeepCopy()
 				if err := unstructured.SetNestedMap(updated.Object, desiredSpec, "spec"); err != nil {
 					return err
@@ -98,7 +155,7 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 				return err
 			}
 			stagedSpec := stagedSelfManagedSpec(desiredSpec)
-			if reflect.DeepEqual(currentSpec, stagedSpec) && selfManagedApplicationMetadataClean(current, selfManagedPhaseAwaiting, desiredHash) {
+			if reflect.DeepEqual(currentSpec, stagedSpec) && operationSafe && selfManagedApplicationMetadataClean(current, selfManagedPhaseAwaiting, desiredHash) {
 				return nil
 			}
 		}
@@ -120,6 +177,7 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 			return err
 		}
 		setSelfManagedApplicationMetadata(updated, selfManagedPhaseAwaiting, desiredHash)
+		unstructured.RemoveNestedField(updated.Object, "operation")
 		updated.SetFinalizers(obj.GetFinalizers())
 		_, err = res.Update(ctx, updated, metav1.UpdateOptions{})
 		return err
@@ -133,6 +191,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 	}
 	if statusSubresource {
 		return fmt.Errorf("refuse credential scrub: installed Application CRD enables the status subresource; upgrade the bounded status migration first")
+	}
+	if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
+		return fmt.Errorf("unsafe legacy Application migration requires a complete server rollout: %w", err)
 	}
 	if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
 		return fmt.Errorf("unsafe legacy Application requires an operator-gated migration: %w", err)
@@ -164,6 +225,141 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		return fmt.Errorf("self-managed Application still contains a secret-tainted source copy after scrub; automated sync remains disabled")
 	}
 	return nil
+}
+
+func selfManagedAwaitingOperationSafe(application *unstructured.Unstructured, stagedSpec map[string]any) bool {
+	raw, exists := application.Object["operation"]
+	if !exists {
+		return true
+	}
+	operation, ok := raw.(map[string]any)
+	if !ok || len(operation) == 0 {
+		return false
+	}
+	for key := range operation {
+		if key != "sync" && key != "initiatedBy" {
+			return false
+		}
+	}
+	syncOperation, ok := operation["sync"].(map[string]any)
+	if !ok || len(syncOperation) == 0 {
+		return false
+	}
+	for key := range syncOperation {
+		switch key {
+		case "revision", "prune", "dryRun", "syncOptions", "syncStrategy":
+		default:
+			return false
+		}
+	}
+	if prune, exists := syncOperation["prune"]; exists {
+		value, ok := prune.(bool)
+		if !ok || value {
+			return false
+		}
+	}
+	if dryRun, exists := syncOperation["dryRun"]; exists {
+		value, ok := dryRun.(bool)
+		if !ok || value {
+			return false
+		}
+	}
+	if revision, exists := syncOperation["revision"]; exists {
+		value, ok := revision.(string)
+		if !ok {
+			return false
+		}
+		targetRevision, _, _ := unstructured.NestedString(stagedSpec, "source", "targetRevision")
+		if strings.TrimSpace(value) != "" && value != targetRevision {
+			return false
+		}
+	}
+	if options, exists := syncOperation["syncOptions"]; exists {
+		list, ok := options.([]any)
+		if !ok || len(list) != 0 {
+			return false
+		}
+	}
+	if rawStrategy, exists := syncOperation["syncStrategy"]; exists {
+		strategy, ok := rawStrategy.(map[string]any)
+		if !ok || len(strategy) != 1 {
+			return false
+		}
+		if rawHook, hook := strategy["hook"]; hook {
+			hookConfig, ok := rawHook.(map[string]any)
+			if !ok || len(hookConfig) != 0 {
+				return false
+			}
+		} else if rawApply, apply := strategy["apply"]; apply {
+			applyConfig, ok := rawApply.(map[string]any)
+			if !ok {
+				return false
+			}
+			for key, value := range applyConfig {
+				if key != "force" {
+					return false
+				}
+				force, ok := value.(bool)
+				if !ok || force {
+					return false
+				}
+			}
+		} else {
+			return false
+		}
+	}
+	if initiated, exists := operation["initiatedBy"]; exists {
+		initiatedBy, ok := initiated.(map[string]any)
+		if !ok {
+			return false
+		}
+		for key, value := range initiatedBy {
+			switch key {
+			case "username":
+				username, ok := value.(string)
+				if !ok || len(username) > 253 || strings.TrimSpace(username) != username || strings.IndexFunc(username, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
+					return false
+				}
+			case "automated":
+				automated, ok := value.(bool)
+				if !ok || automated {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func selfManagedAcceptanceStatusReady(application *unstructured.Unstructured, stagedSpec map[string]any) bool {
+	if _, operationExists := application.Object["operation"]; operationExists {
+		return false
+	}
+	if syncStatus, _, _ := unstructured.NestedString(application.Object, "status", "sync", "status"); syncStatus != "Synced" {
+		return false
+	}
+	if healthStatus, _, _ := unstructured.NestedString(application.Object, "status", "health", "status"); healthStatus != "Healthy" {
+		return false
+	}
+	if phase, _, _ := unstructured.NestedString(application.Object, "status", "operationState", "phase"); phase != "Succeeded" {
+		return false
+	}
+	completedOperation, foundOperation, _ := unstructured.NestedMap(application.Object, "status", "operationState", "operation")
+	if !foundOperation {
+		return false
+	}
+	completed := &unstructured.Unstructured{Object: map[string]any{"operation": completedOperation}}
+	if !selfManagedAwaitingOperationSafe(completed, stagedSpec) {
+		return false
+	}
+	desiredSource, _, _ := unstructured.NestedMap(stagedSpec, "source")
+	desiredDestination, _, _ := unstructured.NestedMap(stagedSpec, "destination")
+	comparedSource, foundCompared, _ := unstructured.NestedMap(application.Object, "status", "sync", "comparedTo", "source")
+	comparedDestination, foundDestination, _ := unstructured.NestedMap(application.Object, "status", "sync", "comparedTo", "destination")
+	resultSource, foundResult, _ := unstructured.NestedMap(application.Object, "status", "operationState", "syncResult", "source")
+	return foundCompared && foundDestination && foundResult && reflect.DeepEqual(comparedSource, desiredSource) && reflect.DeepEqual(comparedDestination, desiredDestination) && reflect.DeepEqual(resultSource, desiredSource)
 }
 
 func selfManagedApplicationMetadataClean(application *unstructured.Unstructured, phase, hash string) bool {
@@ -227,20 +423,24 @@ func selfManagedApplicationHasUnsafeSourceCopies(object map[string]any) bool {
 	visit = func(node any) bool {
 		switch typed := node.(type) {
 		case map[string]any:
+			if manifests, ok := typed["manifests"].([]any); ok && len(manifests) > 0 {
+				return true
+			}
+			if info, ok := typed["info"].([]any); ok && len(info) > 0 {
+				return true
+			}
 			if sources, ok := typed["sources"].([]any); ok && len(sources) > 0 {
 				return true
 			}
 			if looksLikeArgoApplicationSource(typed) {
-				if _, ok := typed["helm"].(map[string]any); !ok {
+				wrapper := map[string]any{"spec": map[string]any{"source": typed}}
+				if validateSelfManagedApplicationSource(wrapper) != nil {
 					return true
 				}
-			}
-			if helm, ok := typed["helm"].(map[string]any); ok {
-				if len(helm) > 0 {
-					wrapper := map[string]any{"spec": map[string]any{"source": map[string]any{"helm": helm}}}
-					if validateSelfManagedApplicationSource(wrapper) != nil {
-						return true
-					}
+			} else if _, ok := typed["helm"].(map[string]any); ok {
+				wrapper := map[string]any{"spec": map[string]any{"source": typed}}
+				if validateSelfManagedApplicationSource(wrapper) != nil {
+					return true
 				}
 			}
 			for _, child := range typed {
@@ -290,6 +490,86 @@ func applicationStatusSubresourceEnabled(ctx context.Context, dyn dynamic.Interf
 		}
 	}
 	return false, nil
+}
+
+func verifySelfManagedServerRolloutComplete(ctx context.Context, k8s kubernetes.Interface) error {
+	deployment, err := k8s.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas < 1 {
+		return fmt.Errorf("server Deployment has no positive desired replica count")
+	}
+	desired := *deployment.Spec.Replicas
+	if deployment.Status.ObservedGeneration < deployment.Generation || deployment.Status.Replicas != desired || deployment.Status.UpdatedReplicas != desired || deployment.Status.ReadyReplicas != desired || deployment.Status.AvailableReplicas != desired || deployment.Status.UnavailableReplicas != 0 {
+		return fmt.Errorf("server Deployment is not fully observed/updated/ready/available (%d desired, %d updated, %d ready, %d available)", desired, deployment.Status.UpdatedReplicas, deployment.Status.ReadyReplicas, deployment.Status.AvailableReplicas)
+	}
+	replicaSets, err := k8s.AppsV1().ReplicaSets(localAstronomerNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	revision := deployment.Annotations["deployment.kubernetes.io/revision"]
+	if revision == "" {
+		return fmt.Errorf("server Deployment has no rollout revision annotation")
+	}
+	var currentReplicaSetName string
+	var currentReplicaSetUID types.UID
+	for i := range replicaSets.Items {
+		replicaSet := &replicaSets.Items[i]
+		if !metav1.IsControlledBy(replicaSet, deployment) {
+			continue
+		}
+		if replicaSet.Annotations["deployment.kubernetes.io/revision"] == revision && selfManagedReplicaSetTemplateMatchesDeployment(replicaSet.Spec.Template, deployment.Spec.Template) {
+			if currentReplicaSetName != "" {
+				return fmt.Errorf("multiple current server ReplicaSets match rollout revision %s", revision)
+			}
+			currentReplicaSetName = replicaSet.Name
+			currentReplicaSetUID = replicaSet.UID
+			if replicaSet.Spec.Replicas == nil || *replicaSet.Spec.Replicas != desired {
+				return fmt.Errorf("current server ReplicaSet %s does not desire %d replicas", replicaSet.Name, desired)
+			}
+			continue
+		}
+		if replicaSet.Spec.Replicas != nil && *replicaSet.Spec.Replicas > 0 {
+			return fmt.Errorf("old server ReplicaSet %s still has desired replicas", replicaSet.Name)
+		}
+	}
+	if currentReplicaSetName == "" {
+		return fmt.Errorf("current server ReplicaSet for revision %s was not found", revision)
+	}
+	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
+	if err != nil || selector.Empty() {
+		return fmt.Errorf("server Deployment has no usable Pod selector")
+	}
+	pods, err := k8s.CoreV1().Pods(localAstronomerNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
+	if err != nil {
+		return err
+	}
+	currentPods := int32(0)
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		owner := metav1.GetControllerOf(pod)
+		if owner == nil || owner.Kind != "ReplicaSet" || owner.UID != currentReplicaSetUID {
+			return fmt.Errorf("old or unowned server Pod %s still exists", pod.Name)
+		}
+		if pod.DeletionTimestamp != nil {
+			return fmt.Errorf("current server Pod %s is terminating", pod.Name)
+		}
+		currentPods++
+	}
+	if currentPods != desired {
+		return fmt.Errorf("current server ReplicaSet has %d Pods, want exactly %d", currentPods, desired)
+	}
+	return nil
+}
+
+func selfManagedReplicaSetTemplateMatchesDeployment(replicaSetTemplate, deploymentTemplate corev1.PodTemplateSpec) bool {
+	normalize := func(template corev1.PodTemplateSpec) corev1.PodTemplateSpec {
+		copy := *template.DeepCopy()
+		delete(copy.Labels, "pod-template-hash")
+		return copy
+	}
+	return apiequality.Semantic.DeepEqual(normalize(replicaSetTemplate), normalize(deploymentTemplate))
 }
 
 func verifyLocalArgoApplicationControllerStopped(ctx context.Context, k8s kubernetes.Interface) error {
@@ -462,5 +742,20 @@ func validateSelfManagedApplicationSource(obj map[string]any) error {
 		return fmt.Errorf("self-managed Application Helm valueFiles are forbidden; stock Argo cannot source their contents from Kubernetes Secrets")
 	}
 	values, _ := helm["values"].(string)
-	return validateSelfManagedHelmValues(values)
+	return validateReferenceOnlySelfManagedHelmValues(values)
+}
+
+func validateReferenceOnlySelfManagedHelmValues(valuesYAML string) error {
+	if err := validateSelfManagedHelmValues(valuesYAML); err != nil {
+		return err
+	}
+	values := map[string]any{}
+	if err := yaml.Unmarshal([]byte(valuesYAML), &values); err != nil {
+		return fmt.Errorf("parse values: %w", err)
+	}
+	shape, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		return fmt.Errorf("load audited chart values vocabulary: %w", err)
+	}
+	return validateSelfManagedValuesShape(values, shape, "")
 }

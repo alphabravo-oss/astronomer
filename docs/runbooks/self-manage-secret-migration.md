@@ -30,7 +30,41 @@ sync policy. It records a SHA-256 digest in
    self-managed upgrades.
 3. Verify every credential source is a Secret reference and that no rendered
    ConfigMap/Application contains credential bytes.
-4. Approve the exact digest:
+4. Run one full **non-pruning** acceptance sync. Do not pass `--prune`,
+   `--force`, `--replace`, selective resources, source overrides, or sync
+   options; the awaiting-approval state machine cancels operations outside this
+   narrow shape:
+
+   ```bash
+   # Authenticate against Astronomer's bundled Argo root path first.
+   argocd login astronomer.example.com --grpc-web \
+     --grpc-web-root-path /argocd
+
+   # Pause credential rotation for this bounded check. Capture metadata only;
+   # do not print Secret data or reusable data hashes.
+   # Replace this example with only the inventoried names that exist in this
+   # installation (including custom core/bootstrap and optional Redis/Dex).
+   SECRET_NAMES='core-credentials bootstrap-credentials astronomer-self-manage-database'
+   BEFORE=$(kubectl -n astronomer get secret ${SECRET_NAMES} -o json \
+     | jq -c '[.items[] | {name:.metadata.name,uid:.metadata.uid,resourceVersion:.metadata.resourceVersion}] | sort_by(.name)')
+
+   argocd app sync astronomer-self-manage
+   argocd app wait astronomer-self-manage --sync --health --timeout 600
+
+   AFTER=$(kubectl -n astronomer get secret ${SECRET_NAMES} -o json \
+     | jq -c '[.items[] | {name:.metadata.name,uid:.metadata.uid,resourceVersion:.metadata.resourceVersion}] | sort_by(.name)')
+   if [ "${BEFORE}" != "${AFTER}" ]; then
+     echo 'protected Secret identity/resourceVersion changed: FAIL' >&2
+     exit 1
+   fi
+   echo 'protected Secret metadata/data unchanged: PASS'
+   ```
+
+   Verify server/worker readiness, migration/preflight completion, login, and
+   backup CronJob rendering. Platform-owned credential Secrets carry canonical
+   `Prune=false,Delete=false` and `IgnoreExtraneous`; external Secrets were
+   never adopted. This protects the acceptance sync while prune is disabled.
+5. Only after the non-pruning sync is healthy, approve the exact digest:
 
    ```bash
    HASH=$(kubectl -n astronomer get application astronomer-self-manage \
@@ -40,22 +74,43 @@ sync policy. It records a SHA-256 digest in
    ```
 
 The next reconcile enables automated sync/prune only if the approval equals the
-current digest. A changed or stale digest never arms sync.
+current digest, no operation remains, the completed operation was the narrow
+non-pruning form above, status is `Synced`/`Healthy`/`Succeeded` for the exact
+staged source and destination, and the server rollout is still complete. A
+changed/stale digest or stale status never arms sync.
 
 ## Scrubbing a legacy plaintext Application
 
 This is deliberately operator-gated. The server never scales Argo controllers.
 
-1. Scale `astro-argocd-application-controller` to zero and wait until the
+1. Finish the Astronomer server rollout first and prove no old reconciler is
+   running:
+
+   ```bash
+   kubectl -n astronomer rollout status deployment/astronomer-server --timeout=10m
+   kubectl -n astronomer get deployment astronomer-server \
+     -o jsonpath='{.status.replicas} {.status.updatedReplicas} {.status.readyReplicas} {.status.availableReplicas}{"\n"}'
+   SELECTOR='app.kubernetes.io/name=astronomer,app.kubernetes.io/instance=astronomer,app.kubernetes.io/component=server'
+   kubectl -n astronomer get rs -l "${SELECTOR}" -L pod-template-hash
+   kubectl -n astronomer get pods -l "${SELECTOR}" -L pod-template-hash
+   ```
+
+   Desired, updated, ready, and available counts must match; every Pod must be
+   non-terminating and owned by the current ReplicaSet/pod-template-hash. No old
+   or dangling Pod may remain even when its ReplicaSet desires zero or has
+   already been deleted. The server enforces the same gate before touching
+   credentials or the Application and again before hash promotion.
+2. Scale `astro-argocd-application-controller` to zero and wait until the
    StatefulSet/Deployment reports zero replicas and **no matching controller
    Pods exist**. A terminating Pod is not quiesced.
-2. Let the server reconcile. With the pinned Argo CRD (no status subresource),
+3. Let the server reconcile. With the pinned Argo CRD (no status subresource),
    it performs one full-object replacement that removes `spec` plaintext plus
    `operation`, compared sources, sync-result sources, and every history source.
-3. Confirm the Application is `awaiting-approval`, has no `status` or
+4. Confirm the Application is `awaiting-approval`, has no `status` or
    `operation`, has `revisionHistoryLimit: 0`, and its source is reference-only.
-4. Restore the controller, review the non-pruning diff, then approve the exact
-   digest using the procedure above.
+5. Restore the controller, run the explicit non-pruning sync and health checks
+   above, then approve the exact digest. Approval itself arms automated prune;
+   there is no intermediate automatic-prune trial.
 
 If the installed Application CRD enables a status subresource, migration fails
 closed. Do not bypass this guard; upgrade the migration logic for that CRD.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -386,6 +387,85 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	second := unmarshalSelfManagedValues(t, secondYAML)
 	if got := second["image"].(map[string]any)["server"].(map[string]any)["tag"]; got != "server-upgraded" {
 		t.Fatalf("reference-only current Application image upgrade reverted to live/Helm source: %v", got)
+	}
+
+	const globalMirror = "mirror.example/platform"
+	if err := client.Tracker().Add(helmReleaseSecretFixture(t, 8, "deployed", map[string]any{
+		"image":     map[string]any{"registry": globalMirror},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v10", "mirror.example/platform/database/migrate:v10")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-frontend", "frontend.example/team/frontend:v10", "")
+	mirroredYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v10",
+	}, client, "https://astronomer.dev.alphabravo.io")
+	if err != nil {
+		t.Fatalf("mirrored first takeover: %v", err)
+	}
+	mirrored := unmarshalSelfManagedValues(t, mirroredYAML)
+	mirroredImages := mirrored["image"].(map[string]any)
+	if got := mirroredImages["registry"]; got != globalMirror {
+		t.Fatalf("global mirror = %v", got)
+	}
+	for component, wantRepository := range map[string]string{"server": "team/server", "worker": "team/worker", "migrate": "database/migrate", "agent": "agents/agent"} {
+		image := mirroredImages[component].(map[string]any)
+		if got := image["repository"]; got != wantRepository {
+			t.Fatalf("%s repository = %v, want %s", component, got, wantRepository)
+		}
+		if got := globalMirror + "/" + image["repository"].(string) + ":" + image["tag"].(string); !strings.HasPrefix(got, globalMirror+"/"+wantRepository+":") {
+			t.Fatalf("%s rendered ref = %s", component, got)
+		}
+	}
+	// Once staged, the validated Application is canonical: neither live drift
+	// nor a changed process config silently rewrites its declared image intent.
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/drift/server:bad", "outside.example/drift/migrate:bad")
+	mirroredSecondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "outside.example/drift/agent", AgentImageTag: "bad",
+	}, client, "https://astronomer.dev.alphabravo.io", mirroredYAML)
+	if err != nil {
+		t.Fatalf("mirrored second cycle: %v", err)
+	}
+	mirroredSecond := unmarshalSelfManagedValues(t, mirroredSecondYAML)
+	if !reflect.DeepEqual(mirrored["image"], mirroredSecond["image"]) || !reflect.DeepEqual(mirrored["config"], mirroredSecond["config"]) {
+		t.Fatalf("safe Application image/config changed on cycle two:\nfirst=%#v\nsecond=%#v", mirrored["image"], mirroredSecond["image"])
+	}
+
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "outside.example/team/worker:v10", "")
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v10"}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "adopt server image") {
+		// Server is still deliberately drifted outside the mirror and is checked first.
+		t.Fatalf("incompatible live registry error = %v", err)
+	}
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v10", "mirror.example/platform/database/migrate:v10")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/agents/agent", AgentImageTag: "v10"}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "configured agent image") {
+		t.Fatalf("incompatible agent registry error = %v", err)
+	}
+}
+
+func setDeploymentImagesForTest(t *testing.T, client *fake.Clientset, name, primary, migrate string) {
+	t.Helper()
+	deployment, err := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name == "server" || deployment.Spec.Template.Spec.Containers[i].Name == "worker" || deployment.Spec.Template.Spec.Containers[i].Name == "frontend" {
+			deployment.Spec.Template.Spec.Containers[i].Image = primary
+		}
+	}
+	if migrate != "" {
+		for i := range deployment.Spec.Template.Spec.InitContainers {
+			if deployment.Spec.Template.Spec.InitContainers[i].Name == "migrate" {
+				deployment.Spec.Template.Spec.InitContainers[i].Image = migrate
+			}
+		}
+	}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), deployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
 	}
 }
 
