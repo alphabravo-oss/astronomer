@@ -34,6 +34,15 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
+ARG VERSION=0.2.0-dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
+
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 

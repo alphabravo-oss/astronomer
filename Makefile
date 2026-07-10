@@ -137,13 +137,13 @@ docker-build-worker: ## Build worker image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.worker -t $(IMG_WORKER) .
 
 docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image
-	docker build -f deploy/docker/Dockerfile.migrate -t $(IMG_MIGRATE) .
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.migrate -t $(IMG_MIGRATE) .
 
 docker-build-frontend: ## Build frontend (Next.js dashboard) image from frontend/
-	docker build -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
+	docker build $(DOCKER_BUILD_ARGS) -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
 
 docker-build-shell: ## Build astronomer-shell (in-cluster kubectl shell pod) image
-	docker build -f deploy/docker/Dockerfile.shell -t $(IMG_SHELL) deploy/docker
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.shell -t $(IMG_SHELL) .
 
 docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell ## Build all images
 

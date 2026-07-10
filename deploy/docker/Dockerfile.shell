@@ -35,9 +35,19 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
+COPY internal/dexconfig ./internal/dexconfig
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
 FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d AS base
+
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
 
 # kubectl version is pinned in lockstep with the bundled control-plane
 # minor. Bump in the same commit that bumps the k8s.io/* dependencies

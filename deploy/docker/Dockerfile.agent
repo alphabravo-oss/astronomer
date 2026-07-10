@@ -25,6 +25,15 @@ RUN CGO_ENABLED=0 go build \
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
 
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
+
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /bin/astronomer-agent /usr/local/bin/astronomer-agent
