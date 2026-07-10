@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
 )
 
 const argoHandlerCanary = "ARGO_HANDLER_CANARY_38b1ca"
@@ -53,6 +54,21 @@ func TestArgoCDTypedCreateAndPatchRejectUnsafeSourcesBeforeUpstream(t *testing.T
 			body:   `{"name":"demo-set","spec":{"generators":[{"list":{"elements":[{"name":"demo"}]}}],"template":{"metadata":{"name":"{{name}}"},"spec":{"project":"default","source":{"repoURL":"https://git.example/repo","helm":{"values":"password: ` + argoHandlerCanary + `"}}}}}}`,
 			call:   (*ArgoCDHandler).CreateApplicationSet,
 		},
+		"application destination signed URL": {
+			method: http.MethodPost,
+			body:   `{"name":"demo","spec":{"project":"default","source":{"repoURL":"https://git.example/repo"},"destination":{"server":"https://kube.example?X-Amz-Signature=` + argoHandlerCanary + `","namespace":"prod"}}}`,
+			call:   (*ArgoCDHandler).CreateApplication,
+		},
+		"project sourceRepos signed URL": {
+			method: http.MethodPost,
+			body:   `{"name":"demo","spec":{"sourceRepos":["https://git.example/repo?Signature=` + argoHandlerCanary + `"]}}`,
+			call:   (*ArgoCDHandler).CreateProject,
+		},
+		"repository signed URL": {
+			method: http.MethodPost,
+			body:   `{"repo":"https://git.example/repo?sig=` + argoHandlerCanary + `"}`,
+			call:   (*ArgoCDHandler).CreateRepo,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			upstreamCalls := 0
@@ -75,6 +91,18 @@ func TestArgoCDTypedCreateAndPatchRejectUnsafeSourcesBeforeUpstream(t *testing.T
 				t.Fatalf("validation response leaked canary: %s", rr.Body.String())
 			}
 		})
+	}
+}
+
+func TestCreateArgoCDInstanceRejectsCredentialURLBeforePersistence(t *testing.T) {
+	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("invalid instance URL reached upstream")
+	})
+	req := argoHandlerRouteRequest(http.MethodPost, "/typed", `{"name":"demo","cluster_id":"`+rec.instance.ClusterID.String()+`","api_url":"https://user:pass@example.test?sig=`+argoHandlerCanary+`"}`, nil)
+	rr := httptest.NewRecorder()
+	h.CreateInstance(rr, req)
+	if rr.Code != http.StatusBadRequest || strings.Contains(rr.Body.String(), argoHandlerCanary) {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -132,6 +160,22 @@ func TestArgoCDTypedUpstreamResponsesAreSanitized(t *testing.T) {
 	}
 }
 
+func TestArgoCDApplicationSetSafeWorkflowReachesUpstream(t *testing.T) {
+	calls := 0
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"demo-set"},"spec":{}}`))
+	})
+	body := `{"name":"demo-set","spec":{"generators":[{"list":{"elements":[{"name":"prod","server":"https://kube.example"}]}}],"template":{"metadata":{"name":"{{name}}-app","annotations":{"argocd.argoproj.io/sync-wave":"-1","argocd.argoproj.io/compare-options":"IgnoreExtraneous","notifications.argoproj.io/subscribe.on-sync-failed.slack":"platform-alerts"}},"spec":{"project":"default","source":{"repoURL":"https://git.example/repo","path":"deploy"},"destination":{"server":"{{server}}","namespace":"prod"}}}}}`
+	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.instance.ID.String()})
+	rr := httptest.NewRecorder()
+	h.CreateApplicationSet(rr, req)
+	if rr.Code != http.StatusCreated || calls != 1 {
+		t.Fatalf("status=%d calls=%d body=%s", rr.Code, calls, rr.Body.String())
+	}
+}
+
 func TestArgoCDOperationResponseSanitizesErrorAndEventDetail(t *testing.T) {
 	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
 	rec.operation = sqlc.ArgocdOperation{
@@ -170,6 +214,42 @@ func TestArgoCDOperationEventPersistenceSanitizesMessageAndDetail(t *testing.T) 
 	}
 	if !strings.Contains(string(raw), "Degraded") || !strings.Contains(string(raw), "failed") {
 		t.Fatalf("persisted event lost diagnostics: %s", raw)
+	}
+}
+
+func TestArgoCDTypedErrorsNeverEchoUpstreamBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/typed", nil)
+	rr := httptest.NewRecorder()
+	err := &argocdclient.APIError{
+		Kind:    argocdclient.ErrServer,
+		Status:  http.StatusInternalServerError,
+		Message: "upstream message " + argoHandlerCanary,
+		Body:    `{"token":"` + argoHandlerCanary + `"}`,
+	}
+	if !translateClientError(rr, req, err) {
+		t.Fatal("typed error was not translated")
+	}
+	if strings.Contains(rr.Body.String(), argoHandlerCanary) || !strings.Contains(rr.Body.String(), "upstream service failed") {
+		t.Fatalf("unsafe or unstable error response: %s", rr.Body.String())
+	}
+}
+
+func TestRecordArgoAuditSanitizesPersistedAndPublishedEventInput(t *testing.T) {
+	writer := &serviceProxyTestAuditWriter{}
+	req := httptest.NewRequest(http.MethodPost, "/argocd", nil)
+	recordArgoAudit(req, writer, "argocd.test", "argocd_resource", "id", "https://user:pass@example.test/repo?sig="+argoHandlerCanary+"#x", map[string]any{
+		"reason": "token=" + argoHandlerCanary,
+		"server": "https://user:pass@example.test/api?sig=" + argoHandlerCanary + "#x",
+	})
+	if len(writer.rows) != 1 {
+		t.Fatalf("audit rows=%d", len(writer.rows))
+	}
+	raw, _ := json.Marshal(writer.rows[0])
+	if strings.Contains(string(raw), argoHandlerCanary) || strings.Contains(string(raw), "user:pass") || strings.Contains(string(raw), "?sig=") || strings.Contains(string(raw), "#x") {
+		t.Fatalf("persisted/published audit input leaked diagnostics: %s", raw)
+	}
+	if !strings.Contains(string(raw), "example.test") {
+		t.Fatalf("audit lost safe host diagnostic: %s", raw)
 	}
 }
 

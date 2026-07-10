@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // ApplicationSetSpec is the writable subset of an ApplicationSet.
@@ -124,6 +126,9 @@ type applicationSetEnvelope struct {
 
 // CreateApplicationSet creates an ApplicationSet upstream.
 func (c *Client) CreateApplicationSet(ctx context.Context, name string, spec ApplicationSetSpec) (*ApplicationSet, error) {
+	if err := argosecurity.ValidateMutation(map[string]any{"spec": spec}); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(applicationSetEnvelope{
 		APIVersion: "argoproj.io/v1alpha1",
 		Kind:       "ApplicationSet",

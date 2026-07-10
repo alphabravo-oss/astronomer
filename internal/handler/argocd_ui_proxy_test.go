@@ -94,11 +94,17 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 		gotCookie = r.Header.Get("Cookie")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		w.Header().Set("Authorization", "Bearer leaked")
 		w.Header().Set("Clear-Site-Data", `"cookies"`)
 		w.Header().Set("Connection", "upgrade")
 		w.Header().Set("Content-Length", "11")
 		w.Header().Set("Proxy-Authenticate", "Basic")
+		w.Header().Set("Location", "https://user:pass@example.test/path?token="+argoProxyCanary)
+		w.Header().Add("Link", "<https://example.test/a?sig="+argoProxyCanary+">; rel=next")
+		w.Header().Add("Link", "<https://example.test/b>; rel=prev")
+		w.Header()["x-aPi-ToKeN"] = []string{"first-" + argoProxyCanary, "second-" + argoProxyCanary}
+		w.Header()["X-Future-Metadata"] = []string{"one", "two"}
 		w.Header().Set("Set-Cookie", "astronomer_session=leaked; Path=/; HttpOnly")
 		w.Header().Add("Set-Cookie", "argocd.token=upstream; Path=/; Domain=example.com")
 		w.Header().Set("Set-Cookie2", "legacy=leaked")
@@ -140,6 +146,10 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 		"Connection",
 		"Content-Length",
 		"Proxy-Authenticate",
+		"Location",
+		"Link",
+		"X-Api-Token",
+		"X-Future-Metadata",
 		"Set-Cookie2",
 		"Transfer-Encoding",
 		"WWW-Authenticate",
@@ -150,6 +160,9 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 	}
 	if rr.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("expected Cache-Control to be preserved")
+	}
+	if rr.Header().Get("Content-Security-Policy") != "default-src 'self'" {
+		t.Fatalf("expected Content-Security-Policy to be preserved")
 	}
 	cookies := rr.Result().Cookies()
 	if len(cookies) != 1 {
@@ -164,6 +177,24 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 	}
 	if cookie.Path != "/argocd" || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("cookie security attrs = path:%q httponly:%v secure:%v samesite:%v", cookie.Path, cookie.HttpOnly, cookie.Secure, cookie.SameSite)
+	}
+}
+
+func TestSanitizeArgoCDUIResponseHeadersIsCaseInsensitiveAndDefaultDeny(t *testing.T) {
+	resp := &http.Response{Header: http.Header{
+		"cAcHe-CoNtRoL":  []string{"private", "no-store"},
+		"x-aPi-ToKeN":    []string{"one", "two"},
+		"lOcAtIoN":       []string{"https://user:pass@example.test?sig=secret"},
+		"X-New-Upstream": []string{"future"},
+	}}
+	sanitizeArgoCDUIResponseHeaders(resp)
+	if got := resp.Header.Values("Cache-Control"); len(got) != 2 || got[0] != "private" || got[1] != "no-store" {
+		t.Fatalf("allowed multi-value header = %v", got)
+	}
+	for _, key := range []string{"X-Api-Token", "Location", "X-New-Upstream"} {
+		if got := resp.Header.Values(key); len(got) != 0 {
+			t.Fatalf("unsafe mixed-case header %s survived: %v", key, got)
+		}
 	}
 }
 
@@ -279,7 +310,7 @@ func TestArgoCDUIProxyRejectsUnsafeMutationBodiesBeforeUpstream(t *testing.T) {
 		"scalar wrapper":       {contentType: "application/json", body: []byte(`"{\"spec\":{\"source\":{\"helm\":{\"values\":\"` + argoProxyCanary + `\"}}}}"`), wantStatus: http.StatusBadRequest},
 		"malformed":            {contentType: "application/json", body: []byte(`{"spec":`), wantStatus: http.StatusBadRequest},
 		"non json":             {contentType: "text/plain", body: []byte(argoProxyCanary), wantStatus: http.StatusUnsupportedMediaType},
-		"gzip":                 {contentType: "application/json", contentEncoding: "gzip", body: gzipTestBytes(t, []byte(`{"spec":{"sources":[{"repoURL":"https://git.example/repo"}]}}`)), wantStatus: http.StatusBadRequest},
+		"gzip":                 {contentType: "application/json", contentEncoding: "gzip", body: gzipTestBytes(t, []byte(`{"spec":{"sources":[{"repoURL":"https://git.example/repo","helm":{"values":"`+argoProxyCanary+`"}}]}}`)), wantStatus: http.StatusBadRequest},
 		"unsupported encoding": {contentType: "application/json", contentEncoding: "br", body: []byte(`{"safe":true}`), wantStatus: http.StatusBadRequest},
 	} {
 		t.Run(name, func(t *testing.T) {

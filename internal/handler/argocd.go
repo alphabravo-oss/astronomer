@@ -395,6 +395,10 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "api_url is required")
 		return
 	}
+	if err := argosecurity.ValidateCredentialFreeURL(req.ApiUrl); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "api_url must be a canonical credential-free URL")
+		return
+	}
 	if !h.authz.authorizeClusterAction(w, r, req.ClusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
@@ -420,11 +424,11 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidClusterID, "cluster_id does not match any registered cluster")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create ArgoCD instance: "+err.Error())
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create ArgoCD instance")
 		return
 	}
 
-	recordAudit(r, h.queries, "argocd.instance.create", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.instance.create", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
 		"api_url":    instance.ApiUrl,
 		"verify_ssl": instance.VerifySsl,
@@ -475,7 +479,7 @@ func (h *ArgoCDHandler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recordAudit(r, h.queries, "argocd.instance.delete", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.instance.delete", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
 	})
 
@@ -503,6 +507,10 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
+	if err := argosecurity.ValidateCredentialFreeURL(req.ApiUrl); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "api_url must be a canonical credential-free URL")
+		return
+	}
 
 	tokenColumn, err := h.resolveAuthToken(req)
 	if err != nil {
@@ -527,7 +535,7 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recordAudit(r, h.queries, "argocd.instance.update", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.instance.update", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
 		"api_url":    instance.ApiUrl,
 		"verify_ssl": instance.VerifySsl,
@@ -694,7 +702,7 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to enqueue ArgoCD sync")
 		return
 	}
-	recordAudit(r, h.queries, "argocd.app.sync", "argocd_application", app.ID.String(), app.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.app.sync", "argocd_application", app.ID.String(), app.Name, map[string]any{
 		"instance_id":          app.ArgocdInstanceID.String(),
 		"revision":             req.Revision,
 		"prune":                req.Prune,
@@ -753,7 +761,7 @@ func (h *ArgoCDHandler) LiveApplications(w http.ResponseWriter, r *http.Request)
 	}
 	apps, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, "Argo CD upstream request failed")
 		return
 	}
 	respondArgoJSON(w, http.StatusOK, apps)
@@ -781,7 +789,7 @@ func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	history, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications/"+app.Name+"/revisions")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, "Argo CD upstream request failed")
 		return
 	}
 	respondArgoJSON(w, http.StatusOK, history)
@@ -809,7 +817,7 @@ func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
 	}
 	manifests, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications/"+app.Name+"/manifests")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, "Argo CD upstream request failed")
 		return
 	}
 	respondArgoJSON(w, http.StatusOK, manifests)
@@ -845,10 +853,10 @@ func (h *ArgoCDHandler) RefreshApp(w http.ResponseWriter, r *http.Request) {
 		} else if argocdclient.IsKind(err, argocdclient.ErrNotFound) {
 			status = http.StatusNotFound
 		}
-		RespondRequestError(w, r, status, apierror.ArgoCDError, err.Error())
+		RespondRequestError(w, r, status, apierror.ArgoCDError, argocdclient.PublicErrorMessage(err))
 		return
 	}
-	recordAudit(r, h.queries, "argocd.app.refresh", "argocd_application", app.ID.String(), app.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.app.refresh", "argocd_application", app.ID.String(), app.Name, map[string]any{
 		"instance_id": app.ArgocdInstanceID.String(),
 		"hard":        hard,
 	})
@@ -1016,7 +1024,7 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.TriggerReconcile()
-	recordAudit(r, h.queries, "argocd.operation.retry", "argocd_operation", id.String(), op.TargetKey, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.operation.retry", "argocd_operation", id.String(), op.TargetKey, map[string]any{
 		"target_type":     op.TargetType,
 		"previous_status": op.Status,
 	})
@@ -1304,7 +1312,7 @@ func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []clai
 				// bookkeeping because argocd's terminal state depends on
 				// the operationResult.async flag.
 				OnFailure: func(ctx context.Context, err error) {
-					safeError := argosecurity.SanitizeString(err.Error())
+					safeError := argocdclient.PublicErrorMessage(err)
 					h.recordArgoCDOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": safeError})
 					_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
 						ID:           running.ID,
@@ -1458,7 +1466,7 @@ func operationResultFromApp(app *argocdclient.Application) operationResult {
 		return res
 	}
 	res.phase = state.Phase
-	res.message = argosecurity.SanitizeString(state.Message)
+	res.message = safeArgoOperationStateMessage(state.Phase)
 	if state.SyncResult != nil && state.SyncResult.Revision != "" {
 		res.revision = state.SyncResult.Revision
 	} else if state.Operation != nil && state.Operation.Sync != nil {
@@ -1473,6 +1481,19 @@ func operationResultFromApp(app *argocdclient.Application) operationResult {
 	}
 	res.async = true
 	return res
+}
+
+func safeArgoOperationStateMessage(phase string) string {
+	switch strings.ToLower(strings.TrimSpace(phase)) {
+	case "succeeded":
+		return "Argo CD sync succeeded"
+	case "failed", "error":
+		return "Argo CD sync failed"
+	case "running", "terminating":
+		return "Argo CD sync in progress"
+	default:
+		return "Argo CD sync state updated"
+	}
 }
 
 func argoCDResourceDriftCountsFromApplication(app *argocdclient.Application) (created, changed, pruned int32, observed bool) {
@@ -1542,12 +1563,12 @@ func (h *ArgoCDHandler) claimRunningArgoCDPolls(ctx context.Context) []claimedOp
 		}
 		var env argocdOperationEnvelope
 		if err := json.Unmarshal(op.Payload, &env); err != nil {
-			h.failOperationWithMessage(ctx, op, "Failed", err.Error())
+			h.failOperationWithMessage(ctx, op, "Failed", argocdclient.PublicErrorMessage(err))
 			continue
 		}
 		appID, err := uuid.Parse(env.ApplicationID)
 		if err != nil {
-			h.failOperationWithMessage(ctx, op, "Failed", err.Error())
+			h.failOperationWithMessage(ctx, op, "Failed", argocdclient.PublicErrorMessage(err))
 			continue
 		}
 		app, err := h.queries.GetArgoCDApplicationByID(ctx, appID)
@@ -1587,7 +1608,7 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 			// Transient errors: bump poll counter, keep retrying. Auth/NotFound
 			// errors are terminal.
 			if argocdclient.IsKind(err, argocdclient.ErrUnauthorized) || argocdclient.IsKind(err, argocdclient.ErrNotFound) {
-				h.failOperationWithMessage(ctx, op, "Failed", err.Error())
+				h.failOperationWithMessage(ctx, op, "Failed", argocdclient.PublicErrorMessage(err))
 				return
 			}
 			_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
@@ -1595,7 +1616,7 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 				Phase:       op.Phase,
 				OperationID: op.OperationID,
 				Revision:    op.Revision,
-				Message:     argosecurity.SanitizeString(err.Error()),
+				Message:     argocdclient.PublicErrorMessage(err),
 			})
 			return
 		}
@@ -2175,8 +2196,20 @@ func translateClientError(w http.ResponseWriter, r *http.Request, err error) boo
 	case argocdclient.IsKind(err, argocdclient.ErrUnreachable):
 		status = http.StatusBadGateway
 	}
-	RespondRequestError(w, r, status, apierror.ArgoCDError, argosecurity.SanitizeString(err.Error()))
+	RespondRequestError(w, r, status, apierror.ArgoCDError, argocdclient.PublicErrorMessage(err))
 	return true
+}
+
+// recordArgoAudit applies the Argo policy before both the audit row and its
+// published audit event are constructed. This keeps future detail fields
+// default-safe without relying on every caller to remember URL and secret
+// sanitation independently.
+func recordArgoAudit(r *http.Request, q any, action, resourceType, resourceID, resourceName string, detail map[string]any) {
+	safeDetail := map[string]any{}
+	if sanitized, ok := argosecurity.Sanitize(detail).(map[string]any); ok {
+		safeDetail = sanitized
+	}
+	recordAudit(r, q, action, resourceType, resourceID, argosecurity.SanitizeString(resourceName), safeDetail)
 }
 
 // --- Application CRUD (B1) -------------------------------------------------
@@ -2215,7 +2248,7 @@ func (h *ArgoCDHandler) CreateApplication(w http.ResponseWriter, r *http.Request
 	if translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.app.create", "argocd_application", "", req.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.app.create", "argocd_application", "", req.Name, map[string]any{
 		"instance_id": instance.ID.String(),
 		"project":     req.Spec.Project,
 	})
@@ -2251,7 +2284,7 @@ func (h *ArgoCDHandler) PatchApplication(w http.ResponseWriter, r *http.Request)
 	}
 	// Don't include the patch body verbatim — it can carry sensitive
 	// per-application overrides (e.g. helm values). Length is enough.
-	recordAudit(r, h.queries, "argocd.app.update", "argocd_application", "", name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.app.update", "argocd_application", "", name, map[string]any{
 		"instance_id":     instance.ID.String(),
 		"patch_byte_size": len(raw),
 	})
@@ -2275,7 +2308,7 @@ func (h *ArgoCDHandler) DeleteApplication(w http.ResponseWriter, r *http.Request
 	if err := client.DeleteApplication(r.Context(), name, cascade); translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.app.delete", "argocd_application", "", name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.app.delete", "argocd_application", "", name, map[string]any{
 		"instance_id": instance.ID.String(),
 		"cascade":     cascade,
 	})
@@ -2314,7 +2347,7 @@ func (h *ArgoCDHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.project.create", "argocd_project", "", req.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.project.create", "argocd_project", "", req.Name, map[string]any{
 		"instance_id": instance.ID.String(),
 	})
 	respondArgoJSON(w, http.StatusCreated, out)
@@ -2329,7 +2362,7 @@ func (h *ArgoCDHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	projects, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/projects")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, "Argo CD upstream request failed")
 		return
 	}
 	respondArgoJSON(w, http.StatusOK, projects)
@@ -2356,7 +2389,7 @@ func (h *ArgoCDHandler) PatchProject(w http.ResponseWriter, r *http.Request) {
 	if translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.project.update", "argocd_project", "", name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.project.update", "argocd_project", "", name, map[string]any{
 		"instance_id":     instance.ID.String(),
 		"patch_byte_size": len(raw),
 	})
@@ -2378,7 +2411,7 @@ func (h *ArgoCDHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	if err := client.DeleteProject(r.Context(), name); translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.project.delete", "argocd_project", "", name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.project.delete", "argocd_project", "", name, map[string]any{
 		"instance_id": instance.ID.String(),
 	})
 	w.WriteHeader(http.StatusNoContent)
@@ -2427,7 +2460,7 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 	if translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.appset.create", "argocd_applicationset", "", req.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.appset.create", "argocd_applicationset", "", req.Name, map[string]any{
 		"instance_id":     instance.ID.String(),
 		"generator_count": len(req.Spec.Generators),
 	})
@@ -2487,7 +2520,7 @@ func (h *ArgoCDHandler) ListApplicationSets(w http.ResponseWriter, r *http.Reque
 	}
 	out, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applicationsets")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, "Argo CD upstream request failed")
 		return
 	}
 	respondArgoJSON(w, http.StatusOK, out)
@@ -2508,7 +2541,7 @@ func (h *ArgoCDHandler) DeleteApplicationSet(w http.ResponseWriter, r *http.Requ
 	if err := client.DeleteApplicationSet(r.Context(), name); translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.appset.delete", "argocd_applicationset", "", name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.appset.delete", "argocd_applicationset", "", name, map[string]any{
 		"instance_id": instance.ID.String(),
 	})
 	w.WriteHeader(http.StatusNoContent)
@@ -2590,6 +2623,10 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cluster has no api_server_url; supply 'server' override")
 		return
 	}
+	if err := argosecurity.ValidateCredentialFreeURL(server); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "server must be a canonical credential-free URL")
+		return
+	}
 	caData := req.CAData
 	if caData == "" {
 		caData = cluster.CaCertificate
@@ -2598,7 +2635,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	if bearerToken == "" && cluster.IsLocal {
 		bearerToken, err = h.createLocalArgoCDServiceAccountToken(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.TokenError, "Failed to mint local cluster token: "+err.Error())
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.TokenError, "Failed to mint local cluster token")
 			return
 		}
 	}
@@ -2654,7 +2691,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		Labels:            labelsJSON,
 	})
 
-	recordAudit(r, h.queries, "argocd.cluster.register", "argocd_managed_cluster", cluster.ID.String(), cluster.Name, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.cluster.register", "argocd_managed_cluster", cluster.ID.String(), cluster.Name, map[string]any{
 		"instance_id": instance.ID.String(),
 		"server":      server,
 		"insecure":    req.Insecure,
@@ -2730,7 +2767,7 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 	}
 	secret, err := h.lookupArgoCDClusterSecret(r.Context(), row.ClusterSecretName, row.ServerUrl)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDSecretError, "Failed to load ArgoCD cluster Secret: "+err.Error())
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDSecretError, "Failed to load ArgoCD cluster Secret")
 		return
 	}
 	if secret == nil {
@@ -2747,7 +2784,7 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 	if !stringMapEqual(secret.Labels, merged) {
 		patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"labels": astronomerManagedLabelsPatch(secret.Labels, labels)}})
 		if _, err := h.k8s.CoreV1().Secrets(argocdNamespace).Patch(r.Context(), secret.Name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDSecretError, "Failed to patch ArgoCD cluster Secret: "+err.Error())
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDSecretError, "Failed to patch ArgoCD cluster Secret")
 			return
 		}
 	}
@@ -2761,7 +2798,7 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update managed cluster labels")
 		return
 	}
-	recordAudit(r, h.queries, "argocd.cluster.refresh_labels", "argocd_managed_cluster", clusterID.String(), row.ClusterSecretName, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.cluster.refresh_labels", "argocd_managed_cluster", clusterID.String(), row.ClusterSecretName, map[string]any{
 		"instance_id": instance.ID.String(),
 		"server":      row.ServerUrl,
 	})
@@ -2810,7 +2847,7 @@ func (h *ArgoCDHandler) UnregisterManagedCluster(w http.ResponseWriter, r *http.
 		ArgocdInstanceID: instance.ID,
 		ClusterID:        clusterID,
 	})
-	recordAudit(r, h.queries, "argocd.cluster.unregister", "argocd_managed_cluster", clusterID.String(), row.ClusterSecretName, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.cluster.unregister", "argocd_managed_cluster", clusterID.String(), row.ClusterSecretName, map[string]any{
 		"instance_id": instance.ID.String(),
 		"server":      row.ServerUrl,
 	})
@@ -2865,6 +2902,10 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL is required")
 		return
 	}
+	if err := argosecurity.ValidateCredentialFreeURL(req.Repo); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL must be canonical and credential-free")
+		return
+	}
 	// Defense-in-depth: round-trip the secret through the Encryptor so
 	// it lands in our request audit (when we add one) ciphered. We still
 	// pass plaintext to ArgoCD because that's what the upstream API expects.
@@ -2886,7 +2927,7 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	safeRepoURL := argosecurity.SanitizeString(req.Repo)
-	recordAudit(r, h.queries, "argocd.repo.create", "argocd_repository", "", safeRepoURL, map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.repo.create", "argocd_repository", "", safeRepoURL, map[string]any{
 		"instance_id":     instance.ID.String(),
 		"type":            req.Type,
 		"username":        req.Username,
@@ -2927,11 +2968,15 @@ func (h *ArgoCDHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo query parameter is required")
 		return
 	}
+	if err := argosecurity.ValidateCredentialFreeURL(repoURL); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL must be canonical and credential-free")
+		return
+	}
 	client := h.argoCDClient(instance)
 	if err := client.DeleteRepository(r.Context(), repoURL); translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.repo.delete", "argocd_repository", "", argosecurity.SanitizeString(repoURL), map[string]any{
+	recordArgoAudit(r, h.queries, "argocd.repo.delete", "argocd_repository", "", argosecurity.SanitizeString(repoURL), map[string]any{
 		"instance_id": instance.ID.String(),
 	})
 	w.WriteHeader(http.StatusNoContent)
@@ -2951,6 +2996,10 @@ func (h *ArgoCDHandler) TestRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Repo) == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL is required")
+		return
+	}
+	if err := argosecurity.ValidateCredentialFreeURL(req.Repo); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL must be canonical and credential-free")
 		return
 	}
 	client := h.argoCDClient(instance)

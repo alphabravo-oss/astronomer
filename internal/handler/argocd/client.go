@@ -114,6 +114,34 @@ func IsKind(err error, kind ErrorKind) bool {
 	return false
 }
 
+// PublicErrorMessage returns a stable, non-echoing diagnostic for API
+// responses, operation rows, events and audits. APIError.Message/Body are
+// untrusted upstream documents and must never cross those boundaries.
+func PublicErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.Kind {
+		case ErrUnauthorized:
+			return "Argo CD rejected the configured credentials"
+		case ErrNotFound:
+			return "Argo CD resource was not found"
+		case ErrConflict:
+			return "Argo CD rejected the operation because of a conflict"
+		case ErrServer:
+			return "Argo CD upstream service failed"
+		default:
+			return "Argo CD upstream request failed"
+		}
+	}
+	if IsKind(err, ErrUnreachable) {
+		return "Argo CD upstream service is unreachable"
+	}
+	return "Argo CD upstream request failed"
+}
+
 // Client speaks the ArgoCD HTTP API for a single instance.
 type Client struct {
 	baseURL    string

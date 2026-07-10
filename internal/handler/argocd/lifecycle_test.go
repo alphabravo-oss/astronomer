@@ -47,8 +47,7 @@ func TestCreateApplication(t *testing.T) {
 			Path:           "manifests",
 			TargetRevision: "main",
 			Helm: &HelmSource{
-				ValueFiles: []string{"values-prod.yaml"},
-				Parameters: []HelmParameter{{Name: "image.tag", Value: "v1.0"}},
+				ReleaseName: "myapp",
 			},
 		},
 		Destination: &ApplicationDestination{
@@ -380,6 +379,48 @@ func TestPatchProjectUsesPUTAfterMerge(t *testing.T) {
 	repos, ok := spec["sourceRepos"].([]any)
 	if !ok || len(repos) != 1 || repos[0] != "*" {
 		t.Errorf("merged sourceRepos = %v (must preserve original)", spec["sourceRepos"])
+	}
+}
+
+func TestPatchProjectRejectsUnsafeMergedSourceReposBeforePUT(t *testing.T) {
+	putCalls := 0
+	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"metadata":{"name":"myproj","resourceVersion":"42"},"spec":{"description":"old","sourceRepos":["https://user:pass@git.example/repo"]}}`))
+		case http.MethodPut:
+			putCalls++
+		}
+	})
+	if _, err := c.PatchProject(context.Background(), "myproj", json.RawMessage(`{"description":"new"}`)); err == nil {
+		t.Fatal("unsafe merged sourceRepos accepted")
+	}
+	if putCalls != 0 {
+		t.Fatalf("unsafe merged project issued %d PUT calls", putCalls)
+	}
+}
+
+func TestTypedWriteClientsRejectCredentialURLsBeforeUpstream(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(http.ResponseWriter, *http.Request) { calls++ })
+	unsafe := "https://user:pass@example.test/path?sig=secret#fragment"
+	if _, err := c.CreateRepository(context.Background(), RepositoryCreate{Repo: unsafe}); err == nil {
+		t.Fatal("unsafe repository URL accepted")
+	}
+	if _, err := c.TestRepository(context.Background(), RepositoryCreate{Repo: unsafe}); err == nil {
+		t.Fatal("unsafe repository test URL accepted")
+	}
+	if err := c.DeleteRepository(context.Background(), unsafe); err == nil {
+		t.Fatal("unsafe repository delete URL accepted")
+	}
+	if _, err := c.RegisterCluster(context.Background(), ClusterRegistration{Server: unsafe}); err == nil {
+		t.Fatal("unsafe cluster server accepted")
+	}
+	if _, err := c.CreateProject(context.Background(), "demo", AppProjectSpec{SourceRepos: []string{unsafe}}); err == nil {
+		t.Fatal("unsafe project sourceRepos accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("unsafe writes made %d upstream calls", calls)
 	}
 }
 

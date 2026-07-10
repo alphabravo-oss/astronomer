@@ -494,7 +494,7 @@ func TestPollRunningOperationFailsOnTerminalFailed(t *testing.T) {
 	if rec.failed[0].Phase != "Failed" {
 		t.Errorf("phase = %s", rec.failed[0].Phase)
 	}
-	if rec.failed[0].Message != "manifest error" {
+	if rec.failed[0].Message != "Argo CD sync failed" {
 		t.Errorf("message = %s", rec.failed[0].Message)
 	}
 }

@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // ClusterConfig carries the credentials embedded in an ArgoCD Cluster.
@@ -81,6 +83,9 @@ type Cluster struct {
 // RegisterCluster registers a Kubernetes cluster into upstream ArgoCD.
 // The upstream returns the registered Cluster shape on success.
 func (c *Client) RegisterCluster(ctx context.Context, reg ClusterRegistration) (*Cluster, error) {
+	if err := argosecurity.ValidateCredentialFreeURL(reg.Server); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(reg)
 	if err != nil {
 		return nil, err

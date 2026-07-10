@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // Repository is the projection ArgoCD returns for a repo. Secrets such as
@@ -53,6 +55,9 @@ type RepositoryCreate struct {
 
 // CreateRepository registers a repo (git or helm) with upstream ArgoCD.
 func (c *Client) CreateRepository(ctx context.Context, repo RepositoryCreate) (*Repository, error) {
+	if err := argosecurity.ValidateCredentialFreeURL(repo.Repo); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(repo)
 	if err != nil {
 		return nil, err
@@ -77,6 +82,9 @@ func (c *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
 
 // DeleteRepository removes a repo by its URL.
 func (c *Client) DeleteRepository(ctx context.Context, repoURL string) error {
+	if err := argosecurity.ValidateCredentialFreeURL(repoURL); err != nil {
+		return err
+	}
 	return c.do(ctx, http.MethodDelete, "/api/v1/repositories/"+url.PathEscape(repoURL), nil, nil)
 }
 
@@ -84,6 +92,9 @@ func (c *Client) DeleteRepository(ctx context.Context, repoURL string) error {
 // performing a quick connectivity check. The response carries
 // ConnectionState.Status ("Successful" or "Failed").
 func (c *Client) TestRepository(ctx context.Context, repo RepositoryCreate) (*Repository, error) {
+	if err := argosecurity.ValidateCredentialFreeURL(repo.Repo); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(repo)
 	if err != nil {
 		return nil, err

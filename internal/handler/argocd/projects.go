@@ -18,7 +18,10 @@ package argocd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // AppProjectSpec is the writable subset of an AppProject.
@@ -88,6 +91,9 @@ type projectCreateEnvelope struct {
 
 // CreateProject creates an AppProject upstream.
 func (c *Client) CreateProject(ctx context.Context, name string, spec AppProjectSpec) (*AppProject, error) {
+	if err := validateProjectURLs(spec); err != nil {
+		return nil, err
+	}
 	var env projectCreateEnvelope
 	env.Project.APIVersion = "argoproj.io/v1alpha1"
 	env.Project.Kind = "AppProject"
@@ -115,6 +121,9 @@ func (c *Client) CreateProject(ctx context.Context, name string, spec AppProject
 // PatchProject is preserved as a deprecated alias that delegates to
 // UpdateProject; existing callers don't need to change.
 func (c *Client) UpdateProject(ctx context.Context, name, resourceVersion string, spec AppProjectSpec) (*AppProject, error) {
+	if err := validateProjectURLs(spec); err != nil {
+		return nil, err
+	}
 	var env projectCreateEnvelope
 	env.Project.APIVersion = "argoproj.io/v1alpha1"
 	env.Project.Kind = "AppProject"
@@ -129,6 +138,22 @@ func (c *Client) UpdateProject(ctx context.Context, name, resourceVersion string
 		return nil, err
 	}
 	return &out, nil
+}
+
+func validateProjectURLs(spec AppProjectSpec) error {
+	for i, repo := range spec.SourceRepos {
+		if err := argosecurity.ValidateSourceRepoPattern(repo); err != nil {
+			return fmt.Errorf("sourceRepos[%d] must be a canonical credential-free repository pattern", i)
+		}
+	}
+	for i, destination := range spec.Destinations {
+		if destination.Server != "" && destination.Server != "*" {
+			if err := argosecurity.ValidateCredentialFreeURL(destination.Server); err != nil {
+				return fmt.Errorf("destinations[%d].server must be a canonical credential-free URL", i)
+			}
+		}
+	}
+	return nil
 }
 
 // PatchProject is a back-compat shim around UpdateProject. The mergeBody is

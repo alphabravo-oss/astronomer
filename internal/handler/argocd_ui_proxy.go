@@ -387,12 +387,14 @@ func sanitizeArgoCDUIResponseHeaders(resp *http.Response) {
 		return
 	}
 	cookies := resp.Cookies()
-	for key := range resp.Header {
-		if !argoCDUIResponseHeaderAllowed(key) {
-			resp.Header.Del(key)
+	safeHeaders := make(http.Header)
+	for key, values := range resp.Header {
+		if argoCDUIResponseHeaderAllowed(key) {
+			canonical := http.CanonicalHeaderKey(key)
+			safeHeaders[canonical] = append(safeHeaders[canonical], values...)
 		}
 	}
-	resp.Header.Del("Set-Cookie")
+	resp.Header = safeHeaders
 	for _, cookie := range cookies {
 		if !argoCDUIResponseCookieAllowed(cookie.Name) {
 			continue
@@ -405,14 +407,18 @@ func sanitizeArgoCDUIResponseHeaders(resp *http.Response) {
 func argoCDUIResponseHeaderAllowed(name string) bool {
 	lower := strings.ToLower(strings.TrimSpace(name))
 	switch lower {
-	case "":
-		return false
-	case "authorization", "clear-site-data", "content-length", "cookie", "proxy-authenticate", "proxy-authorization", "set-cookie", "set-cookie2", "www-authenticate":
-		return false
-	case "connection", "keep-alive", "te", "trailer", "trailers", "transfer-encoding", "upgrade":
-		return false
-	default:
+	case "accept-ranges", "cache-control", "content-disposition", "content-language", "content-length", "content-type",
+		"content-security-policy", "content-security-policy-report-only", "cross-origin-embedder-policy",
+		"cross-origin-opener-policy", "cross-origin-resource-policy", "date", "expires", "last-modified",
+		"permissions-policy", "pragma", "referrer-policy", "retry-after", "strict-transport-security", "vary",
+		"x-content-type-options", "x-frame-options":
 		return true
+	default:
+		// Default deny: Argo and intermediary upgrades can introduce new
+		// secret-shaped or redirect headers without silently widening this
+		// browser-visible boundary. Location and Link are intentionally omitted;
+		// their query/fragment components commonly carry OAuth credentials.
+		return false
 	}
 }
 
@@ -569,7 +575,7 @@ func (p *ArgoCDUIProxy) recordProxyAudit(r *http.Request, status int) {
 		return
 	}
 	safePath := safeArgoCDProxyPath(r.URL.Path)
-	recordAudit(r, audit, action, "argocd_proxy", "", safePath, map[string]any{
+	recordArgoAudit(r, audit, action, "argocd_proxy", "", safePath, map[string]any{
 		"path":        safePath,
 		"status_code": status,
 		"is_api":      strings.HasPrefix(r.URL.Path, "/argocd/api/"),

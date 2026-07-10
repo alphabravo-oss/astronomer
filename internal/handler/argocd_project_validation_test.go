@@ -88,6 +88,25 @@ func TestValidateArgoProjectPatchAllowsPartialSyncWindowUpdates(t *testing.T) {
 	}
 }
 
+func TestValidateArgoProjectURLsAndPatterns(t *testing.T) {
+	valid := argocdclient.AppProjectSpec{
+		SourceRepos:  []string{"*", "https://git.example/team/*", "!https://git.example/team/private/*"},
+		Destinations: []argocdclient.ApplicationDestination{{Server: "https://kube.example:6443", Namespace: "prod"}},
+	}
+	if err := validateArgoProjectSpec(valid); err != nil {
+		t.Fatalf("valid project rejected: %v", err)
+	}
+	for _, raw := range []string{
+		`{"sourceRepos":["https://user:pass@git.example/repo"]}`,
+		`{"sourceRepos":["https://git.example/repo?X-Amz-Signature=secret"]}`,
+		`{"destinations":[{"server":"https://kube.example:6443?token=secret","namespace":"prod"}]}`,
+	} {
+		if err := validateArgoProjectPatch([]byte(raw)); err == nil {
+			t.Fatalf("unsafe project patch accepted: %s", raw)
+		}
+	}
+}
+
 func TestNormalizeSyncRequestRequiresOverrideReason(t *testing.T) {
 	if _, err := normalizeSyncRequest(SyncRequest{SyncWindowOverride: true}); err == nil {
 		t.Fatalf("override without reason accepted")
