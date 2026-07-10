@@ -135,8 +135,12 @@ compatibility value, CAS-scrubs it, and stamps `public_clients_cutover_at`.
 Re-running is safe and processes only unstamped rows. The database constraint
 then rejects an old binary attempting to repopulate plaintext.
 
-When the `keyrotate` summary shows `failed=0`, every column and connector secret is
-now under the new primary.
+After rewriting, `keyrotate` performs a second primary-only scan of every
+encrypted column, typed connector JSON credential, and static-client envelope.
+It also checks pre-cutover envelope/plaintext equality. Any CAS miss, fallback-
+only ciphertext, malformed JSON, or static-client drift increments `failed` and
+keeps the command non-zero. Only a final `failed=0` result authorizes removing
+the fallback key.
 
 ### Step 4 — drop the old key
 

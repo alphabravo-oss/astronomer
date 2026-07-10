@@ -57,6 +57,30 @@ func TestRotateDexConnectorConfigFailsClosedForUnknownTypeOrBadCiphertext(t *tes
 	}
 }
 
+func TestPrimaryOnlyVerificationRejectsFallbackConnectorAndStaticClientDrift(t *testing.T) {
+	primaryKey, _ := auth.GenerateKey()
+	fallbackKey, _ := auth.GenerateKey()
+	primary, _ := auth.NewEncryptor(primaryKey)
+	fallback, _ := auth.NewEncryptor(fallbackKey)
+	fallbackCipher, _ := fallback.Encrypt("synthetic")
+	connector, _ := json.Marshal(map[string]any{"issuer": "https://idp.example", "clientID": "id", "clientSecret": fallbackCipher})
+	if err := verifyDexConnectorPrimary(string(connector), "oidc", primary); err == nil {
+		t.Fatal("fallback-only connector passed primary-only verification")
+	}
+	clients := `[{"id":"app","redirectURIs":["https://platform.example/callback"],"secret":"synthetic"}]`
+	fallbackEnvelope, _ := fallback.Encrypt(clients)
+	if err := verifyDexStaticClientRow(clients, fallbackEnvelope, false, primary); err == nil {
+		t.Fatal("fallback-only static-client envelope passed primary-only verification")
+	}
+	primaryEnvelope, _ := primary.Encrypt(clients)
+	if err := verifyDexStaticClientRow(`[{"id":"different","redirectURIs":["https://platform.example/callback"],"secret":"synthetic"}]`, primaryEnvelope, false, primary); err == nil {
+		t.Fatal("stale pre-cutover envelope passed compatibility equality verification")
+	}
+	if err := verifyDexStaticClientRow(`[]`, primaryEnvelope, true, primary); err != nil {
+		t.Fatalf("valid cutover envelope failed: %v", err)
+	}
+}
+
 func TestCASUpdateSQL_RequiresOldCiphertext(t *testing.T) {
 	sql := casUpdateSQL(target{table: "sso_configurations", idCol: "id", column: "client_secret_encrypted"})
 	// Must CAS on both primary key and previous ciphertext.
@@ -65,6 +89,17 @@ func TestCASUpdateSQL_RequiresOldCiphertext(t *testing.T) {
 	}
 	if strings.Contains(sql, "WHERE id = $2;") || !strings.Contains(sql, "$3") {
 		t.Fatalf("CAS UPDATE must not be id-only: %s", sql)
+	}
+}
+
+func TestRequireCASUpdateTreatsEveryMissAsFatal(t *testing.T) {
+	if requireCASUpdate(1) != nil {
+		t.Fatal("single-row CAS update rejected")
+	}
+	for _, affected := range []int64{0, 2} {
+		if requireCASUpdate(affected) == nil {
+			t.Fatalf("rows affected %d was not fatal", affected)
+		}
 	}
 }
 
