@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -56,7 +57,7 @@ func TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName(t *testing.T) {
 		}
 	}
 	rules, _ := role["rules"].([]any)
-	var exactSecretRule bool
+	var exactSecretRule, exactHealthProxyRule bool
 	for _, raw := range rules {
 		rule, _ := raw.(map[string]any)
 		resources, _ := rule["resources"].([]any)
@@ -69,9 +70,16 @@ func TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName(t *testing.T) {
 			exactSecretRule = len(names) == 1 && names[0] == "dex-runtime-contract" &&
 				containsAnyString(verbs, "get") && containsAnyString(verbs, "patch")
 		}
+		if containsAnyString(resources, "services/proxy") {
+			names, _ := rule["resourceNames"].([]any)
+			exactHealthProxyRule = len(names) == 1 && names[0] == "http:astronomer-dex:5556" && containsAnyString(verbs, "get")
+		}
 	}
 	if !exactSecretRule {
 		t.Fatalf("runtime Secret rule is not exact-name scoped: %#v", rules)
+	}
+	if !exactHealthProxyRule {
+		t.Fatalf("Dex health proxy rule is not scoped to the full Kubernetes service-proxy resource name: %#v", rules)
 	}
 }
 
@@ -118,21 +126,35 @@ func TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData(t *testing.T) 
 }
 
 func TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable(t *testing.T) {
-	docs := renderDexRuntimeContract(t)
-	var deployment, legacyConfig, preflight renderedDoc
+	chart := filepath.Join(repoRoot(t), "deploy", "chart")
+	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"--set", "dex.enabled=true",
+		"--set", "dex.runtimeSecretName=dex-runtime-contract",
+		"--set", "dex.migration.phase=cutover")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("render cutover: %v\n%s", err, stderr.String())
+	}
+	docs := parseRenderedDocs(t, stdout.String())
+	var deployment, preflight, cleanup renderedDoc
+	legacyFound := false
 	for _, doc := range docs {
 		name := stringValue(nestedMap(doc, "metadata")["name"])
 		switch stringValue(doc["kind"]) + "/" + name {
 		case "Deployment/astronomer-dex":
 			deployment = doc
 		case "ConfigMap/astronomer-dex-config":
-			legacyConfig = doc
+			legacyFound = true
 		case "Job/astronomer-preflight":
 			preflight = doc
+		case "Job/astronomer-dex-legacy-cleanup":
+			cleanup = doc
 		}
 	}
-	if deployment == nil || legacyConfig == nil || preflight == nil {
-		t.Fatalf("missing cutover resources: deployment=%v config=%v preflight=%v", deployment != nil, legacyConfig != nil, preflight != nil)
+	if deployment == nil || preflight == nil || cleanup == nil || legacyFound {
+		t.Fatalf("invalid cutover resources: deployment=%v preflight=%v cleanup=%v legacy=%v", deployment != nil, preflight != nil, cleanup != nil, legacyFound)
 	}
 	rolling := nestedMap(deployment, "spec", "strategy", "rollingUpdate")
 	if fmt.Sprint(rolling["maxUnavailable"]) != "0" || fmt.Sprint(rolling["maxSurge"]) != "1" {
@@ -143,19 +165,80 @@ func TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable(t *testing.T) {
 	if !bytes.Contains(volumeJSON, []byte(`"secretName":"dex-runtime-contract"`)) || bytes.Contains(volumeJSON, []byte("configMap")) {
 		t.Fatalf("Dex deployment did not cut over exclusively to runtime Secret: %s", volumeJSON)
 	}
-	legacyJSON, _ := json.Marshal(legacyConfig)
-	if bytes.Contains(legacyJSON, []byte("config.yaml")) || !bytes.Contains(legacyJSON, []byte("migration-notice")) {
-		t.Fatalf("legacy ConfigMap was not inert after cutover: %s", legacyJSON)
-	}
-	if stringValue(nestedMap(legacyConfig, "metadata", "annotations")["argocd.argoproj.io/sync-wave"]) != "1" ||
-		stringValue(nestedMap(deployment, "metadata", "annotations")["argocd.argoproj.io/sync-wave"]) != "0" {
-		t.Fatalf("Argo cutover waves do not scrub after Deployment convergence")
-	}
 	preflightJSON, _ := json.Marshal(preflight)
-	for _, required := range []string{"prepared Dex runtime Secret", "has no config.yaml data", "dex-runtime-secret-migration.md"} {
+	for _, required := range []string{"prepared Dex runtime Secret", "dexconfigcheck", "dex-migration-phase", "1 MiB preflight limit"} {
 		if !bytes.Contains(preflightJSON, []byte(required)) {
 			t.Fatalf("preflight missing cutover gate %q", required)
 		}
+	}
+	cleanupJSON, _ := json.Marshal(cleanup)
+	for _, required := range []string{"post-upgrade", "readyReplicas", "secretName", "kubectl delete configmap"} {
+		if !bytes.Contains(cleanupJSON, []byte(required)) {
+			t.Fatalf("cleanup missing post-rollout contract %q", required)
+		}
+	}
+	cleanupText := string(cleanupJSON)
+	if strings.Index(cleanupText, "readyReplicas") > strings.Index(cleanupText, "kubectl delete configmap") {
+		t.Fatal("cleanup deletes the legacy ConfigMap before proving the Secret-mounted rollout ready")
+	}
+}
+
+func TestDexFreshInstallNeverRendersLegacyConfigMap(t *testing.T) {
+	for _, doc := range renderDexRuntimeContract(t) {
+		if stringValue(doc["kind"]) == "ConfigMap" && stringValue(nestedMap(doc, "metadata")["name"]) == "astronomer-dex-config" {
+			t.Fatal("fresh install rendered a legacy Dex ConfigMap")
+		}
+	}
+}
+
+func TestDexPrepareTemplatePreservesLiveDataAndOldMount(t *testing.T) {
+	root := repoRoot(t)
+	configTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-legacy-prepare.yaml"))
+	deploymentTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-deployment.yaml"))
+	for _, required := range []string{"pre-upgrade", "dex-config-retained", "--patch-file", "helm.sh/resource-policy", "astronomer.io/dex-migration-phase", "umask 077"} {
+		if !bytes.Contains(configTemplate, []byte(required)) {
+			t.Fatalf("prepare template missing %q", required)
+		}
+	}
+	if bytes.Contains(configTemplate, []byte("lookup")) || bytes.Contains(configTemplate, []byte("$legacy.data")) || bytes.Contains(configTemplate, []byte("stringData:")) {
+		t.Fatal("prepare manifest serializes credential data into Helm desired state")
+	}
+	if bytes.Contains(configTemplate, []byte(".Release.IsUpgrade")) {
+		t.Fatal("prepare phase must not depend on imperative Helm upgrade state; Argo CD does not reliably provide it")
+	}
+	if !bytes.Contains(deploymentTemplate, []byte(`eq .Values.dex.migration.phase "prepare"`)) || !bytes.Contains(deploymentTemplate, []byte("configMap:")) {
+		t.Fatal("prepare release does not keep the Deployment on the legacy ConfigMap")
+	}
+}
+
+func TestDexRenderedReleaseNeverArchivesCredentialCanaries(t *testing.T) {
+	chart := filepath.Join(repoRoot(t), "deploy", "chart")
+	for _, phase := range []string{"fresh", "cutover"} {
+		cmd := exec.Command("helm", "template", "astronomer", chart,
+			"--set", "dex.enabled=true", "--set", "dex.migration.phase="+phase,
+			"--set-string", "dex.runtimeSecretName=dex-runtime-contract")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		err := cmd.Run()
+		if err != nil {
+			t.Fatalf("render %s: %v\n%s", phase, err, stderr.String())
+		}
+		for _, doc := range parseRenderedDocs(t, stdout.String()) {
+			name := stringValue(nestedMap(doc, "metadata")["name"])
+			if !strings.Contains(name, "dex") {
+				continue
+			}
+			dexJSON, _ := json.Marshal(doc)
+			for _, forbidden := range []string{"DEX-LEGACY-ARCHIVE-CANARY", "clientSecret", "bindPW", "stringData"} {
+				if bytes.Contains(dexJSON, []byte(forbidden)) {
+					t.Fatalf("%s Dex release resource contains forbidden credential shape %q", phase, forbidden)
+				}
+			}
+		}
+	}
+	prepareTemplate, _ := os.ReadFile(filepath.Join(chart, "templates", "dex-legacy-prepare.yaml"))
+	if bytes.Contains(prepareTemplate, []byte(".data.config.yaml")) || bytes.Contains(prepareTemplate, []byte("lookup")) {
+		t.Fatal("prepare desired manifest reads credential bytes through Helm templating")
 	}
 }
 

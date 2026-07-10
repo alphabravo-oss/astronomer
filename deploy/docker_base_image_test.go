@@ -47,3 +47,21 @@ func TestDockerfileBaseImagesAreDigestPinned(t *testing.T) {
 		})
 	}
 }
+
+func TestShellImageContainsOfflineDexPreflightToolchain(t *testing.T) {
+	raw, err := os.ReadFile("docker/Dockerfile.shell")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"COPY cmd/dexconfigcheck", "CGO_ENABLED=0 go build", "apk add --no-cache", "coreutils", "jq", "COPY --from=dex-validator", "dexconfigcheck --version", "base64 --version",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("offline preflight toolchain missing %q", required)
+		}
+	}
+	if strings.Contains(text, "curl | sh") || strings.Contains(text, "wget | sh") {
+		t.Fatal("shell image performs an undeclared runtime tool download")
+	}
+}

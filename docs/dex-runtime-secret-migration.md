@@ -5,48 +5,60 @@ DEX-01 separates ownership deliberately:
 - Helm/Argo owns the stable Secret identity and retention metadata, but renders
   no `data` or `stringData`.
 - `DexHandler` owns only `data.config.yaml`, using an exact-name merge patch.
-- Dex mounts that Secret read-only. The compatibility ConfigMap is inert after
-  cutover and must never receive `config.yaml` again.
+- Dex mounts that Secret read-only after an explicit prepare/cutover sequence.
 
 The production preflight blocks a chart release while the retained Secret is
 missing or has no `config.yaml`. This is intentional: switching the Deployment
 volume before populating the Secret can take every Dex replica offline.
 
-## Existing-install upgrade (required two-phase sequence)
+## Existing-install upgrade (required two-release sequence)
 
 1. Back up the management database and the platform Fernet key. They are the
    authoritative, restorable source for connector and static-client secrets.
-2. Create the metadata-only Secret and exact-name Role/RoleBinding from the new
-   chart in a preparatory Argo sync or reviewed manifest. Do not add `data` to
-   Git or Helm values.
-3. Populate it before chart cutover. Preferred: stage the new server image while
-   retaining the old Dex Deployment volume and call
-   `POST /api/v1/auth/dex/apply/`. For a one-time legacy bridge, copy the live
-   ConfigMap through a mode-0600 local file; never print or commit its contents:
-
-   ```sh
-   umask 077
-   tmp=$(mktemp)
-   kubectl -n astronomer get configmap astronomer-dex-config \
-     -o jsonpath='{.data.config\.yaml}' >"$tmp"
-   kubectl -n astronomer create secret generic astronomer-dex-runtime \
-     --from-file=config.yaml="$tmp" --dry-run=client -o yaml | kubectl apply -f -
-   rm -f "$tmp"
-   ```
-
-   Ensure the Secret also carries `astronomer.io/runtime-writer=dex-handler`
-   and `astronomer.io/secret-purpose=dex-runtime`; applying the metadata-only
-   chart manifest supplies these without changing `data`.
-4. Run the normal chart/Argo release. Preflight must pass before any volume
-   switch. The Deployment uses `maxUnavailable: 0`, so old ConfigMap-backed
-   replicas remain available until Secret-backed replicas become Ready.
-5. Call `/apply` once more. Confirm the response reports `changed: false` on a
-   repeat call, then verify the old ConfigMap has only `migration-notice` and no
-   `config.yaml`.
+2. Upgrade with `dex.migration.phase=prepare`. A credential-free pre-upgrade
+   hook creates a metadata-only retained staging ConfigMap, then copies live
+   legacy data Kubernetes-to-Kubernetes through a mode-0600 temporary patch
+   file. No credential bytes enter Helm values, rendered manifests, logs, or
+   release history. The prepare Deployment stays ConfigMap-mounted.
+3. Populate the metadata-only runtime Secret by calling
+   `POST /api/v1/auth/dex/apply/`. Confirm its exact ownership labels and a
+   semantically valid `config.yaml`; preflight uses the bounded first-party
+   `dexconfigcheck` parser and never prints content.
+4. Upgrade again with `dex.migration.phase=cutover`. Preflight requires the
+   durable prepare marker and valid runtime Secret. The Deployment uses
+   `maxUnavailable: 0` and switches to the Secret.
+5. The post-upgrade cleanup hook independently waits for the observed
+   Secret-mounted Deployment to be fully ready/available, rechecks Secret
+   ownership, and only then deletes both legacy ConfigMap names. A failed check
+   leaves them retained for recovery and fails the release.
 6. Scan API responses, audit exports, support bundles, rendered manifests, and
    the database legacy `public_clients` column for the canary credentials used
    in the rehearsal. `public_clients` must be `[]`; only the Fernet envelope may
    be populated.
+
+### Argo CD execution
+
+Treat `prepare` and `cutover` as two separately reviewed Git revisions and two
+successful sync operations. The chart uses Helm hook annotations that Argo CD
+maps to `PreSync`/`PostSync`; it intentionally does not depend on Helm's
+imperative `.Release.IsUpgrade` flag. Do not use `SkipHooks`, selective sync, or
+manual pruning for these revisions:
+
+1. Commit `dex.migration.phase=prepare`, sync the whole Application, and wait
+   for the prepare hooks and ConfigMap-mounted Dex Deployment to become healthy.
+2. Call `/api/v1/auth/dex/apply/` through the authenticated management API and
+   verify the retained runtime Secret exists. Runtime credential data remains
+   outside Git and Argo's desired-state/revision history.
+3. Commit `dex.migration.phase=cutover`, sync the whole Application, and wait
+   for both the Secret-mounted Deployment and the `PostSync` cleanup hook.
+4. If `PreSync` or `PostSync` fails, stop. Keep the failed revision and its hook
+   diagnostics available; do not force a later wave or delete retained objects
+   to make the Application appear healthy.
+
+The phase value is therefore part of the deployment state machine, not a
+long-lived environment preference. New installations stay on `fresh`; legacy
+installations pass through `prepare` exactly long enough to establish the live
+staging object, then remain on `cutover` after the verified transition.
 
 ## Database compatibility cutover
 
@@ -70,17 +82,19 @@ retention policy; rendering it unused does not erase Helm's stored values.
 
 ## Fresh install
 
-There is no old Dex service to preserve. An operator may explicitly set
-`dex.migration.requirePreparedConfig=false`, install the chart, configure
-settings/connectors, and call `/apply`. Dex remains unready—not partially
-configured—until the Secret has `config.yaml`. Re-enable the gate afterward.
+There is no old Dex service to preserve. Keep `dex.migration.phase=fresh`,
+install the chart, configure settings/connectors, and call `/apply`. Fresh
+preflight fails if a legacy ConfigMap exists, preventing the default from being
+used as a direct-upgrade shortcut. Dex remains unready—not partially configured—
+until the Secret has `config.yaml`.
 
 ## Rollback and recovery
 
 Do not roll back to a chart version that templates Dex credentials into a
-ConfigMap: Helm release history may replay the old plaintext values. For the
-one-release compatibility window, roll back server/frontend/Dex image tags with
-this chart while keeping the Secret-mounted Deployment and retained Secret.
+ConfigMap: Helm release history may replay the old plaintext values. During
+prepare, roll back only to the prepare release so the retained staging ConfigMap
+remains available. After cutover, keep the Secret-mounted Deployment and
+retained Secret.
 This reverses code without recreating the plaintext path.
 
 If the Secret is lost, restore the management DB and the same Fernet key, apply

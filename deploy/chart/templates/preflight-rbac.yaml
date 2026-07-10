@@ -34,11 +34,17 @@
     {{- $secretNames = append $secretNames .Values.postgres.external.dsnSecretRef.name }}
   {{- end }}
 {{- end }}
-{{- if and .Values.dex.enabled .Values.dex.migration.requirePreparedConfig }}
+{{- if and .Values.dex.enabled (or .Values.dex.migration.requirePreparedConfig (eq .Values.dex.migration.phase "cutover")) }}
   {{- $dexRuntimeSecret := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName }}
   {{- if not (has $dexRuntimeSecret $secretNames) }}
     {{- $secretNames = append $secretNames $dexRuntimeSecret }}
   {{- end }}
+{{- end }}
+{{- $configMapNames := list }}
+{{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "fresh") }}
+  {{- $configMapNames = append $configMapNames (printf "%s-dex-config" (include "astronomer.fullname" .)) }}
+{{- else if and .Values.dex.enabled (eq .Values.dex.migration.phase "cutover") }}
+  {{- $configMapNames = append $configMapNames (printf "%s-dex-config-retained" (include "astronomer.fullname" .)) }}
 {{- end }}
 {{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
 {{- $legacyPVC := printf "data-%s-postgres-0" (include "astronomer.fullname" .) }}
@@ -114,10 +120,10 @@ metadata:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
   annotations:
     {{- toYaml $hookAnnotations | nindent 4 }}
-{{- if or (gt (len $secretNames) 0) $externalPostgres }}
+{{- if or (gt (len $secretNames) 0) $externalPostgres (gt (len $configMapNames) 0) }}
 rules:
   # additionalTrustedCAs / external-DSN secret presence checks.
-  {{- if gt (len $secretNames) 0 }}
+{{- if gt (len $secretNames) 0 }}
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames:
@@ -131,6 +137,13 @@ rules:
     resourceNames: [{{ $legacyPVC | quote }}]
     verbs: ["get"]
   {{- end }}
+{{- if gt (len $configMapNames) 0 }}
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      {{- toYaml $configMapNames | nindent 6 }}
+    verbs: ["get"]
+{{- end }}
 {{- else }}
 rules: []
 {{- end }}

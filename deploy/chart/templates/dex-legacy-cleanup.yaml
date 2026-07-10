@@ -1,0 +1,121 @@
+{{- /*
+Post-upgrade cleanup for the explicit Dex cutover release. The prepare release
+marks the old ConfigMap keep/prepared and leaves the Deployment on it. This hook
+runs only after Helm has applied the Secret-mounted Deployment. It independently
+proves the new ReplicaSet is observed, fully ready/available, carries the exact
+Secret volume, and that the Secret still has handler ownership before deleting
+the exact legacy ConfigMap. No credential content is read or logged here.
+*/ -}}
+{{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "cutover") }}
+{{- $name := printf "%s-dex-legacy-cleanup" (include "astronomer.fullname" .) -}}
+{{- $deployment := printf "%s-dex" (include "astronomer.fullname" .) -}}
+{{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
+{{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
+{{- $runtime := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName -}}
+{{- $hooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $hooks) | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $hooks) | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ $deployment | quote }}]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $runtime | quote }}]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $legacy | quote }}, {{ $retained | quote }}]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $hooks) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "10") $hooks) | nindent 4 }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cleanup
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "registry" .Values.preflight.image.registry "fallback" (.Values.image.registry | default "ghcr.io/alphabravo-oss")) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              deployment={{ $deployment | quote }}
+              runtime={{ $runtime | quote }}
+              legacy={{ $legacy | quote }}
+              retained={{ $retained | quote }}
+              namespace={{ .Release.Namespace | quote }}
+              attempt=1
+              while [ "${attempt}" -le 60 ]; do
+                deployment_json=$(kubectl get deployment "${deployment}" -n "${namespace}" -o json) || exit 1
+                if printf '%s' "${deployment_json}" | jq -e --arg runtime "${runtime}" '
+                  (.metadata.generation > 0) and
+                  (.status.observedGeneration >= .metadata.generation) and
+                  (.spec.replicas > 0) and
+                  (.status.updatedReplicas == .spec.replicas) and
+                  (.status.readyReplicas == .spec.replicas) and
+                  (.status.availableReplicas == .spec.replicas) and
+                  ((.status.unavailableReplicas // 0) == 0) and
+                  any(.spec.template.spec.volumes[]?; .name == "config" and .secret.secretName == $runtime)
+                ' >/dev/null; then
+                  break
+                fi
+                deployment_json=""
+                if [ "${attempt}" -eq 60 ]; then
+                  echo "Refusing legacy Dex ConfigMap cleanup: Secret-mounted Deployment did not become ready."
+                  exit 1
+                fi
+                sleep 2
+                attempt=$((attempt + 1))
+              done
+              deployment_json=""
+              if ! kubectl get secret "${runtime}" -n "${namespace}" -o json | jq -e '
+                .type == "Opaque" and
+                .metadata.labels["astronomer.io/runtime-writer"] == "dex-handler" and
+                .metadata.labels["astronomer.io/secret-purpose"] == "dex-runtime"
+              ' >/dev/null; then
+                echo "Refusing legacy Dex ConfigMap cleanup: runtime Secret ownership is invalid."
+                exit 1
+              fi
+              kubectl delete configmap "${legacy}" -n "${namespace}" --ignore-not-found=true
+              kubectl delete configmap "${retained}" -n "${namespace}" --ignore-not-found=true
+{{- end }}

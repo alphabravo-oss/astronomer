@@ -94,7 +94,11 @@
         "enabled": { "type": "boolean" },
         "replicaCount": { "type": "integer", "minimum": 1 },
         "issuerURL": { "type": "string" },
-        "runtimeSecretName": { "type": "string", "maxLength": 253 },
+        "runtimeSecretName": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)*$"
+        },
         "runtimeWriterServiceAccount": {
           "type": "object",
           "additionalProperties": false,
@@ -108,9 +112,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "phase": { "type": "string", "enum": ["fresh", "prepare", "cutover"] },
             "requirePreparedConfig": { "type": "boolean" }
           },
-          "required": ["requirePreparedConfig"]
+          "required": ["phase", "requirePreparedConfig"]
         },
         "image": { "$ref": "#/definitions/imageRef" },
         "resources": { "type": "object", "additionalProperties": true },

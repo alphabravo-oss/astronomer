@@ -490,11 +490,13 @@ dex:
     name: "astronomer-agent"
     namespace: "astronomer-system"
   migration:
-    # Upgrade safety gate. Leave true for upgrades: preflight refuses to switch
-    # the Deployment until config.yaml is already present in runtimeSecretName.
-    # Fresh installs with no prior Dex may explicitly set false and populate via
-    # the API before expecting Dex readiness.
-    requirePreparedConfig: true
+    # fresh: new install, Secret volume from the start.
+    # prepare: first legacy-upgrade release; preserve/retain the old ConfigMap
+    #          and keep the Deployment on it while the runtime Secret is filled.
+    # cutover: second release; require a prepared Secret, roll to it, then a
+    #          post-upgrade hook deletes the retained legacy ConfigMap.
+    phase: fresh
+    requirePreparedConfig: false
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1001

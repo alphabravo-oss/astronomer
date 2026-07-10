@@ -1,0 +1,97 @@
+{{- /*
+Credential-free prepare release for legacy ConfigMap-mounted Dex.
+
+The rendered hook ConfigMap is metadata-only. A pre-upgrade Job reads the old
+exact-name ConfigMap and patches its data Kubernetes-to-Kubernetes into this
+retained staging object through a 0600 temporary file. Neither legacy bytes nor
+runtime Secret bytes enter Helm values, desired manifests, logs, or release
+history. The main prepare Deployment mounts the staging object. The following
+cutover release verifies its marker plus the prepared runtime Secret, rolls to
+the Secret, then removes both legacy names from a post-upgrade hook.
+*/ -}}
+{{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "prepare") }}
+{{- $name := printf "%s-dex-legacy-prepare" (include "astronomer.fullname" .) -}}
+{{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
+{{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
+{{- $hooks := dict "helm.sh/hook" "pre-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $retained }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10" "helm.sh/resource-policy" "keep") $hooks) | nindent 4 }}
+    astronomer.io/dex-migration-phase: staging
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $legacy | quote }}]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $retained | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-10") $hooks) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "-5") $hooks) | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      containers:
+        - name: stage
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "registry" .Values.preflight.image.registry "fallback" (.Values.image.registry | default "ghcr.io/alphabravo-oss")) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              umask 077
+              patch_file=$(mktemp)
+              trap 'rm -f "${patch_file}"' EXIT
+              if ! kubectl get configmap {{ $legacy | quote }} -n {{ .Release.Namespace | quote }} -o json |
+                jq -e '{data: .data, metadata: {annotations: {"astronomer.io/dex-migration-phase": "prepared", "helm.sh/resource-policy": "keep"}}} |
+                if (.data["config.yaml"] | type == "string" and length > 0) then . else error("missing config") end' >"${patch_file}"; then
+                echo "Refusing Dex prepare release: legacy ConfigMap is missing or has no config.yaml data."
+                exit 1
+              fi
+              kubectl patch configmap {{ $retained | quote }} -n {{ .Release.Namespace | quote }} --type=merge --patch-file "${patch_file}" >/dev/null
+              rm -f "${patch_file}"
+              trap - EXIT
+              echo "Dex legacy configuration staged for the prepare release."
+{{- end }}

@@ -187,17 +187,78 @@ spec:
                 return 2
               }
 
-              {{- if and .Values.dex.enabled .Values.dex.migration.requirePreparedConfig }}
-              DEX_RUNTIME_SECRET={{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
-              if ! kube_read "prepared Dex runtime Secret ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o jsonpath='{.data.config\.yaml}'; then
-                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} is missing. Prepare it before volume cutover; see docs/dex-runtime-secret-migration.md."
+              {{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "fresh") }}
+              DEX_LEGACY_CONFIGMAP={{ printf "%s-dex-config" (include "astronomer.fullname" .) | quote }}
+              if kube_read "legacy Dex ConfigMap ${DEX_LEGACY_CONFIGMAP}" get configmap "${DEX_LEGACY_CONFIGMAP}" -n {{ .Release.Namespace | quote }} -o name; then
+                echo "Refusing direct Dex cutover: legacy ConfigMap detected. Run prepare, populate the runtime Secret, then run cutover."
+                exit 1
+              else
+                legacy_status=$?
+                if [ "${legacy_status}" -ne 1 ]; then
+                  echo "Refusing release: could not prove the legacy Dex ConfigMap is absent."
+                  exit 1
+                fi
+              fi
+              KUBE_READ_OUTPUT=""
+              {{- end }}
+              {{- if and .Values.dex.enabled (or .Values.dex.migration.requirePreparedConfig (eq .Values.dex.migration.phase "cutover")) }}
+              {{- if eq .Values.dex.migration.phase "cutover" }}
+              DEX_LEGACY_CONFIGMAP={{ printf "%s-dex-config-retained" (include "astronomer.fullname" .) | quote }}
+              if ! kube_read "prepared legacy Dex ConfigMap ${DEX_LEGACY_CONFIGMAP}" get configmap "${DEX_LEGACY_CONFIGMAP}" -n {{ .Release.Namespace | quote }} -o json; then
+                echo "Refusing Dex cutover: the prepare release and retained legacy ConfigMap are required first."
                 exit 1
               fi
-              if [ -z "${KUBE_READ_OUTPUT}" ]; then
-                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} has no config.yaml data. Populate it before volume cutover; see docs/dex-runtime-secret-migration.md."
+              if ! printf '%s' "${KUBE_READ_OUTPUT}" | jq -e '.metadata.annotations["astronomer.io/dex-migration-phase"] == "prepared"' >/dev/null; then
+                echo "Refusing Dex cutover: legacy ConfigMap lacks the durable prepare-phase marker."
                 exit 1
               fi
               KUBE_READ_OUTPUT=""
+              {{- end }}
+              DEX_RUNTIME_SECRET={{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
+              if ! kube_read "prepared Dex runtime Secret ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o json; then
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} is missing. Prepare it before volume cutover; see docs/dex-runtime-secret-migration.md."
+                exit 1
+              fi
+              dex_secret_json=${KUBE_READ_OUTPUT}
+              KUBE_READ_OUTPUT=""
+              if ! printf '%s' "${dex_secret_json}" | jq -e '
+                .type == "Opaque" and
+                .metadata.labels["astronomer.io/runtime-writer"] == "dex-handler" and
+                .metadata.labels["astronomer.io/secret-purpose"] == "dex-runtime" and
+                (.data["config.yaml"] | type == "string" and length > 0)
+              ' >/dev/null; then
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} lacks exact ownership labels, Opaque type, or config.yaml data."
+                exit 1
+              fi
+              dex_config_b64=$(printf '%s' "${dex_secret_json}" | jq -er '.data["config.yaml"]') || {
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} has an unreadable config.yaml field."
+                exit 1
+              }
+              dex_secret_json=""
+              # 1 MiB decoded ceiling plus base64 expansion. Check before and
+              # after decode so hostile input cannot create an unbounded file.
+              if [ "${#dex_config_b64}" -gt 1398104 ]; then
+                echo "Refusing release: Dex runtime config exceeds the 1 MiB preflight limit."
+                exit 1
+              fi
+              dex_config_file=$(mktemp)
+              if ! printf '%s' "${dex_config_b64}" | base64 -d >"${dex_config_file}" 2>/dev/null; then
+                rm -f "${dex_config_file}"
+                echo "Refusing release: Dex runtime config is not valid base64."
+                exit 1
+              fi
+              dex_config_b64=""
+              if [ "$(wc -c <"${dex_config_file}")" -gt 1048576 ]; then
+                rm -f "${dex_config_file}"
+                echo "Refusing release: decoded Dex runtime config exceeds the 1 MiB preflight limit."
+                exit 1
+              fi
+              if ! dexconfigcheck --max-bytes 1048576 <"${dex_config_file}"; then
+                rm -f "${dex_config_file}"
+                echo "Refusing release: Dex runtime config failed YAML and semantic validation."
+                exit 1
+              fi
+              rm -f "${dex_config_file}"
               {{- end }}
 
               if [ "{{ .Values.gateway.enabled }}" = "true" ]; then

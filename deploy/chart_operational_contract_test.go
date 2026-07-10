@@ -254,8 +254,9 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 			{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, resourceNames: []string{"nginx"}, verbs: []string{"get"}},
 		})
 		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
-			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn", "astronomer-dex-runtime"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn"}, verbs: []string{"get"}},
 			{apiGroups: []string{""}, resources: []string{"persistentvolumeclaims"}, resourceNames: []string{"data-astronomer-postgres-0"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config"}, verbs: []string{"get"}},
 		})
 	})
 
@@ -263,6 +264,17 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 		docs := parseRenderedDocs(t, helmTemplate(t, "gateway.enabled=false", "tls.source=none"))
 		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
 		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+	})
+
+	t.Run("Dex cutover exact Secret and legacy ConfigMap", func(t *testing.T) {
+		docs := parseRenderedDocs(t, helmTemplate(t,
+			"gateway.enabled=false", "tls.source=none", "dex.enabled=true",
+			"dex.migration.phase=cutover", "dex.runtimeSecretName=dex-runtime-contract"))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"dex-runtime-contract"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config-retained"}, verbs: []string{"get"}},
+		})
 	})
 }
 
@@ -354,7 +366,7 @@ func TestPreflightKubernetesReadsUseBoundedExplicitSemantics(t *testing.T) {
 func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 	prodSets := append([]string{}, productionWiringSets...)
-	prodSets = append(prodSets, "managementBackup.enabled=false")
+	prodSets = append(prodSets, "managementBackup.enabled=false", "dex.enabled=false", "config.auth.localPasswordOnly=true")
 
 	tests := []struct {
 		name        string
@@ -425,7 +437,7 @@ func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
 			sets:       prodSets,
 			mode:       "dsn-forbidden",
 			wantText:   "could not read postgres DSN secret/astronomer-postgres-dsn because the Kubernetes API read never became usable.",
-			wantCalls:  14,
+			wantCalls:  13,
 		},
 		{
 			name:        "DSN Secret success validates TLS without disclosure",
@@ -434,7 +446,7 @@ func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
 			mode:        "dsn-success",
 			wantSuccess: true,
 			wantText:    "Production Postgres DSN TLS check passed.",
-			wantCalls:   6,
+			wantCalls:   5,
 		},
 	}
 

@@ -11,6 +11,7 @@ QPS even on big installs because every successful sign-in caches a
 session JWT for hours.
 */ -}}
 {{- if .Values.dex.enabled }}
+{{- $legacyConfigName := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -83,11 +84,19 @@ spec:
             {{- toYaml .Values.dex.resources | nindent 12 }}
       volumes:
         - name: config
+          {{- if eq .Values.dex.migration.phase "prepare" }}
+          configMap:
+            name: {{ printf "%s-dex-config-retained" (include "astronomer.fullname" .) }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+          {{- else }}
           secret:
             secretName: {{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
             items:
               - key: config.yaml
                 path: config.yaml
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
