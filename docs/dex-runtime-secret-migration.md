@@ -110,10 +110,17 @@ rejected. Before upgrade, rotate any credential that appeared in Helm values and
 remove credential-bearing historical release Secrets according to the platform
 retention policy; rendering it unused does not erase Helm's stored values.
 
-`keyrotate` is deliberately not a logical connector mutation. It CAS-rewrites
-only encrypted JSONB values in `dex_connectors.config`; migration 137 removes
-the generic connector trigger so ciphertext maintenance neither advances
-`runtime_generation` nor disables a healthy SSO provider.
+`keyrotate` is deliberately not a logical connector mutation. Migration 137
+retains the compatibility trigger for direct connector CRUD from pre-137
+replicas; that legacy path takes the shared advisory lock, advances
+`runtime_generation`, preserves restoration provenance, and disables Dex SSO.
+New staged connector CRUD and ciphertext-only `keyrotate` CAS rewrites instead
+set a transaction-local, one-shot bypass before their connector DML. The
+trigger consumes and clears the bypass when a row changes. Staged no-row paths
+never arm it, failed statements roll it back, and a no-row `keyrotate` CAS ends
+its statement transaction, so the bypass cannot leak into a pooled connection.
+New logical CRUD therefore stages exactly once, while `keyrotate` changes
+neither the generation nor a healthy SSO provider's enabled state.
 
 ## Fresh install
 
