@@ -20,6 +20,7 @@
 # Env vars:
 #   CLUSTER       k3d cluster name                           (default: astronomer-mgmt)
 #   IMG_TAG       Image tag to build / deploy                (default: dev)
+#   IMG_REGISTRY  First-party image registry                 (default: ghcr.io/alphabravo-oss)
 #   NAMESPACE     Astronomer release namespace               (default: astronomer)
 #   HOST          External hostname for the dashboard        (default: astronomer.localtest.me)
 #   HTTP_PORT     Host port mapped to the gateway :80        (default: 8080)
@@ -33,6 +34,7 @@ set -euo pipefail
 
 CLUSTER="${CLUSTER:-astronomer-mgmt}"
 IMG_TAG="${IMG_TAG:-dev}"
+IMG_REGISTRY="${IMG_REGISTRY:-ghcr.io/alphabravo-oss}"
 NAMESPACE="${NAMESPACE:-astronomer}"
 HOST="${HOST:-astronomer.localtest.me}"
 HTTP_PORT="${HTTP_PORT:-8080}"
@@ -56,12 +58,13 @@ require kubectl
 require docker
 require helm
 
-IMG_SERVER="astronomer-go-server:${IMG_TAG}"
-IMG_AGENT="astronomer-go-agent:${IMG_TAG}"
-IMG_WORKER="astronomer-go-worker:${IMG_TAG}"
-IMG_MIGRATE="astronomer-go-migrate:${IMG_TAG}"
+IMG_SERVER="${IMG_REGISTRY}/astronomer-go-server:${IMG_TAG}"
+IMG_AGENT="${IMG_REGISTRY}/astronomer-go-agent:${IMG_TAG}"
+IMG_WORKER="${IMG_REGISTRY}/astronomer-go-worker:${IMG_TAG}"
+IMG_MIGRATE="${IMG_REGISTRY}/astronomer-go-migrate:${IMG_TAG}"
 # Frontend image name kept as astronomer-frontend to match deploy/chart/values.yaml.
-IMG_FRONTEND="astronomer-frontend:${IMG_TAG}"
+IMG_FRONTEND="${IMG_REGISTRY}/astronomer-frontend:${IMG_TAG}"
+IMG_SHELL="${IMG_REGISTRY}/astronomer-shell:${IMG_TAG}"
 
 # ── 1. Create cluster (if missing) ───────────────────────────────────────────
 step "Ensuring k3d cluster '${CLUSTER}' exists"
@@ -110,7 +113,7 @@ fi
 # ── 3. Build images ──────────────────────────────────────────────────────────
 if [[ "${SKIP_BUILD}" != "1" ]]; then
   step "Building Docker images (tag=${IMG_TAG})"
-  make IMG_TAG="${IMG_TAG}" docker-build-all
+  make IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all
 else
   info "SKIP_BUILD=1, skipping docker build"
 fi
@@ -118,30 +121,20 @@ fi
 # ── 4. Import images into k3d ────────────────────────────────────────────────
 step "Importing images into k3d cluster"
 k3d image import \
-  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" \
+  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" "${IMG_SHELL}" \
   -c "${CLUSTER}"
-
-# Sprint 074 — preload the kubectl image used by the kubectl-shell debug
-# pods + preflight checks. k3d nodes have no egress by default on
-# air-gapped dev laptops, and pulling at debug-pod-start-time causes a
-# 60s ImagePullBackOff that masks every real cluster bug under
-# investigation. The pull is best-effort: if Docker Hub is unreachable
-# we warn and continue (the operator can `docker pull` + `k3d image
-# import` manually).
-KUBECTL_IMG="bitnami/kubectl:1.31.4"
-step "Preloading kubectl image (${KUBECTL_IMG}) into k3d for debug pods"
-if docker image inspect "${KUBECTL_IMG}" >/dev/null 2>&1 \
-  || docker pull "${KUBECTL_IMG}" >/dev/null 2>&1; then
-  k3d image import "${KUBECTL_IMG}" -c "${CLUSTER}" || warn "k3d image import of ${KUBECTL_IMG} failed; debug pods may ImagePullBackOff"
-else
-  warn "could not pull ${KUBECTL_IMG}; debug pods will hit ImagePullBackOff until you 'docker pull' + 'k3d image import' it manually"
-fi
 
 # ── 5. Deploy astronomer ─────────────────────────────────────────────────────
 step "Installing Helm chart into namespace '${NAMESPACE}'"
 helm upgrade --install astronomer deploy/chart \
   --namespace "${NAMESPACE}" --create-namespace \
   -f deploy/chart/values.yaml \
+  --set image.server.registry="${IMG_REGISTRY}" \
+  --set image.worker.registry="${IMG_REGISTRY}" \
+  --set image.agent.registry="${IMG_REGISTRY}" \
+  --set image.migrate.registry="${IMG_REGISTRY}" \
+  --set frontend.image.registry="${IMG_REGISTRY}" \
+  --set preflight.image.registry="${IMG_REGISTRY}" \
   --set image.server.tag="${IMG_TAG}" \
   --set image.worker.tag="${IMG_TAG}" \
   --set image.agent.tag="${IMG_TAG}" \

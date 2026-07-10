@@ -28,7 +28,8 @@ ENV NODE_ENV=production
 ARG VERSION=0.2.0-dev
 ENV NEXT_PUBLIC_APP_VERSION=$VERSION
 
-RUN npm run build
+RUN npm run build \
+  && grep -R -F -q -- "${VERSION}" .next/static
 
 # Production image, copy all the files and run next
 FROM base AS runner

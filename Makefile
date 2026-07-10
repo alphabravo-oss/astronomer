@@ -1,7 +1,7 @@
 .PHONY: help build test lint fmt vet run verify verify-enterprise sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check \
-        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-all \
+        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
-        k3d-load k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
+        k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
         validate-live-b6 validate-live-argocd validate-live-argocd-register-appset validate-live-argocd-auto-adoption validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
 
 # ── Variables ────────────────────────────────────────────────────────────────
@@ -157,10 +157,10 @@ k3d-load: ## Import a Docker image into the k3d cluster (IMG=<image:tag> CLUSTER
 	k3d image import $(IMG) -c $(CLUSTER)
 
 k3d-import-all: docker-build-all ## Build & import all images into k3d
-	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) -c $(CLUSTER)
+	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) $(IMG_SHELL) -c $(CLUSTER)
 
 k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLUSTER))
-	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) ./scripts/k3d-bootstrap.sh
+	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) IMG_REGISTRY=$(IMG_REGISTRY) ./scripts/k3d-bootstrap.sh
 
 validate-live-b6: ## Validate live cluster.k8s_changed SSE flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
 	./scripts/validate-live-b6.sh

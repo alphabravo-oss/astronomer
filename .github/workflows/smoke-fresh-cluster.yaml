@@ -76,8 +76,8 @@ jobs:
           ASTRO_URL: http://astronomer.localtest.me:8080
           ASTRO_USERNAME: admin
           ASTRO_PASSWORD: ${{ steps.creds.outputs.password }}
-          AGENT_IMAGE: astronomer-go-agent:ci
-          SHELL_IMAGE: astronomer-shell:ci
+          AGENT_IMAGE: ghcr.io/alphabravo-oss/astronomer-go-agent:ci
+          SHELL_IMAGE: ghcr.io/alphabravo-oss/astronomer-shell:ci
         run: |
           ./scripts/smoke-fresh-cluster.sh
 

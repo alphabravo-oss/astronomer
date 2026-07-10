@@ -2,7 +2,7 @@ name: release
 
 # FEATURES-051126 T12: signed images + SBOMs.
 #
-# Fires on tag push (e.g. `v0.2.0`). Builds the four chart-published
+# Fires on tag push (e.g. `v0.2.0`). Builds the six chart-published
 # first-party images, pushes them to GHCR, generates an SPDX SBOM per
 # image with syft, and signs both the image and the attestation with keyless
 # cosign (GitHub OIDC → Sigstore Fulcio).
@@ -62,6 +62,11 @@ jobs:
           fi
           echo "buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -79,6 +84,7 @@ jobs:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
           push: true
+          platforms: linux/amd64,linux/arm64
           # Stamp version info into the binaries (Dockerfiles default these to
           # 'dev'/'unknown'; without this the agent self-test compatibility
           # check warns that the version isn't parseable semver).
@@ -96,6 +102,27 @@ jobs:
           # We attach our own SBOM below; the build-push-action's
           # default SBOM would duplicate it.
           sbom: false
+
+      - name: Verify multi-platform manifest
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "${IMAGE_REF}" --raw > manifest.json
+          python3 - <<'PY'
+          import json
+          with open("manifest.json", encoding="utf-8") as handle:
+              manifest = json.load(handle)
+          actual = {
+              (item.get("platform") or {}).get("os", "") + "/" +
+              (item.get("platform") or {}).get("architecture", "")
+              for item in manifest.get("manifests", [])
+          }
+          required = {"linux/amd64", "linux/arm64"}
+          missing = required - actual
+          if missing:
+              raise SystemExit(f"multi-platform manifest missing: {sorted(missing)}; actual={sorted(actual)}")
+          PY
+          rm -f manifest.json
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
