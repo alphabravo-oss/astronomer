@@ -131,6 +131,10 @@ the generated values. Any intervening controller restart, Helm release change,
 workload convergence event, or credential/config input change aborts the write
 and the next reconcile rebuilds from fresh evidence. Initial takeover and
 bounded live upgrade use the same compare-before-write evidence contract.
+After final values are assembled, a closed collector inventories every audited
+Secret-name/ref and image pull Secret, verifies each object exists, applies
+retention protection where owned, and binds its post-protection UID/resourceVersion.
+Malformed or newly unclassified secret-bearing values fail before staging.
 Live adoption with concurrent Argo self-healing is not a supported or safe
 upgrade path.
 

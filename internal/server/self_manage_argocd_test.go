@@ -757,6 +757,198 @@ func TestSelfManagedBundledComponentIntentUsesChartDefaults(t *testing.T) {
 	}
 }
 
+func TestCollectSelfManagedSecretReferencesCoversAuditedContracts(t *testing.T) {
+	shape, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]any{
+		"image":                  map[string]any{"pullSecrets": []any{map[string]any{"name": "registry-auth"}}},
+		"secrets":                map[string]any{"existingSecret": "core-secret"},
+		"bootstrap":              map[string]any{"existingSecret": "bootstrap-secret"},
+		"postgres":               map[string]any{"passwordSecretRef": map[string]any{"name": "pg-password", "key": "password"}, "external": map[string]any{"dsnSecretRef": map[string]any{"name": "pg-dsn", "key": "dsn"}}},
+		"redis":                  map[string]any{"external": map[string]any{"urlSecretRef": map[string]any{"name": "redis-url", "key": "url"}, "passwordSecretRef": map[string]any{"name": "redis-password", "key": "password"}}},
+		"dex":                    map[string]any{"clientSecretRef": map[string]any{"name": "dex-client", "key": "clientSecret"}},
+		"tls":                    map[string]any{"secretName": "tls-listener", "additionalTrustedCAs": map[string]any{"existingSecret": "additional-ca"}},
+		"managementBackup":       map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}},
+		"managementRestoreDrill": map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}},
+		"managementLogging":      map[string]any{"auth": map[string]any{"bearerSecretRef": map[string]any{"name": "logging-bearer", "key": "token"}}, "splunk": map[string]any{"hecTokenSecretRef": map[string]any{"name": "logging-hec", "key": "hec_token"}}},
+	}
+	got, err := collectSelfManagedSecretReferences(values, shape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"additional-ca", "backup-bundle", "backup-s3", "backup-wrap", "bootstrap-secret", "core-secret", "dex-client", "logging-bearer", "logging-hec", "pg-dsn", "pg-password", "redis-password", "redis-url", "registry-auth", "restore-wrap", "tls-listener"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Secret inventory = %#v, want %#v", got, want)
+	}
+	for name, malformed := range map[string]map[string]any{
+		"scalar ref":            {"postgres": map[string]any{"passwordSecretRef": "secret"}},
+		"non-string name":       {"tls": map[string]any{"secretName": 42}},
+		"ambiguous pull secret": {"image": map[string]any{"pullSecrets": []any{map[string]any{"name": "registry", "extra": true}}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := collectSelfManagedSecretReferences(malformed, shape); err == nil {
+				t.Fatal("malformed secret-shaped value was accepted")
+			}
+		})
+	}
+	allowedNonReferenceKeys := map[string]struct{}{
+		"clientsecret": {}, "secretkeykey": {}, "secretkey": {}, "githubclientsecret": {}, "googleclientsecret": {}, "oidcclientsecret": {}, "existingsecretkey": {},
+	}
+	var auditShape func(map[string]any, string)
+	auditShape = func(node map[string]any, path string) {
+		for key, value := range node {
+			child := key
+			if path != "" {
+				child = path + "." + key
+			}
+			lower := strings.ToLower(key)
+			if strings.Contains(lower, "secret") {
+				_, explicitlyNonReference := allowedNonReferenceKeys[lower]
+				recognizedReference := lower == "pullsecrets" || lower == "imagepullsecrets" || lower == "existingsecret" || lower == "secretname" || strings.HasSuffix(lower, "secretname") || strings.HasSuffix(lower, "secretref")
+				// The pinned Argo dependency also has inline Secret payload/config
+				// containers. Reference-only validation rejects non-empty secret data;
+				// these are deliberately not interpreted as names.
+				explicitlyNonReference = explicitlyNonReference || lower == "secrets" || lower == "secret" || lower == "redissecretinit" || strings.HasSuffix(lower, "secret") || (strings.Contains(lower, "secret") && strings.HasSuffix(lower, "annotations"))
+				if !explicitlyNonReference && !recognizedReference {
+					t.Errorf("audited values shape gained an unclassified secret-bearing contract at %s", child)
+				}
+			}
+			if nested, ok := value.(map[string]any); ok {
+				auditShape(nested, child)
+			}
+		}
+	}
+	auditShape(shape, "")
+}
+
+func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t *testing.T) {
+	client, _, initial := selfManagedInitialSnapshotTestBuild(t)
+	canonical := initial.ValuesYAML
+	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	server.Spec.Template.Spec.Containers[0].Env = append(server.Spec.Template.Spec.Containers[0].Env,
+		corev1.EnvVar{Name: "SECRET_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "drifted-core"}, Key: "different"}}})
+	server.ResourceVersion = "live-drift"
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Create(context.Background(), selfManagedDexDeploymentFixture(false), metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	client.ClearActions()
+	client.Fake.PrependReactor("get", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("same-revision build attempted live discovery")
+	})
+	same, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "drifted/agent", AgentImageTag: "drift"}, client, "https://different.example", selfManagedValuesSource{ValuesYAML: canonical})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same.ValuesYAML != canonical || same.AdoptionSnapshot != nil {
+		t.Fatalf("same-revision values changed or carried evidence: build=%#v", same)
+	}
+	if len(client.Actions()) != 0 {
+		t.Fatalf("same-revision build performed Kubernetes discovery: %#v", client.Actions())
+	}
+	application := activeSelfManagedApplicationForRevision(t, "0.2.1", "https://kubernetes.default.svc")
+	_ = unstructured.SetNestedField(application.Object, canonical, "spec", "source", "helm", "values")
+	spec, _, _ := unstructured.NestedMap(application.Object, "spec")
+	hash, _ := selfManagedSpecHash(spec)
+	application.SetAnnotations(map[string]string{selfManagedPhaseAnnotation: selfManagedPhaseActive, selfManagedHashAnnotation: hash})
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), application)
+	if err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, same.ValuesYAML, same.AdoptionSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	assertSelfManagedApplicationWriteCount(t, dyn, 0)
+}
+
+func TestCollectedSecretEvidenceBlocksInitialAndBoundedWrites(t *testing.T) {
+	for _, mode := range []string{"initial", "bounded"} {
+		_, _, _, names := selfManagedSecretEvidenceTestBuild(t, mode == "bounded")
+		for _, name := range names {
+			for _, mutation := range []string{"mutate", "delete", "replace"} {
+				t.Run(mode+"/"+name+"/"+mutation, func(t *testing.T) {
+					client, dyn, build, _ := selfManagedSecretEvidenceTestBuild(t, mode == "bounded")
+					ctx := context.Background()
+					secret, err := client.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					switch mutation {
+					case "mutate":
+						secret.ResourceVersion = "secret-mutated"
+						secret.Data["tls.crt"] = []byte("changed")
+						_, err = client.CoreV1().Secrets(localAstronomerNamespace).Update(ctx, secret, metav1.UpdateOptions{})
+					case "delete", "replace":
+						err = client.CoreV1().Secrets(localAstronomerNamespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+						if err == nil && mutation == "replace" {
+							secret.UID = "replacement-secret"
+							secret.ResourceVersion = "secret-replaced"
+							_, err = client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, secret, metav1.CreateOptions{})
+						}
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+				})
+			}
+		}
+	}
+}
+
+func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild, []string) {
+	t.Helper()
+	releaseValues := selfManagedBundledIntentReleaseValues()
+	extraNames := applyAllSelfManagedSecretReferenceValues(releaseValues)
+	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+	for _, name := range extraNames {
+		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: localAstronomerNamespace, UID: types.UID("input-" + name), ResourceVersion: "input-1"}, Data: map[string][]byte{"value": []byte("reference")}})
+	}
+	client := fake.NewSimpleClientset(objects...)
+	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	server.Spec.Template.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-auth"}}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	var build selfManagedValuesBuild
+	var err error
+	if bounded {
+		dyn = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), activeSelfManagedApplicationForRevision(t, "0.2.0", "https://kubernetes.default.svc"))
+		build, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: string(yamlOrPanic(releaseValues)), AdoptLiveUpgrade: true})
+	} else {
+		build, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalValues := unmarshalSelfManagedValues(t, build.ValuesYAML)
+	shape, _ := chartdeploy.AstronomerDefaultValuesShape()
+	names, err := collectSelfManagedSecretReferences(finalValues, shape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client, dyn, build, names
+}
+
+func applyAllSelfManagedSecretReferenceValues(values map[string]any) []string {
+	values["image"].(map[string]any)["pullSecrets"] = []any{map[string]any{"name": "registry-auth"}}
+	values["postgres"].(map[string]any)["passwordSecretRef"] = map[string]any{"name": "pg-password", "key": "password"}
+	values["redis"].(map[string]any)["external"].(map[string]any)["passwordSecretRef"] = map[string]any{"name": "redis-password", "key": "password"}
+	values["dex"].(map[string]any)["clientSecretRef"] = map[string]any{"name": "dex-client", "key": "clientSecret"}
+	values["tls"] = map[string]any{"source": "secret", "secretName": "tls-listener", "additionalTrustedCAs": map[string]any{"enabled": true, "existingSecret": "additional-ca"}}
+	values["managementBackup"] = map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}}
+	values["managementRestoreDrill"] = map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}}
+	values["managementLogging"] = map[string]any{"auth": map[string]any{"bearerSecretRef": map[string]any{"name": "logging-bearer", "key": "token"}}, "splunk": map[string]any{"hecTokenSecretRef": map[string]any{"name": "logging-hec", "key": "hec_token"}}}
+	return []string{"registry-auth", "pg-password", "redis-password", "dex-client", "tls-listener", "additional-ca", "backup-s3", "backup-bundle", "backup-wrap", "restore-wrap", "logging-bearer", "logging-hec"}
+}
+
 func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
 	t.Run("initial carries runtime evidence and same revision does not", func(t *testing.T) {
 		client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)

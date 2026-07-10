@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -77,6 +78,13 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0].ValuesYAML) == ""
 	liveUpgradeAdoption := !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade
 	adoptRuntime := initialTakeover || liveUpgradeAdoption
+	if !adoptRuntime {
+		canonical := referenceOnlySource[0].ValuesYAML
+		if err := validateReferenceOnlySelfManagedHelmValues(canonical); err != nil {
+			return "", fmt.Errorf("current self-managed Application values are not canonical reference-only values: %w", err)
+		}
+		return canonical, nil
+	}
 	if adoptRuntime {
 		if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
 			if liveUpgradeAdoption {
@@ -310,66 +318,6 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 			runtimeOverlay["redis"] = redisRuntime
 		}
 	}
-	protectedSecrets := []string{coreSecretName, bootstrapRef.Name, databaseRef.Name}
-	if !redisBundled {
-		if external, ok := redisValues["external"].(map[string]any); ok {
-			protectedSecrets = append(protectedSecrets, referencedSecretNames(external)...)
-		}
-	}
-	protectedSecrets = append(protectedSecrets, referencedSecretNames(dexValues)...)
-	seenProtected := map[string]struct{}{}
-	for _, name := range protectedSecrets {
-		if name == "" {
-			continue
-		}
-		if _, seen := seenProtected[name]; seen {
-			continue
-		}
-		seenProtected[name] = struct{}{}
-		if err := protectSelfManagedSecret(ctx, k8s, name); err != nil {
-			return "", fmt.Errorf("protect referenced Secret %s from Argo prune: %w", name, err)
-		}
-	}
-	if adoptRuntime && snapshotOut != nil {
-		if deployedRelease == nil {
-			return "", fmt.Errorf("runtime adoption has no selected Helm release evidence")
-		}
-		objects := []selfManagedObjectEvidence{
-			selfManagedWorkloadEvidence("deployments", serverDeployment.Name, true, serverDeployment),
-			selfManagedWorkloadEvidence("deployments", workerDeployment.Name, true, workerDeployment),
-			selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-postgres", postgresStatefulSet != nil, postgresStatefulSet),
-			selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-redis", redisStatefulSet != nil, redisStatefulSet),
-			selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-dex", dexDeployment != nil, dexDeployment),
-			selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-frontend", frontendDeployment != nil, frontendDeployment),
-		}
-		// Re-read every referenced Secret after protection because protection may
-		// update metadata. Secret contents are never copied into the snapshot or
-		// an error; UID/resourceVersion binds all credential discovery/fallback
-		// inputs to the Application write.
-		for name := range seenProtected {
-			secret, err := k8s.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
-			if err != nil {
-				return "", fmt.Errorf("refresh referenced Secret %s evidence: %w", name, err)
-			}
-			objects = append(objects, selfManagedWorkloadEvidence("secrets", name, true, secret))
-		}
-		if runtimeConfigMap != nil {
-			objects = append(objects, selfManagedWorkloadEvidence("configmaps", runtimeConfigMap.Name, true, runtimeConfigMap))
-		}
-		if dexConfigMap != nil {
-			objects = append(objects, selfManagedWorkloadEvidence("configmaps", dexConfigMap.Name, true, dexConfigMap))
-		}
-		*snapshotOut = &selfManagedAdoptionSnapshot{
-			RuntimeAdoption:          true,
-			BoundedAdoption:          liveUpgradeAdoption,
-			RequireControllerStopped: true,
-			ReleaseName:              deployedRelease.Name,
-			ReleaseUID:               deployedRelease.UID,
-			ReleaseResourceVersion:   deployedRelease.ResourceVersion,
-			ReleaseVersion:           deployedRelease.Version,
-			Objects:                  objects,
-		}
-	}
 	discovered := map[string]any{
 		"config": map[string]any{
 			"corsAllowedOrigins": serverURL,
@@ -402,6 +350,42 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 	if err := validateSelfManagedValuesShape(values, shape, ""); err != nil {
 		return "", fmt.Errorf("generated self-managed values violate the audited chart vocabulary: %w", err)
 	}
+	secretNames, err := collectSelfManagedSecretReferences(values, shape)
+	if err != nil {
+		return "", err
+	}
+	secretEvidence := make([]selfManagedObjectEvidence, 0, len(secretNames))
+	for _, name := range secretNames {
+		if err := protectSelfManagedSecret(ctx, k8s, name); err != nil {
+			return "", fmt.Errorf("protect referenced Secret %s from Argo prune: %w", name, err)
+		}
+		secret, err := k8s.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return "", fmt.Errorf("refresh referenced Secret %s evidence: %w", name, err)
+		}
+		secretEvidence = append(secretEvidence, selfManagedWorkloadEvidence("secrets", name, true, secret))
+	}
+	if snapshotOut != nil {
+		if deployedRelease == nil {
+			return "", fmt.Errorf("runtime adoption has no selected Helm release evidence")
+		}
+		objects := []selfManagedObjectEvidence{
+			selfManagedWorkloadEvidence("deployments", serverDeployment.Name, true, serverDeployment),
+			selfManagedWorkloadEvidence("deployments", workerDeployment.Name, true, workerDeployment),
+			selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-postgres", postgresStatefulSet != nil, postgresStatefulSet),
+			selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-redis", redisStatefulSet != nil, redisStatefulSet),
+			selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-dex", dexDeployment != nil, dexDeployment),
+			selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-frontend", frontendDeployment != nil, frontendDeployment),
+		}
+		objects = append(objects, secretEvidence...)
+		if runtimeConfigMap != nil {
+			objects = append(objects, selfManagedWorkloadEvidence("configmaps", runtimeConfigMap.Name, true, runtimeConfigMap))
+		}
+		if dexConfigMap != nil {
+			objects = append(objects, selfManagedWorkloadEvidence("configmaps", dexConfigMap.Name, true, dexConfigMap))
+		}
+		*snapshotOut = &selfManagedAdoptionSnapshot{RuntimeAdoption: true, BoundedAdoption: liveUpgradeAdoption, RequireControllerStopped: true, ReleaseName: deployedRelease.Name, ReleaseUID: deployedRelease.UID, ReleaseResourceVersion: deployedRelease.ResourceVersion, ReleaseVersion: deployedRelease.Version, Objects: objects}
+	}
 	valuesYAML := string(yamlOrPanic(values))
 	if err := validateSelfManagedHelmValues(valuesYAML); err != nil {
 		return "", err
@@ -427,6 +411,86 @@ func selfManagedWorkloadEvidence(resource, name string, present bool, object met
 		evidence.ResourceVersion = object.GetResourceVersion()
 	}
 	return evidence
+}
+
+func collectSelfManagedSecretReferences(values, shape map[string]any) ([]string, error) {
+	names := map[string]struct{}{}
+	if err := collectSelfManagedSecretReferencesAt(values, shape, "", names); err != nil {
+		return nil, fmt.Errorf("collect final self-managed Secret references: %w", err)
+	}
+	result := make([]string, 0, len(names))
+	for name := range names {
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func collectSelfManagedSecretReferencesAt(values, shape map[string]any, path string, names map[string]struct{}) error {
+	for key, value := range values {
+		childPath := key
+		if path != "" {
+			childPath = path + "." + key
+		}
+		shapeValue, allowed := shape[key]
+		if !allowed {
+			return fmt.Errorf("%s is outside the audited values shape", childPath)
+		}
+		lowerKey := strings.ToLower(key)
+		if strings.HasSuffix(lowerKey, "secretref") {
+			ref, ok := value.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s must be a Secret reference object", childPath)
+			}
+			name, exists := ref["name"]
+			if !exists || name == nil || name == "" {
+				continue
+			}
+			nameString, ok := name.(string)
+			if !ok || strings.TrimSpace(nameString) == "" {
+				return fmt.Errorf("%s.name must be a non-empty string when set", childPath)
+			}
+			names[nameString] = struct{}{}
+			continue
+		}
+		if lowerKey == "existingsecret" || lowerKey == "secretname" || strings.HasSuffix(lowerKey, "secretname") {
+			name, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("%s must be a Secret name string", childPath)
+			}
+			if strings.TrimSpace(name) != "" {
+				names[name] = struct{}{}
+			}
+			continue
+		}
+		if lowerKey == "pullsecrets" || lowerKey == "imagepullsecrets" {
+			items, ok := value.([]any)
+			if !ok {
+				return fmt.Errorf("%s must be an array of name objects", childPath)
+			}
+			for i, item := range items {
+				entry, ok := item.(map[string]any)
+				name, nameOK := entry["name"].(string)
+				if !ok || !nameOK || strings.TrimSpace(name) == "" || len(entry) != 1 {
+					return fmt.Errorf("%s[%d] must contain exactly one non-empty name", childPath, i)
+				}
+				names[name] = struct{}{}
+			}
+			continue
+		}
+		nested, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		shapeMap, ok := shapeValue.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s has an ambiguous object shape", childPath)
+		}
+		if err := collectSelfManagedSecretReferencesAt(nested, shapeMap, childPath, names); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func effectiveSelfManagedChartBool(defaults, overrides map[string]any, path ...string) (bool, error) {
