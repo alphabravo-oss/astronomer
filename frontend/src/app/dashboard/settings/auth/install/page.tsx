@@ -10,15 +10,15 @@
  *      labels/annotations (`astronomer.io/dex-issuer-url`,
  *      `astronomer.io/external-url`) when present, and otherwise build one
  *      from the gateway hostname pattern.
- *   3. Review + click Install. We hand off to the existing tools-catalog
- *      install API for slug `dex`, then in the same step PUT the dex
- *      settings row so /apply has somewhere to write afterwards.
+ *   3. Review + save the bundled Dex settings. Dex is deployed only by the
+ *      Astronomer management Helm chart; this page never installs the
+ *      unrelated upstream chart through the remote tools catalog.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
-import { ArrowLeft, ArrowRight, Check, Loader2, Server, Wrench, Globe } from 'lucide-react';
-import { useClusters, useInstallTool, useTools } from '@/lib/hooks';
+import { ArrowLeft, ArrowRight, Check, Loader2, Server, Globe } from 'lucide-react';
+import { useClusters } from '@/lib/hooks';
 import { useUpdateDexSettings } from '@/components/auth/hooks';
 import { cn } from '@/lib/utils';
 import type { Cluster } from '@/types';
@@ -27,18 +27,15 @@ type Step = 1 | 2 | 3;
 
 export default function InstallDexPage() {
   const router = useRouter();
-  const { data: tools } = useTools();
   const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
   const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
 
-  const installMutation = useInstallTool();
   const settingsMutation = useUpdateDexSettings();
 
   const [step, setStep] = useState<Step>(1);
   const [clusterId, setClusterId] = useState<string>('');
   const [issuerUrl, setIssuerUrl] = useState<string>('');
 
-  const dexTool = useMemo(() => tools?.find((t) => t.slug === 'dex'), [tools]);
   const cluster = clusters.find((c) => c.id === clusterId);
 
   // Default cluster + issuer suggestion as soon as data lands.
@@ -60,18 +57,9 @@ export default function InstallDexPage() {
   const handleInstall = async () => {
     if (!cluster) return;
     try {
-      // 1. Trigger the tool install. Preset selection mirrors the cluster
-      //    environment heuristic the tools-tab page uses.
-      const preset = ['production', 'staging', 'development'].includes(cluster.environment)
-        ? cluster.environment
-        : 'development';
-      await installMutation.mutateAsync({
-        slug: 'dex',
-        cluster_id: cluster.id,
-        preset,
-      });
-      // 2. Persist the issuer + cluster_id so the rest of the auth UI can
-      //    drive /apply without an extra round-trip later.
+      // Persist the issuer + cluster identity for the in-band Dex Deployment
+      // rendered by the management chart. The backend rejects remote catalog
+      // installation for slug `dex` so these two deployment models cannot mix.
       await settingsMutation.mutateAsync({
         issuer_url: issuerUrl,
         cluster_id: cluster.id,
@@ -88,7 +76,7 @@ export default function InstallDexPage() {
     }
   };
 
-  const installing = installMutation.isPending || settingsMutation.isPending;
+  const installing = settingsMutation.isPending;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -100,8 +88,8 @@ export default function InstallDexPage() {
         </p>
         <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">Install Dex</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Dex installs as a regular cluster tool. We&apos;ll seed its issuer URL so apply works
-          end-to-end on the first try.
+          Dex is bundled with the Astronomer management chart. Enable <span className="font-mono">dex.enabled</span>
+          in Helm first; this workflow only binds its issuer and runtime identity.
         </p>
       </div>
 
@@ -124,7 +112,7 @@ export default function InstallDexPage() {
           />
         )}
         {step === 3 && cluster && (
-          <ReviewStep cluster={cluster} issuerUrl={issuerUrl} dexAvailable={!!dexTool} />
+          <ReviewStep cluster={cluster} issuerUrl={issuerUrl} />
         )}
 
         {/* Footer */}
@@ -155,12 +143,12 @@ export default function InstallDexPage() {
             <button
               type="button"
               onClick={handleInstall}
-              disabled={installing || !dexTool}
+              disabled={installing}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
                 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {installing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Install Dex
+              Save bundled Dex settings
             </button>
           )}
         </div>
@@ -376,18 +364,16 @@ function IssuerStep({
 function ReviewStep({
   cluster,
   issuerUrl,
-  dexAvailable,
 }: {
   cluster: Cluster;
   issuerUrl: string;
-  dexAvailable: boolean;
 }) {
   return (
     <div className="space-y-4">
       <div>
         <p className="text-sm font-medium text-foreground">Review</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          We&apos;ll install Dex on the cluster and seed the singleton settings row.
+          We&apos;ll bind the chart-managed Dex Deployment to its singleton settings row.
         </p>
       </div>
       <dl className="rounded-lg border border-border divide-y divide-border">
@@ -398,15 +384,6 @@ function ReviewStep({
         <ReviewRow label="Namespace" value="dex" mono />
         <ReviewRow label="Runtime Secret" value="astronomer-dex-runtime" mono />
       </dl>
-      {!dexAvailable && (
-        <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 flex items-start gap-2">
-          <Wrench className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-status-warning/90">
-            Dex isn&apos;t in the cluster tools catalog. Ask an admin to enable it before
-            installing.
-          </div>
-        </div>
-      )}
     </div>
   );
 }

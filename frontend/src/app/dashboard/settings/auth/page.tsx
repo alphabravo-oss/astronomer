@@ -4,16 +4,15 @@
  * /dashboard/settings/auth/ — overview page.
  *
  * Three concerns:
- *   1. Identity Broker card — shows whether the `dex` cluster tool is installed
- *      anywhere. We piggy-back on /tools and /clusters/{id}/tools/status; no
- *      new endpoint required. When Dex isn't found, we link to the install
- *      flow. When it is, we link to the settings page.
+ *   1. Identity Broker card — reflects the bundled Dex settings contract.
+ *      Deployment is owned by the management Helm chart, never the remote
+ *      cluster-tools catalog.
  *   2. Configured connectors table — DataTable over /auth/dex/connectors/.
  *      Row actions: edit, delete (with ConfirmDialog), apply.
  *   3. Register-as-SSO callout — only after at least one connector exists,
  *      because there's no point flipping the SSO row on without an upstream.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import {
@@ -26,7 +25,6 @@ import {
   ArrowRight,
   KeyRound,
 } from 'lucide-react';
-import { useTools, useClusterToolsStatus, useClusters } from '@/lib/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ActionMenu } from '@/components/ui/action-menu';
@@ -49,10 +47,11 @@ export default function AuthOverviewPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<DexConnector | null>(null);
 
-  // Dex install detection: walk every cluster's tool status, looking for the
-  // `dex` slug. We don't need a new endpoint — this matches how the cluster
-  // tools page itself decides what to render.
-  const dexInstall = useDexInstallStatus();
+  const dexInstall = {
+    installed: Boolean(settings?.configured),
+    clusterName: undefined,
+    loading: false,
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -267,47 +266,6 @@ export default function AuthOverviewPage() {
   );
 }
 
-// ============================================================
-// Dex install detection
-// ============================================================
-
-interface DexInstallStatus {
-  installed: boolean;
-  clusterName?: string;
-  loading: boolean;
-}
-
-function useDexInstallStatus(): DexInstallStatus {
-  const { data: tools } = useTools();
-  const { data: clustersData, isLoading: clustersLoading } = useClusters({ pageSize: 100 });
-  const clusters = clustersData?.data ?? [];
-
-  // Look for the dex tool slug — early-return when the registry doesn't even
-  // have it (so the card can advertise "Dex isn't packaged" instead of
-  // misleading the operator).
-  const dexTool = useMemo(() => tools?.find((t) => t.slug === 'dex'), [tools]);
-
-  // We can only inspect cluster status one cluster at a time. Use the first
-  // cluster as the "primary" — for management-cluster setups this is normally
-  // the only one. The `useClusterToolsStatus` hook short-circuits when the
-  // id is empty, so this is cheap when there are no clusters yet.
-  const primary = clusters[0];
-  const { data: statuses, isLoading: statusLoading } = useClusterToolsStatus(primary?.id ?? '');
-
-  const installed = useMemo(() => {
-    if (!statuses) return false;
-    return statuses.some(
-      (s) => s.slug === 'dex' && (s.status === 'installed' || s.status === 'installed_unmanaged'),
-    );
-  }, [statuses]);
-
-  return {
-    installed: !!dexTool && installed,
-    clusterName: primary?.displayName || primary?.name,
-    loading: clustersLoading || statusLoading,
-  };
-}
-
 function DexInstallCard({
   installed,
   clusterName,
@@ -331,14 +289,14 @@ function DexInstallCard({
               <p className="text-sm font-semibold text-foreground">Dex</p>
               <StatusBadge
                 status={installed ? 'active' : loading ? 'connecting' : 'disconnected'}
-                label={installed ? 'Installed' : loading ? 'Checking…' : 'Not installed'}
+                label={installed ? 'Configured' : loading ? 'Checking…' : 'Not configured'}
                 size="sm"
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {installed
-                ? `Running on ${clusterName ?? 'the management cluster'}.`
-                : 'Dex brokers messy upstream IdPs into a single OIDC issuer Astronomer can register.'}
+                ? `Bundled runtime configured${clusterName ? ` on ${clusterName}` : ''}.`
+                : 'Enable bundled Dex in the management Helm chart, then bind its settings here.'}
             </p>
             {issuerUrl && (
               <p className="text-2xs font-mono text-muted-foreground mt-1.5 truncate">
@@ -362,7 +320,7 @@ function DexInstallCard({
               className="inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-primary text-primary-foreground
                 text-xs font-medium hover:opacity-90 transition-opacity"
             >
-              Install Dex
+              Configure bundled Dex
             </Link>
           )}
         </div>
