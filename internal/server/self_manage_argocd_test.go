@@ -794,8 +794,9 @@ func TestCollectSelfManagedSecretReferencesCoversAuditedContracts(t *testing.T) 
 		})
 	}
 	allowedNonReferenceKeys := map[string]struct{}{
-		"clientsecret": {}, "secretkeykey": {}, "secretkey": {}, "githubclientsecret": {}, "googleclientsecret": {}, "oidcclientsecret": {}, "existingsecretkey": {},
+		"secrets": {}, "clientsecret": {}, "secretkeykey": {}, "secretkey": {}, "githubclientsecret": {}, "googleclientsecret": {}, "oidcclientsecret": {}, "existingsecretkey": {},
 	}
+	actualArgoPaths := map[string]string{}
 	var auditShape func(map[string]any, string)
 	auditShape = func(node map[string]any, path string) {
 		for key, value := range node {
@@ -805,14 +806,18 @@ func TestCollectSelfManagedSecretReferencesCoversAuditedContracts(t *testing.T) 
 			}
 			lower := strings.ToLower(key)
 			if strings.Contains(lower, "secret") {
-				_, explicitlyNonReference := allowedNonReferenceKeys[lower]
-				recognizedReference := lower == "pullsecrets" || lower == "imagepullsecrets" || lower == "existingsecret" || lower == "secretname" || strings.HasSuffix(lower, "secretname") || strings.HasSuffix(lower, "secretref")
-				// The pinned Argo dependency also has inline Secret payload/config
-				// containers. Reference-only validation rejects non-empty secret data;
-				// these are deliberately not interpreted as names.
-				explicitlyNonReference = explicitlyNonReference || lower == "secrets" || lower == "secret" || lower == "redissecretinit" || strings.HasSuffix(lower, "secret") || (strings.Contains(lower, "secret") && strings.HasSuffix(lower, "annotations"))
-				if !explicitlyNonReference && !recognizedReference {
-					t.Errorf("audited values shape gained an unclassified secret-bearing contract at %s", child)
+				if strings.HasPrefix(child, "argo-cd.") {
+					class := auditedEmbeddedArgoSecretPathClass(child)
+					if class == "" {
+						t.Errorf("vendored Argo secret-shaped path is unclassified: %s", child)
+					}
+					actualArgoPaths[child] = class
+				} else {
+					_, explicitlyNonReference := allowedNonReferenceKeys[lower]
+					recognizedReference := lower == "pullsecrets" || lower == "imagepullsecrets" || lower == "existingsecret" || lower == "secretname" || strings.HasSuffix(lower, "secretname") || strings.HasSuffix(lower, "secretref")
+					if !explicitlyNonReference && !recognizedReference {
+						t.Errorf("audited values shape gained an unclassified secret-bearing contract at %s", child)
+					}
 				}
 			}
 			if nested, ok := value.(map[string]any); ok {
@@ -821,6 +826,104 @@ func TestCollectSelfManagedSecretReferencesCoversAuditedContracts(t *testing.T) 
 		}
 	}
 	auditShape(shape, "")
+	if want := auditedEmbeddedArgoSecretBearingPathClasses(); !reflect.DeepEqual(actualArgoPaths, want) {
+		t.Fatalf("vendored Argo secret-shaped values changed:\n got: %#v\nwant: %#v", actualArgoPaths, want)
+	}
+	for path, class := range auditedEmbeddedArgoContextualPathClasses() {
+		segments := strings.Split(path, ".")
+		if _, found, err := unstructured.NestedFieldNoCopy(shape, segments...); err != nil || !found {
+			t.Errorf("pinned Argo values shape lost audited %s path %s: found=%v err=%v", class, path, found, err)
+		}
+		if got := auditedEmbeddedArgoSecretPathClass(path); got != class {
+			t.Errorf("embedded Argo path %s class = %q, want %q", path, got, class)
+		}
+	}
+	for _, container := range []string{
+		"argo-cd.configs.secret", "argo-cd.configs.secret.azureDevops",
+		"argo-cd.notifications.secret", "argo-cd.dex.certificateSecret",
+		"argo-cd.server.certificateSecret", "argo-cd.repoServer.certificateSecret",
+	} {
+		segments := strings.Split(container, ".")
+		raw, _, _ := unstructured.NestedMap(shape, segments...)
+		for key := range raw {
+			child := container + "." + key
+			if auditedEmbeddedArgoSecretPathClass(child) == "" {
+				t.Errorf("vendored Argo secret container gained an unclassified child at %s", child)
+			}
+		}
+	}
+}
+
+func auditedEmbeddedArgoSecretPathClass(path string) string {
+	if class := auditedEmbeddedArgoSecretBearingPathClasses()[path]; class != "" {
+		return class
+	}
+	return auditedEmbeddedArgoContextualPathClasses()[path]
+}
+
+func auditedEmbeddedArgoSecretBearingPathClasses() map[string]string {
+	return map[string]string{
+		"argo-cd.global.imagePullSecrets":                      "external-reference",
+		"argo-cd.controller.imagePullSecrets":                  "external-reference",
+		"argo-cd.dex.imagePullSecrets":                         "external-reference",
+		"argo-cd.dex.certificateSecret":                        "safe-metadata",
+		"argo-cd.server.imagePullSecrets":                      "external-reference",
+		"argo-cd.server.certificate.secretTemplateAnnotations": "safe-metadata",
+		"argo-cd.server.certificateSecret":                     "safe-metadata",
+		"argo-cd.repoServer.imagePullSecrets":                  "external-reference",
+		"argo-cd.repoServer.certificateSecret":                 "safe-metadata",
+		"argo-cd.applicationSet.imagePullSecrets":              "external-reference",
+		"argo-cd.redis.imagePullSecrets":                       "external-reference",
+		"argo-cd.redis-ha.existingSecret":                      "external-reference",
+		"argo-cd.externalRedis.existingSecret":                 "external-reference",
+		"argo-cd.externalRedis.secretAnnotations":              "safe-metadata",
+		"argo-cd.redisSecretInit":                              "safe-metadata",
+		"argo-cd.redisSecretInit.imagePullSecrets":             "external-reference",
+		"argo-cd.configs.secret":                               "safe-metadata",
+		"argo-cd.configs.secret.createSecret":                  "safe-metadata",
+		"argo-cd.configs.secret.githubSecret":                  "forbidden-inline",
+		"argo-cd.configs.secret.gitlabSecret":                  "forbidden-inline",
+		"argo-cd.configs.secret.bitbucketServerSecret":         "forbidden-inline",
+		"argo-cd.configs.secret.gogsSecret":                    "forbidden-inline",
+		"argo-cd.notifications.secret":                         "safe-metadata",
+		"argo-cd.notifications.imagePullSecrets":               "external-reference",
+	}
+}
+
+func auditedEmbeddedArgoContextualPathClasses() map[string]string {
+	result := map[string]string{
+		"argo-cd.configs.clusterCredentials":                    "forbidden-inline",
+		"argo-cd.configs.credentialTemplates":                   "forbidden-inline",
+		"argo-cd.configs.repositories":                          "forbidden-inline",
+		"argo-cd.configs.secret.labels":                         "safe-metadata",
+		"argo-cd.configs.secret.annotations":                    "safe-metadata",
+		"argo-cd.configs.secret.bitbucketUUID":                  "forbidden-inline",
+		"argo-cd.configs.secret.azureDevops":                    "safe-metadata",
+		"argo-cd.configs.secret.azureDevops.username":           "forbidden-inline",
+		"argo-cd.configs.secret.azureDevops.password":           "forbidden-inline",
+		"argo-cd.configs.secret.extra":                          "forbidden-inline",
+		"argo-cd.configs.secret.argocdServerAdminPassword":      "forbidden-inline",
+		"argo-cd.configs.secret.argocdServerAdminPasswordMtime": "safe-metadata",
+		"argo-cd.notifications.secret.create":                   "safe-metadata",
+		"argo-cd.notifications.secret.name":                     "external-reference",
+		"argo-cd.notifications.secret.annotations":              "safe-metadata",
+		"argo-cd.notifications.secret.labels":                   "safe-metadata",
+		"argo-cd.notifications.secret.items":                    "forbidden-inline",
+		"argo-cd.externalRedis.username":                        "forbidden-inline",
+		"argo-cd.externalRedis.password":                        "forbidden-inline",
+	}
+	for _, component := range []string{"dex", "server", "repoServer"} {
+		prefix := "argo-cd." + component + ".certificateSecret."
+		result[prefix+"enabled"] = "safe-metadata"
+		result[prefix+"labels"] = "safe-metadata"
+		result[prefix+"annotations"] = "safe-metadata"
+		result[prefix+"key"] = "forbidden-inline"
+		result[prefix+"crt"] = "forbidden-inline"
+		if component != "server" {
+			result[prefix+"ca"] = "forbidden-inline"
+		}
+	}
+	return result
 }
 
 func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t *testing.T) {
@@ -860,6 +963,60 @@ func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t
 		t.Fatal(err)
 	}
 	assertSelfManagedApplicationWriteCount(t, dyn, 0)
+}
+
+func TestEmbeddedArgoInlineSecretsFailBeforeApplicationWrite(t *testing.T) {
+	unsafe := map[string]map[string]any{
+		"github webhook":     {"argo-cd": map[string]any{"configs": map[string]any{"secret": map[string]any{"githubSecret": "plaintext"}}}},
+		"admin password":     {"argo-cd": map[string]any{"configs": map[string]any{"secret": map[string]any{"argocdServerAdminPassword": "$2a$10$hash"}}}},
+		"cluster credential": {"argo-cd": map[string]any{"configs": map[string]any{"clusterCredentials": map[string]any{"production": map[string]any{"server": "https://cluster.example", "config": map[string]any{"generic": "credential"}}}}}},
+		"repository secret":  {"argo-cd": map[string]any{"configs": map[string]any{"repositories": map[string]any{"private": map[string]any{"url": "https://git.example/repo"}}}}},
+		"redis username":     {"argo-cd": map[string]any{"externalRedis": map[string]any{"username": "credential-user"}}},
+		"certificate key":    {"argo-cd": map[string]any{"server": map[string]any{"certificateSecret": map[string]any{"enabled": true, "key": "private-key"}}}},
+		"notification item":  {"argo-cd": map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": true, "items": map[string]any{"slack-token": "plaintext"}}}}},
+	}
+	for name, values := range unsafe {
+		t.Run(name+"/application-write", func(t *testing.T) {
+			raw := string(yamlOrPanic(values))
+			dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+			err := ensureSelfManagedAstronomerApplication(context.Background(), fake.NewSimpleClientset(), dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, raw)
+			if err == nil || !strings.Contains(err.Error(), "inline") {
+				t.Fatalf("unsafe Application error = %v", err)
+			}
+			assertSelfManagedApplicationWriteCount(t, dyn, 0)
+		})
+		for _, mode := range []string{"same", "initial", "bounded"} {
+			t.Run(name+"/"+mode, func(t *testing.T) {
+				raw := string(yamlOrPanic(values))
+				if mode == "same" {
+					if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{}, fake.NewSimpleClientset(), "https://ignored.example", selfManagedValuesSource{ValuesYAML: raw}); err == nil || !strings.Contains(err.Error(), "inline") {
+						t.Fatalf("same-revision unsafe error = %v", err)
+					}
+					return
+				}
+				releaseValues := selfManagedBundledIntentReleaseValues()
+				deepMergeSelfManagedValues(releaseValues, values)
+				objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+				client := fake.NewSimpleClientset(objects...)
+				zero := int32(0)
+				_, _ = client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{})
+				var err error
+				if mode == "initial" {
+					_, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+				} else {
+					markServerDeploymentRolloutCompleteForTest(t, client)
+					_, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: string(yamlOrPanic(releaseValues)), AdoptLiveUpgrade: true})
+				}
+				if err == nil {
+					t.Fatalf("%s unsafe error = %v", mode, err)
+				}
+			})
+		}
+	}
+	safe := map[string]any{"argo-cd": map[string]any{"configs": map[string]any{"secret": map[string]any{"createSecret": false, "labels": map[string]any{}, "annotations": map[string]any{}, "argocdServerAdminPasswordMtime": "2026-01-01T00:00:00Z"}}, "notifications": map[string]any{"secret": map[string]any{"create": false, "name": "argocd-notifications-secret", "labels": map[string]any{}, "annotations": map[string]any{}}}}}
+	if err := validateReferenceOnlySelfManagedHelmValues(string(yamlOrPanic(safe))); err != nil {
+		t.Fatalf("safe embedded Argo metadata rejected: %v", err)
+	}
 }
 
 func TestCollectedSecretEvidenceBlocksInitialAndBoundedWrites(t *testing.T) {
@@ -934,6 +1091,15 @@ func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool) (*fake.Clien
 	if err != nil {
 		t.Fatal(err)
 	}
+	collected := map[string]struct{}{}
+	for _, name := range names {
+		collected[name] = struct{}{}
+	}
+	for _, name := range extraNames {
+		if _, ok := collected[name]; !ok {
+			t.Fatalf("expected Secret reference %q was not collected; got %#v", name, names)
+		}
+	}
 	return client, dyn, build, names
 }
 
@@ -946,7 +1112,14 @@ func applyAllSelfManagedSecretReferenceValues(values map[string]any) []string {
 	values["managementBackup"] = map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}}
 	values["managementRestoreDrill"] = map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}}
 	values["managementLogging"] = map[string]any{"auth": map[string]any{"bearerSecretRef": map[string]any{"name": "logging-bearer", "key": "token"}}, "splunk": map[string]any{"hecTokenSecretRef": map[string]any{"name": "logging-hec", "key": "hec_token"}}}
-	return []string{"registry-auth", "pg-password", "redis-password", "dex-client", "tls-listener", "additional-ca", "backup-s3", "backup-bundle", "backup-wrap", "restore-wrap", "logging-bearer", "logging-hec"}
+	values["argo-cd"] = map[string]any{
+		"global":        map[string]any{"imagePullSecrets": []any{map[string]any{"name": "argo-global-pull"}}},
+		"redis-ha":      map[string]any{"existingSecret": "argo-redis-ha"},
+		"externalRedis": map[string]any{"existingSecret": "argo-external-redis"},
+		"configs":       map[string]any{"secret": map[string]any{"createSecret": false}},
+		"notifications": map[string]any{"secret": map[string]any{"create": false, "name": "argo-notifications"}},
+	}
+	return []string{"registry-auth", "pg-password", "redis-password", "dex-client", "tls-listener", "additional-ca", "backup-s3", "backup-bundle", "backup-wrap", "restore-wrap", "logging-bearer", "logging-hec", "argo-global-pull", "argo-redis-ha", "argo-external-redis", "argocd-secret", "argo-notifications"}
 }
 
 func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {

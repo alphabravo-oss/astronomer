@@ -795,7 +795,11 @@ func validateSelfManagedValueNode(node any, path string) error {
 			if path != "" {
 				childPath = path + "." + key
 			}
-			if _, sensitive := selfManagedSensitiveValueKeys[normalizedSensitiveKey(key)]; sensitive {
+			if classified, err := validateEmbeddedArgoSecretValue(childPath, child); classified {
+				if err != nil {
+					return err
+				}
+			} else if _, sensitive := selfManagedSensitiveValueKeys[normalizedSensitiveKey(key)]; sensitive {
 				return fmt.Errorf("secret material field %s is forbidden; use an existingSecret/SecretRef contract", childPath)
 			}
 			if err := validateSelfManagedValueNode(child, childPath); err != nil {
@@ -810,6 +814,45 @@ func validateSelfManagedValueNode(node any, path string) error {
 		}
 	}
 	return nil
+}
+
+func validateEmbeddedArgoSecretValue(path string, value any) (bool, error) {
+	if !strings.HasPrefix(path, "argo-cd.") {
+		return false, nil
+	}
+	// These two objects are audited control/metadata containers. Their inline
+	// material children are classified below; notifications.secret.name is an
+	// external reference only when create=false and is collected separately.
+	if path == "argo-cd.configs.secret" || path == "argo-cd.notifications.secret" {
+		return true, nil
+	}
+	for _, forbidden := range []string{
+		"argo-cd.configs.clusterCredentials", "argo-cd.configs.credentialTemplates",
+		"argo-cd.configs.repositories",
+		"argo-cd.configs.secret.githubSecret", "argo-cd.configs.secret.gitlabSecret",
+		"argo-cd.configs.secret.bitbucketServerSecret", "argo-cd.configs.secret.gogsSecret",
+		"argo-cd.configs.secret.bitbucketUUID",
+		"argo-cd.configs.secret.azureDevops.username", "argo-cd.configs.secret.azureDevops.password",
+		"argo-cd.configs.secret.extra", "argo-cd.configs.secret.argocdServerAdminPassword",
+		"argo-cd.notifications.secret.items", "argo-cd.externalRedis.username", "argo-cd.externalRedis.password",
+	} {
+		if path == forbidden || strings.HasPrefix(path, forbidden+".") {
+			if !isEmptySelfManagedValue(value) {
+				return true, fmt.Errorf("embedded Argo inline secret material %s is forbidden; use an external Secret contract", path)
+			}
+			return true, nil
+		}
+	}
+	if strings.Contains(path, ".certificateSecret.") {
+		last := path[strings.LastIndex(path, ".")+1:]
+		if last == "key" || last == "crt" || last == "ca" {
+			if !isEmptySelfManagedValue(value) {
+				return true, fmt.Errorf("embedded Argo inline certificate material %s is forbidden", path)
+			}
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func validateSelfManagedApplicationSource(obj map[string]any) error {

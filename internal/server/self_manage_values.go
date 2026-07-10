@@ -437,6 +437,34 @@ func collectSelfManagedSecretReferencesAt(values, shape map[string]any, path str
 			return fmt.Errorf("%s is outside the audited values shape", childPath)
 		}
 		lowerKey := strings.ToLower(key)
+		if childPath == "argo-cd.notifications.secret" || childPath == "argo-cd.configs.secret" {
+			secretConfig, ok := value.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s must be an audited Secret configuration object", childPath)
+			}
+			createKey := "create"
+			if childPath == "argo-cd.configs.secret" {
+				createKey = "createSecret"
+			}
+			create, found, err := unstructured.NestedBool(secretConfig, createKey)
+			if err != nil {
+				return fmt.Errorf("%s.%s must be boolean", childPath, createKey)
+			}
+			if !found {
+				shapeMap, _ := shapeValue.(map[string]any)
+				create, _, _ = unstructured.NestedBool(shapeMap, createKey)
+			}
+			if !create {
+				name := "argocd-secret"
+				if childPath == "argo-cd.notifications.secret" {
+					name, _ = secretConfig["name"].(string)
+					if strings.TrimSpace(name) == "" {
+						return fmt.Errorf("%s.name must be non-empty when create=false", childPath)
+					}
+				}
+				names[name] = struct{}{}
+			}
+		}
 		if strings.HasSuffix(lowerKey, "secretref") {
 			ref, ok := value.(map[string]any)
 			if !ok {
