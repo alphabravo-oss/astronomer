@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"sigs.k8s.io/yaml"
@@ -18,9 +20,16 @@ import (
 
 const Marker = redaction.Marker
 
+const (
+	maxDocumentDepth       = 12
+	maxStructuredStringLen = 1 << 20
+	maxGeneratorEntries    = 64
+	maxGeneratorScalarLen  = 512
+)
+
 var forbiddenSourceKeys = map[string]struct{}{
 	"values": {}, "valuesobject": {}, "parameters": {}, "fileparameters": {}, "valuefiles": {},
-	"plugin": {}, "env": {}, "envs": {}, "manifests": {}, "info": {}, "sources": {},
+	"plugin": {}, "env": {}, "envs": {}, "manifests": {}, "info": {},
 }
 
 var applicationSourceKeys = map[string]struct{}{
@@ -67,9 +76,13 @@ func SanitizeJSON(raw []byte) ([]byte, error) {
 type sanitizeContext struct {
 	parentKey string
 	kind      string
+	depth     int
 }
 
 func sanitizeArgoValue(value any, ctx sanitizeContext) any {
+	if ctx.depth > maxDocumentDepth {
+		return Marker
+	}
 	switch typed := value.(type) {
 	case map[string]any:
 		kind, _ := typed["kind"].(string)
@@ -83,7 +96,7 @@ func sanitizeArgoValue(value any, ctx sanitizeContext) any {
 				out[key] = redactShape(item)
 				continue
 			}
-			child := sanitizeContext{parentKey: normalized, kind: kind}
+			child := sanitizeContext{parentKey: normalized, kind: kind, depth: ctx.depth + 1}
 			if (normalized == "manifests" || normalized == "manifest") && !emptyJSONValue(item) {
 				out[key] = sanitizeManifestValue(item)
 				continue
@@ -98,14 +111,31 @@ func sanitizeArgoValue(value any, ctx sanitizeContext) any {
 	case []any:
 		out := make([]any, len(typed))
 		for i, item := range typed {
-			out[i] = sanitizeArgoValue(item, ctx)
+			out[i] = sanitizeArgoValue(item, sanitizeContext{parentKey: ctx.parentKey, kind: ctx.kind, depth: ctx.depth + 1})
 		}
 		return out
 	case string:
-		return sanitizeString(typed)
+		return sanitizeStringDocument(typed, ctx)
 	default:
 		return typed
 	}
+}
+
+func sanitizeStringDocument(value string, ctx sanitizeContext) string {
+	trimmed := strings.TrimSpace(value)
+	if len(value) <= maxStructuredStringLen && looksLikeJSONWrapper(trimmed) {
+		if decoded, err := decodeJSONDocument([]byte(trimmed)); err == nil {
+			if text, ok := decoded.(string); ok && !looksLikeJSONWrapper(strings.TrimSpace(text)) {
+				return sanitizeString(value)
+			}
+			safe := sanitizeArgoValue(decoded, sanitizeContext{parentKey: ctx.parentKey, kind: ctx.kind, depth: ctx.depth + 1})
+			if raw, marshalErr := json.Marshal(safe); marshalErr == nil {
+				return string(raw)
+			}
+			return Marker
+		}
+	}
+	return sanitizeString(value)
 }
 
 func shouldRedactKey(key, parentKey, kind string) bool {
@@ -196,10 +226,11 @@ func sanitizeStructuredString(value string) string {
 	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") && !strings.Contains(value, "\n") && !strings.Contains(value, ":") {
 		return sanitizeString(value)
 	}
-	var decoded any
-	if json.Unmarshal([]byte(value), &decoded) == nil {
-		if raw, err := json.Marshal(sanitizeArgoValue(decoded, sanitizeContext{})); err == nil {
-			return string(raw)
+	if len(value) <= maxStructuredStringLen {
+		if decoded, err := decodeJSONDocument([]byte(value)); err == nil {
+			if raw, err := json.Marshal(sanitizeArgoValue(decoded, sanitizeContext{depth: 1})); err == nil {
+				return string(raw)
+			}
 		}
 	}
 	var yamlValue any
@@ -213,26 +244,12 @@ func sanitizeStructuredString(value string) string {
 
 func sanitizeString(value string) string {
 	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-		changed := false
-		if parsed.User != nil {
-			parsed.User = nil
-			changed = true
-		}
-		query := parsed.Query()
-		for key, values := range query {
-			normalized := normalizeKey(key)
-			if shouldRedactKey(normalized, "query", "") || normalized == "auth" {
-				for i := range values {
-					values[i] = Marker
-				}
-				query[key] = values
-				changed = true
-			}
-		}
-		if changed {
-			parsed.RawQuery = query.Encode()
-			value = parsed.String()
-		}
+		parsed.User = nil
+		parsed.RawQuery = ""
+		parsed.ForceQuery = false
+		parsed.Fragment = ""
+		parsed.RawFragment = ""
+		value = parsed.String()
 	}
 	return redaction.String(value)
 }
@@ -295,9 +312,13 @@ func decodeJSONDocument(raw []byte) (any, error) {
 type mutationContext struct {
 	inSource bool
 	path     string
+	depth    int
 }
 
 func validateMutationValue(value any, ctx mutationContext) error {
+	if ctx.depth > maxDocumentDepth {
+		return fmt.Errorf("Argo mutation exceeds maximum document depth")
+	}
 	switch typed := value.(type) {
 	case map[string]any:
 		if err := validateJSONPatchObject(typed); err != nil {
@@ -309,20 +330,57 @@ func validateMutationValue(value any, ctx mutationContext) error {
 			if ctx.path != "" {
 				path = ctx.path + "." + key
 			}
-			inSource := ctx.inSource || normalized == "source" || normalized == "sources" || normalized == "template" || normalized == "generators" || normalized == "elements"
+			inSource := ctx.inSource || normalized == "source"
+			childInSource := inSource || normalized == "sources"
 			if normalized == "source" && !emptyJSONValue(item) {
 				if err := validateClosedSourceObject(item, path); err != nil {
 					return err
 				}
 			}
+			if normalized == "sources" && !emptyJSONValue(item) {
+				items, ok := item.([]any)
+				if !ok || len(items) == 0 {
+					return fmt.Errorf("Argo mutation sources must be a non-empty array")
+				}
+				for i, source := range items {
+					if err := validateClosedSourceObject(source, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+						return err
+					}
+				}
+			}
 			if normalized == "operation" && !emptyJSONValue(item) {
 				return fmt.Errorf("Argo mutation operations are not admitted")
 			}
-			if _, forbidden := forbiddenSourceKeys[normalized]; forbidden && (inSource || normalized == "sources" || normalized == "manifests" || normalized == "info") && !emptyJSONValue(item) {
+			if (normalized == "repourl" || normalized == "repo" || normalized == "apiurl" || normalized == "server") && !emptyJSONValue(item) {
+				text, ok := item.(string)
+				if !ok || ValidateCredentialFreeURL(text) != nil {
+					return fmt.Errorf("%s must be a canonical credential-free URL", path)
+				}
+			}
+			if normalized == "sourcerepos" && !emptyJSONValue(item) {
+				values, ok := item.([]any)
+				if !ok {
+					return fmt.Errorf("%s must be an array", path)
+				}
+				for _, rawRepo := range values {
+					repo, ok := rawRepo.(string)
+					if !ok || ValidateSourceRepoPattern(repo) != nil {
+						return fmt.Errorf("%s contains a non-canonical or credential-bearing repository URL", path)
+					}
+				}
+			}
+			if _, forbidden := forbiddenSourceKeys[normalized]; forbidden && (inSource || normalized == "manifests" || normalized == "info") && !emptyJSONValue(item) {
 				return fmt.Errorf("Argo mutation contains a non-reference-only source field")
 			}
 			if normalized == "annotations" && !emptyJSONValue(item) {
-				return fmt.Errorf("Argo mutation annotations are not admitted")
+				if err := validateSafeAnnotations(item); err != nil {
+					return err
+				}
+			}
+			if normalized == "elements" || (normalized == "values" && strings.Contains(strings.ToLower(ctx.path), "clusters")) {
+				if err := validateGeneratorValues(item, path); err != nil {
+					return err
+				}
 			}
 			if inSource && strings.Contains(normalized, "env") && !emptyJSONValue(item) {
 				return fmt.Errorf("Argo mutation environment fields are not admitted")
@@ -337,18 +395,37 @@ func validateMutationValue(value any, ctx mutationContext) error {
 					}
 				}
 			}
-			if err := validateMutationValue(item, mutationContext{inSource: inSource, path: path}); err != nil {
+			if err := validateMutationValue(item, mutationContext{inSource: childInSource, path: path, depth: ctx.depth + 1}); err != nil {
 				return err
 			}
 		}
 	case []any:
 		for i, item := range typed {
-			if err := validateMutationValue(item, mutationContext{inSource: ctx.inSource, path: fmt.Sprintf("%s[%d]", ctx.path, i)}); err != nil {
+			if err := validateMutationValue(item, mutationContext{inSource: ctx.inSource, path: fmt.Sprintf("%s[%d]", ctx.path, i), depth: ctx.depth + 1}); err != nil {
 				return err
 			}
 		}
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if len(typed) <= maxStructuredStringLen && looksLikeJSONWrapper(trimmed) {
+			decoded, err := decodeJSONDocument([]byte(trimmed))
+			if err != nil {
+				if (strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "{{")) || strings.HasPrefix(trimmed, "[") {
+					return fmt.Errorf("Argo mutation contains a malformed JSON document string")
+				}
+				return nil
+			}
+			if text, ok := decoded.(string); ok && !looksLikeJSONWrapper(strings.TrimSpace(text)) {
+				return nil
+			}
+			return validateMutationValue(decoded, mutationContext{inSource: ctx.inSource, path: ctx.path, depth: ctx.depth + 1})
+		}
 	}
 	return nil
+}
+
+func looksLikeJSONWrapper(value string) bool {
+	return strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") || strings.HasPrefix(value, "\"")
 }
 
 // validateJSONPatchObject projects RFC 6902 path/value pairs back into a
@@ -408,6 +485,11 @@ func validateClosedSourceObject(value any, path string) error {
 			return fmt.Errorf("Argo mutation contains a field outside the admitted source shape")
 		}
 		switch normalized {
+		case "repourl":
+			text, ok := item.(string)
+			if !ok || ValidateCredentialFreeURL(text) != nil {
+				return fmt.Errorf("%s.%s must be a canonical credential-free URL", path, key)
+			}
 		case "helm":
 			if err := validateClosedNestedSourceObject(item, path+"."+key, helmSourceKeys); err != nil {
 				return err
@@ -419,6 +501,137 @@ func validateClosedSourceObject(value any, path string) error {
 		case "directory":
 			if err := validateClosedNestedSourceObject(item, path+"."+key, directorySourceKeys); err != nil {
 				return err
+			}
+		}
+	}
+	return nil
+}
+
+var (
+	safeTemplateScalar        = regexp.MustCompile(`^\{\{[a-zA-Z0-9_.-]{1,128}\}\}$`)
+	safeNotificationRecipient = regexp.MustCompile(`^[a-zA-Z0-9_.@+-]{1,256}$`)
+)
+
+// ValidateCredentialFreeURL is the shared write boundary for Argo endpoint,
+// repository, source and destination URLs. Diagnostic output uses the same
+// policy but strips every query and fragment rather than attempting to
+// classify provider-specific signatures.
+func ValidateCredentialFreeURL(raw string) error {
+	if raw == "" || raw != strings.TrimSpace(raw) {
+		return fmt.Errorf("URL must be non-empty and canonical")
+	}
+	if safeTemplateScalar.MatchString(raw) {
+		return nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Opaque != "" {
+		return fmt.Errorf("URL must include scheme and host")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || parsed.RawFragment != "" {
+		return fmt.Errorf("URL credentials, query and fragment are not admitted")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https", "http", "ssh", "git", "oci":
+	default:
+		return fmt.Errorf("URL scheme is not admitted")
+	}
+	if parsed.String() != raw || strings.ContainsAny(parsed.Host, "\\\r\n\t") {
+		return fmt.Errorf("URL must be canonical")
+	}
+	return nil
+}
+
+// ValidateSourceRepoPattern preserves Argo's documented wildcard and negated
+// sourceRepos semantics while applying the credential-free URL policy.
+func ValidateSourceRepoPattern(raw string) error {
+	if raw == "*" {
+		return nil
+	}
+	pattern := raw
+	if strings.HasPrefix(pattern, "!") {
+		pattern = strings.TrimPrefix(pattern, "!")
+		if pattern == "" || pattern == "*" {
+			return fmt.Errorf("negated repository pattern must be scoped")
+		}
+	}
+	if strings.Contains(pattern, "*") {
+		candidate := strings.ReplaceAll(pattern, "*", "wildcard")
+		return ValidateCredentialFreeURL(candidate)
+	}
+	return ValidateCredentialFreeURL(pattern)
+}
+
+func validateGeneratorValues(value any, path string) error {
+	validateObject := func(object map[string]any) error {
+		if len(object) > maxGeneratorEntries {
+			return fmt.Errorf("%s exceeds generator value limit", path)
+		}
+		for key, item := range object {
+			if shouldRedactKey(normalizeKey(key), "generator", "") {
+				return fmt.Errorf("%s contains a secret-shaped generator key", path)
+			}
+			switch scalar := item.(type) {
+			case nil, bool, json.Number, float64:
+			case string:
+				if len(scalar) > maxGeneratorScalarLen || strings.ContainsAny(scalar, "\r\n") {
+					return fmt.Errorf("%s contains an oversized generator scalar", path)
+				}
+				if strings.Contains(scalar, "://") && ValidateCredentialFreeURL(scalar) != nil {
+					return fmt.Errorf("%s contains a credential-bearing generator URL", path)
+				}
+			default:
+				return fmt.Errorf("%s generator values must be scalars", path)
+			}
+		}
+		return nil
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		return validateObject(typed)
+	case []any:
+		if len(typed) > maxGeneratorEntries {
+			return fmt.Errorf("%s exceeds generator element limit", path)
+		}
+		for _, item := range typed {
+			object, ok := item.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s generator elements must be objects", path)
+			}
+			if err := validateObject(object); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("%s generator values have invalid shape", path)
+	}
+}
+
+func validateSafeAnnotations(value any) error {
+	annotations, ok := value.(map[string]any)
+	if !ok || len(annotations) > 32 {
+		return fmt.Errorf("Argo mutation annotations have invalid shape")
+	}
+	for key, raw := range annotations {
+		text, ok := raw.(string)
+		if !ok || len(text) > maxGeneratorScalarLen || strings.ContainsAny(text, "\r\n") {
+			return fmt.Errorf("Argo mutation annotation %q has an invalid value", key)
+		}
+		switch key {
+		case "argocd.argoproj.io/sync-wave":
+			wave, err := strconv.Atoi(text)
+			if err != nil || wave < -100 || wave > 100 {
+				return fmt.Errorf("Argo sync-wave annotation must be an integer from -100 to 100")
+			}
+		case "argocd.argoproj.io/compare-options":
+			if text != "IgnoreExtraneous" {
+				return fmt.Errorf("Argo compare-options annotation is not admitted")
+			}
+		default:
+			if !strings.HasPrefix(key, "notifications.argoproj.io/subscribe.") ||
+				!safeNotificationRecipient.MatchString(text) ||
+				strings.Contains(strings.ToLower(key), "secret") {
+				return fmt.Errorf("Argo mutation annotation %q is not admitted", key)
 			}
 		}
 	}
