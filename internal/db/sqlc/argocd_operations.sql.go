@@ -615,6 +615,7 @@ func (q *Queries) MarkArgoCDOperationSuperseded(ctx context.Context, arg MarkArg
 const requeueArgoCDOperation = `-- name: RequeueArgoCDOperation :one
 UPDATE argocd_operations
 SET
+    payload = $2,
     status = 'pending',
     started_at = NULL,
     completed_at = NULL,
@@ -626,8 +627,13 @@ WHERE id = $1
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at
 `
 
-func (q *Queries) RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error) {
-	row := q.db.QueryRow(ctx, requeueArgoCDOperation, id)
+type RequeueArgoCDOperationParams struct {
+	ID      uuid.UUID       `json:"id"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+func (q *Queries) RequeueArgoCDOperation(ctx context.Context, arg RequeueArgoCDOperationParams) (ArgocdOperation, error) {
+	row := q.db.QueryRow(ctx, requeueArgoCDOperation, arg.ID, arg.Payload)
 	var i ArgocdOperation
 	err := row.Scan(
 		&i.ID,

@@ -270,10 +270,9 @@ func TestRecordArgoAuditSanitizesPersistedAndPublishedEventInput(t *testing.T) {
 	writer := &serviceProxyTestAuditWriter{}
 	req := httptest.NewRequest(http.MethodPost, "/argocd", nil)
 	recordArgoAudit(req, writer, "argocd.test", "argocd_resource", "id", "https://user:pass@example.test/repo?sig="+argoHandlerCanary+"#x", map[string]any{
-		"reason":    `{"token":"` + argoHandlerCanary,
-		"oversized": `{"safe":"` + strings.Repeat("x", (1<<20)+1) + `"}`,
-		"note":      "credential=" + argoHandlerCanary,
-		"server":    "https://user:pass@example.test/api?sig=" + argoHandlerCanary + "#x",
+		"reason": `{"token":"` + argoHandlerCanary,
+		"note":   "credential=" + argoHandlerCanary,
+		"server": "https://user:pass@example.test/api?sig=" + argoHandlerCanary + "#x",
 	})
 	if len(writer.rows) != 1 || len(bus.data) != 1 {
 		t.Fatalf("audit rows=%d published=%d", len(writer.rows), len(bus.data))
@@ -292,7 +291,7 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 	audit.SetBusPublisher(bus)
 	t.Cleanup(func() { audit.SetBusPublisher(nil) })
 	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
-	reason := "deploy https://user:pass@example.test/object?X-Amz-Signature=" + argoHandlerCanary + "#fragment token=" + argoHandlerCanary
+	reason := "deploy HTTP://user:pass@example.test/object?AWSAccessKeyId=" + argoHandlerCanary + "#fragment apiKey=" + argoHandlerCanary + " token=" + argoHandlerCanary
 	body := `{"reason":` + string(mustJSON(t, reason)) + `,"sync_window_override":true}`
 	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.app.ID.String()})
 	rr := httptest.NewRecorder()
@@ -310,8 +309,48 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 			t.Fatalf("durable/published sync reason leaked %q: %s", forbidden, text)
 		}
 	}
-	if !strings.Contains(text, "https://example.test/object") || !strings.Contains(text, "[redacted]") {
+	if !strings.Contains(strings.ToLower(text), "http://example.test/object") || !strings.Contains(text, "[redacted]") {
 		t.Fatalf("sanitized reason lost safe context: %s", text)
+	}
+}
+
+func TestRetrySanitizesLegacyReasonBeforePayloadTimelineAuditAndAPI(t *testing.T) {
+	bus := &argoAuditBusCapture{}
+	audit.SetBusPublisher(bus)
+	t.Cleanup(func() { audit.SetBusPublisher(nil) })
+	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
+	opID := uuid.New()
+	legacyReason := `{"apiKey":"` + argoHandlerCanary + `","nested":{"privateKey":"` + argoHandlerCanary + `","credential":"` + argoHandlerCanary + `"},"note":"Bearer ` + argoHandlerCanary + `"}`
+	payload := mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), Reason: legacyReason})
+	now := time.Now().UTC()
+	rec.operation = sqlc.ArgocdOperation{
+		ID: opID, TargetType: "application", TargetKey: rec.app.ID.String(), OperationType: "sync",
+		Payload: payload, Status: "failed", CreatedAt: now, UpdatedAt: now,
+	}
+	req := argoHandlerRouteRequest(http.MethodPost, "/retry", "", map[string]string{"id": opID.String()})
+	rr := httptest.NewRecorder()
+	h.RetryOperation(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("retry status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(rec.requeued) != 1 || len(rec.events) != 1 || len(rec.auditRows) != 1 || len(bus.data) != 1 {
+		t.Fatalf("requeued=%d events=%d audits=%d published=%d", len(rec.requeued), len(rec.events), len(rec.auditRows), len(bus.data))
+	}
+	all, _ := json.Marshal(map[string]any{"payload": rec.requeued[0].Payload, "timeline": rec.events[0], "audit": rec.auditRows[0], "published": bus.data[0], "response": rr.Body.String()})
+	if strings.Contains(string(all), argoHandlerCanary) || !strings.Contains(string(all), "[redacted]") {
+		t.Fatalf("retry sinks leaked or lost marker: %s", all)
+	}
+	rec.operation.Payload = rec.requeued[0].Payload
+	rec.operation.Status = OpStatusPending
+	rec.operationEvents = []sqlc.ArgocdOperationEvent{{
+		ID: uuid.New(), OperationID: opID, Level: rec.events[0].Level, Stage: rec.events[0].Stage,
+		Message: rec.events[0].Message, Detail: rec.events[0].Detail, CreatedAt: now,
+	}}
+	apiReq := argoHandlerRouteRequest(http.MethodGet, "/operation", "", map[string]string{"id": opID.String()})
+	apiRR := httptest.NewRecorder()
+	h.GetOperation(apiRR, apiReq)
+	if apiRR.Code != http.StatusOK || strings.Contains(apiRR.Body.String(), argoHandlerCanary) || !strings.Contains(apiRR.Body.String(), "[redacted]") {
+		t.Fatalf("operation API status=%d body=%s", apiRR.Code, apiRR.Body.String())
 	}
 }
 

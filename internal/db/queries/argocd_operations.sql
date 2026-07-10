@@ -102,6 +102,7 @@ RETURNING *;
 -- name: RequeueArgoCDOperation :one
 UPDATE argocd_operations
 SET
+    payload = $2,
     status = 'pending',
     started_at = NULL,
     completed_at = NULL,

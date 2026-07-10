@@ -1701,7 +1701,7 @@ type Querier interface {
 	// 'pending' before returning the task to asynq.
 	ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
-	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
+	RequeueArgoCDOperation(ctx context.Context, arg RequeueArgoCDOperationParams) (ArgocdOperation, error)
 	RequeueCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	// Bulk reset for the retry-failed endpoint. Resets every 'failed'
 	// target on this operation back to 'pending' so the next orchestrator

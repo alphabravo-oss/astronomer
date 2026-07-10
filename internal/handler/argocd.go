@@ -85,7 +85,7 @@ type ArgoCDQuerier interface {
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg sqlc.MarkArgoCDOperationFailedParams) (sqlc.ArgocdOperation, error)
 	MarkArgoCDOperationSuperseded(ctx context.Context, arg sqlc.MarkArgoCDOperationSupersededParams) (sqlc.ArgocdOperation, error)
-	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error)
+	RequeueArgoCDOperation(ctx context.Context, arg sqlc.RequeueArgoCDOperationParams) (sqlc.ArgocdOperation, error)
 	ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]sqlc.ArgocdOperation, error)
 	UpdateArgoCDOperationProgress(ctx context.Context, arg sqlc.UpdateArgoCDOperationProgressParams) (sqlc.ArgocdOperation, error)
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg sqlc.CompleteArgoCDOperationWithResultParams) (sqlc.ArgocdOperation, error)
@@ -277,7 +277,11 @@ func normalizeSyncRequest(req SyncRequest) (SyncRequest, error) {
 	// The reason is durable: it is copied into the operation payload, audit
 	// row, published audit event and later operation timeline events. Sanitize
 	// once before any of those sinks rather than relying on every consumer.
-	req.Reason = argosecurity.SanitizeString(req.Reason)
+	safeReason, err := argosecurity.SanitizeDurableReason(req.Reason)
+	if err != nil {
+		return req, fmt.Errorf("reason is not safe to persist")
+	}
+	req.Reason = safeReason
 	if req.SyncWindowOverride && req.Reason == "" {
 		return req, fmt.Errorf("sync_window_override requires a reason")
 	}
@@ -1022,17 +1026,41 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
 		return
 	}
-	requeued, err := h.queries.RequeueArgoCDOperation(r.Context(), id)
+	safePayload, safeReason, err := sanitizeArgoCDOperationPayload(op.Payload)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "ArgoCD operation payload is not safe to retry")
+		return
+	}
+	requeued, err := h.queries.RequeueArgoCDOperation(r.Context(), sqlc.RequeueArgoCDOperationParams{ID: id, Payload: safePayload})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry ArgoCD operation")
 		return
 	}
 	h.TriggerReconcile()
+	h.recordArgoCDOperationEvent(r.Context(), id, "info", "retry", "operation requeued", map[string]any{"reason": safeReason})
 	recordArgoAudit(r, h.queries, "argocd.operation.retry", "argocd_operation", id.String(), op.TargetKey, map[string]any{
 		"target_type":     op.TargetType,
 		"previous_status": op.Status,
+		"reason":          safeReason,
 	})
 	respondArgoJSON(w, http.StatusAccepted, argocdOperationResponse(requeued))
+}
+
+func sanitizeArgoCDOperationPayload(raw json.RawMessage) (json.RawMessage, string, error) {
+	var envelope argocdOperationEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, "", err
+	}
+	reason, err := argosecurity.SanitizeDurableReason(envelope.Reason)
+	if err != nil {
+		return nil, "", err
+	}
+	envelope.Reason = reason
+	safe, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, "", err
+	}
+	return safe, reason, nil
 }
 
 func (h *ArgoCDHandler) operationClusterID(ctx context.Context, op sqlc.ArgocdOperation) (uuid.UUID, error) {
@@ -2455,7 +2483,7 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
-	if err := argosecurity.ValidateMutation(map[string]any{"spec": req.Spec}); err != nil {
+	if err := argosecurity.ValidateApplicationSetMutation(map[string]any{"spec": req.Spec}); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
@@ -2487,6 +2515,13 @@ func validateApplicationSetGeneratorClusterSelector(generator argocdclient.Appli
 	if generator.Matrix != nil {
 		for i, child := range generator.Matrix.Generators {
 			if err := validateApplicationSetGeneratorClusterSelector(child, fmt.Sprintf("%s.matrix.generators[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	if generator.Merge != nil {
+		for i, child := range generator.Merge.Generators {
+			if err := validateApplicationSetGeneratorClusterSelector(child, fmt.Sprintf("%s.merge.generators[%d]", path, i)); err != nil {
 				return err
 			}
 		}

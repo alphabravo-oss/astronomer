@@ -33,6 +33,7 @@ type argoCDQueryRecorder struct {
 	events     []sqlc.CreateArgoCDOperationEventParams
 	created    []sqlc.CreateArgoCDOperationParams
 	auditRows  []sqlc.CreateAuditLogV1Params
+	requeued   []sqlc.RequeueArgoCDOperationParams
 	runningOps []sqlc.ArgocdOperation
 }
 
@@ -149,8 +150,12 @@ func (q *argoCDQueryRecorder) MarkArgoCDOperationFailed(context.Context, sqlc.Ma
 func (q *argoCDQueryRecorder) MarkArgoCDOperationSuperseded(context.Context, sqlc.MarkArgoCDOperationSupersededParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argoCDQueryRecorder) RequeueArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+func (q *argoCDQueryRecorder) RequeueArgoCDOperation(_ context.Context, arg sqlc.RequeueArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
+	q.requeued = append(q.requeued, arg)
+	row := q.operation
+	row.Payload = arg.Payload
+	row.Status = OpStatusPending
+	return row, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperationEvents(context.Context, uuid.UUID) ([]sqlc.ArgocdOperationEvent, error) {
 	return q.operationEvents, nil
