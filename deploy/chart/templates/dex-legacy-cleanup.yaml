@@ -12,8 +12,8 @@ the exact legacy ConfigMap. No credential content is read or logged here.
 {{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
 {{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
 {{- $runtime := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName -}}
-{{- $hooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation,HookSucceeded" -}}
-{{- $policyHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation" -}}
+{{- $jobHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation,HookSucceeded" -}}
+{{- $prerequisiteHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation" -}}
 {{- $legacyCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) -}}
 {{- $apiCIDRs := list -}}
 {{- range $cidr := .Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list) -}}
@@ -31,14 +31,14 @@ kind: ServiceAccount
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -58,7 +58,7 @@ kind: RoleBinding
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -67,10 +67,11 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ .Release.Namespace }}
-{{- if and .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
 ---
 # Non-Job hooks are considered complete immediately, so this policy must omit
-# hook-succeeded and remain present while the later cleanup Job runs.
+# hook-succeeded and remain present while the later cleanup Job runs. Render it
+# even when the new values disable default deny: an old release's selecting
+# policy can remain active through Argo PostSync/prune ordering.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -79,7 +80,7 @@ metadata:
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex-legacy-cleanup") | nindent 4 }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $policyHooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
@@ -99,15 +100,16 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 6443
     {{- end }}
-{{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "10" "argocd.argoproj.io/sync-wave" "10") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "10" "argocd.argoproj.io/sync-wave" "10") $jobHooks) | nindent 4 }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600

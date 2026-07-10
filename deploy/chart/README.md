@@ -358,12 +358,19 @@ The Dex legacy prepare and cutover-cleanup Jobs are also selected by the
 release default-deny policy. Each has an exact Astronomer ownership tuple and a
 dedicated component label, plus a phase-specific hook NetworkPolicy created
 before its Job. Those policies permit only DNS on TCP/UDP 53 and Kubernetes
-API access on TCP 443 to the de-duplicated union of
+API access on TCP 443/6443 to the de-duplicated union of
 `kubernetesAPIEgressCIDRs` and the legacy development
-`externalEgressCIDRs`. The policy hooks are retained until replacement; adding
-`hook-succeeded` would let Helm remove a non-Job policy before the Job starts.
-Production must therefore configure API CIDRs before running either migration
-phase.
+`externalEgressCIDRs`. They render for the active migration phase even when the
+new values disable NetworkPolicy or default deny, because the previous
+release's default-deny can still select pre-upgrade hooks and can remain through
+Argo PostSync pruning. This makes the disable transition safe without opening
+general egress. The cleanup ServiceAccount, Role, RoleBinding, and policy are
+retained until replacement at weight / sync wave `5`; only the later Job at
+`10` uses success deletion. Adding `hook-succeeded` to a non-Job prerequisite
+would let Helm or Argo remove it before the Job starts. Production must retain
+valid API CIDRs through both migration releases; Helm validates that the list
+is non-empty in the normal production/default-deny posture, but it cannot prove
+that configured CIDRs cover live pre- and post-DNAT destinations.
 
 Kubernetes authorization caches can take a few seconds to observe newly
 created hook RBAC. To avoid reporting that propagation window as a missing

@@ -73,10 +73,12 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ .Release.Namespace }}
-{{- if and .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
 ---
 # The ownership-scoped default deny selects this hook pod. Retain its stable
 # policy through Job completion and replace it before the next prepare run.
+# This policy is phase infrastructure, not a reflection of the new release's
+# default-deny switch: the previous release's deny can remain active while
+# pre-upgrade hooks run, including when the new values disable NetworkPolicy.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -105,8 +107,9 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 6443
     {{- end }}
-{{- end }}
 ---
 apiVersion: batch/v1
 kind: Job

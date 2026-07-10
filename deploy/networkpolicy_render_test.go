@@ -348,8 +348,8 @@ func TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege(t *testi
 			}
 			if got, want := preflightEgressContracts(t, policy), []string{
 				"*:UDP/53,TCP/53",
-				"10.40.0.0/16:TCP/443",
-				"10.10.0.0/16:TCP/443",
+				"10.40.0.0/16:TCP/443,TCP/6443",
+				"10.10.0.0/16:TCP/443,TCP/6443",
 			}; !reflect.DeepEqual(got, want) {
 				t.Errorf("%s egress = %v, want exactly %v", tt.presentName, got, want)
 			}
@@ -375,23 +375,92 @@ func TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege(t *testi
 	}
 }
 
-func TestDexMigrationHookPolicyFollowsDefaultDenySwitch(t *testing.T) {
-	for _, phase := range []string{"prepare", "cutover"} {
-		docs := parseRenderedDocs(t, helmTemplate(t,
-			"dex.enabled=true",
-			"dex.migration.phase="+phase,
-			"networkPolicy.defaultDeny=false",
-		))
-		name := "astronomer-dex-legacy-" + phase
-		if phase == "cutover" {
-			name = "astronomer-dex-legacy-cleanup"
+func TestDexCleanupNonJobPrerequisitesOutliveTheJobStart(t *testing.T) {
+	const name = "astronomer-dex-legacy-cleanup"
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"dex.enabled=true",
+		"dex.migration.phase=cutover",
+	))
+
+	for _, kind := range []string{"ServiceAccount", "Role", "RoleBinding", "NetworkPolicy"} {
+		resource := findRenderedDoc(t, docs, kind, name)
+		annotations := nestedMap(resource, "metadata", "annotations")
+		for key, want := range map[string]string{
+			"helm.sh/hook":                          "post-upgrade",
+			"helm.sh/hook-weight":                   "5",
+			"helm.sh/hook-delete-policy":            "before-hook-creation",
+			"argocd.argoproj.io/hook":               "PostSync",
+			"argocd.argoproj.io/sync-wave":          "5",
+			"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation",
+		} {
+			if got := stringValue(annotations[key]); got != want {
+				t.Errorf("%s/%s annotation %s = %q, want %q", kind, name, key, got, want)
+			}
 		}
-		if !renderedDocExists(docs, "Job", name) {
-			t.Errorf("%s Job disappeared when default deny was disabled", name)
+		annotationsJSON := fmt.Sprint(annotations)
+		if strings.Contains(strings.ToLower(annotationsJSON), "hook-succeeded") || strings.Contains(annotationsJSON, "HookSucceeded") {
+			t.Errorf("%s/%s can be success-deleted before the cleanup Job starts: %#v", kind, name, annotations)
 		}
-		if renderedDocExists(docs, "NetworkPolicy", name) {
-			t.Errorf("%s NetworkPolicy rendered without the selecting default deny", name)
+	}
+
+	job := findRenderedDoc(t, docs, "Job", name)
+	jobAnnotations := nestedMap(job, "metadata", "annotations")
+	for key, want := range map[string]string{
+		"helm.sh/hook":                          "post-upgrade",
+		"helm.sh/hook-weight":                   "10",
+		"helm.sh/hook-delete-policy":            "before-hook-creation,hook-succeeded",
+		"argocd.argoproj.io/hook":               "PostSync",
+		"argocd.argoproj.io/sync-wave":          "10",
+		"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded",
+	} {
+		if got := stringValue(jobAnnotations[key]); got != want {
+			t.Errorf("Job/%s annotation %s = %q, want %q", name, key, got, want)
 		}
+	}
+}
+
+func TestDexMigrationHookPolicySurvivesDefaultDenyDisableTransition(t *testing.T) {
+	oldDocs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true", "dex.migration.phase=fresh"))
+	oldDefaultDeny := findRenderedDoc(t, oldDocs, "NetworkPolicy", "astronomer-default-deny")
+	oldSelector := nestedMap(oldDefaultDeny, "spec", "podSelector", "matchLabels")
+
+	for _, tt := range []struct {
+		name  string
+		phase string
+		sets  []string
+	}{
+		{name: "prepare disables default deny", phase: "prepare", sets: []string{"networkPolicy.defaultDeny=false"}},
+		{name: "prepare disables network policy", phase: "prepare", sets: []string{"networkPolicy.enabled=false"}},
+		{name: "cutover disables default deny", phase: "cutover", sets: []string{"networkPolicy.defaultDeny=false"}},
+		{name: "cutover disables network policy", phase: "cutover", sets: []string{"networkPolicy.enabled=false"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sets := append([]string{"dex.enabled=true", "dex.migration.phase=" + tt.phase}, tt.sets...)
+			docs := parseRenderedDocs(t, helmTemplate(t, sets...))
+			if renderedDocExists(docs, "NetworkPolicy", "astronomer-default-deny") {
+				t.Fatal("new release still rendered the release default-deny; transition scenario was not exercised")
+			}
+			name := "astronomer-dex-legacy-prepare"
+			if tt.phase == "cutover" {
+				name = "astronomer-dex-legacy-cleanup"
+			}
+			job := findRenderedDoc(t, docs, "Job", name)
+			jobLabels := nestedStringMap(job, "spec", "template", "metadata", "labels")
+			if !matchExactLabels(oldSelector, jobLabels) {
+				t.Fatalf("old release default-deny does not select transition Job labels %#v; scenario is invalid", jobLabels)
+			}
+			policy := findRenderedDoc(t, docs, "NetworkPolicy", name)
+			policySelector := nestedMap(policy, "spec", "podSelector", "matchLabels")
+			if !matchExactLabels(policySelector, jobLabels) {
+				t.Fatalf("transition policy selector %#v does not select Job labels %#v", policySelector, jobLabels)
+			}
+			if got, want := preflightEgressContracts(t, policy), []string{
+				"*:UDP/53,TCP/53",
+				"0.0.0.0/0:TCP/443,TCP/6443",
+			}; !reflect.DeepEqual(got, want) {
+				t.Fatalf("transition policy egress = %v, want %v", got, want)
+			}
+		})
 	}
 }
 
@@ -424,7 +493,7 @@ dex:
 	policy = findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-dex-legacy-cleanup")
 	if got, want := preflightEgressContracts(t, policy), []string{
 		"*:UDP/53,TCP/53",
-		"10.40.0.0/16:TCP/443",
+		"10.40.0.0/16:TCP/443,TCP/6443",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Dex cleanup policy CIDR union = %v, want de-duplicated %v", got, want)
 	}

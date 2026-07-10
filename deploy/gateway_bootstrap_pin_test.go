@@ -59,6 +59,10 @@ func TestK3DBootstrapPinsSupportedGatewayAPIBundle(t *testing.T) {
 		if strings.Contains(text, "kubernetes-sigs/gateway-api/releases/latest/") {
 			t.Errorf("%s recommends a moving Gateway API release URL", relative)
 		}
+		if relative == filepath.Join("docs", "upgrade-runbook.md") &&
+			!strings.Contains(text, "chart preflight verifies CRD and GatewayClass existence; it does not\n     validate controller-owned status conditions") {
+			t.Errorf("%s does not distinguish chart preflight scope from bootstrap status validation", relative)
+		}
 	}
 }
 

@@ -284,22 +284,30 @@ What happens:
    `dex-legacy-prepare` policy is created at weight / sync wave `-10`, before
    its Job at `-5`. In `cutover`, the `dex-legacy-cleanup` policy is created at
    weight / sync wave `5`, before its Job at `10`. Both allow only DNS TCP/UDP
-   53 and API TCP 443 to the de-duplicated union of
+   53 and API TCP 443/6443 to the de-duplicated union of
    `kubernetesAPIEgressCIDRs` and the legacy development
-   `externalEgressCIDRs`. Their non-Job hook resources deliberately omit
-   `hook-succeeded` so Helm and Argo cannot delete network access before the Job
-   completes. Verify the API CIDRs before either phase.
+   `externalEgressCIDRs`. The phase-specific policy renders even when the new
+   values disable NetworkPolicy/default deny, because the old release's
+   default-deny can still select pre-upgrade pods and can remain through Argo
+   PostSync pruning. The cleanup ServiceAccount, Role, RoleBinding, and policy
+   are retained until replacement at wave `5`; only the Job at wave `10` uses
+   success deletion. All non-Job hook prerequisites deliberately omit
+   `hook-succeeded` so Helm and Argo cannot delete authorization or network
+   access before the Job runs. Retain valid API CIDRs through both migration
+   releases and verify their live destination coverage before either phase.
 2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present
-   - Gateway API standard CRDs pinned to the controller-supported bundle
-     (`v1.4.1` paired with NGINX Gateway Fabric `2.6.0` for the supported local
-     bootstrap); do not use a moving `latest` URL. Before continuing, require
-     the `nginx` GatewayClass to report both `Accepted=True` and
-     `SupportedVersion=True`, with each condition's `observedGeneration`
-     matching the current object generation. `Accepted=True` alone does not
-     prove the CRD bundle is supported, and stale True conditions do not prove
-     the current class spec is ready.
+   - Gateway API standard CRDs pinned to the controller-supported bundle. The
+     chart preflight verifies CRD and GatewayClass existence; it does not
+     validate controller-owned status conditions. The supported local
+     bootstrap separately binds Gateway API `v1.4.1` to NGINX Gateway Fabric
+     `2.6.0` and fails closed unless the `nginx` GatewayClass reports
+     generation-current `Accepted=True` and `SupportedVersion=True`. Operators
+     using an externally installed controller must perform that same status
+     check before invoking the upgrade. `Accepted=True` alone does not prove
+     the CRD bundle is supported, and stale True conditions do not prove the
+     current class spec is ready.
    - cert-manager CRDs present (if `tls.source` needs them)
    - Postgres DSN enforces TLS (production only)
    - `schema_migrations` connectivity + dirty-flag check
