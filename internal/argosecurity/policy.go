@@ -127,10 +127,16 @@ func sanitizeStringDocument(value string, ctx sanitizeContext) string {
 	trimmed := strings.TrimSpace(value)
 	if looksLikeJSONWrapper(trimmed) {
 		if len(value) > maxStructuredStringLen {
+			if containsCanonicalSensitiveMarker(value) {
+				return Marker
+			}
 			return sanitizeString(value)
 		}
 		decoded, err := decodeJSONDocument([]byte(trimmed))
 		if err != nil {
+			if containsCanonicalSensitiveMarker(value) {
+				return Marker
+			}
 			return sanitizeString(value)
 		}
 		if text, ok := decoded.(string); ok && !looksLikeJSONWrapper(strings.TrimSpace(text)) {
@@ -158,15 +164,7 @@ func shouldRedactKey(key, parentKey, kind string) bool {
 	if referenceKey(key) {
 		return false
 	}
-	if redaction.IsSensitiveKey(key) {
-		return true
-	}
-	for _, fragment := range []string{"password", "passwd", "token", "apikey", "privatekey", "secretkey", "clientsecret", "clientcertkey", "credential", "kubeconfig"} {
-		if strings.Contains(key, fragment) {
-			return true
-		}
-	}
-	return false
+	return canonicalSensitiveKey(key)
 }
 
 func referenceKey(key string) bool {
@@ -264,15 +262,75 @@ func sanitizeStructuredString(value string) string {
 
 func sanitizeString(value string) string {
 	value = embeddedHTTPURL.ReplaceAllStringFunc(value, sanitizeURLDiagnostic)
-	value = cloudCredential.ReplaceAllString(value, "$1="+Marker)
-	value = credentialAssignment.ReplaceAllString(value, "$1="+Marker)
-	value = sensitiveAssignment.ReplaceAllString(value, "$1$2"+Marker)
-	value = quotedSensitiveAssignment.ReplaceAllString(value, "$1"+Marker)
+	value, _ = sanitizeCanonicalAssignments(value)
 	return redaction.String(value)
 }
 
-func hasSensitiveDiagnostic(value string) bool {
-	return redaction.String(value) != value || cloudCredential.MatchString(value) || credentialAssignment.MatchString(value) || sensitiveAssignment.MatchString(value)
+func canonicalSensitiveKey(key string) bool {
+	normalized := normalizeKey(key)
+	if normalized == "" || referenceKey(normalized) {
+		return false
+	}
+	if redaction.IsSensitiveKey(key) || redaction.IsSensitiveKey(normalized) {
+		return true
+	}
+	switch normalized {
+	case "bearer", "sig", "xamzcredential", "xamzsecuritytoken", "xgoogsignature":
+		return true
+	}
+	for _, fragment := range []string{
+		"password", "passwd", "secret", "clientsecret", "clientcertkey", "kubeconfig",
+		"apikey", "privatekey", "token", "credential", "awsaccesskeyid", "googleaccessid", "signature",
+	} {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeCanonicalAssignments(value string) (string, bool) {
+	matches := canonicalAssignment.FindAllStringSubmatchIndex(value, -1)
+	if len(matches) == 0 {
+		return value, false
+	}
+	var out strings.Builder
+	last := 0
+	found := false
+	for _, match := range matches {
+		if len(match) < 6 || match[4] < 0 || match[5] < 0 || !canonicalSensitiveKey(value[match[4]:match[5]]) {
+			continue
+		}
+		out.WriteString(value[last:match[0]])
+		out.WriteString(value[match[2]:match[3]])
+		out.WriteString(Marker)
+		last = match[1]
+		found = true
+	}
+	if !found {
+		return value, false
+	}
+	out.WriteString(value[last:])
+	return out.String(), true
+}
+
+func canonicalCredentialDetected(value string) bool {
+	if _, found := sanitizeCanonicalAssignments(value); found {
+		return true
+	}
+	if redaction.String(value) != value || embeddedCredentialURL(value) {
+		return true
+	}
+	return false
+}
+
+func containsCanonicalSensitiveMarker(value string) bool {
+	for _, candidate := range canonicalMarkerCandidate.FindAllString(value, -1) {
+		if canonicalSensitiveKey(candidate) {
+			return true
+		}
+	}
+	return canonicalCredentialDetected(value)
 }
 
 func sanitizeURLDiagnostic(value string) string {
@@ -314,6 +372,9 @@ func SanitizeString(value string) string {
 func SanitizeDurableReason(value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	if len(trimmed) > maxStructuredStringLen {
+		if looksLikeJSONWrapper(trimmed) && containsCanonicalSensitiveMarker(trimmed) {
+			return Marker, nil
+		}
 		return "", fmt.Errorf("reason exceeds sanitation limit")
 	}
 	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
@@ -324,6 +385,22 @@ func SanitizeDurableReason(value string) (string, error) {
 				return "", fmt.Errorf("sanitize structured reason: %w", err)
 			}
 			return string(raw), nil
+		}
+		if containsCanonicalSensitiveMarker(trimmed) {
+			return Marker, nil
+		}
+	}
+	if strings.Contains(trimmed, "\n") || canonicalCredentialDetected(trimmed) {
+		var decoded any
+		if err := yaml.Unmarshal([]byte(trimmed), &decoded); err == nil {
+			switch decoded.(type) {
+			case map[string]any, []any:
+				raw, err := json.Marshal(sanitizeArgoValue(decoded, sanitizeContext{}))
+				if err != nil {
+					return "", fmt.Errorf("sanitize structured reason: %w", err)
+				}
+				return string(raw), nil
+			}
 		}
 	}
 	safe := sanitizeString(trimmed)
@@ -833,7 +910,7 @@ func validatePatchScalar(value any, copying bool) error {
 		return nil
 	}
 	text, ok := value.(string)
-	if !ok || len(text) > maxGeneratorScalarLen || strings.ContainsAny(text, "\r\n") || hasSensitiveDiagnostic(text) || embeddedCredentialURL(text) {
+	if !ok || len(text) > maxGeneratorScalarLen || strings.ContainsAny(text, "\r\n") || canonicalCredentialDetected(text) {
 		return fmt.Errorf("patch scalar is unsafe")
 	}
 	return nil
@@ -995,7 +1072,7 @@ func validateHelmSourceObject(value any, sourcePath string, multiSource bool, re
 func validateHelmValueFile(value string, refs map[string]struct{}) error {
 	if value == "" || value != strings.TrimSpace(value) || len(value) > maxGeneratorScalarLen ||
 		strings.ContainsAny(value, "\\\r\n?#:") || strings.Contains(value, "{{") ||
-		redaction.String(value) != value || cloudCredential.MatchString(value) || credentialAssignment.MatchString(value) || embeddedCredentialURL(value) {
+		canonicalCredentialDetected(value) {
 		return fmt.Errorf("unsafe Helm value file")
 	}
 	relative := value
@@ -1023,10 +1100,8 @@ var (
 	safeGeneratorKey          = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
 	safeSCPRepository         = regexp.MustCompile(`^git@([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):([A-Za-z0-9._/-]{1,512})$`)
 	embeddedHTTPURL           = regexp.MustCompile(`(?i)https?://[^\s<>'"]+`)
-	cloudCredential           = regexp.MustCompile(`(?i)\b(x-amz-(?:credential|signature|security-token)|awsaccesskeyid|googleaccessid|signature|sig|x-goog-signature)\s*=\s*[^&\s,;]+`)
-	credentialAssignment      = regexp.MustCompile(`(?i)\b(credential|credentials)\s*=\s*[^&\s,;]+`)
-	sensitiveAssignment       = regexp.MustCompile(`(?i)\b(api[_-]?key|private[_-]?key|client[_-]?key|secret[_-]?key)(\s*[:=]\s*)[^&\s,;]+`)
-	quotedSensitiveAssignment = regexp.MustCompile(`(?i)(["'](?:api[_-]?key|private[_-]?key|client[_-]?key|secret[_-]?key|credential|credentials|token|bearer|awsaccesskeyid)["']\s*:\s*["'])[^"'\s,;}]+`)
+	canonicalAssignment       = regexp.MustCompile(`(?im)(([A-Za-z][A-Za-z0-9_."' -]{0,64})\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\s,;}\]\r\n]+)`)
+	canonicalMarkerCandidate  = regexp.MustCompile(`(?i)[A-Za-z][A-Za-z0-9_."' -]{0,64}`)
 )
 
 // ValidateCredentialFreeURL is the shared write boundary for Argo endpoint,
@@ -1323,15 +1398,79 @@ func validateGeneratorScalar(value any, scalarPath string) error {
 		return nil
 	case string:
 		if len(scalar) > maxGeneratorScalarLen || strings.ContainsAny(scalar, "\r\n") {
-			return fmt.Errorf("%s contains an oversized generator scalar", scalarPath)
+			if len(scalar) > maxGeneratorScalarLen {
+				return fmt.Errorf("%s contains an oversized generator scalar", scalarPath)
+			}
 		}
-		if hasSensitiveDiagnostic(scalar) || embeddedCredentialURL(scalar) {
-			return fmt.Errorf("%s contains credential-shaped generator data", scalarPath)
-		}
-		return nil
+		return validateGeneratorString(scalar, scalarPath, 0)
 	default:
 		return fmt.Errorf("%s must be a scalar", scalarPath)
 	}
+}
+
+func validateGeneratorString(value, scalarPath string, depth int) error {
+	if depth > maxGeneratorDepth {
+		return fmt.Errorf("%s exceeds structured generator depth", scalarPath)
+	}
+	trimmed := strings.TrimSpace(value)
+	if canonicalCredentialDetected(value) {
+		return fmt.Errorf("%s contains credential-shaped generator data", scalarPath)
+	}
+	if looksLikeJSONWrapper(trimmed) {
+		decoded, err := decodeJSONDocument([]byte(trimmed))
+		if err == nil {
+			return validateGeneratorStructuredValue(decoded, scalarPath, depth+1)
+		}
+		if containsCanonicalSensitiveMarker(value) {
+			return fmt.Errorf("%s contains a sensitive marker in malformed structured data", scalarPath)
+		}
+		return nil
+	}
+	if strings.Contains(value, "\n") || strings.Contains(value, ":") {
+		var decoded any
+		if err := yaml.Unmarshal([]byte(value), &decoded); err == nil {
+			switch decoded.(type) {
+			case map[string]any, []any:
+				return validateGeneratorStructuredValue(decoded, scalarPath, depth+1)
+			}
+		}
+		if containsCanonicalSensitiveMarker(value) {
+			return fmt.Errorf("%s contains a sensitive marker in malformed structured data", scalarPath)
+		}
+	}
+	return nil
+}
+
+func validateGeneratorStructuredValue(value any, scalarPath string, depth int) error {
+	if depth > maxGeneratorDepth {
+		return fmt.Errorf("%s exceeds structured generator depth", scalarPath)
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		if len(typed) > maxGeneratorEntries {
+			return fmt.Errorf("%s exceeds structured generator entry limit", scalarPath)
+		}
+		for key, item := range typed {
+			if canonicalSensitiveKey(key) {
+				return fmt.Errorf("%s contains sensitive structured key %q", scalarPath, key)
+			}
+			if err := validateGeneratorStructuredValue(item, scalarPath+"."+key, depth+1); err != nil {
+				return err
+			}
+		}
+	case []any:
+		if len(typed) > maxGeneratorEntries {
+			return fmt.Errorf("%s exceeds structured generator entry limit", scalarPath)
+		}
+		for i, item := range typed {
+			if err := validateGeneratorStructuredValue(item, fmt.Sprintf("%s[%d]", scalarPath, i), depth+1); err != nil {
+				return err
+			}
+		}
+	case string:
+		return validateGeneratorString(typed, scalarPath, depth+1)
+	}
+	return nil
 }
 
 func validateGeneratorValues(value any, path string) error {

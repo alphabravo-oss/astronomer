@@ -428,8 +428,10 @@ func TestArgoCDUIProxyAllowsSchemaScopedProjectWildcardAndSafeValueRepositories(
 
 func TestArgoCDUIProxyArbitraryBracketResponsesRoundTripWithoutLogLeak(t *testing.T) {
 	for name, message := range map[string]string{
-		"malformed credential": `{"token":"` + argoProxyCanary,
-		"ordinary brackets":    `[maintenance window`,
+		"malformed credential":      `{"token":"` + argoProxyCanary,
+		"ordinary brackets":         `[maintenance window`,
+		"credential before one MiB": `[` + strings.Repeat("x", (1<<20)-128) + `"password":"` + argoProxyCanary,
+		"credential after one MiB":  `[` + strings.Repeat("x", (1<<20)+128) + `"clientSecret":"` + argoProxyCanary,
 	} {
 		t.Run(name, func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

@@ -229,6 +229,50 @@ func TestSanitizeDurableReasonStructuredAndProse(t *testing.T) {
 	}
 }
 
+func TestCanonicalCredentialDetectorTaxonomyAndFragmentedKeys(t *testing.T) {
+	keys := []string{
+		"password", "passwd", "secret", "clientSecret", "client_cert_key", "kube-config",
+		"apiKey", "private.key", "token", "bearer", "credential", "AWSAccessKeyId", "sig",
+	}
+	for _, key := range keys {
+		for _, input := range []string{
+			key + "=" + policyCanary,
+			`"` + key + `":"` + policyCanary + `"`,
+			key + ": " + policyCanary,
+		} {
+			got := SanitizeString(input)
+			if strings.Contains(got, policyCanary) || !strings.Contains(got, Marker) {
+				t.Errorf("key %q input %q sanitized to %q", key, input, got)
+			}
+		}
+	}
+	for _, fragmented := range []string{
+		`{"client_"secret":"` + policyCanary,
+		`{"pass-word":"` + policyCanary,
+		`[broken "private_ key" = ` + policyCanary,
+	} {
+		got := Sanitize(map[string]any{"message": fragmented}).(map[string]any)["message"]
+		if got != Marker {
+			t.Errorf("fragmented malformed key was not failed closed: %#v", got)
+		}
+	}
+}
+
+func TestStructuredCredentialScanCrossesOneMiBBoundary(t *testing.T) {
+	credential := `"clientSecret":"` + policyCanary + `"`
+	for name, value := range map[string]string{
+		"before boundary": `[` + strings.Repeat("x", maxStructuredStringLen-len(credential)-32) + credential + strings.Repeat("x", 128),
+		"after boundary":  `[` + strings.Repeat("x", maxStructuredStringLen+128) + credential,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := Sanitize(map[string]any{"message": value}).(map[string]any)["message"]
+			if got != Marker {
+				t.Fatalf("over-limit structured credential was not failed closed")
+			}
+		})
+	}
+}
+
 func TestCredentialFreeURLPolicy(t *testing.T) {
 	for _, safe := range []string{"https://git.example/team/repo", "ssh://git.example/team/repo", "{{server}}"} {
 		if err := ValidateCredentialFreeURL(safe); err != nil {
@@ -356,6 +400,41 @@ func TestValidateApplicationSetClosedGeneratorUnion(t *testing.T) {
 				t.Fatal("unsafe generator union accepted")
 			}
 		})
+	}
+}
+
+func TestGeneratorStructuredScalarsRejectCanonicalCredentialsAcrossBranches(t *testing.T) {
+	unsafeJSON := `{"safe":[{"clientSecret":"` + policyCanary + `"}]}`
+	unsafeYAML := "safe:\n  - password: " + policyCanary
+	malformed := `{"safe":{"client_"secret":"` + policyCanary
+	wrap := func(generators ...any) map[string]any {
+		return map[string]any{"spec": map[string]any{"generators": generators}}
+	}
+	listWith := func(value string) any {
+		return map[string]any{"list": map[string]any{"elements": []any{map[string]any{"note": value}}}}
+	}
+	gitWith := func(value string) any {
+		return map[string]any{"git": map[string]any{"repoURL": "https://git.example/repo", "values": map[string]any{"note": value}}}
+	}
+	clusterWith := func(value string) any {
+		return map[string]any{"clusters": map[string]any{"values": map[string]any{"note": value}}}
+	}
+	for name, payload := range map[string]any{
+		"list json":     wrap(listWith(unsafeJSON)),
+		"clusters yaml": wrap(clusterWith(unsafeYAML)),
+		"git malformed": wrap(gitWith(malformed)),
+		"matrix nested": wrap(map[string]any{"matrix": map[string]any{"generators": []any{listWith("safe"), gitWith(unsafeJSON)}}}),
+		"merge nested":  wrap(map[string]any{"merge": map[string]any{"mergeKeys": []any{"cluster"}, "generators": []any{clusterWith("safe"), listWith(unsafeYAML)}}}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateApplicationSetMutation(payload); err == nil {
+				t.Fatal("structured generator credential accepted")
+			}
+		})
+	}
+	safeStructured := wrap(listWith(`{"safe":[{"note":"diagnostic"}]}`))
+	if err := ValidateApplicationSetMutation(safeStructured); err != nil {
+		t.Fatalf("safe structured generator scalar rejected: %v", err)
 	}
 }
 

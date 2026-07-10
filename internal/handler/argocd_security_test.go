@@ -290,8 +290,11 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 	bus := &argoAuditBusCapture{}
 	audit.SetBusPublisher(bus)
 	t.Cleanup(func() { audit.SetBusPublisher(nil) })
-	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
-	reason := "deploy HTTP://user:pass@example.test/object?AWSAccessKeyId=" + argoHandlerCanary + "#fragment apiKey=" + argoHandlerCanary + " token=" + argoHandlerCanary
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
+	})
+	reason := "deploy HTTP://user:pass@example.test/object?AWSAccessKeyId=" + argoHandlerCanary + "#fragment apiKey=" + argoHandlerCanary + " password=" + argoHandlerCanary + " clientSecret=" + argoHandlerCanary + " token=" + argoHandlerCanary
 	body := `{"reason":` + string(mustJSON(t, reason)) + `,"sync_window_override":true}`
 	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.app.ID.String()})
 	rr := httptest.NewRecorder()
@@ -312,6 +315,36 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 	if !strings.Contains(strings.ToLower(text), "http://example.test/object") || !strings.Contains(text, "[redacted]") {
 		t.Fatalf("sanitized reason lost safe context: %s", text)
 	}
+	pendingID := uuid.New()
+	pending := sqlc.ArgocdOperation{
+		ID: pendingID, TargetType: "application", TargetKey: rec.app.ID.String(), OperationType: "sync",
+		Payload: rec.created[0].Payload, Status: OpStatusPending, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	if _, err := h.executeOperation(context.Background(), pending); err != nil {
+		t.Fatalf("execute pending operation: %v", err)
+	}
+	if len(rec.events) == 0 {
+		t.Fatal("pending execution did not create a timeline event")
+	}
+	timelineRaw, _ := json.Marshal(rec.events)
+	if strings.Contains(string(timelineRaw), argoHandlerCanary) || !strings.Contains(string(timelineRaw), "[redacted]") {
+		t.Fatalf("pending timeline leaked or lost marker: %s", timelineRaw)
+	}
+	rec.operation = pending
+	rec.operation.Status = "running"
+	rec.operationEvents = make([]sqlc.ArgocdOperationEvent, 0, len(rec.events))
+	for _, event := range rec.events {
+		rec.operationEvents = append(rec.operationEvents, sqlc.ArgocdOperationEvent{
+			ID: uuid.New(), OperationID: pendingID, Level: event.Level, Stage: event.Stage,
+			Message: event.Message, Detail: event.Detail, CreatedAt: time.Now().UTC(),
+		})
+	}
+	apiReq := argoHandlerRouteRequest(http.MethodGet, "/operation", "", map[string]string{"id": pendingID.String()})
+	apiRR := httptest.NewRecorder()
+	h.GetOperation(apiRR, apiReq)
+	if apiRR.Code != http.StatusOK || strings.Contains(apiRR.Body.String(), argoHandlerCanary) || !strings.Contains(apiRR.Body.String(), "[redacted]") {
+		t.Fatalf("pending operation API status=%d body=%s", apiRR.Code, apiRR.Body.String())
+	}
 }
 
 func TestRetrySanitizesLegacyReasonBeforePayloadTimelineAuditAndAPI(t *testing.T) {
@@ -320,7 +353,7 @@ func TestRetrySanitizesLegacyReasonBeforePayloadTimelineAuditAndAPI(t *testing.T
 	t.Cleanup(func() { audit.SetBusPublisher(nil) })
 	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
 	opID := uuid.New()
-	legacyReason := `{"apiKey":"` + argoHandlerCanary + `","nested":{"privateKey":"` + argoHandlerCanary + `","credential":"` + argoHandlerCanary + `"},"note":"Bearer ` + argoHandlerCanary + `"}`
+	legacyReason := `{"apiKey":"` + argoHandlerCanary + `","password":"` + argoHandlerCanary + `","nested":{"privateKey":"` + argoHandlerCanary + `","clientSecret":"` + argoHandlerCanary + `","credential":"` + argoHandlerCanary + `"},"note":"Bearer ` + argoHandlerCanary + `"}`
 	payload := mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), Reason: legacyReason})
 	now := time.Now().UTC()
 	rec.operation = sqlc.ArgocdOperation{
