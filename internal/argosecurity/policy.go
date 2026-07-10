@@ -278,10 +278,7 @@ func canonicalSensitiveKey(key string) bool {
 	case "bearer", "sig", "xamzcredential", "xamzsecuritytoken", "xgoogsignature":
 		return true
 	}
-	for _, fragment := range []string{
-		"password", "passwd", "secret", "clientsecret", "clientcertkey", "kubeconfig",
-		"apikey", "privatekey", "token", "credential", "awsaccesskeyid", "googleaccessid", "signature",
-	} {
+	for _, fragment := range canonicalSensitiveFragments {
 		if strings.Contains(normalized, fragment) {
 			return true
 		}
@@ -325,8 +322,12 @@ func canonicalCredentialDetected(value string) bool {
 }
 
 func containsCanonicalSensitiveMarker(value string) bool {
-	for _, candidate := range canonicalMarkerCandidate.FindAllString(value, -1) {
-		if canonicalSensitiveKey(candidate) {
+	// Normalize once so separator-fragmented keys are joined, then use the
+	// standard library's optimized substring scan. This remains bounded for
+	// the proxy's 16 MiB inspection limit without a regex match per token.
+	normalized := normalizeKey(value)
+	for _, fragment := range canonicalSensitiveFragments {
+		if strings.Contains(normalized, fragment) {
 			return true
 		}
 	}
@@ -1094,14 +1095,18 @@ func validateHelmValueFile(value string, refs map[string]struct{}) error {
 }
 
 var (
-	safeTemplateScalar        = regexp.MustCompile(`^\{\{[a-zA-Z0-9_.-]{1,128}\}\}$`)
-	safeNotificationRecipient = regexp.MustCompile(`^[a-zA-Z0-9_.@+-]{1,256}$`)
-	safeSourceRef             = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,62}$`)
-	safeGeneratorKey          = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
-	safeSCPRepository         = regexp.MustCompile(`^git@([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):([A-Za-z0-9._/-]{1,512})$`)
-	embeddedHTTPURL           = regexp.MustCompile(`(?i)https?://[^\s<>'"]+`)
-	canonicalAssignment       = regexp.MustCompile(`(?im)(([A-Za-z][A-Za-z0-9_."' -]{0,64})\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\s,;}\]\r\n]+)`)
-	canonicalMarkerCandidate  = regexp.MustCompile(`(?i)[A-Za-z][A-Za-z0-9_."' -]{0,64}`)
+	safeTemplateScalar          = regexp.MustCompile(`^\{\{[a-zA-Z0-9_.-]{1,128}\}\}$`)
+	safeNotificationRecipient   = regexp.MustCompile(`^[a-zA-Z0-9_.@+-]{1,256}$`)
+	safeSourceRef               = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,62}$`)
+	safeGeneratorKey            = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
+	safeSCPRepository           = regexp.MustCompile(`^git@([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):([A-Za-z0-9._/-]{1,512})$`)
+	embeddedHTTPURL             = regexp.MustCompile(`(?i)https?://[^\s<>'"]+`)
+	canonicalAssignment         = regexp.MustCompile(`(?im)(([A-Za-z][A-Za-z0-9_."' -]{0,64})\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\s,;}\]\r\n]+)`)
+	canonicalSensitiveFragments = []string{
+		"password", "passwd", "secret", "clientsecret", "clientcertkey", "kubeconfig",
+		"apikey", "privatekey", "token", "credential", "awsaccesskeyid", "googleaccessid",
+		"signature", "bearer", "xamzsecuritytoken",
+	}
 )
 
 // ValidateCredentialFreeURL is the shared write boundary for Argo endpoint,
