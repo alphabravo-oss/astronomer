@@ -20,12 +20,13 @@ SELECT * FROM dex_connectors WHERE enabled = true ORDER BY name ASC;
 -- name: StageCreateDexConnector :one
 WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
 locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true) FROM locked_settings),
 locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), connector AS (
  INSERT INTO dex_connectors (name,type,display_name,config,enabled)
- SELECT sqlc.arg(name),sqlc.arg(type),sqlc.arg(display_name),sqlc.arg(config),sqlc.arg(enabled) FROM locked_settings RETURNING *
+ SELECT sqlc.arg(name),sqlc.arg(type),sqlc.arg(display_name),sqlc.arg(config),sqlc.arg(enabled) FROM bypass RETURNING *
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
@@ -37,12 +38,14 @@ SELECT connector.*,staged.runtime_generation FROM connector CROSS JOIN staged WH
 -- name: StageUpdateDexConnector :one
 WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
 locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_connector AS MATERIALIZED (SELECT dex_connectors.id FROM dex_connectors,locked_settings WHERE dex_connectors.id=sqlc.arg(connector_id) FOR UPDATE OF dex_connectors),
+bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true) FROM locked_connector),
 locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), connector AS (
  UPDATE dex_connectors SET type=sqlc.arg(type),display_name=sqlc.arg(display_name),config=sqlc.arg(config),enabled=sqlc.arg(enabled),updated_at=now()
- WHERE dex_connectors.id=sqlc.arg(connector_id) AND EXISTS(SELECT 1 FROM locked_settings) RETURNING dex_connectors.*
+ WHERE dex_connectors.id=sqlc.arg(connector_id) AND EXISTS(SELECT 1 FROM bypass) RETURNING dex_connectors.*
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
@@ -54,11 +57,13 @@ SELECT connector.*,staged.runtime_generation FROM connector CROSS JOIN staged WH
 -- name: StageDeleteDexConnector :one
 WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
 locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_connector AS MATERIALIZED (SELECT dex_connectors.id FROM dex_connectors,locked_settings WHERE dex_connectors.id=sqlc.arg(connector_id) FOR UPDATE OF dex_connectors),
+bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true) FROM locked_connector),
 locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), deleted AS (
- DELETE FROM dex_connectors WHERE dex_connectors.id=sqlc.arg(connector_id) AND EXISTS(SELECT 1 FROM locked_settings) RETURNING dex_connectors.id
+ DELETE FROM dex_connectors WHERE dex_connectors.id=sqlc.arg(connector_id) AND EXISTS(SELECT 1 FROM bypass) RETURNING dex_connectors.id
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,deleted WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation

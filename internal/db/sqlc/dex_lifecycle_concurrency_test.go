@@ -45,6 +45,13 @@ INSERT INTO dex_settings(id) VALUES('00000000-0000-0000-0000-000000000001'); INS
 	if _, err = c1.Exec(ctx, ddl); err != nil {
 		t.Fatal(err)
 	}
+	upSQL, err := os.ReadFile("../migrations/137_dex_advisory_lock_connector_lifecycle.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c1.Exec(ctx, string(upSQL)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = c2.Exec(ctx, fmt.Sprintf(`SET search_path TO %s`, schema)); err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +108,119 @@ INSERT INTO dex_settings(id) VALUES('00000000-0000-0000-0000-000000000001'); INS
 			}
 		})
 	}
+	t.Run("mixed version connector lifecycle and one shot bypass", func(t *testing.T) {
+		reset := func() {
+			_, err := c1.Exec(ctx, `DELETE FROM dex_connectors; UPDATE dex_settings SET runtime_generation=1,runtime_applied_generation=1,runtime_staged_generation=1,saga_previous_sso_enabled=false; UPDATE sso_configurations SET is_enabled=true`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		assertState := func(generation int64, enabled bool) {
+			var g int64
+			var e bool
+			if err := c1.QueryRow(ctx, `SELECT runtime_generation FROM dex_settings`).Scan(&g); err != nil {
+				t.Fatal(err)
+			}
+			if err := c1.QueryRow(ctx, `SELECT is_enabled FROM sso_configurations WHERE provider='dex'`).Scan(&e); err != nil {
+				t.Fatal(err)
+			}
+			if g != generation || e != enabled {
+				t.Fatalf("generation=%d enabled=%v want %d/%v", g, e, generation, enabled)
+			}
+		}
+		reset()
+		if _, err := c1.Exec(ctx, `INSERT INTO dex_connectors(name,type,config) VALUES('old','saml','{}')`); err != nil {
+			t.Fatal(err)
+		}
+		assertState(2, false)
+		reset()
+		row, err := New(c1).StageCreateDexConnector(ctx, StageCreateDexConnectorParams{Name: "new", Type: "saml", Config: []byte(`{"cipher":"old"}`), Enabled: true})
+		if err != nil || row.RuntimeGeneration != 2 {
+			t.Fatalf("staged=%#v err=%v", row, err)
+		}
+		assertState(2, false)
+		if _, err = c1.Exec(ctx, `UPDATE dex_settings SET runtime_applied_generation=2,runtime_staged_generation=2,saga_previous_sso_enabled=false; UPDATE sso_configurations SET is_enabled=true`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c1.Exec(ctx, `WITH bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true)) UPDATE dex_connectors SET config='{"cipher":"new"}' WHERE name='new' AND EXISTS(SELECT 1 FROM bypass)`); err != nil {
+			t.Fatal(err)
+		}
+		assertState(2, true)
+		tx, err := c1.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = New(tx).StageUpdateDexConnector(ctx, StageUpdateDexConnectorParams{ConnectorID: row.ID, Type: "saml", Config: []byte(`{"x":1}`), Enabled: true}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE sso_configurations SET is_enabled=true`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE dex_connectors SET display_name='old-writer' WHERE id=$1`, row.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		assertState(4, false)
+
+		// A failed staged statement rolled back to a savepoint must not leave the
+		// transaction-local bypass armed for the next old-writer mutation.
+		reset()
+		if _, err = c1.Exec(ctx, `WITH bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true)) INSERT INTO dex_connectors(name,type,config) SELECT 'duplicate','saml','{}' FROM bypass`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c1.Exec(ctx, `UPDATE dex_settings SET runtime_generation=1,runtime_applied_generation=1,runtime_staged_generation=1,saga_previous_sso_enabled=false; UPDATE sso_configurations SET is_enabled=true`); err != nil {
+			t.Fatal(err)
+		}
+		tx, err = c1.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.Exec(ctx, `SAVEPOINT before_failed_stage`); err != nil {
+			t.Fatal(err)
+		}
+		_, stageErr := New(tx).StageCreateDexConnector(ctx, StageCreateDexConnectorParams{Name: "duplicate", Type: "saml", Config: []byte(`{}`), Enabled: true})
+		if stageErr == nil {
+			t.Fatal("duplicate staged create unexpectedly succeeded")
+		}
+		if _, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT before_failed_stage`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE dex_connectors SET display_name='old-after-failure' WHERE name='duplicate'`); err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		assertState(2, false)
+	})
+	t.Run("down restores migration 136 connector behavior", func(t *testing.T) {
+		downSQL, err := os.ReadFile("../migrations/137_dex_advisory_lock_connector_lifecycle.down.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c1.Exec(ctx, string(downSQL)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c1.Exec(ctx, `DELETE FROM dex_connectors; UPDATE dex_settings SET runtime_generation=1,runtime_applied_generation=1,runtime_staged_generation=1,saga_previous_sso_enabled=false; UPDATE sso_configurations SET is_enabled=true`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c1.Exec(ctx, `INSERT INTO dex_connectors(name,type,config) VALUES('migration-136','saml','{}')`); err != nil {
+			t.Fatal(err)
+		}
+		var generation int64
+		var enabled, previousEnabled bool
+		if err = c1.QueryRow(ctx, `SELECT runtime_generation,saga_previous_sso_enabled FROM dex_settings`).Scan(&generation, &previousEnabled); err != nil {
+			t.Fatal(err)
+		}
+		if err = c1.QueryRow(ctx, `SELECT is_enabled FROM sso_configurations WHERE provider='dex'`).Scan(&enabled); err != nil {
+			t.Fatal(err)
+		}
+		if generation != 2 || enabled || !previousEnabled {
+			t.Fatalf("down behavior generation=%d enabled=%v previous=%v", generation, enabled, previousEnabled)
+		}
+	})
 	t.Run("connector failure is atomic", func(t *testing.T) {
 		if _, err := c1.Exec(ctx, `DELETE FROM dex_settings; DELETE FROM dex_connectors`); err != nil {
 			t.Fatal(err)

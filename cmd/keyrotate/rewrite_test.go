@@ -15,7 +15,7 @@ func TestDexConnectorCiphertextRotationDoesNotStageLogicalRuntime(t *testing.T) 
 		t.Fatal(err)
 	}
 	text := string(source)
-	if !strings.Contains(text, "UPDATE dex_connectors SET config = $1::jsonb") || strings.Contains(text, "UPDATE dex_connectors SET runtime_generation") {
+	if !strings.Contains(text, "set_config('astronomer.dex_connector_stage_bypass','1',true)") || !strings.Contains(text, "UPDATE dex_connectors SET config = $1::jsonb") || strings.Contains(text, "UPDATE dex_connectors SET runtime_generation") {
 		t.Fatal("Dex connector key rotation is not a ciphertext-only CAS")
 	}
 	migration, err := os.ReadFile("../../internal/db/migrations/137_dex_advisory_lock_connector_lifecycle.up.sql")

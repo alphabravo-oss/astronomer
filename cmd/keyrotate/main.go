@@ -345,7 +345,7 @@ func rewriteDexConnectorConfigs(ctx context.Context, log *slog.Logger, db *sql.D
 				result.rewrote++
 				continue
 			}
-			res, err := db.ExecContext(ctx, `UPDATE dex_connectors SET config = $1::jsonb, updated_at = now() WHERE id = $2::uuid AND config = $3::jsonb`, updated, row.id, row.raw)
+			res, err := db.ExecContext(ctx, `WITH bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true)) UPDATE dex_connectors SET config = $1::jsonb, updated_at = now() WHERE id = $2::uuid AND config = $3::jsonb AND EXISTS (SELECT 1 FROM bypass)`, updated, row.id, row.raw)
 			if err != nil {
 				result.failed++
 				continue

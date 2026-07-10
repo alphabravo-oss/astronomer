@@ -401,12 +401,13 @@ func (q *Queries) RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDex
 const stageCreateDexConnector = `-- name: StageCreateDexConnector :one
 WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
 locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true) FROM locked_settings),
 locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), connector AS (
  INSERT INTO dex_connectors (name,type,display_name,config,enabled)
- SELECT $1,$2,$3,$4,$5 FROM locked_settings RETURNING id, name, type, display_name, config, enabled, created_at, updated_at
+ SELECT $1,$2,$3,$4,$5 FROM bypass RETURNING id, name, type, display_name, config, enabled, created_at, updated_at
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
@@ -464,11 +465,13 @@ func (q *Queries) StageCreateDexConnector(ctx context.Context, arg StageCreateDe
 const stageDeleteDexConnector = `-- name: StageDeleteDexConnector :one
 WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
 locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_connector AS MATERIALIZED (SELECT dex_connectors.id FROM dex_connectors,locked_settings WHERE dex_connectors.id=$1 FOR UPDATE OF dex_connectors),
+bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true) FROM locked_connector),
 locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), deleted AS (
- DELETE FROM dex_connectors WHERE dex_connectors.id=$1 AND EXISTS(SELECT 1 FROM locked_settings) RETURNING dex_connectors.id
+ DELETE FROM dex_connectors WHERE dex_connectors.id=$1 AND EXISTS(SELECT 1 FROM bypass) RETURNING dex_connectors.id
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,deleted WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
@@ -588,12 +591,14 @@ func (q *Queries) StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDe
 const stageUpdateDexConnector = `-- name: StageUpdateDexConnector :one
 WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
 locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_connector AS MATERIALIZED (SELECT dex_connectors.id FROM dex_connectors,locked_settings WHERE dex_connectors.id=$1 FOR UPDATE OF dex_connectors),
+bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true) FROM locked_connector),
 locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), connector AS (
- UPDATE dex_connectors SET type=$1,display_name=$2,config=$3,enabled=$4,updated_at=now()
- WHERE dex_connectors.id=$5 AND EXISTS(SELECT 1 FROM locked_settings) RETURNING dex_connectors.id, dex_connectors.name, dex_connectors.type, dex_connectors.display_name, dex_connectors.config, dex_connectors.enabled, dex_connectors.created_at, dex_connectors.updated_at
+ UPDATE dex_connectors SET type=$2,display_name=$3,config=$4,enabled=$5,updated_at=now()
+ WHERE dex_connectors.id=$1 AND EXISTS(SELECT 1 FROM bypass) RETURNING dex_connectors.id, dex_connectors.name, dex_connectors.type, dex_connectors.display_name, dex_connectors.config, dex_connectors.enabled, dex_connectors.created_at, dex_connectors.updated_at
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
@@ -604,11 +609,11 @@ SELECT connector.id, connector.name, connector.type, connector.display_name, con
 `
 
 type StageUpdateDexConnectorParams struct {
+	ConnectorID uuid.UUID       `json:"connector_id"`
 	Type        string          `json:"type"`
 	DisplayName string          `json:"display_name"`
 	Config      json.RawMessage `json:"config"`
 	Enabled     bool            `json:"enabled"`
-	ConnectorID uuid.UUID       `json:"connector_id"`
 }
 
 type StageUpdateDexConnectorRow struct {
@@ -625,11 +630,11 @@ type StageUpdateDexConnectorRow struct {
 
 func (q *Queries) StageUpdateDexConnector(ctx context.Context, arg StageUpdateDexConnectorParams) (StageUpdateDexConnectorRow, error) {
 	row := q.db.QueryRow(ctx, stageUpdateDexConnector,
+		arg.ConnectorID,
 		arg.Type,
 		arg.DisplayName,
 		arg.Config,
 		arg.Enabled,
-		arg.ConnectorID,
 	)
 	var i StageUpdateDexConnectorRow
 	err := row.Scan(
