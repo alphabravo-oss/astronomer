@@ -204,11 +204,19 @@ helm-install: ## Install/upgrade the Helm chart (CLUSTER=$(CLUSTER) NAMESPACE=as
 	helm upgrade --install astronomer deploy/chart \
 		--namespace $${NAMESPACE:-astronomer} --create-namespace \
 		-f deploy/chart/values.yaml \
+		--set image.server.registry=$(IMG_REGISTRY) \
+		--set image.worker.registry=$(IMG_REGISTRY) \
+		--set image.agent.registry=$(IMG_REGISTRY) \
+		--set image.migrate.registry=$(IMG_REGISTRY) \
+		--set frontend.image.registry=$(IMG_REGISTRY) \
+		--set preflight.image.registry=$(IMG_REGISTRY) \
 		--set image.server.tag=$(IMG_TAG) \
 		--set image.worker.tag=$(IMG_TAG) \
 		--set image.agent.tag=$(IMG_TAG) \
 		--set image.migrate.tag=$(IMG_TAG) \
-		--set frontend.image.tag=$(IMG_TAG)
+		--set frontend.image.tag=$(IMG_TAG) \
+		--set preflight.image.tag=$(IMG_TAG) \
+		--set-string kubectlShell.image=$(IMG_SHELL)
 
 helm-uninstall: ## Uninstall the Helm release
 	helm uninstall astronomer --namespace $${NAMESPACE:-astronomer}

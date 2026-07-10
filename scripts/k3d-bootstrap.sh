@@ -140,6 +140,8 @@ helm upgrade --install astronomer deploy/chart \
   --set image.agent.tag="${IMG_TAG}" \
   --set image.migrate.tag="${IMG_TAG}" \
   --set frontend.image.tag="${IMG_TAG}" \
+  --set preflight.image.tag="${IMG_TAG}" \
+  --set-string kubectlShell.image="${IMG_SHELL}" \
   --set config.serverURL="${SERVER_URL}" \
   --set config.corsAllowedOrigins="${SERVER_URL}" \
   --set ingress.enabled=false \

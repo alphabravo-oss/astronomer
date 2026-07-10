@@ -1,7 +1,9 @@
 package deploy
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -141,12 +143,114 @@ func TestSixImageReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
 	for _, required := range []string{
 		`make IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all`,
 		`--set preflight.image.registry="${IMG_REGISTRY}"`,
+		`--set preflight.image.tag="${IMG_TAG}"`,
+		`--set-string kubectlShell.image="${IMG_SHELL}"`,
 		`--set frontend.image.registry="${IMG_REGISTRY}"`,
 	} {
 		if !strings.Contains(bootstrap, required) {
 			t.Fatalf("k3d bootstrap missing registry/import contract %q", required)
 		}
 	}
+}
+
+func TestMakeK3DImportedIdentitiesEqualRenderedFirstPartyReferences(t *testing.T) {
+	const (
+		registry = "mirror.example.test:5443/platform/team"
+		tag      = "ci-contract"
+		cluster  = "contract-cluster"
+	)
+
+	cmd := exec.Command("make", "-n", "k3d-import-all", "helm-install",
+		"IMG_REGISTRY="+registry,
+		"IMG_TAG="+tag,
+		"CLUSTER="+cluster,
+	)
+	cmd.Dir = ".."
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("dry-run Make import/install workflow: %v\n%s", err, output.String())
+	}
+	dryRun := output.String()
+
+	importMatch := regexp.MustCompile(`(?m)^k3d image import (.+) -c ` + regexp.QuoteMeta(cluster) + `$`).FindStringSubmatch(dryRun)
+	if len(importMatch) != 2 {
+		t.Fatalf("Make dry run has no exact k3d import command:\n%s", dryRun)
+	}
+	imported := strings.Fields(importMatch[1])
+	want := []string{
+		registry + "/astronomer-go-agent:" + tag,
+		registry + "/astronomer-frontend:" + tag,
+		registry + "/astronomer-go-migrate:" + tag,
+		registry + "/astronomer-go-server:" + tag,
+		registry + "/astronomer-shell:" + tag,
+		registry + "/astronomer-go-worker:" + tag,
+	}
+	assertStringSet(t, imported, want, "Make k3d imported identities")
+
+	helmStart := strings.Index(dryRun, "helm upgrade --install")
+	if helmStart < 0 {
+		t.Fatalf("Make dry run has no Helm install command:\n%s", dryRun)
+	}
+	setMatches := regexp.MustCompile(`--set(?:-string)?[ \t]+([^ \t\\\r\n]+)`).FindAllStringSubmatch(dryRun[helmStart:], -1)
+	sets := make([]string, 0, len(setMatches))
+	for _, match := range setMatches {
+		sets = append(sets, match[1])
+	}
+	if len(sets) == 0 {
+		t.Fatalf("Make Helm command has no value overrides:\n%s", dryRun[helmStart:])
+	}
+
+	docs := parseRenderedDocs(t, helmTemplate(t, sets...))
+	rendered := renderedFirstPartyImageReferences(t, docs)
+	assertStringSet(t, rendered, want, "rendered first-party image identities")
+
+	config := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
+	if got := stringValue(config["KUBECTL_SHELL_IMAGE"]); got != registry+"/astronomer-shell:"+tag {
+		t.Fatalf("KUBECTL_SHELL_IMAGE = %q, want imported shell identity", got)
+	}
+	if got := stringValue(config["AGENT_IMAGE_REPOSITORY"]) + ":" + stringValue(config["AGENT_IMAGE_TAG"]); got != registry+"/astronomer-go-agent:"+tag {
+		t.Fatalf("rendered agent install identity = %q, want imported agent identity", got)
+	}
+}
+
+func renderedFirstPartyImageReferences(t *testing.T, docs []renderedDoc) []string {
+	t.Helper()
+	firstPartyRepositories := []string{
+		"astronomer-go-server",
+		"astronomer-go-worker",
+		"astronomer-go-migrate",
+		"astronomer-frontend",
+		"astronomer-shell",
+	}
+	seen := map[string]bool{}
+	for _, doc := range docs {
+		podSpec := podSpecFor(doc)
+		if podSpec == nil {
+			continue
+		}
+		for _, field := range []string{"initContainers", "containers"} {
+			for _, container := range containerList(podSpec, field) {
+				ref := stringValue(container["image"])
+				for _, repository := range firstPartyRepositories {
+					if strings.Contains(ref, "/"+repository+":") || strings.HasPrefix(ref, repository+":") {
+						seen[ref] = true
+					}
+				}
+			}
+		}
+	}
+
+	config := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
+	seen[stringValue(config["AGENT_IMAGE_REPOSITORY"])+":"+stringValue(config["AGENT_IMAGE_TAG"])] = true
+	seen[stringValue(config["KUBECTL_SHELL_IMAGE"])] = true
+
+	refs := make([]string, 0, len(seen))
+	for ref := range seen {
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 func TestFrontendVersionIsBakedIntoShippedStaticOutput(t *testing.T) {
