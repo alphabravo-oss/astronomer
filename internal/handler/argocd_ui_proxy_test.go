@@ -1,12 +1,21 @@
 package handler
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+const argoProxyCanary = "ARGO_PROXY_CANARY_9d32f1"
 
 // TestArgoCDUIProxy_ForwardsPathUnchanged verifies that the proxy forwards
 // the full incoming path (including the `/argocd` prefix) to the upstream.
@@ -198,7 +207,270 @@ func TestArgoCDUIProxyAuditsDocumentAndMutatingRequests(t *testing.T) {
 	if audit.rows[1].Action != "argocd.ui_proxy.forwarded" {
 		t.Fatalf("second audit action = %q", audit.rows[1].Action)
 	}
-	if audit.rows[1].ResourceName != "/argocd/api/v1/applications/demo/sync" {
+	if audit.rows[1].ResourceName != "/argocd/api/v1/applications/*/sync" {
 		t.Fatalf("mutating audit resource name = %q", audit.rows[1].ResourceName)
 	}
+}
+
+func TestArgoCDUIProxySanitizesJSONResponsesCompressedAndUncompressed(t *testing.T) {
+	for _, compressed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "plain", true: "gzip"}[compressed], func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				payload := `{"metadata":{"name":"demo"},"spec":{"source":{"repoURL":"https://user:` + argoProxyCanary + `@git.example/team/repo?token=` + argoProxyCanary + `","helm":{"values":"password: ` + argoProxyCanary + `","releaseName":"diagnostic-release"}}},"status":{"health":{"status":"Healthy"},"history":[{"source":{"helm":{"valuesObject":{"password":"` + argoProxyCanary + `"}}}}]}}`
+				w.Header().Set("Content-Type", "application/vnd.argoproj.application+json; charset=utf-8")
+				w.Header().Set("ETag", `"unsafe-etag"`)
+				if compressed {
+					var encoded bytes.Buffer
+					zw := gzip.NewWriter(&encoded)
+					_, _ = zw.Write([]byte(payload))
+					_ = zw.Close()
+					w.Header().Set("Content-Encoding", "gzip")
+					w.Header().Set("Content-Length", fmt.Sprint(encoded.Len()))
+					_, _ = w.Write(encoded.Bytes())
+					return
+				}
+				w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+				_, _ = w.Write([]byte(payload))
+			}))
+			defer upstream.Close()
+
+			proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications/demo", nil)
+			req.Header.Set("Accept", "application/json")
+			if compressed {
+				req.Header.Set("Accept-Encoding", "gzip")
+			}
+			rr := httptest.NewRecorder()
+			proxy.ServeHTTP(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			body := rr.Body.String()
+			if strings.Contains(body, argoProxyCanary) || strings.Contains(body, "user:") {
+				t.Fatalf("response leaked canary or URL userinfo: %s", body)
+			}
+			for _, want := range []string{"Healthy", "diagnostic-release", "https://", "git.example", "/team/repo"} {
+				if !strings.Contains(body, want) {
+					t.Fatalf("response lost diagnostic %q: %s", want, body)
+				}
+			}
+			for _, header := range []string{"Content-Encoding", "ETag", "Content-MD5", "Digest"} {
+				if got := rr.Header().Get(header); got != "" {
+					t.Fatalf("stale %s=%q", header, got)
+				}
+			}
+		})
+	}
+}
+
+func TestArgoCDUIProxyRejectsUnsafeMutationBodiesBeforeUpstream(t *testing.T) {
+	for name, tc := range map[string]struct {
+		contentType     string
+		contentEncoding string
+		body            []byte
+		wantStatus      int
+	}{
+		"helm values":          {contentType: "application/json", body: []byte(`{"spec":{"source":{"helm":{"values":"` + argoProxyCanary + `"}}}}`), wantStatus: http.StatusBadRequest},
+		"patch wrapper":        {contentType: "application/merge-patch+json", body: []byte(`{"patch":"{\"spec\":{\"source\":{\"helm\":{\"values\":\"` + argoProxyCanary + `\"}}}}"}`), wantStatus: http.StatusBadRequest},
+		"json patch path":      {contentType: "application/json-patch+json", body: []byte(`[{"op":"replace","path":"/spec/source/helm/values","value":"` + argoProxyCanary + `"}]`), wantStatus: http.StatusBadRequest},
+		"scalar wrapper":       {contentType: "application/json", body: []byte(`"{\"spec\":{\"source\":{\"helm\":{\"values\":\"` + argoProxyCanary + `\"}}}}"`), wantStatus: http.StatusBadRequest},
+		"malformed":            {contentType: "application/json", body: []byte(`{"spec":`), wantStatus: http.StatusBadRequest},
+		"non json":             {contentType: "text/plain", body: []byte(argoProxyCanary), wantStatus: http.StatusUnsupportedMediaType},
+		"gzip":                 {contentType: "application/json", contentEncoding: "gzip", body: gzipTestBytes(t, []byte(`{"spec":{"sources":[{"repoURL":"https://git.example/repo"}]}}`)), wantStatus: http.StatusBadRequest},
+		"unsupported encoding": {contentType: "application/json", contentEncoding: "br", body: []byte(`{"safe":true}`), wantStatus: http.StatusBadRequest},
+	} {
+		t.Run(name, func(t *testing.T) {
+			upstreamCalls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				upstreamCalls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer upstream.Close()
+			var logs bytes.Buffer
+			proxy, err := NewArgoCDUIProxy(upstream.URL, slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			if err != nil {
+				t.Fatal(err)
+			}
+			audit := &serviceProxyTestAuditWriter{}
+			proxy.SetAuditWriter(audit)
+			req := httptest.NewRequest(http.MethodPatch, "/argocd/api/v1/applications/demo", bytes.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.contentType)
+			if tc.contentEncoding != "" {
+				req.Header.Set("Content-Encoding", tc.contentEncoding)
+			}
+			rr := httptest.NewRecorder()
+			proxy.ServeHTTP(rr, req)
+			if rr.Code != tc.wantStatus || upstreamCalls != 0 {
+				t.Fatalf("status=%d calls=%d body=%s", rr.Code, upstreamCalls, rr.Body.String())
+			}
+			if strings.Contains(logs.String(), argoProxyCanary) {
+				t.Fatalf("logs leaked canary: %s", logs.String())
+			}
+			if len(audit.rows) != 1 {
+				t.Fatalf("audit rows=%d, want rejected mutation audit", len(audit.rows))
+			}
+			auditRaw, _ := json.Marshal(audit.rows)
+			if strings.Contains(string(auditRaw), argoProxyCanary) {
+				t.Fatalf("audit leaked canary: %s", auditRaw)
+			}
+		})
+	}
+}
+
+func TestArgoCDUIProxyRejectsAPIProtocolUpgradeBeforeUpstream(t *testing.T) {
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls++
+		w.WriteHeader(http.StatusSwitchingProtocols)
+	}))
+	defer upstream.Close()
+	proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications?watch=true", nil)
+	req.Header.Set("Connection", "keep-alive, Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	rr := httptest.NewRecorder()
+	proxy.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden || upstreamCalls != 0 {
+		t.Fatalf("status=%d calls=%d", rr.Code, upstreamCalls)
+	}
+}
+
+func TestArgoCDUIProxyForwardsSafeJSONMutationAndNonAPIAsset(t *testing.T) {
+	for _, tc := range []struct {
+		method, path, contentType, body string
+	}{
+		{method: http.MethodPost, path: "/argocd/api/v1/applications/demo/sync", contentType: "application/json", body: `{"name":"demo","revision":"main","prune":false}`},
+		{method: http.MethodGet, path: "/argocd/assets/main.js", contentType: "application/javascript", body: "window.ARGO_DIAGNOSTIC=true;"},
+	} {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", tc.contentType)
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		if tc.method != http.MethodGet {
+			req.Header.Set("Content-Type", tc.contentType)
+		}
+		rr := httptest.NewRecorder()
+		proxy.ServeHTTP(rr, req)
+		upstream.Close()
+		if rr.Code != http.StatusOK {
+			t.Fatalf("method=%s status=%d body=%q", tc.method, rr.Code, rr.Body.String())
+		}
+		if tc.method == http.MethodGet && rr.Body.String() != tc.body {
+			t.Fatalf("stream changed: %q", rr.Body.String())
+		}
+		if tc.method != http.MethodGet {
+			var got, want any
+			if json.Unmarshal(rr.Body.Bytes(), &got) != nil || json.Unmarshal([]byte(tc.body), &want) != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("safe JSON mutation response changed semantically: %s", rr.Body.String())
+			}
+		}
+	}
+}
+
+func TestArgoCDUIProxyFailsClosedForSensitiveNonJSONAPIStreams(t *testing.T) {
+	for name, tc := range map[string]struct {
+		path, contentType, body string
+	}{
+		"application sse":  {path: "/argocd/api/v1/stream/applications", contentType: "text/event-stream", body: "data: " + argoProxyCanary + "\n\n"},
+		"operation ndjson": {path: "/argocd/api/v1/stream/applications/demo", contentType: "application/x-ndjson", body: `{"source":{"helm":{"values":"` + argoProxyCanary + `"}}}` + "\n"},
+		"pod logs":         {path: "/argocd/api/v1/applications/demo/pods/pod/logs", contentType: "text/plain", body: "token=" + argoProxyCanary + "\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tc.contentType)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer upstream.Close()
+			proxy, _ := NewArgoCDUIProxy(upstream.URL, nil)
+			rr := httptest.NewRecorder()
+			proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if rr.Code != http.StatusBadGateway || strings.Contains(rr.Body.String(), argoProxyCanary) {
+				t.Fatalf("stream status=%d body=%s", rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestArgoCDUIProxyMalformedJSONResponseFailsClosed(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"secret":"` + argoProxyCanary))
+	}))
+	defer upstream.Close()
+	proxy, _ := NewArgoCDUIProxy(upstream.URL, nil)
+	rr := httptest.NewRecorder()
+	proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
+	if rr.Code != http.StatusBadGateway || strings.Contains(rr.Body.String(), argoProxyCanary) {
+		t.Fatalf("malformed response status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+type staticArgoTokenSource string
+
+func (s staticArgoTokenSource) UpstreamSessionToken(context.Context) (string, error) {
+	return string(s), nil
+}
+
+type failingArgoTokenSource string
+
+func (s failingArgoTokenSource) UpstreamSessionToken(context.Context) (string, error) {
+	return "", fmt.Errorf("token=%s", string(s))
+}
+
+func TestArgoCDUIProxyNeverLogsTokenFragments(t *testing.T) {
+	const tokenCanary = "ARGO_TOKEN_FRAGMENT_CANARY_d4e5f6"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"health":"Healthy"}`))
+	}))
+	defer upstream.Close()
+	var logs bytes.Buffer
+	proxy, _ := NewArgoCDUIProxy(upstream.URL, slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	proxy.SetSessionTokenSource(staticArgoTokenSource(tokenCanary))
+	proxy.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
+	proxy.SetSessionTokenSource(failingArgoTokenSource(tokenCanary))
+	proxy.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
+	if strings.Contains(logs.String(), tokenCanary) || strings.Contains(logs.String(), "token_prefix") {
+		t.Fatalf("logs contain token fragment: %s", logs.String())
+	}
+}
+
+func TestSafeArgoCDProxyPathNeverRetainsDynamicCredentialFragments(t *testing.T) {
+	for _, path := range []string{
+		"/argocd/api/v1/repositories/https:%2F%2Fuser:" + argoProxyCanary + "@git.example%2Frepo/validate",
+		"/argocd/api/v1/applications/" + argoProxyCanary + "/sync",
+		"/argocd/api/v1/unknown/" + argoProxyCanary,
+	} {
+		if got := safeArgoCDProxyPath(path); strings.Contains(got, argoProxyCanary) || strings.Contains(got, "user:") {
+			t.Fatalf("safe path %q retained credential fragment from %q", got, path)
+		}
+	}
+	if got := safeArgoCDProxyPath("/argocd/api/v1/applications/demo/sync"); got != "/argocd/api/v1/applications/*/sync" {
+		t.Fatalf("application path family=%q", got)
+	}
+}
+
+func gzipTestBytes(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	writer := gzip.NewWriter(&out)
+	if _, err := writer.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
 }

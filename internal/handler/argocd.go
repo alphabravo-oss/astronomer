@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -562,7 +563,7 @@ func (h *ArgoCDHandler) ListAppsByInstance(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	RespondPaginated(w, r, apps, total)
+	RespondPaginated(w, r, argosecurity.Sanitize(apps), total)
 }
 
 // ListAllApps handles GET /api/v1/argocd/apps/.
@@ -604,7 +605,7 @@ func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, app)
 			}
 		}
-		RespondPaginated(w, r, filtered, int64(len(filtered)))
+		RespondPaginated(w, r, argosecurity.Sanitize(filtered), int64(len(filtered)))
 		return
 	}
 
@@ -614,7 +615,7 @@ func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, apps, total)
+	RespondPaginated(w, r, argosecurity.Sanitize(apps), total)
 }
 
 // GetApp handles GET /api/v1/argocd/apps/{id}/.
@@ -639,7 +640,7 @@ func (h *ArgoCDHandler) GetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, app)
+	respondArgoJSON(w, http.StatusOK, app)
 }
 
 // SyncApp handles POST /api/v1/argocd/apps/{id}/sync/.
@@ -702,7 +703,7 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 		"override_reason":      req.Reason,
 		"operation_id":         op.ID.String(),
 	})
-	RespondJSON(w, http.StatusAccepted, argocdOperationResponse(op))
+	respondArgoJSON(w, http.StatusAccepted, argocdOperationResponse(op))
 }
 
 // InstanceHealth handles GET /api/v1/argocd/instances/{id}/health/.
@@ -755,7 +756,7 @@ func (h *ArgoCDHandler) LiveApplications(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, apps)
+	respondArgoJSON(w, http.StatusOK, apps)
 }
 
 // AppHistory handles GET /api/v1/argocd/applications/{id}/history/.
@@ -783,7 +784,7 @@ func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, history)
+	respondArgoJSON(w, http.StatusOK, history)
 }
 
 // AppManifests handles GET /api/v1/argocd/applications/{id}/manifests/.
@@ -811,7 +812,7 @@ func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, manifests)
+	respondArgoJSON(w, http.StatusOK, manifests)
 }
 
 // RefreshApp handles POST /api/v1/argocd/applications/{id}/refresh/.
@@ -851,7 +852,7 @@ func (h *ArgoCDHandler) RefreshApp(w http.ResponseWriter, r *http.Request) {
 		"instance_id": app.ArgocdInstanceID.String(),
 		"hard":        hard,
 	})
-	RespondJSON(w, http.StatusAccepted, upstream)
+	respondArgoJSON(w, http.StatusAccepted, upstream)
 }
 
 // fetchInstanceJSON performs a GET against the ArgoCD instance's API and decodes JSON.
@@ -958,7 +959,7 @@ func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	// forced has_more to always be false.
 	page := NewPaginationFromPage(int(limit), int(offset), len(ops))
 	page.Total = int(total)
-	RespondList(w, items, page)
+	RespondList(w, argosecurity.Sanitize(items), page)
 }
 
 func (h *ArgoCDHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
@@ -984,7 +985,7 @@ func (h *ArgoCDHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if events, err := h.queries.ListArgoCDOperationEvents(r.Context(), op.ID); err == nil {
 		resp["events"] = argocdOperationEventsResponse(events)
 	}
-	RespondJSON(w, http.StatusOK, resp)
+	respondArgoJSON(w, http.StatusOK, resp)
 }
 
 func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
@@ -1019,7 +1020,7 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 		"target_type":     op.TargetType,
 		"previous_status": op.Status,
 	})
-	RespondJSON(w, http.StatusAccepted, argocdOperationResponse(requeued))
+	respondArgoJSON(w, http.StatusAccepted, argocdOperationResponse(requeued))
 }
 
 func (h *ArgoCDHandler) operationClusterID(ctx context.Context, op sqlc.ArgocdOperation) (uuid.UUID, error) {
@@ -1054,7 +1055,7 @@ func (h *ArgoCDHandler) ControllerStatus(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load ArgoCD controller status")
 		return
 	}
-	RespondJSON(w, http.StatusOK, summary)
+	respondArgoJSON(w, http.StatusOK, summary)
 }
 
 func (h *ArgoCDHandler) controllerSummary(ctx context.Context) (map[string]any, error) {
@@ -1190,6 +1191,10 @@ func argocdOperationEventsResponse(events []sqlc.ArgocdOperationEvent) []map[str
 	return out
 }
 
+func respondArgoJSON(w http.ResponseWriter, status int, payload any) {
+	RespondJSON(w, status, argosecurity.Sanitize(payload))
+}
+
 func (h *ArgoCDHandler) operationPreview(ctx context.Context, op sqlc.ArgocdOperation) map[string]any {
 	resp := argocdOperationResponse(op)
 	if events, err := h.queries.ListArgoCDOperationEvents(ctx, op.ID); err == nil && len(events) > 0 {
@@ -1299,15 +1304,16 @@ func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []clai
 				// bookkeeping because argocd's terminal state depends on
 				// the operationResult.async flag.
 				OnFailure: func(ctx context.Context, err error) {
-					h.recordArgoCDOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
+					safeError := argosecurity.SanitizeString(err.Error())
+					h.recordArgoCDOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": safeError})
 					_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
 						ID:           running.ID,
 						Phase:        "Failed",
-						ErrorMessage: err.Error(),
-						Message:      err.Error(),
+						ErrorMessage: safeError,
+						Message:      safeError,
 					})
 					if h.log != nil {
-						h.log.Warn("argocd operation failed", "id", running.ID.String(), "error", err)
+						h.log.Warn("argocd operation failed", "id", running.ID.String(), "error", safeError)
 					}
 				},
 			}
@@ -1428,7 +1434,7 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 		ResourcePrunedCount:  resourcePrunedCount,
 		LastSynced:           lastSynced,
 	}); updErr != nil && h.log != nil {
-		h.log.Warn("failed to update argocd application after sync", "id", app.ID.String(), "error", updErr)
+		h.log.Warn("failed to update argocd application after sync", "id", app.ID.String(), "error", argosecurity.SanitizeString(updErr.Error()))
 	}
 	return res, nil
 }
@@ -1452,7 +1458,7 @@ func operationResultFromApp(app *argocdclient.Application) operationResult {
 		return res
 	}
 	res.phase = state.Phase
-	res.message = state.Message
+	res.message = argosecurity.SanitizeString(state.Message)
 	if state.SyncResult != nil && state.SyncResult.Revision != "" {
 		res.revision = state.SyncResult.Revision
 	} else if state.Operation != nil && state.Operation.Sync != nil {
@@ -1589,7 +1595,7 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 				Phase:       op.Phase,
 				OperationID: op.OperationID,
 				Revision:    op.Revision,
-				Message:     err.Error(),
+				Message:     argosecurity.SanitizeString(err.Error()),
 			})
 			return
 		}
@@ -1693,6 +1699,7 @@ func (h *ArgoCDHandler) argoCDClient(instance sqlc.ArgocdInstance) *argocdclient
 }
 
 func (h *ArgoCDHandler) failOperationWithMessage(ctx context.Context, op sqlc.ArgocdOperation, phase, msg string) {
+	msg = argosecurity.SanitizeString(msg)
 	h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "ArgoCD sync failed", map[string]any{
 		"phase":   phase,
 		"message": msg,
@@ -1718,7 +1725,8 @@ func (h *ArgoCDHandler) recordArgoCDOperationEvent(ctx context.Context, operatio
 	if h == nil || h.queries == nil {
 		return
 	}
-	raw, err := json.Marshal(detail)
+	message = argosecurity.SanitizeString(message)
+	raw, err := json.Marshal(argosecurity.Sanitize(detail))
 	if err != nil {
 		raw = json.RawMessage(`{}`)
 	}
@@ -1783,7 +1791,7 @@ func (h *ArgoCDHandler) refreshLocalManagedClusterRegistrations(ctx context.Cont
 			continue
 		}
 		if err := h.refreshLocalManagedClusterRegistration(ctx, client, instance.ID, cluster, row); err != nil && h.log != nil {
-			h.log.Warn("failed to refresh local argocd managed cluster registration", "instance_id", instance.ID.String(), "cluster_id", cluster.ID.String(), "error", err)
+			h.log.Warn("failed to refresh local argocd managed cluster registration", "instance_id", instance.ID.String(), "cluster_id", cluster.ID.String(), "error", argosecurity.SanitizeString(err.Error()))
 		}
 	}
 }
@@ -2167,7 +2175,7 @@ func translateClientError(w http.ResponseWriter, r *http.Request, err error) boo
 	case argocdclient.IsKind(err, argocdclient.ErrUnreachable):
 		status = http.StatusBadGateway
 	}
-	RespondRequestError(w, r, status, apierror.ArgoCDError, err.Error())
+	RespondRequestError(w, r, status, apierror.ArgoCDError, argosecurity.SanitizeString(err.Error()))
 	return true
 }
 
@@ -2198,6 +2206,10 @@ func (h *ArgoCDHandler) CreateApplication(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
 		return
 	}
+	if err := argosecurity.ValidateMutation(map[string]any{"spec": req.Spec}); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
 	client := h.argoCDClient(instance)
 	app, err := client.CreateApplication(r.Context(), req.Name, req.Spec)
 	if translateClientError(w, r, err) {
@@ -2207,7 +2219,7 @@ func (h *ArgoCDHandler) CreateApplication(w http.ResponseWriter, r *http.Request
 		"instance_id": instance.ID.String(),
 		"project":     req.Spec.Project,
 	})
-	RespondJSON(w, http.StatusCreated, app)
+	respondArgoJSON(w, http.StatusCreated, app)
 }
 
 // PatchApplication handles PATCH /api/v1/argocd/instances/{id}/applications/{name}/.
@@ -2223,7 +2235,15 @@ func (h *ArgoCDHandler) PatchApplication(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "application name is required")
 		return
 	}
-	raw, _ := io.ReadAll(r.Body)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	if err := argosecurity.ValidateMutationJSON(raw); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
 	client := h.argoCDClient(instance)
 	app, err := client.PatchApplication(r.Context(), name, raw)
 	if translateClientError(w, r, err) {
@@ -2235,7 +2255,7 @@ func (h *ArgoCDHandler) PatchApplication(w http.ResponseWriter, r *http.Request)
 		"instance_id":     instance.ID.String(),
 		"patch_byte_size": len(raw),
 	})
-	RespondJSON(w, http.StatusOK, app)
+	respondArgoJSON(w, http.StatusOK, app)
 }
 
 // DeleteApplication handles DELETE /api/v1/argocd/instances/{id}/applications/{name}/.
@@ -2297,7 +2317,7 @@ func (h *ArgoCDHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	recordAudit(r, h.queries, "argocd.project.create", "argocd_project", "", req.Name, map[string]any{
 		"instance_id": instance.ID.String(),
 	})
-	RespondJSON(w, http.StatusCreated, out)
+	respondArgoJSON(w, http.StatusCreated, out)
 }
 
 // ListProjects handles GET /api/v1/argocd/instances/{id}/projects/.
@@ -2312,7 +2332,7 @@ func (h *ArgoCDHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, projects)
+	respondArgoJSON(w, http.StatusOK, projects)
 }
 
 // PatchProject handles PATCH /api/v1/argocd/instances/{id}/projects/{name}/.
@@ -2340,7 +2360,7 @@ func (h *ArgoCDHandler) PatchProject(w http.ResponseWriter, r *http.Request) {
 		"instance_id":     instance.ID.String(),
 		"patch_byte_size": len(raw),
 	})
-	RespondJSON(w, http.StatusOK, out)
+	respondArgoJSON(w, http.StatusOK, out)
 }
 
 // DeleteProject handles DELETE /api/v1/argocd/instances/{id}/projects/{name}/.
@@ -2398,6 +2418,10 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
+	if err := argosecurity.ValidateMutation(map[string]any{"spec": req.Spec}); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
 	client := h.argoCDClient(instance)
 	out, err := client.CreateApplicationSet(r.Context(), req.Name, req.Spec)
 	if translateClientError(w, r, err) {
@@ -2407,7 +2431,7 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 		"instance_id":     instance.ID.String(),
 		"generator_count": len(req.Spec.Generators),
 	})
-	RespondJSON(w, http.StatusCreated, out)
+	respondArgoJSON(w, http.StatusCreated, out)
 }
 
 func validateApplicationSetClusterGenerators(spec argocdclient.ApplicationSetSpec) error {
@@ -2466,7 +2490,7 @@ func (h *ArgoCDHandler) ListApplicationSets(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, out)
+	respondArgoJSON(w, http.StatusOK, out)
 }
 
 // DeleteApplicationSet handles DELETE /api/v1/argocd/instances/{id}/applicationsets/{name}/.
@@ -2637,7 +2661,7 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 		"project":     req.Project,
 	})
 
-	RespondJSON(w, http.StatusCreated, map[string]any{
+	respondArgoJSON(w, http.StatusCreated, map[string]any{
 		"cluster_id":         cluster.ID.String(),
 		"argocd_instance_id": instance.ID.String(),
 		"server":             server,
@@ -2673,7 +2697,7 @@ func (h *ArgoCDHandler) ListManagedClusters(w http.ResponseWriter, r *http.Reque
 			"created_at":          row.CreatedAt.UTC().Format(time.RFC3339),
 		})
 	}
-	RespondJSON(w, http.StatusOK, out)
+	respondArgoJSON(w, http.StatusOK, out)
 }
 
 // RefreshManagedClusterLabels handles
@@ -2741,7 +2765,7 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 		"instance_id": instance.ID.String(),
 		"server":      row.ServerUrl,
 	})
-	RespondJSON(w, http.StatusOK, map[string]any{
+	respondArgoJSON(w, http.StatusOK, map[string]any{
 		"id":                  updated.ID.String(),
 		"argocd_instance_id":  updated.ArgocdInstanceID.String(),
 		"cluster_id":          updated.ClusterID.String(),
@@ -2847,12 +2871,12 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if h.encryptor != nil {
 		if req.Password != "" {
 			if _, err := h.encryptor.Encrypt(req.Password); err != nil && h.log != nil {
-				h.log.Warn("failed to encrypt repo password for audit", "error", err)
+				h.log.Warn("failed to encrypt repo password for audit", "error", argosecurity.SanitizeString(err.Error()))
 			}
 		}
 		if req.SSHPrivateKey != "" {
 			if _, err := h.encryptor.Encrypt(req.SSHPrivateKey); err != nil && h.log != nil {
-				h.log.Warn("failed to encrypt repo ssh key for audit", "error", err)
+				h.log.Warn("failed to encrypt repo ssh key for audit", "error", argosecurity.SanitizeString(err.Error()))
 			}
 		}
 	}
@@ -2861,7 +2885,8 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.repo.create", "argocd_repository", "", req.Repo, map[string]any{
+	safeRepoURL := argosecurity.SanitizeString(req.Repo)
+	recordAudit(r, h.queries, "argocd.repo.create", "argocd_repository", "", safeRepoURL, map[string]any{
 		"instance_id":     instance.ID.String(),
 		"type":            req.Type,
 		"username":        req.Username,
@@ -2870,7 +2895,7 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		"has_password":    req.Password != "",
 		"has_private_key": req.SSHPrivateKey != "",
 	})
-	RespondJSON(w, http.StatusCreated, out)
+	respondArgoJSON(w, http.StatusCreated, out)
 }
 
 // ListRepos handles GET /api/v1/argocd/instances/{id}/repos/. Pulls live
@@ -2885,7 +2910,7 @@ func (h *ArgoCDHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 	if translateClientError(w, r, err) {
 		return
 	}
-	RespondJSON(w, http.StatusOK, repos)
+	respondArgoJSON(w, http.StatusOK, repos)
 }
 
 // DeleteRepo handles DELETE /api/v1/argocd/instances/{id}/repos/.
@@ -2906,7 +2931,7 @@ func (h *ArgoCDHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	if err := client.DeleteRepository(r.Context(), repoURL); translateClientError(w, r, err) {
 		return
 	}
-	recordAudit(r, h.queries, "argocd.repo.delete", "argocd_repository", "", repoURL, map[string]any{
+	recordAudit(r, h.queries, "argocd.repo.delete", "argocd_repository", "", argosecurity.SanitizeString(repoURL), map[string]any{
 		"instance_id": instance.ID.String(),
 	})
 	w.WriteHeader(http.StatusNoContent)
@@ -2933,7 +2958,7 @@ func (h *ArgoCDHandler) TestRepo(w http.ResponseWriter, r *http.Request) {
 	if translateClientError(w, r, err) {
 		return
 	}
-	RespondJSON(w, http.StatusOK, out)
+	respondArgoJSON(w, http.StatusOK, out)
 }
 
 // isForeignKeyViolation reports whether err is a PostgreSQL FK violation

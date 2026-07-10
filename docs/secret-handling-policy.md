@@ -145,6 +145,9 @@ Current specialized owners:
 - Audit detail: `internal/audit` owns deterministic JSONB audit sanitization.
   Audit rows need stable, queryable detail shape and should not inherit future
   broad log-line heuristics without an audit migration review.
+- Argo API/UI payloads: `internal/argosecurity` owns recursive Application
+  source, history, operation, manifest, and URL-credential sanitation plus the
+  matching reference-only mutation policy.
 
 New diagnostic/export surfaces must use `internal/redaction` by default. New
 credential APIs must either reuse an existing domain-specific sentinel contract
@@ -161,6 +164,12 @@ support-bundle behavior with tests.
   only.
 - Support bundles can include Argo health and label metadata, but never Argo
   auth tokens or raw cluster Secret data.
+- The `/argocd/api/*` proxy sanitizes complete JSON and `+json` documents,
+  including gzip responses. Protocol upgrades and non-empty SSE, NDJSON, log,
+  and other non-JSON API responses fail closed: opaque streaming would bypass
+  source and legacy-log redaction, while unbounded buffering is unsafe. Static
+  HTML/assets outside the API prefix remain pass-through. Restoring an Argo API
+  stream requires a bounded, format-aware streaming sanitizer and canary tests.
 
 ## Backup and Restore Rules
 

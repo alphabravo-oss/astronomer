@@ -21,8 +21,10 @@ import (
 type argoCDQueryRecorder struct {
 	mu sync.Mutex
 
-	app      sqlc.ArgocdApplication
-	instance sqlc.ArgocdInstance
+	app             sqlc.ArgocdApplication
+	instance        sqlc.ArgocdInstance
+	operation       sqlc.ArgocdOperation
+	operationEvents []sqlc.ArgocdOperationEvent
 
 	progress   []sqlc.UpdateArgoCDOperationProgressParams
 	completed  []sqlc.CompleteArgoCDOperationWithResultParams
@@ -112,7 +114,7 @@ func (q *argoCDQueryRecorder) CreateArgoCDOperation(context.Context, sqlc.Create
 	return sqlc.ArgocdOperation{}, nil
 }
 func (q *argoCDQueryRecorder) GetArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+	return q.operation, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperations(context.Context, sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
@@ -142,7 +144,7 @@ func (q *argoCDQueryRecorder) RequeueArgoCDOperation(context.Context, uuid.UUID)
 	return sqlc.ArgocdOperation{}, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperationEvents(context.Context, uuid.UUID) ([]sqlc.ArgocdOperationEvent, error) {
-	return nil, nil
+	return q.operationEvents, nil
 }
 func (q *argoCDQueryRecorder) ListRunningArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return q.runningOps, nil

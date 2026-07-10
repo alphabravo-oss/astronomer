@@ -2,17 +2,22 @@ package handler
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // Local aliases so the body of isExpiredJWT reads cleanly without aliasing the
@@ -113,7 +118,7 @@ func (p *ArgoCDUIProxy) upstreamToken(ctx context.Context) string {
 		// upstream login page — operators need to see them. Once-per-cache-
 		// window cadence (cleared each TTL) keeps this from spamming logs.
 		p.log.Warn("argocd UI proxy: token source error",
-			"error", err.Error(),
+			"error", argosecurity.SanitizeString(err.Error()),
 			"hint", "check ASTRONOMER_ENCRYPTION_KEY hasn't rotated and that the argocd_instances row holds a valid encrypted token")
 		return ""
 	}
@@ -203,10 +208,10 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 			if tok := p.upstreamToken(req.Context()); tok != "" {
 				appendCookie(req, "argocd.token="+tok)
 				p.log.Debug("argocd UI proxy: injected upstream session cookie",
-					"path", req.URL.Path, "token_prefix", safePrefix(tok))
+					"path", safeArgoCDProxyPath(req.URL.Path))
 			} else {
 				p.log.Debug("argocd UI proxy: no upstream token injected",
-					"path", req.URL.Path)
+					"path", safeArgoCDProxyPath(req.URL.Path))
 			}
 		}
 
@@ -224,7 +229,7 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 		stripCookie(req, "astronomer_session")
 	}
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Warn("argocd UI proxy upstream error", "path", r.URL.Path, "error", err.Error())
+		log.Warn("argocd UI proxy upstream error", "path", safeArgoCDProxyPath(r.URL.Path), "error", argosecurity.SanitizeString(err.Error()))
 		http.Error(w, "argocd upstream unavailable", http.StatusBadGateway)
 	}
 
@@ -246,6 +251,24 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 		// Don't touch responses to API calls — only navigations under the
 		// /argocd/ prefix that aren't /argocd/api/*.
 		isAPI := strings.HasPrefix(path, "/argocd/api/")
+		if isAPI && resp.StatusCode == http.StatusSwitchingProtocols {
+			return fmt.Errorf("Argo API protocol upgrades are not admitted by the redaction policy")
+		}
+		if isAPI && isJSONMediaType(ct) {
+			if err := sanitizeArgoCDAPIJSONResponse(resp); err != nil {
+				return err
+			}
+			sanitizeArgoCDUIResponseHeaders(resp)
+			return nil
+		}
+		if isAPI && resp.Request.Method != http.MethodHead && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotModified && resp.ContentLength != 0 {
+			// Application watches, NDJSON event feeds and log streams can carry
+			// the same source/manifests or legacy credential lines as JSON
+			// responses. Buffering an unbounded stream is unsafe, while opaque
+			// pass-through is a redaction bypass. Keep them disabled until a
+			// bounded format-aware streaming sanitizer is implemented.
+			return fmt.Errorf("non-JSON Argo API response is not admitted by the redaction policy")
+		}
 
 		// Case 1: 404 on a text/html navigation under /argocd/* — the SPA
 		// deep-link case. Re-fetch /argocd/ and substitute it in.
@@ -347,15 +370,6 @@ func isExpiredJWT(token string) (bool, time.Time) {
 	}
 	exp := time.Unix(claims.Exp, 0)
 	return time.Now().After(exp), exp
-}
-
-// safePrefix returns a short prefix of a token suitable for logging without
-// leaking the whole secret. Used only at Debug level.
-func safePrefix(s string) string {
-	if len(s) > 12 {
-		return s[:12] + "..."
-	}
-	return s
 }
 
 // hasArgoCDCookie reports whether the inbound request already carries an
@@ -517,6 +531,12 @@ func rewriteBaseHref(body []byte, prefix string) []byte {
 // ServeHTTP proxies the request to the upstream ArgoCD server. It runs after
 // auth middleware so reaching this point means the caller is allowed.
 func (p *ArgoCDUIProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if status, err := validateArgoCDProxyMutationRequest(r); err != nil {
+		http.Error(w, http.StatusText(status), status)
+		p.recordProxyAudit(r, status)
+		p.log.Warn("argocd UI proxy rejected unsafe mutation", "method", r.Method, "path", safeArgoCDProxyPath(r.URL.Path), "reason", argosecurity.SanitizeString(err.Error()))
+		return
+	}
 	// Stash the original public host so the Director can stamp it on
 	// X-Forwarded-Host before clobbering r.Host.
 	if r.Header.Get("X-Original-Host") == "" && r.Host != "" {
@@ -530,7 +550,7 @@ func (p *ArgoCDUIProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.recordProxyAudit(r, sw.status)
 	p.log.Debug("argocd UI proxy",
 		"method", r.Method,
-		"path", r.URL.Path,
+		"path", safeArgoCDProxyPath(r.URL.Path),
 		"status", sw.status,
 		"upstream", p.target.String(),
 		"upgrade", strings.EqualFold(r.Header.Get("Connection"), "upgrade"),
@@ -548,8 +568,9 @@ func (p *ArgoCDUIProxy) recordProxyAudit(r *http.Request, status int) {
 	if audit == nil {
 		return
 	}
-	recordAudit(r, audit, action, "argocd_proxy", "", r.URL.Path, map[string]any{
-		"path":        r.URL.Path,
+	safePath := safeArgoCDProxyPath(r.URL.Path)
+	recordAudit(r, audit, action, "argocd_proxy", "", safePath, map[string]any{
+		"path":        safePath,
 		"status_code": status,
 		"is_api":      strings.HasPrefix(r.URL.Path, "/argocd/api/"),
 		"upgrade":     strings.EqualFold(r.Header.Get("Connection"), "upgrade"),
@@ -597,3 +618,152 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 // response-controller (used by httputil.ReverseProxy for hijack/flush on
 // upgrade) can find the hijacker on the inner writer.
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+const maxArgoCDProxyJSONBytes = 16 << 20
+
+func validateArgoCDProxyMutationRequest(r *http.Request) (int, error) {
+	if r == nil || !strings.HasPrefix(r.URL.Path, "/argocd/api/") {
+		return 0, nil
+	}
+	if r.Header.Get("Upgrade") != "" || headerContainsToken(r.Header.Values("Connection"), "upgrade") {
+		return http.StatusForbidden, fmt.Errorf("Argo API protocol upgrades are not admitted")
+	}
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch:
+	default:
+		return 0, nil
+	}
+	if r.Body == nil || r.Body == http.NoBody {
+		return 0, nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxArgoCDProxyJSONBytes+1))
+	if err != nil {
+		return http.StatusBadRequest, fmt.Errorf("read mutation body")
+	}
+	_ = r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	if len(raw) > maxArgoCDProxyJSONBytes {
+		return http.StatusRequestEntityTooLarge, fmt.Errorf("mutation body exceeds inspection limit")
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return 0, nil
+	}
+	if !isJSONMediaType(r.Header.Get("Content-Type")) {
+		return http.StatusUnsupportedMediaType, fmt.Errorf("non-JSON Argo mutation body")
+	}
+	decoded, err := decodeArgoJSONBody(raw, r.Header.Get("Content-Encoding"))
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+	if err := argosecurity.ValidateMutationJSON(decoded); err != nil {
+		return http.StatusBadRequest, err
+	}
+	return 0, nil
+}
+
+func sanitizeArgoCDAPIJSONResponse(resp *http.Response) error {
+	if resp == nil || resp.Body == nil || resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxArgoCDProxyJSONBytes+1))
+	_ = resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("read Argo JSON response: %w", err)
+	}
+	if len(raw) > maxArgoCDProxyJSONBytes {
+		return fmt.Errorf("Argo JSON response exceeds inspection limit")
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		resp.Body = io.NopCloser(bytes.NewReader(nil))
+		resp.ContentLength = 0
+		resp.Header.Del("Content-Length")
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("ETag")
+		resp.Header.Del("Content-MD5")
+		resp.Header.Del("Digest")
+		return nil
+	}
+	decoded, err := decodeArgoJSONBody(raw, resp.Header.Get("Content-Encoding"))
+	if err != nil {
+		return err
+	}
+	sanitized, err := argosecurity.SanitizeJSON(decoded)
+	if err != nil {
+		return err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(sanitized))
+	resp.ContentLength = int64(len(sanitized))
+	resp.Header.Del("Content-Length")
+	resp.Header.Del("Content-Encoding")
+	resp.Header.Del("ETag")
+	resp.Header.Del("Content-MD5")
+	resp.Header.Del("Digest")
+	return nil
+}
+
+func headerContainsToken(values []string, want string) bool {
+	for _, value := range values {
+		for _, token := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func decodeArgoJSONBody(raw []byte, contentEncoding string) ([]byte, error) {
+	switch strings.ToLower(strings.TrimSpace(contentEncoding)) {
+	case "":
+		return raw, nil
+	case "gzip":
+		reader, err := gzip.NewReader(bytes.NewReader(raw))
+		if err != nil {
+			return nil, fmt.Errorf("decode gzip Argo JSON: %w", err)
+		}
+		defer reader.Close()
+		decoded, err := io.ReadAll(io.LimitReader(reader, maxArgoCDProxyJSONBytes+1))
+		if err != nil {
+			return nil, fmt.Errorf("decode gzip Argo JSON: %w", err)
+		}
+		if len(decoded) > maxArgoCDProxyJSONBytes {
+			return nil, fmt.Errorf("decoded Argo JSON exceeds inspection limit")
+		}
+		return decoded, nil
+	default:
+		return nil, fmt.Errorf("unsupported Argo JSON content encoding")
+	}
+}
+
+func isJSONMediaType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	mediaType = strings.ToLower(mediaType)
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
+}
+
+func safeArgoCDProxyPath(path string) string {
+	if !strings.HasPrefix(path, "/argocd/api/") {
+		return path
+	}
+	for _, collection := range []string{"applications", "applicationsets", "projects", "repositories", "clusters", "accounts", "certificates", "repocreds"} {
+		marker := "/" + collection + "/"
+		if index := strings.Index(path, marker); index >= 0 {
+			safe := path[:index+len(marker)] + "*"
+			for _, action := range []string{"sync", "refresh", "revisions", "manifests", "validate", "logs"} {
+				if strings.HasSuffix(path, "/"+action) {
+					return safe + "/" + action
+				}
+			}
+			return safe
+		}
+	}
+	for _, collection := range []string{"applications", "applicationsets", "projects", "repositories", "clusters", "accounts", "certificates", "repocreds", "version"} {
+		if strings.HasSuffix(path, "/"+collection) {
+			return path
+		}
+	}
+	return "/argocd/api/*"
+}

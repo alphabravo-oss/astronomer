@@ -1,0 +1,183 @@
+package handler
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+)
+
+const argoHandlerCanary = "ARGO_HANDLER_CANARY_38b1ca"
+
+func TestArgoCDTypedCreateAndPatchRejectUnsafeSourcesBeforeUpstream(t *testing.T) {
+	for name, tc := range map[string]struct {
+		method string
+		body   string
+		call   func(*ArgoCDHandler, http.ResponseWriter, *http.Request)
+		params map[string]string
+	}{
+		"create helm values": {
+			method: http.MethodPost,
+			body:   `{"name":"demo","spec":{"project":"default","source":{"repoURL":"https://git.example/repo","helm":{"values":"password: ` + argoHandlerCanary + `"}}}}`,
+			call:   (*ArgoCDHandler).CreateApplication,
+		},
+		"patch values object": {
+			method: http.MethodPatch,
+			body:   `{"spec":{"source":{"helm":{"valuesObject":{"password":"` + argoHandlerCanary + `"}}}}}`,
+			call:   (*ArgoCDHandler).PatchApplication,
+			params: map[string]string{"name": "demo"},
+		},
+		"patch plugin env": {
+			method: http.MethodPatch,
+			body:   `{"spec":{"source":{"plugin":{"env":[{"name":"TOKEN","value":"` + argoHandlerCanary + `"}]}}}}`,
+			call:   (*ArgoCDHandler).PatchApplication,
+			params: map[string]string{"name": "demo"},
+		},
+		"patch unknown canary key": {
+			method: http.MethodPatch,
+			body:   `{"spec":{"source":{"` + argoHandlerCanary + `":"value"}}}`,
+			call:   (*ArgoCDHandler).PatchApplication,
+			params: map[string]string{"name": "demo"},
+		},
+		"applicationset template values": {
+			method: http.MethodPost,
+			body:   `{"name":"demo-set","spec":{"generators":[{"list":{"elements":[{"name":"demo"}]}}],"template":{"metadata":{"name":"{{name}}"},"spec":{"project":"default","source":{"repoURL":"https://git.example/repo","helm":{"values":"password: ` + argoHandlerCanary + `"}}}}}}`,
+			call:   (*ArgoCDHandler).CreateApplicationSet,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			upstreamCalls := 0
+			h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				upstreamCalls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"metadata":{"name":"demo"}}`))
+			})
+			params := map[string]string{"id": rec.instance.ID.String()}
+			for key, value := range tc.params {
+				params[key] = value
+			}
+			req := argoHandlerRouteRequest(tc.method, "/typed", tc.body, params)
+			rr := httptest.NewRecorder()
+			tc.call(h, rr, req)
+			if rr.Code != http.StatusBadRequest || upstreamCalls != 0 {
+				t.Fatalf("status=%d calls=%d body=%s", rr.Code, upstreamCalls, rr.Body.String())
+			}
+			if strings.Contains(rr.Body.String(), argoHandlerCanary) {
+				t.Fatalf("validation response leaked canary: %s", rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestArgoCDTypedUpstreamResponsesAreSanitized(t *testing.T) {
+	application := `{"metadata":{"name":"demo"},"spec":{"source":{"repoURL":"https://user:` + argoHandlerCanary + `@git.example/team/repo?token=` + argoHandlerCanary + `","helm":{"values":"password: ` + argoHandlerCanary + `","releaseName":"diagnostic-release"}}},"status":{"health":{"status":"Healthy"},"sync":{"status":"Synced"},"history":[{"source":{"helm":{"values":"` + argoHandlerCanary + `"}}}]}}`
+	manifest := `{"manifests":["apiVersion: v1\nkind: Secret\nmetadata:\n  name: retained-name\nstringData:\n  password: ` + argoHandlerCanary + `\n"],"health":"Healthy"}`
+
+	for name, tc := range map[string]struct {
+		method string
+		body   string
+		params func(*argoCDQueryRecorder) map[string]string
+		call   func(*ArgoCDHandler, http.ResponseWriter, *http.Request)
+	}{
+		"live list": {method: http.MethodGet, params: func(q *argoCDQueryRecorder) map[string]string { return map[string]string{"id": q.instance.ID.String()} }, call: (*ArgoCDHandler).LiveApplications},
+		"history":   {method: http.MethodGet, params: func(q *argoCDQueryRecorder) map[string]string { return map[string]string{"id": q.app.ID.String()} }, call: (*ArgoCDHandler).AppHistory},
+		"manifests": {method: http.MethodGet, params: func(q *argoCDQueryRecorder) map[string]string { return map[string]string{"id": q.app.ID.String()} }, call: (*ArgoCDHandler).AppManifests},
+		"refresh":   {method: http.MethodPost, params: func(q *argoCDQueryRecorder) map[string]string { return map[string]string{"id": q.app.ID.String()} }, call: (*ArgoCDHandler).RefreshApp},
+		"create":    {method: http.MethodPost, body: `{"name":"demo","spec":{"project":"default","source":{"repoURL":"https://git.example/repo","helm":{"releaseName":"safe"}}}}`, params: func(q *argoCDQueryRecorder) map[string]string { return map[string]string{"id": q.instance.ID.String()} }, call: (*ArgoCDHandler).CreateApplication},
+		"patch": {method: http.MethodPatch, body: `{"spec":{"source":{"targetRevision":"main"}}}`, params: func(q *argoCDQueryRecorder) map[string]string {
+			return map[string]string{"id": q.instance.ID.String(), "name": "demo"}
+		}, call: (*ArgoCDHandler).PatchApplication},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if strings.Contains(r.URL.Path, "/manifests") {
+					_, _ = w.Write([]byte(manifest))
+					return
+				}
+				_, _ = w.Write([]byte(application))
+			})
+			req := argoHandlerRouteRequest(tc.method, "/typed", tc.body, tc.params(rec))
+			rr := httptest.NewRecorder()
+			tc.call(h, rr, req)
+			if rr.Code < 200 || rr.Code >= 300 {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			text := rr.Body.String()
+			if strings.Contains(text, argoHandlerCanary) || strings.Contains(text, "user:") {
+				t.Fatalf("typed response leaked canary or userinfo: %s", text)
+			}
+			if !strings.Contains(text, "Healthy") {
+				t.Fatalf("health diagnostic removed: %s", text)
+			}
+			if name != "manifests" {
+				for _, diagnostic := range []string{"git.example", "/team/repo"} {
+					if !strings.Contains(text, diagnostic) {
+						t.Fatalf("URL diagnostic %q removed: %s", diagnostic, text)
+					}
+				}
+			} else if !strings.Contains(text, "retained-name") {
+				t.Fatalf("Secret identity diagnostic removed: %s", text)
+			}
+		})
+	}
+}
+
+func TestArgoCDOperationResponseSanitizesErrorAndEventDetail(t *testing.T) {
+	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
+	rec.operation = sqlc.ArgocdOperation{
+		ID: rec.app.ID, TargetType: "application", TargetKey: rec.app.ID.String(), Status: "failed",
+		ErrorMessage: "token=" + argoHandlerCanary + " sync failed", CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	rec.operationEvents = []sqlc.ArgocdOperationEvent{{
+		ID: uuid.New(), OperationID: rec.operation.ID, Level: "error", Stage: "sync",
+		Message: "diagnostic event", Detail: json.RawMessage(`{"source":{"helm":{"values":"` + argoHandlerCanary + `"}},"health":"Degraded"}`), CreatedAt: time.Now(),
+	}}
+	req := argoHandlerRouteRequest(http.MethodGet, "/typed", "", map[string]string{"id": rec.operation.ID.String()})
+	rr := httptest.NewRecorder()
+	h.GetOperation(rr, req)
+	if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), argoHandlerCanary) {
+		t.Fatalf("operation response status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	for _, diagnostic := range []string{"sync failed", "diagnostic event", "Degraded"} {
+		if !strings.Contains(rr.Body.String(), diagnostic) {
+			t.Fatalf("operation diagnostic %q removed: %s", diagnostic, rr.Body.String())
+		}
+	}
+}
+
+func TestArgoCDOperationEventPersistenceSanitizesMessageAndDetail(t *testing.T) {
+	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
+	h.recordArgoCDOperationEvent(context.Background(), uuid.New(), "error", "sync", "token="+argoHandlerCanary+" failed", map[string]any{
+		"source": map[string]any{"helm": map[string]any{"values": argoHandlerCanary}},
+		"health": "Degraded",
+	})
+	if len(rec.events) != 1 {
+		t.Fatalf("events=%d", len(rec.events))
+	}
+	raw, _ := json.Marshal(rec.events[0])
+	if strings.Contains(string(raw), argoHandlerCanary) {
+		t.Fatalf("persisted event leaked canary: %s", raw)
+	}
+	if !strings.Contains(string(raw), "Degraded") || !strings.Contains(string(raw), "failed") {
+		t.Fatalf("persisted event lost diagnostics: %s", raw)
+	}
+}
+
+func argoHandlerRouteRequest(method, path, body string, params map[string]string) *http.Request {
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	ctx := chi.NewRouteContext()
+	for key, value := range params {
+		ctx.URLParams.Add(key, value)
+	}
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
+}
