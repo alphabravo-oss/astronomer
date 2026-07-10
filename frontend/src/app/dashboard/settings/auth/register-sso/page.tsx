@@ -45,6 +45,9 @@ export default function RegisterAsSSOPage() {
         client_secret: clientSecret || undefined,
         display_name: displayName,
       });
+      if (!res.verified || !res.secretResourceVersion) {
+        throw new Error('Dex rollout verification was not returned by the server');
+      }
       setSuccess({ provider: res.provider, issuerUrl: res.issuerUrl });
     } catch {
       /* mutation toasts on error */

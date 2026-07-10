@@ -1977,7 +1977,6 @@ type Querier interface {
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
 	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
-	UpsertDexSettingsAndSSO(ctx context.Context, arg UpsertDexSettingsAndSSOParams) (SsoConfiguration, error)
 	// The sync worker calls this after a YAML's contents have been applied
 	// so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT
 	// promotes any tombstoned row back to active — that's the

@@ -525,14 +525,46 @@ export interface OpenAPIComponents {
           "optional_fields"?: string[];
           "secret_fields"?: string[];
         } & Record<string, unknown>;
+    DexExpiry: {
+          "idTokens"?: string;
+          "signingKeys"?: string;
+          "refreshTokens"?: {
+            "reuseInterval"?: string;
+            "validIfNotUsedFor"?: string;
+            "absoluteLifetime"?: string;
+          };
+        };
+    DexExtra: {
+          "logger"?: {
+            "level"?: string;
+            "format"?: string;
+          };
+          "frontend"?: {
+            "issuer"?: string;
+            "logoURL"?: string;
+            "dir"?: string;
+            "theme"?: string;
+          };
+          "grpc"?: {
+            "addr"?: string;
+          };
+          "telemetry"?: {
+            "http"?: string;
+          };
+        };
     DexRegisterSSOResult: {
           "id"?: string;
           "provider"?: string;
           "client_id"?: string;
           "display_name"?: string;
-          "created_at"?: string;
-          "updated_at"?: string;
-        } & Record<string, unknown>;
+          "issuer_url"?: string;
+          "is_enabled"?: boolean;
+          "verified"?: boolean;
+          "secret_resource_version"?: string;
+          "runtime_changed"?: boolean;
+          "created"?: boolean;
+          "updated"?: boolean;
+        };
     DexSettings: {
           "configured"?: boolean;
           "issuer_url"?: string;
@@ -551,6 +583,8 @@ export interface OpenAPIComponents {
           }>;
           "cluster_id"?: string | null;
           "updated_at"?: string;
+          "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
+          "extra"?: OpenAPIComponents['schemas']['DexExtra'];
         } & Record<string, unknown>;
     DexSettingsRequest: {
           "issuer_url": string;
@@ -569,8 +603,8 @@ export interface OpenAPIComponents {
             "trustedPeers"?: string[];
           }>;
           "cluster_id"?: string;
-          "expiry"?: Record<string, unknown>;
-          "extra"?: Record<string, unknown>;
+          "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
+          "extra"?: OpenAPIComponents['schemas']['DexExtra'];
         };
     Error: {
           "error": {
@@ -1582,6 +1616,8 @@ export type DecommissionStatusResponse = OpenAPIComponents['schemas']['Decommiss
 export type DexConnector = OpenAPIComponents['schemas']['DexConnector'];
 export type DexConnectorRequest = OpenAPIComponents['schemas']['DexConnectorRequest'];
 export type DexConnectorType = OpenAPIComponents['schemas']['DexConnectorType'];
+export type DexExpiry = OpenAPIComponents['schemas']['DexExpiry'];
+export type DexExtra = OpenAPIComponents['schemas']['DexExtra'];
 export type DexRegisterSSOResult = OpenAPIComponents['schemas']['DexRegisterSSOResult'];
 export type DexSettings = OpenAPIComponents['schemas']['DexSettings'];
 export type DexSettingsRequest = OpenAPIComponents['schemas']['DexSettingsRequest'];

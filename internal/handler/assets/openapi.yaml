@@ -2839,8 +2839,10 @@ components:
                 type: string
               redirectURIs:
                 type: array
+                minItems: 1
                 items:
                   type: string
+                  format: uri
               secret:
                 type: string
                 description: Always redacted to an empty string on reads.
@@ -2859,6 +2861,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        expiry:
+          $ref: '#/components/schemas/DexExpiry'
+        extra:
+          $ref: '#/components/schemas/DexExtra'
     DexSettingsRequest:
       type: object
       additionalProperties: false
@@ -2887,7 +2893,8 @@ components:
               name: { type: string }
               redirectURIs:
                 type: array
-                items: { type: string }
+                minItems: 1
+                items: { type: string, format: uri }
               secret: { type: string, format: password, writeOnly: true }
               secret_configured: { type: boolean, deprecated: true }
               secretConfigured: { type: boolean, deprecated: true }
@@ -2899,14 +2906,53 @@ components:
           type: string
           format: uuid
         expiry:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/DexExpiry'
         extra:
+          $ref: '#/components/schemas/DexExtra'
+    DexExpiry:
+      type: object
+      additionalProperties: false
+      properties:
+        idTokens: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
+        signingKeys: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
+        refreshTokens:
           type: object
-          additionalProperties: true
+          additionalProperties: false
+          properties:
+            reuseInterval: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
+            validIfNotUsedFor: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
+            absoluteLifetime: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
+    DexExtra:
+      type: object
+      additionalProperties: false
+      properties:
+        logger:
+          type: object
+          additionalProperties: false
+          properties:
+            level: { type: string }
+            format: { type: string }
+        frontend:
+          type: object
+          additionalProperties: false
+          properties:
+            issuer: { type: string }
+            logoURL: { type: string, format: uri }
+            dir: { type: string }
+            theme: { type: string }
+        grpc:
+          type: object
+          additionalProperties: false
+          properties:
+            addr: { type: string }
+        telemetry:
+          type: object
+          additionalProperties: false
+          properties:
+            http: { type: string }
     DexRegisterSSOResult:
       type: object
-      additionalProperties: true
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -2917,12 +2963,13 @@ components:
           type: string
         display_name:
           type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+        issuer_url: { type: string, format: uri }
+        is_enabled: { type: boolean }
+        verified: { type: boolean }
+        secret_resource_version: { type: string }
+        runtime_changed: { type: boolean }
+        created: { type: boolean }
+        updated: { type: boolean }
     UsersSettingsUserListItem:
       type: object
       properties:
@@ -15876,6 +15923,10 @@ paths:
                             type: string
                           connector_count:
                             type: integer
+                          changed:
+                            type: boolean
+                          secret_resource_version:
+                            type: string
                           applied_at:
                             type: string
                             format: date-time

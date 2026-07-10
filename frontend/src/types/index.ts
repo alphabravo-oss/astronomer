@@ -2299,6 +2299,8 @@ export interface DexRegisterAsSSOResponse {
   clientId: string;
   issuerUrl: string;
   displayName: string;
+  verified: boolean;
+  secretResourceVersion: string;
   created?: boolean;
   updated?: boolean;
 }
