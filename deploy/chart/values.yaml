@@ -480,9 +480,9 @@ dex:
   # astronomer.dex.issuerURL). Override only if Dex is reachable on a
   # different hostname than the rest of Astronomer.
   issuerURL: ""
-  # Stable Secret identity mounted read-only by Dex. The chart references but
-  # never templates this Secret: DexHandler is its sole writer and annotates it
-  # for Argo CD no-prune retention. Empty derives <release>-dex-runtime.
+  # Stable Secret identity mounted read-only by Dex. The chart templates only
+  # its metadata; DexHandler is the sole data.config.yaml writer. Empty derives
+  # <release>-dex-runtime. Legacy clientSecret/clientSecretRef values are rejected.
   runtimeSecretName: ""
   # Identity used by the tunnel-backed Kubernetes requester. All Secret verbs
   # are exact-name scoped; Helm/Argo creates the metadata-only object.

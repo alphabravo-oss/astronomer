@@ -254,7 +254,7 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 			{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, resourceNames: []string{"nginx"}, verbs: []string{"get"}},
 		})
 		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
-			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn", "astronomer-dex-runtime"}, verbs: []string{"get"}},
 			{apiGroups: []string{""}, resources: []string{"persistentvolumeclaims"}, resourceNames: []string{"data-astronomer-postgres-0"}, verbs: []string{"get"}},
 		})
 	})
@@ -425,7 +425,7 @@ func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
 			sets:       prodSets,
 			mode:       "dsn-forbidden",
 			wantText:   "could not read postgres DSN secret/astronomer-postgres-dsn because the Kubernetes API read never became usable.",
-			wantCalls:  13,
+			wantCalls:  14,
 		},
 		{
 			name:        "DSN Secret success validates TLS without disclosure",
@@ -434,7 +434,7 @@ func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
 			mode:        "dsn-success",
 			wantSuccess: true,
 			wantText:    "Production Postgres DSN TLS check passed.",
-			wantCalls:   5,
+			wantCalls:   6,
 		},
 	}
 

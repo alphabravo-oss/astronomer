@@ -89,10 +89,11 @@
     "preflight": { "$ref": "#/definitions/workload" },
     "dex": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
         "replicaCount": { "type": "integer", "minimum": 1 },
+        "issuerURL": { "type": "string" },
         "runtimeSecretName": { "type": "string", "maxLength": 253 },
         "runtimeWriterServiceAccount": {
           "type": "object",
@@ -111,7 +112,10 @@
           },
           "required": ["requirePreparedConfig"]
         },
-        "image": { "$ref": "#/definitions/imageRef" }
+        "image": { "$ref": "#/definitions/imageRef" },
+        "resources": { "type": "object", "additionalProperties": true },
+        "podSecurityContext": { "type": "object", "additionalProperties": true },
+        "securityContext": { "type": "object", "additionalProperties": true }
       }
     },
     "config": {

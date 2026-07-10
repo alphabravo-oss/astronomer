@@ -2796,10 +2796,13 @@ components:
           format: date-time
     DexConnectorRequest:
       type: object
+      additionalProperties: false
       properties:
         name:
           type: string
         type:
+          type: string
+        display_name:
           type: string
         config:
           type: object
@@ -2820,10 +2823,15 @@ components:
           type: string
         runtime_secret_name:
           type: string
+        configmap_name:
+          type: string
+          deprecated: true
+          description: Compatibility alias of runtime_secret_name; never identifies a credential-bearing ConfigMap.
         public_clients:
           type: array
           items:
             type: object
+            additionalProperties: false
             properties:
               id:
                 type: string
@@ -2838,6 +2846,12 @@ components:
                 description: Always redacted to an empty string on reads.
               secret_configured:
                 type: boolean
+              public:
+                type: boolean
+              trustedPeers:
+                type: array
+                items:
+                  type: string
         cluster_id:
           type: string
           format: uuid
@@ -2847,6 +2861,7 @@ components:
           format: date-time
     DexSettingsRequest:
       type: object
+      additionalProperties: false
       required:
         - issuer_url
       properties:
@@ -2858,14 +2873,37 @@ components:
           type: string
         runtime_secret_name:
           type: string
+        configmap_name:
+          type: string
+          deprecated: true
         public_clients:
           type: array
           items:
             type: object
-            additionalProperties: true
+            additionalProperties: false
+            required: [id]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              redirectURIs:
+                type: array
+                items: { type: string }
+              secret: { type: string, format: password, writeOnly: true }
+              secret_configured: { type: boolean, deprecated: true }
+              secretConfigured: { type: boolean, deprecated: true }
+              public: { type: boolean }
+              trustedPeers:
+                type: array
+                items: { type: string }
         cluster_id:
           type: string
           format: uuid
+        expiry:
+          type: object
+          additionalProperties: true
+        extra:
+          type: object
+          additionalProperties: true
     DexRegisterSSOResult:
       type: object
       additionalProperties: true
@@ -15831,6 +15869,9 @@ paths:
                             type: string
                           runtime_secret_name:
                             type: string
+                          configmap_name:
+                            type: string
+                            deprecated: true
                           deployment_name:
                             type: string
                           connector_count:
@@ -15881,6 +15922,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
                 client_id:
                   type: string

@@ -61,6 +61,20 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 	}
 }
 
+func TestDexLegacyInlineCredentialValuesAreRejected(t *testing.T) {
+	chart := filepath.Join(repoRoot(t), "deploy", "chart")
+	for _, legacy := range []string{
+		"dex.clientSecret=SYNTHETIC-DEX-HISTORY-CANARY",
+		"dex.clientSecretRef.name=legacy-dex-secret",
+		"dex.futurePassword=SYNTHETIC-DEX-HISTORY-CANARY",
+	} {
+		cmd := exec.Command("helm", "template", "astronomer", chart, "--set", "dex.enabled=true", "--set", legacy)
+		if err := cmd.Run(); err == nil {
+			t.Fatalf("legacy/unknown Dex credential value %q was accepted into Helm release values", strings.SplitN(legacy, "=", 2)[0])
+		}
+	}
+}
+
 func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	production := filepath.Join(chart, "values-production.yaml")

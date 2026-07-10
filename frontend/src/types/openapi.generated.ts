@@ -514,6 +514,7 @@ export interface OpenAPIComponents {
     DexConnectorRequest: {
           "name"?: string;
           "type"?: string;
+          "display_name"?: string;
           "config"?: Record<string, unknown>;
           "enabled"?: boolean;
         };
@@ -538,12 +539,15 @@ export interface OpenAPIComponents {
           "namespace"?: string;
           "release_name"?: string;
           "runtime_secret_name"?: string;
+          "configmap_name"?: string;
           "public_clients"?: Array<{
             "id"?: string;
             "name"?: string;
             "redirectURIs"?: string[];
             "secret"?: string;
             "secret_configured"?: boolean;
+            "public"?: boolean;
+            "trustedPeers"?: string[];
           }>;
           "cluster_id"?: string | null;
           "updated_at"?: string;
@@ -553,8 +557,20 @@ export interface OpenAPIComponents {
           "namespace"?: string;
           "release_name"?: string;
           "runtime_secret_name"?: string;
-          "public_clients"?: Record<string, unknown>[];
+          "configmap_name"?: string;
+          "public_clients"?: Array<{
+            "id": string;
+            "name"?: string;
+            "redirectURIs"?: string[];
+            "secret"?: string;
+            "secret_configured"?: boolean;
+            "secretConfigured"?: boolean;
+            "public"?: boolean;
+            "trustedPeers"?: string[];
+          }>;
           "cluster_id"?: string;
+          "expiry"?: Record<string, unknown>;
+          "extra"?: Record<string, unknown>;
         };
     Error: {
           "error": {
