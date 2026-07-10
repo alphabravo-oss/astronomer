@@ -562,6 +562,7 @@ export interface OpenAPIComponents {
           "verified"?: boolean;
           "secret_resource_version"?: string;
           "runtime_changed"?: boolean;
+          "runtime_generation"?: number;
           "created"?: boolean;
           "updated"?: boolean;
         };
@@ -570,6 +571,9 @@ export interface OpenAPIComponents {
           "issuer_url"?: string;
           "namespace"?: string;
           "release_name"?: string;
+          "chart_release_name"?: string;
+          "deployment_name"?: string;
+          "service_name"?: string;
           "runtime_secret_name"?: string;
           "configmap_name"?: string;
           "public_clients"?: Array<{
@@ -585,11 +589,16 @@ export interface OpenAPIComponents {
           "updated_at"?: string;
           "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
           "extra"?: OpenAPIComponents['schemas']['DexExtra'];
+          "runtime_generation"?: number;
+          "runtime_applied_generation"?: number;
         } & Record<string, unknown>;
     DexSettingsRequest: {
           "issuer_url": string;
           "namespace"?: string;
           "release_name"?: string;
+          "chart_release_name"?: string;
+          "deployment_name"?: string;
+          "service_name"?: string;
           "runtime_secret_name"?: string;
           "configmap_name"?: string;
           "public_clients"?: Array<{

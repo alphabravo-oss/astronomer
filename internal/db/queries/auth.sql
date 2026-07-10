@@ -134,6 +134,35 @@ UPDATE sso_configurations SET
 WHERE id = $1
 RETURNING *;
 
+-- name: EnableDexSSOForGeneration :one
+-- The generation predicate is evaluated in the same statement that enables
+-- the provider. A stale reconcile can therefore never win a check-then-write
+-- race against a newer settings/register mutation.
+WITH current_generation AS (
+    SELECT 1
+    FROM dex_settings
+    WHERE id = '00000000-0000-0000-0000-000000000001'::uuid
+      AND runtime_generation = sqlc.arg(runtime_generation)
+      AND runtime_applied_generation = sqlc.arg(runtime_generation)
+)
+INSERT INTO sso_configurations (
+    provider, is_enabled, display_name, config, client_id,
+    client_secret_encrypted, allowed_organizations, allowed_domains,
+    auto_create_users
+)
+SELECT
+    'dex', true, sqlc.arg(display_name), sqlc.arg(config), sqlc.arg(client_id),
+    sqlc.arg(client_secret_encrypted), '[]'::jsonb, '[]'::jsonb, true
+FROM current_generation
+ON CONFLICT (provider) DO UPDATE SET
+    is_enabled = true,
+    display_name = EXCLUDED.display_name,
+    config = EXCLUDED.config,
+    client_id = EXCLUDED.client_id,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted
+WHERE EXISTS (SELECT 1 FROM current_generation)
+RETURNING *;
+
 -- name: DeleteSSOConfiguration :exec
 DELETE FROM sso_configurations WHERE id = $1;
 

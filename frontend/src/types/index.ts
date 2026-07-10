@@ -1573,6 +1573,9 @@ export interface InstalledChart {
   chartName: string;
   chartVersionLabel: string;
   releaseName: string;
+  chartReleaseName?: string;
+  deploymentName?: string;
+  serviceName?: string;
   namespace: string;
   status: InstalledChartStatus;
   revision: number;
@@ -2268,6 +2271,9 @@ export interface DexSettingsWriteRequest {
   cluster_id?: string;
   namespace?: string;
   release_name?: string;
+  chart_release_name?: string;
+  deployment_name?: string;
+  service_name?: string;
   runtime_secret_name?: string;
   public_clients?: DexPublicClient[];
   expiry?: Record<string, unknown>;
@@ -2281,6 +2287,7 @@ export interface DexApplyResponse {
   namespace: string;
   runtimeSecretName: string;
   connectorCount: number;
+  runtimeGeneration?: number;
   appliedAt: string;
 }
 
@@ -2301,6 +2308,8 @@ export interface DexRegisterAsSSOResponse {
   displayName: string;
   verified: boolean;
   secretResourceVersion: string;
+  runtimeChanged?: boolean;
+  runtimeGeneration?: number;
   created?: boolean;
   updated?: boolean;
 }

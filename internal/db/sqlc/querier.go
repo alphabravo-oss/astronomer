@@ -587,6 +587,10 @@ type Querier interface {
 	// delivery history; the handler doesn't have to do that explicitly.
 	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
+	// The generation predicate is evaluated in the same statement that enables
+	// the provider. A stale reconcile can therefore never win a check-then-write
+	// race against a newer settings/register mutation.
+	EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (SsoConfiguration, error)
 	// Bus-tap insert. Called once per (forwarder, event) pair that matched
 	// at least one filter glob. The dispatcher picks rows up in batch
 	// order via the (forwarder_id, id) index.
@@ -1603,6 +1607,7 @@ type Querier interface {
 	MarkDeferredDispatched(ctx context.Context, arg MarkDeferredDispatchedParams) error
 	MarkDeferredExpired(ctx context.Context, arg MarkDeferredExpiredParams) error
 	MarkDeferredFailed(ctx context.Context, arg MarkDeferredFailedParams) error
+	MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeAppliedParams) (DexSetting, error)
 	// Records a delivery failure. attempts is the NEW count (caller computes
 	// prev+1) so the dispatcher can decide whether to mark the row 'failed'
 	// (still retryable) or escalate to a final state. last_error is kept

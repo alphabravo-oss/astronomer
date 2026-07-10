@@ -76,11 +76,13 @@ func (e envMap) lookup(key string) (string, bool) {
 func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{}
 	env := envMap{
-		"DEX_BUNDLED_ENABLED":        "true",
-		"DEX_BUNDLED_NAMESPACE":      "astronomer",
-		"DEX_BUNDLED_RELEASE_NAME":   "astronomer-dex",
-		"DEX_BUNDLED_CONFIGMAP_NAME": "astronomer-dex-config",
-		"DEX_BUNDLED_ISSUER_URL":     "https://astronomer.example.com/dex",
+		"DEX_BUNDLED_ENABLED":         "true",
+		"DEX_BUNDLED_NAMESPACE":       "astronomer",
+		"DEX_BUNDLED_RELEASE_NAME":    "astronomer",
+		"DEX_BUNDLED_DEPLOYMENT_NAME": "astronomer-dex",
+		"DEX_BUNDLED_SERVICE_NAME":    "astronomer-dex",
+		"DEX_BUNDLED_CONFIGMAP_NAME":  "astronomer-dex-config",
+		"DEX_BUNDLED_ISSUER_URL":      "https://astronomer.example.com/dex",
 	}
 	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
 	if err != nil {
@@ -113,7 +115,8 @@ func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{
 		getResult: sqlc.DexSetting{
 			ID: dexBootstrapSingletonID, IssuerUrl: "https://operator-managed.example.com/dex",
-			Namespace: "auth", RuntimeSecretName: "operator-managed-runtime",
+			Namespace: "astronomer", ReleaseName: "astronomer-dex", ChartReleaseName: "astronomer",
+			DeploymentName: "astronomer-dex", ServiceName: "astronomer-dex", RuntimeSecretName: "astronomer-dex-runtime",
 		},
 	}
 	env := envMap{

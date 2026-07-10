@@ -2821,6 +2821,12 @@ components:
           type: string
         release_name:
           type: string
+        chart_release_name:
+          type: string
+        deployment_name:
+          type: string
+        service_name:
+          type: string
         runtime_secret_name:
           type: string
         configmap_name:
@@ -2865,6 +2871,8 @@ components:
           $ref: '#/components/schemas/DexExpiry'
         extra:
           $ref: '#/components/schemas/DexExtra'
+        runtime_generation: { type: integer, format: int64 }
+        runtime_applied_generation: { type: integer, format: int64 }
     DexSettingsRequest:
       type: object
       additionalProperties: false
@@ -2876,6 +2884,12 @@ components:
         namespace:
           type: string
         release_name:
+          type: string
+        chart_release_name:
+          type: string
+        deployment_name:
+          type: string
+        service_name:
           type: string
         runtime_secret_name:
           type: string
@@ -2968,6 +2982,7 @@ components:
         verified: { type: boolean }
         secret_resource_version: { type: string }
         runtime_changed: { type: boolean }
+        runtime_generation: { type: integer, format: int64 }
         created: { type: boolean }
         updated: { type: boolean }
     UsersSettingsUserListItem:
@@ -15846,7 +15861,7 @@ paths:
                         $ref: '#/components/schemas/DexSettings'
     put:
       summary: Upsert Dex singleton settings
-      description: Upserts the Dex settings row. `issuer_url` is required; namespace/release_name/runtime_secret_name default to `dex`/`dex`/`astronomer-dex-runtime`. The deprecated `configmap_name` request alias is accepted for one compatibility release but never causes a ConfigMap write.
+      description: Upserts the Dex settings row. `issuer_url` is required. For bundled Dex, this endpoint binds only issuer and target cluster; namespace, chart release, Deployment, Service, and runtime Secret are immutable chart-derived identity. Operator-managed Dex may set the custom identity fields. The deprecated `configmap_name` request alias is accepted for one compatibility release but never causes a ConfigMap write.
       tags:
         - auth
       security:
@@ -15927,6 +15942,9 @@ paths:
                             type: boolean
                           secret_resource_version:
                             type: string
+                          runtime_generation:
+                            type: integer
+                            format: int64
                           applied_at:
                             type: string
                             format: date-time

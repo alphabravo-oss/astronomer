@@ -21,7 +21,7 @@ WHERE id = $1
   AND public_clients_cutover_at IS NULL
   AND public_clients_encrypted = ''
   AND public_clients = $3::jsonb
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation
 `
 
 type BackfillDexPublicClientsEnvelopeParams struct {
@@ -48,6 +48,11 @@ func (q *Queries) BackfillDexPublicClientsEnvelope(ctx context.Context, arg Back
 		&i.RuntimeSecretName,
 		&i.PublicClientsEncrypted,
 		&i.PublicClientsCutoverAt,
+		&i.ChartReleaseName,
+		&i.DeploymentName,
+		&i.ServiceName,
+		&i.RuntimeGeneration,
+		&i.RuntimeAppliedGeneration,
 	)
 	return i, err
 }
@@ -143,7 +148,7 @@ func (q *Queries) GetDexConnectorByName(ctx context.Context, name string) (DexCo
 }
 
 const getDexSettings = `-- name: GetDexSettings :one
-SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at FROM dex_settings WHERE id = $1
+SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation FROM dex_settings WHERE id = $1
 `
 
 func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error) {
@@ -164,6 +169,11 @@ func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting,
 		&i.RuntimeSecretName,
 		&i.PublicClientsEncrypted,
 		&i.PublicClientsCutoverAt,
+		&i.ChartReleaseName,
+		&i.DeploymentName,
+		&i.ServiceName,
+		&i.RuntimeGeneration,
+		&i.RuntimeAppliedGeneration,
 	)
 	return i, err
 }
@@ -234,6 +244,47 @@ func (q *Queries) ListEnabledDexConnectors(ctx context.Context) ([]DexConnector,
 	return items, nil
 }
 
+const markDexRuntimeApplied = `-- name: MarkDexRuntimeApplied :one
+UPDATE dex_settings
+SET runtime_applied_generation = $2,
+    updated_at = now()
+WHERE id = $1
+  AND runtime_generation = $2
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation
+`
+
+type MarkDexRuntimeAppliedParams struct {
+	ID                uuid.UUID `json:"id"`
+	RuntimeGeneration int64     `json:"runtime_generation"`
+}
+
+func (q *Queries) MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeAppliedParams) (DexSetting, error) {
+	row := q.db.QueryRow(ctx, markDexRuntimeApplied, arg.ID, arg.RuntimeGeneration)
+	var i DexSetting
+	err := row.Scan(
+		&i.ID,
+		&i.IssuerUrl,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.ReleaseName,
+		&i.ConfigmapName,
+		&i.PublicClients,
+		&i.Expiry,
+		&i.Extra,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
+		&i.PublicClientsCutoverAt,
+		&i.ChartReleaseName,
+		&i.DeploymentName,
+		&i.ServiceName,
+		&i.RuntimeGeneration,
+		&i.RuntimeAppliedGeneration,
+	)
+	return i, err
+}
+
 const updateDexConnector = `-- name: UpdateDexConnector :one
 UPDATE dex_connectors SET
     type         = $2,
@@ -278,8 +329,9 @@ func (q *Queries) UpdateDexConnector(ctx context.Context, arg UpdateDexConnector
 const upsertDexSettings = `-- name: UpsertDexSettings :one
 INSERT INTO dex_settings (
     id, issuer_url, cluster_id, namespace, release_name, configmap_name,
-    runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $8, $9, $10)
+    runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra,
+    chart_release_name, deployment_name, service_name
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $14, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE SET
     issuer_url     = EXCLUDED.issuer_url,
     cluster_id     = EXCLUDED.cluster_id,
@@ -291,8 +343,12 @@ ON CONFLICT (id) DO UPDATE SET
     public_clients_encrypted = EXCLUDED.public_clients_encrypted,
     expiry         = EXCLUDED.expiry,
     extra          = EXCLUDED.extra,
+    chart_release_name = EXCLUDED.chart_release_name,
+    deployment_name = EXCLUDED.deployment_name,
+    service_name = EXCLUDED.service_name,
+    runtime_generation = dex_settings.runtime_generation + 1,
     updated_at     = now()
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation
 `
 
 type UpsertDexSettingsParams struct {
@@ -306,6 +362,9 @@ type UpsertDexSettingsParams struct {
 	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
 	Expiry                 json.RawMessage `json:"expiry"`
 	Extra                  json.RawMessage `json:"extra"`
+	ChartReleaseName       string          `json:"chart_release_name"`
+	DeploymentName         string          `json:"deployment_name"`
+	ServiceName            string          `json:"service_name"`
 	PublicClients          json.RawMessage `json:"public_clients"`
 }
 
@@ -321,6 +380,9 @@ func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsPa
 		arg.PublicClientsEncrypted,
 		arg.Expiry,
 		arg.Extra,
+		arg.ChartReleaseName,
+		arg.DeploymentName,
+		arg.ServiceName,
 		arg.PublicClients,
 	)
 	var i DexSetting
@@ -339,6 +401,11 @@ func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsPa
 		&i.RuntimeSecretName,
 		&i.PublicClientsEncrypted,
 		&i.PublicClientsCutoverAt,
+		&i.ChartReleaseName,
+		&i.DeploymentName,
+		&i.ServiceName,
+		&i.RuntimeGeneration,
+		&i.RuntimeAppliedGeneration,
 	)
 	return i, err
 }

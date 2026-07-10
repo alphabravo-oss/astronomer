@@ -148,6 +148,72 @@ func (q *Queries) DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) erro
 	return err
 }
 
+const enableDexSSOForGeneration = `-- name: EnableDexSSOForGeneration :one
+WITH current_generation AS (
+    SELECT 1
+    FROM dex_settings
+    WHERE id = '00000000-0000-0000-0000-000000000001'::uuid
+      AND runtime_generation = $5
+      AND runtime_applied_generation = $5
+)
+INSERT INTO sso_configurations (
+    provider, is_enabled, display_name, config, client_id,
+    client_secret_encrypted, allowed_organizations, allowed_domains,
+    auto_create_users
+)
+SELECT
+    'dex', true, $1, $2, $3,
+    $4, '[]'::jsonb, '[]'::jsonb, true
+FROM current_generation
+ON CONFLICT (provider) DO UPDATE SET
+    is_enabled = true,
+    display_name = EXCLUDED.display_name,
+    config = EXCLUDED.config,
+    client_id = EXCLUDED.client_id,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted
+WHERE EXISTS (SELECT 1 FROM current_generation)
+RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
+`
+
+type EnableDexSSOForGenerationParams struct {
+	DisplayName           string          `json:"display_name"`
+	Config                json.RawMessage `json:"config"`
+	ClientID              string          `json:"client_id"`
+	ClientSecretEncrypted string          `json:"client_secret_encrypted"`
+	RuntimeGeneration     int64           `json:"runtime_generation"`
+}
+
+// The generation predicate is evaluated in the same statement that enables
+// the provider. A stale reconcile can therefore never win a check-then-write
+// race against a newer settings/register mutation.
+func (q *Queries) EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (SsoConfiguration, error) {
+	row := q.db.QueryRow(ctx, enableDexSSOForGeneration,
+		arg.DisplayName,
+		arg.Config,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.RuntimeGeneration,
+	)
+	var i SsoConfiguration
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.IsEnabled,
+		&i.DisplayName,
+		&i.Config,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.AllowedOrganizations,
+		&i.AllowedDomains,
+		&i.AutoCreateUsers,
+		&i.DefaultGlobalRoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MigratedToDexAt,
+	)
+	return i, err
+}
+
 const getAPITokenByID = `-- name: GetAPITokenByID :one
 
 SELECT id, user_id, name, token_hash, prefix, expires_at, last_used_at, is_revoked, scopes, created_at, updated_at, allowed_cidrs, last_seen_remote_ip FROM api_tokens WHERE id = $1

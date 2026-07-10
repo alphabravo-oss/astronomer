@@ -35,6 +35,8 @@ const (
 	dexBootstrapEnv                  = "DEX_BUNDLED_ENABLED"
 	dexBootstrapNamespaceEnv         = "DEX_BUNDLED_NAMESPACE"
 	dexBootstrapReleaseNameEnv       = "DEX_BUNDLED_RELEASE_NAME"
+	dexBootstrapDeploymentNameEnv    = "DEX_BUNDLED_DEPLOYMENT_NAME"
+	dexBootstrapServiceNameEnv       = "DEX_BUNDLED_SERVICE_NAME"
 	dexBootstrapRuntimeSecretNameEnv = "DEX_BUNDLED_RUNTIME_SECRET_NAME"
 	dexBootstrapConfigmapNameEnv     = "DEX_BUNDLED_CONFIGMAP_NAME" // deprecated alias
 	dexBootstrapIssuerURLEnv         = "DEX_BUNDLED_ISSUER_URL"
@@ -98,17 +100,23 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	// should be no-ops.
 	existing, err := queries.GetDexSettings(ctx, dexBootstrapSingletonID)
 	if err == nil && existing.ID == dexBootstrapSingletonID {
+		desiredNamespace := envOr(env, dexBootstrapNamespaceEnv, "astronomer")
+		desiredChartRelease := envOr(env, dexBootstrapReleaseNameEnv, "astronomer")
+		desiredDeployment := envOr(env, dexBootstrapDeploymentNameEnv, desiredChartRelease+"-dex")
+		desiredService := envOr(env, dexBootstrapServiceNameEnv, desiredDeployment)
 		desiredRuntimeName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
 			envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
-		// Migration 134 assigns the generic default to legacy rows. Reconcile only
-		// that implicit value; any other runtime name is operator intent.
-		if existing.RuntimeSecretName == "" || (existing.RuntimeSecretName == "astronomer-dex-runtime" && desiredRuntimeName != existing.RuntimeSecretName) {
+		// Bundled identity is chart-owned and immutable. Reconcile every identity
+		// field while preserving operator-owned issuer, cluster, clients, and
+		// extension settings.
+		if existing.Namespace != desiredNamespace || existing.ChartReleaseName != desiredChartRelease || existing.DeploymentName != desiredDeployment || existing.ServiceName != desiredService || existing.RuntimeSecretName != desiredRuntimeName {
 			_, updateErr := queries.UpsertDexSettings(ctx, sqlc.UpsertDexSettingsParams{
 				ID: existing.ID, IssuerUrl: existing.IssuerUrl, ClusterID: existing.ClusterID,
-				Namespace: existing.Namespace, ReleaseName: existing.ReleaseName,
+				Namespace: desiredNamespace, ReleaseName: desiredDeployment,
 				ConfigmapName: desiredRuntimeName, RuntimeSecretName: desiredRuntimeName,
 				PublicClients: existing.PublicClients, PublicClientsEncrypted: existing.PublicClientsEncrypted,
 				Expiry: existing.Expiry, Extra: existing.Extra,
+				ChartReleaseName: desiredChartRelease, DeploymentName: desiredDeployment, ServiceName: desiredService,
 			})
 			return updateErr == nil, updateErr
 		}
@@ -129,7 +137,9 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	}
 
 	namespace := envOr(env, dexBootstrapNamespaceEnv, "astronomer")
-	releaseName := envOr(env, dexBootstrapReleaseNameEnv, "astronomer-dex")
+	chartReleaseName := envOr(env, dexBootstrapReleaseNameEnv, "astronomer")
+	deploymentName := envOr(env, dexBootstrapDeploymentNameEnv, chartReleaseName+"-dex")
+	serviceName := envOr(env, dexBootstrapServiceNameEnv, deploymentName)
 	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
 		envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
 
@@ -138,13 +148,16 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		IssuerUrl:              issuer,
 		ClusterID:              pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
 		Namespace:              namespace,
-		ReleaseName:            releaseName,
+		ReleaseName:            deploymentName,
 		ConfigmapName:          runtimeSecretName,
 		RuntimeSecretName:      runtimeSecretName,
 		PublicClientsEncrypted: "",
 		PublicClients:          []byte("[]"),
 		Expiry:                 []byte("{}"),
 		Extra:                  []byte("{}"),
+		ChartReleaseName:       chartReleaseName,
+		DeploymentName:         deploymentName,
+		ServiceName:            serviceName,
 	})
 	if err != nil {
 		return false, err
@@ -153,7 +166,9 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		"event", "dex_settings_seeded",
 		"issuer_url", issuer,
 		"namespace", namespace,
-		"release_name", releaseName,
+		"chart_release_name", chartReleaseName,
+		"deployment_name", deploymentName,
+		"service_name", serviceName,
 		"runtime_secret_name", runtimeSecretName,
 	)
 	return true, nil

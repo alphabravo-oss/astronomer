@@ -64,16 +64,31 @@ func configureDexRuntime(t *testing.T, q *fakeDexQuerier, h *DexHandler, deploym
 	}
 	q.settings.Namespace = cmpOrTest(q.settings.Namespace, "dex")
 	q.settings.ReleaseName = cmpOrTest(q.settings.ReleaseName, "dex")
+	q.settings.DeploymentName = cmpOrTest(q.settings.DeploymentName, q.settings.ReleaseName)
+	q.settings.ServiceName = cmpOrTest(q.settings.ServiceName, q.settings.ReleaseName)
 	q.settings.RuntimeSecretName = cmpOrTest(q.settings.RuntimeSecretName, q.settings.ConfigmapName, "astronomer-dex-runtime")
+	if q.settings.RuntimeGeneration == 0 {
+		q.settings.RuntimeGeneration = 1
+	}
 	if !q.settings.ClusterID.Valid {
 		q.settings.ClusterID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	}
 	samlConfig, _ := json.Marshal(map[string]any{"ssoURL": "https://idp.example.com/saml", "entityIssuer": "https://idp.example.com/metadata"})
-	q.connectors[uuid.New()] = sqlc.DexConnector{ID: uuid.New(), Name: "verified-saml", Type: "saml", DisplayName: "Verified SAML", Config: samlConfig, Enabled: true}
+	hasVerified := false
+	for _, connector := range q.connectors {
+		if connector.Name == "verified-saml" {
+			hasVerified = true
+		}
+	}
+	if !hasVerified {
+		id := uuid.New()
+		q.connectors[id] = sqlc.DexConnector{ID: id, Name: "verified-saml", Type: "saml", DisplayName: "Verified SAML", Config: samlConfig, Enabled: true}
+	}
 
 	secret := newDexRuntimeSecret(q.settings.Namespace, q.settings.RuntimeSecretName, nil)
 	secret.Metadata.ResourceVersion = "1"
 	deploymentRV := ""
+	deploymentGeneration := ""
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 		switch {
 		case req.Method == http.MethodGet && strings.Contains(req.Path, "/secrets/"):
@@ -106,6 +121,7 @@ func configureDexRuntime(t *testing.T, q *fakeDexQuerier, h *DexHandler, deploym
 			metadata, _ := template["metadata"].(map[string]any)
 			annotations, _ := metadata["annotations"].(map[string]any)
 			deploymentRV, _ = annotations["astronomer.io/dex-runtime-resource-version"].(string)
+			deploymentGeneration, _ = annotations[dexRuntimeGenerationAnnotation].(string)
 			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode([]byte(`{}`))}, nil
 		case req.Method == http.MethodGet && strings.Contains(req.Path, "/deployments/"):
 			readyReplicas := 0
@@ -117,7 +133,7 @@ func configureDexRuntime(t *testing.T, q *fakeDexQuerier, h *DexHandler, deploym
 			deployment := map[string]any{
 				"metadata": map[string]any{"generation": 3},
 				"spec": map[string]any{"replicas": 1, "template": map[string]any{
-					"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": deploymentRV}},
+					"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": deploymentRV, dexRuntimeGenerationAnnotation: deploymentGeneration}},
 					"spec":     map[string]any{"volumes": []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": q.settings.RuntimeSecretName}}}},
 				}},
 				"status": map[string]any{"observedGeneration": 3, "updatedReplicas": 1, "readyReplicas": readyReplicas, "availableReplicas": readyReplicas, "unavailableReplicas": 1 - readyReplicas, "conditions": conditions},
@@ -223,12 +239,21 @@ func (f *fakeDexQuerier) GetDexSettings(_ context.Context, id uuid.UUID) (sqlc.D
 	if f.settings == nil || f.settings.ID != id {
 		return sqlc.DexSetting{}, errors.New("not found")
 	}
+	if f.settings.RuntimeGeneration == 0 {
+		f.settings.RuntimeGeneration = 1
+	}
+	f.settings.DeploymentName = cmpOrTest(f.settings.DeploymentName, f.settings.ReleaseName)
+	f.settings.ServiceName = cmpOrTest(f.settings.ServiceName, f.settings.ReleaseName)
 	return *f.settings, nil
 }
 
 func (f *fakeDexQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error) {
 	if f.upsertErr != nil {
 		return sqlc.DexSetting{}, f.upsertErr
+	}
+	generation := int64(1)
+	if f.settings != nil {
+		generation = f.settings.RuntimeGeneration + 1
 	}
 	row := sqlc.DexSetting{
 		ID:                     arg.ID,
@@ -242,6 +267,10 @@ func (f *fakeDexQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDex
 		PublicClientsEncrypted: arg.PublicClientsEncrypted,
 		Expiry:                 arg.Expiry,
 		Extra:                  arg.Extra,
+		ChartReleaseName:       arg.ChartReleaseName,
+		DeploymentName:         arg.DeploymentName,
+		ServiceName:            arg.ServiceName,
+		RuntimeGeneration:      generation,
 		CreatedAt:              time.Now().UTC(),
 		UpdatedAt:              time.Now().UTC(),
 	}
@@ -251,6 +280,14 @@ func (f *fakeDexQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDex
 	}
 	f.settings = &row
 	return row, nil
+}
+
+func (f *fakeDexQuerier) MarkDexRuntimeApplied(_ context.Context, arg sqlc.MarkDexRuntimeAppliedParams) (sqlc.DexSetting, error) {
+	if f.settings == nil || f.settings.ID != arg.ID || f.settings.RuntimeGeneration != arg.RuntimeGeneration {
+		return sqlc.DexSetting{}, errors.New("stale generation")
+	}
+	f.settings.RuntimeAppliedGeneration = arg.RuntimeGeneration
+	return *f.settings, nil
 }
 
 func (f *fakeDexQuerier) BackfillDexPublicClientsEnvelope(_ context.Context, arg sqlc.BackfillDexPublicClientsEnvelopeParams) (sqlc.DexSetting, error) {
@@ -321,6 +358,20 @@ func (f *fakeDexQuerier) UpdateSSOConfiguration(_ context.Context, arg sqlc.Upda
 	return sqlc.SsoConfiguration{}, errors.New("not found")
 }
 
+func (f *fakeDexQuerier) EnableDexSSOForGeneration(_ context.Context, arg sqlc.EnableDexSSOForGenerationParams) (sqlc.SsoConfiguration, error) {
+	if f.settings == nil || f.settings.RuntimeGeneration != arg.RuntimeGeneration || f.settings.RuntimeAppliedGeneration != arg.RuntimeGeneration {
+		return sqlc.SsoConfiguration{}, errors.New("stale generation")
+	}
+	row, exists := f.ssoByProv["dex"]
+	if !exists {
+		row = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true, CreatedAt: time.Now().UTC()}
+	}
+	row.IsEnabled, row.DisplayName, row.Config, row.ClientID, row.ClientSecretEncrypted = true, arg.DisplayName, arg.Config, arg.ClientID, arg.ClientSecretEncrypted
+	row.UpdatedAt = time.Now().UTC()
+	f.ssoByProv["dex"] = row
+	return row, nil
+}
+
 func (f *fakeDexQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	f.auditRows = append(f.auditRows, arg)
 	return nil
@@ -378,7 +429,7 @@ func TestValidateConnectorConfig_RequiredFieldsByType(t *testing.T) {
 			name: "ldap happy path",
 			typ:  "ldap",
 			config: map[string]any{
-				"host":   "ldap.example.com",
+				"host":   "ldap.example.com:636",
 				"bindDN": "cn=admin,dc=example,dc=com",
 				"bindPW": "secret",
 				"userSearch": map[string]any{
@@ -394,7 +445,7 @@ func TestValidateConnectorConfig_RequiredFieldsByType(t *testing.T) {
 			name: "ldap missing nested field",
 			typ:  "ldap",
 			config: map[string]any{
-				"host":   "ldap.example.com",
+				"host":   "ldap.example.com:636",
 				"bindDN": "cn=admin,dc=example,dc=com",
 				"bindPW": "secret",
 				"userSearch": map[string]any{
@@ -408,7 +459,7 @@ func TestValidateConnectorConfig_RequiredFieldsByType(t *testing.T) {
 		{
 			name:     "ldap missing parent userSearch",
 			typ:      "ldap",
-			config:   map[string]any{"host": "h", "bindDN": "d", "bindPW": "p"},
+			config:   map[string]any{"host": "h:636", "bindDN": "d", "bindPW": "p"},
 			wantOK:   false,
 			wantMiss: []string{"userSearch"},
 		},
@@ -436,7 +487,7 @@ func TestValidateConnectorConfig_RequiredFieldsByType(t *testing.T) {
 			typ:      "oidc",
 			config:   map[string]any{"issuer": "https://i", "clientID": "id", "clientSecret": map[string]any{"password": "synthetic-canary"}},
 			wantOK:   false,
-			wantMiss: []string{"secret fields must be strings"},
+			wantMiss: []string{"clientSecret must be a string"},
 		},
 		{
 			name:     "github missing client",
@@ -638,19 +689,33 @@ func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *test
 	metadataOnlySecret := newDexRuntimeSecret("dex", "astronomer-dex-runtime", nil)
 	metadataOnlySecret.Data = nil
 	metadataOnlySecret.Metadata.ResourceVersion = "18"
-	metadataOnlyJSON, _ := json.Marshal(metadataOnlySecret)
+	currentSecret := metadataOnlySecret
 	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		body, _ := io.ReadAll(r.Body)
 		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
+			current, _ := json.Marshal(currentSecret)
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(metadataOnlyJSON)
+			_, _ = w.Write(current)
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
 			secretBody = append([]byte(nil), body...)
+			_ = json.Unmarshal(body, &currentSecret)
+			currentSecret.Metadata.ResourceVersion = "19"
+			updated, _ := json.Marshal(currentSecret)
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"Secret","metadata":{"name":"astronomer-dex-runtime","resourceVersion":"19"}}`))
+			_, _ = w.Write(updated)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
+			deployment := map[string]any{"metadata": map[string]any{"generation": 2}, "spec": map[string]any{"replicas": 1, "template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": "19", dexRuntimeGenerationAnnotation: "1"}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": "astronomer-dex-runtime"}}}}}}, "status": map[string]any{"observedGeneration": 2, "updatedReplicas": 1, "readyReplicas": 1, "availableReplicas": 1, "unavailableReplicas": 0, "conditions": []any{map[string]any{"type": "Available", "status": "True"}}}}
+			raw, _ := json.Marshal(deployment)
+			_, _ = w.Write(raw)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/namespaces/dex/services/http:dex:5556/proxy/healthz" {
+			_, _ = w.Write([]byte("ok"))
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
@@ -696,7 +761,10 @@ func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *test
 	wantRequests := []string{
 		"GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
 		"PATCH /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
+		"GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
 		"PATCH /apis/apps/v1/namespaces/dex/deployments/dex",
+		"GET /apis/apps/v1/namespaces/dex/deployments/dex",
+		"GET /api/v1/namespaces/dex/services/http:dex:5556/proxy/healthz",
 	}
 	if strings.Join(requests, "|") != strings.Join(wantRequests, "|") {
 		t.Fatalf("requests=%v want=%v", requests, wantRequests)
@@ -741,14 +809,24 @@ func TestApply_FixedPointDoesNotMutateOrRollout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	existing := newDexRuntimeSecret("dex", "astronomer-dex-runtime", rendered)
+	existing := newDexRuntimeSecret("dex", "astronomer-dex-runtime", rendered, 1)
 	existing.Metadata.ResourceVersion = "42"
 	existingJSON, _ := json.Marshal(existing)
 	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
-		if r.Method == http.MethodGet {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/secrets/") {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(existingJSON)
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/deployments/") {
+			deployment := map[string]any{"metadata": map[string]any{"generation": 2}, "spec": map[string]any{"replicas": 1, "template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": "42", dexRuntimeGenerationAnnotation: "1"}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": "astronomer-dex-runtime"}}}}}}, "status": map[string]any{"observedGeneration": 2, "updatedReplicas": 1, "readyReplicas": 1, "availableReplicas": 1, "conditions": []any{map[string]any{"type": "Available", "status": "True"}}}}
+			raw, _ := json.Marshal(deployment)
+			_, _ = w.Write(raw)
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/services/") {
+			_, _ = w.Write([]byte("ok"))
 			return
 		}
 		t.Fatalf("fixed point unexpectedly mutated Kubernetes with %s %s", r.Method, r.URL.Path)
@@ -762,7 +840,7 @@ func TestApply_FixedPointDoesNotMutateOrRollout(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if len(requests) != 1 || requests[0] != "GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
+	if len(requests) != 4 || requests[0] != "GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
 		t.Fatalf("fixed point requests=%v", requests)
 	}
 }
@@ -1348,6 +1426,79 @@ func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
 	}
 }
 
+func TestBundledSettingsBindPreservesChartIdentityAndRuntimeConfiguration(t *testing.T) {
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://old.example.com/dex", Namespace: "platform-system", ReleaseName: "elite-dex", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{"idTokens":"2h"}`), Extra: json.RawMessage(`{"logger":{"level":"info"}}`), RuntimeGeneration: 7}
+	h := NewDexHandler(q)
+	h.bundledIdentity = &dexRuntimeIdentity{Namespace: "platform-system", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime"}
+	clusterID := uuid.NewString()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", strings.NewReader(`{"issuer_url":"https://platform.example.com/dex","cluster_id":"`+clusterID+`"}`))
+	w := httptest.NewRecorder()
+	h.UpdateSettings(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	row := q.settings
+	if row.Namespace != "platform-system" || row.ChartReleaseName != "elite" || row.DeploymentName != "elite-dex" || row.ServiceName != "elite-dex" || row.RuntimeSecretName != "elite-dex-runtime" {
+		t.Fatalf("bundled identity drifted: %#v", row)
+	}
+	if string(row.Expiry) != `{"idTokens":"2h"}` || string(row.Extra) != `{"logger":{"level":"info"}}` {
+		t.Fatalf("bind overwrote runtime config: expiry=%s extra=%s", row.Expiry, row.Extra)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", strings.NewReader(`{"issuer_url":"https://platform.example.com/dex","cluster_id":"`+clusterID+`","namespace":"attacker"}`))
+	w = httptest.NewRecorder()
+	h.UpdateSettings(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("immutable bundled namespace accepted: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCustomDexRuntimeIdentityRoundTripsEndToEnd(t *testing.T) {
+	q := newFakeDexQuerier()
+	h := NewDexHandler(q)
+	clusterID := uuid.NewString()
+	body := `{"issuer_url":"https://dex.customer.example/auth","cluster_id":"` + clusterID + `","namespace":"customer-auth","release_name":"customer-dex","chart_release_name":"customer-stack","deployment_name":"customer-dex-server","service_name":"customer-dex-http","runtime_secret_name":"customer-dex-runtime"}`
+	w := httptest.NewRecorder()
+	h.UpdateSettings(w, httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", strings.NewReader(body)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	row := q.settings
+	if row.Namespace != "customer-auth" || row.ChartReleaseName != "customer-stack" || row.DeploymentName != "customer-dex-server" || row.ServiceName != "customer-dex-http" || row.RuntimeSecretName != "customer-dex-runtime" {
+		t.Fatalf("custom identity did not round trip: %#v", row)
+	}
+}
+
+func TestStaleGenerationCannotEnableDexSSOOrOverwriteNewerSecret(t *testing.T) {
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 2, RuntimeAppliedGeneration: 2}
+	if _, err := q.EnableDexSSOForGeneration(context.Background(), sqlc.EnableDexSSOForGenerationParams{RuntimeGeneration: 1, ClientID: "stale"}); err == nil {
+		t.Fatal("stale generation enabled SSO")
+	}
+	if _, exists := q.ssoByProv["dex"]; exists {
+		t.Fatal("stale generation mutated SSO")
+	}
+
+	secret := newDexRuntimeSecret("dex", "runtime", []byte("newer"), 2)
+	secret.Metadata.ResourceVersion = "9"
+	raw, _ := json.Marshal(secret)
+	patched := false
+	h := NewDexHandler(q)
+	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if req.Method == http.MethodPatch {
+			patched = true
+		}
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
+	}})
+	if _, _, err := h.applyRuntimeSecret(context.Background(), uuid.NewString(), "dex", "runtime", []byte("older"), 1); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("stale Secret write err=%v", err)
+	}
+	if patched {
+		t.Fatal("stale generation patched the newer Secret")
+	}
+}
+
 func TestLoadPublicClientsMixedVersionAuthorityAndCutover(t *testing.T) {
 	key, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(key)
@@ -1432,7 +1583,7 @@ func TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition(t *testing.
 
 	cipher, _ := enc.Encrypt("existing-secret")
 	id := uuid.New()
-	config, _ := json.Marshal(map[string]any{"host": "ldap.example", "bindDN": "cn=svc", "bindPW": cipher, "userSearch": map[string]any{"baseDN": "dc=example", "username": "uid", "idAttr": "uid", "emailAttr": "mail"}})
+	config, _ := json.Marshal(map[string]any{"host": "ldap.example:636", "bindDN": "cn=svc", "bindPW": cipher, "userSearch": map[string]any{"baseDN": "dc=example", "username": "uid", "idAttr": "uid", "emailAttr": "mail"}})
 	q.connectors[id] = sqlc.DexConnector{ID: id, Name: "ldap", Type: "ldap", Config: config, Enabled: true}
 	raw, _ := json.Marshal(map[string]any{"type": "saml"})
 	req := httptest.NewRequest(http.MethodPatch, "/", bytes.NewReader(raw))

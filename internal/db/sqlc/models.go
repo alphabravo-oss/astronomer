@@ -1033,6 +1033,16 @@ type DexSetting struct {
 	PublicClientsEncrypted string `json:"public_clients_encrypted"`
 	// Durable cutover marker; non-null means old writers are prohibited and public_clients is scrubbed.
 	PublicClientsCutoverAt pgtype.Timestamptz `json:"public_clients_cutover_at"`
+	// Immutable Helm/Argo release identity for bundled Dex; empty for operator-managed Dex.
+	ChartReleaseName string `json:"chart_release_name"`
+	// Exact Kubernetes Deployment name reconciled by DexHandler.
+	DeploymentName string `json:"deployment_name"`
+	// Exact Kubernetes Service name used for the verified health proxy.
+	ServiceName string `json:"service_name"`
+	// Opaque monotonic generation for Dex runtime candidates; never content-derived.
+	RuntimeGeneration int64 `json:"runtime_generation"`
+	// Last generation conditionally verified in Secret, Deployment, and health checks.
+	RuntimeAppliedGeneration int64 `json:"runtime_applied_generation"`
 }
 
 type EmailMessage struct {
