@@ -16,9 +16,12 @@ volume before populating the Secret can take every Dex replica offline.
 1. Back up the management database and the platform Fernet key. They are the
    authoritative, restorable source for connector and static-client secrets.
 2. Upgrade with `dex.migration.phase=prepare`. A credential-free pre-upgrade
-   hook creates a metadata-only retained staging ConfigMap, then copies live
+   / Argo `PreSync` hook first metadata-patches the original exact-name
+   ConfigMap with Helm `keep` and Argo `Prune=false,Delete=false`, creates a
+   metadata-only retained staging ConfigMap, then copies live
    legacy data Kubernetes-to-Kubernetes through a mode-0600 temporary patch
-   file. No credential bytes enter Helm values, rendered manifests, logs, or
+   file. The original object remains a restart/rollback source throughout the
+   prepare phase. No credential bytes enter Helm values, rendered manifests, logs, or
    release history. The prepare Deployment stays ConfigMap-mounted.
 3. Populate the metadata-only runtime Secret by calling
    `POST /api/v1/auth/dex/apply/`. Confirm its exact ownership labels and a
@@ -27,7 +30,7 @@ volume before populating the Secret can take every Dex replica offline.
 4. Upgrade again with `dex.migration.phase=cutover`. Preflight requires the
    durable prepare marker and valid runtime Secret. The Deployment uses
    `maxUnavailable: 0` and switches to the Secret.
-5. The post-upgrade cleanup hook independently waits for the observed
+5. The post-upgrade / Argo `PostSync` cleanup hook independently waits for the observed
    Secret-mounted Deployment to be fully ready/available, rechecks Secret
    ownership, and only then deletes both legacy ConfigMap names. A failed check
    leaves them retained for recovery and fails the release.
@@ -59,6 +62,15 @@ The phase value is therefore part of the deployment state machine, not a
 long-lived environment preference. New installations stay on `fresh`; legacy
 installations pass through `prepare` exactly long enough to establish the live
 staging object, then remain on `cutover` after the verified transition.
+
+Every API/runtime mutation also carries an opaque monotonic database
+`runtime_generation`. The same decimal generation is written to the retained
+Secret and Deployment pod-template annotations. Only after the exact generation
+is observed ready and healthy is `runtime_applied_generation` advanced with a
+conditional update; SSO enablement checks both values in the same SQL statement.
+A stale or crashed request can therefore be retried, but it cannot overwrite a
+newer Secret generation or enable an older client credential pair. Generations
+are counters only and are never hashes of credential-bearing content.
 
 ## Database compatibility cutover
 

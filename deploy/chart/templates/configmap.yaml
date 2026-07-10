@@ -49,7 +49,9 @@ data:
   {{- if .Values.dex.enabled }}
   DEX_BUNDLED_ENABLED: "true"
   DEX_BUNDLED_NAMESPACE: {{ .Release.Namespace | quote }}
-  DEX_BUNDLED_RELEASE_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
+  DEX_BUNDLED_RELEASE_NAME: {{ .Release.Name | quote }}
+  DEX_BUNDLED_DEPLOYMENT_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
+  DEX_BUNDLED_SERVICE_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
   DEX_BUNDLED_RUNTIME_SECRET_NAME: {{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
   DEX_BUNDLED_ISSUER_URL: {{ include "astronomer.dex.issuerURL" . | quote }}
   {{- end }}

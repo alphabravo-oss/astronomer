@@ -83,6 +83,25 @@ func TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName(t *testing.T) {
 	}
 }
 
+func TestDexBundledIdentityTracksCustomReleaseNamespaceAndRuntimeName(t *testing.T) {
+	chart := filepath.Join(repoRoot(t), "deploy", "chart")
+	cmd := exec.Command("helm", "template", "elite", chart, "--namespace", "platform-auth", "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
+	raw, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("render: %v\n%s", err, raw)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		`DEX_BUNDLED_NAMESPACE: "platform-auth"`, `DEX_BUNDLED_RELEASE_NAME: "elite"`,
+		`DEX_BUNDLED_DEPLOYMENT_NAME: "elite-astronomer-dex"`, `DEX_BUNDLED_SERVICE_NAME: "elite-astronomer-dex"`,
+		`DEX_BUNDLED_RUNTIME_SECRET_NAME: "company-dex-runtime"`, `secretName: "company-dex-runtime"`,
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("custom bundled identity missing %q", required)
+		}
+	}
+}
+
 func TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData(t *testing.T) {
 	var manifest renderedDoc
 	for _, doc := range renderDexRuntimeContract(t) {
@@ -195,7 +214,7 @@ func TestDexPrepareTemplatePreservesLiveDataAndOldMount(t *testing.T) {
 	root := repoRoot(t)
 	configTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-legacy-prepare.yaml"))
 	deploymentTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-deployment.yaml"))
-	for _, required := range []string{"pre-upgrade", "dex-config-retained", "--patch-file", "helm.sh/resource-policy", "astronomer.io/dex-migration-phase", "umask 077"} {
+	for _, required := range []string{"pre-upgrade", "dex-config-retained", "--patch-file", "helm.sh/resource-policy", "argocd.argoproj.io/sync-options", "Prune=false,Delete=false", "astronomer.io/dex-migration-phase", "umask 077"} {
 		if !bytes.Contains(configTemplate, []byte(required)) {
 			t.Fatalf("prepare template missing %q", required)
 		}
@@ -203,11 +222,48 @@ func TestDexPrepareTemplatePreservesLiveDataAndOldMount(t *testing.T) {
 	if bytes.Contains(configTemplate, []byte("lookup")) || bytes.Contains(configTemplate, []byte("$legacy.data")) || bytes.Contains(configTemplate, []byte("stringData:")) {
 		t.Fatal("prepare manifest serializes credential data into Helm desired state")
 	}
+	if !bytes.Contains(configTemplate, []byte(`kubectl patch configmap {{ $legacy | quote }}`)) {
+		t.Fatal("prepare hook must metadata-retain the original exact-name ConfigMap before copying it")
+	}
 	if bytes.Contains(configTemplate, []byte(".Release.IsUpgrade")) {
 		t.Fatal("prepare phase must not depend on imperative Helm upgrade state; Argo CD does not reliably provide it")
 	}
 	if !bytes.Contains(deploymentTemplate, []byte(`eq .Values.dex.migration.phase "prepare"`)) || !bytes.Contains(deploymentTemplate, []byte("configMap:")) {
 		t.Fatal("prepare release does not keep the Deployment on the legacy ConfigMap")
+	}
+}
+
+func TestDexMigrationLifecycleFailsClosedAcrossPrepareCutoverAndRollback(t *testing.T) {
+	root := repoRoot(t)
+	prepare, _ := os.ReadFile(filepath.Join(root, "deploy/chart/templates/dex-legacy-prepare.yaml"))
+	cleanup, _ := os.ReadFile(filepath.Join(root, "deploy/chart/templates/dex-legacy-cleanup.yaml"))
+	deployment, _ := os.ReadFile(filepath.Join(root, "deploy/chart/templates/dex-deployment.yaml"))
+	p := string(prepare)
+	c := string(cleanup)
+	d := string(deployment)
+	retain := strings.Index(p, `kubectl patch configmap {{ $legacy | quote }}`)
+	copyLive := strings.Index(p, `kubectl get configmap {{ $legacy | quote }}`)
+	copyRetained := strings.Index(p, `kubectl patch configmap {{ $retained | quote }}`)
+	if retain < 0 || copyLive <= retain || copyRetained <= copyLive {
+		t.Fatal("prepare must retain original before reading and copying its live data")
+	}
+	for _, required := range []string{`helm.sh/resource-policy":"keep`, `Prune=false,Delete=false`, `argocd.argoproj.io/hook" "PreSync`, `exit 1`} {
+		if !strings.Contains(p, required) {
+			t.Fatalf("prepare rollback/failure contract missing %q", required)
+		}
+	}
+	if !strings.Contains(d, `eq .Values.dex.migration.phase "prepare"`) || !strings.Contains(d, "configMap:") || !strings.Contains(d, "secret:") {
+		t.Fatal("Deployment does not preserve prepare restart and cutover rollback mounts")
+	}
+	ready := strings.Index(c, `.status.availableReplicas == .spec.replicas`)
+	ownership := strings.Index(c, `.metadata.labels["astronomer.io/runtime-writer"]`)
+	deleteOriginal := strings.Index(c, `kubectl delete configmap "${legacy}"`)
+	deleteRetained := strings.Index(c, `kubectl delete configmap "${retained}"`)
+	if ready < 0 || ownership <= ready || deleteOriginal <= ownership || deleteRetained <= deleteOriginal {
+		t.Fatal("cleanup may delete recovery ConfigMaps before Secret-backed readiness and ownership proof")
+	}
+	if !strings.Contains(c, `argocd.argoproj.io/hook" "PostSync`) {
+		t.Fatal("cutover cleanup is not an explicit Argo PostSync hook")
 	}
 }
 

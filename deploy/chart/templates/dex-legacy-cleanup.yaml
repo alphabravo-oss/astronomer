@@ -12,20 +12,20 @@ the exact legacy ConfigMap. No credential content is read or logged here.
 {{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
 {{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
 {{- $runtime := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName -}}
-{{- $hooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" -}}
+{{- $hooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation,HookSucceeded" -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $hooks) | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $hooks) | nindent 4 }}
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -45,7 +45,7 @@ kind: RoleBinding
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "5") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $hooks) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -60,7 +60,7 @@ kind: Job
 metadata:
   name: {{ $name }}
   annotations:
-    {{- toYaml (merge (dict "helm.sh/hook-weight" "10") $hooks) | nindent 4 }}
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "10" "argocd.argoproj.io/sync-wave" "10") $hooks) | nindent 4 }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600

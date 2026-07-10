@@ -63,12 +63,6 @@ export default function InstallDexPage() {
       await settingsMutation.mutateAsync({
         issuer_url: issuerUrl,
         cluster_id: cluster.id,
-        namespace: 'dex',
-        release_name: 'dex',
-        runtime_secret_name: 'astronomer-dex-runtime',
-        public_clients: [],
-        expiry: {},
-        extra: {},
       });
       router.push('/dashboard/settings/auth/');
     } catch {
@@ -89,7 +83,7 @@ export default function InstallDexPage() {
         <h1 className="text-2xl font-semibold text-foreground tracking-tight mt-1">Install Dex</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Dex is bundled with the Astronomer management chart. Enable <span className="font-mono">dex.enabled</span>
-          in Helm first; this workflow only binds its issuer and runtime identity.
+          in Helm first; this workflow only binds its issuer and target cluster. Kubernetes runtime identity stays chart-owned.
         </p>
       </div>
 

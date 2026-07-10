@@ -68,7 +68,7 @@ COPY --from=dex-validator /out/dexconfigcheck /usr/local/bin/dexconfigcheck
 # probes make image construction fail if the offline contract drifts.
 RUN jq --version | grep -Eq '^jq-1\.[0-9]+' \
     && base64 --version | grep -q 'GNU coreutils' \
-    && test "$(dexconfigcheck --version)" = "1"
+    && test "$(dexconfigcheck --version)" = "2"
 
 # Drop a tiny .bashrc that gives the shell session a recognisable prompt
 # so operators know they're inside an Astronomer-managed pod (and not
