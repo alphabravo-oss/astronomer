@@ -291,6 +291,14 @@ func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBran
 	for _, family := range []string{"api key", "private key", "client cert key", "AWS access key ID", "Google access ID", "pass word"} {
 		assignments["multiword "+family] = family + "=" + policyCanary
 	}
+	for _, phrase := range []string{
+		"api key value", "private key data", "client secret material", "access token value",
+		"authorization header", "cookie value", "AWS access key ID value",
+		"private key content", "private key pem", "private key hash", "client secret reference",
+		"platform api key owner",
+	} {
+		assignments["sensitive continuation "+phrase] = phrase + "=" + policyCanary
+	}
 	for name, assignment := range assignments {
 		name, assignment := name, assignment
 		t.Run(name, func(t *testing.T) {
@@ -319,6 +327,9 @@ func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBran
 				}
 			}
 		})
+	}
+	if got := SanitizeString("note=api key value=" + policyCanary); strings.Contains(got, policyCanary) {
+		t.Fatalf("credential family split across value/LHS boundary survived: %q", got)
 	}
 }
 
@@ -350,7 +361,7 @@ func TestCanonicalAssignmentScannerMaxSizeIsBoundedAndAllocationStable(t *testin
 func TestCanonicalAssignmentScannerPreservesSafeProse(t *testing.T) {
 	for _, prose := range []string{
 		`phase=Running message:"deployment complete" ratio=3:1 path=/apps/demo unicode=東京 [maintenance window]`,
-		`release status = healthy private key count = 2 api key owner = platform access key rotation = scheduled pass word count = 3`,
+		`release status = healthy private key count = 2 api key owner = platform access token status = active AWS access key ID rotation = scheduled pass word count = 3`,
 	} {
 		if got := SanitizeString(prose); got != prose {
 			t.Fatalf("safe prose changed: %q", got)

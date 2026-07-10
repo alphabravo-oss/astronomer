@@ -36,6 +36,7 @@ const (
 	maxGeneratorScalarLen  = 512
 	maxAssignmentLHSBytes  = 256
 	maxAssignmentSpace     = 32
+	maxAssignmentPrefix    = 32
 	maxSanitizedStringLen  = MaxArgoResponseBodyBytes
 )
 
@@ -312,17 +313,34 @@ type canonicalAssignmentMatch struct {
 // bounded whitespace and ':'/'=' delimit the assignment grammar. Fixed local
 // storage prevents dense safe assignments from allocating per candidate.
 func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch, bool) {
-	var normalized [maxAssignmentLHSBytes]byte
+	var normalized [maxAssignmentLHSBytes + maxAssignmentPrefix]byte
 	normalizedLen := 0
+	semanticStart := 0
 	lhsBytes := 0
 	lhsValid := true
+	valueBoundary := -1
 
 	reset := func() {
 		normalizedLen = 0
+		semanticStart = 0
 		lhsBytes = 0
 		lhsValid = true
 	}
 	for cursor := start; cursor < len(value); {
+		if valueBoundary >= 0 && cursor >= valueBoundary {
+			// Retain only a bounded normalized tail from the preceding value.
+			// It detects a credential family split across the value/LHS
+			// boundary, while semanticStart identifies the exact new LHS for
+			// the narrow metadata allowlist.
+			if normalizedLen > maxAssignmentPrefix {
+				copy(normalized[:], normalized[normalizedLen-maxAssignmentPrefix:normalizedLen])
+				normalizedLen = maxAssignmentPrefix
+			}
+			semanticStart = normalizedLen
+			lhsBytes = 0
+			lhsValid = true
+			valueBoundary = -1
+		}
 		r, size := utf8.DecodeRuneInString(value[cursor:])
 		if r == utf8.RuneError && size == 0 {
 			break
@@ -377,8 +395,11 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 
 		delimiterEnd := cursor + size
 		valueStart, valueEnd, next, hasValue := assignmentValueRange(value, delimiterEnd)
-		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveAssignmentLHS(normalized[:normalizedLen]) {
+		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveAssignmentLHS(normalized[:normalizedLen], normalized[semanticStart:normalizedLen]) {
 			return canonicalAssignmentMatch{valueStart: valueStart, valueEnd: valueEnd, next: next}, true
+		}
+		if hasValue {
+			valueBoundary = next
 		}
 		reset()
 		cursor = delimiterEnd
@@ -393,14 +414,27 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 	return canonicalAssignmentMatch{}, false
 }
 
-func canonicalSensitiveAssignmentLHS(normalized []byte) bool {
-	if len(normalized) == 0 || referenceNormalizedKey(normalized) {
+func canonicalSensitiveAssignmentLHS(normalized, semanticLHS []byte) bool {
+	if !canonicalMarkerBytes(normalized) && !bytes.Contains(normalized, []byte("sig")) {
 		return false
 	}
-	if bytes.HasSuffix(normalized, []byte("sig")) {
+	// Containment fails closed. Only a complete normalized LHS with exact,
+	// non-value metadata semantics is exempted; arbitrary continuations and
+	// free-text secret reference labels are never accepted here.
+	if !safeAssignmentMetadataLHS(semanticLHS) {
 		return true
 	}
-	return canonicalMarkerSuffixBytes(normalized)
+	prefix := normalized[:len(normalized)-len(semanticLHS)]
+	return canonicalMarkerBytes(prefix) || bytes.Contains(prefix, []byte("sig"))
+}
+
+func safeAssignmentMetadataLHS(normalized []byte) bool {
+	switch string(normalized) {
+	case "apikeyowner", "privatekeycount", "passwordcount", "accesstokenstatus", "awsaccesskeyidrotation":
+		return true
+	default:
+		return false
+	}
 }
 
 func isNormalizedKeyRune(r rune) bool {
@@ -1335,20 +1369,6 @@ func canonicalMarkerBytes(value []byte) bool {
 		}
 	}
 	return false
-}
-
-func canonicalMarkerSuffixBytes(value []byte) bool {
-	state := 0
-	for _, item := range value {
-		if item >= 'A' && item <= 'Z' {
-			item += 'a' - 'A'
-		}
-		if (item < 'a' || item > 'z') && (item < '0' || item > '9') {
-			continue
-		}
-		state = canonicalMarkerMachine[state].next[canonicalMarkerIndex(item)]
-	}
-	return canonicalMarkerMachine[state].terminal
 }
 
 func canonicalMarkerString(value string) bool {

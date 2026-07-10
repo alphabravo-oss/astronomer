@@ -360,6 +360,68 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 	}
 }
 
+func TestSensitiveFamilyContinuationsAreSanitizedAcrossDurableAndReadSinks(t *testing.T) {
+	bus := &argoAuditBusCapture{}
+	audit.SetBusPublisher(bus)
+	t.Cleanup(func() { audit.SetBusPublisher(nil) })
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
+	})
+	phrases := []string{
+		"api key value", "private key data", "client secret material", "access token value",
+		"authorization header", "cookie value", "AWS access key ID value", "client secret reference",
+	}
+	assignments := make([]string, 0, len(phrases))
+	for _, phrase := range phrases {
+		assignments = append(assignments, phrase+"=Z")
+	}
+	reason := strings.Join(assignments, " ")
+	body := `{"reason":` + string(mustJSON(t, reason)) + `,"sync_window_override":true}`
+	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.app.ID.String()})
+	rr := httptest.NewRecorder()
+	h.SyncApp(rr, req)
+	if rr.Code != http.StatusAccepted || len(rec.created) != 1 || len(rec.auditRows) != 1 || len(bus.data) != 1 {
+		t.Fatalf("status=%d created=%d audit=%d published=%d body=%s", rr.Code, len(rec.created), len(rec.auditRows), len(bus.data), rr.Body.String())
+	}
+	initial, _ := json.Marshal(map[string]any{"payload": rec.created[0].Payload, "audit": rec.auditRows[0], "published": bus.data[0]})
+	if strings.Contains(string(initial), "=Z") || !strings.Contains(string(initial), "[redacted]") {
+		t.Fatalf("enqueue/audit/bus leaked or lost marker: %s", initial)
+	}
+
+	pendingID := uuid.New()
+	pending := sqlc.ArgocdOperation{
+		ID: pendingID, TargetType: "application", TargetKey: rec.app.ID.String(), OperationType: "sync",
+		Payload: rec.created[0].Payload, Status: OpStatusPending, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	if _, err := h.executeOperation(context.Background(), pending); err != nil {
+		t.Fatalf("execute pending operation: %v", err)
+	}
+	if len(rec.events) == 0 {
+		t.Fatal("pending execution did not create a timeline event")
+	}
+	timelineRaw, _ := json.Marshal(rec.events)
+	if strings.Contains(string(timelineRaw), "=Z") || !strings.Contains(string(timelineRaw), "[redacted]") {
+		t.Fatalf("timeline leaked or lost marker: %s", timelineRaw)
+	}
+
+	rec.operation = pending
+	rec.operation.Status = "running"
+	rec.operationEvents = make([]sqlc.ArgocdOperationEvent, 0, len(rec.events))
+	for _, event := range rec.events {
+		rec.operationEvents = append(rec.operationEvents, sqlc.ArgocdOperationEvent{
+			ID: uuid.New(), OperationID: pendingID, Level: event.Level, Stage: event.Stage,
+			Message: event.Message, Detail: event.Detail, CreatedAt: time.Now().UTC(),
+		})
+	}
+	apiReq := argoHandlerRouteRequest(http.MethodGet, "/operation", "", map[string]string{"id": pendingID.String()})
+	apiRR := httptest.NewRecorder()
+	h.GetOperation(apiRR, apiReq)
+	if apiRR.Code != http.StatusOK || strings.Contains(apiRR.Body.String(), "=Z") || !strings.Contains(apiRR.Body.String(), "[redacted]") {
+		t.Fatalf("operation API status=%d body=%s", apiRR.Code, apiRR.Body.String())
+	}
+}
+
 func fragmentedArgoCredentialKey(key string) string {
 	middle := len(key) / 2
 	return key[:middle] + "·" + key[middle:]
