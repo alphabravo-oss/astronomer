@@ -294,16 +294,20 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
 	})
-	reason := "deploy HTTP://user:pass@example.test/object?AWSAccessKeyId=" + argoHandlerCanary + "#fragment"
+	reason := "HTTP://user:pass@example.test/object?AWSAccessKeyId=" + argoHandlerCanary + "#fragment"
 	for _, family := range []string{
 		"password", "passwd", "secret", "clientsecret", "clientcertkey", "kubeconfig",
 		"apikey", "privatekey", "token", "credential", "awsaccesskeyid", "googleaccessid",
 		"signature", "bearer", "xamzsecuritytoken", "authorization", "cookie", "clientkey",
 		"cacertificate", "certificateauthoritydata", "sig",
+		"api key", "private key", "client cert key", "AWS access key ID", "Google access ID", "pass word",
 	} {
-		reason += " " + fragmentedArgoCredentialKey(family) + "=§"
+		key := fragmentedArgoCredentialKey(family)
+		if strings.Contains(family, " ") {
+			key = family
+		}
+		reason += " " + key + "=Z"
 	}
-	reason += " phase=running ordinary=[maintenance-window]"
 	body := `{"reason":` + string(mustJSON(t, reason)) + `,"sync_window_override":true}`
 	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.app.ID.String()})
 	rr := httptest.NewRecorder()
@@ -316,7 +320,7 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 	}
 	all, _ := json.Marshal(map[string]any{"payload": rec.created[0].Payload, "audit": rec.auditRows[0], "published": bus.data[0]})
 	text := string(all)
-	for _, forbidden := range []string{argoHandlerCanary, "§", "user:pass", "?X-Amz", "#fragment"} {
+	for _, forbidden := range []string{argoHandlerCanary, "=Z", "user:pass", "?X-Amz", "#fragment"} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("durable/published sync reason leaked %q: %s", forbidden, text)
 		}

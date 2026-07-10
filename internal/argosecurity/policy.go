@@ -343,18 +343,25 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 		}
 		if unicode.IsSpace(r) {
 			spaceStart := cursor
+			lineBoundary := false
 			for cursor < len(value) {
 				r, size = utf8.DecodeRuneInString(value[cursor:])
 				if !unicode.IsSpace(r) {
 					break
 				}
+				lineBoundary = lineBoundary || r == '\r' || r == '\n'
 				cursor += size
 			}
-			if cursor-spaceStart <= maxAssignmentSpace && cursor < len(value) && (value[cursor] == ':' || value[cursor] == '=') {
-				// Preserve the candidate for the delimiter below.
-				continue
+			spaceBytes := cursor - spaceStart
+			if normalizedLen > 0 {
+				lhsBytes += spaceBytes
+				if lineBoundary || spaceBytes > maxAssignmentSpace || lhsBytes > maxAssignmentLHSBytes {
+					// A line or an excessive whitespace run is a safe prose
+					// boundary. Ordinary bounded spaces remain part of the LHS
+					// normalization exactly as normalizeKey specifies.
+					reset()
+				}
 			}
-			reset()
 			continue
 		}
 		if r != ':' && r != '=' {
@@ -370,7 +377,7 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 
 		delimiterEnd := cursor + size
 		valueStart, valueEnd, next, hasValue := assignmentValueRange(value, delimiterEnd)
-		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveNormalized(normalized[:normalizedLen]) {
+		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveAssignmentLHS(normalized[:normalizedLen]) {
 			return canonicalAssignmentMatch{valueStart: valueStart, valueEnd: valueEnd, next: next}, true
 		}
 		reset()
@@ -384,6 +391,16 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 		}
 	}
 	return canonicalAssignmentMatch{}, false
+}
+
+func canonicalSensitiveAssignmentLHS(normalized []byte) bool {
+	if len(normalized) == 0 || referenceNormalizedKey(normalized) {
+		return false
+	}
+	if bytes.HasSuffix(normalized, []byte("sig")) {
+		return true
+	}
+	return canonicalMarkerSuffixBytes(normalized)
 }
 
 func isNormalizedKeyRune(r rune) bool {
@@ -1318,6 +1335,20 @@ func canonicalMarkerBytes(value []byte) bool {
 		}
 	}
 	return false
+}
+
+func canonicalMarkerSuffixBytes(value []byte) bool {
+	state := 0
+	for _, item := range value {
+		if item >= 'A' && item <= 'Z' {
+			item += 'a' - 'A'
+		}
+		if (item < 'a' || item > 'z') && (item < '0' || item > '9') {
+			continue
+		}
+		state = canonicalMarkerMachine[state].next[canonicalMarkerIndex(item)]
+	}
+	return canonicalMarkerMachine[state].terminal
 }
 
 func canonicalMarkerString(value string) bool {

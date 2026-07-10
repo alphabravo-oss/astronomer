@@ -284,10 +284,16 @@ func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBran
 	clusterWith := func(value string) any {
 		return map[string]any{"clusters": map[string]any{"values": map[string]any{"note": value}}}
 	}
+	assignments := make(map[string]string, len(families)+6)
 	for _, family := range families {
-		family := family
-		t.Run(family, func(t *testing.T) {
-			assignment := fragment(family) + "=" + policyCanary
+		assignments["fragmented "+family] = fragment(family) + "=" + policyCanary
+	}
+	for _, family := range []string{"api key", "private key", "client cert key", "AWS access key ID", "Google access ID", "pass word"} {
+		assignments["multiword "+family] = family + "=" + policyCanary
+	}
+	for name, assignment := range assignments {
+		name, assignment := name, assignment
+		t.Run(name, func(t *testing.T) {
 			if got := SanitizeString(assignment); strings.Contains(got, policyCanary) || !strings.Contains(got, Marker) {
 				t.Fatalf("fragmented assignment sanitized to %q", got)
 			}
@@ -309,7 +315,7 @@ func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBran
 			}
 			for branch, payload := range branches {
 				if err := ValidateApplicationSetMutation(payload); err == nil {
-					t.Errorf("%s accepted fragmented %s assignment", branch, family)
+					t.Errorf("%s accepted %s assignment", branch, name)
 				}
 			}
 		})
@@ -342,9 +348,13 @@ func TestCanonicalAssignmentScannerMaxSizeIsBoundedAndAllocationStable(t *testin
 }
 
 func TestCanonicalAssignmentScannerPreservesSafeProse(t *testing.T) {
-	prose := `phase=Running message:"deployment complete" ratio=3:1 path=/apps/demo unicode=東京 [maintenance window]`
-	if got := SanitizeString(prose); got != prose {
-		t.Fatalf("safe prose changed: %q", got)
+	for _, prose := range []string{
+		`phase=Running message:"deployment complete" ratio=3:1 path=/apps/demo unicode=東京 [maintenance window]`,
+		`release status = healthy private key count = 2 api key owner = platform access key rotation = scheduled pass word count = 3`,
+	} {
+		if got := SanitizeString(prose); got != prose {
+			t.Fatalf("safe prose changed: %q", got)
+		}
 	}
 }
 
