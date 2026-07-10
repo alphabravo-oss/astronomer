@@ -63,9 +63,9 @@ spec:
           # cross-pod PSK door at /internal/tunnel/{k8s,helm}/* performs
           # cluster mutations with no per-user authz and must never be
           # externally reachable. This more-specific /internal prefix
-          # wins over the catch-all `/` below and points at a non-existent
-          # blackhole service so the request is NEVER forwarded to the
-          # real backend in any frontend.enabled topology.
+          # wins over the catch-all `/` below and points at the chart's
+          # endpointless internal-deny Service so the request is NEVER
+          # forwarded to the real backend in any frontend.enabled topology.
           - path: /internal
             pathType: Prefix
             backend:
