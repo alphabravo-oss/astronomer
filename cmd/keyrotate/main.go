@@ -152,6 +152,7 @@ type target struct {
 // exempted (jsonbExemptColumns). See docs/secret-column-inventory.md.
 var rewriteTargets = []target{
 	{"sso_configurations", "id", "client_secret_encrypted"},
+	{"dex_settings", "id", "public_clients_encrypted"},
 	{"argocd_instances", "id", "auth_token_encrypted"},
 	{"backup_storage_configs", "id", "encrypted_credentials"},
 	{"vault_connections", "id", "auth_encrypted"},

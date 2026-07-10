@@ -10,13 +10,12 @@ package handler
 // This file owns:
 //   * CRUD for `dex_connectors` (one row per upstream IdP connector).
 //   * Singleton settings for the running Dex deployment (issuer URL, namespace,
-//     ConfigMap name, public clients, expiry).
+//     retained runtime Secret name, static clients, expiry).
 //   * A connector-type registry mapping each connector kind to its required +
 //     optional + secret config fields. Validation runs against this registry on
 //     every write.
-//   * Rendering settings + connectors into a Dex-shaped YAML configmap and
-//     PATCH/POST'ing it to the management cluster via K8sRequester so Dex's
-//     in-process file watcher hot-reloads.
+//   * Rendering settings + connectors into a Dex-shaped YAML document stored
+//     only in a retained Kubernetes Secret mounted read-only by Dex.
 //   * `register-as-sso` ergonomics: one-click row in `sso_configurations` so the
 //     A1 OIDC discovery path can register Dex as a normal OIDC provider.
 
@@ -24,6 +23,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,6 +60,8 @@ type DexQuerier interface {
 
 	GetDexSettings(ctx context.Context, id uuid.UUID) (sqlc.DexSetting, error)
 	UpsertDexSettings(ctx context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error)
+	UpsertDexSettingsAndSSO(ctx context.Context, arg sqlc.UpsertDexSettingsAndSSOParams) (sqlc.SsoConfiguration, error)
+	MigrateLegacyDexPublicClients(ctx context.Context, arg sqlc.MigrateLegacyDexPublicClientsParams) (sqlc.DexSetting, error)
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 
 	// SSO bridge — register-as-sso writes here.
@@ -77,9 +79,9 @@ type DexHandler struct {
 }
 
 // NewDexHandler constructs a Dex handler. queries is required; encryptor and
-// k8s are optional (encryptor: secret round-trip is skipped when nil; k8s: the
-// /apply endpoint short-circuits with a 503 when nil so unit tests can run
-// without a tunnel).
+// k8s are optional at construction time. Secret-bearing writes and renders
+// fail closed until an encryptor is configured; /apply returns 503 without a
+// Kubernetes requester.
 func NewDexHandler(queries DexQuerier) *DexHandler {
 	return &DexHandler{
 		queries: queries,
@@ -276,10 +278,10 @@ func isEmptyValue(v any) bool {
 }
 
 // encryptSecretFields walks raw and replaces every spec.Secret key with its
-// Fernet-encrypted value. No-op when the encryptor is nil. Callers should
-// pass a freshly-decoded map so we don't mutate shared state.
+// Fernet-encrypted value. Secret-bearing input fails closed when the
+// encryptor is unavailable. Callers should pass a freshly-decoded map.
 func (h *DexHandler) encryptSecretFields(connectorType string, raw map[string]any) error {
-	if h == nil || h.encryptor == nil || raw == nil {
+	if h == nil || raw == nil {
 		return nil
 	}
 	spec, ok := dexConnectorRegistry[strings.ToLower(connectorType)]
@@ -295,11 +297,14 @@ func (h *DexHandler) encryptSecretFields(connectorType string, raw map[string]an
 		if !ok || s == "" {
 			continue
 		}
-		// Best-effort idempotency: if the value already decrypts cleanly we
-		// leave it alone. This lets PATCHes that don't touch the secret round
-		// trip without re-encrypting (and double-encrypting) the value.
-		if _, err := h.encryptor.Decrypt(s); err == nil {
-			continue
+		if h.encryptor == nil {
+			return fmt.Errorf("encrypt %s: encryptor is not configured", key)
+		}
+		// Existing ciphertext is decrypted then re-encrypted with the active
+		// primary key. This is both double-encryption protection and the online
+		// key-rotation path used when a connector is re-saved.
+		if plaintext, err := h.encryptor.Decrypt(s); err == nil {
+			s = plaintext
 		}
 		ct, err := h.encryptor.Encrypt(s)
 		if err != nil {
@@ -311,17 +316,16 @@ func (h *DexHandler) encryptSecretFields(connectorType string, raw map[string]an
 }
 
 // decryptSecretFields walks raw and replaces every spec.Secret key with its
-// plaintext value. Used at render time before the config goes into the Dex
-// ConfigMap. Failures decrypting a single field are tolerated (the field is
-// left as-is) so a misconfigured encryption key surface a runtime error in
-// Dex rather than a 500 from /apply.
-func (h *DexHandler) decryptSecretFields(connectorType string, raw map[string]any) {
-	if h == nil || h.encryptor == nil || raw == nil {
-		return
+// plaintext value. Used only while rendering the in-memory document that is
+// written to the runtime Secret. Missing keys and decrypt failures fail closed
+// so ciphertext can never be handed to Dex as if it were a credential.
+func (h *DexHandler) decryptSecretFields(connectorType string, raw map[string]any) error {
+	if h == nil || raw == nil {
+		return nil
 	}
 	spec, ok := dexConnectorRegistry[strings.ToLower(connectorType)]
 	if !ok {
-		return
+		return nil
 	}
 	for _, key := range spec.Secret {
 		v, ok := raw[key]
@@ -332,10 +336,16 @@ func (h *DexHandler) decryptSecretFields(connectorType string, raw map[string]an
 		if !ok || s == "" {
 			continue
 		}
-		if pt, err := h.encryptor.Decrypt(s); err == nil {
-			raw[key] = pt
+		if h.encryptor == nil {
+			return fmt.Errorf("decrypt %s: encryptor is not configured", key)
 		}
+		pt, err := h.encryptor.Decrypt(s)
+		if err != nil {
+			return fmt.Errorf("decrypt %s: %w", key, err)
+		}
+		raw[key] = pt
 	}
+	return nil
 }
 
 // redactSecretFields returns a shallow clone of raw with every spec.Secret
@@ -372,10 +382,13 @@ type connectorRequest struct {
 
 // settingsRequest is the JSON shape PUT /settings accepts.
 type settingsRequest struct {
-	IssuerURL     string           `json:"issuer_url"`
-	ClusterID     string           `json:"cluster_id"`
-	Namespace     string           `json:"namespace"`
-	ReleaseName   string           `json:"release_name"`
+	IssuerURL         string `json:"issuer_url"`
+	ClusterID         string `json:"cluster_id"`
+	Namespace         string `json:"namespace"`
+	ReleaseName       string `json:"release_name"`
+	RuntimeSecretName string `json:"runtime_secret_name"`
+	// ConfigmapName is accepted for one compatibility release. It is treated
+	// as a resource-name alias only and never causes a ConfigMap write.
 	ConfigmapName string           `json:"configmap_name"`
 	PublicClients []map[string]any `json:"public_clients"`
 	Expiry        map[string]any   `json:"expiry"`
@@ -604,7 +617,12 @@ func (h *DexHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		RespondJSON(w, http.StatusOK, defaultSettingsResponse())
 		return
 	}
-	RespondJSON(w, http.StatusOK, settingsResponse(row))
+	clients, row, err := h.loadPublicClients(r.Context(), row)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
+		return
+	}
+	RespondJSON(w, http.StatusOK, settingsResponse(row, clients))
 }
 
 // UpdateSettings upserts the singleton settings row. PUT /api/v1/auth/dex/settings/
@@ -624,8 +642,11 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if req.ReleaseName == "" {
 		req.ReleaseName = "dex"
 	}
-	if req.ConfigmapName == "" {
-		req.ConfigmapName = "astronomer-dex-config"
+	if req.RuntimeSecretName == "" {
+		req.RuntimeSecretName = req.ConfigmapName
+	}
+	if req.RuntimeSecretName == "" {
+		req.RuntimeSecretName = "astronomer-dex-runtime"
 	}
 	clusterUUID := pgtype.UUID{}
 	if req.ClusterID != "" {
@@ -636,9 +657,24 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		clusterUUID = pgtype.UUID{Bytes: id, Valid: true}
 	}
-	publicBytes, _ := json.Marshal(req.PublicClients)
-	if len(publicBytes) == 0 {
-		publicBytes = []byte("[]")
+	existingClients := []map[string]any{}
+	if existing, getErr := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID); getErr == nil {
+		var loadErr error
+		existingClients, _, loadErr = h.loadPublicClients(r.Context(), existing)
+		if loadErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
+			return
+		}
+	}
+	clients := mergePublicClientSecrets(existingClients, req.PublicClients)
+	encryptedClients, err := h.encryptPublicClients(clients)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured; cannot store Dex static clients")
+		return
+	}
+	if err := validateDexExtra(req.Extra); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
 	}
 	expiryBytes, _ := json.Marshal(req.Expiry)
 	if len(expiryBytes) == 0 || string(expiryBytes) == "null" {
@@ -649,31 +685,32 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		extraBytes = []byte("{}")
 	}
 	row, err := h.queries.UpsertDexSettings(r.Context(), sqlc.UpsertDexSettingsParams{
-		ID:            dexSettingsSingletonID,
-		IssuerUrl:     strings.TrimRight(req.IssuerURL, "/"),
-		ClusterID:     clusterUUID,
-		Namespace:     req.Namespace,
-		ReleaseName:   req.ReleaseName,
-		ConfigmapName: req.ConfigmapName,
-		PublicClients: publicBytes,
-		Expiry:        expiryBytes,
-		Extra:         extraBytes,
+		ID:                     dexSettingsSingletonID,
+		IssuerUrl:              strings.TrimRight(req.IssuerURL, "/"),
+		ClusterID:              clusterUUID,
+		Namespace:              req.Namespace,
+		ReleaseName:            req.ReleaseName,
+		ConfigmapName:          req.RuntimeSecretName,
+		RuntimeSecretName:      req.RuntimeSecretName,
+		PublicClientsEncrypted: encryptedClients,
+		Expiry:                 expiryBytes,
+		Extra:                  extraBytes,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to save Dex settings")
 		return
 	}
 	recordAudit(r, h.queries, "dex.settings.update", "dex_settings", row.ID.String(), row.ReleaseName, map[string]any{
-		"issuer_url":     row.IssuerUrl,
-		"namespace":      row.Namespace,
-		"configmap_name": row.ConfigmapName,
+		"issuer_url":          row.IssuerUrl,
+		"namespace":           row.Namespace,
+		"runtime_secret_name": row.RuntimeSecretName,
 	})
-	RespondJSON(w, http.StatusOK, settingsResponse(row))
+	RespondJSON(w, http.StatusOK, settingsResponse(row, clients))
 }
 
-// Apply renders the full Dex config from settings + connectors, writes it to
-// the management cluster's ConfigMap, then forces a Deployment rollout so the
-// running Dex pod picks up the new file contents. Returns 503 when the K8s
+// Apply renders the full Dex config from settings + connectors, patches the
+// management cluster's retained runtime Secret, then rolls the Deployment only
+// when content changed. Returns 503 when the K8s
 // requester is not configured (e.g. before the tunnel is up).
 //
 // POST /api/v1/auth/dex/apply/
@@ -700,35 +737,45 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list Dex connectors")
 		return
 	}
-	configYAML, err := h.renderDexConfig(settings, connectors)
+	clients, settings, err := h.loadPublicClients(r.Context(), settings)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
+		return
+	}
+	configYAML, err := h.renderDexConfig(settings, clients, connectors)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RenderError, err.Error())
 		return
 	}
 	clusterID := uuid.UUID(settings.ClusterID.Bytes).String()
-	if err := h.applyConfigMap(r.Context(), clusterID, settings.Namespace, settings.ConfigmapName, configYAML); err != nil {
+	changed, secretVersion, err := h.applyRuntimeSecret(r.Context(), clusterID, settings.Namespace, settings.RuntimeSecretName, configYAML)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, err.Error())
 		return
 	}
-	if err := h.restartDeployment(r.Context(), clusterID, settings.Namespace, settings.ReleaseName); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.RestartError, err.Error())
-		return
+	if changed {
+		if err := h.restartDeployment(r.Context(), clusterID, settings.Namespace, settings.ReleaseName, secretVersion); err != nil {
+			RespondRequestError(w, r, http.StatusBadGateway, apierror.RestartError, err.Error())
+			return
+		}
 	}
 	recordAudit(r, h.queries, "dex.config.apply", "dex_settings", settings.ID.String(), settings.ReleaseName, map[string]any{
-		"cluster_id":      clusterID,
-		"namespace":       settings.Namespace,
-		"configmap_name":  settings.ConfigmapName,
-		"deployment_name": settings.ReleaseName,
-		"connector_count": len(connectors),
+		"cluster_id":          clusterID,
+		"namespace":           settings.Namespace,
+		"runtime_secret_name": settings.RuntimeSecretName,
+		"deployment_name":     settings.ReleaseName,
+		"connector_count":     len(connectors),
+		"changed":             changed,
 	})
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"applied":         true,
-		"cluster_id":      clusterID,
-		"namespace":       settings.Namespace,
-		"configmap_name":  settings.ConfigmapName,
-		"deployment_name": settings.ReleaseName,
-		"connector_count": len(connectors),
-		"applied_at":      time.Now().UTC().Format(time.RFC3339),
+		"applied":             true,
+		"cluster_id":          clusterID,
+		"namespace":           settings.Namespace,
+		"runtime_secret_name": settings.RuntimeSecretName,
+		"deployment_name":     settings.ReleaseName,
+		"connector_count":     len(connectors),
+		"changed":             changed,
+		"applied_at":          time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
@@ -782,99 +829,97 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		}
 		encryptedSecret = ct
 	}
-	if updatedSettings, err := h.syncAstronomerPublicClient(r.Context(), settings, req.ClientID, req.ClientSecret); err == nil {
-		settings = updatedSettings
-	} else {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Failed to update Dex public client settings")
+	existing, getErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
+	created := getErr != nil
+	staticSecret := req.ClientSecret
+	secretValue := encryptedSecret
+	allowedOrganizations := json.RawMessage(`[]`)
+	allowedDomains := json.RawMessage(`[]`)
+	autoCreateUsers := true
+	defaultGlobalRoleID := pgtype.UUID{}
+	if !created {
+		allowedOrganizations = existing.AllowedOrganizations
+		allowedDomains = existing.AllowedDomains
+		autoCreateUsers = existing.AutoCreateUsers
+		defaultGlobalRoleID = existing.DefaultGlobalRoleID
+		if secretValue == "" {
+			secretValue = existing.ClientSecretEncrypted
+			if secretValue != "" {
+				if h.encryptor == nil {
+					RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured; cannot synchronize client_secret")
+					return
+				}
+				staticSecret, err = h.encryptor.Decrypt(secretValue)
+				if err != nil {
+					RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Existing Dex client secret is unavailable")
+					return
+				}
+			}
+		}
+	} else if staticSecret == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "client_secret is required when registering Dex SSO")
+		return
+	}
+	clients, settings, err := h.astronomerPublicClients(r.Context(), settings, req.ClientID, staticSecret)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Failed to build Dex public client settings")
+		return
+	}
+	encryptedClients, err := h.encryptPublicClients(clients)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Failed to encrypt Dex public clients")
 		return
 	}
 	cfgBytes, _ := json.Marshal(map[string]any{"issuer_url": settings.IssuerUrl})
-	// If the dex SSO row already exists, update it; otherwise create.
-	existing, getErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
-	if getErr == nil {
-		secretValue := existing.ClientSecretEncrypted
-		if encryptedSecret != "" {
-			secretValue = encryptedSecret
-		}
-		updated, err := h.queries.UpdateSSOConfiguration(r.Context(), sqlc.UpdateSSOConfigurationParams{
-			ID:                    existing.ID,
-			IsEnabled:             true,
-			DisplayName:           req.DisplayName,
-			Config:                cfgBytes,
-			ClientID:              req.ClientID,
-			ClientSecretEncrypted: secretValue,
-			AllowedOrganizations:  existing.AllowedOrganizations,
-			AllowedDomains:        existing.AllowedDomains,
-			AutoCreateUsers:       existing.AutoCreateUsers,
-			DefaultGlobalRoleID:   existing.DefaultGlobalRoleID,
-		})
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to update SSO row")
-			return
-		}
-		recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", updated.ID.String(), updated.Provider, map[string]any{
-			"client_id":  updated.ClientID,
-			"issuer_url": settings.IssuerUrl,
-			"updated":    true,
-		})
-		RespondJSON(w, http.StatusOK, map[string]any{
-			"provider":     updated.Provider,
-			"id":           updated.ID.String(),
-			"is_enabled":   updated.IsEnabled,
-			"client_id":    updated.ClientID,
-			"issuer_url":   settings.IssuerUrl,
-			"display_name": updated.DisplayName,
-			"updated":      true,
-		})
-		return
-	}
-	created, err := h.queries.CreateSSOConfiguration(r.Context(), sqlc.CreateSSOConfigurationParams{
-		Provider:              "dex",
-		IsEnabled:             true,
-		DisplayName:           req.DisplayName,
-		Config:                cfgBytes,
-		ClientID:              req.ClientID,
-		ClientSecretEncrypted: encryptedSecret,
-		AllowedOrganizations:  json.RawMessage(`[]`),
-		AllowedDomains:        json.RawMessage(`[]`),
-		AutoCreateUsers:       true,
-		DefaultGlobalRoleID:   pgtype.UUID{},
+	row, err := h.queries.UpsertDexSettingsAndSSO(r.Context(), sqlc.UpsertDexSettingsAndSSOParams{
+		DisplayName: req.DisplayName, SsoConfig: cfgBytes, ClientID: req.ClientID,
+		ClientSecretEncrypted: secretValue, AllowedOrganizations: allowedOrganizations,
+		AllowedDomains: allowedDomains, AutoCreateUsers: autoCreateUsers, DefaultGlobalRoleID: defaultGlobalRoleID,
+		SettingsID: settings.ID, IssuerUrl: settings.IssuerUrl, ClusterID: settings.ClusterID,
+		Namespace: settings.Namespace, ReleaseName: settings.ReleaseName, RuntimeSecretName: settings.RuntimeSecretName,
+		PublicClientsEncrypted: encryptedClients, Expiry: settings.Expiry, Extra: settings.Extra,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to create SSO row")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to atomically synchronize Dex and server SSO credentials")
 		return
 	}
-	recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", created.ID.String(), created.Provider, map[string]any{
-		"client_id":  created.ClientID,
+	action := "updated"
+	status := http.StatusOK
+	if created {
+		action = "created"
+		status = http.StatusCreated
+	}
+	recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", row.ID.String(), row.Provider, map[string]any{
+		"client_id":  row.ClientID,
 		"issuer_url": settings.IssuerUrl,
-		"created":    true,
+		action:       true,
 	})
-	RespondJSON(w, http.StatusCreated, map[string]any{
-		"provider":     created.Provider,
-		"id":           created.ID.String(),
-		"is_enabled":   created.IsEnabled,
-		"client_id":    created.ClientID,
+	RespondJSON(w, status, map[string]any{
+		"provider":     row.Provider,
+		"id":           row.ID.String(),
+		"is_enabled":   row.IsEnabled,
+		"client_id":    row.ClientID,
 		"issuer_url":   settings.IssuerUrl,
-		"display_name": created.DisplayName,
-		"created":      true,
+		"display_name": row.DisplayName,
+		action:         true,
 	})
 }
 
-func (h *DexHandler) syncAstronomerPublicClient(ctx context.Context, settings sqlc.DexSetting, clientID, clientSecret string) (sqlc.DexSetting, error) {
+func (h *DexHandler) astronomerPublicClients(ctx context.Context, settings sqlc.DexSetting, clientID, clientSecret string) ([]map[string]any, sqlc.DexSetting, error) {
 	if h == nil || h.queries == nil {
-		return settings, nil
+		return nil, settings, nil
 	}
 	cfg, err := h.queries.GetPlatformConfig(ctx)
 	if err != nil || strings.TrimSpace(cfg.ServerUrl) == "" {
-		return settings, nil
+		return nil, settings, nil
 	}
 	base := strings.TrimRight(strings.TrimSpace(cfg.ServerUrl), "/")
 	callback := base + "/api/v1/auth/callback/dex"
 	callbackSlash := callback + "/"
 
-	clients := make([]map[string]any, 0)
-	if len(settings.PublicClients) > 0 {
-		_ = json.Unmarshal(settings.PublicClients, &clients)
+	clients, settings, err := h.loadPublicClients(ctx, settings)
+	if err != nil {
+		return nil, settings, err
 	}
 	found := false
 	for i := range clients {
@@ -901,25 +946,132 @@ func (h *DexHandler) syncAstronomerPublicClient(ctx context.Context, settings sq
 		clients = append(clients, client)
 	}
 
-	publicBytes, _ := json.Marshal(clients)
-	if len(publicBytes) == 0 {
-		publicBytes = []byte("[]")
+	return clients, settings, nil
+}
+
+func (h *DexHandler) encryptPublicClients(clients []map[string]any) (string, error) {
+	if len(clients) == 0 {
+		return "", nil
 	}
-	updated, err := h.queries.UpsertDexSettings(ctx, sqlc.UpsertDexSettingsParams{
-		ID:            settings.ID,
-		IssuerUrl:     settings.IssuerUrl,
-		ClusterID:     settings.ClusterID,
-		Namespace:     settings.Namespace,
-		ReleaseName:   settings.ReleaseName,
-		ConfigmapName: settings.ConfigmapName,
-		PublicClients: publicBytes,
-		Expiry:        settings.Expiry,
-		Extra:         settings.Extra,
-	})
+	if h == nil || h.encryptor == nil {
+		return "", fmt.Errorf("encrypt Dex static clients: encryptor is not configured")
+	}
+	raw, err := json.Marshal(clients)
 	if err != nil {
-		return settings, err
+		return "", fmt.Errorf("encode Dex static clients: %w", err)
 	}
-	return updated, nil
+	value, err := h.encryptor.Encrypt(string(raw))
+	if err != nil {
+		return "", fmt.Errorf("encrypt Dex static clients: %w", err)
+	}
+	return value, nil
+}
+
+// loadPublicClients decrypts the canonical envelope. For rows created before
+// DEX-01 it performs a deterministic, optimistic migration: encrypt the exact
+// parsed client array, conditionally scrub the matching plaintext JSONB, and
+// re-read if another replica won the race.
+func (h *DexHandler) loadPublicClients(ctx context.Context, row sqlc.DexSetting) ([]map[string]any, sqlc.DexSetting, error) {
+	if row.RuntimeSecretName == "" {
+		row.RuntimeSecretName = cmp.Or(row.ConfigmapName, "astronomer-dex-runtime")
+	}
+	decode := func(raw []byte) ([]map[string]any, error) {
+		clients := make([]map[string]any, 0)
+		if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return clients, nil
+		}
+		if err := json.Unmarshal(raw, &clients); err != nil {
+			return nil, fmt.Errorf("decode Dex static clients: %w", err)
+		}
+		return clients, nil
+	}
+	if row.PublicClientsEncrypted != "" {
+		if h == nil || h.encryptor == nil {
+			return nil, row, fmt.Errorf("decrypt Dex static clients: encryptor is not configured")
+		}
+		plain, err := h.encryptor.Decrypt(row.PublicClientsEncrypted)
+		if err != nil {
+			return nil, row, fmt.Errorf("decrypt Dex static clients: %w", err)
+		}
+		clients, err := decode([]byte(plain))
+		return clients, row, err
+	}
+	clients, err := decode(row.PublicClients)
+	if err != nil || len(clients) == 0 {
+		return clients, row, err
+	}
+	encrypted, err := h.encryptPublicClients(clients)
+	if err != nil {
+		return nil, row, err
+	}
+	migrated, err := h.queries.MigrateLegacyDexPublicClients(ctx, sqlc.MigrateLegacyDexPublicClientsParams{
+		ID:                     row.ID,
+		PublicClientsEncrypted: encrypted,
+		LegacyPublicClients:    row.PublicClients,
+	})
+	if err == nil {
+		if migrated.RuntimeSecretName == "" {
+			migrated.RuntimeSecretName = row.RuntimeSecretName
+		}
+		return clients, migrated, nil
+	}
+	latest, readErr := h.queries.GetDexSettings(ctx, row.ID)
+	if readErr != nil || latest.PublicClientsEncrypted == "" {
+		return nil, row, fmt.Errorf("migrate legacy Dex static clients: %w", err)
+	}
+	if h.encryptor == nil {
+		return nil, latest, fmt.Errorf("decrypt migrated Dex static clients: encryptor is not configured")
+	}
+	plain, decryptErr := h.encryptor.Decrypt(latest.PublicClientsEncrypted)
+	if decryptErr != nil {
+		return nil, latest, fmt.Errorf("decrypt migrated Dex static clients: %w", decryptErr)
+	}
+	latestClients, decodeErr := decode([]byte(plain))
+	return latestClients, latest, decodeErr
+}
+
+func mergePublicClientSecrets(existing, requested []map[string]any) []map[string]any {
+	secrets := make(map[string]string, len(existing))
+	for _, client := range existing {
+		if id := asString(client["id"]); id != "" {
+			secrets[id] = asString(client["secret"])
+		}
+	}
+	out := make([]map[string]any, 0, len(requested))
+	for _, client := range requested {
+		copyClient := make(map[string]any, len(client))
+		for key, value := range client {
+			if key != "secret_configured" && key != "secretConfigured" && key != "__secret_set" {
+				copyClient[key] = value
+			}
+		}
+		if asString(copyClient["secret"]) == "" {
+			if secret := secrets[asString(copyClient["id"])]; secret != "" {
+				copyClient["secret"] = secret
+			}
+		}
+		out = append(out, copyClient)
+	}
+	return out
+}
+
+func redactPublicClients(clients []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(clients))
+	for _, client := range clients {
+		copyClient := make(map[string]any, len(client)+1)
+		for key, value := range client {
+			copyClient[key] = value
+		}
+		if secret := asString(copyClient["secret"]); secret != "" {
+			copyClient["secret"] = ""
+			copyClient["secret_configured"] = true
+		} else {
+			delete(copyClient, "secret")
+			copyClient["secret_configured"] = false
+		}
+		out = append(out, copyClient)
+	}
+	return out
 }
 
 func asString(v any) string {
@@ -990,42 +1142,42 @@ func (h *DexHandler) connectorResponse(row sqlc.DexConnector) map[string]any {
 
 func defaultSettingsResponse() map[string]any {
 	return map[string]any{
-		"issuer_url":     "",
-		"cluster_id":     "",
-		"namespace":      "dex",
-		"release_name":   "dex",
-		"configmap_name": "astronomer-dex-config",
-		"public_clients": []any{},
-		"expiry":         map[string]any{},
-		"extra":          map[string]any{},
-		"configured":     false,
+		"issuer_url":          "",
+		"cluster_id":          "",
+		"namespace":           "dex",
+		"release_name":        "dex",
+		"runtime_secret_name": "astronomer-dex-runtime",
+		"public_clients":      []any{},
+		"expiry":              map[string]any{},
+		"extra":               map[string]any{},
+		"configured":          false,
 	}
 }
 
-func settingsResponse(row sqlc.DexSetting) map[string]any {
+func settingsResponse(row sqlc.DexSetting, clients []map[string]any) map[string]any {
 	clusterID := ""
 	if row.ClusterID.Valid {
 		clusterID = uuid.UUID(row.ClusterID.Bytes).String()
 	}
 	return map[string]any{
-		"issuer_url":     row.IssuerUrl,
-		"cluster_id":     clusterID,
-		"namespace":      row.Namespace,
-		"release_name":   row.ReleaseName,
-		"configmap_name": row.ConfigmapName,
-		"public_clients": json.RawMessage(row.PublicClients),
-		"expiry":         json.RawMessage(row.Expiry),
-		"extra":          json.RawMessage(row.Extra),
-		"configured":     true,
-		"updated_at":     row.UpdatedAt.UTC().Format(time.RFC3339),
+		"issuer_url":          row.IssuerUrl,
+		"cluster_id":          clusterID,
+		"namespace":           row.Namespace,
+		"release_name":        row.ReleaseName,
+		"runtime_secret_name": row.RuntimeSecretName,
+		"public_clients":      redactPublicClients(clients),
+		"expiry":              json.RawMessage(row.Expiry),
+		"extra":               json.RawMessage(row.Extra),
+		"configured":          true,
+		"updated_at":          row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
 // renderDexConfig builds a Dex-shaped config document and serializes it to
-// YAML. The output goes verbatim into the ConfigMap's `config.yaml` key. We
+// YAML. The output goes verbatim into the runtime Secret's `config.yaml` key. We
 // keep this in handler-package code (rather than a sub-package) so tests can
 // exercise it without exporting helpers.
-func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc.DexConnector) ([]byte, error) {
+func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, publicClients []map[string]any, connectors []sqlc.DexConnector) ([]byte, error) {
 	doc := map[string]any{
 		"issuer": settings.IssuerUrl,
 		"storage": map[string]any{
@@ -1043,14 +1195,9 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 	}
 	// Public + static clients: the operator can supply both from settings
 	// (public_clients is a list of {id, name, redirectURIs, secret?, public?}).
-	clients := make([]any, 0)
-	if len(settings.PublicClients) > 0 {
-		var raw []map[string]any
-		if err := json.Unmarshal(settings.PublicClients, &raw); err == nil {
-			for _, c := range raw {
-				clients = append(clients, c)
-			}
-		}
+	clients := make([]any, 0, len(publicClients))
+	for _, client := range publicClients {
+		clients = append(clients, client)
 	}
 	if len(clients) > 0 {
 		doc["staticClients"] = clients
@@ -1066,6 +1213,9 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 	if len(settings.Extra) > 0 {
 		var ex map[string]any
 		if err := json.Unmarshal(settings.Extra, &ex); err == nil {
+			if err := validateDexExtra(ex); err != nil {
+				return nil, err
+			}
 			for k, v := range ex {
 				doc[k] = v
 			}
@@ -1074,7 +1224,9 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 	out := make([]map[string]any, 0, len(connectors))
 	for _, c := range connectors {
 		raw := decodeJSONMap(c.Config)
-		h.decryptSecretFields(c.Type, raw)
+		if err := h.decryptSecretFields(c.Type, raw); err != nil {
+			return nil, fmt.Errorf("connector %q: %w", c.Name, err)
+		}
 		if spec, ok := dexConnectorRegistry[strings.ToLower(c.Type)]; ok && containsField(spec.Optional, "redirectURI") {
 			if isEmptyValue(raw["redirectURI"]) {
 				raw["redirectURI"] = strings.TrimRight(settings.IssuerUrl, "/") + "/callback"
@@ -1097,6 +1249,15 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, connectors []sqlc
 	return buf.Bytes(), nil
 }
 
+func validateDexExtra(extra map[string]any) error {
+	for _, key := range []string{"issuer", "storage", "web", "oauth2", "staticClients", "connectors", "expiry"} {
+		if _, exists := extra[key]; exists {
+			return fmt.Errorf("extra.%s is reserved and must be configured through its dedicated settings surface", key)
+		}
+	}
+	return nil
+}
+
 func containsField(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -1106,56 +1267,123 @@ func containsField(items []string, want string) bool {
 	return false
 }
 
-// applyConfigMap PATCHes (or POSTs, on 404) the ConfigMap holding Dex's config.
-// The `config.yaml` key matches the volumeMount path the chart's defaults set
-// up. Apply() follows this with a Deployment rollout because hot-reload is not
-// reliable enough for the current stack.
-func (h *DexHandler) applyConfigMap(ctx context.Context, clusterID, namespace, name string, configYAML []byte) error {
-	body, err := json.Marshal(map[string]any{
-		"apiVersion": "v1",
-		"kind":       "ConfigMap",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
-			"labels": map[string]any{
-				"app.kubernetes.io/managed-by": "astronomer-go",
-				"app.kubernetes.io/component":  "dex-config",
-			},
-		},
-		"data": map[string]any{
-			"config.yaml": string(configYAML),
-		},
-	})
-	if err != nil {
-		return err
-	}
-	patchPath := fmt.Sprintf("/api/v1/namespaces/%s/configmaps/%s", namespace, name)
-	resp, err := h.k8s.Do(ctx, clusterID, http.MethodPatch, patchPath, body, requestHeaders("application/merge-patch+json"))
-	if err == nil && resp != nil && resp.StatusCode != http.StatusNotFound {
-		return ensureSuccess(resp)
-	}
-	createPath := fmt.Sprintf("/api/v1/namespaces/%s/configmaps", namespace)
-	resp, err = h.k8s.Do(ctx, clusterID, http.MethodPost, createPath, body, requestHeaders("application/json"))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode == http.StatusConflict {
-		// Lost the race with another writer; PATCH should now succeed.
-		resp, err = h.k8s.Do(ctx, clusterID, http.MethodPatch, patchPath, body, requestHeaders("application/merge-patch+json"))
-		if err != nil {
-			return err
-		}
-	}
-	return ensureSuccess(resp)
+const (
+	dexRuntimeManagedByLabel = "astronomer.io/runtime-writer"
+	dexRuntimePurposeLabel   = "astronomer.io/secret-purpose"
+)
+
+type dexRuntimeSecret struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Metadata   struct {
+		Name            string            `json:"name"`
+		Namespace       string            `json:"namespace"`
+		ResourceVersion string            `json:"resourceVersion,omitempty"`
+		Labels          map[string]string `json:"labels,omitempty"`
+		Annotations     map[string]string `json:"annotations,omitempty"`
+	} `json:"metadata"`
+	Type string            `json:"type"`
+	Data map[string]string `json:"data"`
 }
 
-func (h *DexHandler) restartDeployment(ctx context.Context, clusterID, namespace, name string) error {
+// applyRuntimeSecret creates or resourceVersion-replaces the stable Secret
+// mounted by Dex. Existing data is compared in memory for a fixed point;
+// no content-derived hash is persisted because static-client secrets may have
+// low entropy. Identical repeat applies do not mutate or roll the Deployment.
+// A pre-existing Secret must carry our ownership labels; this prevents a name
+// collision from silently overwriting an operator-owned credential.
+func (h *DexHandler) applyRuntimeSecret(ctx context.Context, clusterID, namespace, name string, configYAML []byte) (bool, string, error) {
+	if strings.TrimSpace(name) == "" {
+		return false, "", fmt.Errorf("Dex runtime_secret_name is empty")
+	}
+	path := fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, name)
+	resp, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return false, "", err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, "", fmt.Errorf("Dex runtime Secret %s/%s does not exist; install or upgrade the chart to create the retained metadata-only Secret, then retry apply", namespace, name)
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return false, "", err
+	}
+	var existing dexRuntimeSecret
+	if err := parseJSONResponse(resp, &existing); err != nil {
+		return false, "", fmt.Errorf("decode existing Dex runtime Secret: %w", err)
+	}
+	if existing.Metadata.Labels[dexRuntimeManagedByLabel] != "dex-handler" ||
+		existing.Metadata.Labels[dexRuntimePurposeLabel] != "dex-runtime" {
+		return false, "", fmt.Errorf("refusing to overwrite Secret %s/%s without Dex runtime ownership labels", namespace, name)
+	}
+	desired := newDexRuntimeSecret(namespace, name, configYAML)
+	contentChanged := existing.Data["config.yaml"] != desired.Data["config.yaml"]
+	metadataCurrent := existing.Metadata.Annotations["helm.sh/resource-policy"] == "keep" &&
+		existing.Metadata.Annotations["argocd.argoproj.io/sync-options"] == "Prune=false,Delete=false" &&
+		existing.Metadata.Annotations["argocd.argoproj.io/compare-options"] == "IgnoreExtraneous"
+	if !contentChanged && metadataCurrent {
+		return false, existing.Metadata.ResourceVersion, nil
+	}
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"resourceVersion": existing.Metadata.ResourceVersion,
+			"labels":          desired.Metadata.Labels,
+			"annotations":     desired.Metadata.Annotations,
+		},
+		"type": desired.Type,
+		"data": desired.Data,
+	})
+	if err != nil {
+		return false, "", err
+	}
+	updated, err := h.k8s.Do(ctx, clusterID, http.MethodPatch, path, body, requestHeaders("application/merge-patch+json"))
+	if err != nil {
+		return false, "", err
+	}
+	if updated.StatusCode == http.StatusConflict {
+		return false, "", fmt.Errorf("Dex runtime Secret changed concurrently; retry apply")
+	}
+	if err := ensureSuccess(updated); err != nil {
+		return false, "", err
+	}
+	var result dexRuntimeSecret
+	if err := parseJSONResponse(updated, &result); err != nil {
+		return false, "", fmt.Errorf("decode updated Dex runtime Secret: %w", err)
+	}
+	return contentChanged, result.Metadata.ResourceVersion, nil
+}
+
+func newDexRuntimeSecret(namespace, name string, configYAML []byte) dexRuntimeSecret {
+	secret := dexRuntimeSecret{
+		APIVersion: "v1",
+		Kind:       "Secret",
+		Type:       "Opaque",
+		Data: map[string]string{
+			"config.yaml": base64.StdEncoding.EncodeToString(configYAML),
+		},
+	}
+	secret.Metadata.Name = name
+	secret.Metadata.Namespace = namespace
+	secret.Metadata.Labels = map[string]string{
+		dexRuntimeManagedByLabel:              "dex-handler",
+		"app.kubernetes.io/component":         "dex-runtime",
+		dexRuntimePurposeLabel:                "dex-runtime",
+		"astronomer.io/backup-reconstruction": "encrypted-management-db",
+	}
+	secret.Metadata.Annotations = map[string]string{
+		"helm.sh/resource-policy":            "keep",
+		"argocd.argoproj.io/sync-options":    "Prune=false,Delete=false",
+		"argocd.argoproj.io/compare-options": "IgnoreExtraneous",
+	}
+	return secret
+}
+
+func (h *DexHandler) restartDeployment(ctx context.Context, clusterID, namespace, name, secretResourceVersion string) error {
 	body, err := json.Marshal(map[string]any{
 		"spec": map[string]any{
 			"template": map[string]any{
 				"metadata": map[string]any{
 					"annotations": map[string]any{
-						"kubectl.kubernetes.io/restartedAt": time.Now().UTC().Format(time.RFC3339),
+						"astronomer.io/dex-runtime-resource-version": secretResourceVersion,
 					},
 				},
 			},

@@ -37,8 +37,10 @@ var classifiedSecretColumns = map[string]string{
 	"093_cluster_registration_token_hash.up.sql:token_hash":                      "hashed cluster registration token",
 	"094_cluster_agent_token_hash.up.sql:token_hash":                             "hashed cluster agent token",
 	"095_cluster_registry_password_encrypted.up.sql:registry_password_encrypted": "encrypted cluster registry password",
-	"114_scim_tokens.up.sql:token_hash":                                         "hashed SCIM provisioning token",
-	"120_cluster_agent_token_rotation.up.sql:previous_token_hash":               "hashed previous cluster agent token (rotation grace window)",
+	"114_scim_tokens.up.sql:token_hash":                                          "hashed SCIM provisioning token",
+	"120_cluster_agent_token_rotation.up.sql:previous_token_hash":                "hashed previous cluster agent token (rotation grace window)",
+	"134_dex_runtime_secret.up.sql:runtime_secret_name":                          "Kubernetes Secret name reference",
+	"134_dex_runtime_secret.up.sql:public_clients_encrypted":                     "encrypted Dex static-client configuration",
 }
 
 var migrationColumnDecl = regexp.MustCompile(`(?i)\b(?:ADD\s+COLUMN(?:\s+IF\s+NOT\s+EXISTS)?\s+)?([a-z][a-z0-9_]*)\s+(TEXT|VARCHAR(?:\([^)]+\))?|CHAR(?:\([^)]+\))?|JSONB|UUID|BYTEA)\b`)

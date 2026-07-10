@@ -1674,6 +1674,7 @@ type Querier interface {
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
+	MigrateLegacyDexPublicClients(ctx context.Context, arg MigrateLegacyDexPublicClientsParams) (DexSetting, error)
 	// Retention sweep: delete apiserver audit rows older than the cutoff. The table
 	// is otherwise append-only and unbounded (one row per apiserver request, fleet
 	// wide), so a periodic sweeper must call this to keep it from growing forever.
@@ -1976,6 +1977,7 @@ type Querier interface {
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
 	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
+	UpsertDexSettingsAndSSO(ctx context.Context, arg UpsertDexSettingsAndSSOParams) (SsoConfiguration, error)
 	// The sync worker calls this after a YAML's contents have been applied
 	// so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT
 	// promotes any tombstoned row back to active — that's the

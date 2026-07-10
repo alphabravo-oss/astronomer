@@ -1014,17 +1014,23 @@ type DexConnector struct {
 }
 
 type DexSetting struct {
-	ID            uuid.UUID       `json:"id"`
-	IssuerUrl     string          `json:"issuer_url"`
-	ClusterID     pgtype.UUID     `json:"cluster_id"`
-	Namespace     string          `json:"namespace"`
-	ReleaseName   string          `json:"release_name"`
-	ConfigmapName string          `json:"configmap_name"`
+	ID          uuid.UUID   `json:"id"`
+	IssuerUrl   string      `json:"issuer_url"`
+	ClusterID   pgtype.UUID `json:"cluster_id"`
+	Namespace   string      `json:"namespace"`
+	ReleaseName string      `json:"release_name"`
+	// Deprecated compatibility alias. Must never identify a ConfigMap containing Dex runtime configuration.
+	ConfigmapName string `json:"configmap_name"`
+	// Legacy migration input only. Application code must atomically scrub this column to [] after Fernet migration.
 	PublicClients json.RawMessage `json:"public_clients"`
 	Expiry        json.RawMessage `json:"expiry"`
 	Extra         json.RawMessage `json:"extra"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
+	// Stable retained Secret mounted read-only by Dex; owned by the Dex runtime reconciler.
+	RuntimeSecretName string `json:"runtime_secret_name"`
+	// Fernet-encrypted canonical JSON array of Dex static clients.
+	PublicClientsEncrypted string `json:"public_clients_encrypted"`
 }
 
 type EmailMessage struct {

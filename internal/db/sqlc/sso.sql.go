@@ -104,7 +104,7 @@ func (q *Queries) GetDexConnectorByName(ctx context.Context, name string) (DexCo
 }
 
 const getDexSettings = `-- name: GetDexSettings :one
-SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at FROM dex_settings WHERE id = $1
+SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted FROM dex_settings WHERE id = $1
 `
 
 func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error) {
@@ -122,6 +122,8 @@ func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting,
 		&i.Extra,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
 	)
 	return i, err
 }
@@ -192,6 +194,44 @@ func (q *Queries) ListEnabledDexConnectors(ctx context.Context) ([]DexConnector,
 	return items, nil
 }
 
+const migrateLegacyDexPublicClients = `-- name: MigrateLegacyDexPublicClients :one
+UPDATE dex_settings
+SET public_clients_encrypted = $2,
+    public_clients = '[]'::jsonb,
+    updated_at = now()
+WHERE id = $1
+  AND public_clients_encrypted = ''
+  AND public_clients = $3::jsonb
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted
+`
+
+type MigrateLegacyDexPublicClientsParams struct {
+	ID                     uuid.UUID       `json:"id"`
+	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
+	LegacyPublicClients    json.RawMessage `json:"legacy_public_clients"`
+}
+
+func (q *Queries) MigrateLegacyDexPublicClients(ctx context.Context, arg MigrateLegacyDexPublicClientsParams) (DexSetting, error) {
+	row := q.db.QueryRow(ctx, migrateLegacyDexPublicClients, arg.ID, arg.PublicClientsEncrypted, arg.LegacyPublicClients)
+	var i DexSetting
+	err := row.Scan(
+		&i.ID,
+		&i.IssuerUrl,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.ReleaseName,
+		&i.ConfigmapName,
+		&i.PublicClients,
+		&i.Expiry,
+		&i.Extra,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
+	)
+	return i, err
+}
+
 const updateDexConnector = `-- name: UpdateDexConnector :one
 UPDATE dex_connectors SET
     type         = $2,
@@ -236,31 +276,34 @@ func (q *Queries) UpdateDexConnector(ctx context.Context, arg UpdateDexConnector
 const upsertDexSettings = `-- name: UpsertDexSettings :one
 INSERT INTO dex_settings (
     id, issuer_url, cluster_id, namespace, release_name, configmap_name,
-    public_clients, expiry, extra
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra
+) VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, $8, $9, $10)
 ON CONFLICT (id) DO UPDATE SET
     issuer_url     = EXCLUDED.issuer_url,
     cluster_id     = EXCLUDED.cluster_id,
     namespace      = EXCLUDED.namespace,
     release_name   = EXCLUDED.release_name,
     configmap_name = EXCLUDED.configmap_name,
-    public_clients = EXCLUDED.public_clients,
+    runtime_secret_name = EXCLUDED.runtime_secret_name,
+    public_clients = '[]'::jsonb,
+    public_clients_encrypted = EXCLUDED.public_clients_encrypted,
     expiry         = EXCLUDED.expiry,
     extra          = EXCLUDED.extra,
     updated_at     = now()
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted
 `
 
 type UpsertDexSettingsParams struct {
-	ID            uuid.UUID       `json:"id"`
-	IssuerUrl     string          `json:"issuer_url"`
-	ClusterID     pgtype.UUID     `json:"cluster_id"`
-	Namespace     string          `json:"namespace"`
-	ReleaseName   string          `json:"release_name"`
-	ConfigmapName string          `json:"configmap_name"`
-	PublicClients json.RawMessage `json:"public_clients"`
-	Expiry        json.RawMessage `json:"expiry"`
-	Extra         json.RawMessage `json:"extra"`
+	ID                     uuid.UUID       `json:"id"`
+	IssuerUrl              string          `json:"issuer_url"`
+	ClusterID              pgtype.UUID     `json:"cluster_id"`
+	Namespace              string          `json:"namespace"`
+	ReleaseName            string          `json:"release_name"`
+	ConfigmapName          string          `json:"configmap_name"`
+	RuntimeSecretName      string          `json:"runtime_secret_name"`
+	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
+	Expiry                 json.RawMessage `json:"expiry"`
+	Extra                  json.RawMessage `json:"extra"`
 }
 
 func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error) {
@@ -271,7 +314,8 @@ func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsPa
 		arg.Namespace,
 		arg.ReleaseName,
 		arg.ConfigmapName,
-		arg.PublicClients,
+		arg.RuntimeSecretName,
+		arg.PublicClientsEncrypted,
 		arg.Expiry,
 		arg.Extra,
 	)
@@ -288,6 +332,117 @@ func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsPa
 		&i.Extra,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
+	)
+	return i, err
+}
+
+const upsertDexSettingsAndSSO = `-- name: UpsertDexSettingsAndSSO :one
+WITH settings_upsert AS (
+    INSERT INTO dex_settings (
+        id, issuer_url, cluster_id, namespace, release_name, configmap_name,
+        runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra
+    ) VALUES (
+        $9, $10, $11,
+        $12, $13, $14,
+        $14, '[]'::jsonb, $15,
+        $16, $17
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        issuer_url = EXCLUDED.issuer_url,
+        cluster_id = EXCLUDED.cluster_id,
+        namespace = EXCLUDED.namespace,
+        release_name = EXCLUDED.release_name,
+        configmap_name = EXCLUDED.configmap_name,
+        runtime_secret_name = EXCLUDED.runtime_secret_name,
+        public_clients = '[]'::jsonb,
+        public_clients_encrypted = EXCLUDED.public_clients_encrypted,
+        expiry = EXCLUDED.expiry,
+        extra = EXCLUDED.extra,
+        updated_at = now()
+    RETURNING id
+)
+INSERT INTO sso_configurations (
+    provider, is_enabled, display_name, config, client_id,
+    client_secret_encrypted, allowed_organizations, allowed_domains,
+    auto_create_users, default_global_role_id
+)
+SELECT
+    'dex', true, $1, $2, $3,
+    $4, $5,
+    $6, $7, $8
+FROM settings_upsert
+ON CONFLICT (provider) DO UPDATE SET
+    is_enabled = true,
+    display_name = EXCLUDED.display_name,
+    config = EXCLUDED.config,
+    client_id = EXCLUDED.client_id,
+    client_secret_encrypted = EXCLUDED.client_secret_encrypted,
+    allowed_organizations = EXCLUDED.allowed_organizations,
+    allowed_domains = EXCLUDED.allowed_domains,
+    auto_create_users = EXCLUDED.auto_create_users,
+    default_global_role_id = EXCLUDED.default_global_role_id,
+    updated_at = now()
+RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
+`
+
+type UpsertDexSettingsAndSSOParams struct {
+	DisplayName            string          `json:"display_name"`
+	SsoConfig              json.RawMessage `json:"sso_config"`
+	ClientID               string          `json:"client_id"`
+	ClientSecretEncrypted  string          `json:"client_secret_encrypted"`
+	AllowedOrganizations   json.RawMessage `json:"allowed_organizations"`
+	AllowedDomains         json.RawMessage `json:"allowed_domains"`
+	AutoCreateUsers        bool            `json:"auto_create_users"`
+	DefaultGlobalRoleID    pgtype.UUID     `json:"default_global_role_id"`
+	SettingsID             uuid.UUID       `json:"settings_id"`
+	IssuerUrl              string          `json:"issuer_url"`
+	ClusterID              pgtype.UUID     `json:"cluster_id"`
+	Namespace              string          `json:"namespace"`
+	ReleaseName            string          `json:"release_name"`
+	RuntimeSecretName      string          `json:"runtime_secret_name"`
+	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
+	Expiry                 json.RawMessage `json:"expiry"`
+	Extra                  json.RawMessage `json:"extra"`
+}
+
+func (q *Queries) UpsertDexSettingsAndSSO(ctx context.Context, arg UpsertDexSettingsAndSSOParams) (SsoConfiguration, error) {
+	row := q.db.QueryRow(ctx, upsertDexSettingsAndSSO,
+		arg.DisplayName,
+		arg.SsoConfig,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.AllowedOrganizations,
+		arg.AllowedDomains,
+		arg.AutoCreateUsers,
+		arg.DefaultGlobalRoleID,
+		arg.SettingsID,
+		arg.IssuerUrl,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.ReleaseName,
+		arg.RuntimeSecretName,
+		arg.PublicClientsEncrypted,
+		arg.Expiry,
+		arg.Extra,
+	)
+	var i SsoConfiguration
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.IsEnabled,
+		&i.DisplayName,
+		&i.Config,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.AllowedOrganizations,
+		&i.AllowedDomains,
+		&i.AutoCreateUsers,
+		&i.DefaultGlobalRoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MigratedToDexAt,
 	)
 	return i, err
 }

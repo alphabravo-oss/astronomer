@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -141,19 +142,66 @@ func (f *fakeDexQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDex
 		return sqlc.DexSetting{}, f.upsertErr
 	}
 	row := sqlc.DexSetting{
-		ID:            arg.ID,
-		IssuerUrl:     arg.IssuerUrl,
-		ClusterID:     arg.ClusterID,
-		Namespace:     arg.Namespace,
-		ReleaseName:   arg.ReleaseName,
-		ConfigmapName: arg.ConfigmapName,
-		PublicClients: arg.PublicClients,
-		Expiry:        arg.Expiry,
-		Extra:         arg.Extra,
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
+		ID:                     arg.ID,
+		IssuerUrl:              arg.IssuerUrl,
+		ClusterID:              arg.ClusterID,
+		Namespace:              arg.Namespace,
+		ReleaseName:            arg.ReleaseName,
+		ConfigmapName:          arg.ConfigmapName,
+		RuntimeSecretName:      arg.RuntimeSecretName,
+		PublicClients:          json.RawMessage(`[]`),
+		PublicClientsEncrypted: arg.PublicClientsEncrypted,
+		Expiry:                 arg.Expiry,
+		Extra:                  arg.Extra,
+		CreatedAt:              time.Now().UTC(),
+		UpdatedAt:              time.Now().UTC(),
 	}
 	f.settings = &row
+	return row, nil
+}
+
+func (f *fakeDexQuerier) MigrateLegacyDexPublicClients(_ context.Context, arg sqlc.MigrateLegacyDexPublicClientsParams) (sqlc.DexSetting, error) {
+	if f.settings == nil || f.settings.ID != arg.ID || f.settings.PublicClientsEncrypted != "" ||
+		!bytes.Equal(f.settings.PublicClients, arg.LegacyPublicClients) {
+		return sqlc.DexSetting{}, errors.New("legacy migration conflict")
+	}
+	f.settings.PublicClients = json.RawMessage(`[]`)
+	f.settings.PublicClientsEncrypted = arg.PublicClientsEncrypted
+	f.settings.UpdatedAt = time.Now().UTC()
+	return *f.settings, nil
+}
+
+func (f *fakeDexQuerier) UpsertDexSettingsAndSSO(_ context.Context, arg sqlc.UpsertDexSettingsAndSSOParams) (sqlc.SsoConfiguration, error) {
+	if f.upsertErr != nil {
+		return sqlc.SsoConfiguration{}, f.upsertErr
+	}
+	now := time.Now().UTC()
+	settings := sqlc.DexSetting{
+		ID: arg.SettingsID, IssuerUrl: arg.IssuerUrl, ClusterID: arg.ClusterID,
+		Namespace: arg.Namespace, ReleaseName: arg.ReleaseName,
+		ConfigmapName: arg.RuntimeSecretName, RuntimeSecretName: arg.RuntimeSecretName,
+		PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: arg.PublicClientsEncrypted,
+		Expiry: arg.Expiry, Extra: arg.Extra, CreatedAt: now, UpdatedAt: now,
+	}
+	row, exists := f.ssoByProv["dex"]
+	if !exists {
+		row.ID = uuid.New()
+		row.Provider = "dex"
+		row.CreatedAt = now
+	}
+	row.IsEnabled = true
+	row.DisplayName = arg.DisplayName
+	row.Config = arg.SsoConfig
+	row.ClientID = arg.ClientID
+	row.ClientSecretEncrypted = arg.ClientSecretEncrypted
+	row.AllowedOrganizations = arg.AllowedOrganizations
+	row.AllowedDomains = arg.AllowedDomains
+	row.AutoCreateUsers = arg.AutoCreateUsers
+	row.DefaultGlobalRoleID = arg.DefaultGlobalRoleID
+	row.UpdatedAt = now
+	// Commit both in-memory rows together after every error point above.
+	f.settings = &settings
+	f.ssoByProv["dex"] = row
 	return row, nil
 }
 
@@ -437,7 +485,12 @@ func TestRenderDexConfig_DecryptsSecretsAndForwardsExpiry(t *testing.T) {
 		Extra:         json.RawMessage(`{"logger":{"level":"info"}}`),
 	}
 
-	out, err := h.renderDexConfig(settings, connectors)
+	publicClients := []map[string]any{{
+		"id": "astronomer", "name": "Astronomer",
+		"redirectURIs": []any{"https://astro.example.com/api/v1/auth/callback/dex/"},
+		"secret":       "client-secret",
+	}}
+	out, err := h.renderDexConfig(settings, publicClients, connectors)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -514,117 +567,25 @@ func proxyToHTTPTest(srv *httptest.Server) func(req stubReq) (*protocol.K8sRespo
 	}
 }
 
-func TestApply_PatchesConfigMapOnLiveCluster(t *testing.T) {
-	// Mock K8s API: write the ConfigMap, then restart the Dex deployment.
-	var seenMethod, seenPath string
-	var seenBody []byte
-	var configMapBody []byte
-	var sawRestart bool
-	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenMethod = r.Method
-		seenPath = r.URL.Path
-		seenBody, _ = io.ReadAll(r.Body)
-		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/namespaces/dex/configmaps/astronomer-dex-config" {
-			configMapBody = append([]byte(nil), seenBody...)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"kind":"ConfigMap","metadata":{"name":"astronomer-dex-config"}}`))
-			return
-		}
-		if r.Method == http.MethodPatch && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
-			sawRestart = true
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"kind":"Deployment","metadata":{"name":"dex"}}`))
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"kind":"Status","status":"Failure","reason":"NotFound"}`))
-	}))
-	defer mockK8s.Close()
-
-	q := newFakeDexQuerier()
-	clusterID := uuid.New()
-	q.settings = &sqlc.DexSetting{
-		ID:            dexSettingsSingletonID,
-		IssuerUrl:     "https://dex.example.com",
-		Namespace:     "dex",
-		ReleaseName:   "dex",
-		ConfigmapName: "astronomer-dex-config",
-		ClusterID:     pgtype.UUID{Bytes: clusterID, Valid: true},
-		PublicClients: json.RawMessage(`[]`),
-		Expiry:        json.RawMessage(`{}`),
-		Extra:         json.RawMessage(`{}`),
-	}
-	connectorCfg, _ := json.Marshal(map[string]any{
-		"tenant":       "abc",
-		"clientID":     "id",
-		"clientSecret": "plaintext",
-	})
-	cid := uuid.New()
-	q.connectors[cid] = sqlc.DexConnector{
-		ID:        cid,
-		Name:      "azure",
-		Type:      "microsoft",
-		Config:    connectorCfg,
-		Enabled:   true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-	stub := &stubK8sRequester{respFn: proxyToHTTPTest(mockK8s)}
-	h := NewDexHandler(q)
-	h.SetK8sRequester(stub)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil)
-	w := httptest.NewRecorder()
-	h.Apply(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
-	}
-	if seenMethod != http.MethodPatch {
-		t.Errorf("expected final request to be PATCH, got %s", seenMethod)
-	}
-	if seenPath != "/apis/apps/v1/namespaces/dex/deployments/dex" {
-		t.Errorf("unexpected final path: %s", seenPath)
-	}
-	if !bytes.Contains(configMapBody, []byte("config.yaml")) {
-		t.Errorf("configmap body missing config.yaml key: %s", configMapBody)
-	}
-	if !bytes.Contains(configMapBody, []byte("microsoft")) {
-		t.Errorf("configmap body missing connector type: %s", configMapBody)
-	}
-	if !sawRestart {
-		t.Fatalf("expected deployment restart patch")
-	}
-	if !bytes.Contains(seenBody, []byte("kubectl.kubernetes.io/restartedAt")) {
-		t.Errorf("restart patch missing restartedAt annotation: %s", seenBody)
-	}
-	auditRow := q.auditRowAt(t, 0)
-	assertDexAudit(t, auditRow, "dex.config.apply", "dex_settings")
-	assertAuditDetail(t, auditRow.Detail, "cluster_id", clusterID.String())
-	assertAuditDetail(t, auditRow.Detail, "namespace", "dex")
-}
-
-func TestApply_FallsBackToPostOnNotFound(t *testing.T) {
+func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *testing.T) {
 	var requests []string
-	var configMapBody []byte
-	var restartBody []byte
+	var secretBody, restartBody []byte
+	metadataOnlySecret := newDexRuntimeSecret("dex", "astronomer-dex-runtime", nil)
+	metadataOnlySecret.Data = nil
+	metadataOnlySecret.Metadata.ResourceVersion = "18"
+	metadataOnlyJSON, _ := json.Marshal(metadataOnlySecret)
 	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		body, _ := io.ReadAll(r.Body)
-		// First (PATCH) returns 404 to simulate "configmap doesn't exist yet".
-		// Second (POST) creates it. Third PATCH restarts the deployment.
-		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/namespaces/dex/configmaps/astronomer-dex-config" {
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"kind":"Status","status":"Failure","reason":"NotFound"}`))
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(metadataOnlyJSON)
 			return
 		}
-		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/namespaces/dex/configmaps" {
-			configMapBody = append([]byte(nil), body...)
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"kind":"ConfigMap"}`))
+		if r.Method == http.MethodPatch && r.URL.Path == "/api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
+			secretBody = append([]byte(nil), body...)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"Secret","metadata":{"name":"astronomer-dex-runtime","resourceVersion":"19"}}`))
 			return
 		}
 		if r.Method == http.MethodPatch && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
@@ -634,26 +595,101 @@ func TestApply_FallsBackToPostOnNotFound(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"kind":"Status","status":"Failure","reason":"NotFound"}`))
 	}))
 	defer mockK8s.Close()
 
 	q := newFakeDexQuerier()
+	key, _ := auth.GenerateKey()
+	enc, _ := auth.NewEncryptor(key)
+	ciphertext, _ := enc.Encrypt("hostile-'\"-secret")
 	clusterID := uuid.New()
 	q.settings = &sqlc.DexSetting{
-		ID:            dexSettingsSingletonID,
-		IssuerUrl:     "https://dex.example.com",
-		Namespace:     "dex",
-		ReleaseName:   "dex",
-		ConfigmapName: "astronomer-dex-config",
-		ClusterID:     pgtype.UUID{Bytes: clusterID, Valid: true},
-		PublicClients: json.RawMessage(`[]`),
-		Expiry:        json.RawMessage(`{}`),
-		Extra:         json.RawMessage(`{}`),
+		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
+		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
+		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, PublicClients: json.RawMessage(`[]`),
+		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
-	stub := &stubK8sRequester{respFn: proxyToHTTPTest(mockK8s)}
+	connectorCfg, _ := json.Marshal(map[string]any{
+		"tenant": "abc", "clientID": "id", "clientSecret": ciphertext,
+	})
+	cid := uuid.New()
+	q.connectors[cid] = sqlc.DexConnector{
+		ID: cid, Name: "azure", Type: "microsoft", Config: connectorCfg, Enabled: true,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
 	h := NewDexHandler(q)
-	h.SetK8sRequester(stub)
+	h.SetEncryptor(enc)
+	h.SetK8sRequester(&stubK8sRequester{respFn: proxyToHTTPTest(mockK8s)})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil)
+	w := httptest.NewRecorder()
+	h.Apply(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	wantRequests := []string{
+		"GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
+		"PATCH /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
+		"PATCH /apis/apps/v1/namespaces/dex/deployments/dex",
+	}
+	if strings.Join(requests, "|") != strings.Join(wantRequests, "|") {
+		t.Fatalf("requests=%v want=%v", requests, wantRequests)
+	}
+	var secret dexRuntimeSecret
+	if err := json.Unmarshal(secretBody, &secret); err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := base64.StdEncoding.DecodeString(secret.Data["config.yaml"])
+	if err != nil || !bytes.Contains(rendered, []byte("hostile-'\"-secret")) {
+		t.Fatalf("runtime Secret did not preserve hostile credential: err=%v config=%q", err, rendered)
+	}
+	metadataOnly := append([]byte(nil), secretBody...)
+	var generic map[string]any
+	_ = json.Unmarshal(metadataOnly, &generic)
+	delete(generic, "data")
+	metadataOnly, _ = json.Marshal(generic)
+	if bytes.Contains(metadataOnly, []byte("hostile")) || bytes.Contains(metadataOnly, []byte("sha256")) {
+		t.Fatalf("Secret metadata leaked content-derived material: %s", metadataOnly)
+	}
+	if !bytes.Contains(restartBody, []byte(`"astronomer.io/dex-runtime-resource-version":"19"`)) {
+		t.Fatalf("restart patch did not use Secret resourceVersion: %s", restartBody)
+	}
+	auditRow := q.auditRowAt(t, 0)
+	assertDexAudit(t, auditRow, "dex.config.apply", "dex_settings")
+	assertAuditDetail(t, auditRow.Detail, "cluster_id", clusterID.String())
+	assertAuditDetail(t, auditRow.Detail, "namespace", "dex")
+}
+
+func TestApply_FixedPointDoesNotMutateOrRollout(t *testing.T) {
+	var requests []string
+	q := newFakeDexQuerier()
+	clusterID := uuid.New()
+	q.settings = &sqlc.DexSetting{
+		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
+		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
+		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, PublicClients: json.RawMessage(`[]`),
+		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
+	}
+	h := NewDexHandler(q)
+	rendered, err := h.renderDexConfig(*q.settings, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing := newDexRuntimeSecret("dex", "astronomer-dex-runtime", rendered)
+	existing.Metadata.ResourceVersion = "42"
+	existingJSON, _ := json.Marshal(existing)
+	mockK8s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(existingJSON)
+			return
+		}
+		t.Fatalf("fixed point unexpectedly mutated Kubernetes with %s %s", r.Method, r.URL.Path)
+	}))
+	defer mockK8s.Close()
+	h.SetK8sRequester(&stubK8sRequester{respFn: proxyToHTTPTest(mockK8s)})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil)
 	w := httptest.NewRecorder()
@@ -661,19 +697,41 @@ func TestApply_FallsBackToPostOnNotFound(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if len(requests) != 3 {
-		t.Fatalf("expected config PATCH, config POST, deployment PATCH; got %#v", requests)
+	if len(requests) != 1 || requests[0] != "GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime" {
+		t.Fatalf("fixed point requests=%v", requests)
 	}
-	if requests[0] != "PATCH /api/v1/namespaces/dex/configmaps/astronomer-dex-config" ||
-		requests[1] != "POST /api/v1/namespaces/dex/configmaps" ||
-		requests[2] != "PATCH /apis/apps/v1/namespaces/dex/deployments/dex" {
-		t.Errorf("unexpected request sequence: %#v", requests)
+}
+
+func TestApplyRuntimeSecret_FailsClosedWhenChartIdentityMissing(t *testing.T) {
+	h := NewDexHandler(newFakeDexQuerier())
+	h.SetK8sRequester(&stubK8sRequester{respFn: func(_ stubReq) (*protocol.K8sResponsePayload, error) {
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+	}})
+	changed, version, err := h.applyRuntimeSecret(context.Background(), uuid.NewString(), "dex", "astronomer-dex-runtime", []byte("secret: never-log-me"))
+	if err == nil || !strings.Contains(err.Error(), "install or upgrade the chart") {
+		t.Fatalf("error=%v, want operator guidance", err)
 	}
-	if !bytes.Contains(configMapBody, []byte("config.yaml")) {
-		t.Errorf("configmap body missing config.yaml key: %s", configMapBody)
+	if changed || version != "" || strings.Contains(err.Error(), "never-log-me") {
+		t.Fatalf("missing identity leaked or reported mutation: changed=%v version=%q err=%v", changed, version, err)
 	}
-	if !bytes.Contains(restartBody, []byte("kubectl.kubernetes.io/restartedAt")) {
-		t.Errorf("restart patch missing restartedAt annotation: %s", restartBody)
+}
+
+func TestApplyRuntimeSecret_RefusesUnownedNameCollision(t *testing.T) {
+	unowned := dexRuntimeSecret{APIVersion: "v1", Kind: "Secret", Type: "Opaque"}
+	unowned.Metadata.Name = "astronomer-dex-runtime"
+	unowned.Metadata.ResourceVersion = "7"
+	unowned.Data = map[string]string{"config.yaml": base64.StdEncoding.EncodeToString([]byte("operator-owned"))}
+	raw, _ := json.Marshal(unowned)
+	h := NewDexHandler(newFakeDexQuerier())
+	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if req.Method != http.MethodGet {
+			t.Fatalf("unexpected mutation %s", req.Method)
+		}
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
+	}})
+	changed, _, err := h.applyRuntimeSecret(context.Background(), uuid.NewString(), "dex", "astronomer-dex-runtime", []byte("replacement"))
+	if err == nil || !strings.Contains(err.Error(), "refusing to overwrite") || changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
 	}
 }
 
@@ -910,7 +968,11 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 		t.Errorf("issuer_url not stored in sso config: %v", cfg)
 	}
 	var clients []map[string]any
-	if err := json.Unmarshal(q.settings.PublicClients, &clients); err != nil {
+	plainClients, err := enc.Decrypt(q.settings.PublicClientsEncrypted)
+	if err != nil {
+		t.Fatalf("decrypt public_clients: %v", err)
+	}
+	if err := json.Unmarshal([]byte(plainClients), &clients); err != nil {
 		t.Fatalf("unmarshal public_clients: %v", err)
 	}
 	if len(clients) != 1 {
@@ -926,6 +988,20 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	if clients[0]["secret"] != "shared-secret" {
 		t.Fatalf("public client secret not synchronized")
 	}
+	rendered, err := h.renderDexConfig(*q.settings, clients, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dexDoc map[string]any
+	if err := yaml.Unmarshal(rendered, &dexDoc); err != nil {
+		t.Fatal(err)
+	}
+	staticClients, _ := dexDoc["staticClients"].([]any)
+	dexClient, _ := staticClients[0].(map[string]any)
+	serverSecret, err := enc.Decrypt(row.ClientSecretEncrypted)
+	if err != nil || dexClient["secret"] != serverSecret {
+		t.Fatalf("Dex/server credential pair diverged: dex=%v server=%q err=%v", dexClient["secret"], serverSecret, err)
+	}
 	auditRow := q.auditRowAt(t, 0)
 	assertDexAudit(t, auditRow, "dex.register_sso", "sso_configuration")
 	if auditRow.ResourceID != row.ID.String() || auditRow.ResourceName != "dex" {
@@ -934,11 +1010,71 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	assertAuditDetail(t, auditRow.Detail, "client_id", "astronomer")
 	assertAuditDetail(t, auditRow.Detail, "issuer_url", "https://dex.example.com")
 	assertAuditDetailOmit(t, auditRow.Detail, "client_secret")
+
+	rotateBody, _ := json.Marshal(map[string]any{
+		"client_id": "astronomer", "client_secret": "rotated-shared-secret", "display_name": "Sign in with Dex",
+	})
+	rotateRecorder := httptest.NewRecorder()
+	h.RegisterAsSSO(rotateRecorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/register-as-sso/", bytes.NewReader(rotateBody)))
+	if rotateRecorder.Code != http.StatusOK {
+		t.Fatalf("rotation status=%d body=%s", rotateRecorder.Code, rotateRecorder.Body.String())
+	}
+	rotatedServerSecret, err := enc.Decrypt(q.ssoByProv["dex"].ClientSecretEncrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotatedClientsJSON, err := enc.Decrypt(q.settings.PublicClientsEncrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rotatedClients []map[string]any
+	if err := json.Unmarshal([]byte(rotatedClientsJSON), &rotatedClients); err != nil {
+		t.Fatal(err)
+	}
+	if rotatedServerSecret != "rotated-shared-secret" || rotatedClients[0]["secret"] != rotatedServerSecret {
+		t.Fatalf("atomic rotation pair diverged: server=%q clients=%#v", rotatedServerSecret, rotatedClients)
+	}
+}
+
+func TestRegisterAsSSO_AtomicFailurePreservesCredentialPair(t *testing.T) {
+	q := newFakeDexQuerier()
+	key, _ := auth.GenerateKey()
+	enc, _ := auth.NewEncryptor(key)
+	oldCipher, _ := enc.Encrypt("old-paired-secret")
+	oldClients, _ := enc.Encrypt(`[{"id":"astronomer","secret":"old-paired-secret"}]`)
+	q.platform = &sqlc.PlatformConfiguration{ID: 1, ServerUrl: "https://astronomer.example.com"}
+	q.settings = &sqlc.DexSetting{
+		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
+		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
+		PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: oldClients,
+		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
+	}
+	q.ssoByProv["dex"] = sqlc.SsoConfiguration{
+		ID: uuid.New(), Provider: "dex", ClientID: "astronomer", ClientSecretEncrypted: oldCipher,
+		AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true,
+	}
+	q.upsertErr = errors.New("atomic statement failed")
+	h := NewDexHandler(q)
+	h.SetEncryptor(enc)
+	body, _ := json.Marshal(map[string]any{"client_id": "astronomer", "client_secret": "new-secret"})
+	recorder := httptest.NewRecorder()
+	h.RegisterAsSSO(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/register-as-sso/", bytes.NewReader(body)))
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if q.settings.PublicClientsEncrypted != oldClients || q.ssoByProv["dex"].ClientSecretEncrypted != oldCipher ||
+		strings.Contains(recorder.Body.String(), "new-secret") {
+		t.Fatalf("failed atomic rotation changed or leaked the pair")
+	}
 }
 
 func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
 	q := newFakeDexQuerier()
 	h := NewDexHandler(q)
+	key, _ := auth.GenerateKey()
+	enc, _ := auth.NewEncryptor(key)
+	h.SetEncryptor(enc)
+	ciphertext, _ := enc.Encrypt("secret")
 	settings := sqlc.DexSetting{
 		ID:            dexSettingsSingletonID,
 		IssuerUrl:     "https://dex.example.com/dex",
@@ -956,11 +1092,11 @@ func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
 			Name:        "oidc-live",
 			Type:        "oidc",
 			DisplayName: "OIDC Live",
-			Config:      json.RawMessage(`{"issuer":"https://issuer.example.com","clientID":"id","clientSecret":"secret"}`),
+			Config:      json.RawMessage(fmt.Sprintf(`{"issuer":"https://issuer.example.com","clientID":"id","clientSecret":%q}`, ciphertext)),
 			Enabled:     true,
 		},
 	}
-	rendered, err := h.renderDexConfig(settings, connectors)
+	rendered, err := h.renderDexConfig(settings, nil, connectors)
 	if err != nil {
 		t.Fatalf("renderDexConfig error: %v", err)
 	}
@@ -1003,6 +1139,63 @@ func TestUpdateSettings_RejectsMissingIssuer(t *testing.T) {
 	}
 }
 
+func TestGetSettings_MigratesAndRedactsLegacyStaticClientSecret(t *testing.T) {
+	q := newFakeDexQuerier()
+	legacySecret := "legacy-low-entropy-secret"
+	q.settings = &sqlc.DexSetting{
+		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
+		ReleaseName: "dex", ConfigmapName: "legacy-dex-config",
+		PublicClients: json.RawMessage(`[{"id":"astronomer","name":"Astronomer","secret":"` + legacySecret + `"}]`),
+		Expiry:        json.RawMessage(`{}`), Extra: json.RawMessage(`{}`), UpdatedAt: time.Now().UTC(),
+	}
+	key, _ := auth.GenerateKey()
+	enc, _ := auth.NewEncryptor(key)
+	h := NewDexHandler(q)
+	h.SetEncryptor(enc)
+	recorder := httptest.NewRecorder()
+	h.GetSettings(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/auth/dex/settings/", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if string(q.settings.PublicClients) != "[]" || q.settings.PublicClientsEncrypted == "" {
+		t.Fatalf("legacy row was not atomically scrubbed/encrypted: %#v", q.settings)
+	}
+	if strings.Contains(q.settings.PublicClientsEncrypted, legacySecret) || strings.Contains(recorder.Body.String(), legacySecret) {
+		t.Fatalf("legacy secret leaked after migration: row=%q response=%s", q.settings.PublicClientsEncrypted, recorder.Body.String())
+	}
+	var response struct {
+		Data struct {
+			RuntimeSecretName string `json:"runtime_secret_name"`
+			PublicClients     []struct {
+				Secret           string `json:"secret"`
+				SecretConfigured bool   `json:"secret_configured"`
+			} `json:"public_clients"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Data.RuntimeSecretName != "legacy-dex-config" || len(response.Data.PublicClients) != 1 ||
+		response.Data.PublicClients[0].Secret != "" || !response.Data.PublicClients[0].SecretConfigured {
+		t.Fatalf("response did not preserve alias/redaction contract: %#v", response.Data)
+	}
+}
+
+func TestCreateConnector_FailsClosedWithoutEncryptor(t *testing.T) {
+	q := newFakeDexQuerier()
+	h := NewDexHandler(q)
+	raw, _ := json.Marshal(map[string]any{
+		"type": "oidc", "name": "unsafe", "config": map[string]any{
+			"issuer": "https://idp.example.com", "clientID": "id", "clientSecret": "must-not-store",
+		},
+	})
+	recorder := httptest.NewRecorder()
+	h.CreateConnector(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/connectors/", bytes.NewReader(raw)))
+	if recorder.Code != http.StatusInternalServerError || len(q.connectors) != 0 || strings.Contains(recorder.Body.String(), "must-not-store") {
+		t.Fatalf("connector write did not fail closed: status=%d rows=%d body=%s", recorder.Code, len(q.connectors), recorder.Body.String())
+	}
+}
+
 func TestUpdateSettingsAuditsDexSettingsUpdate(t *testing.T) {
 	q := newFakeDexQuerier()
 	h := NewDexHandler(q)
@@ -1027,7 +1220,7 @@ func TestUpdateSettingsAuditsDexSettingsUpdate(t *testing.T) {
 	}
 	assertAuditDetail(t, auditRow.Detail, "issuer_url", "https://dex.example.com")
 	assertAuditDetail(t, auditRow.Detail, "namespace", "dex")
-	assertAuditDetail(t, auditRow.Detail, "configmap_name", "astronomer-dex-config")
+	assertAuditDetail(t, auditRow.Detail, "runtime_secret_name", "astronomer-dex-config")
 }
 
 // base64StdEncode mirrors what the agent does so the handler's
