@@ -106,9 +106,13 @@ and replica tuples while the new server is trying to adopt them.
    replica tuples and stages the newer embedded chart revision. Optional
    frontend absence is adopted as disabled only when the highest deployed Helm
    release explicitly records `frontend.enabled=false`; wait for its Deployment
-   deletion to converge before reconciliation. A non-active, inconsistent,
-   non-semantic, cross-major, or newer revision fails closed and requires
-   operator remediation; it never silently reuses old runtime tags.
+   deletion to converge before reconciliation. Bundled Postgres, bundled Redis,
+   and Dex use their effective chart intent (including defaults): an enabled
+   component must have a non-terminating workload, while a disabled component
+   must have no workload. Wait for creation/deletion to converge before letting
+   the server adopt exact live runtime references and settings. A non-active,
+   inconsistent, non-semantic, cross-major, or newer revision fails closed and
+   requires operator remediation; it never silently reuses old runtime tags.
 6. Restore the controller only after the new reference-only Application is
    staged. Run the full non-pruning sync, verify exact source/destination status,
    health, completed operation, workload rollout, login, and protected Secret

@@ -137,21 +137,10 @@ func statefulSetEnvSecretRef(statefulSet *appsv1.StatefulSet, containerName, env
 	return selfManagedSecretRef{}, false
 }
 
-func statefulSetExists(ctx context.Context, k8s kubernetes.Interface, name string) (bool, error) {
-	_, err := k8s.AppsV1().StatefulSets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return false, nil
-	}
-	return err == nil, err
-}
-
-func selfManagedDatabaseSecretRefs(ctx context.Context, k8s kubernetes.Interface, server *appsv1.Deployment, coreSecret *corev1.Secret, bundled bool) (selfManagedSecretRef, selfManagedSecretRef, error) {
+func selfManagedDatabaseSecretRefs(ctx context.Context, k8s kubernetes.Interface, server *appsv1.Deployment, coreSecret *corev1.Secret, postgres *appsv1.StatefulSet) (selfManagedSecretRef, selfManagedSecretRef, error) {
+	bundled := postgres != nil
 	if ref, ok := deploymentEnvSecretRef(server, "server", "DATABASE_URL"); ok {
 		if bundled {
-			postgres, err := k8s.AppsV1().StatefulSets(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-postgres", metav1.GetOptions{})
-			if err != nil {
-				return selfManagedSecretRef{}, selfManagedSecretRef{}, err
-			}
 			passwordRef, ok := statefulSetEnvSecretRef(postgres, "postgres", "POSTGRES_PASSWORD")
 			if !ok {
 				return selfManagedSecretRef{}, selfManagedSecretRef{}, fmt.Errorf("bundled Postgres StatefulSet has no POSTGRES_PASSWORD Secret reference")
@@ -251,13 +240,9 @@ func decomposableSelfManagedRedisURL(raw string) (*url.URL, int, bool) {
 	return parsed, database, true
 }
 
-func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface) (map[string]any, error) {
-	deploy, err := k8s.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-dex", metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
+func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface, deploy *appsv1.Deployment) (map[string]any, error) {
+	if deploy == nil {
 		return map[string]any{"enabled": false}, nil
-	}
-	if err != nil {
-		return nil, err
 	}
 	ref, ok := deploymentEnvSecretRef(deploy, "dex", "ASTRONOMER_DEX_CLIENT_SECRET")
 	if !ok {
@@ -283,6 +268,7 @@ func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface) (map[st
 		"replicaCount":    replicas,
 		"clientSecretRef": secretRefValues(ref),
 	}
+	foundImage := false
 	for _, container := range deploy.Spec.Template.Spec.Containers {
 		if container.Name == "dex" {
 			image, err := parseImageRef(container.Image)
@@ -290,8 +276,12 @@ func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface) (map[st
 				return nil, fmt.Errorf("parse Dex image: %w", err)
 			}
 			values["image"] = image
+			foundImage = true
 			break
 		}
+	}
+	if !foundImage {
+		return nil, fmt.Errorf("bundled Dex Deployment has no dex container image")
 	}
 	return values, nil
 }

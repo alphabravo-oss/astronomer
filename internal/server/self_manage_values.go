@@ -61,7 +61,7 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 			var err error
 			deployedReleaseValues, err = currentHelmReleaseValues(ctx, k8s)
 			if err != nil {
-				return "", fmt.Errorf("load highest deployed external Helm release values for bounded frontend adoption: %w", err)
+				return "", fmt.Errorf("load highest deployed external Helm release values for bounded topology/runtime adoption: %w", err)
 			}
 		}
 	} else {
@@ -179,18 +179,40 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	if !ok {
 		return "", fmt.Errorf("server Deployment does not reference ASTRONOMER_BOOTSTRAP_PASSWORD from a Secret")
 	}
-	postgresBundled, err := statefulSetExists(ctx, k8s, localAstronomerReleaseName+"-postgres")
+	intentValues := values
+	if deployedReleaseValues != nil {
+		intentValues = deployedReleaseValues
+	}
+	postgresIntent, err := effectiveSelfManagedChartBool(shape, intentValues, "postgres", "bundled", "enabled")
 	if err != nil {
 		return "", err
 	}
-	databaseRef, postgresPasswordRef, err := selfManagedDatabaseSecretRefs(ctx, k8s, serverDeployment, coreSecret, postgresBundled)
+	redisIntent, err := effectiveSelfManagedChartBool(shape, intentValues, "redis", "bundled", "enabled")
 	if err != nil {
 		return "", err
 	}
-	redisBundled, err := statefulSetExists(ctx, k8s, localAstronomerReleaseName+"-redis")
+	dexIntent, err := effectiveSelfManagedChartBool(shape, intentValues, "dex", "enabled")
 	if err != nil {
 		return "", err
 	}
+	postgresStatefulSet, err := selfManagedStatefulSetForIntent(ctx, k8s, localAstronomerReleaseName+"-postgres", "bundled Postgres", postgresIntent)
+	if err != nil {
+		return "", err
+	}
+	redisStatefulSet, err := selfManagedStatefulSetForIntent(ctx, k8s, localAstronomerReleaseName+"-redis", "bundled Redis", redisIntent)
+	if err != nil {
+		return "", err
+	}
+	dexDeployment, err := selfManagedDeploymentForIntent(ctx, k8s, localAstronomerReleaseName+"-dex", "bundled Dex", dexIntent)
+	if err != nil {
+		return "", err
+	}
+	postgresBundled := postgresStatefulSet != nil
+	databaseRef, postgresPasswordRef, err := selfManagedDatabaseSecretRefs(ctx, k8s, serverDeployment, coreSecret, postgresStatefulSet)
+	if err != nil {
+		return "", err
+	}
+	redisBundled := redisStatefulSet != nil
 	redisValues := map[string]any{"bundled": map[string]any{"enabled": redisBundled}}
 	if !redisBundled {
 		externalRedis, err := selfManagedExternalRedisValues(ctx, k8s, serverDeployment)
@@ -199,9 +221,25 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		}
 		redisValues["external"] = externalRedis
 	}
-	dexValues, err := selfManagedDexValues(ctx, k8s)
+	dexValues, err := selfManagedDexValues(ctx, k8s, dexDeployment)
 	if err != nil {
 		return "", err
+	}
+	if adoptRuntime {
+		if postgresStatefulSet != nil {
+			postgresRuntime, err := selfManagedPostgresRuntimeValues(postgresStatefulSet)
+			if err != nil {
+				return "", err
+			}
+			runtimeOverlay["postgres"] = postgresRuntime
+		}
+		if redisStatefulSet != nil {
+			redisRuntime, err := selfManagedRedisRuntimeValues(redisStatefulSet)
+			if err != nil {
+				return "", err
+			}
+			runtimeOverlay["redis"] = redisRuntime
+		}
 	}
 	protectedSecrets := []string{coreSecretName, bootstrapRef.Name, databaseRef.Name}
 	if !redisBundled {
@@ -271,6 +309,140 @@ func deployedHelmFrontendIntent(values map[string]any) (bool, bool, error) {
 		return false, false, fmt.Errorf("highest deployed Helm release frontend.enabled is not a boolean: %w", err)
 	}
 	return enabled, found, nil
+}
+
+func effectiveSelfManagedChartBool(defaults, overrides map[string]any, path ...string) (bool, error) {
+	defaultValue, found, err := unstructured.NestedBool(defaults, path...)
+	if err != nil || !found {
+		return false, fmt.Errorf("embedded chart default %s is not a boolean", strings.Join(path, "."))
+	}
+	value, found, err := unstructured.NestedBool(overrides, path...)
+	if err != nil {
+		return false, fmt.Errorf("highest deployed Helm release %s is not a boolean: %w", strings.Join(path, "."), err)
+	}
+	if found {
+		return value, nil
+	}
+	return defaultValue, nil
+}
+
+func selfManagedStatefulSetForIntent(ctx context.Context, k8s kubernetes.Interface, name, component string, enabled bool) (*appsv1.StatefulSet, error) {
+	statefulSet, err := k8s.AppsV1().StatefulSets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		if enabled {
+			return nil, fmt.Errorf("%s is enabled by the highest deployed Helm release but StatefulSet %s is absent; wait for creation to converge", component, name)
+		}
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s StatefulSet %s: %w", component, name, err)
+	}
+	if !enabled {
+		return nil, fmt.Errorf("%s is disabled by the highest deployed Helm release but StatefulSet %s still exists; wait for deletion to converge", component, name)
+	}
+	if statefulSet.DeletionTimestamp != nil {
+		return nil, fmt.Errorf("%s is enabled but StatefulSet %s is terminating; wait for creation to converge", component, name)
+	}
+	return statefulSet, nil
+}
+
+func selfManagedDeploymentForIntent(ctx context.Context, k8s kubernetes.Interface, name, component string, enabled bool) (*appsv1.Deployment, error) {
+	deployment, err := k8s.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		if enabled {
+			return nil, fmt.Errorf("%s is enabled by the highest deployed Helm release but Deployment %s is absent; wait for creation to converge", component, name)
+		}
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s Deployment %s: %w", component, name, err)
+	}
+	if !enabled {
+		return nil, fmt.Errorf("%s is disabled by the highest deployed Helm release but Deployment %s still exists; wait for deletion to converge", component, name)
+	}
+	if deployment.DeletionTimestamp != nil {
+		return nil, fmt.Errorf("%s is enabled but Deployment %s is terminating; wait for creation to converge", component, name)
+	}
+	return deployment, nil
+}
+
+func selfManagedPostgresRuntimeValues(statefulSet *appsv1.StatefulSet) (map[string]any, error) {
+	container, err := selfManagedStatefulSetContainer(statefulSet, "postgres")
+	if err != nil {
+		return nil, err
+	}
+	image, err := parseImageRef(container.Image)
+	if err != nil {
+		return nil, fmt.Errorf("adopt bundled Postgres image: %w", err)
+	}
+	user, err := selfManagedLiteralEnv(container, "POSTGRES_USER")
+	if err != nil {
+		return nil, fmt.Errorf("adopt bundled Postgres user: %w", err)
+	}
+	database, err := selfManagedLiteralEnv(container, "POSTGRES_DB")
+	if err != nil {
+		return nil, fmt.Errorf("adopt bundled Postgres database: %w", err)
+	}
+	storage, err := selfManagedStatefulSetStorage(statefulSet)
+	if err != nil {
+		return nil, fmt.Errorf("adopt bundled Postgres storage: %w", err)
+	}
+	return map[string]any{"image": image, "user": user, "database": database, "storage": storage}, nil
+}
+
+func selfManagedRedisRuntimeValues(statefulSet *appsv1.StatefulSet) (map[string]any, error) {
+	container, err := selfManagedStatefulSetContainer(statefulSet, "redis")
+	if err != nil {
+		return nil, err
+	}
+	image, err := parseImageRef(container.Image)
+	if err != nil {
+		return nil, fmt.Errorf("adopt bundled Redis image: %w", err)
+	}
+	storage, err := selfManagedStatefulSetStorage(statefulSet)
+	if err != nil {
+		return nil, fmt.Errorf("adopt bundled Redis storage: %w", err)
+	}
+	return map[string]any{"image": image, "storage": storage}, nil
+}
+
+func selfManagedStatefulSetContainer(statefulSet *appsv1.StatefulSet, name string) (*corev1.Container, error) {
+	if statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas != 1 {
+		return nil, fmt.Errorf("StatefulSet %s replicas cannot be represented by the bundled chart; want exactly 1", statefulSet.Name)
+	}
+	for i := range statefulSet.Spec.Template.Spec.Containers {
+		if statefulSet.Spec.Template.Spec.Containers[i].Name == name {
+			return &statefulSet.Spec.Template.Spec.Containers[i], nil
+		}
+	}
+	return nil, fmt.Errorf("StatefulSet %s has no %s container", statefulSet.Name, name)
+}
+
+func selfManagedLiteralEnv(container *corev1.Container, name string) (string, error) {
+	for _, env := range container.Env {
+		if env.Name == name && env.ValueFrom == nil && strings.TrimSpace(env.Value) != "" {
+			return env.Value, nil
+		}
+	}
+	return "", fmt.Errorf("container %s has no non-empty literal %s", container.Name, name)
+}
+
+func selfManagedStatefulSetStorage(statefulSet *appsv1.StatefulSet) (map[string]any, error) {
+	for _, claim := range statefulSet.Spec.VolumeClaimTemplates {
+		if claim.Name != "data" {
+			continue
+		}
+		quantity, found := claim.Spec.Resources.Requests[corev1.ResourceStorage]
+		if !found || quantity.IsZero() {
+			return nil, fmt.Errorf("StatefulSet %s data claim has no storage request", statefulSet.Name)
+		}
+		storageClass := ""
+		if claim.Spec.StorageClassName != nil {
+			storageClass = *claim.Spec.StorageClassName
+		}
+		return map[string]any{"size": quantity.String(), "storageClassName": storageClass}, nil
+	}
+	return nil, fmt.Errorf("StatefulSet %s has no data volumeClaimTemplate", statefulSet.Name)
 }
 
 func parseSelfManagedFirstPartyImageRef(ref, globalRegistry string) (map[string]any, error) {

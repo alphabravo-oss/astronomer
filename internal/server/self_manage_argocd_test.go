@@ -12,12 +12,15 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
 
+	chartdeploy "github.com/alphabravocompany/astronomer-go/deploy"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -324,6 +327,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		"image":     map[string]any{"registry": ""},
 		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
 		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}},
 	})); err != nil {
 		t.Fatal(err)
 	}
@@ -397,6 +402,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		"image":     map[string]any{"registry": globalMirror},
 		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
 		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}},
 	})); err != nil {
 		t.Fatal(err)
 	}
@@ -494,6 +501,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
 		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
 		"frontend":  map[string]any{"enabled": false},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}},
 	})
 	if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), frontendDisabledRelease, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
@@ -574,6 +583,305 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
 	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/agents/agent", AgentImageTag: "v10"}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "configured agent image") {
 		t.Fatalf("incompatible agent registry error = %v", err)
+	}
+}
+
+func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing.T) {
+	type componentCase struct {
+		name       string
+		resource   string
+		workload   string
+		setIntent  func(map[string]any, bool)
+		object     func(bool) runtime.Object
+		assertLive func(*testing.T, map[string]any)
+	}
+	components := []componentCase{
+		{
+			name: "postgres", resource: "statefulsets", workload: localAstronomerReleaseName + "-postgres",
+			setIntent: func(values map[string]any, enabled bool) {
+				values["postgres"].(map[string]any)["bundled"] = map[string]any{"enabled": enabled}
+			},
+			object: func(terminating bool) runtime.Object { return selfManagedPostgresStatefulSetFixture(terminating) },
+			assertLive: func(t *testing.T, values map[string]any) {
+				postgres := values["postgres"].(map[string]any)
+				if postgres["user"] != "runtime-user" || postgres["database"] != "runtime-database" {
+					t.Fatalf("Postgres runtime identity not adopted: %#v", postgres)
+				}
+				assertSelfManagedImageValues(t, postgres["image"], "pg.runtime/team", "postgres", "17.4")
+				storage := postgres["storage"].(map[string]any)
+				if storage["size"] != "12Gi" || storage["storageClassName"] != "runtime-fast" {
+					t.Fatalf("Postgres runtime storage not adopted: %#v", storage)
+				}
+				ref := postgres["passwordSecretRef"].(map[string]any)
+				if ref["name"] != "runtime-postgres" || ref["key"] != "runtime-password" {
+					t.Fatalf("Postgres runtime password ref not adopted: %#v", ref)
+				}
+			},
+		},
+		{
+			name: "redis", resource: "statefulsets", workload: localAstronomerReleaseName + "-redis",
+			setIntent: func(values map[string]any, enabled bool) {
+				values["redis"].(map[string]any)["bundled"] = map[string]any{"enabled": enabled}
+			},
+			object: func(terminating bool) runtime.Object { return selfManagedRedisStatefulSetFixture(terminating) },
+			assertLive: func(t *testing.T, values map[string]any) {
+				redis := values["redis"].(map[string]any)
+				assertSelfManagedImageValues(t, redis["image"], "redis.runtime/team", "valkey", "8.1")
+				storage := redis["storage"].(map[string]any)
+				if storage["size"] != "6Gi" || storage["storageClassName"] != "runtime-cache" {
+					t.Fatalf("Redis runtime storage not adopted: %#v", storage)
+				}
+			},
+		},
+		{
+			name: "dex", resource: "deployments", workload: localAstronomerReleaseName + "-dex",
+			setIntent: func(values map[string]any, enabled bool) {
+				values["dex"].(map[string]any)["enabled"] = enabled
+			},
+			object: func(terminating bool) runtime.Object { return selfManagedDexDeploymentFixture(terminating) },
+			assertLive: func(t *testing.T, values map[string]any) {
+				dex := values["dex"].(map[string]any)
+				assertSelfManagedImageValues(t, dex["image"], "dex.runtime/team", "dex", "v2.99.0")
+				if dex["replicaCount"] != float64(3) {
+					t.Fatalf("Dex runtime replicas not adopted: %#v", dex)
+				}
+				ref := dex["clientSecretRef"].(map[string]any)
+				if ref["name"] != "runtime-dex" || ref["key"] != "client-secret" {
+					t.Fatalf("Dex runtime client Secret ref not adopted: %#v", ref)
+				}
+			},
+		},
+	}
+	states := []struct {
+		name        string
+		enabled     bool
+		present     bool
+		terminating bool
+		apiError    bool
+		wantError   string
+	}{
+		{name: "enabled-present", enabled: true, present: true},
+		{name: "enabled-absent", enabled: true, wantError: "enabled by the highest deployed Helm release"},
+		{name: "disabled-present-terminating", present: true, terminating: true, wantError: "disabled by the highest deployed Helm release"},
+		{name: "disabled-absent", enabled: false},
+		{name: "api-error", enabled: true, apiError: true, wantError: "API unavailable"},
+	}
+	for _, component := range components {
+		for _, mode := range []string{"initial", "bounded-upgrade"} {
+			for _, state := range states {
+				t.Run(component.name+"/"+mode+"/"+state.name, func(t *testing.T) {
+					releaseValues := selfManagedBundledIntentReleaseValues()
+					component.setIntent(releaseValues, state.enabled)
+					objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+					if state.present {
+						objects = append(objects, component.object(state.terminating))
+					}
+					client := fake.NewSimpleClientset(objects...)
+					if mode == "bounded-upgrade" {
+						markServerDeploymentRolloutCompleteForTest(t, client)
+						zero := int32(0)
+						if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if state.apiError {
+						client.Fake.PrependReactor("get", component.resource, func(action k8stesting.Action) (bool, runtime.Object, error) {
+							get, ok := action.(k8stesting.GetAction)
+							if ok && get.GetName() == component.workload {
+								return true, nil, errors.New(component.name + " API unavailable")
+							}
+							return false, nil, nil
+						})
+					}
+					cfg := &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}
+					var output string
+					var err error
+					if mode == "bounded-upgrade" {
+						output, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
+					} else {
+						output, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example")
+					}
+					if state.wantError != "" {
+						if err == nil || !strings.Contains(err.Error(), state.wantError) {
+							t.Fatalf("error = %v, want substring %q", err, state.wantError)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					values := unmarshalSelfManagedValues(t, output)
+					if state.enabled {
+						component.assertLive(t, values)
+					} else {
+						assertSelfManagedComponentDisabled(t, component.name, values)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSelfManagedBundledComponentIntentUsesChartDefaults(t *testing.T) {
+	defaults, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		path []string
+		want bool
+	}{
+		"postgres": {path: []string{"postgres", "bundled", "enabled"}, want: true},
+		"redis":    {path: []string{"redis", "bundled", "enabled"}, want: true},
+		"dex":      {path: []string{"dex", "enabled"}, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := effectiveSelfManagedChartBool(defaults, map[string]any{}, tc.path...)
+			if err != nil || got != tc.want {
+				t.Fatalf("effective default = %v, err=%v, want %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+const selfManagedBundledUpgradeSource = `
+image:
+  registry: ""
+frontend:
+  enabled: false
+secrets:
+  existingSecret: astronomer-secrets
+  secretKeyKey: SECRET_KEY
+  encryptionKeyKey: ASTRONOMER_ENCRYPTION_KEY
+bootstrap:
+  existingSecret: astronomer-bootstrap
+  existingSecretKey: password
+postgres:
+  bundled: {enabled: false}
+  external:
+    dsnSecretRef: {name: astronomer-secrets, key: DATABASE_URL}
+redis:
+  bundled: {enabled: false}
+  external:
+    urlSecretRef: {name: astronomer-secrets, key: REDIS_URL}
+dex:
+  enabled: false
+`
+
+func selfManagedBundledIntentReleaseValues() map[string]any {
+	return map[string]any{
+		"image":     map[string]any{"registry": ""},
+		"frontend":  map[string]any{"enabled": false},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"existingSecret": "astronomer-bootstrap", "existingSecretKey": "password"},
+		"secrets":   map[string]any{"existingSecret": "astronomer-secrets", "secretKeyKey": "SECRET_KEY", "encryptionKeyKey": "ASTRONOMER_ENCRYPTION_KEY"},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}, "external": map[string]any{"dsnSecretRef": map[string]any{"name": "astronomer-secrets", "key": "DATABASE_URL"}}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}, "external": map[string]any{"urlSecretRef": map[string]any{"name": "astronomer-secrets", "key": "REDIS_URL"}}},
+		"dex":       map[string]any{"enabled": false},
+	}
+}
+
+func selfManagedBundledIntentBaseObjects(t *testing.T, releaseValues map[string]any) []runtime.Object {
+	t.Helper()
+	one := int32(1)
+	coreSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "astronomer-secrets", Namespace: localAstronomerNamespace},
+		Data: map[string][]byte{
+			"SECRET_KEY": []byte("runtime-secret-key"), "ASTRONOMER_ENCRYPTION_KEY": []byte("runtime-encryption-key"), "POSTGRES_PASSWORD": []byte("runtime-postgres-password"),
+			"DATABASE_URL": []byte("postgres://runtime-reference"), "REDIS_URL": []byte("redis://runtime-reference"),
+		},
+	}
+	server := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-server", Namespace: localAstronomerNamespace},
+		Spec: appsv1.DeploymentSpec{Replicas: &one, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{{Name: "migrate", Image: "runtime.example/team/migrate:v12"}},
+			Containers: []corev1.Container{{
+				Name: "server", Image: "runtime.example/team/server:v12",
+				EnvFrom: []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: coreSecret.Name}}}},
+				Env: []corev1.EnvVar{
+					{Name: "ASTRONOMER_BOOTSTRAP_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "astronomer-bootstrap"}, Key: "password"}}},
+					{Name: "DATABASE_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: coreSecret.Name}, Key: "DATABASE_URL"}}},
+					{Name: "REDIS_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: coreSecret.Name}, Key: "REDIS_URL"}}},
+				},
+			}},
+		}}},
+	}
+	worker := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-worker", Namespace: localAstronomerNamespace},
+		Spec:       appsv1.DeploymentSpec{Replicas: &one, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "runtime.example/team/worker:v12"}}}}},
+	}
+	return []runtime.Object{
+		coreSecret,
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-bootstrap", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"password": []byte("runtime-bootstrap")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "runtime-postgres", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"runtime-password": []byte("postgres")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "runtime-dex", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"client-secret": []byte("dex")}},
+		server, worker, helmReleaseSecretFixture(t, 12, "deployed", releaseValues),
+	}
+}
+
+func selfManagedPostgresStatefulSetFixture(terminating bool) *appsv1.StatefulSet {
+	one := int32(1)
+	storageClass := "runtime-fast"
+	statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-postgres", Namespace: localAstronomerNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one,
+		Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "postgres", Image: "pg.runtime/team/postgres:17.4", Env: []corev1.EnvVar{
+			{Name: "POSTGRES_USER", Value: "runtime-user"}, {Name: "POSTGRES_DB", Value: "runtime-database"},
+			{Name: "POSTGRES_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "runtime-postgres"}, Key: "runtime-password"}}},
+		}}}}},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data"}, Spec: corev1.PersistentVolumeClaimSpec{StorageClassName: &storageClass, Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("12Gi")}}}}},
+	}}
+	setSelfManagedFixtureTerminating(&statefulSet.ObjectMeta, terminating)
+	return statefulSet
+}
+
+func selfManagedRedisStatefulSetFixture(terminating bool) *appsv1.StatefulSet {
+	one := int32(1)
+	storageClass := "runtime-cache"
+	statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-redis", Namespace: localAstronomerNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one,
+		Template:             corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "redis", Image: "redis.runtime/team/valkey:8.1"}}}},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data"}, Spec: corev1.PersistentVolumeClaimSpec{StorageClassName: &storageClass, Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("6Gi")}}}}},
+	}}
+	setSelfManagedFixtureTerminating(&statefulSet.ObjectMeta, terminating)
+	return statefulSet
+}
+
+func selfManagedDexDeploymentFixture(terminating bool) *appsv1.Deployment {
+	replicas := int32(3)
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex", Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "dex", Image: "dex.runtime/team/dex:v2.99.0", Env: []corev1.EnvVar{{Name: "ASTRONOMER_DEX_CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "runtime-dex"}, Key: "client-secret"}}}}}}}}}}
+	setSelfManagedFixtureTerminating(&deployment.ObjectMeta, terminating)
+	return deployment
+}
+
+func setSelfManagedFixtureTerminating(metadata *metav1.ObjectMeta, terminating bool) {
+	if !terminating {
+		return
+	}
+	now := metav1.Now()
+	metadata.DeletionTimestamp = &now
+	metadata.Finalizers = []string{"test.astronomer.io/hold"}
+}
+
+func assertSelfManagedComponentDisabled(t *testing.T, component string, values map[string]any) {
+	t.Helper()
+	switch component {
+	case "postgres":
+		postgres := values["postgres"].(map[string]any)
+		if enabled, _, _ := unstructured.NestedBool(values, "postgres", "bundled", "enabled"); enabled {
+			t.Fatalf("Postgres was not explicitly disabled: %#v", postgres)
+		}
+		if ref, _, _ := unstructured.NestedString(values, "postgres", "external", "dsnSecretRef", "name"); ref != "astronomer-secrets" {
+			t.Fatalf("external Postgres ref = %q", ref)
+		}
+	case "redis":
+		if enabled, _, _ := unstructured.NestedBool(values, "redis", "bundled", "enabled"); enabled {
+			t.Fatalf("Redis was not explicitly disabled: %#v", values["redis"])
+		}
+		if ref, _, _ := unstructured.NestedString(values, "redis", "external", "urlSecretRef", "name"); ref != "astronomer-secrets" {
+			t.Fatalf("external Redis ref = %q", ref)
+		}
+	case "dex":
+		if enabled, _, _ := unstructured.NestedBool(values, "dex", "enabled"); enabled {
+			t.Fatalf("Dex was not explicitly disabled: %#v", values["dex"])
+		}
 	}
 }
 
