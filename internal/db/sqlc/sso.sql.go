@@ -8,6 +8,7 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -58,51 +59,6 @@ func (q *Queries) BackfillDexPublicClientsEnvelope(ctx context.Context, arg Back
 		&i.SagaPreviousSsoEnabled,
 	)
 	return i, err
-}
-
-const createDexConnector = `-- name: CreateDexConnector :one
-INSERT INTO dex_connectors (name, type, display_name, config, enabled)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, type, display_name, config, enabled, created_at, updated_at
-`
-
-type CreateDexConnectorParams struct {
-	Name        string          `json:"name"`
-	Type        string          `json:"type"`
-	DisplayName string          `json:"display_name"`
-	Config      json.RawMessage `json:"config"`
-	Enabled     bool            `json:"enabled"`
-}
-
-func (q *Queries) CreateDexConnector(ctx context.Context, arg CreateDexConnectorParams) (DexConnector, error) {
-	row := q.db.QueryRow(ctx, createDexConnector,
-		arg.Name,
-		arg.Type,
-		arg.DisplayName,
-		arg.Config,
-		arg.Enabled,
-	)
-	var i DexConnector
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Type,
-		&i.DisplayName,
-		&i.Config,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const deleteDexConnector = `-- name: DeleteDexConnector :exec
-DELETE FROM dex_connectors WHERE id = $1
-`
-
-func (q *Queries) DeleteDexConnector(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteDexConnector, id)
-	return err
 }
 
 const getDexConnectorByID = `-- name: GetDexConnectorByID :one
@@ -291,11 +247,13 @@ func (q *Queries) ListEnabledDexConnectors(ctx context.Context) ([]DexConnector,
 }
 
 const markDexRuntimeApplied = `-- name: MarkDexRuntimeApplied :one
-UPDATE dex_settings
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)) UPDATE dex_settings
 SET runtime_applied_generation = $2,
     updated_at = now()
 WHERE id = $1
   AND runtime_generation = $2
+  AND runtime_staged_generation = $2
+  AND EXISTS(SELECT 1 FROM dex_lock)
 RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled
 `
 
@@ -335,11 +293,12 @@ func (q *Queries) MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeA
 }
 
 const markDexRuntimeStaged = `-- name: MarkDexRuntimeStaged :one
-UPDATE dex_settings
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)) UPDATE dex_settings
 SET runtime_staged_generation = $2,
     updated_at = now()
 WHERE id = $1
   AND runtime_generation = $2
+  AND EXISTS(SELECT 1 FROM dex_lock)
 RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled
 `
 
@@ -379,16 +338,20 @@ func (q *Queries) MarkDexRuntimeStaged(ctx context.Context, arg MarkDexRuntimeSt
 }
 
 const restoreDexSSOForGeneration = `-- name: RestoreDexSSOForGeneration :one
-UPDATE sso_configurations AS sso
-SET is_enabled = true, updated_at = now()
-WHERE sso.provider = 'dex'
-  AND EXISTS (
-      SELECT 1 FROM dex_settings AS settings
-      WHERE settings.id = $1
-        AND settings.runtime_generation = $2
-        AND settings.saga_previous_sso_enabled = true
-  )
-RETURNING sso.id, sso.provider, sso.is_enabled, sso.display_name, sso.config, sso.client_id, sso.client_secret_encrypted, sso.allowed_organizations, sso.allowed_domains, sso.auto_create_users, sso.default_global_role_id, sso.created_at, sso.updated_at, sso.migrated_to_dex_at
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)), current_generation AS MATERIALIZED (
+ SELECT settings.saga_previous_sso_enabled FROM dex_settings AS settings,dex_lock
+ WHERE settings.id=$1 AND settings.runtime_generation=$2
+ AND settings.runtime_applied_generation=$2 AND settings.runtime_phase IN ('fresh','cutover')
+ FOR UPDATE OF settings
+), enabled AS (
+ UPDATE sso_configurations AS sso SET is_enabled=true,updated_at=now()
+ WHERE sso.provider='dex' AND EXISTS(SELECT 1 FROM current_generation WHERE saga_previous_sso_enabled=true)
+ RETURNING sso.id, sso.provider, sso.is_enabled, sso.display_name, sso.config, sso.client_id, sso.client_secret_encrypted, sso.allowed_organizations, sso.allowed_domains, sso.auto_create_users, sso.default_global_role_id, sso.created_at, sso.updated_at, sso.migrated_to_dex_at
+), cleared AS (
+ UPDATE dex_settings SET saga_previous_sso_enabled=false,updated_at=now()
+ WHERE id=$1 AND runtime_generation=$2 AND EXISTS(SELECT 1 FROM enabled) RETURNING 1
+)
+SELECT enabled.id, enabled.provider, enabled.is_enabled, enabled.display_name, enabled.config, enabled.client_id, enabled.client_secret_encrypted, enabled.allowed_organizations, enabled.allowed_domains, enabled.auto_create_users, enabled.default_global_role_id, enabled.created_at, enabled.updated_at, enabled.migrated_to_dex_at FROM enabled WHERE (SELECT count(*) FROM cleared)>0
 `
 
 type RestoreDexSSOForGenerationParams struct {
@@ -396,9 +359,26 @@ type RestoreDexSSOForGenerationParams struct {
 	RuntimeGeneration int64     `json:"runtime_generation"`
 }
 
-func (q *Queries) RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (SsoConfiguration, error) {
+type RestoreDexSSOForGenerationRow struct {
+	ID                    uuid.UUID          `json:"id"`
+	Provider              string             `json:"provider"`
+	IsEnabled             bool               `json:"is_enabled"`
+	DisplayName           string             `json:"display_name"`
+	Config                json.RawMessage    `json:"config"`
+	ClientID              string             `json:"client_id"`
+	ClientSecretEncrypted string             `json:"client_secret_encrypted"`
+	AllowedOrganizations  json.RawMessage    `json:"allowed_organizations"`
+	AllowedDomains        json.RawMessage    `json:"allowed_domains"`
+	AutoCreateUsers       bool               `json:"auto_create_users"`
+	DefaultGlobalRoleID   pgtype.UUID        `json:"default_global_role_id"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	MigratedToDexAt       pgtype.Timestamptz `json:"migrated_to_dex_at"`
+}
+
+func (q *Queries) RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error) {
 	row := q.db.QueryRow(ctx, restoreDexSSOForGeneration, arg.ID, arg.RuntimeGeneration)
-	var i SsoConfiguration
+	var i RestoreDexSSOForGenerationRow
 	err := row.Scan(
 		&i.ID,
 		&i.Provider,
@@ -418,15 +398,105 @@ func (q *Queries) RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDex
 	return i, err
 }
 
+const stageCreateDexConnector = `-- name: StageCreateDexConnector :one
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
+locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
+previous_sso AS MATERIALIZED (
+ SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
+), connector AS (
+ INSERT INTO dex_connectors (name,type,display_name,config,enabled)
+ SELECT $1,$2,$3,$4,$5 FROM locked_settings RETURNING id, name, type, display_name, config, enabled, created_at, updated_at
+), staged AS (
+ UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
+ FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
+), disabled AS (
+ UPDATE sso_configurations SET is_enabled=false,updated_at=now() WHERE provider='dex' AND is_enabled=true AND EXISTS(SELECT 1 FROM staged) RETURNING 1
+)
+SELECT connector.id, connector.name, connector.type, connector.display_name, connector.config, connector.enabled, connector.created_at, connector.updated_at,staged.runtime_generation FROM connector CROSS JOIN staged WHERE (SELECT count(*) FROM disabled)>=0
+`
+
+type StageCreateDexConnectorParams struct {
+	Name        string          `json:"name"`
+	Type        string          `json:"type"`
+	DisplayName string          `json:"display_name"`
+	Config      json.RawMessage `json:"config"`
+	Enabled     bool            `json:"enabled"`
+}
+
+type StageCreateDexConnectorRow struct {
+	ID                uuid.UUID       `json:"id"`
+	Name              string          `json:"name"`
+	Type              string          `json:"type"`
+	DisplayName       string          `json:"display_name"`
+	Config            json.RawMessage `json:"config"`
+	Enabled           bool            `json:"enabled"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	RuntimeGeneration int64           `json:"runtime_generation"`
+}
+
+// All logical connector mutations stage a new runtime generation and disable
+// SSO under the same transaction-scoped advisory lock used by activation.
+func (q *Queries) StageCreateDexConnector(ctx context.Context, arg StageCreateDexConnectorParams) (StageCreateDexConnectorRow, error) {
+	row := q.db.QueryRow(ctx, stageCreateDexConnector,
+		arg.Name,
+		arg.Type,
+		arg.DisplayName,
+		arg.Config,
+		arg.Enabled,
+	)
+	var i StageCreateDexConnectorRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.DisplayName,
+		&i.Config,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuntimeGeneration,
+	)
+	return i, err
+}
+
+const stageDeleteDexConnector = `-- name: StageDeleteDexConnector :one
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
+locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
+previous_sso AS MATERIALIZED (
+ SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
+), deleted AS (
+ DELETE FROM dex_connectors WHERE dex_connectors.id=$1 AND EXISTS(SELECT 1 FROM locked_settings) RETURNING dex_connectors.id
+), staged AS (
+ UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
+ FROM previous_sso,deleted WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
+), disabled AS (
+ UPDATE sso_configurations SET is_enabled=false,updated_at=now() WHERE provider='dex' AND is_enabled=true AND EXISTS(SELECT 1 FROM staged) RETURNING 1
+)
+SELECT runtime_generation FROM staged WHERE (SELECT count(*) FROM disabled)>=0
+`
+
+func (q *Queries) StageDeleteDexConnector(ctx context.Context, connectorID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, stageDeleteDexConnector, connectorID)
+	var runtime_generation int64
+	err := row.Scan(&runtime_generation)
+	return runtime_generation, err
+}
+
 const stageDexSettingsAndDisableSSO = `-- name: StageDexSettingsAndDisableSSO :one
-WITH previous_sso AS MATERIALIZED (
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
+locked_settings AS MATERIALIZED (
+	SELECT current_settings.saga_previous_sso_enabled FROM dex_settings AS current_settings, dex_lock
+	WHERE current_settings.id=$1 FOR UPDATE OF current_settings
+), locked_sso AS MATERIALIZED (
+	SELECT current_sso.is_enabled FROM sso_configurations AS current_sso, dex_lock
+	WHERE current_sso.provider='dex' FOR UPDATE OF current_sso
+), previous_sso AS MATERIALIZED (
 	SELECT
-		COALESCE((SELECT is_enabled FROM sso_configurations WHERE provider = 'dex'), false)
-		OR COALESCE((
-			SELECT saga_previous_sso_enabled
-			FROM dex_settings AS current_settings
-			WHERE current_settings.id = $1
-		), false) AS was_enabled
+		COALESCE((SELECT is_enabled FROM locked_sso), false)
+		OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings), false) AS was_enabled FROM dex_lock
 ), staged AS (
     INSERT INTO dex_settings (
         id, issuer_url, cluster_id, namespace, release_name, configmap_name,
@@ -515,34 +585,53 @@ func (q *Queries) StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDe
 	return runtime_generation, err
 }
 
-const updateDexConnector = `-- name: UpdateDexConnector :one
-UPDATE dex_connectors SET
-    type         = $2,
-    display_name = $3,
-    config       = $4,
-    enabled      = $5,
-    updated_at   = now()
-WHERE id = $1
-RETURNING id, name, type, display_name, config, enabled, created_at, updated_at
+const stageUpdateDexConnector = `-- name: StageUpdateDexConnector :one
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)),
+locked_settings AS MATERIALIZED (SELECT saga_previous_sso_enabled FROM dex_settings,dex_lock WHERE id='00000000-0000-0000-0000-000000000001'::uuid FOR UPDATE OF dex_settings),
+locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock WHERE provider='dex' FOR UPDATE OF sso_configurations),
+previous_sso AS MATERIALIZED (
+ SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
+), connector AS (
+ UPDATE dex_connectors SET type=$1,display_name=$2,config=$3,enabled=$4,updated_at=now()
+ WHERE dex_connectors.id=$5 AND EXISTS(SELECT 1 FROM locked_settings) RETURNING dex_connectors.id, dex_connectors.name, dex_connectors.type, dex_connectors.display_name, dex_connectors.config, dex_connectors.enabled, dex_connectors.created_at, dex_connectors.updated_at
+), staged AS (
+ UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
+ FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
+), disabled AS (
+ UPDATE sso_configurations SET is_enabled=false,updated_at=now() WHERE provider='dex' AND is_enabled=true AND EXISTS(SELECT 1 FROM staged) RETURNING 1
+)
+SELECT connector.id, connector.name, connector.type, connector.display_name, connector.config, connector.enabled, connector.created_at, connector.updated_at,staged.runtime_generation FROM connector CROSS JOIN staged WHERE (SELECT count(*) FROM disabled)>=0
 `
 
-type UpdateDexConnectorParams struct {
-	ID          uuid.UUID       `json:"id"`
+type StageUpdateDexConnectorParams struct {
 	Type        string          `json:"type"`
 	DisplayName string          `json:"display_name"`
 	Config      json.RawMessage `json:"config"`
 	Enabled     bool            `json:"enabled"`
+	ConnectorID uuid.UUID       `json:"connector_id"`
 }
 
-func (q *Queries) UpdateDexConnector(ctx context.Context, arg UpdateDexConnectorParams) (DexConnector, error) {
-	row := q.db.QueryRow(ctx, updateDexConnector,
-		arg.ID,
+type StageUpdateDexConnectorRow struct {
+	ID                uuid.UUID       `json:"id"`
+	Name              string          `json:"name"`
+	Type              string          `json:"type"`
+	DisplayName       string          `json:"display_name"`
+	Config            json.RawMessage `json:"config"`
+	Enabled           bool            `json:"enabled"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	RuntimeGeneration int64           `json:"runtime_generation"`
+}
+
+func (q *Queries) StageUpdateDexConnector(ctx context.Context, arg StageUpdateDexConnectorParams) (StageUpdateDexConnectorRow, error) {
+	row := q.db.QueryRow(ctx, stageUpdateDexConnector,
 		arg.Type,
 		arg.DisplayName,
 		arg.Config,
 		arg.Enabled,
+		arg.ConnectorID,
 	)
-	var i DexConnector
+	var i StageUpdateDexConnectorRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -552,6 +641,7 @@ func (q *Queries) UpdateDexConnector(ctx context.Context, arg UpdateDexConnector
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RuntimeGeneration,
 	)
 	return i, err
 }

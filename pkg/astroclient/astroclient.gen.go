@@ -41161,6 +41161,13 @@ type PostApiV1AuthDexApplyResponse struct {
 			Staged                *bool                                     `json:"staged,omitempty"`
 		} `json:"data"`
 	}
+	JSON202 *struct {
+		Data struct {
+			Applied      *bool   `json:"applied,omitempty"`
+			RuntimeState *string `json:"runtime_state,omitempty"`
+			Staged       *bool   `json:"staged,omitempty"`
+		} `json:"data"`
+	}
 	JSON400 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
 	JSON502 *ErrorEnvelope
@@ -41351,8 +41358,12 @@ type PostApiV1AuthDexRegisterAsSsoResponse struct {
 	JSON201 *struct {
 		Data DexRegisterSSOResult `json:"data"`
 	}
+	JSON202 *struct {
+		Data DexRegisterSSOResult `json:"data"`
+	}
 	JSON400 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
+	JSON502 *ErrorEnvelope
 	JSON503 *ErrorEnvelope
 }
 
@@ -59260,6 +59271,19 @@ func ParsePostApiV1AuthDexApplyResponse(rsp *http.Response) (*PostApiV1AuthDexAp
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data struct {
+				Applied      *bool   `json:"applied,omitempty"`
+				RuntimeState *string `json:"runtime_state,omitempty"`
+				Staged       *bool   `json:"staged,omitempty"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -59579,6 +59603,15 @@ func ParsePostApiV1AuthDexRegisterAsSsoResponse(rsp *http.Response) (*PostApiV1A
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data DexRegisterSSOResult `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -59592,6 +59625,13 @@ func ParsePostApiV1AuthDexRegisterAsSsoResponse(rsp *http.Response) (*PostApiV1A
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ErrorEnvelope

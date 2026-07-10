@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
@@ -193,13 +194,13 @@ func (f *fakeDexQuerier) ListEnabledDexConnectors(_ context.Context) ([]sqlc.Dex
 	return out, nil
 }
 
-func (f *fakeDexQuerier) CreateDexConnector(_ context.Context, arg sqlc.CreateDexConnectorParams) (sqlc.DexConnector, error) {
+func (f *fakeDexQuerier) StageCreateDexConnector(_ context.Context, arg sqlc.StageCreateDexConnectorParams) (sqlc.StageCreateDexConnectorRow, error) {
 	if f.createErr != nil {
-		return sqlc.DexConnector{}, f.createErr
+		return sqlc.StageCreateDexConnectorRow{}, f.createErr
 	}
 	for _, existing := range f.connectors {
 		if existing.Name == arg.Name {
-			return sqlc.DexConnector{}, errors.New("duplicate key value violates unique constraint")
+			return sqlc.StageCreateDexConnectorRow{}, errors.New("duplicate key value violates unique constraint")
 		}
 	}
 	row := sqlc.DexConnector{
@@ -213,26 +214,55 @@ func (f *fakeDexQuerier) CreateDexConnector(_ context.Context, arg sqlc.CreateDe
 		UpdatedAt:   time.Now().UTC(),
 	}
 	f.connectors[row.ID] = row
-	return row, nil
+	generation, err := f.stageConnectorMutation()
+	if err != nil {
+		delete(f.connectors, row.ID)
+	}
+	return sqlc.StageCreateDexConnectorRow{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: row.Config, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, RuntimeGeneration: generation}, err
 }
 
-func (f *fakeDexQuerier) UpdateDexConnector(_ context.Context, arg sqlc.UpdateDexConnectorParams) (sqlc.DexConnector, error) {
-	row, ok := f.connectors[arg.ID]
+func (f *fakeDexQuerier) StageUpdateDexConnector(_ context.Context, arg sqlc.StageUpdateDexConnectorParams) (sqlc.StageUpdateDexConnectorRow, error) {
+	row, ok := f.connectors[arg.ConnectorID]
 	if !ok {
-		return sqlc.DexConnector{}, errors.New("not found")
+		return sqlc.StageUpdateDexConnectorRow{}, errors.New("not found")
 	}
 	row.Type = arg.Type
 	row.DisplayName = arg.DisplayName
 	row.Config = arg.Config
 	row.Enabled = arg.Enabled
 	row.UpdatedAt = time.Now().UTC()
-	f.connectors[arg.ID] = row
-	return row, nil
+	previous := f.connectors[arg.ConnectorID]
+	f.connectors[arg.ConnectorID] = row
+	generation, err := f.stageConnectorMutation()
+	if err != nil {
+		f.connectors[arg.ConnectorID] = previous
+	}
+	return sqlc.StageUpdateDexConnectorRow{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: row.Config, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, RuntimeGeneration: generation}, err
 }
 
-func (f *fakeDexQuerier) DeleteDexConnector(_ context.Context, id uuid.UUID) error {
+func (f *fakeDexQuerier) StageDeleteDexConnector(_ context.Context, id uuid.UUID) (int64, error) {
+	previous, existed := f.connectors[id]
 	delete(f.connectors, id)
-	return nil
+	generation, err := f.stageConnectorMutation()
+	if err != nil && existed {
+		f.connectors[id] = previous
+	}
+	return generation, err
+}
+
+func (f *fakeDexQuerier) stageConnectorMutation() (int64, error) {
+	if f.settings == nil {
+		return 0, errors.New("Dex settings required")
+	}
+	previous := f.settings.SagaPreviousSsoEnabled
+	if sso, ok := f.ssoByProv["dex"]; ok {
+		previous = previous || sso.IsEnabled
+		sso.IsEnabled = false
+		f.ssoByProv["dex"] = sso
+	}
+	f.settings.RuntimeGeneration++
+	f.settings.SagaPreviousSsoEnabled = previous
+	return f.settings.RuntimeGeneration, nil
 }
 
 func (f *fakeDexQuerier) GetDexSettings(_ context.Context, id uuid.UUID) (sqlc.DexSetting, error) {
@@ -301,17 +331,21 @@ func (f *fakeDexQuerier) MarkDexRuntimeStaged(_ context.Context, arg sqlc.MarkDe
 	return *f.settings, nil
 }
 
-func (f *fakeDexQuerier) RestoreDexSSOForGeneration(_ context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.SsoConfiguration, error) {
-	if f.settings == nil || f.settings.ID != arg.ID || f.settings.RuntimeGeneration != arg.RuntimeGeneration || !f.settings.SagaPreviousSsoEnabled {
-		return sqlc.SsoConfiguration{}, errors.New("stale generation")
+func (f *fakeDexQuerier) RestoreDexSSOForGeneration(_ context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.RestoreDexSSOForGenerationRow, error) {
+	if f.settings == nil || f.settings.ID != arg.ID || f.settings.RuntimeGeneration != arg.RuntimeGeneration || f.settings.RuntimeAppliedGeneration != arg.RuntimeGeneration || f.settings.RuntimePhase == "prepare" {
+		return sqlc.RestoreDexSSOForGenerationRow{}, errors.New("stale generation")
+	}
+	if !f.settings.SagaPreviousSsoEnabled {
+		return sqlc.RestoreDexSSOForGenerationRow{}, pgx.ErrNoRows
 	}
 	row, ok := f.ssoByProv["dex"]
 	if !ok {
-		return sqlc.SsoConfiguration{}, errors.New("not found")
+		return sqlc.RestoreDexSSOForGenerationRow{}, errors.New("not found")
 	}
 	row.IsEnabled = true
 	f.ssoByProv["dex"] = row
-	return row, nil
+	f.settings.SagaPreviousSsoEnabled = false
+	return sqlc.RestoreDexSSOForGenerationRow{ID: row.ID, Provider: row.Provider, IsEnabled: row.IsEnabled, DisplayName: row.DisplayName, Config: row.Config, ClientID: row.ClientID, ClientSecretEncrypted: row.ClientSecretEncrypted, AllowedOrganizations: row.AllowedOrganizations, AllowedDomains: row.AllowedDomains, AutoCreateUsers: row.AutoCreateUsers, DefaultGlobalRoleID: row.DefaultGlobalRoleID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, MigratedToDexAt: row.MigratedToDexAt}, nil
 }
 
 func (f *fakeDexQuerier) MarkDexRuntimeApplied(_ context.Context, arg sqlc.MarkDexRuntimeAppliedParams) (sqlc.DexSetting, error) {
@@ -390,9 +424,9 @@ func (f *fakeDexQuerier) UpdateSSOConfiguration(_ context.Context, arg sqlc.Upda
 	return sqlc.SsoConfiguration{}, errors.New("not found")
 }
 
-func (f *fakeDexQuerier) EnableDexSSOForGeneration(_ context.Context, arg sqlc.EnableDexSSOForGenerationParams) (sqlc.SsoConfiguration, error) {
-	if f.settings == nil || f.settings.RuntimeGeneration != arg.RuntimeGeneration || f.settings.RuntimeAppliedGeneration != arg.RuntimeGeneration {
-		return sqlc.SsoConfiguration{}, errors.New("stale generation")
+func (f *fakeDexQuerier) EnableDexSSOForGeneration(_ context.Context, arg sqlc.EnableDexSSOForGenerationParams) (sqlc.EnableDexSSOForGenerationRow, error) {
+	if f.settings == nil || f.settings.RuntimeGeneration != arg.RuntimeGeneration || f.settings.RuntimeAppliedGeneration != arg.RuntimeGeneration || f.settings.RuntimePhase == "prepare" {
+		return sqlc.EnableDexSSOForGenerationRow{}, errors.New("stale generation")
 	}
 	row, exists := f.ssoByProv["dex"]
 	if !exists {
@@ -401,7 +435,8 @@ func (f *fakeDexQuerier) EnableDexSSOForGeneration(_ context.Context, arg sqlc.E
 	row.IsEnabled, row.DisplayName, row.Config, row.ClientID, row.ClientSecretEncrypted = true, arg.DisplayName, arg.Config, arg.ClientID, arg.ClientSecretEncrypted
 	row.UpdatedAt = time.Now().UTC()
 	f.ssoByProv["dex"] = row
-	return row, nil
+	f.settings.SagaPreviousSsoEnabled = false
+	return sqlc.EnableDexSSOForGenerationRow{ID: row.ID, Provider: row.Provider, IsEnabled: row.IsEnabled, DisplayName: row.DisplayName, Config: row.Config, ClientID: row.ClientID, ClientSecretEncrypted: row.ClientSecretEncrypted, AllowedOrganizations: row.AllowedOrganizations, AllowedDomains: row.AllowedDomains, AutoCreateUsers: row.AutoCreateUsers, DefaultGlobalRoleID: row.DefaultGlobalRoleID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, MigratedToDexAt: row.MigratedToDexAt}, nil
 }
 
 func (f *fakeDexQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
@@ -1028,6 +1063,7 @@ func TestApply_503WhenNoK8sRequester(t *testing.T) {
 
 func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh"}
 	keyStr, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(keyStr)
 	h := NewDexHandler(q)
@@ -1100,6 +1136,7 @@ func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 
 func TestDexConnectorUpdateAndDeleteAreAudited(t *testing.T) {
 	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh"}
 	h := NewDexHandler(q)
 	connectorID := uuid.New()
 	cfg, _ := json.Marshal(map[string]any{
@@ -1155,6 +1192,42 @@ func TestDexConnectorUpdateAndDeleteAreAudited(t *testing.T) {
 		t.Fatalf("connector delete audit target=(%q,%q), want (%q,azure-prod)", deleteAudit.ResourceID, deleteAudit.ResourceName, connectorID.String())
 	}
 	assertAuditDetail(t, deleteAudit.Detail, "type", "microsoft")
+}
+
+func TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO(t *testing.T) {
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex", ReleaseName: "dex", DeploymentName: "dex", ServiceName: "dex", RuntimeSecretName: "runtime", RuntimePhase: "fresh", RuntimeGeneration: 1, RuntimeAppliedGeneration: 1, RuntimeStagedGeneration: 1, ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
+	q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", IsEnabled: true}
+	config := json.RawMessage(`{"ssoURL":"https://idp.example.com/saml","entityIssuer":"urn:example:idp"}`)
+	staged, err := q.StageCreateDexConnector(context.Background(), sqlc.StageCreateDexConnectorParams{Name: "saml", Type: "saml", Config: config, Enabled: true})
+	if err != nil || staged.RuntimeGeneration != 2 || q.ssoByProv["dex"].IsEnabled {
+		t.Fatalf("staged=%#v err=%v sso=%#v", staged, err, q.ssoByProv["dex"])
+	}
+	h := NewDexHandler(q)
+	configureVerifiedDexRuntime(t, q, h)
+	recorder := httptest.NewRecorder()
+	h.Apply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil))
+	if recorder.Code != http.StatusOK || !q.ssoByProv["dex"].IsEnabled || q.settings.RuntimeAppliedGeneration != 2 {
+		t.Fatalf("status=%d body=%s settings=%#v sso=%#v", recorder.Code, recorder.Body.String(), q.settings, q.ssoByProv["dex"])
+	}
+}
+
+func TestConnectorMutationFailureAndManualDisableRemainFailClosed(t *testing.T) {
+	q := newFakeDexQuerier()
+	if _, err := q.StageCreateDexConnector(context.Background(), sqlc.StageCreateDexConnectorParams{Name: "no-settings", Type: "saml", Config: json.RawMessage(`{}`), Enabled: true}); err == nil || len(q.connectors) != 0 {
+		t.Fatalf("failed atomic create persisted connector: err=%v connectors=%#v", err, q.connectors)
+	}
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh", RuntimeAppliedGeneration: 1}
+	q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", IsEnabled: false}
+	staged, err := q.StageCreateDexConnector(context.Background(), sqlc.StageCreateDexConnectorParams{Name: "manual-disabled", Type: "saml", Config: json.RawMessage(`{}`), Enabled: true})
+	if err != nil || q.settings.SagaPreviousSsoEnabled {
+		t.Fatalf("manual disable provenance changed: staged=%#v err=%v settings=%#v", staged, err, q.settings)
+	}
+	q.settings.RuntimeStagedGeneration = staged.RuntimeGeneration
+	q.settings.RuntimeAppliedGeneration = staged.RuntimeGeneration
+	if _, err := q.RestoreDexSSOForGeneration(context.Background(), sqlc.RestoreDexSSOForGenerationParams{ID: dexSettingsSingletonID, RuntimeGeneration: staged.RuntimeGeneration}); !errors.Is(err, pgx.ErrNoRows) || q.ssoByProv["dex"].IsEnabled {
+		t.Fatalf("manual disable was restored: err=%v sso=%#v", err, q.ssoByProv["dex"])
+	}
 }
 
 func TestCreateConnector_400OnMissingRequired(t *testing.T) {
@@ -1640,6 +1713,8 @@ func TestDexSagaAtomicFailureAndABRestorationTimeline(t *testing.T) {
 		if _, err := q.RestoreDexSSOForGeneration(context.Background(), sqlc.RestoreDexSSOForGenerationParams{ID: base.ID, RuntimeGeneration: generationA}); err == nil || q.ssoByProv["dex"].IsEnabled {
 			t.Fatal("stale A re-enabled SSO")
 		}
+		q.settings.RuntimeAppliedGeneration = generationB
+		q.settings.RuntimePhase = "fresh"
 		if _, err := q.RestoreDexSSOForGeneration(context.Background(), sqlc.RestoreDexSSOForGenerationParams{ID: base.ID, RuntimeGeneration: generationB}); err != nil || !q.ssoByProv["dex"].IsEnabled {
 			t.Fatalf("current B could not restore inherited state: %v", err)
 		}

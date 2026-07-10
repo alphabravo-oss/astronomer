@@ -282,7 +282,6 @@ type Querier interface {
 	CreateDashboardWidget(ctx context.Context, arg CreateDashboardWidgetParams) (DashboardWidget, error)
 	// Deferred operations --------------------------------------------------
 	CreateDeferredOperation(ctx context.Context, arg CreateDeferredOperationParams) (DeferredOperation, error)
-	CreateDexConnector(ctx context.Context, arg CreateDexConnectorParams) (DexConnector, error)
 	// Fleet operations (migration 056). Backs:
 	//   * /api/v1/fleet-operations/*       — CRUD + lifecycle endpoints
 	//   * fleet:orchestrate worker         — periodic, idempotent dispatcher
@@ -475,7 +474,6 @@ type Querier interface {
 	DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDashboardWidget(ctx context.Context, id uuid.UUID) error
 	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
 	// Retention sweep, runs daily. Returns the row count so the task can
 	// emit a "rows deleted" log line for the operator.
 	DeleteEmailsOlderThan(ctx context.Context, createdAt time.Time) (int64, error)
@@ -590,7 +588,7 @@ type Querier interface {
 	// The generation predicate is evaluated in the same statement that enables
 	// the provider. A stale reconcile can therefore never win a check-then-write
 	// race against a newer settings/register mutation.
-	EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (SsoConfiguration, error)
+	EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (EnableDexSSOForGenerationRow, error)
 	// Bus-tap insert. Called once per (forwarder, event) pair that matched
 	// at least one filter glob. The dispatcher picks rows up in batch
 	// order via the (forwarder_id, id) index.
@@ -1724,7 +1722,7 @@ type Querier interface {
 	// failed-attempt cycle starts from a clean state.
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
-	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (SsoConfiguration, error)
+	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
 	// Admin-triggered re-dispatch. Resets the row so the next dispatcher
 	// tick picks it up immediately, regardless of where it was in the
 	// backoff schedule.
@@ -1788,10 +1786,15 @@ type Querier interface {
 	SetPlatformDefaultClusterTemplate(ctx context.Context, defaultClusterTemplateID pgtype.UUID) (PlatformConfiguration, error)
 	SetProjectDefaultVaultConnection(ctx context.Context, arg SetProjectDefaultVaultConnectionParams) error
 	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
+	// All logical connector mutations stage a new runtime generation and disable
+	// SSO under the same transaction-scoped advisory lock used by activation.
+	StageCreateDexConnector(ctx context.Context, arg StageCreateDexConnectorParams) (StageCreateDexConnectorRow, error)
+	StageDeleteDexConnector(ctx context.Context, connectorID uuid.UUID) (int64, error)
 	// The previous SSO state, new settings generation, and fail-closed provider
 	// disablement are one PostgreSQL statement. No process-local pre-snapshot can
 	// race a concurrent stage.
 	StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDexSettingsAndDisableSSOParams) (int64, error)
+	StageUpdateDexConnector(ctx context.Context, arg StageUpdateDexConnectorParams) (StageUpdateDexConnectorRow, error)
 	// Stamped on a hard sync failure (clone error, walk error, etc).
 	StampGitOpsSourceError(ctx context.Context, arg StampGitOpsSourceErrorParams) error
 	// Called by the sync worker after every successful tick. Clearing
@@ -1902,7 +1905,6 @@ type Querier interface {
 	// rather keep them in Go where the validator lives.
 	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
 	UpdateDashboardWidget(ctx context.Context, arg UpdateDashboardWidgetParams) (DashboardWidget, error)
-	UpdateDexConnector(ctx context.Context, arg UpdateDexConnectorParams) (DexConnector, error)
 	// Bulk counter refresh. The orchestrator recomputes the aggregate
 	// counts from fleet_operation_targets when it observes a target
 	// transition, then writes them back here so the read endpoints

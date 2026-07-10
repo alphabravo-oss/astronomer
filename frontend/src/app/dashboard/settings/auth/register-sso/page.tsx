@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * /dashboard/settings/auth/register-sso/ — one-click "wire Dex as our SSO".
@@ -14,19 +14,27 @@
  *     Dex; if you flip the client to public, leave blank)
  *   - Display name (text on the login button)
  */
-import { useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
-import { useDexSettings, useRegisterDexAsSSO } from '@/components/auth/hooks';
+import { useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import {
+  isDexRuntimeApplied,
+  useDexSettings,
+  useRegisterDexAsSSO,
+} from "@/components/auth/hooks";
 
 export default function RegisterAsSSOPage() {
   const { data: settings } = useDexSettings();
   const registerMutation = useRegisterDexAsSSO();
 
-  const [clientId, setClientId] = useState('astronomer');
-  const [clientSecret, setClientSecret] = useState('');
-  const [displayName, setDisplayName] = useState('Sign in with Dex');
-  const [success, setSuccess] = useState<{ provider: string; issuerUrl: string } | null>(null);
+  const [clientId, setClientId] = useState("astronomer");
+  const [clientSecret, setClientSecret] = useState("");
+  const [displayName, setDisplayName] = useState("Sign in with Dex");
+  const [success, setSuccess] = useState<{
+    provider: string;
+    issuerUrl: string;
+  } | null>(null);
+  const [staged, setStaged] = useState(false);
 
   useEffect(() => {
     if (success) return; // don't snap state back after a successful submit
@@ -45,8 +53,14 @@ export default function RegisterAsSSOPage() {
         client_secret: clientSecret || undefined,
         display_name: displayName,
       });
+      if (!isDexRuntimeApplied(res)) {
+        setStaged(true);
+        return;
+      }
       if (!res.verified || !res.secretResourceVersion) {
-        throw new Error('Dex rollout verification was not returned by the server');
+        throw new Error(
+          "Dex rollout verification was not returned by the server",
+        );
       }
       setSuccess({ provider: res.provider, issuerUrl: res.issuerUrl });
     } catch {
@@ -74,9 +88,10 @@ export default function RegisterAsSSOPage() {
           Register Dex as the platform&apos;s SSO provider
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Astronomer&apos;s OIDC SSO manager (Phase A1) will treat Dex like any other
-          upstream OIDC IdP. After this, your login screen shows the &ldquo;{displayName}&rdquo; button
-          and Dex handles the upstream IdP fan-out.
+          Astronomer&apos;s OIDC SSO manager (Phase A1) will treat Dex like any
+          other upstream OIDC IdP. After this, your login screen shows the
+          &ldquo;{displayName}&rdquo; button and Dex handles the upstream IdP
+          fan-out.
         </p>
       </div>
 
@@ -86,8 +101,8 @@ export default function RegisterAsSSOPage() {
           <div className="text-xs text-status-warning/90 space-y-1">
             <p className="font-medium">Issuer URL not set.</p>
             <p>
-              Configure Dex settings before registering it as SSO — the SSO row needs to
-              know where to discover OIDC metadata.
+              Configure Dex settings before registering it as SSO — the SSO row
+              needs to know where to discover OIDC metadata.
             </p>
             <Link
               href="/dashboard/settings/auth/settings"
@@ -100,20 +115,43 @@ export default function RegisterAsSSOPage() {
         </div>
       )}
 
+      {staged && (
+        <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-4 text-sm text-status-warning space-y-2">
+          <p className="font-medium">
+            Runtime Secret staged; SSO remains disabled.
+          </p>
+          <p>
+            Complete the chart cutover, apply the current generation, then retry
+            registration. Verification is reported only after the Secret-mounted
+            Deployment is healthy.
+          </p>
+          <Link
+            href="/dashboard/settings/auth/settings"
+            className="underline hover:no-underline"
+          >
+            Open Dex Settings
+          </Link>
+        </div>
+      )}
+
       {success ? (
         <div className="rounded-xl border border-status-success/40 bg-status-success/5 p-5 space-y-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-status-success" />
-            <p className="text-sm font-semibold text-foreground">Dex is now your SSO provider.</p>
+            <p className="text-sm font-semibold text-foreground">
+              Dex is now your SSO provider.
+            </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            The <span className="font-mono text-xs">{success.provider}</span> row in
-            <span className="font-mono text-xs"> sso_configurations</span> is enabled and
-            pointed at <span className="font-mono text-xs">{success.issuerUrl}</span>.
+            The <span className="font-mono text-xs">{success.provider}</span>{" "}
+            row in
+            <span className="font-mono text-xs"> sso_configurations</span> is
+            enabled and pointed at{" "}
+            <span className="font-mono text-xs">{success.issuerUrl}</span>.
           </p>
           <p className="text-sm text-muted-foreground">
-            Now try logging out and back in — you should see the &ldquo;{displayName}&rdquo;
-            button on the login screen.
+            Now try logging out and back in — you should see the &ldquo;
+            {displayName}&rdquo; button on the login screen.
           </p>
           <div className="flex items-center gap-2 pt-2">
             <Link
@@ -134,7 +172,11 @@ export default function RegisterAsSSOPage() {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-          <FieldRow label="Dex client ID" required helper="Defaults to `astronomer`. Must match a `staticClients[*].id` configured in Dex.">
+          <FieldRow
+            label="Dex client ID"
+            required
+            helper="Defaults to `astronomer`. Must match a `staticClients[*].id` configured in Dex."
+          >
             <input
               type="text"
               value={clientId}
@@ -158,7 +200,10 @@ export default function RegisterAsSSOPage() {
             />
           </FieldRow>
 
-          <FieldRow label="Display name" helper="Shown on the platform's login button.">
+          <FieldRow
+            label="Display name"
+            helper="Shown on the platform's login button."
+          >
             <input
               type="text"
               value={displayName}
@@ -170,13 +215,17 @@ export default function RegisterAsSSOPage() {
 
           <div className="rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground space-y-1">
             <p>
-              <span className="font-medium text-foreground">Heads up:</span> the client
-              secret you enter here is encrypted at rest. To actually let users in, the
-              same secret must be present in Dex&apos;s <span className="font-mono">staticClients</span> config —
-              configure it under{' '}
-              <Link href="/dashboard/settings/auth/settings" className="underline hover:no-underline">
+              <span className="font-medium text-foreground">Heads up:</span> the
+              client secret you enter here is encrypted at rest. To actually let
+              users in, the same secret must be present in Dex&apos;s{" "}
+              <span className="font-mono">staticClients</span> config —
+              configure it under{" "}
+              <Link
+                href="/dashboard/settings/auth/settings"
+                className="underline hover:no-underline"
+              >
                 Dex Settings
-              </Link>{' '}
+              </Link>{" "}
               and Apply.
             </p>
           </div>
@@ -192,11 +241,17 @@ export default function RegisterAsSSOPage() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={registerMutation.isPending || !issuerConfigured || !clientId.trim()}
+              disabled={
+                registerMutation.isPending ||
+                !issuerConfigured ||
+                !clientId.trim()
+              }
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
                 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {registerMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {registerMutation.isPending && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              )}
               Register
             </button>
           </div>
@@ -207,7 +262,7 @@ export default function RegisterAsSSOPage() {
 }
 
 const inputCls =
-  'w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+  "w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 function FieldRow({
   label,

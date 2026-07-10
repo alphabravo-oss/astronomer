@@ -37,6 +37,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
@@ -59,14 +60,14 @@ type DexQuerier interface {
 	GetDexConnectorByName(ctx context.Context, name string) (sqlc.DexConnector, error)
 	ListDexConnectors(ctx context.Context) ([]sqlc.DexConnector, error)
 	ListEnabledDexConnectors(ctx context.Context) ([]sqlc.DexConnector, error)
-	CreateDexConnector(ctx context.Context, arg sqlc.CreateDexConnectorParams) (sqlc.DexConnector, error)
-	UpdateDexConnector(ctx context.Context, arg sqlc.UpdateDexConnectorParams) (sqlc.DexConnector, error)
-	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
+	StageCreateDexConnector(ctx context.Context, arg sqlc.StageCreateDexConnectorParams) (sqlc.StageCreateDexConnectorRow, error)
+	StageUpdateDexConnector(ctx context.Context, arg sqlc.StageUpdateDexConnectorParams) (sqlc.StageUpdateDexConnectorRow, error)
+	StageDeleteDexConnector(ctx context.Context, connectorID uuid.UUID) (int64, error)
 
 	GetDexSettings(ctx context.Context, id uuid.UUID) (sqlc.DexSetting, error)
 	GetDexSettingsForGeneration(ctx context.Context, arg sqlc.GetDexSettingsForGenerationParams) (sqlc.DexSetting, error)
 	StageDexSettingsAndDisableSSO(ctx context.Context, arg sqlc.StageDexSettingsAndDisableSSOParams) (int64, error)
-	RestoreDexSSOForGeneration(ctx context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.SsoConfiguration, error)
+	RestoreDexSSOForGeneration(ctx context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.RestoreDexSSOForGenerationRow, error)
 	MarkDexRuntimeStaged(ctx context.Context, arg sqlc.MarkDexRuntimeStagedParams) (sqlc.DexSetting, error)
 	MarkDexRuntimeApplied(ctx context.Context, arg sqlc.MarkDexRuntimeAppliedParams) (sqlc.DexSetting, error)
 	BackfillDexPublicClientsEnvelope(ctx context.Context, arg sqlc.BackfillDexPublicClientsEnvelopeParams) (sqlc.DexSetting, error)
@@ -76,7 +77,7 @@ type DexQuerier interface {
 	GetSSOConfigurationByProvider(ctx context.Context, provider string) (sqlc.SsoConfiguration, error)
 	CreateSSOConfiguration(ctx context.Context, arg sqlc.CreateSSOConfigurationParams) (sqlc.SsoConfiguration, error)
 	UpdateSSOConfiguration(ctx context.Context, arg sqlc.UpdateSSOConfigurationParams) (sqlc.SsoConfiguration, error)
-	EnableDexSSOForGeneration(ctx context.Context, arg sqlc.EnableDexSSOForGenerationParams) (sqlc.SsoConfiguration, error)
+	EnableDexSSOForGeneration(ctx context.Context, arg sqlc.EnableDexSSOForGenerationParams) (sqlc.EnableDexSSOForGenerationRow, error)
 }
 
 // DexHandler exposes /api/v1/auth/dex/* endpoints.
@@ -520,7 +521,7 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	row, err := h.queries.CreateDexConnector(r.Context(), sqlc.CreateDexConnectorParams{
+	staged, err := h.queries.StageCreateDexConnector(r.Context(), sqlc.StageCreateDexConnectorParams{
 		Name:        req.Name,
 		Type:        req.Type,
 		DisplayName: req.DisplayName,
@@ -535,6 +536,7 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create connector")
 		return
 	}
+	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
 	recordAudit(r, h.queries, "dex.connector.create", "dex_connector", row.ID.String(), row.Name, map[string]any{
 		"type":    row.Type,
 		"enabled": row.Enabled,
@@ -609,8 +611,8 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		cfgBytes = raw
 	}
-	row, err := h.queries.UpdateDexConnector(r.Context(), sqlc.UpdateDexConnectorParams{
-		ID:          id,
+	staged, err := h.queries.StageUpdateDexConnector(r.Context(), sqlc.StageUpdateDexConnectorParams{
+		ConnectorID: id,
 		Type:        connectorType,
 		DisplayName: displayName,
 		Config:      cfgBytes,
@@ -620,6 +622,7 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update connector")
 		return
 	}
+	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
 	recordAudit(r, h.queries, "dex.connector.update", "dex_connector", row.ID.String(), row.Name, map[string]any{
 		"type":    row.Type,
 		"enabled": row.Enabled,
@@ -644,7 +647,7 @@ func (h *DexHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
 		return
 	}
-	if err := h.queries.DeleteDexConnector(r.Context(), id); err != nil {
+	if _, err := h.queries.StageDeleteDexConnector(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete connector")
 		return
 	}
@@ -908,6 +911,12 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, redaction.String(err.Error()))
 		return
 	}
+	if result.Applied {
+		if _, restoreErr := h.queries.RestoreDexSSOForGeneration(r.Context(), sqlc.RestoreDexSSOForGenerationParams{ID: settings.ID, RuntimeGeneration: settings.RuntimeGeneration}); restoreErr != nil && !errors.Is(restoreErr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Dex runtime applied but prior SSO state could not be restored")
+			return
+		}
+	}
 	recordAudit(r, h.queries, "dex.config.apply", "dex_settings", settings.ID.String(), settings.ReleaseName, map[string]any{
 		"cluster_id":          clusterID,
 		"namespace":           settings.Namespace,
@@ -920,7 +929,11 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		"staged":              result.Staged,
 		"applied":             result.Applied,
 	})
-	RespondJSON(w, http.StatusOK, map[string]any{
+	status := http.StatusOK
+	if result.Staged && !result.Applied {
+		status = http.StatusAccepted
+	}
+	RespondJSON(w, status, map[string]any{
 		"applied":                 result.Applied,
 		"staged":                  result.Staged,
 		"runtime_state":           result.State,

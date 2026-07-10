@@ -30,10 +30,10 @@ func TestMigration136DexSagaPhaseAndAtomicSQLContract(t *testing.T) {
 	}
 	q := strings.ToLower(string(query))
 	for _, required := range []string{
-		"stagedexsettingsanddisablesso", "with previous_sso as materialized",
+		"stagedexsettingsanddisablesso", "previous_sso as materialized",
 		"saga_previous_sso_enabled = excluded.saga_previous_sso_enabled",
 		"runtime_generation = dex_settings.runtime_generation + 1",
-		"restoredexssoforgeneration", "settings.runtime_generation = sqlc.arg(runtime_generation)",
+		"restoredexssoforgeneration", "settings.runtime_generation=sqlc.arg(runtime_generation)",
 		"markdexruntimestaged", "markdexruntimeapplied",
 	} {
 		if !strings.Contains(q, required) {

@@ -2,11 +2,27 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
+
+func TestDexConnectorCiphertextRotationDoesNotStageLogicalRuntime(t *testing.T) {
+	source, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if !strings.Contains(text, "UPDATE dex_connectors SET config = $1::jsonb") || strings.Contains(text, "UPDATE dex_connectors SET runtime_generation") {
+		t.Fatal("Dex connector key rotation is not a ciphertext-only CAS")
+	}
+	migration, err := os.ReadFile("../../internal/db/migrations/137_dex_advisory_lock_connector_lifecycle.up.sql")
+	if err != nil || !strings.Contains(string(migration), "DROP TRIGGER IF EXISTS dex_connectors_runtime_generation") {
+		t.Fatalf("generic runtime trigger would take keyrotate offline: %v", err)
+	}
+}
 
 // TEST-04 / CORR-04: shipped SQL builders for batch SELECT + CAS UPDATE.
 func TestSelectBatchSQL_HonorsLimitOffsetPlaceholders(t *testing.T) {

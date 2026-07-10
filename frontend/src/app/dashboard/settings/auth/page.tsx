@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * /dashboard/settings/auth/ — overview page.
@@ -12,9 +12,9 @@
  *   3. Register-as-SSO callout — only after at least one connector exists,
  *      because there's no point flipping the SSO row on without an upstream.
  */
-import { useState } from 'react';
-import { Link } from '@/lib/link';
-import { useRouter } from '@/lib/navigation';
+import { useState } from "react";
+import { Link } from "@/lib/link";
+import { useRouter } from "@/lib/navigation";
 import {
   Plus,
   ShieldCheck,
@@ -24,23 +24,24 @@ import {
   Pencil,
   ArrowRight,
   KeyRound,
-} from 'lucide-react';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ActionMenu } from '@/components/ui/action-menu';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+} from "lucide-react";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   useDexConnectors,
   useDeleteDexConnector,
   useApplyDexConfig,
   useDexSettings,
-} from '@/components/auth/hooks';
-import { getConnectorMeta } from '@/components/auth/connector-meta';
-import type { DexConnector } from '@/types';
+} from "@/components/auth/hooks";
+import { getConnectorMeta } from "@/components/auth/connector-meta";
+import type { DexConnector } from "@/types";
 
 export default function AuthOverviewPage() {
   const router = useRouter();
-  const { data: connectors = [], isLoading: connectorsLoading } = useDexConnectors();
+  const { data: connectors = [], isLoading: connectorsLoading } =
+    useDexConnectors();
   const { data: settings } = useDexSettings();
   const deleteMutation = useDeleteDexConnector();
   const applyMutation = useApplyDexConfig();
@@ -65,62 +66,73 @@ export default function AuthOverviewPage() {
 
   const columns: Column<DexConnector>[] = [
     {
-      key: 'type',
-      header: 'Type',
+      key: "type",
+      header: "Type",
       accessor: (row) => {
         const meta = getConnectorMeta(row.type);
         const Icon = meta.icon;
         return (
           <div className="flex items-center gap-2">
             <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <span className="text-sm text-foreground">{meta.label || row.type}</span>
+            <span className="text-sm text-foreground">
+              {meta.label || row.type}
+            </span>
           </div>
         );
       },
       sortAccessor: (row) => row.type,
     },
     {
-      key: 'name',
-      header: 'Name',
-      accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{row.name}</span>,
+      key: "name",
+      header: "Name",
+      accessor: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.name}
+        </span>
+      ),
       sortAccessor: (row) => row.name,
     },
     {
-      key: 'displayName',
-      header: 'Display Name',
-      accessor: (row) => <span className="text-sm text-foreground">{row.displayName || '—'}</span>,
+      key: "displayName",
+      header: "Display Name",
+      accessor: (row) => (
+        <span className="text-sm text-foreground">
+          {row.displayName || "—"}
+        </span>
+      ),
       sortAccessor: (row) => row.displayName,
     },
     {
-      key: 'status',
-      header: 'Status',
+      key: "status",
+      header: "Status",
       accessor: (row) => (
         <StatusBadge
-          status={row.enabled ? 'active' : 'disconnected'}
-          label={row.enabled ? 'Enabled' : 'Disabled'}
+          status={row.enabled ? "active" : "disconnected"}
+          label={row.enabled ? "Enabled" : "Disabled"}
           size="sm"
         />
       ),
-      sortAccessor: (row) => (row.enabled ? '1' : '0'),
+      sortAccessor: (row) => (row.enabled ? "1" : "0"),
     },
     {
-      key: 'actions',
-      header: '',
+      key: "actions",
+      header: "",
       sortable: false,
-      align: 'center',
+      align: "center",
       accessor: (row) => (
         <ActionMenu
           items={[
             {
-              label: 'Edit',
+              label: "Edit",
               icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () => router.push(`/dashboard/settings/auth/connectors/${row.id}`),
+              onClick: () =>
+                router.push(`/dashboard/settings/auth/connectors/${row.id}`),
             },
             {
-              label: 'Delete',
+              label: "Delete",
               icon: <Trash2 className="h-3.5 w-3.5" />,
               onClick: () => setDeleteTarget(row),
-              variant: 'destructive',
+              variant: "destructive",
               separator: true,
             },
           ]}
@@ -131,6 +143,13 @@ export default function AuthOverviewPage() {
 
   return (
     <div className="space-y-6">
+      {settings?.runtimePhase === "prepare" && (
+        <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm text-status-warning">
+          Dex is in prepare: Apply stages and validates the retained Secret
+          without rolling the Deployment. Review and sync the cutover revision
+          before registration can be verified.
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -141,9 +160,9 @@ export default function AuthOverviewPage() {
             Identity Broker
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Astronomer brokers enterprise IdPs through Dex. Configure upstream connectors
-            (Azure AD, Okta, LDAP, SAML, …) here; once applied, register Dex as the
-            platform's SSO provider with one click.
+            Astronomer brokers enterprise IdPs through Dex. Configure upstream
+            connectors (Azure AD, Okta, LDAP, SAML, …) here; once applied,
+            register Dex as the platform's SSO provider with one click.
           </p>
         </div>
         {connectors.length > 0 && (
@@ -170,7 +189,9 @@ export default function AuthOverviewPage() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Configured Connectors</h2>
+            <h2 className="text-base font-semibold text-foreground">
+              Configured Connectors
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               Each row becomes a `connectors` entry in the rendered Dex config.
             </p>
@@ -184,7 +205,9 @@ export default function AuthOverviewPage() {
                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
               title="Reconcile the retained runtime Secret and roll Dex when changed"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${applyMutation.isPending ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${applyMutation.isPending ? "animate-spin" : ""}`}
+              />
               Apply to Dex
             </button>
             <Link
@@ -219,7 +242,9 @@ export default function AuthOverviewPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Dex Settings</p>
-            <p className="text-xs text-muted-foreground">Issuer URL, public clients, token expiry.</p>
+            <p className="text-xs text-muted-foreground">
+              Issuer URL, public clients, token expiry.
+            </p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
         </Link>
@@ -231,8 +256,12 @@ export default function AuthOverviewPage() {
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Register as SSO</p>
-            <p className="text-xs text-muted-foreground">Wire Dex as the platform's OIDC SSO provider.</p>
+            <p className="text-sm font-medium text-foreground">
+              Register as SSO
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Wire Dex as the platform's OIDC SSO provider.
+            </p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
         </Link>
@@ -244,8 +273,12 @@ export default function AuthOverviewPage() {
             <KeyRound className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">SCIM Provisioning Tokens</p>
-            <p className="text-xs text-muted-foreground">Mint / revoke bearer tokens for IdP SCIM 2.0 sync.</p>
+            <p className="text-sm font-medium text-foreground">
+              SCIM Provisioning Tokens
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Mint / revoke bearer tokens for IdP SCIM 2.0 sync.
+            </p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
         </Link>
@@ -288,15 +321,23 @@ function DexInstallCard({
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-semibold text-foreground">Dex</p>
               <StatusBadge
-                status={installed ? 'active' : loading ? 'connecting' : 'disconnected'}
-                label={installed ? 'Configured' : loading ? 'Checking…' : 'Not configured'}
+                status={
+                  installed ? "active" : loading ? "connecting" : "disconnected"
+                }
+                label={
+                  installed
+                    ? "Configured"
+                    : loading
+                      ? "Checking…"
+                      : "Not configured"
+                }
                 size="sm"
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {installed
-                ? `Bundled runtime configured${clusterName ? ` on ${clusterName}` : ''}.`
-                : 'Enable bundled Dex in the management Helm chart, then bind its settings here.'}
+                ? `Bundled runtime configured${clusterName ? ` on ${clusterName}` : ""}.`
+                : "Enable bundled Dex in the management Helm chart, then bind its settings here."}
             </p>
             {issuerUrl && (
               <p className="text-2xs font-mono text-muted-foreground mt-1.5 truncate">

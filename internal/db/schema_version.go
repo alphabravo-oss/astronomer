@@ -16,7 +16,7 @@ import (
 // It MUST equal max(internal/db/migrations/*.up.sql). TestExpectedSchemaVersionMatchesMigrations
 // (schema_version_test.go) fails the build when a new migration is added without
 // bumping this constant, so it can't silently drift.
-const ExpectedSchemaVersion int64 = 136
+const ExpectedSchemaVersion int64 = 137
 
 // SchemaVersion returns the currently-applied golang-migrate schema version
 // (the highest row in schema_migrations) along with that row's dirty flag. It

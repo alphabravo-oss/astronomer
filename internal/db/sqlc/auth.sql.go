@@ -149,21 +149,24 @@ func (q *Queries) DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) erro
 }
 
 const enableDexSSOForGeneration = `-- name: EnableDexSSOForGeneration :one
-WITH current_generation AS (
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)), current_generation AS MATERIALIZED (
     SELECT 1
-    FROM dex_settings
-    WHERE id = '00000000-0000-0000-0000-000000000001'::uuid
-      AND runtime_generation = $5
-      AND runtime_applied_generation = $5
-)
+    FROM dex_settings AS settings
+    WHERE settings.id = '00000000-0000-0000-0000-000000000001'::uuid
+      AND settings.runtime_generation = $1
+      AND settings.runtime_applied_generation = $1
+      AND settings.runtime_phase IN ('fresh','cutover')
+      AND EXISTS(SELECT 1 FROM dex_lock)
+	FOR UPDATE OF settings
+), enabled AS (
 INSERT INTO sso_configurations (
     provider, is_enabled, display_name, config, client_id,
     client_secret_encrypted, allowed_organizations, allowed_domains,
     auto_create_users
 )
 SELECT
-    'dex', true, $1, $2, $3,
-    $4, '[]'::jsonb, '[]'::jsonb, true
+    'dex', true, $2, $3, $4,
+    $5, '[]'::jsonb, '[]'::jsonb, true
 FROM current_generation
 ON CONFLICT (provider) DO UPDATE SET
     is_enabled = true,
@@ -173,28 +176,51 @@ ON CONFLICT (provider) DO UPDATE SET
     client_secret_encrypted = EXCLUDED.client_secret_encrypted
 WHERE EXISTS (SELECT 1 FROM current_generation)
 RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
+), cleared AS (
+ UPDATE dex_settings SET saga_previous_sso_enabled=false,updated_at=now()
+ WHERE id='00000000-0000-0000-0000-000000000001'::uuid
+ AND runtime_generation=$1 AND EXISTS(SELECT 1 FROM enabled) RETURNING 1
+)
+SELECT enabled.id, enabled.provider, enabled.is_enabled, enabled.display_name, enabled.config, enabled.client_id, enabled.client_secret_encrypted, enabled.allowed_organizations, enabled.allowed_domains, enabled.auto_create_users, enabled.default_global_role_id, enabled.created_at, enabled.updated_at, enabled.migrated_to_dex_at FROM enabled WHERE (SELECT count(*) FROM cleared)>0
 `
 
 type EnableDexSSOForGenerationParams struct {
+	RuntimeGeneration     int64           `json:"runtime_generation"`
 	DisplayName           string          `json:"display_name"`
 	Config                json.RawMessage `json:"config"`
 	ClientID              string          `json:"client_id"`
 	ClientSecretEncrypted string          `json:"client_secret_encrypted"`
-	RuntimeGeneration     int64           `json:"runtime_generation"`
+}
+
+type EnableDexSSOForGenerationRow struct {
+	ID                    uuid.UUID          `json:"id"`
+	Provider              string             `json:"provider"`
+	IsEnabled             bool               `json:"is_enabled"`
+	DisplayName           string             `json:"display_name"`
+	Config                json.RawMessage    `json:"config"`
+	ClientID              string             `json:"client_id"`
+	ClientSecretEncrypted string             `json:"client_secret_encrypted"`
+	AllowedOrganizations  json.RawMessage    `json:"allowed_organizations"`
+	AllowedDomains        json.RawMessage    `json:"allowed_domains"`
+	AutoCreateUsers       bool               `json:"auto_create_users"`
+	DefaultGlobalRoleID   pgtype.UUID        `json:"default_global_role_id"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	MigratedToDexAt       pgtype.Timestamptz `json:"migrated_to_dex_at"`
 }
 
 // The generation predicate is evaluated in the same statement that enables
 // the provider. A stale reconcile can therefore never win a check-then-write
 // race against a newer settings/register mutation.
-func (q *Queries) EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (SsoConfiguration, error) {
+func (q *Queries) EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (EnableDexSSOForGenerationRow, error) {
 	row := q.db.QueryRow(ctx, enableDexSSOForGeneration,
+		arg.RuntimeGeneration,
 		arg.DisplayName,
 		arg.Config,
 		arg.ClientID,
 		arg.ClientSecretEncrypted,
-		arg.RuntimeGeneration,
 	)
-	var i SsoConfiguration
+	var i EnableDexSSOForGenerationRow
 	err := row.Scan(
 		&i.ID,
 		&i.Provider,

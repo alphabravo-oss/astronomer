@@ -81,6 +81,11 @@ enablement checks the current and applied values in the same SQL statement.
 A settings or connector mutation captures the prior Dex SSO state, advances the
 generation, and disables Dex SSO atomically. Restoration is also generation-CAS
 guarded, so a stale request can never re-enable SSO after a newer stage begins.
+Every stage, logical connector mutation, activation, and restoration uses the
+same PostgreSQL transaction-scoped advisory lock. Activation rechecks the
+locked settings row after waiting, requires the current generation to be fully
+applied outside `prepare`, and clears restoration provenance on success. A
+later operator-initiated manual disable therefore remains disabled.
 A stale or crashed request can therefore be retried, but it cannot overwrite a
 newer Secret generation or enable an older client credential pair. Generations
 are counters only and are never hashes of credential-bearing content.
@@ -104,6 +109,11 @@ Legacy Helm values such as `dex.clientSecret` and `dex.clientSecretRef` are
 rejected. Before upgrade, rotate any credential that appeared in Helm values and
 remove credential-bearing historical release Secrets according to the platform
 retention policy; rendering it unused does not erase Helm's stored values.
+
+`keyrotate` is deliberately not a logical connector mutation. It CAS-rewrites
+only encrypted JSONB values in `dex_connectors.config`; migration 137 removes
+the generic connector trigger so ciphertext maintenance neither advances
+`runtime_generation` nor disables a healthy SSO provider.
 
 ## Fresh install
 

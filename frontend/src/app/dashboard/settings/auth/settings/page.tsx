@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * /dashboard/settings/auth/settings/ — singleton Dex settings.
@@ -13,13 +13,17 @@
  *      block. We store the raw map verbatim so any future Dex fields land
  *      without a code change here.
  */
-import { useEffect, useState } from 'react';
-import { Link } from '@/lib/link';
-import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
-import { useClusters } from '@/lib/hooks';
-import { useDexSettings, useUpdateDexSettings, useApplyDexConfig } from '@/components/auth/hooks';
-import type { DexPublicClient } from '@/types';
-import { cn } from '@/lib/utils';
+import { useEffect, useState } from "react";
+import { Link } from "@/lib/link";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { useClusters } from "@/lib/hooks";
+import {
+  useDexSettings,
+  useUpdateDexSettings,
+  useApplyDexConfig,
+} from "@/components/auth/hooks";
+import type { DexPublicClient } from "@/types";
+import { cn } from "@/lib/utils";
 
 export default function DexSettingsPage() {
   const { data: settings, isLoading } = useDexSettings();
@@ -31,31 +35,42 @@ export default function DexSettingsPage() {
 
   // Track form state separately from the query so unsaved edits don't snap
   // back when the cache refetches.
-  const [issuer, setIssuer] = useState('');
-  const [clusterId, setClusterId] = useState('');
-  const [namespace, setNamespace] = useState('dex');
-  const [releaseName, setReleaseName] = useState('dex');
-  const [runtimeSecretName, setRuntimeSecretName] = useState('astronomer-dex-runtime');
+  const [issuer, setIssuer] = useState("");
+  const [clusterId, setClusterId] = useState("");
+  const [namespace, setNamespace] = useState("dex");
+  const [releaseName, setReleaseName] = useState("dex");
+  const [runtimeSecretName, setRuntimeSecretName] = useState(
+    "astronomer-dex-runtime",
+  );
   const [publicClients, setPublicClients] = useState<DexPublicClient[]>([]);
-  const [idTokenExpiry, setIdTokenExpiry] = useState<string>('24h');
-  const [refreshTokenExpiry, setRefreshTokenExpiry] = useState<string>('2160h');
-  const [refreshIdle, setRefreshIdle] = useState<string>('');
+  const [idTokenExpiry, setIdTokenExpiry] = useState<string>("24h");
+  const [refreshTokenExpiry, setRefreshTokenExpiry] = useState<string>("2160h");
+  const [refreshIdle, setRefreshIdle] = useState<string>("");
 
   useEffect(() => {
     if (!settings) return;
     setIssuer(settings.issuerUrl);
-    setClusterId(settings.clusterId || '');
-    setNamespace(settings.namespace || 'dex');
-    setReleaseName(settings.releaseName || 'dex');
-    setRuntimeSecretName(settings.runtimeSecretName || 'astronomer-dex-runtime');
-    setPublicClients(Array.isArray(settings.publicClients) ? settings.publicClients : []);
+    setClusterId(settings.clusterId || "");
+    setNamespace(settings.namespace || "dex");
+    setReleaseName(settings.releaseName || "dex");
+    setRuntimeSecretName(
+      settings.runtimeSecretName || "astronomer-dex-runtime",
+    );
+    setPublicClients(
+      Array.isArray(settings.publicClients) ? settings.publicClients : [],
+    );
     const expiry = (settings.expiry || {}) as Record<string, unknown>;
-    if (typeof expiry.idTokens === 'string') setIdTokenExpiry(expiry.idTokens);
-    if (typeof expiry.refreshTokens === 'object' && expiry.refreshTokens !== null) {
+    if (typeof expiry.idTokens === "string") setIdTokenExpiry(expiry.idTokens);
+    if (
+      typeof expiry.refreshTokens === "object" &&
+      expiry.refreshTokens !== null
+    ) {
       const rt = expiry.refreshTokens as Record<string, unknown>;
-      if (typeof rt.absoluteLifetime === 'string') setRefreshTokenExpiry(rt.absoluteLifetime);
-      if (typeof rt.validIfNotUsedFor === 'string') setRefreshIdle(rt.validIfNotUsedFor);
-    } else if (typeof expiry.refreshTokens === 'string') {
+      if (typeof rt.absoluteLifetime === "string")
+        setRefreshTokenExpiry(rt.absoluteLifetime);
+      if (typeof rt.validIfNotUsedFor === "string")
+        setRefreshIdle(rt.validIfNotUsedFor);
+    } else if (typeof expiry.refreshTokens === "string") {
       setRefreshTokenExpiry(expiry.refreshTokens);
     }
   }, [settings]);
@@ -108,8 +123,8 @@ export default function DexSettingsPage() {
             Dex Top-level Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Issuer URL, public clients, token expiry. Changes are written to the rendered
-            retained runtime Secret on Apply.
+            Issuer URL, public clients, token expiry. Changes are written to the
+            rendered retained runtime Secret on Apply.
           </p>
         </div>
         <button
@@ -119,14 +134,32 @@ export default function DexSettingsPage() {
           className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
-          {applyMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {applyMutation.isPending && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          )}
           Apply to Dex
         </button>
       </div>
 
+      {applyMutation.data?.staged && !applyMutation.data.applied && (
+        <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm text-status-warning">
+          Runtime Secret generation{" "}
+          {applyMutation.data.runtimeGeneration ?? "current"} is staged. Keep
+          Dex on the legacy ConfigMap during prepare, commit the cutover phase,
+          then apply again to verify the Deployment and restore eligible SSO.
+        </div>
+      )}
+
       {/* Section: Identity */}
-      <Section title="Identity" description="Where Dex lives and what it calls itself.">
-        <FieldRow label="Issuer URL" required helper="Must match the URL the OIDC RP redirects to.">
+      <Section
+        title="Identity"
+        description="Where Dex lives and what it calls itself."
+      >
+        <FieldRow
+          label="Issuer URL"
+          required
+          helper="Must match the URL the OIDC RP redirects to."
+        >
           <input
             type="text"
             value={issuer}
@@ -135,7 +168,10 @@ export default function DexSettingsPage() {
             className={inputCls}
           />
         </FieldRow>
-        <FieldRow label="Target cluster" helper="Where the runtime Secret is updated on Apply.">
+        <FieldRow
+          label="Target cluster"
+          helper="Where the runtime Secret is updated on Apply."
+        >
           <select
             value={clusterId}
             onChange={(e) => setClusterId(e.target.value)}
@@ -185,8 +221,8 @@ export default function DexSettingsPage() {
         <div className="space-y-3">
           {publicClients.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No clients configured. Add one to allow OIDC RPs (Astronomer, Argo CD, etc.) to
-              authenticate.
+              No clients configured. Add one to allow OIDC RPs (Astronomer, Argo
+              CD, etc.) to authenticate.
             </p>
           ) : (
             publicClients.map((client, i) => (
@@ -194,7 +230,9 @@ export default function DexSettingsPage() {
                 key={i}
                 value={client}
                 onChange={(next) => {
-                  setPublicClients((prev) => prev.map((c, idx) => (idx === i ? next : c)));
+                  setPublicClients((prev) =>
+                    prev.map((c, idx) => (idx === i ? next : c)),
+                  );
                 }}
                 onRemove={() =>
                   setPublicClients((prev) => prev.filter((_, idx) => idx !== i))
@@ -207,7 +245,7 @@ export default function DexSettingsPage() {
             onClick={() =>
               setPublicClients((prev) => [
                 ...prev,
-                { id: '', name: '', redirectURIs: [], public: false },
+                { id: "", name: "", redirectURIs: [], public: false },
               ])
             }
             className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-dashed border-border text-sm
@@ -220,7 +258,10 @@ export default function DexSettingsPage() {
       </Section>
 
       {/* Section: Token expiry */}
-      <Section title="Token expiry" description="Forwarded into Dex's `expiry` block as-is.">
+      <Section
+        title="Token expiry"
+        description="Forwarded into Dex's `expiry` block as-is."
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FieldRow label="ID token" helper="e.g. 24h">
             <input
@@ -260,7 +301,9 @@ export default function DexSettingsPage() {
           className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
             text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
         >
-          {updateMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {updateMutation.isPending && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          )}
           Save settings
         </button>
       </div>
@@ -273,7 +316,7 @@ export default function DexSettingsPage() {
 // ============================================================
 
 const inputCls =
-  'w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+  "w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 function Section({
   title,
@@ -288,7 +331,9 @@ function Section({
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
       <div>
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+        {description && (
+          <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        )}
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -327,12 +372,12 @@ function PublicClientEditor({
   onChange: (next: DexPublicClient) => void;
   onRemove: () => void;
 }) {
-  const redirects = (value.redirectURIs ?? []).join(', ');
+  const redirects = (value.redirectURIs ?? []).join(", ");
   return (
     <div className="rounded-lg border border-border bg-background p-3 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-foreground">
-          {value.id ? value.id : 'New client'}{' '}
+          {value.id ? value.id : "New client"}{" "}
           {value.public && (
             <span className="ml-1 text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
               public
@@ -361,7 +406,7 @@ function PublicClientEditor({
         <FieldRow label="Display name">
           <input
             type="text"
-            value={value.name ?? ''}
+            value={value.name ?? ""}
             onChange={(e) => onChange({ ...value, name: e.target.value })}
             placeholder="Astronomer"
             className={inputCls}
@@ -376,7 +421,7 @@ function PublicClientEditor({
             onChange({
               ...value,
               redirectURIs: e.target.value
-                .split(',')
+                .split(",")
                 .map((s) => s.trim())
                 .filter(Boolean),
             })
@@ -388,15 +433,22 @@ function PublicClientEditor({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <FieldRow
           label="Client secret"
-          helper={value.public ? 'Not used for public clients' : 'Required for confidential clients'}
+          helper={
+            value.public
+              ? "Not used for public clients"
+              : "Required for confidential clients"
+          }
         >
           <input
             type="password"
-            value={value.secret ?? ''}
+            value={value.secret ?? ""}
             onChange={(e) => onChange({ ...value, secret: e.target.value })}
-            placeholder={value.public ? '—' : '••••••••'}
+            placeholder={value.public ? "—" : "••••••••"}
             disabled={!!value.public}
-            className={cn(inputCls, value.public && 'opacity-50 cursor-not-allowed')}
+            className={cn(
+              inputCls,
+              value.public && "opacity-50 cursor-not-allowed",
+            )}
           />
         </FieldRow>
         <FieldRow label="Public client?">
@@ -405,19 +457,19 @@ function PublicClientEditor({
               type="button"
               onClick={() => onChange({ ...value, public: !value.public })}
               className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                value.public ? 'bg-status-success' : 'bg-muted'
+                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                value.public ? "bg-status-success" : "bg-muted",
               )}
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                  value.public ? 'translate-x-6' : 'translate-x-1'
+                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                  value.public ? "translate-x-6" : "translate-x-1",
                 )}
               />
             </button>
             <span className="text-xs text-muted-foreground">
-              {value.public ? 'Yes — no client secret' : 'No — confidential'}
+              {value.public ? "Yes — no client secret" : "No — confidential"}
             </span>
           </label>
         </FieldRow>

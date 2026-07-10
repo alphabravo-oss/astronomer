@@ -138,13 +138,16 @@ RETURNING *;
 -- The generation predicate is evaluated in the same statement that enables
 -- the provider. A stale reconcile can therefore never win a check-then-write
 -- race against a newer settings/register mutation.
-WITH current_generation AS (
+WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931)), current_generation AS MATERIALIZED (
     SELECT 1
-    FROM dex_settings
-    WHERE id = '00000000-0000-0000-0000-000000000001'::uuid
-      AND runtime_generation = sqlc.arg(runtime_generation)
-      AND runtime_applied_generation = sqlc.arg(runtime_generation)
-)
+    FROM dex_settings AS settings
+    WHERE settings.id = '00000000-0000-0000-0000-000000000001'::uuid
+      AND settings.runtime_generation = sqlc.arg(runtime_generation)
+      AND settings.runtime_applied_generation = sqlc.arg(runtime_generation)
+      AND settings.runtime_phase IN ('fresh','cutover')
+      AND EXISTS(SELECT 1 FROM dex_lock)
+	FOR UPDATE OF settings
+), enabled AS (
 INSERT INTO sso_configurations (
     provider, is_enabled, display_name, config, client_id,
     client_secret_encrypted, allowed_organizations, allowed_domains,
@@ -161,7 +164,13 @@ ON CONFLICT (provider) DO UPDATE SET
     client_id = EXCLUDED.client_id,
     client_secret_encrypted = EXCLUDED.client_secret_encrypted
 WHERE EXISTS (SELECT 1 FROM current_generation)
-RETURNING *;
+RETURNING *
+), cleared AS (
+ UPDATE dex_settings SET saga_previous_sso_enabled=false,updated_at=now()
+ WHERE id='00000000-0000-0000-0000-000000000001'::uuid
+ AND runtime_generation=sqlc.arg(runtime_generation) AND EXISTS(SELECT 1 FROM enabled) RETURNING 1
+)
+SELECT enabled.* FROM enabled WHERE (SELECT count(*) FROM cleared)>0;
 
 -- name: DeleteSSOConfiguration :exec
 DELETE FROM sso_configurations WHERE id = $1;

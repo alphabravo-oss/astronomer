@@ -15961,6 +15961,20 @@ paths:
                           applied_at:
                             type: string
                             format: date-time
+        '202':
+          description: Prepare phase completed Secret staging; Deployment cutover is intentionally pending.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          applied: { type: boolean, const: false }
+                          staged: { type: boolean, const: true }
+                          runtime_state: { type: string, const: staged }
         '400':
           description: Settings not configured, missing issuer_url, or missing cluster_id.
           content:
@@ -16037,6 +16051,16 @@ paths:
                   - properties:
                       data:
                         $ref: '#/components/schemas/DexRegisterSSOResult'
+        '202':
+          description: Prepare phase staged the runtime Secret; SSO remains disabled until cutover is applied and registration is retried.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/DexRegisterSSOResult'
         '400':
           description: Invalid body or Dex settings not configured.
           content:
@@ -16045,6 +16069,12 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '500':
           description: Encrypt or save failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: Runtime Secret, Deployment rollout, or health verification failed; SSO remains disabled.
           content:
             application/json:
               schema:
