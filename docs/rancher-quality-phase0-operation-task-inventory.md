@@ -10,7 +10,7 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 
 - Worker Go files scanned: 63
 - Handler Go files scanned: 142
-- Production source files scanned: 231
+- Production source files scanned: 232
 - Task constants resolved: 123
 - Worker handler registrations: 66
 - Periodic schedules: 53
@@ -241,7 +241,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `logging` |9 |[`internal/handler/logging.go:351`](internal/handler/logging.go:351)<br>[`internal/handler/logging.go:399`](internal/handler/logging.go:399)<br>[`internal/handler/logging.go:432`](internal/handler/logging.go:432)<br>[`internal/handler/logging.go:467`](internal/handler/logging.go:467) |
 | `monitoring` |12 |[`internal/handler/monitoring.go:531`](internal/handler/monitoring.go:531)<br>[`internal/handler/monitoring.go:567`](internal/handler/monitoring.go:567)<br>[`internal/handler/monitoring.go:602`](internal/handler/monitoring.go:602)<br>[`internal/handler/monitoring.go:658`](internal/handler/monitoring.go:658) |
 | `restore` |1 |[`internal/handler/backups.go:1122`](internal/handler/backups.go:1122) |
-| `tools` |4 |[`internal/handler/tools.go:454`](internal/handler/tools.go:454)<br>[`internal/handler/tools.go:517`](internal/handler/tools.go:517)<br>[`internal/handler/tools.go:577`](internal/handler/tools.go:577)<br>[`internal/handler/tools.go:621`](internal/handler/tools.go:621) |
+| `tools` |4 |[`internal/handler/tools.go:461`](internal/handler/tools.go:461)<br>[`internal/handler/tools.go:524`](internal/handler/tools.go:524)<br>[`internal/handler/tools.go:584`](internal/handler/tools.go:584)<br>[`internal/handler/tools.go:628`](internal/handler/tools.go:628) |
 | `workloads` |3 |[`internal/handler/workloads.go:476`](internal/handler/workloads.go:476)<br>[`internal/handler/workloads.go:497`](internal/handler/workloads.go:497)<br>[`internal/handler/workloads.go:517`](internal/handler/workloads.go:517) |
 
 ## Definition Of Done For Durability Review
