@@ -437,33 +437,30 @@ func collectSelfManagedSecretReferencesAt(values, shape map[string]any, path str
 			return fmt.Errorf("%s is outside the audited values shape", childPath)
 		}
 		lowerKey := strings.ToLower(key)
-		if childPath == "argo-cd.notifications.secret" || childPath == "argo-cd.configs.secret" {
-			secretConfig, ok := value.(map[string]any)
+		if childPath == "argo-cd" {
+			argoValues, ok := value.(map[string]any)
 			if !ok {
-				return fmt.Errorf("%s must be an audited Secret configuration object", childPath)
+				return fmt.Errorf("%s must be an audited values object", childPath)
 			}
-			createKey := "create"
-			if childPath == "argo-cd.configs.secret" {
-				createKey = "createSecret"
+			argoDefaults, ok := shapeValue.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s has no audited default values", childPath)
 			}
-			create, found, err := unstructured.NestedBool(secretConfig, createKey)
+			enabled, err := effectiveSelfManagedChartBool(argoDefaults, argoValues, "enabled")
 			if err != nil {
-				return fmt.Errorf("%s.%s must be boolean", childPath, createKey)
+				return err
 			}
-			if !found {
-				shapeMap, _ := shapeValue.(map[string]any)
-				create, _, _ = unstructured.NestedBool(shapeMap, createKey)
+			if !enabled {
+				continue
 			}
-			if !create {
-				name := "argocd-secret"
-				if childPath == "argo-cd.notifications.secret" {
-					name, _ = secretConfig["name"].(string)
-					if strings.TrimSpace(name) == "" {
-						return fmt.Errorf("%s.name must be non-empty when create=false", childPath)
-					}
-				}
-				names[name] = struct{}{}
+			if err := collectEmbeddedArgoConditionalSecretReferences(argoValues, argoDefaults, names); err != nil {
+				return err
 			}
+		}
+		if embeddedArgoConditionalSecretReferencePath(childPath) {
+			// Resolved once from the effective Argo defaults plus overrides. A
+			// raw key is not necessarily rendered or externally provisioned.
+			continue
 		}
 		if strings.HasSuffix(lowerKey, "secretref") {
 			ref, ok := value.(map[string]any)
@@ -521,6 +518,95 @@ func collectSelfManagedSecretReferencesAt(values, shape map[string]any, path str
 	return nil
 }
 
+func collectEmbeddedArgoConditionalSecretReferences(values, defaults map[string]any, names map[string]struct{}) error {
+	configsCreate, err := effectiveSelfManagedChartBool(defaults, values, "configs", "secret", "createSecret")
+	if err != nil {
+		return err
+	}
+	if !configsCreate {
+		names["argocd-secret"] = struct{}{}
+	}
+
+	notificationsEnabled, err := effectiveSelfManagedChartBool(defaults, values, "notifications", "enabled")
+	if err != nil {
+		return err
+	}
+	notificationsCreate, err := effectiveSelfManagedChartBool(defaults, values, "notifications", "secret", "create")
+	if err != nil {
+		return err
+	}
+	if notificationsEnabled && !notificationsCreate {
+		name, err := effectiveSelfManagedChartString(defaults, values, "notifications", "secret", "name")
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("argo-cd.notifications.secret.name must be non-empty when notifications are enabled and create=false")
+		}
+		names[name] = struct{}{}
+	}
+
+	externalHost, err := effectiveSelfManagedChartString(defaults, values, "externalRedis", "host")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(externalHost) != "" {
+		existing, err := effectiveSelfManagedChartString(defaults, values, "externalRedis", "existingSecret")
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(existing) != "" {
+			names[existing] = struct{}{}
+		}
+		return nil
+	}
+
+	redisHA, err := effectiveSelfManagedChartBool(defaults, values, "redis-ha", "enabled")
+	if err != nil {
+		return err
+	}
+	if redisHA {
+		auth, err := effectiveSelfManagedChartBool(defaults, values, "redis-ha", "auth")
+		if err != nil {
+			return err
+		}
+		if auth {
+			existing, err := effectiveSelfManagedChartString(defaults, values, "redis-ha", "existingSecret")
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(existing) != "" {
+				names[existing] = struct{}{}
+			}
+		}
+		return nil
+	}
+
+	redisEnabled, err := effectiveSelfManagedChartBool(defaults, values, "redis", "enabled")
+	if err != nil {
+		return err
+	}
+	redisSecretInit, err := effectiveSelfManagedChartBool(defaults, values, "redisSecretInit", "enabled")
+	if err != nil {
+		return err
+	}
+	if redisEnabled && !redisSecretInit {
+		names["argocd-redis"] = struct{}{}
+	}
+	return nil
+}
+
+func embeddedArgoConditionalSecretReferencePath(path string) bool {
+	_, conditional := embeddedArgoConditionalSecretReferencePaths[path]
+	return conditional
+}
+
+var embeddedArgoConditionalSecretReferencePaths = map[string]struct{}{
+	"argo-cd.redis-ha.existingSecret":      {},
+	"argo-cd.externalRedis.existingSecret": {},
+	"argo-cd.notifications.secret.name":    {},
+}
+
 func effectiveSelfManagedChartBool(defaults, overrides map[string]any, path ...string) (bool, error) {
 	defaultValue, found, err := unstructured.NestedBool(defaults, path...)
 	if err != nil || !found {
@@ -529,6 +615,21 @@ func effectiveSelfManagedChartBool(defaults, overrides map[string]any, path ...s
 	value, found, err := unstructured.NestedBool(overrides, path...)
 	if err != nil {
 		return false, fmt.Errorf("highest deployed Helm release %s is not a boolean: %w", strings.Join(path, "."), err)
+	}
+	if found {
+		return value, nil
+	}
+	return defaultValue, nil
+}
+
+func effectiveSelfManagedChartString(defaults, overrides map[string]any, path ...string) (string, error) {
+	defaultValue, found, err := unstructured.NestedString(defaults, path...)
+	if err != nil || !found {
+		return "", fmt.Errorf("embedded chart default %s is not a string", strings.Join(path, "."))
+	}
+	value, found, err := unstructured.NestedString(overrides, path...)
+	if err != nil {
+		return "", fmt.Errorf("highest deployed Helm release %s is not a string: %w", strings.Join(path, "."), err)
 	}
 	if found {
 		return value, nil

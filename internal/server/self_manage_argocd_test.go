@@ -926,6 +926,59 @@ func auditedEmbeddedArgoContextualPathClasses() map[string]string {
 	return result
 }
 
+func TestEmbeddedArgoConditionalSecretReferenceTaxonomy(t *testing.T) {
+	shape, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		values map[string]any
+		want   []string
+	}{
+		"standard init disabled": {values: map[string]any{"redisSecretInit": map[string]any{"enabled": false}}, want: []string{"argocd-redis"}},
+		"standard init creates":  {values: map[string]any{"redisSecretInit": map[string]any{"enabled": true}}},
+		"redis ha default":       {values: map[string]any{"redis-ha": map[string]any{"enabled": true}}, want: []string{"argocd-redis"}},
+		"redis ha override":      {values: map[string]any{"redis-ha": map[string]any{"enabled": true, "existingSecret": "custom-ha"}}, want: []string{"custom-ha"}},
+		"redis ha creates":       {values: map[string]any{"redis-ha": map[string]any{"enabled": true, "existingSecret": ""}}},
+		"notifications default":  {values: map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": false}}}, want: []string{"argocd-notifications-secret"}},
+		"notifications override": {values: map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": false, "name": "custom-notifications"}}}, want: []string{"custom-notifications"}},
+		"notifications creates":  {values: map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": true}}}},
+		"notifications disabled": {values: map[string]any{"notifications": map[string]any{"enabled": false, "secret": map[string]any{"create": false}}}},
+		"configs external":       {values: map[string]any{"configs": map[string]any{"secret": map[string]any{"createSecret": false}}}, want: []string{"argocd-secret"}},
+		"configs creates":        {values: map[string]any{"configs": map[string]any{"secret": map[string]any{"createSecret": true}}}},
+		"external redis active":  {values: map[string]any{"externalRedis": map[string]any{"host": "redis.example", "existingSecret": "external-redis"}}, want: []string{"external-redis"}},
+		"external redis unused":  {values: map[string]any{"externalRedis": map[string]any{"existingSecret": "unused-redis"}}},
+		"argo disabled": {values: map[string]any{
+			"enabled":         false,
+			"redisSecretInit": map[string]any{"enabled": false},
+			"configs":         map[string]any{"secret": map[string]any{"createSecret": false}},
+			"notifications":   map[string]any{"secret": map[string]any{"create": false}},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := collectSelfManagedSecretReferences(map[string]any{"argo-cd": tc.values}, shape)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tc.want
+			if want == nil {
+				want = []string{}
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("conditional Secret inventory = %#v, want %#v", got, want)
+			}
+		})
+	}
+	wantConditionalPaths := map[string]struct{}{
+		"argo-cd.redis-ha.existingSecret":      {},
+		"argo-cd.externalRedis.existingSecret": {},
+		"argo-cd.notifications.secret.name":    {},
+	}
+	if !reflect.DeepEqual(embeddedArgoConditionalSecretReferencePaths, wantConditionalPaths) {
+		t.Fatalf("conditional reference paths = %#v, want %#v", embeddedArgoConditionalSecretReferencePaths, wantConditionalPaths)
+	}
+}
+
 func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t *testing.T) {
 	client, _, initial := selfManagedInitialSnapshotTestBuild(t)
 	canonical := initial.ValuesYAML
@@ -1021,43 +1074,61 @@ func TestEmbeddedArgoInlineSecretsFailBeforeApplicationWrite(t *testing.T) {
 
 func TestCollectedSecretEvidenceBlocksInitialAndBoundedWrites(t *testing.T) {
 	for _, mode := range []string{"initial", "bounded"} {
-		_, _, _, names := selfManagedSecretEvidenceTestBuild(t, mode == "bounded")
-		for _, name := range names {
-			for _, mutation := range []string{"mutate", "delete", "replace"} {
-				t.Run(mode+"/"+name+"/"+mutation, func(t *testing.T) {
-					client, dyn, build, _ := selfManagedSecretEvidenceTestBuild(t, mode == "bounded")
-					ctx := context.Background()
-					secret, err := client.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
-					if err != nil {
-						t.Fatal(err)
-					}
-					switch mutation {
-					case "mutate":
-						secret.ResourceVersion = "secret-mutated"
-						secret.Data["tls.crt"] = []byte("changed")
-						_, err = client.CoreV1().Secrets(localAstronomerNamespace).Update(ctx, secret, metav1.UpdateOptions{})
-					case "delete", "replace":
-						err = client.CoreV1().Secrets(localAstronomerNamespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
-						if err == nil && mutation == "replace" {
-							secret.UID = "replacement-secret"
-							secret.ResourceVersion = "secret-replaced"
-							_, err = client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, secret, metav1.CreateOptions{})
+		for _, scenario := range []string{"explicit", "ha-default", "standard-default"} {
+			_, _, _, names := selfManagedSecretEvidenceTestBuild(t, mode == "bounded", scenario)
+			if scenario != "explicit" {
+				names = []string{"argocd-notifications-secret", "argocd-redis", "argocd-secret"}
+			}
+			for _, name := range names {
+				for _, mutation := range []string{"mutate", "delete", "replace"} {
+					t.Run(mode+"/"+scenario+"/"+name+"/"+mutation, func(t *testing.T) {
+						client, dyn, build, _ := selfManagedSecretEvidenceTestBuild(t, mode == "bounded", scenario)
+						ctx := context.Background()
+						secret, err := client.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+						if err != nil {
+							t.Fatal(err)
 						}
-					}
-					if err != nil {
-						t.Fatal(err)
-					}
-					assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
-				})
+						switch mutation {
+						case "mutate":
+							secret.ResourceVersion = "secret-mutated"
+							secret.Data["tls.crt"] = []byte("changed")
+							_, err = client.CoreV1().Secrets(localAstronomerNamespace).Update(ctx, secret, metav1.UpdateOptions{})
+						case "delete", "replace":
+							err = client.CoreV1().Secrets(localAstronomerNamespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+							if err == nil && mutation == "replace" {
+								secret.UID = "replacement-secret"
+								secret.ResourceVersion = "secret-replaced"
+								_, err = client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, secret, metav1.CreateOptions{})
+							}
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+					})
+				}
 			}
 		}
 	}
 }
 
-func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild, []string) {
+func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool, scenario string) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild, []string) {
 	t.Helper()
 	releaseValues := selfManagedBundledIntentReleaseValues()
 	extraNames := applyAllSelfManagedSecretReferenceValues(releaseValues)
+	if scenario != "explicit" {
+		argoValues := map[string]any{
+			"configs":       map[string]any{"secret": map[string]any{"createSecret": false}},
+			"notifications": map[string]any{"secret": map[string]any{"create": false}},
+		}
+		if scenario == "ha-default" {
+			argoValues["redis-ha"] = map[string]any{"enabled": true}
+		} else {
+			argoValues["redisSecretInit"] = map[string]any{"enabled": false}
+		}
+		releaseValues["argo-cd"] = argoValues
+		extraNames = append(selfManagedNonArgoSecretReferenceNames(), "argocd-redis", "argocd-secret", "argocd-notifications-secret")
+	}
 	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
 	for _, name := range extraNames {
 		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: localAstronomerNamespace, UID: types.UID("input-" + name), ResourceVersion: "input-1"}, Data: map[string][]byte{"value": []byte("reference")}})
@@ -1114,12 +1185,15 @@ func applyAllSelfManagedSecretReferenceValues(values map[string]any) []string {
 	values["managementLogging"] = map[string]any{"auth": map[string]any{"bearerSecretRef": map[string]any{"name": "logging-bearer", "key": "token"}}, "splunk": map[string]any{"hecTokenSecretRef": map[string]any{"name": "logging-hec", "key": "hec_token"}}}
 	values["argo-cd"] = map[string]any{
 		"global":        map[string]any{"imagePullSecrets": []any{map[string]any{"name": "argo-global-pull"}}},
-		"redis-ha":      map[string]any{"existingSecret": "argo-redis-ha"},
-		"externalRedis": map[string]any{"existingSecret": "argo-external-redis"},
+		"redis-ha":      map[string]any{"enabled": true, "existingSecret": "argo-redis-ha"},
 		"configs":       map[string]any{"secret": map[string]any{"createSecret": false}},
 		"notifications": map[string]any{"secret": map[string]any{"create": false, "name": "argo-notifications"}},
 	}
-	return []string{"registry-auth", "pg-password", "redis-password", "dex-client", "tls-listener", "additional-ca", "backup-s3", "backup-bundle", "backup-wrap", "restore-wrap", "logging-bearer", "logging-hec", "argo-global-pull", "argo-redis-ha", "argo-external-redis", "argocd-secret", "argo-notifications"}
+	return append(selfManagedNonArgoSecretReferenceNames(), "argo-global-pull", "argo-redis-ha", "argocd-secret", "argo-notifications")
+}
+
+func selfManagedNonArgoSecretReferenceNames() []string {
+	return []string{"registry-auth", "pg-password", "redis-password", "dex-client", "tls-listener", "additional-ca", "backup-s3", "backup-bundle", "backup-wrap", "restore-wrap", "logging-bearer", "logging-hec"}
 }
 
 func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
