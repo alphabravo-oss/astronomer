@@ -119,7 +119,7 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if annotations[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting || hash == "" {
 		t.Fatalf("staged metadata = %#v", annotations)
 	}
-	staged.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.2.1", "prune": false}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	staged.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.2.2", "prune": false}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
 	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if pending.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
 		t.Fatal("approval before acceptance sync activated prune")
 	}
-	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.2.1", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.2.2", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
 	if _, err := resource.Update(ctx, pending, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -183,8 +183,8 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 		t.Fatal(err)
 	}
 	for name, completedOperation := range map[string]map[string]any{
-		"completed prune": {"sync": map[string]any{"revision": "0.2.1", "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
-		"completed force": {"sync": map[string]any{"revision": "0.2.1", "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed prune": {"sync": map[string]any{"revision": "0.2.2", "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed force": {"sync": map[string]any{"revision": "0.2.2", "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -316,7 +316,7 @@ func successfulSelfManagedAcceptanceStatus(t *testing.T, application *unstructur
 	return map[string]any{
 		"sync":           map[string]any{"status": "Synced", "comparedTo": map[string]any{"source": source, "destination": destination}},
 		"health":         map[string]any{"status": "Healthy"},
-		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": "0.2.1", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
+		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": "0.2.2", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
 	}
 }
 
@@ -474,7 +474,7 @@ func TestCurrentReferenceOnlyValuesAuthorizesOnlyStrongOlderRevisionAdoption(t *
 			}
 		})
 	}
-	sameRevision := activeSelfManagedApplicationForRevision(t, "0.2.1", destination)
+	sameRevision := activeSelfManagedApplicationForRevision(t, "0.2.2", destination)
 	source, err = currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), sameRevision), destination)
 	if err != nil || source.AdoptLiveUpgrade || strings.TrimSpace(source.ValuesYAML) == "" {
 		t.Fatalf("same embedded revision was not canonical: source=%#v err=%v", source, err)
@@ -486,7 +486,7 @@ func TestCurrentReferenceOnlyValuesAuthorizesOnlyStrongOlderRevisionAdoption(t *
 	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), awaitingOlder), destination); err == nil || !strings.Contains(err.Error(), "not active") {
 		t.Fatalf("awaiting older revision error = %v", err)
 	}
-	newer := activeSelfManagedApplicationForRevision(t, "0.2.2", destination)
+	newer := activeSelfManagedApplicationForRevision(t, "0.2.3", destination)
 	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), newer), destination); err == nil || !strings.Contains(err.Error(), "downgrade") {
 		t.Fatalf("newer revision error = %v", err)
 	}
