@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	BearerAuthScopes = "bearerAuth.Scopes"
-	BearerJWTScopes  = "bearerJWT.Scopes"
+	ArgoCDClusterProxyTokenScopes = "argoCDClusterProxyToken.Scopes"
+	BearerAuthScopes              = "bearerAuth.Scopes"
+	BearerJWTScopes               = "bearerJWT.Scopes"
 )
 
 // Defines values for AgentFleetItemAgentStatus.
@@ -142,6 +143,19 @@ const (
 	ClusterStatusDisconnected ClusterStatus = "disconnected"
 	ClusterStatusError        ClusterStatus = "error"
 	ClusterStatusPending      ClusterStatus = "pending"
+)
+
+// Defines values for DexRegisterSSOResultRuntimeState.
+const (
+	DexRegisterSSOResultRuntimeStateApplied DexRegisterSSOResultRuntimeState = "applied"
+	DexRegisterSSOResultRuntimeStateStaged  DexRegisterSSOResultRuntimeState = "staged"
+)
+
+// Defines values for DexSettingsRuntimePhase.
+const (
+	DexSettingsRuntimePhaseCutover DexSettingsRuntimePhase = "cutover"
+	DexSettingsRuntimePhaseFresh   DexSettingsRuntimePhase = "fresh"
+	DexSettingsRuntimePhasePrepare DexSettingsRuntimePhase = "prepare"
 )
 
 // Defines values for ExtensionManifestApiVersion.
@@ -1115,10 +1129,11 @@ type DexConnector struct {
 
 // DexConnectorRequest defines model for DexConnectorRequest.
 type DexConnectorRequest struct {
-	Config  *map[string]interface{} `json:"config,omitempty"`
-	Enabled *bool                   `json:"enabled,omitempty"`
-	Name    *string                 `json:"name,omitempty"`
-	Type    *string                 `json:"type,omitempty"`
+	Config      *map[string]interface{} `json:"config,omitempty"`
+	DisplayName *string                 `json:"display_name,omitempty"`
+	Enabled     *bool                   `json:"enabled,omitempty"`
+	Name        *string                 `json:"name,omitempty"`
+	Type        *string                 `json:"type,omitempty"`
 }
 
 // DexConnectorType defines model for DexConnectorType.
@@ -1131,36 +1146,124 @@ type DexConnectorType struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// DexExpiry defines model for DexExpiry.
+type DexExpiry struct {
+	IdTokens      *string `json:"idTokens,omitempty"`
+	RefreshTokens *struct {
+		AbsoluteLifetime  *string `json:"absoluteLifetime,omitempty"`
+		ReuseInterval     *string `json:"reuseInterval,omitempty"`
+		ValidIfNotUsedFor *string `json:"validIfNotUsedFor,omitempty"`
+	} `json:"refreshTokens,omitempty"`
+	SigningKeys *string `json:"signingKeys,omitempty"`
+}
+
+// DexExtra defines model for DexExtra.
+type DexExtra struct {
+	Frontend *struct {
+		Dir     *string `json:"dir,omitempty"`
+		Issuer  *string `json:"issuer,omitempty"`
+		LogoURL *string `json:"logoURL,omitempty"`
+		Theme   *string `json:"theme,omitempty"`
+	} `json:"frontend,omitempty"`
+	Grpc *struct {
+		Addr *string `json:"addr,omitempty"`
+	} `json:"grpc,omitempty"`
+	Logger *struct {
+		Format *string `json:"format,omitempty"`
+		Level  *string `json:"level,omitempty"`
+	} `json:"logger,omitempty"`
+	Telemetry *struct {
+		Http *string `json:"http,omitempty"`
+	} `json:"telemetry,omitempty"`
+}
+
 // DexRegisterSSOResult defines model for DexRegisterSSOResult.
 type DexRegisterSSOResult struct {
-	ClientId             *string                `json:"client_id,omitempty"`
-	CreatedAt            *time.Time             `json:"created_at,omitempty"`
-	DisplayName          *string                `json:"display_name,omitempty"`
-	Id                   *openapi_types.UUID    `json:"id,omitempty"`
-	Provider             *string                `json:"provider,omitempty"`
-	UpdatedAt            *time.Time             `json:"updated_at,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Applied               *bool                             `json:"applied,omitempty"`
+	ClientId              *string                           `json:"client_id,omitempty"`
+	Created               *bool                             `json:"created,omitempty"`
+	DisplayName           *string                           `json:"display_name,omitempty"`
+	Id                    *openapi_types.UUID               `json:"id,omitempty"`
+	IsEnabled             *bool                             `json:"is_enabled,omitempty"`
+	IssuerUrl             *string                           `json:"issuer_url,omitempty"`
+	Provider              *string                           `json:"provider,omitempty"`
+	RuntimeChanged        *bool                             `json:"runtime_changed,omitempty"`
+	RuntimeGeneration     *int64                            `json:"runtime_generation,omitempty"`
+	RuntimeState          *DexRegisterSSOResultRuntimeState `json:"runtime_state,omitempty"`
+	SecretResourceVersion *string                           `json:"secret_resource_version,omitempty"`
+	Staged                *bool                             `json:"staged,omitempty"`
+	Updated               *bool                             `json:"updated,omitempty"`
+	Verified              *bool                             `json:"verified,omitempty"`
 }
+
+// DexRegisterSSOResultRuntimeState defines model for DexRegisterSSOResult.RuntimeState.
+type DexRegisterSSOResultRuntimeState string
 
 // DexSettings defines model for DexSettings.
 type DexSettings struct {
-	ClusterId            *openapi_types.UUID    `json:"cluster_id"`
-	ConfigmapName        *string                `json:"configmap_name,omitempty"`
-	Configured           *bool                  `json:"configured,omitempty"`
-	IssuerUrl            *string                `json:"issuer_url,omitempty"`
-	Namespace            *string                `json:"namespace,omitempty"`
-	ReleaseName          *string                `json:"release_name,omitempty"`
-	UpdatedAt            *time.Time             `json:"updated_at,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
+	ClusterId        *openapi_types.UUID `json:"cluster_id"`
+
+	// ConfigmapName Compatibility alias of runtime_secret_name; never identifies a credential-bearing ConfigMap.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	ConfigmapName  *string    `json:"configmap_name,omitempty"`
+	Configured     *bool      `json:"configured,omitempty"`
+	DeploymentName *string    `json:"deployment_name,omitempty"`
+	Expiry         *DexExpiry `json:"expiry,omitempty"`
+	Extra          *DexExtra  `json:"extra,omitempty"`
+	IssuerUrl      *string    `json:"issuer_url,omitempty"`
+	Namespace      *string    `json:"namespace,omitempty"`
+	PublicClients  *[]struct {
+		Id           *string   `json:"id,omitempty"`
+		Name         *string   `json:"name,omitempty"`
+		Public       *bool     `json:"public,omitempty"`
+		RedirectURIs *[]string `json:"redirectURIs,omitempty"`
+
+		// Secret Always redacted to an empty string on reads.
+		Secret           *string   `json:"secret,omitempty"`
+		SecretConfigured *bool     `json:"secret_configured,omitempty"`
+		TrustedPeers     *[]string `json:"trustedPeers,omitempty"`
+	} `json:"public_clients,omitempty"`
+	ReleaseName              *string                  `json:"release_name,omitempty"`
+	RuntimeAppliedGeneration *int64                   `json:"runtime_applied_generation,omitempty"`
+	RuntimeGeneration        *int64                   `json:"runtime_generation,omitempty"`
+	RuntimePhase             *DexSettingsRuntimePhase `json:"runtime_phase,omitempty"`
+	RuntimeSecretName        *string                  `json:"runtime_secret_name,omitempty"`
+	RuntimeStagedGeneration  *int64                   `json:"runtime_staged_generation,omitempty"`
+	ServiceName              *string                  `json:"service_name,omitempty"`
+	UpdatedAt                *time.Time               `json:"updated_at,omitempty"`
+	AdditionalProperties     map[string]interface{}   `json:"-"`
 }
+
+// DexSettingsRuntimePhase defines model for DexSettings.RuntimePhase.
+type DexSettingsRuntimePhase string
 
 // DexSettingsRequest defines model for DexSettingsRequest.
 type DexSettingsRequest struct {
-	ClusterId     *openapi_types.UUID `json:"cluster_id,omitempty"`
-	ConfigmapName *string             `json:"configmap_name,omitempty"`
-	IssuerUrl     string              `json:"issuer_url"`
-	Namespace     *string             `json:"namespace,omitempty"`
-	ReleaseName   *string             `json:"release_name,omitempty"`
+	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
+	ClusterId        *openapi_types.UUID `json:"cluster_id,omitempty"`
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	ConfigmapName  *string    `json:"configmap_name,omitempty"`
+	DeploymentName *string    `json:"deployment_name,omitempty"`
+	Expiry         *DexExpiry `json:"expiry,omitempty"`
+	Extra          *DexExtra  `json:"extra,omitempty"`
+	IssuerUrl      string     `json:"issuer_url"`
+	Namespace      *string    `json:"namespace,omitempty"`
+	PublicClients  *[]struct {
+		Id           string    `json:"id"`
+		Name         *string   `json:"name,omitempty"`
+		Public       *bool     `json:"public,omitempty"`
+		RedirectURIs *[]string `json:"redirectURIs,omitempty"`
+		Secret       *string   `json:"secret,omitempty"`
+		// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+		SecretConfiguredLegacy *bool `json:"secretConfigured,omitempty"`
+		// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+		SecretConfigured *bool     `json:"secret_configured,omitempty"`
+		TrustedPeers     *[]string `json:"trustedPeers,omitempty"`
+	} `json:"public_clients,omitempty"`
+	ReleaseName       *string `json:"release_name,omitempty"`
+	RuntimeSecretName *string `json:"runtime_secret_name,omitempty"`
+	ServiceName       *string `json:"service_name,omitempty"`
 }
 
 // Error defines model for Error.
@@ -4821,149 +4924,6 @@ func (a DexConnectorType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
-// Getter for additional properties for DexRegisterSSOResult. Returns the specified
-// element and whether it was found
-func (a DexRegisterSSOResult) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for DexRegisterSSOResult
-func (a *DexRegisterSSOResult) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for DexRegisterSSOResult to handle AdditionalProperties
-func (a *DexRegisterSSOResult) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["client_id"]; found {
-		err = json.Unmarshal(raw, &a.ClientId)
-		if err != nil {
-			return fmt.Errorf("error reading 'client_id': %w", err)
-		}
-		delete(object, "client_id")
-	}
-
-	if raw, found := object["created_at"]; found {
-		err = json.Unmarshal(raw, &a.CreatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'created_at': %w", err)
-		}
-		delete(object, "created_at")
-	}
-
-	if raw, found := object["display_name"]; found {
-		err = json.Unmarshal(raw, &a.DisplayName)
-		if err != nil {
-			return fmt.Errorf("error reading 'display_name': %w", err)
-		}
-		delete(object, "display_name")
-	}
-
-	if raw, found := object["id"]; found {
-		err = json.Unmarshal(raw, &a.Id)
-		if err != nil {
-			return fmt.Errorf("error reading 'id': %w", err)
-		}
-		delete(object, "id")
-	}
-
-	if raw, found := object["provider"]; found {
-		err = json.Unmarshal(raw, &a.Provider)
-		if err != nil {
-			return fmt.Errorf("error reading 'provider': %w", err)
-		}
-		delete(object, "provider")
-	}
-
-	if raw, found := object["updated_at"]; found {
-		err = json.Unmarshal(raw, &a.UpdatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'updated_at': %w", err)
-		}
-		delete(object, "updated_at")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for DexRegisterSSOResult to handle AdditionalProperties
-func (a DexRegisterSSOResult) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.ClientId != nil {
-		object["client_id"], err = json.Marshal(a.ClientId)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'client_id': %w", err)
-		}
-	}
-
-	if a.CreatedAt != nil {
-		object["created_at"], err = json.Marshal(a.CreatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
-		}
-	}
-
-	if a.DisplayName != nil {
-		object["display_name"], err = json.Marshal(a.DisplayName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'display_name': %w", err)
-		}
-	}
-
-	if a.Id != nil {
-		object["id"], err = json.Marshal(a.Id)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'id': %w", err)
-		}
-	}
-
-	if a.Provider != nil {
-		object["provider"], err = json.Marshal(a.Provider)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'provider': %w", err)
-		}
-	}
-
-	if a.UpdatedAt != nil {
-		object["updated_at"], err = json.Marshal(a.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
 // Getter for additional properties for DexSettings. Returns the specified
 // element and whether it was found
 func (a DexSettings) Get(fieldName string) (value interface{}, found bool) {
@@ -4987,6 +4947,14 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 	err := json.Unmarshal(b, &object)
 	if err != nil {
 		return err
+	}
+
+	if raw, found := object["chart_release_name"]; found {
+		err = json.Unmarshal(raw, &a.ChartReleaseName)
+		if err != nil {
+			return fmt.Errorf("error reading 'chart_release_name': %w", err)
+		}
+		delete(object, "chart_release_name")
 	}
 
 	if raw, found := object["cluster_id"]; found {
@@ -5013,6 +4981,30 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 		delete(object, "configured")
 	}
 
+	if raw, found := object["deployment_name"]; found {
+		err = json.Unmarshal(raw, &a.DeploymentName)
+		if err != nil {
+			return fmt.Errorf("error reading 'deployment_name': %w", err)
+		}
+		delete(object, "deployment_name")
+	}
+
+	if raw, found := object["expiry"]; found {
+		err = json.Unmarshal(raw, &a.Expiry)
+		if err != nil {
+			return fmt.Errorf("error reading 'expiry': %w", err)
+		}
+		delete(object, "expiry")
+	}
+
+	if raw, found := object["extra"]; found {
+		err = json.Unmarshal(raw, &a.Extra)
+		if err != nil {
+			return fmt.Errorf("error reading 'extra': %w", err)
+		}
+		delete(object, "extra")
+	}
+
 	if raw, found := object["issuer_url"]; found {
 		err = json.Unmarshal(raw, &a.IssuerUrl)
 		if err != nil {
@@ -5029,12 +5021,68 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 		delete(object, "namespace")
 	}
 
+	if raw, found := object["public_clients"]; found {
+		err = json.Unmarshal(raw, &a.PublicClients)
+		if err != nil {
+			return fmt.Errorf("error reading 'public_clients': %w", err)
+		}
+		delete(object, "public_clients")
+	}
+
 	if raw, found := object["release_name"]; found {
 		err = json.Unmarshal(raw, &a.ReleaseName)
 		if err != nil {
 			return fmt.Errorf("error reading 'release_name': %w", err)
 		}
 		delete(object, "release_name")
+	}
+
+	if raw, found := object["runtime_applied_generation"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeAppliedGeneration)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_applied_generation': %w", err)
+		}
+		delete(object, "runtime_applied_generation")
+	}
+
+	if raw, found := object["runtime_generation"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeGeneration)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_generation': %w", err)
+		}
+		delete(object, "runtime_generation")
+	}
+
+	if raw, found := object["runtime_phase"]; found {
+		err = json.Unmarshal(raw, &a.RuntimePhase)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_phase': %w", err)
+		}
+		delete(object, "runtime_phase")
+	}
+
+	if raw, found := object["runtime_secret_name"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeSecretName)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_secret_name': %w", err)
+		}
+		delete(object, "runtime_secret_name")
+	}
+
+	if raw, found := object["runtime_staged_generation"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeStagedGeneration)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_staged_generation': %w", err)
+		}
+		delete(object, "runtime_staged_generation")
+	}
+
+	if raw, found := object["service_name"]; found {
+		err = json.Unmarshal(raw, &a.ServiceName)
+		if err != nil {
+			return fmt.Errorf("error reading 'service_name': %w", err)
+		}
+		delete(object, "service_name")
 	}
 
 	if raw, found := object["updated_at"]; found {
@@ -5064,6 +5112,13 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.ChartReleaseName != nil {
+		object["chart_release_name"], err = json.Marshal(a.ChartReleaseName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'chart_release_name': %w", err)
+		}
+	}
+
 	if a.ClusterId != nil {
 		object["cluster_id"], err = json.Marshal(a.ClusterId)
 		if err != nil {
@@ -5085,6 +5140,27 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.DeploymentName != nil {
+		object["deployment_name"], err = json.Marshal(a.DeploymentName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deployment_name': %w", err)
+		}
+	}
+
+	if a.Expiry != nil {
+		object["expiry"], err = json.Marshal(a.Expiry)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expiry': %w", err)
+		}
+	}
+
+	if a.Extra != nil {
+		object["extra"], err = json.Marshal(a.Extra)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'extra': %w", err)
+		}
+	}
+
 	if a.IssuerUrl != nil {
 		object["issuer_url"], err = json.Marshal(a.IssuerUrl)
 		if err != nil {
@@ -5099,10 +5175,59 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.PublicClients != nil {
+		object["public_clients"], err = json.Marshal(a.PublicClients)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'public_clients': %w", err)
+		}
+	}
+
 	if a.ReleaseName != nil {
 		object["release_name"], err = json.Marshal(a.ReleaseName)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'release_name': %w", err)
+		}
+	}
+
+	if a.RuntimeAppliedGeneration != nil {
+		object["runtime_applied_generation"], err = json.Marshal(a.RuntimeAppliedGeneration)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_applied_generation': %w", err)
+		}
+	}
+
+	if a.RuntimeGeneration != nil {
+		object["runtime_generation"], err = json.Marshal(a.RuntimeGeneration)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_generation': %w", err)
+		}
+	}
+
+	if a.RuntimePhase != nil {
+		object["runtime_phase"], err = json.Marshal(a.RuntimePhase)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_phase': %w", err)
+		}
+	}
+
+	if a.RuntimeSecretName != nil {
+		object["runtime_secret_name"], err = json.Marshal(a.RuntimeSecretName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_secret_name': %w", err)
+		}
+	}
+
+	if a.RuntimeStagedGeneration != nil {
+		object["runtime_staged_generation"], err = json.Marshal(a.RuntimeStagedGeneration)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_staged_generation': %w", err)
+		}
+	}
+
+	if a.ServiceName != nil {
+		object["service_name"], err = json.Marshal(a.ServiceName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'service_name': %w", err)
 		}
 	}
 
@@ -41020,13 +41145,20 @@ type PostApiV1AuthDexApplyResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *struct {
 		Data struct {
-			Applied        *bool               `json:"applied,omitempty"`
-			AppliedAt      *time.Time          `json:"applied_at,omitempty"`
-			ClusterId      *openapi_types.UUID `json:"cluster_id,omitempty"`
-			ConfigmapName  *string             `json:"configmap_name,omitempty"`
-			ConnectorCount *int                `json:"connector_count,omitempty"`
-			DeploymentName *string             `json:"deployment_name,omitempty"`
-			Namespace      *string             `json:"namespace,omitempty"`
+			Applied   *bool               `json:"applied,omitempty"`
+			AppliedAt *time.Time          `json:"applied_at,omitempty"`
+			Changed   *bool               `json:"changed,omitempty"`
+			ClusterId *openapi_types.UUID `json:"cluster_id,omitempty"`
+			// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+			ConfigmapName         *string                                   `json:"configmap_name,omitempty"`
+			ConnectorCount        *int                                      `json:"connector_count,omitempty"`
+			DeploymentName        *string                                   `json:"deployment_name,omitempty"`
+			Namespace             *string                                   `json:"namespace,omitempty"`
+			RuntimeGeneration     *int64                                    `json:"runtime_generation,omitempty"`
+			RuntimeSecretName     *string                                   `json:"runtime_secret_name,omitempty"`
+			RuntimeState          *PostApiV1AuthDexApply200DataRuntimeState `json:"runtime_state,omitempty"`
+			SecretResourceVersion *string                                   `json:"secret_resource_version,omitempty"`
+			Staged                *bool                                     `json:"staged,omitempty"`
 		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
@@ -41034,6 +41166,7 @@ type PostApiV1AuthDexApplyResponse struct {
 	JSON502 *ErrorEnvelope
 	JSON503 *ErrorEnvelope
 }
+type PostApiV1AuthDexApply200DataRuntimeState string
 
 // Status returns HTTPResponse.Status
 func (r PostApiV1AuthDexApplyResponse) Status() string {
@@ -59106,13 +59239,20 @@ func ParsePostApiV1AuthDexApplyResponse(rsp *http.Response) (*PostApiV1AuthDexAp
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Data struct {
-				Applied        *bool               `json:"applied,omitempty"`
-				AppliedAt      *time.Time          `json:"applied_at,omitempty"`
-				ClusterId      *openapi_types.UUID `json:"cluster_id,omitempty"`
-				ConfigmapName  *string             `json:"configmap_name,omitempty"`
-				ConnectorCount *int                `json:"connector_count,omitempty"`
-				DeploymentName *string             `json:"deployment_name,omitempty"`
-				Namespace      *string             `json:"namespace,omitempty"`
+				Applied   *bool               `json:"applied,omitempty"`
+				AppliedAt *time.Time          `json:"applied_at,omitempty"`
+				Changed   *bool               `json:"changed,omitempty"`
+				ClusterId *openapi_types.UUID `json:"cluster_id,omitempty"`
+				// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+				ConfigmapName         *string                                   `json:"configmap_name,omitempty"`
+				ConnectorCount        *int                                      `json:"connector_count,omitempty"`
+				DeploymentName        *string                                   `json:"deployment_name,omitempty"`
+				Namespace             *string                                   `json:"namespace,omitempty"`
+				RuntimeGeneration     *int64                                    `json:"runtime_generation,omitempty"`
+				RuntimeSecretName     *string                                   `json:"runtime_secret_name,omitempty"`
+				RuntimeState          *PostApiV1AuthDexApply200DataRuntimeState `json:"runtime_state,omitempty"`
+				SecretResourceVersion *string                                   `json:"secret_resource_version,omitempty"`
+				Staged                *bool                                     `json:"staged,omitempty"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

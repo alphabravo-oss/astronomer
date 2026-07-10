@@ -560,6 +560,9 @@ export interface OpenAPIComponents {
           "issuer_url"?: string;
           "is_enabled"?: boolean;
           "verified"?: boolean;
+          "staged"?: boolean;
+          "applied"?: boolean;
+          "runtime_state"?: "staged" | "applied";
           "secret_resource_version"?: string;
           "runtime_changed"?: boolean;
           "runtime_generation"?: number;
@@ -590,6 +593,8 @@ export interface OpenAPIComponents {
           "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
           "extra"?: OpenAPIComponents['schemas']['DexExtra'];
           "runtime_generation"?: number;
+          "runtime_phase"?: "fresh" | "prepare" | "cutover";
+          "runtime_staged_generation"?: number;
           "runtime_applied_generation"?: number;
         } & Record<string, unknown>;
     DexSettingsRequest: {

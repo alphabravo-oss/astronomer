@@ -26,10 +26,18 @@ volume before populating the Secret can take every Dex replica offline.
 3. Populate the metadata-only runtime Secret by calling
    `POST /api/v1/auth/dex/apply/`. Confirm its exact ownership labels and a
    semantically valid `config.yaml`; preflight uses the bounded first-party
-   `dexconfigcheck` parser and never prints content.
+   `dexconfigcheck` parser and never prints content. In `prepare`, `/apply`
+   reports `runtime_state=staged`, advances `runtime_staged_generation`, and
+   deliberately does not inspect, restart, or health-check the still
+   ConfigMap-mounted Deployment. A retry after a crash reuses that same
+   generation and converges on the existing Secret resourceVersion.
 4. Upgrade again with `dex.migration.phase=cutover`. Preflight requires the
    durable prepare marker and valid runtime Secret. The Deployment uses
-   `maxUnavailable: 0` and switches to the Secret.
+   `maxUnavailable: 0` and switches to the Secret. The bundled bootstrap
+   atomically stages the cutover phase/generation and disables Dex SSO; a
+   subsequent `/apply` performs rollout and health verification, reports
+   `runtime_state=applied`, and conditionally advances
+   `runtime_applied_generation` before SSO may be enabled.
 5. The post-upgrade / Argo `PostSync` cleanup hook independently waits for the observed
    Secret-mounted Deployment to be fully ready/available, rechecks Secret
    ownership, and only then deletes both legacy ConfigMap names. A failed check
@@ -65,9 +73,14 @@ staging object, then remain on `cutover` after the verified transition.
 
 Every API/runtime mutation also carries an opaque monotonic database
 `runtime_generation`. The same decimal generation is written to the retained
-Secret and Deployment pod-template annotations. Only after the exact generation
-is observed ready and healthy is `runtime_applied_generation` advanced with a
-conditional update; SSO enablement checks both values in the same SQL statement.
+Secret and Deployment pod-template annotations. Secret verification first
+advances `runtime_staged_generation` with a generation-CAS update. Only after
+the exact generation is observed ready and healthy is
+`runtime_applied_generation` advanced with another conditional update; SSO
+enablement checks the current and applied values in the same SQL statement.
+A settings or connector mutation captures the prior Dex SSO state, advances the
+generation, and disables Dex SSO atomically. Restoration is also generation-CAS
+guarded, so a stale request can never re-enable SSO after a newer stage begins.
 A stale or crashed request can therefore be retried, but it cannot overwrite a
 newer Secret generation or enable an older client credential pair. Generations
 are counters only and are never hashes of credential-bearing content.

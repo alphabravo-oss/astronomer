@@ -1043,6 +1043,12 @@ type DexSetting struct {
 	RuntimeGeneration int64 `json:"runtime_generation"`
 	// Last generation conditionally verified in Secret, Deployment, and health checks.
 	RuntimeAppliedGeneration int64 `json:"runtime_applied_generation"`
+	// fresh/cutover require Secret-mounted rollout+health; prepare stops after verified Secret staging.
+	RuntimePhase string `json:"runtime_phase"`
+	// Last generation verified in the owned runtime Secret, before Deployment activation.
+	RuntimeStagedGeneration int64 `json:"runtime_staged_generation"`
+	// SSO enabled snapshot captured atomically with generation staging; restoration is generation-CAS guarded.
+	SagaPreviousSsoEnabled bool `json:"saga_previous_sso_enabled"`
 }
 
 type EmailMessage struct {

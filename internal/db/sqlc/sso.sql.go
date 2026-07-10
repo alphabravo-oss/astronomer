@@ -21,7 +21,7 @@ WHERE id = $1
   AND public_clients_cutover_at IS NULL
   AND public_clients_encrypted = ''
   AND public_clients = $3::jsonb
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled
 `
 
 type BackfillDexPublicClientsEnvelopeParams struct {
@@ -53,6 +53,9 @@ func (q *Queries) BackfillDexPublicClientsEnvelope(ctx context.Context, arg Back
 		&i.ServiceName,
 		&i.RuntimeGeneration,
 		&i.RuntimeAppliedGeneration,
+		&i.RuntimePhase,
+		&i.RuntimeStagedGeneration,
+		&i.SagaPreviousSsoEnabled,
 	)
 	return i, err
 }
@@ -148,7 +151,7 @@ func (q *Queries) GetDexConnectorByName(ctx context.Context, name string) (DexCo
 }
 
 const getDexSettings = `-- name: GetDexSettings :one
-SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation FROM dex_settings WHERE id = $1
+SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled FROM dex_settings WHERE id = $1
 `
 
 func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error) {
@@ -174,6 +177,49 @@ func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting,
 		&i.ServiceName,
 		&i.RuntimeGeneration,
 		&i.RuntimeAppliedGeneration,
+		&i.RuntimePhase,
+		&i.RuntimeStagedGeneration,
+		&i.SagaPreviousSsoEnabled,
+	)
+	return i, err
+}
+
+const getDexSettingsForGeneration = `-- name: GetDexSettingsForGeneration :one
+SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled FROM dex_settings
+WHERE id = $1 AND runtime_generation = $2
+`
+
+type GetDexSettingsForGenerationParams struct {
+	ID                uuid.UUID `json:"id"`
+	RuntimeGeneration int64     `json:"runtime_generation"`
+}
+
+func (q *Queries) GetDexSettingsForGeneration(ctx context.Context, arg GetDexSettingsForGenerationParams) (DexSetting, error) {
+	row := q.db.QueryRow(ctx, getDexSettingsForGeneration, arg.ID, arg.RuntimeGeneration)
+	var i DexSetting
+	err := row.Scan(
+		&i.ID,
+		&i.IssuerUrl,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.ReleaseName,
+		&i.ConfigmapName,
+		&i.PublicClients,
+		&i.Expiry,
+		&i.Extra,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
+		&i.PublicClientsCutoverAt,
+		&i.ChartReleaseName,
+		&i.DeploymentName,
+		&i.ServiceName,
+		&i.RuntimeGeneration,
+		&i.RuntimeAppliedGeneration,
+		&i.RuntimePhase,
+		&i.RuntimeStagedGeneration,
+		&i.SagaPreviousSsoEnabled,
 	)
 	return i, err
 }
@@ -250,7 +296,7 @@ SET runtime_applied_generation = $2,
     updated_at = now()
 WHERE id = $1
   AND runtime_generation = $2
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled
 `
 
 type MarkDexRuntimeAppliedParams struct {
@@ -281,8 +327,192 @@ func (q *Queries) MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeA
 		&i.ServiceName,
 		&i.RuntimeGeneration,
 		&i.RuntimeAppliedGeneration,
+		&i.RuntimePhase,
+		&i.RuntimeStagedGeneration,
+		&i.SagaPreviousSsoEnabled,
 	)
 	return i, err
+}
+
+const markDexRuntimeStaged = `-- name: MarkDexRuntimeStaged :one
+UPDATE dex_settings
+SET runtime_staged_generation = $2,
+    updated_at = now()
+WHERE id = $1
+  AND runtime_generation = $2
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled
+`
+
+type MarkDexRuntimeStagedParams struct {
+	ID                uuid.UUID `json:"id"`
+	RuntimeGeneration int64     `json:"runtime_generation"`
+}
+
+func (q *Queries) MarkDexRuntimeStaged(ctx context.Context, arg MarkDexRuntimeStagedParams) (DexSetting, error) {
+	row := q.db.QueryRow(ctx, markDexRuntimeStaged, arg.ID, arg.RuntimeGeneration)
+	var i DexSetting
+	err := row.Scan(
+		&i.ID,
+		&i.IssuerUrl,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.ReleaseName,
+		&i.ConfigmapName,
+		&i.PublicClients,
+		&i.Expiry,
+		&i.Extra,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
+		&i.PublicClientsCutoverAt,
+		&i.ChartReleaseName,
+		&i.DeploymentName,
+		&i.ServiceName,
+		&i.RuntimeGeneration,
+		&i.RuntimeAppliedGeneration,
+		&i.RuntimePhase,
+		&i.RuntimeStagedGeneration,
+		&i.SagaPreviousSsoEnabled,
+	)
+	return i, err
+}
+
+const restoreDexSSOForGeneration = `-- name: RestoreDexSSOForGeneration :one
+UPDATE sso_configurations AS sso
+SET is_enabled = true, updated_at = now()
+WHERE sso.provider = 'dex'
+  AND EXISTS (
+      SELECT 1 FROM dex_settings AS settings
+      WHERE settings.id = $1
+        AND settings.runtime_generation = $2
+        AND settings.saga_previous_sso_enabled = true
+  )
+RETURNING sso.id, sso.provider, sso.is_enabled, sso.display_name, sso.config, sso.client_id, sso.client_secret_encrypted, sso.allowed_organizations, sso.allowed_domains, sso.auto_create_users, sso.default_global_role_id, sso.created_at, sso.updated_at, sso.migrated_to_dex_at
+`
+
+type RestoreDexSSOForGenerationParams struct {
+	ID                uuid.UUID `json:"id"`
+	RuntimeGeneration int64     `json:"runtime_generation"`
+}
+
+func (q *Queries) RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (SsoConfiguration, error) {
+	row := q.db.QueryRow(ctx, restoreDexSSOForGeneration, arg.ID, arg.RuntimeGeneration)
+	var i SsoConfiguration
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.IsEnabled,
+		&i.DisplayName,
+		&i.Config,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.AllowedOrganizations,
+		&i.AllowedDomains,
+		&i.AutoCreateUsers,
+		&i.DefaultGlobalRoleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.MigratedToDexAt,
+	)
+	return i, err
+}
+
+const stageDexSettingsAndDisableSSO = `-- name: StageDexSettingsAndDisableSSO :one
+WITH previous_sso AS MATERIALIZED (
+	SELECT
+		COALESCE((SELECT is_enabled FROM sso_configurations WHERE provider = 'dex'), false)
+		OR COALESCE((
+			SELECT saga_previous_sso_enabled
+			FROM dex_settings AS current_settings
+			WHERE current_settings.id = $1
+		), false) AS was_enabled
+), staged AS (
+    INSERT INTO dex_settings (
+        id, issuer_url, cluster_id, namespace, release_name, configmap_name,
+        runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra,
+        chart_release_name, deployment_name, service_name, runtime_phase,
+        saga_previous_sso_enabled
+    )
+    SELECT
+        $1, $2, $3, $4,
+        $5, $6, $7,
+        $8, $9, $10,
+        $11, $12, $13,
+        $14, $15, previous_sso.was_enabled
+    FROM previous_sso
+    ON CONFLICT (id) DO UPDATE SET
+        issuer_url = EXCLUDED.issuer_url,
+        cluster_id = EXCLUDED.cluster_id,
+        namespace = EXCLUDED.namespace,
+        release_name = EXCLUDED.release_name,
+        configmap_name = EXCLUDED.configmap_name,
+        runtime_secret_name = EXCLUDED.runtime_secret_name,
+        public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
+        public_clients_encrypted = EXCLUDED.public_clients_encrypted,
+        expiry = EXCLUDED.expiry,
+        extra = EXCLUDED.extra,
+        chart_release_name = EXCLUDED.chart_release_name,
+        deployment_name = EXCLUDED.deployment_name,
+        service_name = EXCLUDED.service_name,
+        runtime_phase = EXCLUDED.runtime_phase,
+        saga_previous_sso_enabled = EXCLUDED.saga_previous_sso_enabled,
+        runtime_generation = dex_settings.runtime_generation + 1,
+        updated_at = now()
+    RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation, runtime_phase, runtime_staged_generation, saga_previous_sso_enabled
+), disabled AS (
+    UPDATE sso_configurations
+    SET is_enabled = false, updated_at = now()
+    WHERE provider = 'dex' AND is_enabled = true
+    RETURNING 1
+)
+SELECT staged.runtime_generation
+FROM staged
+WHERE (SELECT count(*) FROM disabled) >= 0
+`
+
+type StageDexSettingsAndDisableSSOParams struct {
+	ID                     uuid.UUID       `json:"id"`
+	IssuerUrl              string          `json:"issuer_url"`
+	ClusterID              pgtype.UUID     `json:"cluster_id"`
+	Namespace              string          `json:"namespace"`
+	ReleaseName            string          `json:"release_name"`
+	ConfigmapName          string          `json:"configmap_name"`
+	RuntimeSecretName      string          `json:"runtime_secret_name"`
+	PublicClients          json.RawMessage `json:"public_clients"`
+	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
+	Expiry                 json.RawMessage `json:"expiry"`
+	Extra                  json.RawMessage `json:"extra"`
+	ChartReleaseName       string          `json:"chart_release_name"`
+	DeploymentName         string          `json:"deployment_name"`
+	ServiceName            string          `json:"service_name"`
+	RuntimePhase           string          `json:"runtime_phase"`
+}
+
+// The previous SSO state, new settings generation, and fail-closed provider
+// disablement are one PostgreSQL statement. No process-local pre-snapshot can
+// race a concurrent stage.
+func (q *Queries) StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDexSettingsAndDisableSSOParams) (int64, error) {
+	row := q.db.QueryRow(ctx, stageDexSettingsAndDisableSSO,
+		arg.ID,
+		arg.IssuerUrl,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.ReleaseName,
+		arg.ConfigmapName,
+		arg.RuntimeSecretName,
+		arg.PublicClients,
+		arg.PublicClientsEncrypted,
+		arg.Expiry,
+		arg.Extra,
+		arg.ChartReleaseName,
+		arg.DeploymentName,
+		arg.ServiceName,
+		arg.RuntimePhase,
+	)
+	var runtime_generation int64
+	err := row.Scan(&runtime_generation)
+	return runtime_generation, err
 }
 
 const updateDexConnector = `-- name: UpdateDexConnector :one
@@ -322,90 +552,6 @@ func (q *Queries) UpdateDexConnector(ctx context.Context, arg UpdateDexConnector
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertDexSettings = `-- name: UpsertDexSettings :one
-INSERT INTO dex_settings (
-    id, issuer_url, cluster_id, namespace, release_name, configmap_name,
-    runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra,
-    chart_release_name, deployment_name, service_name
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $14, $8, $9, $10, $11, $12, $13)
-ON CONFLICT (id) DO UPDATE SET
-    issuer_url     = EXCLUDED.issuer_url,
-    cluster_id     = EXCLUDED.cluster_id,
-    namespace      = EXCLUDED.namespace,
-    release_name   = EXCLUDED.release_name,
-    configmap_name = EXCLUDED.configmap_name,
-    runtime_secret_name = EXCLUDED.runtime_secret_name,
-    public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
-    public_clients_encrypted = EXCLUDED.public_clients_encrypted,
-    expiry         = EXCLUDED.expiry,
-    extra          = EXCLUDED.extra,
-    chart_release_name = EXCLUDED.chart_release_name,
-    deployment_name = EXCLUDED.deployment_name,
-    service_name = EXCLUDED.service_name,
-    runtime_generation = dex_settings.runtime_generation + 1,
-    updated_at     = now()
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at, chart_release_name, deployment_name, service_name, runtime_generation, runtime_applied_generation
-`
-
-type UpsertDexSettingsParams struct {
-	ID                     uuid.UUID       `json:"id"`
-	IssuerUrl              string          `json:"issuer_url"`
-	ClusterID              pgtype.UUID     `json:"cluster_id"`
-	Namespace              string          `json:"namespace"`
-	ReleaseName            string          `json:"release_name"`
-	ConfigmapName          string          `json:"configmap_name"`
-	RuntimeSecretName      string          `json:"runtime_secret_name"`
-	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
-	Expiry                 json.RawMessage `json:"expiry"`
-	Extra                  json.RawMessage `json:"extra"`
-	ChartReleaseName       string          `json:"chart_release_name"`
-	DeploymentName         string          `json:"deployment_name"`
-	ServiceName            string          `json:"service_name"`
-	PublicClients          json.RawMessage `json:"public_clients"`
-}
-
-func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error) {
-	row := q.db.QueryRow(ctx, upsertDexSettings,
-		arg.ID,
-		arg.IssuerUrl,
-		arg.ClusterID,
-		arg.Namespace,
-		arg.ReleaseName,
-		arg.ConfigmapName,
-		arg.RuntimeSecretName,
-		arg.PublicClientsEncrypted,
-		arg.Expiry,
-		arg.Extra,
-		arg.ChartReleaseName,
-		arg.DeploymentName,
-		arg.ServiceName,
-		arg.PublicClients,
-	)
-	var i DexSetting
-	err := row.Scan(
-		&i.ID,
-		&i.IssuerUrl,
-		&i.ClusterID,
-		&i.Namespace,
-		&i.ReleaseName,
-		&i.ConfigmapName,
-		&i.PublicClients,
-		&i.Expiry,
-		&i.Extra,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.RuntimeSecretName,
-		&i.PublicClientsEncrypted,
-		&i.PublicClientsCutoverAt,
-		&i.ChartReleaseName,
-		&i.DeploymentName,
-		&i.ServiceName,
-		&i.RuntimeGeneration,
-		&i.RuntimeAppliedGeneration,
 	)
 	return i, err
 }

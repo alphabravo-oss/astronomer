@@ -31,7 +31,7 @@ type fakeDexBootstrapQuerier struct {
 	upsertCalls     int
 	upsertResult    sqlc.DexSetting
 	upsertErr       error
-	upsertLastParam sqlc.UpsertDexSettingsParams
+	upsertLastParam sqlc.StageDexSettingsAndDisableSSOParams
 }
 
 func (f *fakeDexBootstrapQuerier) GetDexSettings(_ context.Context, id uuid.UUID) (sqlc.DexSetting, error) {
@@ -46,23 +46,17 @@ func (f *fakeDexBootstrapQuerier) GetDexSettings(_ context.Context, id uuid.UUID
 	return f.getResult, nil
 }
 
-func (f *fakeDexBootstrapQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error) {
+func (f *fakeDexBootstrapQuerier) StageDexSettingsAndDisableSSO(_ context.Context, arg sqlc.StageDexSettingsAndDisableSSOParams) (int64, error) {
 	f.upsertCalls++
 	f.upsertLastParam = arg
 	if f.upsertErr != nil {
-		return sqlc.DexSetting{}, f.upsertErr
+		return 0, f.upsertErr
 	}
 	if f.upsertResult.ID == uuid.Nil {
 		// Synthesize a return value the bootstrap doesn't actually consume.
-		return sqlc.DexSetting{
-			ID:            arg.ID,
-			IssuerUrl:     arg.IssuerUrl,
-			Namespace:     arg.Namespace,
-			ReleaseName:   arg.ReleaseName,
-			ConfigmapName: arg.ConfigmapName,
-		}, nil
+		return 1, nil
 	}
-	return f.upsertResult, nil
+	return f.upsertResult.RuntimeGeneration, nil
 }
 
 // envMap is a test substitute for os.LookupEnv that draws from a fixed table.
@@ -116,7 +110,7 @@ func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 		getResult: sqlc.DexSetting{
 			ID: dexBootstrapSingletonID, IssuerUrl: "https://operator-managed.example.com/dex",
 			Namespace: "astronomer", ReleaseName: "astronomer-dex", ChartReleaseName: "astronomer",
-			DeploymentName: "astronomer-dex", ServiceName: "astronomer-dex", RuntimeSecretName: "astronomer-dex-runtime",
+			DeploymentName: "astronomer-dex", ServiceName: "astronomer-dex", RuntimeSecretName: "astronomer-dex-runtime", RuntimePhase: "fresh",
 		},
 	}
 	env := envMap{

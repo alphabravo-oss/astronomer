@@ -2261,6 +2261,10 @@ export interface DexSettings {
   expiry: Record<string, unknown>;
   extra: Record<string, unknown>;
   configured: boolean;
+  runtimePhase?: 'fresh' | 'prepare' | 'cutover';
+  runtimeGeneration?: number;
+  runtimeStagedGeneration?: number;
+  runtimeAppliedGeneration?: number;
   updatedAt?: string;
 }
 
@@ -2283,6 +2287,8 @@ export interface DexSettingsWriteRequest {
 /** Response from POST /apply/ */
 export interface DexApplyResponse {
   applied: boolean;
+  staged: boolean;
+  runtimeState: 'staged' | 'applied';
   clusterId: string;
   namespace: string;
   runtimeSecretName: string;
@@ -2307,6 +2313,9 @@ export interface DexRegisterAsSSOResponse {
   issuerUrl: string;
   displayName: string;
   verified: boolean;
+  staged?: boolean;
+  applied?: boolean;
+  runtimeState?: 'staged' | 'applied';
   secretResourceVersion: string;
   runtimeChanged?: boolean;
   runtimeGeneration?: number;

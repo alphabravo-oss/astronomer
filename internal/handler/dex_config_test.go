@@ -131,7 +131,7 @@ func configureDexRuntime(t *testing.T, q *fakeDexQuerier, h *DexHandler, deploym
 				conditions = []any{map[string]any{"type": "Available", "status": "True"}}
 			}
 			deployment := map[string]any{
-				"metadata": map[string]any{"generation": 3},
+				"metadata": map[string]any{"generation": 3, "resourceVersion": "deployment-1"},
 				"spec": map[string]any{"replicas": 1, "template": map[string]any{
 					"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": deploymentRV, dexRuntimeGenerationAnnotation: deploymentGeneration}},
 					"spec":     map[string]any{"volumes": []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": q.settings.RuntimeSecretName}}}},
@@ -247,38 +247,70 @@ func (f *fakeDexQuerier) GetDexSettings(_ context.Context, id uuid.UUID) (sqlc.D
 	return *f.settings, nil
 }
 
-func (f *fakeDexQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error) {
+func (f *fakeDexQuerier) StageDexSettingsAndDisableSSO(_ context.Context, arg sqlc.StageDexSettingsAndDisableSSOParams) (int64, error) {
 	if f.upsertErr != nil {
-		return sqlc.DexSetting{}, f.upsertErr
+		return 0, f.upsertErr
+	}
+	previousEnabled := false
+	if current, ok := f.ssoByProv["dex"]; ok {
+		previousEnabled = current.IsEnabled
+		current.IsEnabled = false
+		f.ssoByProv["dex"] = current
+	}
+	if f.settings != nil {
+		previousEnabled = previousEnabled || f.settings.SagaPreviousSsoEnabled
 	}
 	generation := int64(1)
 	if f.settings != nil {
 		generation = f.settings.RuntimeGeneration + 1
 	}
 	row := sqlc.DexSetting{
-		ID:                     arg.ID,
-		IssuerUrl:              arg.IssuerUrl,
-		ClusterID:              arg.ClusterID,
-		Namespace:              arg.Namespace,
-		ReleaseName:            arg.ReleaseName,
-		ConfigmapName:          arg.ConfigmapName,
-		RuntimeSecretName:      arg.RuntimeSecretName,
-		PublicClients:          arg.PublicClients,
-		PublicClientsEncrypted: arg.PublicClientsEncrypted,
-		Expiry:                 arg.Expiry,
-		Extra:                  arg.Extra,
-		ChartReleaseName:       arg.ChartReleaseName,
-		DeploymentName:         arg.DeploymentName,
-		ServiceName:            arg.ServiceName,
-		RuntimeGeneration:      generation,
-		CreatedAt:              time.Now().UTC(),
-		UpdatedAt:              time.Now().UTC(),
+		ID: arg.ID, IssuerUrl: arg.IssuerUrl, ClusterID: arg.ClusterID,
+		Namespace: arg.Namespace, ReleaseName: arg.ReleaseName, ConfigmapName: arg.ConfigmapName,
+		RuntimeSecretName: arg.RuntimeSecretName, PublicClients: arg.PublicClients,
+		PublicClientsEncrypted: arg.PublicClientsEncrypted, Expiry: arg.Expiry, Extra: arg.Extra,
+		ChartReleaseName: arg.ChartReleaseName, DeploymentName: arg.DeploymentName, ServiceName: arg.ServiceName,
+		RuntimePhase: arg.RuntimePhase, RuntimeGeneration: generation, SagaPreviousSsoEnabled: previousEnabled,
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
-	if f.settings != nil && f.settings.PublicClientsCutoverAt.Valid {
-		row.PublicClients = json.RawMessage(`[]`)
-		row.PublicClientsCutoverAt = f.settings.PublicClientsCutoverAt
+	if f.settings != nil {
+		row.RuntimeAppliedGeneration = f.settings.RuntimeAppliedGeneration
+		row.RuntimeStagedGeneration = f.settings.RuntimeStagedGeneration
+		row.CreatedAt = f.settings.CreatedAt
+		if f.settings.PublicClientsCutoverAt.Valid {
+			row.PublicClients = json.RawMessage(`[]`)
+			row.PublicClientsCutoverAt = f.settings.PublicClientsCutoverAt
+		}
 	}
 	f.settings = &row
+	return generation, nil
+}
+
+func (f *fakeDexQuerier) GetDexSettingsForGeneration(_ context.Context, arg sqlc.GetDexSettingsForGenerationParams) (sqlc.DexSetting, error) {
+	if f.settings == nil || f.settings.ID != arg.ID || f.settings.RuntimeGeneration != arg.RuntimeGeneration {
+		return sqlc.DexSetting{}, errors.New("stale generation")
+	}
+	return *f.settings, nil
+}
+
+func (f *fakeDexQuerier) MarkDexRuntimeStaged(_ context.Context, arg sqlc.MarkDexRuntimeStagedParams) (sqlc.DexSetting, error) {
+	if f.settings == nil || f.settings.ID != arg.ID || f.settings.RuntimeGeneration != arg.RuntimeGeneration {
+		return sqlc.DexSetting{}, errors.New("stale generation")
+	}
+	f.settings.RuntimeStagedGeneration = arg.RuntimeGeneration
+	return *f.settings, nil
+}
+
+func (f *fakeDexQuerier) RestoreDexSSOForGeneration(_ context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.SsoConfiguration, error) {
+	if f.settings == nil || f.settings.ID != arg.ID || f.settings.RuntimeGeneration != arg.RuntimeGeneration || !f.settings.SagaPreviousSsoEnabled {
+		return sqlc.SsoConfiguration{}, errors.New("stale generation")
+	}
+	row, ok := f.ssoByProv["dex"]
+	if !ok {
+		return sqlc.SsoConfiguration{}, errors.New("not found")
+	}
+	row.IsEnabled = true
+	f.ssoByProv["dex"] = row
 	return row, nil
 }
 
@@ -709,7 +741,7 @@ func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *test
 			return
 		}
 		if r.Method == http.MethodGet && r.URL.Path == "/apis/apps/v1/namespaces/dex/deployments/dex" {
-			deployment := map[string]any{"metadata": map[string]any{"generation": 2}, "spec": map[string]any{"replicas": 1, "template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": "19", dexRuntimeGenerationAnnotation: "1"}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": "astronomer-dex-runtime"}}}}}}, "status": map[string]any{"observedGeneration": 2, "updatedReplicas": 1, "readyReplicas": 1, "availableReplicas": 1, "unavailableReplicas": 0, "conditions": []any{map[string]any{"type": "Available", "status": "True"}}}}
+			deployment := map[string]any{"metadata": map[string]any{"generation": 2, "resourceVersion": "deployment-18"}, "spec": map[string]any{"replicas": 1, "template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{"astronomer.io/dex-runtime-resource-version": "19", dexRuntimeGenerationAnnotation: "1"}}, "spec": map[string]any{"volumes": []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": "astronomer-dex-runtime"}}}}}}, "status": map[string]any{"observedGeneration": 2, "updatedReplicas": 1, "readyReplicas": 1, "availableReplicas": 1, "unavailableReplicas": 0, "conditions": []any{map[string]any{"type": "Available", "status": "True"}}}}
 			raw, _ := json.Marshal(deployment)
 			_, _ = w.Write(raw)
 			return
@@ -762,6 +794,7 @@ func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *test
 		"GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
 		"PATCH /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
 		"GET /api/v1/namespaces/dex/secrets/astronomer-dex-runtime",
+		"GET /apis/apps/v1/namespaces/dex/deployments/dex",
 		"PATCH /apis/apps/v1/namespaces/dex/deployments/dex",
 		"GET /apis/apps/v1/namespaces/dex/deployments/dex",
 		"GET /api/v1/namespaces/dex/services/http:dex:5556/proxy/healthz",
@@ -845,8 +878,68 @@ func TestApply_FixedPointDoesNotMutateOrRollout(t *testing.T) {
 	}
 }
 
+func TestPreparePhaseCrashRetryStagesSecretWithoutDeploymentCutover(t *testing.T) {
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{
+		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
+		Namespace: "dex", ReleaseName: "dex", DeploymentName: "dex", ServiceName: "dex", RuntimeSecretName: "runtime",
+		RuntimePhase: "prepare", RuntimeGeneration: 4, PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
+	}
+	h := NewDexHandler(q)
+	rendered, err := h.renderDexConfig(*q.settings, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := newDexRuntimeSecret("dex", "runtime", nil)
+	secret.Metadata.ResourceVersion = "10"
+	secretPatches, deploymentCalls := 0, 0
+	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if strings.Contains(req.Path, "/deployments/") || strings.Contains(req.Path, "/services/") {
+			deploymentCalls++
+			return nil, errors.New("prepare must not inspect cutover resources")
+		}
+		if req.Method == http.MethodGet && strings.Contains(req.Path, "/secrets/") {
+			raw, _ := json.Marshal(secret)
+			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
+		}
+		if req.Method == http.MethodPatch && strings.Contains(req.Path, "/secrets/") {
+			secretPatches++
+			var patch dexRuntimeSecret
+			if err := json.Unmarshal(req.Body, &patch); err != nil {
+				t.Fatal(err)
+			}
+			secret.Metadata.Labels, secret.Metadata.Annotations = patch.Metadata.Labels, patch.Metadata.Annotations
+			secret.Type, secret.Data = patch.Type, patch.Data
+			secret.Metadata.ResourceVersion = "11"
+			raw, _ := json.Marshal(secret)
+			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
+		}
+		t.Fatalf("unexpected request %s %s", req.Method, req.Path)
+		return nil, nil
+	}})
+
+	// Simulate a process crash after the Secret CAS but before the durable DB
+	// staged marker. The retry must recognize the same generation fixed point.
+	if changed, version, err := h.applyRuntimeSecret(context.Background(), uuid.UUID(q.settings.ClusterID.Bytes).String(), "dex", "runtime", rendered, 4); err != nil || !changed || version != "11" {
+		t.Fatalf("pre-crash Secret write: changed=%v version=%q err=%v", changed, version, err)
+	}
+	if q.settings.RuntimeStagedGeneration != 0 {
+		t.Fatal("test did not stop at the intended crash boundary")
+	}
+	result, err := h.reconcileDexRuntime(context.Background(), *q.settings, nil, nil)
+	if err != nil || result.Changed || !result.Staged || result.Applied || result.State != "staged" {
+		t.Fatalf("retry result=%#v err=%v", result, err)
+	}
+	second, err := h.reconcileDexRuntime(context.Background(), *q.settings, nil, nil)
+	if err != nil || second.Changed || !second.Staged || second.Applied || secretPatches != 1 || deploymentCalls != 0 || q.settings.RuntimeStagedGeneration != 4 || q.settings.RuntimeAppliedGeneration != 0 {
+		t.Fatalf("idempotent retry=%#v err=%v secretPatches=%d deploymentCalls=%d settings=%#v", second, err, secretPatches, deploymentCalls, q.settings)
+	}
+}
+
 func TestApplyRuntimeSecret_FailsClosedWhenChartIdentityMissing(t *testing.T) {
-	h := NewDexHandler(newFakeDexQuerier())
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
+	h := NewDexHandler(q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(_ stubReq) (*protocol.K8sResponsePayload, error) {
 		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
 	}})
@@ -865,7 +958,9 @@ func TestApplyRuntimeSecret_RefusesUnownedNameCollision(t *testing.T) {
 	unowned.Metadata.ResourceVersion = "7"
 	unowned.Data = map[string]string{"config.yaml": base64.StdEncoding.EncodeToString([]byte("operator-owned"))}
 	raw, _ := json.Marshal(unowned)
-	h := NewDexHandler(newFakeDexQuerier())
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
+	h := NewDexHandler(q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 		if req.Method != http.MethodGet {
 			t.Fatalf("unexpected mutation %s", req.Method)
@@ -887,7 +982,9 @@ func TestApplyRuntimeSecret_ReconcilesOwnedMetadataAndPreservesForeignFields(t *
 	existing.Data["operator-extra"] = base64.StdEncoding.EncodeToString([]byte("preserve"))
 	raw, _ := json.Marshal(existing)
 	var patchBody []byte
-	h := NewDexHandler(newFakeDexQuerier())
+	q := newFakeDexQuerier()
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
+	h := NewDexHandler(q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 		if req.Method == http.MethodGet {
 			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
@@ -1080,6 +1177,17 @@ func TestCreateConnector_400OnMissingRequired(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "tenant") {
 		t.Errorf("expected error to mention 'tenant', got %s", w.Body.String())
+	}
+}
+
+func TestCreateConnector_RejectsUppercaseLDAPBeforeRegistryLookup(t *testing.T) {
+	q := newFakeDexQuerier()
+	h := NewDexHandler(q)
+	body := []byte(`{"name":"corp-ldap","type":"LDAP","config":{"host":"ldap.example.com:636","bindDN":"cn=svc","bindPW":"secret","userSearch":{"baseDN":"dc=example","username":"uid","idAttr":"uid","emailAttr":"mail"}}}`)
+	w := httptest.NewRecorder()
+	h.CreateConnector(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/connectors/", bytes.NewReader(body)))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "canonical lowercase") || len(q.connectors) != 0 {
+		t.Fatalf("status=%d body=%s connectors=%d", w.Code, w.Body.String(), len(q.connectors))
 	}
 }
 
@@ -1428,9 +1536,9 @@ func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
 
 func TestBundledSettingsBindPreservesChartIdentityAndRuntimeConfiguration(t *testing.T) {
 	q := newFakeDexQuerier()
-	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://old.example.com/dex", Namespace: "platform-system", ReleaseName: "elite-dex", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{"idTokens":"2h"}`), Extra: json.RawMessage(`{"logger":{"level":"info"}}`), RuntimeGeneration: 7}
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://old.example.com/dex", Namespace: "platform-system", ReleaseName: "elite-dex", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", RuntimePhase: "fresh", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{"idTokens":"2h"}`), Extra: json.RawMessage(`{"logger":{"level":"info"}}`), RuntimeGeneration: 7}
 	h := NewDexHandler(q)
-	h.bundledIdentity = &dexRuntimeIdentity{Namespace: "platform-system", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime"}
+	h.bundledIdentity = &dexRuntimeIdentity{Namespace: "platform-system", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", MigrationPhase: "fresh"}
 	clusterID := uuid.NewString()
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", strings.NewReader(`{"issuer_url":"https://platform.example.com/dex","cluster_id":"`+clusterID+`"}`))
 	w := httptest.NewRecorder()
@@ -1497,6 +1605,86 @@ func TestStaleGenerationCannotEnableDexSSOOrOverwriteNewerSecret(t *testing.T) {
 	if patched {
 		t.Fatal("stale generation patched the newer Secret")
 	}
+}
+
+func TestDexSagaAtomicFailureAndABRestorationTimeline(t *testing.T) {
+	base := sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
+	params := sqlc.StageDexSettingsAndDisableSSOParams{ID: base.ID, RuntimePhase: "fresh", PublicClients: base.PublicClients, Expiry: base.Expiry, Extra: base.Extra}
+
+	t.Run("statement failure leaves generation and SSO unchanged", func(t *testing.T) {
+		q := newFakeDexQuerier()
+		q.settings = &base
+		q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", IsEnabled: true}
+		q.upsertErr = errors.New("transaction aborted")
+		if _, err := q.StageDexSettingsAndDisableSSO(context.Background(), params); err == nil {
+			t.Fatal("expected staging failure")
+		}
+		if q.settings.RuntimeGeneration != 1 || !q.ssoByProv["dex"].IsEnabled {
+			t.Fatalf("atomic failure mutated state: settings=%#v sso=%#v", q.settings, q.ssoByProv["dex"])
+		}
+	})
+
+	t.Run("stale A cannot re-enable after B supersedes it", func(t *testing.T) {
+		q := newFakeDexQuerier()
+		row := base
+		q.settings = &row
+		q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", IsEnabled: true}
+		generationA, err := q.StageDexSettingsAndDisableSSO(context.Background(), params)
+		if err != nil || generationA != 2 || q.ssoByProv["dex"].IsEnabled {
+			t.Fatalf("stage A: generation=%d err=%v sso=%#v", generationA, err, q.ssoByProv["dex"])
+		}
+		generationB, err := q.StageDexSettingsAndDisableSSO(context.Background(), params)
+		if err != nil || generationB != 3 || !q.settings.SagaPreviousSsoEnabled {
+			t.Fatalf("stage B did not inherit restore provenance: generation=%d err=%v settings=%#v", generationB, err, q.settings)
+		}
+		if _, err := q.RestoreDexSSOForGeneration(context.Background(), sqlc.RestoreDexSSOForGenerationParams{ID: base.ID, RuntimeGeneration: generationA}); err == nil || q.ssoByProv["dex"].IsEnabled {
+			t.Fatal("stale A re-enabled SSO")
+		}
+		if _, err := q.RestoreDexSSOForGeneration(context.Background(), sqlc.RestoreDexSSOForGenerationParams{ID: base.ID, RuntimeGeneration: generationB}); err != nil || !q.ssoByProv["dex"].IsEnabled {
+			t.Fatalf("current B could not restore inherited state: %v", err)
+		}
+	})
+}
+
+func TestDexGenerationCASStopsAfterInterleavedExternalReads(t *testing.T) {
+	t.Run("Secret GET superseded before PATCH", func(t *testing.T) {
+		q := newFakeDexQuerier()
+		q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
+		secret := newDexRuntimeSecret("dex", "runtime", []byte("old"), 1)
+		secret.Metadata.ResourceVersion = "1"
+		raw, _ := json.Marshal(secret)
+		patched := false
+		h := NewDexHandler(q)
+		h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+			if req.Method == http.MethodPatch {
+				patched = true
+			}
+			q.settings.RuntimeGeneration = 2
+			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
+		}})
+		if _, _, err := h.applyRuntimeSecret(context.Background(), uuid.NewString(), "dex", "runtime", []byte("new"), 1); err == nil || patched {
+			t.Fatalf("err=%v patched=%v", err, patched)
+		}
+	})
+
+	t.Run("Deployment GET superseded before resourceVersion PATCH", func(t *testing.T) {
+		q := newFakeDexQuerier()
+		q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
+		deployment := map[string]any{"metadata": map[string]any{"generation": 1, "resourceVersion": "7"}, "spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{}}}}}
+		raw, _ := json.Marshal(deployment)
+		patched := false
+		h := NewDexHandler(q)
+		h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+			if req.Method == http.MethodPatch {
+				patched = true
+			}
+			q.settings.RuntimeGeneration = 2
+			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
+		}})
+		if err := h.restartDeployment(context.Background(), uuid.NewString(), "dex", "dex", "10", 1); err == nil || patched {
+			t.Fatalf("err=%v patched=%v", err, patched)
+		}
+	})
 }
 
 func TestLoadPublicClientsMixedVersionAuthorityAndCutover(t *testing.T) {

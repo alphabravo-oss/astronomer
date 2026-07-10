@@ -703,6 +703,7 @@ type Querier interface {
 	GetDexConnectorByID(ctx context.Context, id uuid.UUID) (DexConnector, error)
 	GetDexConnectorByName(ctx context.Context, name string) (DexConnector, error)
 	GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error)
+	GetDexSettingsForGeneration(ctx context.Context, arg GetDexSettingsForGenerationParams) (DexSetting, error)
 	GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error)
 	// Effective quota lookups ------------------------------------------------
 	GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error)
@@ -1608,6 +1609,7 @@ type Querier interface {
 	MarkDeferredExpired(ctx context.Context, arg MarkDeferredExpiredParams) error
 	MarkDeferredFailed(ctx context.Context, arg MarkDeferredFailedParams) error
 	MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeAppliedParams) (DexSetting, error)
+	MarkDexRuntimeStaged(ctx context.Context, arg MarkDexRuntimeStagedParams) (DexSetting, error)
 	// Records a delivery failure. attempts is the NEW count (caller computes
 	// prev+1) so the dispatcher can decide whether to mark the row 'failed'
 	// (still retryable) or escalate to a final state. last_error is kept
@@ -1722,6 +1724,7 @@ type Querier interface {
 	// failed-attempt cycle starts from a clean state.
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
+	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (SsoConfiguration, error)
 	// Admin-triggered re-dispatch. Resets the row so the next dispatcher
 	// tick picks it up immediately, regardless of where it was in the
 	// backoff schedule.
@@ -1785,6 +1788,10 @@ type Querier interface {
 	SetPlatformDefaultClusterTemplate(ctx context.Context, defaultClusterTemplateID pgtype.UUID) (PlatformConfiguration, error)
 	SetProjectDefaultVaultConnection(ctx context.Context, arg SetProjectDefaultVaultConnectionParams) error
 	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
+	// The previous SSO state, new settings generation, and fail-closed provider
+	// disablement are one PostgreSQL statement. No process-local pre-snapshot can
+	// race a concurrent stage.
+	StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDexSettingsAndDisableSSOParams) (int64, error)
 	// Stamped on a hard sync failure (clone error, walk error, etc).
 	StampGitOpsSourceError(ctx context.Context, arg StampGitOpsSourceErrorParams) error
 	// Called by the sync worker after every successful tick. Clearing
@@ -1981,7 +1988,6 @@ type Querier interface {
 	// who disabled a default repo keeps it disabled across reconciles.
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
-	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
 	// The sync worker calls this after a YAML's contents have been applied
 	// so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT
 	// promotes any tombstoned row back to active — that's the

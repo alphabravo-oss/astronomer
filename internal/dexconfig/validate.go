@@ -152,11 +152,30 @@ func ValidateListener(raw string) error {
 	return nil
 }
 
+// CanonicalConnectorType rejects aliases and casing variants before callers
+// perform any connector-specific lookup or branch. The stored/runtime contract
+// is deliberately a single lowercase spelling for every connector type.
+func CanonicalConnectorType(connectorType string) (string, error) {
+	canonical := strings.ToLower(strings.TrimSpace(connectorType))
+	if canonical == "" || connectorType != canonical {
+		return "", fmt.Errorf("connector type must use its canonical lowercase spelling")
+	}
+	if _, ok := connectorRegistry[canonical]; !ok {
+		return "", fmt.Errorf("unknown connector type")
+	}
+	return canonical, nil
+}
+
 func ValidateConnector(connectorType string, raw map[string]any) error {
-	spec, ok := connectorRegistry[strings.ToLower(connectorType)]
+	canonical, err := CanonicalConnectorType(connectorType)
+	if err != nil {
+		return err
+	}
+	spec, ok := connectorRegistry[canonical]
 	if !ok {
 		return fmt.Errorf("unknown connector type")
 	}
+	connectorType = canonical
 	missing := []string{}
 	for _, key := range spec.Required {
 		if isEmpty(raw[key]) {

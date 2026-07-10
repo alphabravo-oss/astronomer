@@ -141,6 +141,9 @@ spec:
             - /bin/sh
             - -ec
             - |
+              umask 077
+              PREFLIGHT_TMP_DIR=$(mktemp -d /tmp/astronomer-preflight.XXXXXX)
+              trap 'rm -rf "${PREFLIGHT_TMP_DIR}"' EXIT HUP INT TERM
               # Hook RBAC objects are created before this Job, but Kubernetes
               # authorization caches/informers can observe the Job before the
               # new RoleBindings become usable. Every live API read therefore
@@ -149,8 +152,8 @@ spec:
               #   1 = authorized read returned Kubernetes NotFound
               #   2 = authorization or transport never became usable
               # Callers decide whether outcome 1 is allowed; outcome 2 always
-              # fails closed. Stdout is captured for the DSN check and never
-              # printed, while kubectl stderr is retained for diagnostics.
+              # fails closed. Per-call files live in a private, uniquely
+              # named directory and are removed by the process-level trap.
               PREFLIGHT_READ_ATTEMPTS=10
               PREFLIGHT_READ_DELAY_SECONDS=1
               KUBE_READ_OUTPUT=""
@@ -159,8 +162,8 @@ spec:
                 read_description="$1"
                 shift
                 read_attempt=1
-                read_stdout=/tmp/astronomer-preflight-read.stdout
-                read_stderr=/tmp/astronomer-preflight-read.stderr
+                read_stdout=$(mktemp "${PREFLIGHT_TMP_DIR}/read.stdout.XXXXXX")
+                read_stderr=$(mktemp "${PREFLIGHT_TMP_DIR}/read.stderr.XXXXXX")
                 while [ "$read_attempt" -le "$PREFLIGHT_READ_ATTEMPTS" ]; do
                   read_rc=0
                   kubectl "$@" >"$read_stdout" 2>"$read_stderr" || read_rc=$?
@@ -218,50 +221,49 @@ spec:
               KUBE_READ_OUTPUT=""
               {{- end }}
               DEX_RUNTIME_SECRET={{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
-              if ! kube_read "prepared Dex runtime Secret ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o json; then
+              if ! kube_read "prepared Dex runtime Secret metadata ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o 'jsonpath={.type}{"\n"}{.metadata.labels.astronomer\.io/runtime-writer}{"\n"}{.metadata.labels.astronomer\.io/secret-purpose}'; then
                 echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} is missing. Prepare it before volume cutover; see docs/dex-runtime-secret-migration.md."
                 exit 1
               fi
-              dex_secret_json=${KUBE_READ_OUTPUT}
+              dex_secret_metadata=${KUBE_READ_OUTPUT}
               KUBE_READ_OUTPUT=""
-              if ! printf '%s' "${dex_secret_json}" | jq -e '
-                .type == "Opaque" and
-                .metadata.labels["astronomer.io/runtime-writer"] == "dex-handler" and
-                .metadata.labels["astronomer.io/secret-purpose"] == "dex-runtime" and
-                (.data["config.yaml"] | type == "string" and length > 0)
-              ' >/dev/null; then
-                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} lacks exact ownership labels, Opaque type, or config.yaml data."
+              if [ "${dex_secret_metadata}" != "$(printf 'Opaque\ndex-handler\ndex-runtime')" ]; then
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} lacks exact ownership labels or Opaque type."
                 exit 1
               fi
-              dex_config_b64=$(printf '%s' "${dex_secret_json}" | jq -er '.data["config.yaml"]') || {
+              dex_secret_metadata=""
+              if ! kube_read "prepared Dex runtime Secret config field ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o 'jsonpath={.data.config\.yaml}'; then
                 echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} has an unreadable config.yaml field."
                 exit 1
-              }
-              dex_secret_json=""
-              # 1 MiB decoded ceiling plus base64 expansion. Check before and
-              # after decode so hostile input cannot create an unbounded file.
-              if [ "${#dex_config_b64}" -gt 1398104 ]; then
+              fi
+              dex_config_b64=${KUBE_READ_OUTPUT}
+              KUBE_READ_OUTPUT=""
+              # The exact base64 field is bounded before decoding. Decoded
+              # bytes flow through a private FIFO directly to the validator;
+              # plaintext configuration is never written to a regular file.
+              if [ -z "${dex_config_b64}" ] || [ "${#dex_config_b64}" -gt 1398104 ]; then
                 echo "Refusing release: Dex runtime config exceeds the 1 MiB preflight limit."
                 exit 1
               fi
-              dex_config_file=$(mktemp)
-              if ! printf '%s' "${dex_config_b64}" | base64 -d >"${dex_config_file}" 2>/dev/null; then
-                rm -f "${dex_config_file}"
+              dex_config_fifo=$(mktemp "${PREFLIGHT_TMP_DIR}/dex-config.XXXXXX")
+              rm -f "${dex_config_fifo}"
+              mkfifo -m 600 "${dex_config_fifo}"
+              printf '%s' "${dex_config_b64}" | base64 -d >"${dex_config_fifo}" 2>/dev/null &
+              dex_decode_pid=$!
+              dex_config_b64=""
+              dex_validate_rc=0
+              dexconfigcheck --max-bytes 1048576 <"${dex_config_fifo}" || dex_validate_rc=$?
+              dex_decode_rc=0
+              wait "${dex_decode_pid}" || dex_decode_rc=$?
+              rm -f "${dex_config_fifo}"
+              if [ "${dex_decode_rc}" -ne 0 ]; then
                 echo "Refusing release: Dex runtime config is not valid base64."
                 exit 1
               fi
-              dex_config_b64=""
-              if [ "$(wc -c <"${dex_config_file}")" -gt 1048576 ]; then
-                rm -f "${dex_config_file}"
-                echo "Refusing release: decoded Dex runtime config exceeds the 1 MiB preflight limit."
-                exit 1
-              fi
-              if ! dexconfigcheck --max-bytes 1048576 <"${dex_config_file}"; then
-                rm -f "${dex_config_file}"
+              if [ "${dex_validate_rc}" -ne 0 ]; then
                 echo "Refusing release: Dex runtime config failed YAML and semantic validation."
                 exit 1
               fi
-              rm -f "${dex_config_file}"
               {{- end }}
 
               if [ "{{ .Values.gateway.enabled }}" = "true" ]; then

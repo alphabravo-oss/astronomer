@@ -928,7 +928,7 @@ managementRestoreDrill:
   # a migration — the drill will fail if the restored DB is below it,
   # signalling either backup corruption or a stale backup tier the
   # retention policy should be re-evaluating.
-  expectedMinSchemaVersion: 125
+  expectedMinSchemaVersion: 126
   # Critical tables whose row count MUST be > 0 in the restored DB. If
   # one of these comes back empty, the most likely cause is a partial
   # backup (pg_dump aborted mid-flight) or a backup taken before the

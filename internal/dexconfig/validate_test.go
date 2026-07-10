@@ -92,3 +92,27 @@ connectors:
 		t.Fatal("invalid owned Secret would pass preflight")
 	}
 }
+
+func TestUppercaseLDAPCannotBypassCanonicalValidation(t *testing.T) {
+	config := map[string]any{
+		"host": "ldap.example.com:70000", "bindDN": "cn=svc", "bindPW": "secret",
+		"userSearch": map[string]any{"baseDN": "dc=example", "username": "uid", "idAttr": "uid", "emailAttr": "mail"},
+	}
+	if err := ValidateConnector("LDAP", config); err == nil || !strings.Contains(err.Error(), "canonical lowercase") {
+		t.Fatalf("uppercase LDAP did not fail at canonical type gate: %v", err)
+	}
+	raw := []byte(`issuer: https://dex.example.com
+storage: {type: kubernetes, config: {inCluster: true}}
+web: {http: "0.0.0.0:5556"}
+staticClients:
+  - {id: platform, redirectURIs: [https://platform.example/callback], secret: secret}
+connectors:
+  - type: LDAP
+    id: ldap
+    name: LDAP
+    config: {host: "ldap.example.com:636", bindDN: cn=svc, bindPW: secret, userSearch: {baseDN: dc=example, username: uid, idAttr: uid, emailAttr: mail}}
+`)
+	if err := ValidateRuntimeYAML(raw, 1<<20); err == nil || !strings.Contains(err.Error(), "canonical lowercase") {
+		t.Fatalf("uppercase LDAP runtime document bypassed canonical type gate: %v", err)
+	}
+}

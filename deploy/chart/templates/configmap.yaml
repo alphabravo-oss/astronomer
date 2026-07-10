@@ -53,6 +53,7 @@ data:
   DEX_BUNDLED_DEPLOYMENT_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
   DEX_BUNDLED_SERVICE_NAME: {{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}
   DEX_BUNDLED_RUNTIME_SECRET_NAME: {{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
+  DEX_BUNDLED_MIGRATION_PHASE: {{ .Values.dex.migration.phase | quote }}
   DEX_BUNDLED_ISSUER_URL: {{ include "astronomer.dex.issuerURL" . | quote }}
   {{- end }}
   {{- if and .Values.config.auth .Values.config.auth.localPasswordOnly }}

@@ -64,7 +64,10 @@ type DexQuerier interface {
 	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
 
 	GetDexSettings(ctx context.Context, id uuid.UUID) (sqlc.DexSetting, error)
-	UpsertDexSettings(ctx context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error)
+	GetDexSettingsForGeneration(ctx context.Context, arg sqlc.GetDexSettingsForGenerationParams) (sqlc.DexSetting, error)
+	StageDexSettingsAndDisableSSO(ctx context.Context, arg sqlc.StageDexSettingsAndDisableSSOParams) (int64, error)
+	RestoreDexSSOForGeneration(ctx context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.SsoConfiguration, error)
+	MarkDexRuntimeStaged(ctx context.Context, arg sqlc.MarkDexRuntimeStagedParams) (sqlc.DexSetting, error)
 	MarkDexRuntimeApplied(ctx context.Context, arg sqlc.MarkDexRuntimeAppliedParams) (sqlc.DexSetting, error)
 	BackfillDexPublicClientsEnvelope(ctx context.Context, arg sqlc.BackfillDexPublicClientsEnvelopeParams) (sqlc.DexSetting, error)
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
@@ -89,6 +92,7 @@ type DexHandler struct {
 
 type dexRuntimeIdentity struct {
 	Namespace, ChartReleaseName, DeploymentName, ServiceName, RuntimeSecretName string
+	MigrationPhase                                                              string
 }
 
 // NewDexHandler constructs a Dex handler. queries is required; encryptor and
@@ -109,6 +113,7 @@ func NewDexHandler(queries DexQuerier) *DexHandler {
 			DeploymentName:    strings.TrimSpace(os.Getenv("DEX_BUNDLED_DEPLOYMENT_NAME")),
 			ServiceName:       strings.TrimSpace(os.Getenv("DEX_BUNDLED_SERVICE_NAME")),
 			RuntimeSecretName: strings.TrimSpace(os.Getenv("DEX_BUNDLED_RUNTIME_SECRET_NAME")),
+			MigrationPhase:    strings.TrimSpace(os.Getenv("DEX_BUNDLED_MIGRATION_PHASE")),
 		}
 	}
 	return handler
@@ -148,6 +153,9 @@ func validateDexRuntimeIdentity(identity dexRuntimeIdentity) error {
 			return fmt.Errorf("invalid bundled Dex %s name", label)
 		}
 	}
+	if identity.MigrationPhase != "fresh" && identity.MigrationPhase != "prepare" && identity.MigrationPhase != "cutover" {
+		return fmt.Errorf("invalid bundled Dex migration phase")
+	}
 	return nil
 }
 
@@ -159,7 +167,7 @@ func (h *DexHandler) normalizeRuntimeIdentity(row sqlc.DexSetting) (sqlc.DexSett
 		}
 		if row.Namespace != identity.Namespace || row.ChartReleaseName != identity.ChartReleaseName ||
 			row.DeploymentName != identity.DeploymentName || row.ServiceName != identity.ServiceName ||
-			row.RuntimeSecretName != identity.RuntimeSecretName {
+			row.RuntimeSecretName != identity.RuntimeSecretName || row.RuntimePhase != identity.MigrationPhase {
 			return row, fmt.Errorf("stored Dex runtime identity does not match the bundled chart")
 		}
 		row.ReleaseName = identity.DeploymentName // compatibility field
@@ -170,7 +178,8 @@ func (h *DexHandler) normalizeRuntimeIdentity(row sqlc.DexSetting) (sqlc.DexSett
 	row.ServiceName = cmp.Or(row.ServiceName, row.ReleaseName, row.DeploymentName)
 	row.ReleaseName = row.DeploymentName
 	row.RuntimeSecretName = cmp.Or(row.RuntimeSecretName, row.ConfigmapName, "astronomer-dex-runtime")
-	identity := dexRuntimeIdentity{Namespace: row.Namespace, ChartReleaseName: cmp.Or(row.ChartReleaseName, "custom"), DeploymentName: row.DeploymentName, ServiceName: row.ServiceName, RuntimeSecretName: row.RuntimeSecretName}
+	row.RuntimePhase = cmp.Or(row.RuntimePhase, "fresh")
+	identity := dexRuntimeIdentity{Namespace: row.Namespace, ChartReleaseName: cmp.Or(row.ChartReleaseName, "custom"), DeploymentName: row.DeploymentName, ServiceName: row.ServiceName, RuntimeSecretName: row.RuntimeSecretName, MigrationPhase: row.RuntimePhase}
 	if err := validateDexRuntimeIdentity(identity); err != nil {
 		return row, err
 	}
@@ -236,10 +245,11 @@ func (h *DexHandler) encryptSecretFields(connectorType string, raw map[string]an
 	if h == nil || raw == nil {
 		return nil
 	}
-	spec, ok := dexConnectorRegistry[strings.ToLower(connectorType)]
-	if !ok {
-		return nil
+	canonical, err := dexconfig.CanonicalConnectorType(connectorType)
+	if err != nil {
+		return err
 	}
+	spec := dexConnectorRegistry[canonical]
 	for _, key := range spec.Secret {
 		v, ok := raw[key]
 		if !ok {
@@ -275,10 +285,11 @@ func (h *DexHandler) decryptSecretFields(connectorType string, raw map[string]an
 	if h == nil || raw == nil {
 		return nil
 	}
-	spec, ok := dexConnectorRegistry[strings.ToLower(connectorType)]
-	if !ok {
-		return nil
+	canonical, err := dexconfig.CanonicalConnectorType(connectorType)
+	if err != nil {
+		return err
 	}
+	spec := dexConnectorRegistry[canonical]
 	for _, key := range spec.Secret {
 		v, ok := raw[key]
 		if !ok {
@@ -308,10 +319,11 @@ func redactSecretFields(connectorType string, raw map[string]any) map[string]any
 	for k, v := range raw {
 		out[k] = v
 	}
-	spec, ok := dexConnectorRegistry[strings.ToLower(connectorType)]
-	if !ok {
-		return out
+	canonical, err := dexconfig.CanonicalConnectorType(connectorType)
+	if err != nil {
+		return sanitizeDexMap(out)
 	}
+	spec := dexConnectorRegistry[canonical]
 	for _, key := range spec.Secret {
 		if v, ok := out[key]; ok {
 			if s, isStr := v.(string); isStr && s != "" {
@@ -473,7 +485,12 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
+	canonicalType, err := dexconfig.CanonicalConnectorType(req.Type)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, err.Error())
+		return
+	}
+	req.Type = canonicalType
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Connector name is required")
@@ -553,9 +570,10 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connectorType := existing.Type
-	if t := strings.ToLower(strings.TrimSpace(req.Type)); t != "" {
-		if _, ok := dexConnectorRegistry[t]; !ok {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, fmt.Sprintf("Unknown connector type %q", t))
+	if req.Type != "" {
+		t, canonicalErr := dexconfig.CanonicalConnectorType(req.Type)
+		if canonicalErr != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, canonicalErr.Error())
 			return
 		}
 		if t != existing.Type {
@@ -730,6 +748,13 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			req.ServiceName = req.ReleaseName
 		}
 	}
+	runtimePhase := "fresh"
+	if existingErr == nil {
+		runtimePhase = cmp.Or(existing.RuntimePhase, runtimePhase)
+	}
+	if h.bundledIdentity != nil {
+		runtimePhase = h.bundledIdentity.MigrationPhase
+	}
 	if errs := k8svalidation.IsDNS1123Label(req.Namespace); len(errs) > 0 {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace must be a valid Kubernetes DNS label")
 		return
@@ -799,16 +824,7 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if len(extraBytes) == 0 || string(extraBytes) == "null" {
 		extraBytes = []byte("{}")
 	}
-	existingSSO, ssoErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
-	disabledForSettings := false
-	if ssoErr == nil && existingSSO.IsEnabled {
-		if _, err := h.writeDexSSO(r.Context(), existingSSO, false, existingSSO.DisplayName, existingSSO.Config, existingSSO.ClientID, existingSSO.ClientSecretEncrypted); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to disable Dex SSO before staging settings")
-			return
-		}
-		disabledForSettings = true
-	}
-	row, err := h.queries.UpsertDexSettings(r.Context(), sqlc.UpsertDexSettingsParams{
+	generation, err := h.queries.StageDexSettingsAndDisableSSO(r.Context(), sqlc.StageDexSettingsAndDisableSSOParams{
 		ID:                     dexSettingsSingletonID,
 		IssuerUrl:              strings.TrimRight(req.IssuerURL, "/"),
 		ClusterID:              clusterUUID,
@@ -823,12 +839,15 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		ChartReleaseName:       req.ChartReleaseName,
 		DeploymentName:         req.DeploymentName,
 		ServiceName:            req.ServiceName,
+		RuntimePhase:           runtimePhase,
 	})
 	if err != nil {
-		if disabledForSettings {
-			_, _ = h.writeDexSSO(r.Context(), existingSSO, true, existingSSO.DisplayName, existingSSO.Config, existingSSO.ClientID, existingSSO.ClientSecretEncrypted)
-		}
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to save Dex settings")
+		return
+	}
+	row, err := h.queries.GetDexSettingsForGeneration(r.Context(), sqlc.GetDexSettingsForGenerationParams{ID: dexSettingsSingletonID, RuntimeGeneration: generation})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusConflict, apierror.SaveError, "Dex settings were superseded by a newer mutation")
 		return
 	}
 	recordAudit(r, h.queries, "dex.settings.update", "dex_settings", row.ID.String(), row.ReleaseName, map[string]any{
@@ -884,7 +903,7 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clusterID := uuid.UUID(settings.ClusterID.Bytes).String()
-	changed, secretVersion, err := h.reconcileDexRuntime(r.Context(), settings, clients, connectors)
+	result, err := h.reconcileDexRuntime(r.Context(), settings, clients, connectors)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, redaction.String(err.Error()))
 		return
@@ -896,10 +915,15 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		"configmap_name":      settings.RuntimeSecretName,
 		"deployment_name":     settings.DeploymentName,
 		"connector_count":     len(connectors),
-		"changed":             changed,
+		"changed":             result.Changed,
+		"runtime_state":       result.State,
+		"staged":              result.Staged,
+		"applied":             result.Applied,
 	})
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"applied":                 true,
+		"applied":                 result.Applied,
+		"staged":                  result.Staged,
+		"runtime_state":           result.State,
 		"cluster_id":              clusterID,
 		"namespace":               settings.Namespace,
 		"runtime_secret_name":     settings.RuntimeSecretName,
@@ -907,27 +931,55 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		"deployment_name":         settings.DeploymentName,
 		"runtime_generation":      settings.RuntimeGeneration,
 		"connector_count":         len(connectors),
-		"changed":                 changed,
-		"secret_resource_version": secretVersion,
+		"changed":                 result.Changed,
+		"secret_resource_version": result.SecretVersion,
 		"applied_at":              time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
-func (h *DexHandler) reconcileDexRuntime(ctx context.Context, settings sqlc.DexSetting, clients []map[string]any, connectors []sqlc.DexConnector) (bool, string, error) {
+type dexReconcileResult struct {
+	Changed              bool
+	SecretVersion, State string
+	Staged, Applied      bool
+}
+
+func (h *DexHandler) requireDexGeneration(ctx context.Context, id uuid.UUID, generation int64) error {
+	if _, err := h.queries.GetDexSettingsForGeneration(ctx, sqlc.GetDexSettingsForGenerationParams{ID: id, RuntimeGeneration: generation}); err != nil {
+		return fmt.Errorf("Dex runtime generation is stale or was superseded")
+	}
+	return nil
+}
+
+func (h *DexHandler) reconcileDexRuntime(ctx context.Context, settings sqlc.DexSetting, clients []map[string]any, connectors []sqlc.DexConnector) (dexReconcileResult, error) {
+	result := dexReconcileResult{State: "pending"}
 	configYAML, err := h.renderDexConfig(settings, clients, connectors)
 	if err != nil {
-		return false, "", err
+		return result, err
+	}
+	if err := h.requireDexGeneration(ctx, settings.ID, settings.RuntimeGeneration); err != nil {
+		return result, err
 	}
 	clusterID := uuid.UUID(settings.ClusterID.Bytes).String()
 	changed, secretVersion, err := h.applyRuntimeSecret(ctx, clusterID, settings.Namespace, settings.RuntimeSecretName, configYAML, settings.RuntimeGeneration)
 	if err != nil {
-		return false, "", err
+		return result, err
 	}
+	result.Changed, result.SecretVersion = changed, secretVersion
 	if secretVersion == "" {
-		return false, "", fmt.Errorf("Dex runtime Secret update returned no resourceVersion")
+		return result, fmt.Errorf("Dex runtime Secret update returned no resourceVersion")
 	}
 	if err := h.verifyDexRuntimeSecret(ctx, clusterID, settings.Namespace, settings.RuntimeSecretName, secretVersion, settings.RuntimeGeneration, configYAML); err != nil {
-		return false, "", err
+		return result, err
+	}
+	if _, err := h.queries.MarkDexRuntimeStaged(ctx, sqlc.MarkDexRuntimeStagedParams{ID: settings.ID, RuntimeGeneration: settings.RuntimeGeneration}); err != nil {
+		return result, fmt.Errorf("Dex runtime generation became stale before staging")
+	}
+	result.Staged, result.State = true, "staged"
+	if settings.RuntimePhase == "prepare" {
+		return result, nil
+	}
+	if err := h.requireDexGeneration(ctx, settings.ID, settings.RuntimeGeneration); err != nil {
+		return result, err
 	}
 	ready := false
 	if !changed {
@@ -935,24 +987,31 @@ func (h *DexHandler) reconcileDexRuntime(ctx context.Context, settings sqlc.DexS
 	}
 	if !ready {
 		if err := h.restartDeployment(ctx, clusterID, settings.Namespace, settings.DeploymentName, secretVersion, settings.RuntimeGeneration); err != nil {
-			return false, "", err
+			return result, err
 		}
 		if err := h.waitForDexDeploymentReady(ctx, clusterID, settings.Namespace, settings.DeploymentName, settings.RuntimeSecretName, secretVersion, settings.RuntimeGeneration); err != nil {
-			return false, "", err
+			return result, err
 		}
 	}
-	if err := h.verifyDexHealth(ctx, clusterID, settings.Namespace, settings.ServiceName); err != nil {
-		return false, "", err
+	if err := h.verifyDexHealth(ctx, clusterID, settings.Namespace, settings.ServiceName, settings.RuntimeGeneration); err != nil {
+		return result, err
 	}
 	if _, err := h.queries.MarkDexRuntimeApplied(ctx, sqlc.MarkDexRuntimeAppliedParams{ID: settings.ID, RuntimeGeneration: settings.RuntimeGeneration}); err != nil {
-		return false, "", fmt.Errorf("Dex runtime generation became stale before activation")
+		return result, fmt.Errorf("Dex runtime generation became stale before activation")
 	}
-	return changed, secretVersion, nil
+	result.Applied, result.State = true, "applied"
+	return result, nil
 }
 
 func (h *DexHandler) dexDeploymentReadyOnce(ctx context.Context, clusterID, namespace, name, runtimeSecretName, resourceVersion string, generation int64) (bool, error) {
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return false, err
+	}
 	path := fmt.Sprintf("/apis/apps/v1/namespaces/%s/deployments/%s", namespace, name)
 	resp, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return false, generationErr
+	}
 	if err != nil {
 		return false, err
 	}
@@ -961,6 +1020,9 @@ func (h *DexHandler) dexDeploymentReadyOnce(ctx context.Context, clusterID, name
 	}
 	var deployment dexDeployment
 	if err := parseJSONResponse(resp, &deployment); err != nil {
+		return false, err
+	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
 		return false, err
 	}
 	return dexDeploymentReady(deployment, runtimeSecretName, resourceVersion, generation), nil
@@ -1089,36 +1151,32 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.RenderError, "Dex runtime candidate is invalid")
 		return
 	}
-	disabledForRollout := false
-	// Any reconciliation can expose a newly staged connector or extension
-	// configuration, even when the client credential pair itself is unchanged.
-	// Keep login fail-closed until the exact Secret generation, Deployment
-	// rollout, and health endpoint have all been verified.
-	if !created && existing.IsEnabled {
-		if _, err := h.writeDexSSO(r.Context(), existing, false, existing.DisplayName, existing.Config, existing.ClientID, existing.ClientSecretEncrypted); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to safely disable Dex SSO before runtime verification")
-			return
-		}
-		disabledForRollout = true
-	}
-	staged, err := h.queries.UpsertDexSettings(r.Context(), sqlc.UpsertDexSettingsParams{
+	generation, err := h.queries.StageDexSettingsAndDisableSSO(r.Context(), sqlc.StageDexSettingsAndDisableSSOParams{
 		ID: settings.ID, IssuerUrl: settings.IssuerUrl, ClusterID: settings.ClusterID,
 		Namespace: settings.Namespace, ReleaseName: settings.ReleaseName,
 		ConfigmapName: settings.RuntimeSecretName, RuntimeSecretName: settings.RuntimeSecretName,
 		PublicClients: candidate.PublicClients, PublicClientsEncrypted: encryptedClients,
 		Expiry: settings.Expiry, Extra: settings.Extra,
 		ChartReleaseName: settings.ChartReleaseName, DeploymentName: settings.DeploymentName, ServiceName: settings.ServiceName,
+		RuntimePhase: settings.RuntimePhase,
 	})
 	if err != nil {
-		if disabledForRollout {
-			_, _ = h.writeDexSSO(r.Context(), existing, true, existing.DisplayName, existing.Config, existing.ClientID, existing.ClientSecretEncrypted)
-		}
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SaveError, "Failed to stage Dex static-client settings")
 		return
 	}
-	changed, secretVersion, err := h.reconcileDexRuntime(r.Context(), staged, clients, connectors)
+	staged, err := h.queries.GetDexSettingsForGeneration(r.Context(), sqlc.GetDexSettingsForGenerationParams{ID: settings.ID, RuntimeGeneration: generation})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusConflict, apierror.SaveError, "Dex registration was superseded by a newer mutation")
+		return
+	}
+	result, err := h.reconcileDexRuntime(r.Context(), staged, clients, connectors)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.ApplyError, "Dex SSO remains disabled because the verified runtime rollout did not complete")
+		return
+	}
+	if !result.Applied {
+		recordAudit(r, h.queries, "dex.register_sso.staged", "dex_settings", staged.ID.String(), "dex", map[string]any{"runtime_generation": staged.RuntimeGeneration, "runtime_state": result.State, "secret_resource_version": result.SecretVersion})
+		RespondJSON(w, http.StatusAccepted, map[string]any{"provider": "dex", "is_enabled": false, "verified": false, "staged": true, "applied": false, "runtime_state": result.State, "runtime_generation": staged.RuntimeGeneration, "secret_resource_version": result.SecretVersion, "runtime_changed": result.Changed})
 		return
 	}
 	cfgBytes, _ := json.Marshal(map[string]any{"issuer_url": settings.IssuerUrl})
@@ -1139,8 +1197,9 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	recordAudit(r, h.queries, "dex.register_sso", "sso_configuration", row.ID.String(), row.Provider, map[string]any{
 		"client_id":               row.ClientID,
 		"issuer_url":              settings.IssuerUrl,
-		"secret_resource_version": secretVersion,
-		"runtime_changed":         changed,
+		"secret_resource_version": result.SecretVersion,
+		"runtime_changed":         result.Changed,
+		"runtime_state":           result.State,
 		"runtime_generation":      staged.RuntimeGeneration,
 		action:                    true,
 	})
@@ -1152,8 +1211,11 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		"issuer_url":              settings.IssuerUrl,
 		"display_name":            row.DisplayName,
 		"verified":                true,
-		"secret_resource_version": secretVersion,
-		"runtime_changed":         changed,
+		"secret_resource_version": result.SecretVersion,
+		"runtime_changed":         result.Changed,
+		"runtime_state":           result.State,
+		"staged":                  result.Staged,
+		"applied":                 result.Applied,
 		action:                    true,
 	})
 }
@@ -1492,6 +1554,8 @@ func settingsResponse(row sqlc.DexSetting, clients []map[string]any) (map[string
 		"extra":                      extra,
 		"configured":                 true,
 		"runtime_generation":         row.RuntimeGeneration,
+		"runtime_phase":              row.RuntimePhase,
+		"runtime_staged_generation":  row.RuntimeStagedGeneration,
 		"runtime_applied_generation": row.RuntimeAppliedGeneration,
 		"updated_at":                 row.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
@@ -1551,7 +1615,11 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, publicClients []m
 		if err := h.decryptSecretFields(c.Type, raw); err != nil {
 			return nil, fmt.Errorf("connector %q: %w", c.Name, err)
 		}
-		if spec, ok := dexConnectorRegistry[strings.ToLower(c.Type)]; ok && containsField(spec.Optional, "redirectURI") {
+		canonical, canonicalErr := dexconfig.CanonicalConnectorType(c.Type)
+		if canonicalErr != nil {
+			return nil, canonicalErr
+		}
+		if spec, ok := dexConnectorRegistry[canonical]; ok && containsField(spec.Optional, "redirectURI") {
 			if isEmptyValue(raw["redirectURI"]) {
 				raw["redirectURI"] = strings.TrimRight(settings.IssuerUrl, "/") + "/callback"
 			}
@@ -1638,7 +1706,8 @@ type dexRuntimeSecret struct {
 
 type dexDeployment struct {
 	Metadata struct {
-		Generation int64 `json:"generation"`
+		Generation      int64  `json:"generation"`
+		ResourceVersion string `json:"resourceVersion"`
 	} `json:"metadata"`
 	Spec struct {
 		Replicas int32 `json:"replicas"`
@@ -1679,8 +1748,21 @@ func (h *DexHandler) applyRuntimeSecret(ctx context.Context, clusterID, namespac
 	if strings.TrimSpace(name) == "" {
 		return false, "", fmt.Errorf("Dex runtime_secret_name is empty")
 	}
+	generation := int64(1)
+	if len(generations) > 0 {
+		generation = generations[0]
+	}
+	if generation <= 0 {
+		return false, "", fmt.Errorf("Dex runtime generation is invalid")
+	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return false, "", err
+	}
 	path := fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, name)
 	resp, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return false, "", generationErr
+	}
 	if err != nil {
 		return false, "", err
 	}
@@ -1694,16 +1776,12 @@ func (h *DexHandler) applyRuntimeSecret(ctx context.Context, clusterID, namespac
 	if err := parseJSONResponse(resp, &existing); err != nil {
 		return false, "", fmt.Errorf("decode existing Dex runtime Secret: %w", err)
 	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return false, "", err
+	}
 	if existing.Metadata.Labels[dexRuntimeManagedByLabel] != "dex-handler" ||
 		existing.Metadata.Labels[dexRuntimePurposeLabel] != "dex-runtime" {
 		return false, "", fmt.Errorf("refusing to overwrite Secret %s/%s without Dex runtime ownership labels", namespace, name)
-	}
-	generation := int64(1)
-	if len(generations) > 0 {
-		generation = generations[0]
-	}
-	if generation <= 0 {
-		return false, "", fmt.Errorf("Dex runtime generation is invalid")
 	}
 	existingGeneration, _ := strconv.ParseInt(existing.Metadata.Annotations[dexRuntimeGenerationAnnotation], 10, 64)
 	if existingGeneration > generation {
@@ -1717,6 +1795,9 @@ func (h *DexHandler) applyRuntimeSecret(ctx context.Context, clusterID, namespac
 		return false, "", fmt.Errorf("Dex runtime content changed without a new database generation")
 	}
 	if !contentChanged && metadataCurrent {
+		if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+			return false, "", err
+		}
 		return false, existing.Metadata.ResourceVersion, nil
 	}
 	body, err := json.Marshal(map[string]any{
@@ -1731,7 +1812,13 @@ func (h *DexHandler) applyRuntimeSecret(ctx context.Context, clusterID, namespac
 	if err != nil {
 		return false, "", err
 	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return false, "", err
+	}
 	updated, err := h.k8s.Do(ctx, clusterID, http.MethodPatch, path, body, requestHeaders("application/merge-patch+json"))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return false, "", generationErr
+	}
 	if err != nil {
 		return false, "", err
 	}
@@ -1739,6 +1826,9 @@ func (h *DexHandler) applyRuntimeSecret(ctx context.Context, clusterID, namespac
 		return false, "", fmt.Errorf("Dex runtime Secret changed concurrently; retry apply")
 	}
 	if err := ensureSuccess(updated); err != nil {
+		return false, "", err
+	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
 		return false, "", err
 	}
 	var result dexRuntimeSecret
@@ -1786,7 +1876,38 @@ func containsDexMetadata(existing, desired map[string]string) bool {
 }
 
 func (h *DexHandler) restartDeployment(ctx context.Context, clusterID, namespace, name, secretResourceVersion string, generation int64) error {
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return err
+	}
+	path := fmt.Sprintf("/apis/apps/v1/namespaces/%s/deployments/%s", namespace, name)
+	currentResponse, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return generationErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := ensureSuccess(currentResponse); err != nil {
+		return err
+	}
+	var current dexDeployment
+	if err := parseJSONResponse(currentResponse, &current); err != nil {
+		return fmt.Errorf("decode Dex Deployment before rollout: %w", err)
+	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return err
+	}
+	if current.Metadata.ResourceVersion == "" {
+		return fmt.Errorf("Dex Deployment has no resourceVersion")
+	}
+	currentGeneration, _ := strconv.ParseInt(current.Spec.Template.Metadata.Annotations[dexRuntimeGenerationAnnotation], 10, 64)
+	if currentGeneration > generation {
+		return fmt.Errorf("Dex Deployment runtime generation is newer than the requested rollout")
+	}
 	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"resourceVersion": current.Metadata.ResourceVersion,
+		},
 		"spec": map[string]any{
 			"template": map[string]any{
 				"metadata": map[string]any{
@@ -1801,17 +1922,34 @@ func (h *DexHandler) restartDeployment(ctx context.Context, clusterID, namespace
 	if err != nil {
 		return err
 	}
-	path := fmt.Sprintf("/apis/apps/v1/namespaces/%s/deployments/%s", namespace, name)
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return err
+	}
 	resp, err := h.k8s.Do(ctx, clusterID, http.MethodPatch, path, body, requestHeaders("application/merge-patch+json"))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return generationErr
+	}
 	if err != nil {
 		return err
 	}
-	return ensureSuccess(resp)
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("Dex Deployment changed concurrently; retry apply")
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return err
+	}
+	return h.requireDexGeneration(ctx, dexSettingsSingletonID, generation)
 }
 
 func (h *DexHandler) verifyDexRuntimeSecret(ctx context.Context, clusterID, namespace, name, resourceVersion string, generation int64, configYAML []byte) error {
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return err
+	}
 	path := fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, name)
 	resp, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return generationErr
+	}
 	if err != nil {
 		return err
 	}
@@ -1821,6 +1959,9 @@ func (h *DexHandler) verifyDexRuntimeSecret(ctx context.Context, clusterID, name
 	var secret dexRuntimeSecret
 	if err := parseJSONResponse(resp, &secret); err != nil {
 		return fmt.Errorf("decode verified Dex runtime Secret")
+	}
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return err
 	}
 	if secret.Metadata.ResourceVersion != resourceVersion || resourceVersion == "" {
 		return fmt.Errorf("Dex runtime Secret resourceVersion changed before rollout")
@@ -1872,11 +2013,22 @@ func (h *DexHandler) waitForDexDeploymentReady(ctx context.Context, clusterID, n
 	defer cancel()
 	path := fmt.Sprintf("/apis/apps/v1/namespaces/%s/deployments/%s", namespace, name)
 	for {
+		if err := h.requireDexGeneration(deadlineCtx, dexSettingsSingletonID, generation); err != nil {
+			return err
+		}
 		resp, err := h.k8s.Do(deadlineCtx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+		if generationErr := h.requireDexGeneration(deadlineCtx, dexSettingsSingletonID, generation); generationErr != nil {
+			return generationErr
+		}
 		if err == nil && ensureSuccess(resp) == nil {
 			var deployment dexDeployment
-			if parseJSONResponse(resp, &deployment) == nil && dexDeploymentReady(deployment, runtimeSecretName, resourceVersion, generation) {
-				return nil
+			if parseJSONResponse(resp, &deployment) == nil {
+				if err := h.requireDexGeneration(deadlineCtx, dexSettingsSingletonID, generation); err != nil {
+					return err
+				}
+				if dexDeploymentReady(deployment, runtimeSecretName, resourceVersion, generation) {
+					return nil
+				}
 			}
 		}
 		timer := time.NewTimer(poll)
@@ -1912,16 +2064,22 @@ func dexDeploymentReady(deployment dexDeployment, runtimeSecretName, resourceVer
 	return secretMounted && available
 }
 
-func (h *DexHandler) verifyDexHealth(ctx context.Context, clusterID, namespace, serviceName string) error {
+func (h *DexHandler) verifyDexHealth(ctx context.Context, clusterID, namespace, serviceName string, generation int64) error {
+	if err := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); err != nil {
+		return err
+	}
 	path := fmt.Sprintf("/api/v1/namespaces/%s/services/http:%s:5556/proxy/healthz", namespace, serviceName)
 	resp, err := h.k8s.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if generationErr := h.requireDexGeneration(ctx, dexSettingsSingletonID, generation); generationErr != nil {
+		return generationErr
+	}
 	if err != nil {
 		return err
 	}
 	if err := ensureSuccess(resp); err != nil {
 		return fmt.Errorf("Dex health endpoint is not ready")
 	}
-	return nil
+	return h.requireDexGeneration(ctx, dexSettingsSingletonID, generation)
 }
 
 // mergeSecretFromExisting is the partial-update helper for PATCH /connectors/{id}.
@@ -1933,10 +2091,11 @@ func mergeSecretFromExisting(connectorType string, existingRaw json.RawMessage, 
 	for k, v := range req {
 		merged[k] = v
 	}
-	spec, ok := dexConnectorRegistry[strings.ToLower(connectorType)]
-	if !ok {
+	canonical, err := dexconfig.CanonicalConnectorType(connectorType)
+	if err != nil {
 		return merged
 	}
+	spec := dexConnectorRegistry[canonical]
 	existing := decodeJSONMap(existingRaw)
 	for _, key := range spec.Secret {
 		v, ok := req[key]

@@ -185,9 +185,20 @@ func TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable(t *testing.T) {
 		t.Fatalf("Dex deployment did not cut over exclusively to runtime Secret: %s", volumeJSON)
 	}
 	preflightJSON, _ := json.Marshal(preflight)
-	for _, required := range []string{"prepared Dex runtime Secret", "dexconfigcheck", "dex-migration-phase", "1 MiB preflight limit"} {
+	for _, required := range []string{"prepared Dex runtime Secret", "dexconfigcheck", "dex-migration-phase", "1 MiB preflight limit", "umask 077", "mktemp -d", "EXIT HUP INT TERM", "mkfifo -m 600", "jsonpath={.data.config\\\\.yaml}"} {
 		if !bytes.Contains(preflightJSON, []byte(required)) {
 			t.Fatalf("preflight missing cutover gate %q", required)
+		}
+	}
+	preflightText := string(preflightJSON)
+	for _, forbidden := range []string{"astronomer-preflight-read.stdout", "dex_secret_json", "dex_config_file"} {
+		if strings.Contains(preflightText, forbidden) {
+			t.Fatalf("preflight persists sensitive Secret material through %q", forbidden)
+		}
+	}
+	for _, line := range strings.Split(preflightText, `\n`) {
+		if strings.Contains(line, "get secret") && strings.Contains(line, "-o json") {
+			t.Fatalf("preflight reads the full Secret document: %s", line)
 		}
 	}
 	cleanupJSON, _ := json.Marshal(cleanup)

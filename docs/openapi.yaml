@@ -2872,6 +2872,8 @@ components:
         extra:
           $ref: '#/components/schemas/DexExtra'
         runtime_generation: { type: integer, format: int64 }
+        runtime_phase: { type: string, enum: [fresh, prepare, cutover] }
+        runtime_staged_generation: { type: integer, format: int64 }
         runtime_applied_generation: { type: integer, format: int64 }
     DexSettingsRequest:
       type: object
@@ -2911,7 +2913,10 @@ components:
                 items: { type: string, format: uri }
               secret: { type: string, format: password, writeOnly: true }
               secret_configured: { type: boolean, deprecated: true }
-              secretConfigured: { type: boolean, deprecated: true }
+              secretConfigured:
+                type: boolean
+                deprecated: true
+                x-go-name: SecretConfiguredLegacy
               public: { type: boolean }
               trustedPeers:
                 type: array
@@ -2980,6 +2985,9 @@ components:
         issuer_url: { type: string, format: uri }
         is_enabled: { type: boolean }
         verified: { type: boolean }
+        staged: { type: boolean }
+        applied: { type: boolean }
+        runtime_state: { type: string, enum: [staged, applied] }
         secret_resource_version: { type: string }
         runtime_changed: { type: boolean }
         runtime_generation: { type: integer, format: int64 }
@@ -15924,6 +15932,11 @@ paths:
                           applied:
                             type: boolean
                             example: true
+                          staged:
+                            type: boolean
+                          runtime_state:
+                            type: string
+                            enum: [staged, applied]
                           cluster_id:
                             type: string
                             format: uuid
