@@ -179,6 +179,257 @@ func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 	}
 }
 
+func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing.T) {
+	tests := []struct {
+		name          string
+		sets          []string
+		requiredKinds []string
+	}{
+		{
+			name: "fresh",
+			sets: []string{"dex.enabled=true", "dex.migration.phase=fresh"},
+		},
+		{
+			name:          "prepare",
+			sets:          []string{"dex.enabled=true", "dex.migration.phase=prepare"},
+			requiredKinds: []string{"Job/astronomer-dex-legacy-prepare"},
+		},
+		{
+			name:          "cutover",
+			sets:          []string{"dex.enabled=true", "dex.migration.phase=cutover"},
+			requiredKinds: []string{"Job/astronomer-dex-legacy-cleanup"},
+		},
+		{
+			name: "optional workloads",
+			sets: []string{
+				"dex.enabled=true",
+				"dex.migration.phase=fresh",
+				"managementBackup.s3.bucket=enterprise-backups",
+				"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
+				"managementLogging.enabled=true",
+				"managementLogging.endpoint=https://logs.example.invalid",
+			},
+			requiredKinds: []string{
+				"CronJob/astronomer-management-backup",
+				"CronJob/astronomer-restore-drill",
+				"DaemonSet/astronomer-mgmt-logging",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			docs := parseRenderedDocs(t, helmTemplate(t, tt.sets...))
+			defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
+			selector := nestedMap(defaultDeny, "spec", "podSelector", "matchLabels")
+			seen := map[string]bool{}
+			workloadCount := 0
+
+			for _, doc := range docs {
+				labels, ok := renderedWorkloadPodLabels(doc)
+				if !ok {
+					continue
+				}
+				workloadCount++
+				identity := stringValue(doc["kind"]) + "/" + stringAt(doc, "metadata", "name")
+				seen[identity] = true
+
+				if labels["app.kubernetes.io/part-of"] == "argocd" {
+					if matchExactLabels(selector, labels) {
+						t.Errorf("default-deny captures bundled Argo workload %s labels %#v", identity, labels)
+					}
+					continue
+				}
+
+				if !matchExactLabels(selector, labels) {
+					t.Errorf("rendered non-Argo workload %s is outside the exact Astronomer ownership contract: %#v", identity, labels)
+				}
+				if labels["app.kubernetes.io/component"] == "" {
+					t.Errorf("rendered Astronomer workload %s has no dedicated component label: %#v", identity, labels)
+				}
+			}
+
+			if workloadCount == 0 {
+				t.Fatal("render contained no workload pod templates")
+			}
+			for _, required := range tt.requiredKinds {
+				if !seen[required] {
+					t.Errorf("scenario did not exercise required workload %s", required)
+				}
+			}
+		})
+	}
+}
+
+func renderedWorkloadPodLabels(doc renderedDoc) (map[string]string, bool) {
+	switch stringValue(doc["kind"]) {
+	case "Deployment", "StatefulSet", "DaemonSet", "Job":
+		return nestedStringMap(doc, "spec", "template", "metadata", "labels"), true
+	case "CronJob":
+		return nestedStringMap(doc, "spec", "jobTemplate", "spec", "template", "metadata", "labels"), true
+	default:
+		return nil, false
+	}
+}
+
+func TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege(t *testing.T) {
+	const (
+		prepareName = "astronomer-dex-legacy-prepare"
+		cleanupName = "astronomer-dex-legacy-cleanup"
+	)
+
+	for _, tt := range []struct {
+		phase        string
+		presentName  string
+		absentName   string
+		component    string
+		policyWeight int
+		jobWeight    int
+		helmHook     string
+		argoHook     string
+		argoDelete   string
+		helmDelete   string
+	}{
+		{phase: "fresh", absentName: prepareName + "," + cleanupName},
+		{
+			phase: "prepare", presentName: prepareName, absentName: cleanupName,
+			component: "dex-legacy-prepare", policyWeight: -10, jobWeight: -5,
+			helmHook: "pre-upgrade", argoHook: "PreSync",
+			argoDelete: "BeforeHookCreation", helmDelete: "before-hook-creation",
+		},
+		{
+			phase: "cutover", presentName: cleanupName, absentName: prepareName,
+			component: "dex-legacy-cleanup", policyWeight: 5, jobWeight: 10,
+			helmHook: "post-upgrade", argoHook: "PostSync",
+			argoDelete: "BeforeHookCreation", helmDelete: "before-hook-creation",
+		},
+	} {
+		t.Run(tt.phase, func(t *testing.T) {
+			docs := parseRenderedDocs(t, helmTemplate(t,
+				"dex.enabled=true",
+				"dex.migration.phase="+tt.phase,
+				"networkPolicy.externalEgressCIDRs[0]=10.10.0.0/16",
+				"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/16",
+			))
+
+			for _, absent := range strings.Split(tt.absentName, ",") {
+				if absent == "" {
+					continue
+				}
+				if renderedDocExists(docs, "Job", absent) || renderedDocExists(docs, "NetworkPolicy", absent) {
+					t.Errorf("%s rendered out-of-phase hook resources for %s", tt.phase, absent)
+				}
+			}
+			if tt.presentName == "" {
+				return
+			}
+
+			job := findRenderedDoc(t, docs, "Job", tt.presentName)
+			policy := findRenderedDoc(t, docs, "NetworkPolicy", tt.presentName)
+			jobLabels := nestedStringMap(job, "spec", "template", "metadata", "labels")
+			for key, want := range map[string]string{
+				"app.kubernetes.io/name":      "astronomer",
+				"app.kubernetes.io/instance":  "astronomer",
+				"app.kubernetes.io/part-of":   "astronomer",
+				"app.kubernetes.io/component": tt.component,
+			} {
+				if got := jobLabels[key]; got != want {
+					t.Errorf("%s pod label %s = %q, want %q", tt.presentName, key, got, want)
+				}
+			}
+			selector := nestedMap(policy, "spec", "podSelector", "matchLabels")
+			wantSelector := map[string]any{
+				"app.kubernetes.io/name":      "astronomer",
+				"app.kubernetes.io/instance":  "astronomer",
+				"app.kubernetes.io/component": tt.component,
+			}
+			if !reflect.DeepEqual(selector, wantSelector) {
+				t.Errorf("%s policy selector = %#v, want %#v", tt.presentName, selector, wantSelector)
+			}
+			if got, want := preflightEgressContracts(t, policy), []string{
+				"*:UDP/53,TCP/53",
+				"10.40.0.0/16:TCP/443",
+				"10.10.0.0/16:TCP/443",
+			}; !reflect.DeepEqual(got, want) {
+				t.Errorf("%s egress = %v, want exactly %v", tt.presentName, got, want)
+			}
+
+			policyAnnotations := nestedMap(policy, "metadata", "annotations")
+			jobAnnotations := nestedMap(job, "metadata", "annotations")
+			for key, want := range map[string]string{
+				"helm.sh/hook":                          tt.helmHook,
+				"argocd.argoproj.io/hook":               tt.argoHook,
+				"helm.sh/hook-delete-policy":            tt.helmDelete,
+				"argocd.argoproj.io/hook-delete-policy": tt.argoDelete,
+			} {
+				if got := stringValue(policyAnnotations[key]); got != want {
+					t.Errorf("%s policy annotation %s = %q, want %q", tt.presentName, key, got, want)
+				}
+			}
+			policyWeight, policyErr := strconv.Atoi(stringValue(policyAnnotations["helm.sh/hook-weight"]))
+			jobWeight, jobErr := strconv.Atoi(stringValue(jobAnnotations["helm.sh/hook-weight"]))
+			if policyErr != nil || jobErr != nil || policyWeight != tt.policyWeight || jobWeight != tt.jobWeight || policyWeight >= jobWeight {
+				t.Errorf("%s hook order policy=%d (%v), job=%d (%v), want %d before %d", tt.presentName, policyWeight, policyErr, jobWeight, jobErr, tt.policyWeight, tt.jobWeight)
+			}
+		})
+	}
+}
+
+func TestDexMigrationHookPolicyFollowsDefaultDenySwitch(t *testing.T) {
+	for _, phase := range []string{"prepare", "cutover"} {
+		docs := parseRenderedDocs(t, helmTemplate(t,
+			"dex.enabled=true",
+			"dex.migration.phase="+phase,
+			"networkPolicy.defaultDeny=false",
+		))
+		name := "astronomer-dex-legacy-" + phase
+		if phase == "cutover" {
+			name = "astronomer-dex-legacy-cleanup"
+		}
+		if !renderedDocExists(docs, "Job", name) {
+			t.Errorf("%s Job disappeared when default deny was disabled", name)
+		}
+		if renderedDocExists(docs, "NetworkPolicy", name) {
+			t.Errorf("%s NetworkPolicy rendered without the selecting default deny", name)
+		}
+	}
+}
+
+func TestDexMigrationHookPolicyDoesNotInventAPIFallbackAndDeduplicatesCIDRs(t *testing.T) {
+	valuesPath := filepath.Join(t.TempDir(), "dex-hook-networkpolicy-values.yaml")
+	values := []byte(`
+networkPolicy:
+  externalEgressCIDRs: []
+  kubernetesAPIEgressCIDRs: []
+dex:
+  enabled: true
+  migration:
+    phase: prepare
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("write values override: %v", err)
+	}
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{valuesPath}))
+	policy := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-dex-legacy-prepare")
+	if got, want := preflightEgressContracts(t, policy), []string{"*:UDP/53,TCP/53"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Dex prepare policy invented API fallback: got %v, want %v", got, want)
+	}
+
+	docs = parseRenderedDocs(t, helmTemplate(t,
+		"dex.enabled=true",
+		"dex.migration.phase=cutover",
+		"networkPolicy.externalEgressCIDRs[0]=10.40.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/16",
+	))
+	policy = findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-dex-legacy-cleanup")
+	if got, want := preflightEgressContracts(t, policy), []string{
+		"*:UDP/53,TCP/53",
+		"10.40.0.0/16:TCP/443",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Dex cleanup policy CIDR union = %v, want de-duplicated %v", got, want)
+	}
+}
+
 func nestedStringMap(root map[string]any, path ...string) map[string]string {
 	raw := nestedMap(root, path...)
 	result := make(map[string]string, len(raw))

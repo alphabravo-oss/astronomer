@@ -298,13 +298,16 @@ This chart renders Gateway API resources, but it does not install a Gateway
 controller. That controller is treated as cluster infrastructure and should be
 bootstrapped separately.
 
-The supported local bootstrap pins the Gateway API standard CRD bundle to
-`v1.4.1`; it never follows a moving `latest` URL. This matches the supported
-version reported by NGINX Gateway Fabric 2.4.x and is also the default used by
-`scripts/k3d-bootstrap.sh`. Operators that install the controller separately
-must pin an explicit compatible CRD bundle and require the `nginx`
-`GatewayClass` `Accepted=True` and `SupportedVersion=True` conditions before
-deploying Astronomer.
+The supported local bootstrap treats NGINX Gateway Fabric `2.6.0` and the
+Gateway API standard CRD bundle `v1.4.1` as one tested compatibility unit; it
+never follows a moving `latest` URL or permits one side of that pair to drift.
+After installation (and also when prerequisite installation is skipped),
+`scripts/k3d-bootstrap.sh` waits for the `nginx` `GatewayClass` to report both
+`Accepted=True` and `SupportedVersion=True`. Both conditions must have observed
+the current `GatewayClass` generation. The check is bounded to 30 attempts and
+fails the bootstrap closed if the class is missing, rejected, unsupported, or
+stale. Operators that install the controller separately must apply the same
+pairing and generation-current condition contract before deploying Astronomer.
 
 Before install or upgrade, the preflight hook validates:
 
@@ -350,6 +353,17 @@ translate to. One appropriately scoped CIDR may cover both; two CIDRs can still
 be wrong. Helm cannot inspect live addresses to prove semantic coverage. Port
 443 covers evaluation before DNAT; port 6443 covers the common post-DNAT API
 endpoint. Validate the CIDRs against the production cluster before upgrading.
+
+The Dex legacy prepare and cutover-cleanup Jobs are also selected by the
+release default-deny policy. Each has an exact Astronomer ownership tuple and a
+dedicated component label, plus a phase-specific hook NetworkPolicy created
+before its Job. Those policies permit only DNS on TCP/UDP 53 and Kubernetes
+API access on TCP 443 to the de-duplicated union of
+`kubernetesAPIEgressCIDRs` and the legacy development
+`externalEgressCIDRs`. The policy hooks are retained until replacement; adding
+`hook-succeeded` would let Helm remove a non-Job policy before the Job starts.
+Production must therefore configure API CIDRs before running either migration
+phase.
 
 Kubernetes authorization caches can take a few seconds to observe newly
 created hook RBAC. To avoid reporting that propagation window as a missing

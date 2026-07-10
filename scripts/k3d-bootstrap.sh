@@ -27,6 +27,7 @@
 #   SERVER_URL    Override the externally-reachable URL      (default: http://${HOST}:${HTTP_PORT})
 #   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.4.1)
 #   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
+#                  The supported pair is NGF 2.6.0 + Gateway API v1.4.1.
 #   SKIP_BUILD    Skip docker build step                     (default: 0)
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
 
@@ -45,6 +46,7 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PREREQS="${SKIP_PREREQS:-0}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/lib/gatewayclass-readiness.sh"
 cd "$ROOT_DIR"
 
 step()    { printf "\n\033[1;36m==> %s\033[0m\n" "$*"; }
@@ -57,6 +59,13 @@ require k3d
 require kubectl
 require docker
 require helm
+
+# This is a tested compatibility unit, not two independent latest-version
+# knobs. Add a new explicit pair here only after the bootstrap behavioral gate
+# and chart prerequisite contract have been validated together.
+if [[ "${NGF_VERSION}:${GW_API_VER}" != "2.6.0:v1.4.1" ]]; then
+  fail "unsupported Gateway stack ${NGF_VERSION}:${GW_API_VER}; supported pair is NGF 2.6.0 + Gateway API v1.4.1"
+fi
 
 IMG_SERVER="${IMG_REGISTRY}/astronomer-go-server:${IMG_TAG}"
 IMG_AGENT="${IMG_REGISTRY}/astronomer-go-agent:${IMG_TAG}"
@@ -97,18 +106,13 @@ if [[ "${SKIP_PREREQS}" != "1" ]]; then
     --create-namespace --namespace nginx-gateway \
     --wait --timeout 5m
 
-  step "Waiting for the 'nginx' GatewayClass to be Accepted"
-  for _ in $(seq 1 30); do
-    state=$(kubectl get gatewayclass nginx -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
-    if [[ "$state" == "True" ]]; then
-      info "GatewayClass nginx is Accepted"
-      break
-    fi
-    sleep 2
-  done
 else
   info "SKIP_PREREQS=1, skipping Gateway API CRDs + NGF install"
 fi
+
+step "Validating the 'nginx' GatewayClass compatibility contract"
+wait_for_gatewayclass nginx 30 2 \
+  || fail "GatewayClass nginx did not satisfy the supported, generation-current readiness contract"
 
 # ── 3. Build images ──────────────────────────────────────────────────────────
 if [[ "${SKIP_BUILD}" != "1" ]]; then

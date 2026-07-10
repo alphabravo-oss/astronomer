@@ -279,15 +279,27 @@ What happens:
    narrowest provider-supported endpoint or node ranges. Confirm managed
    control-plane addresses with the provider when they are not exposed by the
    EndpointSlice.
+
+   Dex migration hooks follow the same fail-closed model. In `prepare`, the
+   `dex-legacy-prepare` policy is created at weight / sync wave `-10`, before
+   its Job at `-5`. In `cutover`, the `dex-legacy-cleanup` policy is created at
+   weight / sync wave `5`, before its Job at `10`. Both allow only DNS TCP/UDP
+   53 and API TCP 443 to the de-duplicated union of
+   `kubernetesAPIEgressCIDRs` and the legacy development
+   `externalEgressCIDRs`. Their non-Job hook resources deliberately omit
+   `hook-succeeded` so Helm and Argo cannot delete network access before the Job
+   completes. Verify the API CIDRs before either phase.
 2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present
    - Gateway API standard CRDs pinned to the controller-supported bundle
-     (`v1.4.1` for the supported local NGINX Gateway Fabric bootstrap); do not
-     use a moving `latest` URL. Before continuing, require the `nginx`
-     GatewayClass to report both `Accepted=True` and
-     `SupportedVersion=True`. `Accepted=True` alone does not prove the CRD
-     bundle is supported.
+     (`v1.4.1` paired with NGINX Gateway Fabric `2.6.0` for the supported local
+     bootstrap); do not use a moving `latest` URL. Before continuing, require
+     the `nginx` GatewayClass to report both `Accepted=True` and
+     `SupportedVersion=True`, with each condition's `observedGeneration`
+     matching the current object generation. `Accepted=True` alone does not
+     prove the CRD bundle is supported, and stale True conditions do not prove
+     the current class spec is ready.
    - cert-manager CRDs present (if `tls.source` needs them)
    - Postgres DSN enforces TLS (production only)
    - `schema_migrations` connectivity + dirty-flag check
