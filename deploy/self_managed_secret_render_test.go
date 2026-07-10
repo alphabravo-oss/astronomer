@@ -143,4 +143,28 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 	if strings.Contains(rendered[sourceStart:sourceStart+sourceEnd], "items:") {
 		t.Fatal("backup source projection filters unrelated core keys")
 	}
+	overrideArgs := append(append([]string{}, args...), "--set", "managementBackup.encryptionKeyBackup.secretName=independent-key-bundle")
+	overrideCommand := exec.Command("helm", overrideArgs...)
+	var overrideStdout bytes.Buffer
+	overrideCommand.Stdout = &overrideStdout
+	overrideCommand.Stderr = &bytes.Buffer{}
+	if err := overrideCommand.Run(); err != nil {
+		t.Fatalf("independent backup bundle render failed: %v", err)
+	}
+	overrideRendered := overrideStdout.String()
+	for _, want := range []string{
+		`secretName: "independent-key-bundle"`,
+		`cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/`,
+		`cp -L /var/run/astronomer-keys-source/SECRET_KEY /var/run/astronomer-keys/SECRET_KEY`,
+		`cp -L /var/run/astronomer-keys-source/ASTRONOMER_ENCRYPTION_KEY /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY`,
+	} {
+		if !strings.Contains(overrideRendered, want) {
+			t.Fatalf("independent backup bundle missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"astronomer-keys-source/SIGNING_KEY", "astronomer-keys-source/FERNET_KEY"} {
+		if strings.Contains(overrideRendered, forbidden) {
+			t.Fatalf("independent canonical bundle incorrectly used runtime key name %q", forbidden)
+		}
+	}
 }

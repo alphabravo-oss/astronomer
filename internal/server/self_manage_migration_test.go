@@ -44,6 +44,58 @@ redis:
     urlSecretRef: {name: astronomer-redis, key: url}
 `
 
+func TestFirstSelfManagedApplicationCreationRequiresCompleteServerRollout(t *testing.T) {
+	ctx := context.Background()
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	deployment, _ := kube.AppsV1().Deployments(localArgoNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	deployment.Status.UpdatedReplicas = 0
+	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := preflightSelfManagedApplicationCredentialMigration(ctx, kube, dyn); err == nil || !strings.Contains(err.Error(), "first self-managed Application creation") {
+		t.Fatalf("first-create preflight error = %v", err)
+	}
+	dyn.ClearActions()
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, safeSelfManagedValuesForTest); err == nil || !strings.Contains(err.Error(), "first self-managed Application creation") {
+		t.Fatalf("first-create write-boundary error = %v", err)
+	}
+	for _, action := range dyn.Actions() {
+		if action.GetVerb() == "create" || action.GetVerb() == "update" || action.GetVerb() == "patch" {
+			t.Fatalf("partial rollout created/mutated Application: %#v", action)
+		}
+	}
+}
+
+func TestRestageRequiresRolloutEvenWhenForgedHashMatchesDesired(t *testing.T) {
+	ctx := context.Background()
+	const destination = "https://kubernetes.default.svc"
+	current := activeSelfManagedApplicationForRevision(t, "0.2.1", destination)
+	changedValues := safeSelfManagedValuesForTest + "\nserver:\n  replicaCount: 2\n"
+	desiredSpec, _, _ := unstructured.NestedMap(current.Object, "spec")
+	_ = unstructured.SetNestedField(desiredSpec, changedValues, "source", "helm", "values")
+	forgedDesiredHash, _ := selfManagedSpecHash(desiredSpec)
+	annotations := current.GetAnnotations()
+	annotations[selfManagedHashAnnotation] = forgedDesiredHash
+	current.SetAnnotations(annotations)
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), current)
+	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	deployment, _ := kube.AppsV1().Deployments(localArgoNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	deployment.Status.UpdatedReplicas = 0
+	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, sqlc.Cluster{ApiServerUrl: destination}, changedValues)
+	if err == nil || !strings.Contains(err.Error(), "restage requires a complete server rollout") {
+		t.Fatalf("equal-hash different-spec restage error = %v", err)
+	}
+	for _, action := range dyn.Actions() {
+		if action.GetVerb() == "update" || action.GetVerb() == "patch" {
+			t.Fatalf("partial rollout restaged forged-hash Application: %#v", action)
+		}
+	}
+}
+
 func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.T) {
 	ctx := context.Background()
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
@@ -376,6 +428,100 @@ func TestCurrentHelmReleaseValuesSelectsHighestDeployedRevisionAndSanitizes(t *t
 	}
 }
 
+func TestCurrentReferenceOnlyValuesAuthorizesOnlyStrongOlderRevisionAdoption(t *testing.T) {
+	ctx := context.Background()
+	const destination = "https://kubernetes.default.svc"
+	active := activeSelfManagedApplicationForRevision(t, "0.2.0", destination)
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), active)
+	source, err := currentReferenceOnlySelfManagedValues(ctx, dyn, destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !source.AdoptLiveUpgrade || strings.TrimSpace(source.ValuesYAML) == "" {
+		t.Fatalf("older strong active source was not authorized: %#v", source)
+	}
+
+	for name, mutate := range map[string]func(*unstructured.Unstructured){
+		"forged hash": func(app *unstructured.Unstructured) {
+			annotations := app.GetAnnotations()
+			annotations[selfManagedHashAnnotation] = strings.Repeat("0", 64)
+			app.SetAnnotations(annotations)
+		},
+		"forged destination": func(app *unstructured.Unstructured) {
+			_ = unstructured.SetNestedField(app.Object, "https://other-cluster.example", "spec", "destination", "server")
+			spec, _, _ := unstructured.NestedMap(app.Object, "spec")
+			hash, _ := selfManagedSpecHash(spec)
+			annotations := app.GetAnnotations()
+			annotations[selfManagedHashAnnotation] = hash
+			app.SetAnnotations(annotations)
+		},
+		"forged repository": func(app *unstructured.Unstructured) {
+			_ = unstructured.SetNestedField(app.Object, "https://attacker.invalid/charts", "spec", "source", "repoURL")
+			spec, _, _ := unstructured.NestedMap(app.Object, "spec")
+			hash, _ := selfManagedSpecHash(spec)
+			annotations := app.GetAnnotations()
+			annotations[selfManagedHashAnnotation] = hash
+			app.SetAnnotations(annotations)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := active.DeepCopy()
+			mutate(candidate)
+			client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), candidate)
+			if _, err := currentReferenceOnlySelfManagedValues(ctx, client, destination); err == nil || !strings.Contains(err.Error(), "inconsistent") {
+				t.Fatalf("forged active identity error = %v", err)
+			}
+		})
+	}
+	sameRevision := activeSelfManagedApplicationForRevision(t, "0.2.1", destination)
+	source, err = currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), sameRevision), destination)
+	if err != nil || source.AdoptLiveUpgrade || strings.TrimSpace(source.ValuesYAML) == "" {
+		t.Fatalf("same embedded revision was not canonical: source=%#v err=%v", source, err)
+	}
+	awaitingOlder := active.DeepCopy()
+	annotations := awaitingOlder.GetAnnotations()
+	annotations[selfManagedPhaseAnnotation] = selfManagedPhaseAwaiting
+	awaitingOlder.SetAnnotations(annotations)
+	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), awaitingOlder), destination); err == nil || !strings.Contains(err.Error(), "not active") {
+		t.Fatalf("awaiting older revision error = %v", err)
+	}
+	newer := activeSelfManagedApplicationForRevision(t, "0.2.2", destination)
+	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), newer), destination); err == nil || !strings.Contains(err.Error(), "downgrade") {
+		t.Fatalf("newer revision error = %v", err)
+	}
+	nonSemantic := activeSelfManagedApplicationForRevision(t, "latest", destination)
+	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), nonSemantic), destination); err == nil || !strings.Contains(err.Error(), "not semantic") {
+		t.Fatalf("non-semantic revision error = %v", err)
+	}
+	missingLabel := active.DeepCopy()
+	missingLabel.SetLabels(nil)
+	source, err = currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), missingLabel), destination)
+	if err != nil || source.ValuesYAML != "" || source.AdoptLiveUpgrade {
+		t.Fatalf("unowned Application should fall back to takeover/scrub: source=%#v err=%v", source, err)
+	}
+}
+
+func activeSelfManagedApplicationForRevision(t *testing.T, revision, destination string) *unstructured.Unstructured {
+	t.Helper()
+	application := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+		"metadata": map[string]any{"name": localArgoApplicationName, "namespace": localArgoNamespace, "labels": map[string]any{"astronomer.io/platform-owned": "true"}},
+		"spec": map[string]any{
+			"project": "default", "revisionHistoryLimit": int64(0),
+			"source":      map[string]any{"repoURL": localArgoRepoURL, "chart": "astronomer", "targetRevision": revision, "helm": map[string]any{"releaseName": localAstronomerReleaseName, "values": safeSelfManagedValuesForTest}},
+			"destination": map[string]any{"server": destination, "namespace": localArgoNamespace},
+			"syncPolicy":  map[string]any{"automated": map[string]any{"prune": true, "selfHeal": true}},
+		},
+	}}
+	spec, _, _ := unstructured.NestedMap(application.Object, "spec")
+	hash, err := selfManagedSpecHash(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application.SetAnnotations(map[string]string{selfManagedPhaseAnnotation: selfManagedPhaseActive, selfManagedHashAnnotation: hash})
+	return application
+}
+
 func TestSelfManagedCredentialSecretIsProtectedIdempotentAndRotationSafe(t *testing.T) {
 	ctx := context.Background()
 	kube := k8sfake.NewSimpleClientset()
@@ -478,6 +624,21 @@ func TestSelfManagedRedisURLDecompositionPreservesUnsupportedURLs(t *testing.T) 
 	if _, err := kube.CoreV1().Secrets(localArgoNamespace).Get(context.Background(), selfManagedRedisSecret, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatal("unresolved Redis placeholder was persisted as a usable URL")
 	}
+	passwordServer := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server", Env: []corev1.EnvVar{{Name: "REDIS_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "redis-password"}, Key: "password"}}}}}}}}}}
+	for name, aclURL := range map[string]string{
+		"named ACL user":          "redis://alice:$(REDIS_PASSWORD)@redis.example:6379/0",
+		"placeholder as username": "redis://$(REDIS_PASSWORD)@redis.example:6379/0",
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := k8sfake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": aclURL}})
+			if _, err := selfManagedExternalRedisValues(context.Background(), client, passwordServer); err == nil || !strings.Contains(err.Error(), "empty ACL username") {
+				t.Fatalf("ACL placeholder error = %v", err)
+			}
+			if _, err := client.CoreV1().Secrets(localArgoNamespace).Get(context.Background(), selfManagedRedisSecret, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+				t.Fatal("unsupported ACL placeholder was persisted")
+			}
+		})
+	}
 }
 
 func helmReleaseSecretFixture(t *testing.T, version int, status string, config map[string]any) *corev1.Secret {
@@ -518,7 +679,7 @@ func TestUnsafeSelfManagedApplicationScrubRequiresStoppedController(t *testing.T
 	}
 	crd := applicationCRDWithoutStatusFixture()
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), unsafe, crd)
-	if got := currentReferenceOnlySelfManagedValues(context.Background(), dyn); got != "" {
+	if got, err := currentReferenceOnlySelfManagedValues(context.Background(), dyn, "https://kubernetes.default.svc"); err != nil || got.ValuesYAML != "" {
 		t.Fatal("free-form env canary was misclassified as a canonical reference-only source")
 	}
 	one := int32(1)

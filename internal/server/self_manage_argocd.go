@@ -183,7 +183,10 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	if serverURL == "" {
 		return nil
 	}
-	currentSafeValues := currentReferenceOnlySelfManagedValues(ctx, dyn)
+	currentSafeValues, err := currentReferenceOnlySelfManagedValues(ctx, dyn, localCluster.ApiServerUrl)
+	if err != nil {
+		return fmt.Errorf("resolve current self-managed values source: %w", err)
+	}
 	valuesYAML, err := buildSelfManagedAstronomerValues(ctx, cfg, k8s, serverURL, currentSafeValues)
 	if err != nil {
 		return fmt.Errorf("build self-managed values: %w", err)

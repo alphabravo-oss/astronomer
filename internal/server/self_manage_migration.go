@@ -27,6 +27,9 @@ import (
 func preflightSelfManagedApplicationCredentialMigration(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface) error {
 	current, err := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace).Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
+		if rolloutErr := verifySelfManagedServerRolloutComplete(ctx, k8s); rolloutErr != nil {
+			return fmt.Errorf("first self-managed Application creation requires a complete server rollout: %w", rolloutErr)
+		}
 		return nil
 	}
 	if err != nil {
@@ -110,6 +113,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 	res := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
 	current, err := res.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
+		if rolloutErr := verifySelfManagedServerRolloutComplete(ctx, k8s); rolloutErr != nil {
+			return fmt.Errorf("first self-managed Application creation requires a complete server rollout: %w", rolloutErr)
+		}
 		stageSelfManagedApplication(obj, desiredHash)
 		_, err = res.Create(ctx, obj, metav1.CreateOptions{})
 		return err
@@ -173,6 +179,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		// disabled. An operator must review the Argo diff and copy spec-hash into
 		// approved-hash before prune/self-heal can be armed.
 		updated := current.DeepCopy()
+		if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
+			return fmt.Errorf("self-managed restage requires a complete server rollout: %w", err)
+		}
 		if err := unstructured.SetNestedMap(updated.Object, stagedSelfManagedSpec(desiredSpec), "spec"); err != nil {
 			return err
 		}
@@ -573,23 +582,27 @@ func selfManagedReplicaSetTemplateMatchesDeployment(replicaSetTemplate, deployme
 }
 
 func verifyLocalArgoApplicationControllerStopped(ctx context.Context, k8s kubernetes.Interface) error {
+	found := false
 	if statefulSet, err := k8s.AppsV1().StatefulSets(localArgoNamespace).Get(ctx, localArgoControllerWorkload, metav1.GetOptions{}); err == nil {
-		if statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas != 0 || statefulSet.Status.Replicas != 0 || statefulSet.Status.ReadyReplicas != 0 {
+		found = true
+		if statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas != 0 || statefulSet.Status.Replicas != 0 || statefulSet.Status.ReadyReplicas != 0 || statefulSet.Status.CurrentReplicas != 0 || statefulSet.Status.UpdatedReplicas != 0 || statefulSet.Status.AvailableReplicas != 0 {
 			return fmt.Errorf("scale StatefulSet %s to zero and wait for all controller Pods to terminate", localArgoControllerWorkload)
 		}
-		return verifyNoArgoControllerPods(ctx, k8s)
 	} else if !apierrors.IsNotFound(err) {
 		return err
 	}
 	if deployment, err := k8s.AppsV1().Deployments(localArgoNamespace).Get(ctx, localArgoControllerWorkload, metav1.GetOptions{}); err == nil {
-		if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas != 0 || deployment.Status.Replicas != 0 || deployment.Status.ReadyReplicas != 0 {
+		found = true
+		if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas != 0 || deployment.Status.Replicas != 0 || deployment.Status.ReadyReplicas != 0 || deployment.Status.UpdatedReplicas != 0 || deployment.Status.AvailableReplicas != 0 || deployment.Status.UnavailableReplicas != 0 {
 			return fmt.Errorf("scale Deployment %s to zero and wait for all controller Pods to terminate", localArgoControllerWorkload)
 		}
-		return verifyNoArgoControllerPods(ctx, k8s)
 	} else if !apierrors.IsNotFound(err) {
 		return err
 	}
-	return fmt.Errorf("Argo application controller workload not found")
+	if !found {
+		return fmt.Errorf("Argo application controller workload not found")
+	}
+	return verifyNoArgoControllerPods(ctx, k8s)
 }
 
 func verifyNoArgoControllerPods(ctx context.Context, k8s kubernetes.Interface) error {

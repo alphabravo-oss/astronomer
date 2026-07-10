@@ -380,7 +380,7 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	}
 	secondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent", AgentImageTag: "agent-tag",
-	}, client, "https://astronomer.dev.alphabravo.io", string(upgradedSource))
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: string(upgradedSource)})
 	if err != nil {
 		t.Fatalf("second fixed-point build: %v", err)
 	}
@@ -425,13 +425,71 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/drift/server:bad", "outside.example/drift/migrate:bad")
 	mirroredSecondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "outside.example/drift/agent", AgentImageTag: "bad",
-	}, client, "https://astronomer.dev.alphabravo.io", mirroredYAML)
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: mirroredYAML})
 	if err != nil {
 		t.Fatalf("mirrored second cycle: %v", err)
 	}
 	mirroredSecond := unmarshalSelfManagedValues(t, mirroredSecondYAML)
 	if !reflect.DeepEqual(mirrored["image"], mirroredSecond["image"]) || !reflect.DeepEqual(mirrored["config"], mirroredSecond["config"]) {
 		t.Fatalf("safe Application image/config changed on cycle two:\nfirst=%#v\nsecond=%#v", mirrored["image"], mirroredSecond["image"])
+	}
+	oldRevisionValues := unmarshalSelfManagedValues(t, mirroredYAML)
+	oldRevisionValues["image"].(map[string]any)["pullSecrets"] = []any{map[string]any{"name": "old-registry-auth"}}
+	oldRevisionYAML := string(yamlOrPanic(oldRevisionValues))
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v11", "mirror.example/platform/database/migrate:v11")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v11", "")
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	oneController := int32(1)
+	controllerWorkload := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace},
+		Spec:       appsv1.StatefulSetSpec{Replicas: &oneController},
+		Status:     appsv1.StatefulSetStatus{Replicas: 1, ReadyReplicas: 1},
+	}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), controllerWorkload, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	controllerPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astro-argocd-application-controller-0", Namespace: localArgoNamespace, Labels: map[string]string{"app.kubernetes.io/name": "argocd-application-controller"}}}
+	if _, err := client.CoreV1().Pods(localArgoNamespace).Create(context.Background(), controllerPod, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "controller is quiesced") {
+		t.Fatalf("active-controller adoption error = %v", err)
+	}
+	zeroController := int32(0)
+	controllerWorkload.Spec.Replicas = &zeroController
+	controllerWorkload.Status = appsv1.StatefulSetStatus{}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controllerWorkload, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CoreV1().Pods(localArgoNamespace).Delete(context.Background(), controllerPod.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	adoptedYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true})
+	if err != nil {
+		t.Fatalf("bounded chart-revision upgrade adoption: %v", err)
+	}
+	adopted := unmarshalSelfManagedValues(t, adoptedYAML)
+	adoptedImages := adopted["image"].(map[string]any)
+	for _, component := range []string{"server", "worker", "migrate", "agent"} {
+		if got := adoptedImages[component].(map[string]any)["tag"]; got != "v11" {
+			t.Fatalf("adopted %s tag = %v, want v11", component, got)
+		}
+	}
+	if pullSecrets, ok := adoptedImages["pullSecrets"].([]any); !ok || len(pullSecrets) != 0 {
+		t.Fatalf("empty live pull Secrets did not clear old source list: %#v", adoptedImages["pullSecrets"])
+	}
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/same-revision/server:drift", "outside.example/same-revision/migrate:drift")
+	adoptedSecondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/same-revision/agent", AgentImageTag: "drift"}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: adoptedYAML})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adoptedSecond := unmarshalSelfManagedValues(t, adoptedSecondYAML)
+	if !reflect.DeepEqual(adopted["image"], adoptedSecond["image"]) || !reflect.DeepEqual(adopted["config"], adoptedSecond["config"]) {
+		t.Fatal("post-upgrade canonical values were not a fixed point")
 	}
 
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "outside.example/team/worker:v10", "")
@@ -443,6 +501,38 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
 	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/agents/agent", AgentImageTag: "v10"}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "configured agent image") {
 		t.Fatalf("incompatible agent registry error = %v", err)
+	}
+}
+
+func markServerDeploymentRolloutCompleteForTest(t *testing.T, client *fake.Clientset) {
+	t.Helper()
+	ctx := context.Background()
+	deployment, err := client.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	labels := map[string]string{"app.kubernetes.io/name": "astronomer", "app.kubernetes.io/instance": "astronomer", "app.kubernetes.io/component": "server"}
+	deployment.UID = "build-test-deployment"
+	deployment.Generation = 11
+	deployment.Annotations = map[string]string{"deployment.kubernetes.io/revision": "11"}
+	deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
+	deployment.Spec.Template.Labels = labels
+	desired := int32(1)
+	deployment.Spec.Replicas = &desired
+	deployment.Status = appsv1.DeploymentStatus{ObservedGeneration: 11, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	controller := true
+	template := *deployment.Spec.Template.DeepCopy()
+	template.Labels["pod-template-hash"] = "buildhash"
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-buildhash", Namespace: localAstronomerNamespace, UID: "build-test-rs", Annotations: map[string]string{"deployment.kubernetes.io/revision": "11"}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID, Controller: &controller}}}, Spec: appsv1.ReplicaSetSpec{Replicas: &desired, Template: template}}
+	if _, err := client.AppsV1().ReplicaSets(localAstronomerNamespace).Create(ctx, replicaSet, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-buildhash-pod", Namespace: localAstronomerNamespace, Labels: template.Labels, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID, Controller: &controller}}}}
+	if _, err := client.CoreV1().Pods(localAstronomerNamespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
 	}
 }
 

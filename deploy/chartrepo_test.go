@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"os/exec"
@@ -131,5 +133,24 @@ func TestPinnedArgoApplicationCRDHasNoStatusSubresource(t *testing.T) {
 			t.Fatal("pinned Application CRD status semantics changed; update the scrub migration before upgrading")
 		}
 		return
+	}
+}
+
+func TestVendoredArgoArchiveChecksumMatchesProvenance(t *testing.T) {
+	const expected = "5e440d83c763360e16cd93b48f41450cc0d688ec83ee444840faa271ac536443"
+	archive, err := os.ReadFile(filepath.Join("chart", "charts", "argo-cd-9.5.21.tgz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(archive)
+	if got := hex.EncodeToString(digest[:]); got != expected {
+		t.Fatalf("vendored argo-cd checksum = %s, want %s", got, expected)
+	}
+	provenance, err := os.ReadFile(filepath.Join("chart", "DEPENDENCIES.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(provenance), expected) {
+		t.Fatal("DEPENDENCIES.md does not record the asserted vendored archive checksum")
 	}
 }

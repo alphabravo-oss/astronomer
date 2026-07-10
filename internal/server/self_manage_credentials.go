@@ -208,6 +208,13 @@ func selfManagedExternalRedisValues(ctx context.Context, k8s kubernetes.Interfac
 		if !ok {
 			return nil, fmt.Errorf("reference-backed REDIS_URL uses an unsupported scheme, path, query, or fragment")
 		}
+		if parsed.User == nil {
+			return nil, fmt.Errorf("reference-backed REDIS_URL must use an empty ACL username and the exact $(REDIS_PASSWORD) password placeholder")
+		}
+		placeholderPassword, hasPassword := parsed.User.Password()
+		if parsed.User.Username() != "" || !hasPassword || placeholderPassword != "reference-backed-placeholder" {
+			return nil, fmt.Errorf("reference-backed REDIS_URL must use an empty ACL username and the exact $(REDIS_PASSWORD) password placeholder")
+		}
 		return map[string]any{
 			"address":           parsed.Host,
 			"tls":               parsed.Scheme == "rediss",

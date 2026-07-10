@@ -14,8 +14,10 @@ import (
 	"strconv"
 	"strings"
 
+	semver "github.com/Masterminds/semver/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kvalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -28,15 +30,29 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
-func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...string) (string, error) {
+type selfManagedValuesSource struct {
+	ValuesYAML       string
+	AdoptLiveUpgrade bool
+}
+
+func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...selfManagedValuesSource) (string, error) {
 	// A takeover must begin from Helm's complete operator-supplied values. Live
 	// workload discovery alone cannot safely reconstruct storage, air-gap,
 	// scheduling, TLS, backup, network-policy, observability, or bundled Argo
 	// settings. Refuse to create a pruning Application if that source is absent.
 	var values map[string]any
-	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0]) == ""
+	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0].ValuesYAML) == ""
+	adoptRuntime := initialTakeover || referenceOnlySource[0].AdoptLiveUpgrade
+	if !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade {
+		if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
+			return "", fmt.Errorf("adopt live upgrade only while the Argo application controller is quiesced: %w", err)
+		}
+		if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
+			return "", fmt.Errorf("adopt live upgrade only after a complete server rollout: %w", err)
+		}
+	}
 	if !initialTakeover {
-		if err := yaml.Unmarshal([]byte(referenceOnlySource[0]), &values); err != nil {
+		if err := yaml.Unmarshal([]byte(referenceOnlySource[0].ValuesYAML), &values); err != nil {
 			return "", fmt.Errorf("parse current reference-only self-managed values: %w", err)
 		}
 	} else {
@@ -80,7 +96,7 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	}
 	coreSecretName := coreSecret.Name
 	runtimeOverlay := map[string]any{}
-	if initialTakeover {
+	if adoptRuntime {
 		globalRegistry, _, _ := unstructured.NestedString(values, "image", "registry")
 		serverRef, serverReplicas, migrateRef, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-server")
 		if err != nil {
@@ -110,13 +126,11 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 			return "", fmt.Errorf("parse configured agent image: %w", err)
 		}
 		images := map[string]any{"server": serverImage, "worker": workerImage, "migrate": migrateImage, "agent": agentImage}
-		if len(serverDeployment.Spec.Template.Spec.ImagePullSecrets) > 0 {
-			pullSecrets := make([]any, 0, len(serverDeployment.Spec.Template.Spec.ImagePullSecrets))
-			for _, ref := range serverDeployment.Spec.Template.Spec.ImagePullSecrets {
-				pullSecrets = append(pullSecrets, map[string]any{"name": ref.Name})
-			}
-			images["pullSecrets"] = pullSecrets
+		pullSecrets := make([]any, 0, len(serverDeployment.Spec.Template.Spec.ImagePullSecrets))
+		for _, ref := range serverDeployment.Spec.Template.Spec.ImagePullSecrets {
+			pullSecrets = append(pullSecrets, map[string]any{"name": ref.Name})
 		}
+		images["pullSecrets"] = pullSecrets
 		runtimeOverlay["image"] = images
 		runtimeOverlay["config"] = map[string]any{
 			"agentImageRepository": cfg.AgentImageRepository,
@@ -250,16 +264,82 @@ func parseSelfManagedFirstPartyImageRef(ref, globalRegistry string) (map[string]
 	return image, nil
 }
 
-func currentReferenceOnlySelfManagedValues(ctx context.Context, dyn dynamic.Interface) string {
+func currentReferenceOnlySelfManagedValues(ctx context.Context, dyn dynamic.Interface, expectedDestinationServer string) (selfManagedValuesSource, error) {
 	current, err := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace).Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	if err != nil {
-		return ""
+		if apierrors.IsNotFound(err) {
+			return selfManagedValuesSource{}, nil
+		}
+		return selfManagedValuesSource{}, err
+	}
+	if current.GetLabels()["astronomer.io/platform-owned"] != "true" {
+		return selfManagedValuesSource{}, nil
+	}
+	if err := validateSelfManagedApplicationSource(current.Object); err != nil {
+		return selfManagedValuesSource{}, nil
 	}
 	values, found, err := unstructured.NestedString(current.Object, "spec", "source", "helm", "values")
 	if err != nil || !found || validateReferenceOnlySelfManagedHelmValues(values) != nil {
-		return ""
+		return selfManagedValuesSource{}, nil
 	}
-	return values
+	targetRevision, found, err := unstructured.NestedString(current.Object, "spec", "source", "targetRevision")
+	if err != nil || !found {
+		return selfManagedValuesSource{}, fmt.Errorf("self-managed Application has no targetRevision")
+	}
+	repo, err := chartdeploy.AstronomerChartRepo()
+	if err != nil {
+		return selfManagedValuesSource{}, err
+	}
+	currentVersion, err := semver.NewVersion(targetRevision)
+	if err != nil {
+		return selfManagedValuesSource{}, fmt.Errorf("self-managed chart revision %q is not semantic; refusing upgrade because only exact revision equality or a bounded active upgrade may reuse its values", targetRevision)
+	}
+	embeddedVersion, err := semver.NewVersion(repo.Version())
+	if err != nil {
+		return selfManagedValuesSource{}, fmt.Errorf("embedded chart version %q is not semantic", repo.Version())
+	}
+	if currentVersion.GreaterThan(embeddedVersion) {
+		return selfManagedValuesSource{}, fmt.Errorf("refuse self-managed chart downgrade from %s to %s", currentVersion, embeddedVersion)
+	}
+	if currentVersion.Equal(embeddedVersion) {
+		return selfManagedValuesSource{ValuesYAML: values}, nil
+	}
+	if currentVersion.Major() != embeddedVersion.Major() {
+		return selfManagedValuesSource{}, fmt.Errorf("self-managed chart upgrade from %s to %s crosses a major-version boundary; keep the current Application intact and follow the version-specific upgrade procedure", currentVersion, embeddedVersion)
+	}
+	if current.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseActive {
+		return selfManagedValuesSource{}, fmt.Errorf("self-managed chart revision %s is older than embedded revision %s but the Application is not active; restore the exact old active Application identity before the bounded quiesced-controller upgrade procedure", currentVersion, embeddedVersion)
+	}
+	if currentVersion.LessThan(embeddedVersion) {
+		if err := validateActiveSelfManagedUpgradeIdentity(current, expectedDestinationServer); err != nil {
+			return selfManagedValuesSource{}, err
+		}
+		return selfManagedValuesSource{ValuesYAML: values, AdoptLiveUpgrade: true}, nil
+	}
+	return selfManagedValuesSource{}, fmt.Errorf("refuse self-managed chart revision transition from %s to %s", currentVersion, embeddedVersion)
+}
+
+func validateActiveSelfManagedUpgradeIdentity(current *unstructured.Unstructured, expectedDestinationServer string) error {
+	project, _, _ := unstructured.NestedString(current.Object, "spec", "project")
+	repoURL, _, _ := unstructured.NestedString(current.Object, "spec", "source", "repoURL")
+	chart, _, _ := unstructured.NestedString(current.Object, "spec", "source", "chart")
+	releaseName, _, _ := unstructured.NestedString(current.Object, "spec", "source", "helm", "releaseName")
+	destinationServer, _, _ := unstructured.NestedString(current.Object, "spec", "destination", "server")
+	destinationNamespace, _, _ := unstructured.NestedString(current.Object, "spec", "destination", "namespace")
+	prune, _, _ := unstructured.NestedBool(current.Object, "spec", "syncPolicy", "automated", "prune")
+	selfHeal, _, _ := unstructured.NestedBool(current.Object, "spec", "syncPolicy", "automated", "selfHeal")
+	if project != "default" || repoURL != localArgoRepoURL || chart != "astronomer" || releaseName != localAstronomerReleaseName || strings.TrimSpace(expectedDestinationServer) == "" || destinationServer != expectedDestinationServer || destinationNamespace != localAstronomerNamespace || !prune || !selfHeal {
+		return fmt.Errorf("claimed active self-managed Application identity is inconsistent; refusing live upgrade adoption")
+	}
+	spec, _, _ := unstructured.NestedMap(current.Object, "spec")
+	hash, err := selfManagedSpecHash(spec)
+	if err != nil {
+		return err
+	}
+	if !selfManagedApplicationMetadataClean(current, selfManagedPhaseActive, hash) {
+		return fmt.Errorf("claimed active self-managed Application metadata/hash is inconsistent; refusing live upgrade adoption")
+	}
+	return nil
 }
 
 // currentHelmReleaseValues reads the deployed release's operator-supplied

@@ -832,8 +832,10 @@ managementBackup:
     # refuses to upload the key in plaintext). When unset a NOTES/preflight
     # warning fires so the DR gap is visible rather than silent.
     enabled: true
-    # In-cluster Secret holding the Fernet + JWT keys. Empty => <release>-secrets
-    # (the chart's own secret.yaml). Override only for BYO/external-secret setups.
+    # Independent in-cluster backup bundle Secret. Empty => use the runtime core
+    # Secret and alias secrets.*KeyKey to canonical restore filenames. A nonempty
+    # override is a separate contract and MUST already contain canonical keys
+    # SECRET_KEY and ASTRONOMER_ENCRYPTION_KEY; all its other keys are preserved.
     secretName: ""
     # Secret holding the wrapping passphrase used to encrypt the key bundle
     # before upload. HOLD THIS SEPARATELY from the S3 backup credentials and the

@@ -22,6 +22,11 @@ Redis URLs, or Dex credentials are therefore a credential disclosure.
 The server creates/updates the Application in `awaiting-approval` with an empty
 sync policy. It records a SHA-256 digest in
 `astronomer.io/self-manage-spec-hash`. Automated sync and prune remain off.
+Before the first creation and before every restage, finish the Astronomer server
+rollout and prove that only Pods from its current ReplicaSet remain. Use the
+rollout, Deployment-count, ReplicaSet, and Pod checks in the legacy-scrub
+section below. The server enforces this fence even when no Application exists
+and even when the existing Application hash appears unchanged.
 
 1. Render the embedded chart and review the complete Argo diff, including
    storage classes/sizes, Argo itself, image mirrors/pull Secrets, scheduling,
@@ -78,6 +83,37 @@ current digest, no operation remains, the completed operation was the narrow
 non-pruning form above, status is `Synced`/`Healthy`/`Succeeded` for the exact
 staged source and destination, and the server rollout is still complete. A
 changed/stale digest or stale status never arms sync.
+
+## Bounded self-managed chart upgrade
+
+An external Helm/server rollout can temporarily move the running binary ahead
+of the active self-managed Application. Do **not** perform that rollout while
+the old Argo application-controller can self-heal: it can restore the old image
+and replica tuples while the new server is trying to adopt them.
+
+1. Record and retain the exact old active Application, including its platform
+   ownership label, source/destination, active phase, and spec hash. Do not
+   restage, edit, or approve it.
+2. Scale `astro-argocd-application-controller` to zero and wait for the
+   StatefulSet/Deployment status to reach zero and for every matching controller
+   Pod, including terminating Pods, to disappear.
+3. Perform the external Helm/server rollout. Keep the controller stopped.
+4. Prove the new server rollout is complete with the Deployment, ReplicaSet,
+   and Pod ownership checks below. No old or unowned server Pod may remain.
+5. Let the new server reconcile while the controller remains stopped. For an
+   older same-major active Application with the exact expected identity and
+   hash, it adopts the live server, worker, migrate, agent, pull-Secret, and
+   replica tuples and stages the newer embedded chart revision. A non-active,
+   inconsistent, non-semantic, cross-major, or newer revision fails closed and
+   requires operator remediation; it never silently reuses old runtime tags.
+6. Restore the controller only after the new reference-only Application is
+   staged. Run the full non-pruning sync, verify exact source/destination status,
+   health, completed operation, workload rollout, login, and protected Secret
+   identity, then approve the exact new digest as described above.
+
+The server checks both controller quiescence and complete server rollout before
+reading live tuples. Live adoption with concurrent Argo self-healing is not a
+supported or safe upgrade path.
 
 ## Scrubbing a legacy plaintext Application
 

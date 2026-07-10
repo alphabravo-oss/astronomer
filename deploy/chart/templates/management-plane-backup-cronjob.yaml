@@ -164,8 +164,15 @@ spec:
                     # the restore contract when operators use custom key names.
                     find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
                     cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/
+                    {{- if .Values.managementBackup.encryptionKeyBackup.secretName }}
+                    # An independent BYO backup bundle is a separate contract:
+                    # it already exposes the canonical restore filenames.
+                    cp -L /var/run/astronomer-keys-source/SECRET_KEY /var/run/astronomer-keys/SECRET_KEY
+                    cp -L /var/run/astronomer-keys-source/ASTRONOMER_ENCRYPTION_KEY /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
+                    {{- else }}
                     cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.secretKeyKey }}" /var/run/astronomer-keys/SECRET_KEY
                     cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.encryptionKeyKey }}" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
+                    {{- end }}
                     KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
                     KEY_ENC="${KEY_BUNDLE}.enc"
                     KEY_S3="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.enc"
