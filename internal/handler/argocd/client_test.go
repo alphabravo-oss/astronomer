@@ -3,6 +3,7 @@ package argocd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,6 +96,37 @@ func TestSyncServerError(t *testing.T) {
 	_, err := c.Sync(context.Background(), "myapp", SyncOptions{})
 	if !IsKind(err, ErrServer) {
 		t.Errorf("want ErrServer, got %v", err)
+	}
+}
+
+func TestTypedResponseBodyLimitRejectsSuccessAndErrorWithoutEcho(t *testing.T) {
+	const canary = "ARGO_TYPED_LIMIT_CANARY_51b6"
+	for _, tc := range []struct {
+		name   string
+		status int
+		kind   ErrorKind
+	}{
+		{name: "success", status: http.StatusOK, kind: ErrUnknown},
+		{name: "error", status: http.StatusInternalServerError, kind: ErrServer},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(canary))
+				_, _ = w.Write([]byte(strings.Repeat("x", 16<<20)))
+			})
+			_, err := c.GetApp(context.Background(), "large")
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error = %T %v, want APIError", err, err)
+			}
+			if apiErr.Kind != tc.kind || apiErr.Message != responseBodyLimitMessage || apiErr.Body != "" {
+				t.Fatalf("APIError = %+v", apiErr)
+			}
+			if strings.Contains(apiErr.Error(), canary) || strings.Contains(PublicErrorMessage(apiErr), canary) {
+				t.Fatal("over-limit response echoed upstream content")
+			}
+		})
 	}
 }
 

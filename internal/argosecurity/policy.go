@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"sigs.k8s.io/yaml"
 
@@ -21,12 +23,20 @@ import (
 
 const Marker = redaction.Marker
 
+// MaxArgoResponseBodyBytes is the common allocation and inspection ceiling
+// for typed and proxied Argo JSON responses. Readers must consume at most one
+// byte beyond this limit before rejecting the response.
+const MaxArgoResponseBodyBytes = 16 << 20
+
 const (
 	maxDocumentDepth       = 24
 	maxGeneratorDepth      = 8
 	maxStructuredStringLen = 1 << 20
 	maxGeneratorEntries    = 64
 	maxGeneratorScalarLen  = 512
+	maxAssignmentLHSBytes  = 256
+	maxAssignmentSpace     = 32
+	maxSanitizedStringLen  = MaxArgoResponseBodyBytes
 )
 
 var forbiddenSourceKeys = map[string]struct{}{
@@ -268,51 +278,187 @@ func sanitizeString(value string) string {
 
 func canonicalSensitiveKey(key string) bool {
 	normalized := normalizeKey(key)
-	if normalized == "" || referenceKey(normalized) {
+	return canonicalSensitiveNormalized([]byte(normalized))
+}
+
+func canonicalSensitiveNormalized(normalized []byte) bool {
+	if len(normalized) == 0 || referenceNormalizedKey(normalized) {
 		return false
 	}
-	if redaction.IsSensitiveKey(key) || redaction.IsSensitiveKey(normalized) {
+	if bytes.Equal(normalized, []byte("sig")) {
 		return true
 	}
-	switch normalized {
-	case "bearer", "sig", "xamzcredential", "xamzsecuritytoken", "xgoogsignature":
-		return true
+	return canonicalMarkerBytes(normalized)
+}
+
+func referenceNormalizedKey(normalized []byte) bool {
+	return bytes.Equal(normalized, []byte("secretname")) ||
+		bytes.Equal(normalized, []byte("existingsecret")) ||
+		bytes.Equal(normalized, []byte("secretref")) ||
+		bytes.Equal(normalized, []byte("secretkeyref")) ||
+		bytes.HasSuffix(normalized, []byte("secretname")) ||
+		bytes.HasSuffix(normalized, []byte("secretref"))
+}
+
+type canonicalAssignmentMatch struct {
+	valueStart int
+	valueEnd   int
+	next       int
+}
+
+// findCanonicalAssignment scans each input byte at most once from start. Its
+// LHS normalization is exactly normalizeKey's ASCII alphanumeric/lowercase
+// domain: every other ASCII or Unicode rune is an admitted separator, while
+// bounded whitespace and ':'/'=' delimit the assignment grammar. Fixed local
+// storage prevents dense safe assignments from allocating per candidate.
+func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch, bool) {
+	var normalized [maxAssignmentLHSBytes]byte
+	normalizedLen := 0
+	lhsBytes := 0
+	lhsValid := true
+
+	reset := func() {
+		normalizedLen = 0
+		lhsBytes = 0
+		lhsValid = true
 	}
-	for _, fragment := range canonicalSensitiveFragments {
-		if strings.Contains(normalized, fragment) {
-			return true
+	for cursor := start; cursor < len(value); {
+		r, size := utf8.DecodeRuneInString(value[cursor:])
+		if r == utf8.RuneError && size == 0 {
+			break
+		}
+		if isNormalizedKeyRune(r) {
+			lhsBytes += size
+			if lhsBytes > maxAssignmentLHSBytes || normalizedLen >= len(normalized) {
+				lhsValid = false
+			} else {
+				if r >= 'A' && r <= 'Z' {
+					r += 'a' - 'A'
+				}
+				normalized[normalizedLen] = byte(r)
+				normalizedLen++
+			}
+			cursor += size
+			continue
+		}
+		if unicode.IsSpace(r) {
+			spaceStart := cursor
+			for cursor < len(value) {
+				r, size = utf8.DecodeRuneInString(value[cursor:])
+				if !unicode.IsSpace(r) {
+					break
+				}
+				cursor += size
+			}
+			if cursor-spaceStart <= maxAssignmentSpace && cursor < len(value) && (value[cursor] == ':' || value[cursor] == '=') {
+				// Preserve the candidate for the delimiter below.
+				continue
+			}
+			reset()
+			continue
+		}
+		if r != ':' && r != '=' {
+			if normalizedLen > 0 {
+				lhsBytes += size
+				if lhsBytes > maxAssignmentLHSBytes {
+					lhsValid = false
+				}
+			}
+			cursor += size
+			continue
+		}
+
+		delimiterEnd := cursor + size
+		valueStart, valueEnd, next, hasValue := assignmentValueRange(value, delimiterEnd)
+		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveNormalized(normalized[:normalizedLen]) {
+			return canonicalAssignmentMatch{valueStart: valueStart, valueEnd: valueEnd, next: next}, true
+		}
+		reset()
+		cursor = delimiterEnd
+		for cursor < len(value) && cursor-delimiterEnd <= maxAssignmentSpace {
+			r, size = utf8.DecodeRuneInString(value[cursor:])
+			if !unicode.IsSpace(r) {
+				break
+			}
+			cursor += size
 		}
 	}
-	return false
+	return canonicalAssignmentMatch{}, false
+}
+
+func isNormalizedKeyRune(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
+func assignmentValueRange(value string, start int) (valueStart, valueEnd, next int, ok bool) {
+	cursor := start
+	for cursor < len(value) && cursor-start <= maxAssignmentSpace {
+		r, size := utf8.DecodeRuneInString(value[cursor:])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		cursor += size
+	}
+	if cursor-start > maxAssignmentSpace || cursor >= len(value) {
+		return 0, 0, cursor, false
+	}
+	valueStart = cursor
+	quote := value[cursor]
+	if quote == '\'' || quote == '"' {
+		cursor++
+		for cursor < len(value) {
+			if value[cursor] == '\\' && cursor+1 < len(value) {
+				cursor += 2
+				continue
+			}
+			if value[cursor] == quote {
+				cursor++
+				return valueStart, cursor, cursor, true
+			}
+			if value[cursor] == '\r' || value[cursor] == '\n' {
+				break
+			}
+			_, size := utf8.DecodeRuneInString(value[cursor:])
+			cursor += size
+		}
+		return valueStart, cursor, cursor, cursor > valueStart+1
+	}
+	for cursor < len(value) {
+		r, size := utf8.DecodeRuneInString(value[cursor:])
+		if unicode.IsSpace(r) || strings.ContainsRune(",;}]", r) {
+			break
+		}
+		cursor += size
+	}
+	return valueStart, cursor, cursor, cursor > valueStart
 }
 
 func sanitizeCanonicalAssignments(value string) (string, bool) {
-	matches := canonicalAssignment.FindAllStringSubmatchIndex(value, -1)
-	if len(matches) == 0 {
+	match, found := findCanonicalAssignment(value, 0)
+	if !found {
 		return value, false
 	}
 	var out strings.Builder
+	out.Grow(min(len(value), maxSanitizedStringLen))
 	last := 0
-	found := false
-	for _, match := range matches {
-		if len(match) < 6 || match[4] < 0 || match[5] < 0 || !canonicalSensitiveKey(value[match[4]:match[5]]) {
-			continue
+	for found {
+		if out.Len()+match.valueStart-last+len(Marker) > maxSanitizedStringLen {
+			return Marker, true
 		}
-		out.WriteString(value[last:match[0]])
-		out.WriteString(value[match[2]:match[3]])
+		out.WriteString(value[last:match.valueStart])
 		out.WriteString(Marker)
-		last = match[1]
-		found = true
+		last = match.valueEnd
+		match, found = findCanonicalAssignment(value, match.next)
 	}
-	if !found {
-		return value, false
+	if out.Len()+len(value)-last > maxSanitizedStringLen {
+		return Marker, true
 	}
 	out.WriteString(value[last:])
 	return out.String(), true
 }
 
 func canonicalCredentialDetected(value string) bool {
-	if _, found := sanitizeCanonicalAssignments(value); found {
+	if _, found := findCanonicalAssignment(value, 0); found {
 		return true
 	}
 	if redaction.String(value) != value || embeddedCredentialURL(value) {
@@ -322,14 +468,8 @@ func canonicalCredentialDetected(value string) bool {
 }
 
 func containsCanonicalSensitiveMarker(value string) bool {
-	// Normalize once so separator-fragmented keys are joined, then use the
-	// standard library's optimized substring scan. This remains bounded for
-	// the proxy's 16 MiB inspection limit without a regex match per token.
-	normalized := normalizeKey(value)
-	for _, fragment := range canonicalSensitiveFragments {
-		if strings.Contains(normalized, fragment) {
-			return true
-		}
+	if canonicalMarkerString(value) {
+		return true
 	}
 	return canonicalCredentialDetected(value)
 }
@@ -1101,13 +1241,103 @@ var (
 	safeGeneratorKey            = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
 	safeSCPRepository           = regexp.MustCompile(`^git@([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):([A-Za-z0-9._/-]{1,512})$`)
 	embeddedHTTPURL             = regexp.MustCompile(`(?i)https?://[^\s<>'"]+`)
-	canonicalAssignment         = regexp.MustCompile(`(?im)(([A-Za-z][A-Za-z0-9_."' -]{0,64})\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\s,;}\]\r\n]+)`)
 	canonicalSensitiveFragments = []string{
 		"password", "passwd", "secret", "clientsecret", "clientcertkey", "kubeconfig",
 		"apikey", "privatekey", "token", "credential", "awsaccesskeyid", "googleaccessid",
-		"signature", "bearer", "xamzsecuritytoken",
+		"signature", "bearer", "xamzsecuritytoken", "authorization", "cookie", "clientkey",
+		"cacertificate", "certificateauthoritydata",
 	}
+	canonicalMarkerMachine = buildCanonicalMarkerMachine(canonicalSensitiveFragments)
 )
+
+type canonicalMarkerNode struct {
+	next     [36]int
+	failure  int
+	terminal bool
+}
+
+// buildCanonicalMarkerMachine constructs an Aho-Corasick machine once. The
+// hot path then recognizes every canonical family with one transition per
+// normalized byte instead of performing one complete string scan per family.
+func buildCanonicalMarkerMachine(patterns []string) []canonicalMarkerNode {
+	nodes := []canonicalMarkerNode{{}}
+	for _, pattern := range patterns {
+		state := 0
+		for i := 0; i < len(pattern); i++ {
+			index := canonicalMarkerIndex(pattern[i])
+			if nodes[state].next[index] == 0 {
+				nodes = append(nodes, canonicalMarkerNode{})
+				nodes[state].next[index] = len(nodes) - 1
+			}
+			state = nodes[state].next[index]
+		}
+		nodes[state].terminal = true
+	}
+	queue := make([]int, 0, len(nodes))
+	for index, child := range nodes[0].next {
+		if child != 0 {
+			queue = append(queue, child)
+			continue
+		}
+		nodes[0].next[index] = 0
+	}
+	for head := 0; head < len(queue); head++ {
+		state := queue[head]
+		for index, child := range nodes[state].next {
+			if child != 0 {
+				nodes[child].failure = nodes[nodes[state].failure].next[index]
+				nodes[child].terminal = nodes[child].terminal || nodes[nodes[child].failure].terminal
+				queue = append(queue, child)
+				continue
+			}
+			nodes[state].next[index] = nodes[nodes[state].failure].next[index]
+		}
+	}
+	return nodes
+}
+
+func canonicalMarkerIndex(value byte) int {
+	if value >= '0' && value <= '9' {
+		return int(value-'0') + 26
+	}
+	return int(value - 'a')
+}
+
+func canonicalMarkerBytes(value []byte) bool {
+	state := 0
+	for _, item := range value {
+		if item >= 'A' && item <= 'Z' {
+			item += 'a' - 'A'
+		}
+		if (item < 'a' || item > 'z') && (item < '0' || item > '9') {
+			continue
+		}
+		state = canonicalMarkerMachine[state].next[canonicalMarkerIndex(item)]
+		if canonicalMarkerMachine[state].terminal {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalMarkerString(value string) bool {
+	state := 0
+	for cursor := 0; cursor < len(value); {
+		r, size := utf8.DecodeRuneInString(value[cursor:])
+		cursor += size
+		if r >= 'A' && r <= 'Z' {
+			r += 'a' - 'A'
+		}
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			continue
+		}
+		state = canonicalMarkerMachine[state].next[canonicalMarkerIndex(byte(r))]
+		if canonicalMarkerMachine[state].terminal {
+			return true
+		}
+	}
+	return false
+}
 
 // ValidateCredentialFreeURL is the shared write boundary for Argo endpoint,
 // repository, source and destination URLs. Diagnostic output uses the same

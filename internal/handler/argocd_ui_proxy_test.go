@@ -13,6 +13,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 const argoProxyCanary = "ARGO_PROXY_CANARY_9d32f1"
@@ -552,6 +554,28 @@ func TestArgoCDUIProxyMalformedJSONResponseFailsClosed(t *testing.T) {
 	proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
 	if rr.Code != http.StatusBadGateway || strings.Contains(rr.Body.String(), argoProxyCanary) {
 		t.Fatalf("malformed response status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestArgoCDUIProxyResponseLimitMatchesTypedClientAndNeverEchoes(t *testing.T) {
+	if maxArgoCDProxyJSONBytes != argosecurity.MaxArgoResponseBodyBytes {
+		t.Fatalf("proxy limit %d differs from shared typed limit %d", maxArgoCDProxyJSONBytes, argosecurity.MaxArgoResponseBodyBytes)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(argoProxyCanary))
+		_, _ = w.Write([]byte(strings.Repeat("x", argosecurity.MaxArgoResponseBodyBytes)))
+	}))
+	defer upstream.Close()
+	var logs bytes.Buffer
+	proxy, err := NewArgoCDUIProxy(upstream.URL, slog.New(slog.NewJSONHandler(&logs, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
+	if rr.Code != http.StatusBadGateway || strings.Contains(rr.Body.String(), argoProxyCanary) || strings.Contains(logs.String(), argoProxyCanary) {
+		t.Fatalf("status=%d body=%q logs=%q", rr.Code, rr.Body.String(), logs.String())
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 const policyCanary = "ARGO_POLICY_CANARY_7f41d8"
@@ -255,6 +256,95 @@ func TestCanonicalCredentialDetectorTaxonomyAndFragmentedKeys(t *testing.T) {
 		if got != Marker {
 			t.Errorf("fragmented malformed key was not failed closed: %#v", got)
 		}
+	}
+}
+
+func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBranch(t *testing.T) {
+	families := append(append([]string(nil), canonicalSensitiveFragments...), "sig")
+	fragment := func(key string) string {
+		separators := []string{"·", "/", "_", `"`, "-", "."}
+		var out strings.Builder
+		for i, r := range key {
+			if i > 0 {
+				out.WriteString(separators[(i-1)%len(separators)])
+			}
+			out.WriteRune(r)
+		}
+		return out.String()
+	}
+	wrap := func(generator any) map[string]any {
+		return map[string]any{"spec": map[string]any{"generators": []any{generator}}}
+	}
+	listWith := func(value string) any {
+		return map[string]any{"list": map[string]any{"elements": []any{map[string]any{"note": value}}}}
+	}
+	gitWith := func(value string) any {
+		return map[string]any{"git": map[string]any{"repoURL": "https://git.example/repo", "values": map[string]any{"note": value}}}
+	}
+	clusterWith := func(value string) any {
+		return map[string]any{"clusters": map[string]any{"values": map[string]any{"note": value}}}
+	}
+	for _, family := range families {
+		family := family
+		t.Run(family, func(t *testing.T) {
+			assignment := fragment(family) + "=" + policyCanary
+			if got := SanitizeString(assignment); strings.Contains(got, policyCanary) || !strings.Contains(got, Marker) {
+				t.Fatalf("fragmented assignment sanitized to %q", got)
+			}
+			durable, err := SanitizeDurableReason("deploy " + assignment + " phase=running")
+			if err != nil || strings.Contains(durable, policyCanary) || !strings.Contains(durable, "phase=running") {
+				t.Fatalf("durable reason = %q, %v", durable, err)
+			}
+			branches := map[string]any{
+				"list":     wrap(listWith(assignment)),
+				"clusters": wrap(clusterWith(assignment)),
+				"git":      wrap(gitWith(assignment)),
+				"matrix": wrap(map[string]any{"matrix": map[string]any{"generators": []any{
+					listWith("phase=running"), gitWith(assignment),
+				}}}),
+				"merge": wrap(map[string]any{"merge": map[string]any{
+					"mergeKeys":  []any{"cluster"},
+					"generators": []any{clusterWith("phase=running"), listWith(assignment)},
+				}}),
+			}
+			for branch, payload := range branches {
+				if err := ValidateApplicationSetMutation(payload); err == nil {
+					t.Errorf("%s accepted fragmented %s assignment", branch, family)
+				}
+			}
+		})
+	}
+}
+
+func TestCanonicalAssignmentScannerMaxSizeIsBoundedAndAllocationStable(t *testing.T) {
+	unit := "phase=running "
+	dense := strings.Repeat(unit, MaxArgoResponseBodyBytes/len(unit))
+	dense += strings.Repeat("x", MaxArgoResponseBodyBytes-len(dense))
+	started := time.Now()
+	got, found := sanitizeCanonicalAssignments(dense)
+	if found || got != dense {
+		t.Fatal("dense safe assignments were changed")
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Fatalf("one-pass max-size scan took %s", elapsed)
+	}
+	if allocations := testing.AllocsPerRun(3, func() {
+		_, _ = sanitizeCanonicalAssignments(dense)
+	}); allocations > 1 {
+		t.Fatalf("dense safe scan allocations = %.1f, want <= 1", allocations)
+	}
+
+	credentialDense := strings.Repeat("token=x ", (MaxArgoResponseBodyBytes-len("token=x"))/len("token=x "))
+	credentialDense += "token=x"
+	if safe, found := sanitizeCanonicalAssignments(credentialDense); !found || safe != Marker {
+		t.Fatalf("expanded output did not fail closed within %d-byte bound", maxSanitizedStringLen)
+	}
+}
+
+func TestCanonicalAssignmentScannerPreservesSafeProse(t *testing.T) {
+	prose := `phase=Running message:"deployment complete" ratio=3:1 path=/apps/demo unicode=東京 [maintenance window]`
+	if got := SanitizeString(prose); got != prose {
+		t.Fatalf("safe prose changed: %q", got)
 	}
 }
 

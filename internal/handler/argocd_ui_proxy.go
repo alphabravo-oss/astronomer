@@ -625,7 +625,7 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 // upgrade) can find the hijacker on the inner writer.
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
-const maxArgoCDProxyJSONBytes = 16 << 20
+const maxArgoCDProxyJSONBytes = argosecurity.MaxArgoResponseBodyBytes
 
 func validateArgoCDProxyMutationRequest(r *http.Request) (int, error) {
 	if r == nil || !strings.HasPrefix(r.URL.Path, "/argocd/api/") {

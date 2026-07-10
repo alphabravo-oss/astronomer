@@ -27,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -34,6 +35,10 @@ import (
 // Default timeout for all client requests. Kept short because the reconciler
 // loop holds its own mutex while these calls are in flight.
 const DefaultTimeout = 10 * time.Second
+
+const maxResponseDrainBytes = 64 << 10
+
+const responseBodyLimitMessage = "Argo CD response exceeds the 16 MiB limit"
 
 var (
 	clientTracer = otel.Tracer("astronomer/argocd-client")
@@ -372,11 +377,21 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, out a
 		return &APIError{Kind: ErrUnreachable, Message: err.Error()}
 	}
 	defer func() {
+		// A bounded drain permits connection reuse for ordinary short bodies
+		// without letting an oversized upstream response consume unbounded
+		// bandwidth after the allocation limit has fired.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseDrainBytes))
 		_ = resp.Body.Close()
 	}()
 	statusCode = resp.StatusCode
 	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
-	raw, _ := io.ReadAll(resp.Body)
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, argosecurity.MaxArgoResponseBodyBytes+1))
+	if readErr != nil {
+		return &APIError{Kind: classifyErrorKind(resp.StatusCode), Status: resp.StatusCode, Message: "Argo CD response could not be read"}
+	}
+	if len(raw) > argosecurity.MaxArgoResponseBodyBytes {
+		return &APIError{Kind: classifyErrorKind(resp.StatusCode), Status: resp.StatusCode, Message: responseBodyLimitMessage}
+	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		return classifyError(resp.StatusCode, raw)
 	}
@@ -451,6 +466,11 @@ func classifyError(status int, body []byte) error {
 	if msg == "" {
 		msg = strings.TrimSpace(string(body))
 	}
+	kind := classifyErrorKind(status)
+	return &APIError{Kind: kind, Status: status, Message: msg, Body: string(body)}
+}
+
+func classifyErrorKind(status int) ErrorKind {
 	kind := ErrUnknown
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
@@ -462,5 +482,5 @@ func classifyError(status int, body []byte) error {
 	case status >= http.StatusInternalServerError:
 		kind = ErrServer
 	}
-	return &APIError{Kind: kind, Status: status, Message: msg, Body: string(body)}
+	return kind
 }
