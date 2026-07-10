@@ -17,4 +17,3 @@ COMMENT ON COLUMN dex_settings.public_clients IS
     'Legacy migration input only. Application code must atomically scrub this column to [] after Fernet migration.';
 COMMENT ON COLUMN dex_settings.public_clients_encrypted IS
     'Fernet-encrypted canonical JSON array of Dex static clients.';
-

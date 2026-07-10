@@ -4,4 +4,3 @@ ALTER TABLE dex_settings
 
 COMMENT ON COLUMN dex_settings.configmap_name IS NULL;
 COMMENT ON COLUMN dex_settings.public_clients IS NULL;
-
