@@ -26,22 +26,35 @@ type argoCDQueryRecorder struct {
 	operation       sqlc.ArgocdOperation
 	operationEvents []sqlc.ArgocdOperationEvent
 
-	progress   []sqlc.UpdateArgoCDOperationProgressParams
-	completed  []sqlc.CompleteArgoCDOperationWithResultParams
-	failed     []sqlc.FailArgoCDOperationWithResultParams
-	appUpdate  []sqlc.UpdateArgoCDApplicationParams
-	events     []sqlc.CreateArgoCDOperationEventParams
-	created    []sqlc.CreateArgoCDOperationParams
-	auditRows  []sqlc.CreateAuditLogV1Params
-	requeued   []sqlc.RequeueArgoCDOperationParams
-	runningOps []sqlc.ArgocdOperation
+	progress       []sqlc.UpdateArgoCDOperationProgressParams
+	completed      []sqlc.CompleteArgoCDOperationWithResultParams
+	failed         []sqlc.FailArgoCDOperationWithResultParams
+	appUpdate      []sqlc.UpdateArgoCDApplicationParams
+	events         []sqlc.CreateArgoCDOperationEventParams
+	created        []sqlc.CreateArgoCDOperationParams
+	upserts        []sqlc.UpsertDiscoveredArgoCDApplicationParams
+	upsertErr      error
+	getOpErr       error
+	getInstanceErr error
+	getAppErr      error
+	auditRows      []sqlc.CreateAuditLogV1Params
+	requeued       []sqlc.RequeueArgoCDOperationParams
+	runningOps     []sqlc.ArgocdOperation
 }
 
 func (q *argoCDQueryRecorder) GetArgoCDApplicationByID(_ context.Context, _ uuid.UUID) (sqlc.ArgocdApplication, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.getAppErr != nil {
+		return sqlc.ArgocdApplication{}, q.getAppErr
+	}
 	return q.app, nil
 }
 
 func (q *argoCDQueryRecorder) GetArgoCDInstanceByID(_ context.Context, _ uuid.UUID) (sqlc.ArgocdInstance, error) {
+	if q.getInstanceErr != nil {
+		return sqlc.ArgocdInstance{}, q.getInstanceErr
+	}
 	return q.instance, nil
 }
 
@@ -89,6 +102,25 @@ func (q *argoCDQueryRecorder) GetArgoCDInstanceByName(context.Context, string) (
 func (q *argoCDQueryRecorder) GetArgoCDApplicationByName(context.Context, sqlc.GetArgoCDApplicationByNameParams) (sqlc.ArgocdApplication, error) {
 	panic("not used")
 }
+func (q *argoCDQueryRecorder) UpsertDiscoveredArgoCDApplication(_ context.Context, arg sqlc.UpsertDiscoveredArgoCDApplicationParams) (sqlc.ArgocdApplication, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.upserts = append(q.upserts, arg)
+	if q.upsertErr != nil {
+		return sqlc.ArgocdApplication{}, q.upsertErr
+	}
+	q.app.ArgocdInstanceID = arg.ArgocdInstanceID
+	q.app.Name = arg.Name
+	q.app.UpstreamUid = arg.UpstreamUid
+	q.app.ApplicationNamespace = arg.ApplicationNamespace
+	q.app.Project = arg.Project
+	q.app.RepoUrl = arg.RepoUrl
+	q.app.Path = arg.Path
+	q.app.TargetRevision = arg.TargetRevision
+	q.app.DestinationCluster = arg.DestinationCluster
+	q.app.DestinationNamespace = arg.DestinationNamespace
+	return q.app, nil
+}
 func (q *argoCDQueryRecorder) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
 	return nil, nil
 }
@@ -114,16 +146,23 @@ func (q *argoCDQueryRecorder) CountAppsByInstance(context.Context, uuid.UUID) (i
 	return 0, nil
 }
 func (q *argoCDQueryRecorder) CreateArgoCDOperation(_ context.Context, arg sqlc.CreateArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.created = append(q.created, arg)
 	now := time.Now().UTC()
 	return sqlc.ArgocdOperation{ID: uuid.New(), TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType, Payload: arg.Payload, Status: arg.Status, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (q *argoCDQueryRecorder) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.auditRows = append(q.auditRows, arg)
 	return nil
 }
 func (q *argoCDQueryRecorder) GetArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
+	if q.getOpErr != nil {
+		return sqlc.ArgocdOperation{}, q.getOpErr
+	}
 	return q.operation, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperations(context.Context, sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error) {
@@ -205,6 +244,8 @@ func newArgoCDFixture(t *testing.T, handler http.HandlerFunc) (*ArgoCDHandler, *
 			ID:                   uuid.New(),
 			ArgocdInstanceID:     uuid.New(),
 			Name:                 "myapp",
+			UpstreamUid:          "upstream-myapp-uid",
+			ApplicationNamespace: "astronomer",
 			Project:              "default",
 			RepoUrl:              "https://example.com/repo",
 			Path:                 "manifests",
@@ -239,7 +280,7 @@ func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
 		seenBody = string(raw)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"metadata": {"name": "myapp"},
+			"metadata": {"name": "myapp", "uid": "upstream-myapp-uid", "namespace": "astronomer"},
 			"status": {
 				"sync": {"status": "OutOfSync", "revision": "abc123"},
 				"health": {"status": "Progressing"},
@@ -259,7 +300,7 @@ func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
 		ID:            uuid.New(),
 		OperationType: "sync",
 		Status:        "running",
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), SyncOptions: &argocdclient.SyncOptions{Revision: "main", Prune: true}}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid, SyncOptions: &argocdclient.SyncOptions{Revision: "main", Prune: true}}),
 	}
 
 	res, err := h.executeOperation(context.Background(), op)
@@ -443,7 +484,7 @@ func TestBuildArgoCDOrphanReportDetectsLiveArgoApplications(t *testing.T) {
 func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
-			"metadata": {"name": "myapp"},
+			"metadata": {"name": "myapp", "uid": "upstream-myapp-uid"},
 			"status": {
 				"sync": {"status": "Synced", "revision": "deadbeef"},
 				"health": {"status": "Healthy"},
@@ -465,7 +506,7 @@ func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 		Phase:         "Running",
 		PollAttempts:  3,
 		StartedAt:     pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 	}
 	rec.injectRunning(op)
 
@@ -485,7 +526,7 @@ func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 func TestPollRunningOperationFailsOnTerminalFailed(t *testing.T) {
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
-			"metadata": {"name": "myapp"},
+			"metadata": {"name": "myapp", "uid": "upstream-myapp-uid"},
 			"status": {
 				"sync": {"status": "OutOfSync"},
 				"operationState": {"phase": "Failed", "message": "manifest error"}
@@ -497,7 +538,7 @@ func TestPollRunningOperationFailsOnTerminalFailed(t *testing.T) {
 		OperationType: "sync",
 		Status:        "running",
 		Phase:         "Running",
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 	}
 	rec.injectRunning(op)
 	h.pollRunningOperations(context.Background())
@@ -524,7 +565,7 @@ func TestPollRunningOperationCapsAttempts(t *testing.T) {
 		Status:        "running",
 		Phase:         "Running",
 		PollAttempts:  MaxArgoCDOperationPolls,
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 	}
 	rec.injectRunning(op)
 	h.pollRunningOperations(context.Background())

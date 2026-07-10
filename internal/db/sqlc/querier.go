@@ -1990,6 +1990,12 @@ type Querier interface {
 	// who disabled a default repo keeps it disabled across reconciles.
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
+	// A single statement is the transaction boundary for concurrent discovery.
+	// The stable local ID is preserved on conflict so already-audited operation
+	// targets never drift. Discovery refreshes only bounded reference metadata;
+	// last-good status, resource counts and last_synced are intentionally not
+	// clobbered when another server replica won the insert race.
+	UpsertDiscoveredArgoCDApplication(ctx context.Context, arg UpsertDiscoveredArgoCDApplicationParams) (ArgocdApplication, error)
 	// The sync worker calls this after a YAML's contents have been applied
 	// so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT
 	// promotes any tombstoned row back to active — that's the

@@ -13,15 +13,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
@@ -62,6 +65,7 @@ type ArgoCDQuerier interface {
 	GetArgoCDInstanceByID(ctx context.Context, id uuid.UUID) (sqlc.ArgocdInstance, error)
 	GetArgoCDInstanceByName(ctx context.Context, name string) (sqlc.ArgocdInstance, error)
 	GetArgoCDApplicationByName(ctx context.Context, arg sqlc.GetArgoCDApplicationByNameParams) (sqlc.ArgocdApplication, error)
+	UpsertDiscoveredArgoCDApplication(ctx context.Context, arg sqlc.UpsertDiscoveredArgoCDApplicationParams) (sqlc.ArgocdApplication, error)
 	ListArgoCDInstances(ctx context.Context, arg sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error)
 	CreateArgoCDInstance(ctx context.Context, arg sqlc.CreateArgoCDInstanceParams) (sqlc.ArgocdInstance, error)
 	UpdateArgoCDInstance(ctx context.Context, arg sqlc.UpdateArgoCDInstanceParams) (sqlc.ArgocdInstance, error)
@@ -231,6 +235,7 @@ func (h *ArgoCDHandler) resolveAuthToken(req CreateArgoCDInstanceRequest) (strin
 type argocdOperationEnvelope struct {
 	ApplicationID      string                    `json:"applicationId,omitempty"`
 	InstanceID         string                    `json:"instanceId,omitempty"`
+	UpstreamUID        string                    `json:"upstreamUid,omitempty"`
 	SyncOptions        *argocdclient.SyncOptions `json:"syncOptions,omitempty"`
 	Reason             string                    `json:"reason,omitempty"`
 	SyncWindowOverride bool                      `json:"syncWindowOverride,omitempty"`
@@ -271,6 +276,9 @@ func syncWindowOverrideNote(override bool) string {
 func normalizeSyncRequest(req SyncRequest) (SyncRequest, error) {
 	req.Revision = strings.TrimSpace(req.Revision)
 	req.Reason = strings.TrimSpace(req.Reason)
+	if len(req.Revision) > 256 {
+		return req, fmt.Errorf("revision must be 256 bytes or fewer")
+	}
 	if len(req.Reason) > 500 {
 		return req, fmt.Errorf("reason must be 500 characters or fewer")
 	}
@@ -683,6 +691,17 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
 		return
 	}
+	app, ok := h.discoverArgoCDApplication(w, r, instance, app.Name, app.UpstreamUid)
+	if !ok {
+		return
+	}
+	h.syncResolvedApp(w, r, app)
+}
+
+// syncResolvedApp validates the bounded operator request and creates the
+// durable operation after authorization and live Application identity
+// discovery have both succeeded. It never accepts an upstream spec payload.
+func (h *ArgoCDHandler) syncResolvedApp(w http.ResponseWriter, r *http.Request, app sqlc.ArgocdApplication) {
 
 	var req SyncRequest
 	// An empty body is fine; we only fail on malformed JSON.
@@ -695,6 +714,7 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	var err error
 	req, err = normalizeSyncRequest(req)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
@@ -905,24 +925,138 @@ func (h *ArgoCDHandler) callInstance(ctx context.Context, instance sqlc.ArgocdIn
 
 // SyncAppByName handles POST /api/v1/argocd/instances/{id}/applications/{name}/sync/.
 func (h *ArgoCDHandler) SyncAppByName(w http.ResponseWriter, r *http.Request) {
-	instanceID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid instance ID")
+	instance, ok := h.loadInstance(w, r, rbac.VerbUpdate)
+	if !ok {
 		return
 	}
 	name := chi.URLParam(r, "name")
-	app, err := h.queries.GetArgoCDApplicationByName(r.Context(), sqlc.GetArgoCDApplicationByNameParams{
-		ArgocdInstanceID: instanceID,
-		Name:             name,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
+	app, ok := h.discoverArgoCDApplication(w, r, instance, name, "")
+	if !ok {
 		return
 	}
+	h.syncResolvedApp(w, r, app)
+}
 
-	ctx := chi.NewRouteContext()
-	ctx.URLParams.Add("id", app.ID.String())
-	h.SyncApp(w, r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, ctx)))
+// discoverArgoCDApplication resolves one exact name from the authorized
+// instance and atomically upserts only an allowlisted, bounded metadata
+// projection. Userinfo/query/fragment credentials are sanitized before the
+// database boundary; Helm values, parameters, annotations, labels and every
+// other spec field are deliberately excluded.
+func (h *ArgoCDHandler) discoverArgoCDApplication(w http.ResponseWriter, r *http.Request, instance sqlc.ArgocdInstance, name, expectedUID string) (sqlc.ArgocdApplication, bool) {
+	if name == "" || name != strings.TrimSpace(name) || len(k8svalidation.IsDNS1123Subdomain(name)) != 0 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Application name must be a valid Kubernetes DNS subdomain")
+		return sqlc.ArgocdApplication{}, false
+	}
+	live, err := h.argoCDClient(instance).GetApp(r.Context(), name)
+	if translateClientError(w, r, err) {
+		return sqlc.ArgocdApplication{}, false
+	}
+	params, err := discoveredApplicationParams(instance.ID, name, live)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadGateway, apierror.ArgoCDError, "Argo CD returned an invalid Application identity")
+		return sqlc.ArgocdApplication{}, false
+	}
+	if expectedUID = strings.TrimSpace(expectedUID); expectedUID != "" && params.UpstreamUid != expectedUID {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "ArgoCD Application identity changed; refresh and retry by name")
+		return sqlc.ArgocdApplication{}, false
+	}
+	app, err := h.queries.UpsertDiscoveredArgoCDApplication(r.Context(), params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "ArgoCD Application identity changed; remove the stale cache record before rebinding")
+			return sqlc.ArgocdApplication{}, false
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "ArgoCD instance changed during Application discovery")
+			return sqlc.ArgocdApplication{}, false
+		}
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to cache ArgoCD application metadata")
+		return sqlc.ArgocdApplication{}, false
+	}
+	return app, true
+}
+
+func discoveredApplicationParams(instanceID uuid.UUID, expectedName string, live *argocdclient.Application) (sqlc.UpsertDiscoveredArgoCDApplicationParams, error) {
+	if live == nil || strings.TrimSpace(live.Metadata.Name) != expectedName {
+		return sqlc.UpsertDiscoveredArgoCDApplicationParams{}, fmt.Errorf("upstream Application identity is incomplete or mismatched")
+	}
+	uid, err := exactArgoIdentity(live.Metadata.UID, 128)
+	if err != nil {
+		return sqlc.UpsertDiscoveredArgoCDApplicationParams{}, fmt.Errorf("invalid upstream Application UID: %w", err)
+	}
+	applicationNamespace := strings.TrimSpace(live.Metadata.Namespace)
+	if applicationNamespace != "" && len(k8svalidation.IsDNS1123Label(applicationNamespace)) != 0 {
+		return sqlc.UpsertDiscoveredArgoCDApplicationParams{}, fmt.Errorf("invalid upstream Application namespace")
+	}
+	source := argocdclient.ApplicationSource{}
+	if live.Spec.Source != nil {
+		source = *live.Spec.Source
+	} else {
+		for _, candidate := range live.Spec.Sources {
+			if strings.TrimSpace(candidate.RepoURL) != "" && strings.TrimSpace(candidate.Ref) == "" {
+				source = candidate
+				break
+			}
+		}
+	}
+	destinationCluster, destinationNamespace := "", ""
+	if live.Spec.Destination != nil {
+		destinationCluster = firstNonEmptyString(live.Spec.Destination.Name, live.Spec.Destination.Server)
+		destinationNamespace = live.Spec.Destination.Namespace
+	}
+	created, changed, pruned, _ := argoCDResourceDriftCountsFromApplication(live)
+	return sqlc.UpsertDiscoveredArgoCDApplicationParams{
+		ArgocdInstanceID:     instanceID,
+		Name:                 expectedName,
+		UpstreamUid:          uid,
+		ApplicationNamespace: applicationNamespace,
+		Project:              boundedArgoMetadata(live.Spec.Project, 255, "default"),
+		RepoUrl:              safeArgoRepoReference(source.RepoURL),
+		Path:                 boundedArgoMetadata(source.Path, 512, ""),
+		TargetRevision:       boundedArgoMetadata(source.TargetRevision, 128, "HEAD"),
+		DestinationCluster:   boundedArgoMetadata(destinationCluster, 512, ""),
+		DestinationNamespace: boundedArgoMetadata(destinationNamespace, 255, ""),
+		SyncStatus:           boundedArgoMetadata(live.Status.Sync.Status, 16, "Unknown"),
+		HealthStatus:         boundedArgoMetadata(live.Status.Health.Status, 16, "Unknown"),
+		ResourceCreatedCount: created,
+		ResourceChangedCount: changed,
+		ResourcePrunedCount:  pruned,
+	}, nil
+}
+
+func exactArgoIdentity(value string, maxBytes int) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > maxBytes || strings.ContainsAny(value, "\x00\r\n\t ") || argosecurity.SanitizeString(value) != value {
+		return "", fmt.Errorf("identity is empty, oversized, or unsafe")
+	}
+	return value, nil
+}
+
+func safeArgoRepoReference(value string) string {
+	safe := strings.TrimSpace(argosecurity.SanitizeString(value))
+	if safe == "" || safe == argosecurity.Marker || strings.ContainsAny(safe, "\x00\r\n\t ") {
+		return ""
+	}
+	if err := argosecurity.ValidateRepositoryURL(safe); err != nil {
+		return ""
+	}
+	return boundedArgoMetadata(safe, 512, "")
+}
+
+func boundedArgoMetadata(value string, maxBytes int, fallback string) string {
+	value = strings.TrimSpace(argosecurity.SanitizeString(value))
+	if value == "" {
+		value = fallback
+	}
+	for len(value) > maxBytes {
+		_, size := utf8.DecodeLastRuneInString(value)
+		if size <= 0 {
+			return fallback
+		}
+		value = value[:len(value)-size]
+	}
+	return value
 }
 
 func (h *ArgoCDHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
@@ -1156,6 +1290,7 @@ func (h *ArgoCDHandler) enqueueSyncOperation(ctx context.Context, app sqlc.Argoc
 	envelope := argocdOperationEnvelope{
 		ApplicationID:      app.ID.String(),
 		InstanceID:         app.ArgocdInstanceID.String(),
+		UpstreamUID:        app.UpstreamUid,
 		Reason:             reason,
 		SyncWindowOverride: syncWindowOverride,
 	}
@@ -1399,12 +1534,27 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 	if err != nil {
 		return operationResult{}, err
 	}
+	instanceID, err := uuid.Parse(strings.TrimSpace(env.InstanceID))
+	if err != nil || instanceID != app.ArgocdInstanceID {
+		return operationResult{}, fmt.Errorf("argocd operation instance identity does not match its Application")
+	}
 	instance, err := h.queries.GetArgoCDInstanceByID(ctx, app.ArgocdInstanceID)
 	if err != nil {
 		return operationResult{}, err
 	}
+	if instance.ID != app.ArgocdInstanceID {
+		return operationResult{}, fmt.Errorf("argocd instance lookup returned a mismatched identity")
+	}
 	if !instance.IsHealthy {
 		return operationResult{}, fmt.Errorf("argocd instance %s is not healthy", instance.Name)
+	}
+	client := h.argoCDClient(instance)
+	live, err := client.GetApp(ctx, app.Name)
+	if err != nil {
+		return operationResult{}, err
+	}
+	if err := validateOperationApplicationIdentity(env, app, instance, live); err != nil {
+		return operationResult{}, err
 	}
 	h.recordArgoCDOperationEvent(ctx, op.ID, "info", "sync", "calling upstream ArgoCD sync", map[string]any{
 		"applicationId":            app.ID.String(),
@@ -1426,13 +1576,15 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 		})
 	}
 
-	client := h.argoCDClient(instance)
 	opts := argocdclient.SyncOptions{}
 	if env.SyncOptions != nil {
 		opts = *env.SyncOptions
 	}
 	upstream, err := client.Sync(ctx, app.Name, opts)
 	if err != nil {
+		return operationResult{}, err
+	}
+	if err := validateOperationApplicationIdentity(env, app, instance, upstream); err != nil {
 		return operationResult{}, err
 	}
 	res := operationResultFromApp(upstream)
@@ -1513,6 +1665,21 @@ func operationResultFromApp(app *argocdclient.Application) operationResult {
 	}
 	res.async = true
 	return res
+}
+
+func validateOperationApplicationIdentity(env argocdOperationEnvelope, app sqlc.ArgocdApplication, instance sqlc.ArgocdInstance, live *argocdclient.Application) error {
+	expectedUID := strings.TrimSpace(env.UpstreamUID)
+	expectedInstanceID, err := uuid.Parse(strings.TrimSpace(env.InstanceID))
+	if err != nil || expectedInstanceID != app.ArgocdInstanceID || instance.ID != app.ArgocdInstanceID {
+		return fmt.Errorf("argocd operation instance identity does not match its Application")
+	}
+	if expectedUID == "" || strings.TrimSpace(app.UpstreamUid) == "" {
+		return fmt.Errorf("argocd operation is not bound to an upstream Application identity")
+	}
+	if live == nil || strings.TrimSpace(live.Metadata.Name) != app.Name || strings.TrimSpace(live.Metadata.UID) != expectedUID || app.UpstreamUid != expectedUID {
+		return fmt.Errorf("argocd Application identity changed after operation creation")
+	}
+	return nil
 }
 
 func safeArgoOperationStateMessage(phase string) string {
@@ -1605,10 +1772,21 @@ func (h *ArgoCDHandler) claimRunningArgoCDPolls(ctx context.Context) []claimedOp
 		}
 		app, err := h.queries.GetArgoCDApplicationByID(ctx, appID)
 		if err != nil {
+			h.failOperationWithMessage(ctx, op, "Failed", "cached ArgoCD Application no longer exists")
+			continue
+		}
+		instanceID, err := uuid.Parse(strings.TrimSpace(env.InstanceID))
+		if err != nil || instanceID != app.ArgocdInstanceID {
+			h.failOperationWithMessage(ctx, op, "Failed", "durable ArgoCD operation instance identity is invalid")
 			continue
 		}
 		instance, err := h.queries.GetArgoCDInstanceByID(ctx, app.ArgocdInstanceID)
 		if err != nil {
+			h.failOperationWithMessage(ctx, op, "Failed", "ArgoCD instance no longer exists")
+			continue
+		}
+		if instance.ID != app.ArgocdInstanceID {
+			h.failOperationWithMessage(ctx, op, "Failed", "ArgoCD instance lookup returned a mismatched identity")
 			continue
 		}
 		if op.PollAttempts >= MaxArgoCDOperationPolls {
@@ -1650,6 +1828,15 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 				Revision:    op.Revision,
 				Message:     argocdclient.PublicErrorMessage(err),
 			})
+			return
+		}
+		var env argocdOperationEnvelope
+		if err := json.Unmarshal(op.Payload, &env); err != nil {
+			h.failOperationWithMessage(ctx, op, "Failed", "invalid durable ArgoCD operation payload")
+			return
+		}
+		if err := validateOperationApplicationIdentity(env, app, instance, upstream); err != nil {
+			h.failOperationWithMessage(ctx, op, "Failed", argosecurity.SanitizeString(err.Error()))
 			return
 		}
 		res := operationResultFromApp(upstream)
@@ -2254,9 +2441,10 @@ type CreateApplicationRequest struct {
 }
 
 // CreateApplication handles POST /api/v1/argocd/instances/{id}/applications/.
-// Writes through to upstream ArgoCD. The local argocd_applications table is
-// not pre-populated here — the existing list reconciler picks up new
-// applications on its next round-trip.
+// Writes through to upstream ArgoCD. The bounded sync-by-name discovery path
+// populates argocd_applications before creating any durable operation; this
+// write endpoint intentionally does not persist the submitted Application
+// spec or pretend an asynchronous list reconciler exists.
 func (h *ArgoCDHandler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	instance, ok := h.loadInstance(w, r, rbac.VerbCreate)
 	if !ok {

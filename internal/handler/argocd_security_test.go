@@ -292,7 +292,7 @@ func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
 	t.Cleanup(func() { audit.SetBusPublisher(nil) })
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp","uid":"upstream-myapp-uid"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
 	})
 	reason := "HTTP://user:pass@example.test/object?AWSAccessKeyId=" + argoHandlerCanary + "#fragment"
 	for _, family := range []string{
@@ -366,7 +366,7 @@ func TestSensitiveFamilyContinuationsAreSanitizedAcrossDurableAndReadSinks(t *te
 	t.Cleanup(func() { audit.SetBusPublisher(nil) })
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp","uid":"upstream-myapp-uid"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
 	})
 	phrases := []string{
 		"api key value", "private key data", "client secret material", "access token value",
@@ -429,7 +429,7 @@ func TestSafeSigSubstringAssignmentsRoundTripAcrossDurableAndReadSinks(t *testin
 	t.Cleanup(func() { audit.SetBusPublisher(nil) })
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp","uid":"upstream-myapp-uid"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
 	})
 	words := []string{"design", "assignment", "signal", "insignia", "resign"}
 	assignments := make([]string, 0, len(words))
@@ -500,7 +500,7 @@ func TestRetrySanitizesLegacyReasonBeforePayloadTimelineAuditAndAPI(t *testing.T
 	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
 	opID := uuid.New()
 	legacyReason := `{"apiKey":"` + argoHandlerCanary + `","password":"` + argoHandlerCanary + `","nested":{"privateKey":"` + argoHandlerCanary + `","clientSecret":"` + argoHandlerCanary + `","credential":"` + argoHandlerCanary + `"},"note":"Bearer ` + argoHandlerCanary + `"}`
-	payload := mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), Reason: legacyReason})
+	payload := mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid, Reason: legacyReason})
 	now := time.Now().UTC()
 	rec.operation = sqlc.ArgocdOperation{
 		ID: opID, TargetType: "application", TargetKey: rec.app.ID.String(), OperationType: "sync",

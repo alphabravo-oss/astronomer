@@ -45,6 +45,9 @@ func (q *argocdManagedClusterQueryStub) GetArgoCDInstanceByName(context.Context,
 func (q *argocdManagedClusterQueryStub) GetArgoCDApplicationByName(context.Context, sqlc.GetArgoCDApplicationByNameParams) (sqlc.ArgocdApplication, error) {
 	panic("not used")
 }
+func (q *argocdManagedClusterQueryStub) UpsertDiscoveredArgoCDApplication(context.Context, sqlc.UpsertDiscoveredArgoCDApplicationParams) (sqlc.ArgocdApplication, error) {
+	panic("not used")
+}
 func (q *argocdManagedClusterQueryStub) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
 	return nil, nil
 }

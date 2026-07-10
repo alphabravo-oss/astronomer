@@ -89,6 +89,105 @@ components:
             - message
       required:
         - error
+    ArgoSyncRequest:
+      type: object
+      description: |
+        Bounded manual-sync options. Application source/spec and credential
+        material are never accepted by this operation endpoint.
+      additionalProperties: false
+      properties:
+        revision:
+          type: string
+          maxLength: 256
+        prune:
+          type: boolean
+          default: false
+        dry_run:
+          type: boolean
+          default: false
+        reason:
+          type: string
+          maxLength: 500
+        sync_window_override:
+          type: boolean
+          default: false
+          description: Audit intent only; does not bypass ArgoCD AppProject sync windows.
+    ArgoOperation:
+      type: object
+      required:
+        - id
+        - targetType
+        - targetKey
+        - operationType
+        - status
+        - attemptCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        targetType:
+          type: string
+          enum: [application]
+        targetKey:
+          type: string
+          description: Stable Astronomer-local Application UUID.
+        operationType:
+          type: string
+          enum: [sync]
+        status:
+          type: string
+          enum: [pending, running, completed, failed, superseded]
+        attemptCount:
+          type: integer
+          minimum: 0
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        errorMessage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        events:
+          type: array
+          description: Present on operation detail responses.
+          items:
+            $ref: '#/components/schemas/ArgoOperationEvent'
+    ArgoOperationEvent:
+      type: object
+      required: [id, level, stage, message, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        level:
+          type: string
+        stage:
+          type: string
+        message:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    ArgoOperationEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ArgoOperation'
     PaginatedEnvelope:
       type: object
       description: DRF-style paginated list envelope. `data` is the page of items.
@@ -5233,6 +5332,123 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /api/v1/argocd/operations/:
+    get:
+      tags: [ArgoCD]
+      summary: List durable ArgoCD operations
+      parameters:
+        - name: targetType
+          in: query
+          schema: {type: string}
+        - name: targetKey
+          in: query
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: offset
+          in: query
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        '200':
+          description: Durable operation page
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/argocd/operations/{id}/:
+    get:
+      tags: [ArgoCD]
+      summary: Get a durable ArgoCD operation
+      description: A 404 means the durable operation row does not exist; it never indicates completion.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Durable operation state, including terminal completed operations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArgoOperationEnvelope'
+        '404':
+          description: Durable operation row not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /api/v1/argocd/applications/{id}/sync/:
+    post:
+      tags: [ArgoCD]
+      summary: Queue a bounded sync for a cached Application UUID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ArgoSyncRequest'}
+      responses:
+        '202':
+          description: Durable sync operation accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ArgoOperationEnvelope'}
+        '404':
+          description: Application not found locally or upstream
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /api/v1/argocd/instances/{id}/applications/{name}/sync/:
+    post:
+      tags: [ArgoCD]
+      summary: Live-resolve an Application by exact instance/name and queue a bounded sync
+      description: |
+        Authorizes the instance before upstream discovery, atomically caches a
+        reference-only metadata projection, and binds the durable operation to
+        the upstream Application UID. No Application spec payload is accepted.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 253
+            pattern: '^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ArgoSyncRequest'}
+      responses:
+        '202':
+          description: Durable sync operation accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ArgoOperationEnvelope'}
+        '404':
+          description: Application not found upstream
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '409':
+          description: Instance was removed while discovery was in progress
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
   /api/v1/argocd/instances/{id}/orphan-report/:
     get:
       tags:

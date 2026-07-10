@@ -43,6 +43,65 @@ SELECT * FROM argocd_applications WHERE id = $1;
 -- name: GetArgoCDApplicationByName :one
 SELECT * FROM argocd_applications WHERE argocd_instance_id = $1 AND name = $2;
 
+-- name: UpsertDiscoveredArgoCDApplication :one
+-- A single statement is the transaction boundary for concurrent discovery.
+-- The stable local ID is preserved on conflict so already-audited operation
+-- targets never drift. Discovery refreshes only bounded reference metadata;
+-- last-good status, resource counts and last_synced are intentionally not
+-- clobbered when another server replica won the insert race.
+INSERT INTO argocd_applications (
+    argocd_instance_id,
+    name,
+    upstream_uid,
+    application_namespace,
+    project,
+    repo_url,
+    path,
+    target_revision,
+    destination_cluster,
+    destination_namespace,
+    sync_status,
+    health_status,
+    resource_created_count,
+    resource_changed_count,
+    resource_pruned_count
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+)
+ON CONFLICT (argocd_instance_id, name) DO UPDATE SET
+    upstream_uid = EXCLUDED.upstream_uid,
+    application_namespace = EXCLUDED.application_namespace,
+    project = EXCLUDED.project,
+    repo_url = EXCLUDED.repo_url,
+    path = EXCLUDED.path,
+    target_revision = EXCLUDED.target_revision,
+    destination_cluster = EXCLUDED.destination_cluster,
+    destination_namespace = EXCLUDED.destination_namespace,
+    sync_status = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.sync_status
+        ELSE argocd_applications.sync_status
+    END,
+    health_status = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.health_status
+        ELSE argocd_applications.health_status
+    END,
+    resource_created_count = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.resource_created_count
+        ELSE argocd_applications.resource_created_count
+    END,
+    resource_changed_count = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.resource_changed_count
+        ELSE argocd_applications.resource_changed_count
+    END,
+    resource_pruned_count = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.resource_pruned_count
+        ELSE argocd_applications.resource_pruned_count
+    END,
+    updated_at = now()
+WHERE argocd_applications.upstream_uid = ''
+   OR argocd_applications.upstream_uid = EXCLUDED.upstream_uid
+RETURNING *;
+
 -- name: ListArgoCDApplications :many
 SELECT * FROM argocd_applications ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 

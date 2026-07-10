@@ -201,6 +201,10 @@ type ArgocdApplication struct {
 	LastSynced           pgtype.Timestamptz `json:"last_synced"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+	// Non-secret upstream Kubernetes UID used to bind durable operations to one Application incarnation.
+	UpstreamUid string `json:"upstream_uid"`
+	// Non-secret upstream Application object namespace; never stores Application spec or credentials.
+	ApplicationNamespace string `json:"application_namespace"`
 }
 
 type ArgocdBaselineOwnershipDecision struct {

@@ -178,6 +178,31 @@ export interface OpenAPIComponents {
         };
     ApplyClusterTemplateRequest: Record<string, unknown>;
     ApplyNetworkPolicyRequest: Record<string, unknown>;
+    ArgoOperation: {
+          "id": string;
+          "targetType": "application";
+          "targetKey": string;
+          "operationType": "sync";
+          "status": "pending" | "running" | "completed" | "failed" | "superseded";
+          "attemptCount": number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage"?: string;
+          "createdAt": string;
+          "updatedAt": string;
+          "events"?: OpenAPIComponents['schemas']['ArgoOperationEvent'][];
+        };
+    ArgoOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['ArgoOperation'];
+        };
+    ArgoOperationEvent: {
+          "id": string;
+          "level": string;
+          "stage": string;
+          "message": string;
+          "detail"?: Record<string, unknown>;
+          "createdAt": string;
+        };
     ArgoOrphanApplication: {
           "id"?: string;
           "name"?: string;
@@ -199,6 +224,13 @@ export interface OpenAPIComponents {
           "orphan_applications"?: OpenAPIComponents['schemas']['ArgoOrphanApplication'][];
           "live_error"?: string;
           "generated_at"?: string;
+        };
+    ArgoSyncRequest: {
+          "revision"?: string;
+          "prune"?: boolean;
+          "dry_run"?: boolean;
+          "reason"?: string;
+          "sync_window_override"?: boolean;
         };
     AuditLogEntry: {
           "id"?: string;
@@ -1589,8 +1621,12 @@ export type ApiTokenCreated = OpenAPIComponents['schemas']['ApiTokenCreated'];
 export type ApiTokenListItem = OpenAPIComponents['schemas']['ApiTokenListItem'];
 export type ApplyClusterTemplateRequest = OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
 export type ApplyNetworkPolicyRequest = OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
+export type ArgoOperation = OpenAPIComponents['schemas']['ArgoOperation'];
+export type ArgoOperationEnvelope = OpenAPIComponents['schemas']['ArgoOperationEnvelope'];
+export type ArgoOperationEvent = OpenAPIComponents['schemas']['ArgoOperationEvent'];
 export type ArgoOrphanApplication = OpenAPIComponents['schemas']['ArgoOrphanApplication'];
 export type ArgoOrphanReport = OpenAPIComponents['schemas']['ArgoOrphanReport'];
+export type ArgoSyncRequest = OpenAPIComponents['schemas']['ArgoSyncRequest'];
 export type AuditLogEntry = OpenAPIComponents['schemas']['AuditLogEntry'];
 export type BackupControllerStatus = OpenAPIComponents['schemas']['BackupControllerStatus'];
 export type BackupCreateRequest = OpenAPIComponents['schemas']['BackupCreateRequest'];

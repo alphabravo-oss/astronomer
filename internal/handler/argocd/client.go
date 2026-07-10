@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -288,7 +289,7 @@ func (c *Client) Sync(ctx context.Context, name string, opts SyncOptions) (*Appl
 		return nil, err
 	}
 	var app Application
-	if err := c.do(ctx, http.MethodPost, "/api/v1/applications/"+name+"/sync", raw, &app); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/api/v1/applications/"+url.PathEscape(name)+"/sync", raw, &app); err != nil {
 		return nil, err
 	}
 	return &app, nil
@@ -297,7 +298,7 @@ func (c *Client) Sync(ctx context.Context, name string, opts SyncOptions) (*Appl
 // GetApp fetches an application's current state from ArgoCD.
 func (c *Client) GetApp(ctx context.Context, name string) (*Application, error) {
 	var app Application
-	if err := c.do(ctx, http.MethodGet, "/api/v1/applications/"+name, nil, &app); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/api/v1/applications/"+url.PathEscape(name), nil, &app); err != nil {
 		return nil, err
 	}
 	return &app, nil
@@ -311,7 +312,7 @@ func (c *Client) Refresh(ctx context.Context, name string, hard bool) (*Applicat
 		mode = "hard"
 	}
 	var app Application
-	if err := c.do(ctx, http.MethodGet, "/api/v1/applications/"+name+"?refresh="+mode, nil, &app); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/api/v1/applications/"+url.PathEscape(name)+"?refresh="+mode, nil, &app); err != nil {
 		return nil, err
 	}
 	return &app, nil
