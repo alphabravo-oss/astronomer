@@ -296,6 +296,7 @@ func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBran
 		"authorization header", "cookie value", "AWS access key ID value",
 		"private key content", "private key pem", "private key hash", "client secret reference",
 		"platform api key owner",
+		"sig", "sig value", "note=sig value",
 	} {
 		assignments["sensitive continuation "+phrase] = phrase + "=" + policyCanary
 	}
@@ -330,6 +331,51 @@ func TestCanonicalCredentialSeparatorFamiliesSanitizeAndRejectEveryGeneratorBran
 	}
 	if got := SanitizeString("note=api key value=" + policyCanary); strings.Contains(got, policyCanary) {
 		t.Fatalf("credential family split across value/LHS boundary survived: %q", got)
+	}
+}
+
+func TestCanonicalShortMarkerTokenSemanticsAcrossGeneratorBranches(t *testing.T) {
+	for _, fragment := range canonicalSensitiveFragments {
+		if len(fragment) <= 3 {
+			t.Fatalf("canonical fragment %q must have explicit token semantics", fragment)
+		}
+	}
+	wrap := func(generator any) map[string]any {
+		return map[string]any{"spec": map[string]any{"generators": []any{generator}}}
+	}
+	listWith := func(value string) any {
+		return map[string]any{"list": map[string]any{"elements": []any{map[string]any{"note": value}}}}
+	}
+	gitWith := func(value string) any {
+		return map[string]any{"git": map[string]any{"repoURL": "https://git.example/repo", "values": map[string]any{"note": value}}}
+	}
+	clusterWith := func(value string) any {
+		return map[string]any{"clusters": map[string]any{"values": map[string]any{"note": value}}}
+	}
+	for _, word := range []string{"design", "assignment", "signal", "insignia", "resign"} {
+		assignment := word + "=diagnostic"
+		if got := SanitizeString(assignment); got != assignment {
+			t.Errorf("safe %q assignment changed to %q", word, got)
+		}
+		if got, err := SanitizeDurableReason(assignment); err != nil || got != assignment {
+			t.Errorf("safe durable %q = %q, %v", word, got, err)
+		}
+		for branch, payload := range map[string]any{
+			"list":     wrap(listWith(assignment)),
+			"clusters": wrap(clusterWith(assignment)),
+			"git":      wrap(gitWith(assignment)),
+			"matrix": wrap(map[string]any{"matrix": map[string]any{"generators": []any{
+				listWith("phase=running"), gitWith(assignment),
+			}}}),
+			"merge": wrap(map[string]any{"merge": map[string]any{
+				"mergeKeys":  []any{"cluster"},
+				"generators": []any{clusterWith("phase=running"), listWith(assignment)},
+			}}),
+		} {
+			if err := ValidateApplicationSetMutation(payload); err != nil {
+				t.Errorf("%s rejected safe %q assignment: %v", branch, word, err)
+			}
+		}
 	}
 }
 

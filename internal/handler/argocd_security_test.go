@@ -371,6 +371,7 @@ func TestSensitiveFamilyContinuationsAreSanitizedAcrossDurableAndReadSinks(t *te
 	phrases := []string{
 		"api key value", "private key data", "client secret material", "access token value",
 		"authorization header", "cookie value", "AWS access key ID value", "client secret reference",
+		"sig", "sig value", "note=sig value",
 	}
 	assignments := make([]string, 0, len(phrases))
 	for _, phrase := range phrases {
@@ -419,6 +420,71 @@ func TestSensitiveFamilyContinuationsAreSanitizedAcrossDurableAndReadSinks(t *te
 	h.GetOperation(apiRR, apiReq)
 	if apiRR.Code != http.StatusOK || strings.Contains(apiRR.Body.String(), "=Z") || !strings.Contains(apiRR.Body.String(), "[redacted]") {
 		t.Fatalf("operation API status=%d body=%s", apiRR.Code, apiRR.Body.String())
+	}
+}
+
+func TestSafeSigSubstringAssignmentsRoundTripAcrossDurableAndReadSinks(t *testing.T) {
+	bus := &argoAuditBusCapture{}
+	audit.SetBusPublisher(bus)
+	t.Cleanup(func() { audit.SetBusPublisher(nil) })
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"operationState":{"phase":"Running"},"sync":{"status":"OutOfSync"}}}`))
+	})
+	words := []string{"design", "assignment", "signal", "insignia", "resign"}
+	assignments := make([]string, 0, len(words))
+	for _, word := range words {
+		assignments = append(assignments, word+"=diagnostic")
+	}
+	reason := strings.Join(assignments, " ")
+	body := `{"reason":` + string(mustJSON(t, reason)) + `,"sync_window_override":true}`
+	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.app.ID.String()})
+	rr := httptest.NewRecorder()
+	h.SyncApp(rr, req)
+	if rr.Code != http.StatusAccepted || len(rec.created) != 1 || len(rec.auditRows) != 1 || len(bus.data) != 1 {
+		t.Fatalf("status=%d created=%d audit=%d published=%d body=%s", rr.Code, len(rec.created), len(rec.auditRows), len(bus.data), rr.Body.String())
+	}
+	initial, _ := json.Marshal(map[string]any{"payload": rec.created[0].Payload, "audit": rec.auditRows[0], "published": bus.data[0]})
+	for _, assignment := range assignments {
+		if !strings.Contains(string(initial), assignment) {
+			t.Fatalf("enqueue/audit/bus lost safe %q: %s", assignment, initial)
+		}
+	}
+
+	pendingID := uuid.New()
+	pending := sqlc.ArgocdOperation{
+		ID: pendingID, TargetType: "application", TargetKey: rec.app.ID.String(), OperationType: "sync",
+		Payload: rec.created[0].Payload, Status: OpStatusPending, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	if _, err := h.executeOperation(context.Background(), pending); err != nil {
+		t.Fatalf("execute pending operation: %v", err)
+	}
+	timelineRaw, _ := json.Marshal(rec.events)
+	for _, assignment := range assignments {
+		if !strings.Contains(string(timelineRaw), assignment) {
+			t.Fatalf("timeline lost safe %q: %s", assignment, timelineRaw)
+		}
+	}
+
+	rec.operation = pending
+	rec.operation.Status = "running"
+	rec.operationEvents = make([]sqlc.ArgocdOperationEvent, 0, len(rec.events))
+	for _, event := range rec.events {
+		rec.operationEvents = append(rec.operationEvents, sqlc.ArgocdOperationEvent{
+			ID: uuid.New(), OperationID: pendingID, Level: event.Level, Stage: event.Stage,
+			Message: event.Message, Detail: event.Detail, CreatedAt: time.Now().UTC(),
+		})
+	}
+	apiReq := argoHandlerRouteRequest(http.MethodGet, "/operation", "", map[string]string{"id": pendingID.String()})
+	apiRR := httptest.NewRecorder()
+	h.GetOperation(apiRR, apiReq)
+	if apiRR.Code != http.StatusOK {
+		t.Fatalf("operation API status=%d body=%s", apiRR.Code, apiRR.Body.String())
+	}
+	for _, assignment := range assignments {
+		if !strings.Contains(apiRR.Body.String(), assignment) {
+			t.Fatalf("operation API lost safe %q: %s", assignment, apiRR.Body.String())
+		}
 	}
 }
 

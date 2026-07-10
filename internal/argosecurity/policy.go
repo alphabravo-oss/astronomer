@@ -314,17 +314,22 @@ type canonicalAssignmentMatch struct {
 // storage prevents dense safe assignments from allocating per candidate.
 func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch, bool) {
 	var normalized [maxAssignmentLHSBytes + maxAssignmentPrefix]byte
+	var tokenBoundaries [maxAssignmentLHSBytes + maxAssignmentPrefix + 1]uint32
 	normalizedLen := 0
 	semanticStart := 0
 	lhsBytes := 0
 	lhsValid := true
 	valueBoundary := -1
+	boundaryGeneration := uint32(1)
+	tokenBoundaries[0] = boundaryGeneration
 
 	reset := func() {
 		normalizedLen = 0
 		semanticStart = 0
 		lhsBytes = 0
 		lhsValid = true
+		boundaryGeneration++
+		tokenBoundaries[0] = boundaryGeneration
 	}
 	for cursor := start; cursor < len(value); {
 		if valueBoundary >= 0 && cursor >= valueBoundary {
@@ -332,11 +337,24 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 			// It detects a credential family split across the value/LHS
 			// boundary, while semanticStart identifies the exact new LHS for
 			// the narrow metadata allowlist.
+			tokenBoundaries[normalizedLen] = boundaryGeneration
 			if normalizedLen > maxAssignmentPrefix {
-				copy(normalized[:], normalized[normalizedLen-maxAssignmentPrefix:normalizedLen])
+				oldStart := normalizedLen - maxAssignmentPrefix
+				var retainedBoundaries [maxAssignmentPrefix + 1]bool
+				for i := oldStart; i <= normalizedLen; i++ {
+					retainedBoundaries[i-oldStart] = tokenBoundaries[i] == boundaryGeneration
+				}
+				copy(normalized[:], normalized[oldStart:normalizedLen])
 				normalizedLen = maxAssignmentPrefix
+				boundaryGeneration++
+				for i, boundary := range retainedBoundaries {
+					if boundary {
+						tokenBoundaries[i] = boundaryGeneration
+					}
+				}
 			}
 			semanticStart = normalizedLen
+			tokenBoundaries[semanticStart] = boundaryGeneration
 			lhsBytes = 0
 			lhsValid = true
 			valueBoundary = -1
@@ -371,6 +389,7 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 				cursor += size
 			}
 			spaceBytes := cursor - spaceStart
+			tokenBoundaries[normalizedLen] = boundaryGeneration
 			if normalizedLen > 0 {
 				lhsBytes += spaceBytes
 				if lineBoundary || spaceBytes > maxAssignmentSpace || lhsBytes > maxAssignmentLHSBytes {
@@ -383,6 +402,7 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 			continue
 		}
 		if r != ':' && r != '=' {
+			tokenBoundaries[normalizedLen] = boundaryGeneration
 			if normalizedLen > 0 {
 				lhsBytes += size
 				if lhsBytes > maxAssignmentLHSBytes {
@@ -394,8 +414,9 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 		}
 
 		delimiterEnd := cursor + size
+		tokenBoundaries[normalizedLen] = boundaryGeneration
 		valueStart, valueEnd, next, hasValue := assignmentValueRange(value, delimiterEnd)
-		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveAssignmentLHS(normalized[:normalizedLen], normalized[semanticStart:normalizedLen]) {
+		if lhsValid && normalizedLen > 0 && hasValue && canonicalSensitiveAssignmentLHS(normalized[:normalizedLen], normalized[semanticStart:normalizedLen], tokenBoundaries[:normalizedLen+1], boundaryGeneration) {
 			return canonicalAssignmentMatch{valueStart: valueStart, valueEnd: valueEnd, next: next}, true
 		}
 		if hasValue {
@@ -414,8 +435,8 @@ func findCanonicalAssignment(value string, start int) (canonicalAssignmentMatch,
 	return canonicalAssignmentMatch{}, false
 }
 
-func canonicalSensitiveAssignmentLHS(normalized, semanticLHS []byte) bool {
-	if !canonicalMarkerBytes(normalized) && !bytes.Contains(normalized, []byte("sig")) {
+func canonicalSensitiveAssignmentLHS(normalized, semanticLHS []byte, tokenBoundaries []uint32, generation uint32) bool {
+	if !canonicalMarkerBytes(normalized) && !containsExactCanonicalToken(normalized, tokenBoundaries, generation, 0, len(normalized), "sig") && !bytes.Equal(semanticLHS, []byte("sig")) {
 		return false
 	}
 	// Containment fails closed. Only a complete normalized LHS with exact,
@@ -425,7 +446,20 @@ func canonicalSensitiveAssignmentLHS(normalized, semanticLHS []byte) bool {
 		return true
 	}
 	prefix := normalized[:len(normalized)-len(semanticLHS)]
-	return canonicalMarkerBytes(prefix) || bytes.Contains(prefix, []byte("sig"))
+	return canonicalMarkerBytes(prefix) || containsExactCanonicalToken(normalized, tokenBoundaries, generation, 0, len(prefix), "sig")
+}
+
+func containsExactCanonicalToken(normalized []byte, tokenBoundaries []uint32, generation uint32, start, end int, marker string) bool {
+	if len(marker) == 0 || start < 0 || end > len(normalized) || start > end {
+		return false
+	}
+	for cursor := start; cursor+len(marker) <= end; cursor++ {
+		markerEnd := cursor + len(marker)
+		if tokenBoundaries[cursor] == generation && tokenBoundaries[markerEnd] == generation && bytes.Equal(normalized[cursor:markerEnd], []byte(marker)) {
+			return true
+		}
+	}
+	return false
 }
 
 func safeAssignmentMetadataLHS(normalized []byte) bool {
