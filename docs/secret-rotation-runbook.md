@@ -103,6 +103,7 @@ The tool rewrites every row in every column-stored Fernet secret. As of this
 writing that is:
 
 - `sso_configurations.client_secret_encrypted`
+- `dex_settings.public_clients_encrypted`
 - `argocd_instances.auth_token_encrypted`
 - `backup_storage_configs.encrypted_credentials`
 - `vault_connections.auth_encrypted`
@@ -121,17 +122,20 @@ The authoritative list is `rewriteTargets` in `cmd/keyrotate/main.go`; a build
 test (`cmd/keyrotate/coverage_test.go`) fails if a migration adds an encrypted
 column that is not swept, so this list cannot silently drift.
 
-It also prints the count of `dex_connectors` rows: their encrypted
-fields live inside a JSONB blob (per-connector-type schema), so the
-tool does NOT auto-rewrite them. Re-save each Dex connector via the UI
-or:
+The same run CAS-rewrites every recognized encrypted field inside
+`dex_connectors.config`. Unknown connector types, invalid ciphertext, or a CAS
+conflict are reported as failures and keep the command non-zero; do not remove
+the fallback key until a clean rerun completes.
 
-```bash
-curl -sX PATCH -H "Authorization: Bearer $TOKEN" \
-  $URL/api/v1/dex/connectors/$ID -d '{}'    # zero-diff PATCH forces re-encrypt
-```
+Migration 134's plaintext `dex_settings.public_clients` compatibility copy is
+not scrubbed by a normal rotation. After every old server replica is quiesced
+and only the mixed-version-aware binary remains, perform the explicit durable
+cutover with `--dex-public-clients-cutover-confirmed`. This encrypts the final
+compatibility value, CAS-scrubs it, and stamps `public_clients_cutover_at`.
+Re-running is safe and processes only unstamped rows. The database constraint
+then rejects an old binary attempting to repopulate plaintext.
 
-When the `keyrotate` summary shows `failed=0`, every column secret is
+When the `keyrotate` summary shows `failed=0`, every column and connector secret is
 now under the new primary.
 
 ### Step 4 — drop the old key

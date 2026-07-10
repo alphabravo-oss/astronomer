@@ -30,7 +30,7 @@ classification.
 | `cluster_agent_tokens.previous_token_hash` | hashed | Lookup hash for the previous durable agent token during a rotation grace window; cleared once the agent adopts the new token (or by the grace-TTL backstop). |
 | `cluster_registry_configs.registry_password_encrypted` | encrypted | Fernet ciphertext for registry passwords; new registry writes use this column when a Fernet key is configured. |
 | `scim_tokens.token_hash` | hashed | Lookup hash for SCIM provisioning bearer tokens; plaintext is shown once at creation and never stored. |
-| `dex_settings.public_clients_encrypted` | encrypted | Fernet ciphertext containing canonical Dex static-client JSON. The legacy `public_clients` JSONB column is scrubbed to `[]`. |
+| `dex_settings.public_clients_encrypted` | encrypted | Fernet ciphertext containing canonical Dex static-client JSON. It becomes authoritative after the explicit quiesced cutover. |
 
 ## Legacy Plaintext To Migrate
 
@@ -41,6 +41,7 @@ classification.
 | `cluster_registry_configs.registry_password` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
 | `backup_storage_configs.access_key` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
 | `backup_storage_configs.secret_key` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
+| `dex_settings.public_clients` | mixed-version compatibility credential | Dual-written only until `keyrotate --dex-public-clients-cutover-confirmed` CAS-scrubs it and stamps `public_clients_cutover_at`; later writes are DB-rejected. |
 
 ## Non-Secret References Or Metadata
 

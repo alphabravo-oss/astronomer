@@ -48,6 +48,26 @@ volume before populating the Secret can take every Dex replica offline.
    in the rehearsal. `public_clients` must be `[]`; only the Fernet envelope may
    be populated.
 
+## Database compatibility cutover
+
+Migration 134 is deliberately expand-only. During the supported mixed-version
+window, new code encrypts an envelope but continues to dual-write
+`public_clients`; previous replicas therefore remain correct. Do not declare the
+database credential migration complete merely because the envelope exists.
+
+After old replicas are quiesced, run `keyrotate --dry-run
+--dex-public-clients-cutover-confirmed`, review only counts, then repeat without
+`--dry-run`. The cutover is CAS-safe, resumable, and observable through
+`public_clients_cutover_at`; it never prints client JSON. Its forward-fix down
+migration retains the envelope because dropping it after scrub would destroy
+credentials. A later contract migration may remove the legacy column only after
+the rollback window closes.
+
+Legacy Helm values such as `dex.clientSecret` and `dex.clientSecretRef` are
+rejected. Before upgrade, rotate any credential that appeared in Helm values and
+remove credential-bearing historical release Secrets according to the platform
+retention policy; rendering it unused does not erase Helm's stored values.
+
 ## Fresh install
 
 There is no old Dex service to preserve. An operator may explicitly set

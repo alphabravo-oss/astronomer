@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -19,6 +20,40 @@ func TestSelectBatchSQL_HonorsLimitOffsetPlaceholders(t *testing.T) {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("select SQL missing %q: %s", want, sql)
 		}
+	}
+}
+
+func TestRotateDexConnectorConfigRewritesFallbackCiphertext(t *testing.T) {
+	newKey, _ := auth.GenerateKey()
+	oldKey, _ := auth.GenerateKey()
+	oldOnly, _ := auth.NewEncryptor(oldKey)
+	multi, _ := auth.NewEncryptor(newKey + "," + oldKey)
+	newOnly, _ := auth.NewEncryptor(newKey)
+	oldCipher, _ := oldOnly.Encrypt("synthetic-connector-secret")
+	raw, _ := json.Marshal(map[string]any{"issuer": "https://idp.example", "clientID": "id", "clientSecret": oldCipher})
+	rotated, changed, err := rotateDexConnectorConfig(string(raw), "oidc", multi)
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	var config map[string]any
+	_ = json.Unmarshal([]byte(rotated), &config)
+	value, _ := config["clientSecret"].(string)
+	if plain, err := newOnly.Decrypt(value); err != nil || plain != "synthetic-connector-secret" {
+		t.Fatalf("new primary cannot decrypt rotated value")
+	}
+	if _, err := oldOnly.Decrypt(value); err == nil {
+		t.Fatal("rotated value still decrypts with removed fallback only")
+	}
+}
+
+func TestRotateDexConnectorConfigFailsClosedForUnknownTypeOrBadCiphertext(t *testing.T) {
+	key, _ := auth.GenerateKey()
+	enc, _ := auth.NewEncryptor(key)
+	if _, _, err := rotateDexConnectorConfig(`{}`, "future", enc); err == nil {
+		t.Fatal("unknown connector type accepted")
+	}
+	if _, _, err := rotateDexConnectorConfig(`{"clientSecret":"plaintext"}`, "oidc", enc); err == nil {
+		t.Fatal("plaintext connector secret accepted")
 	}
 }
 
