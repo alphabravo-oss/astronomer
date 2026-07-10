@@ -39,5 +39,9 @@ data:
         redirectURIs:
           - {{ printf "%s/api/v1/auth/callback/dex" (default "http://astronomer.localtest.me" .Values.config.serverURL) | quote }}
           - {{ printf "%s/api/v1/auth/callback/dex/" (default "http://astronomer.localtest.me" .Values.config.serverURL) | quote }}
+        {{- if .Values.dex.clientSecretRef.name }}
+        secretEnv: ASTRONOMER_DEX_CLIENT_SECRET
+        {{- else }}
         secret: {{ .Values.dex.clientSecret | default "astronomer-dex-secret" | quote }}
+        {{- end }}
 {{- end }}

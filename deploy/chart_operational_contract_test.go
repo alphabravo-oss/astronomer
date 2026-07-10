@@ -999,13 +999,23 @@ func TestSchemaFloorTracksMaxMigration(t *testing.T) {
 func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
 	root := repoRoot(t)
 
-	// The chart renders the canonical name.
+	// The chart writes the configured canonical key and workloads reference that
+	// exact key from the selected existing Secret.
 	chartSecret, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "secret.yaml"))
 	if err != nil {
 		t.Fatalf("read chart secret.yaml: %v", err)
 	}
-	if !strings.Contains(string(chartSecret), "ASTRONOMER_ENCRYPTION_KEY:") {
-		t.Fatal("chart templates/secret.yaml no longer renders ASTRONOMER_ENCRYPTION_KEY")
+	if !strings.Contains(string(chartSecret), `.Values.secrets.encryptionKeyKey`) {
+		t.Fatal("chart templates/secret.yaml no longer renders the configured encryption key name")
+	}
+	for _, template := range []string{"server-deployment.yaml", "worker-deployment.yaml"} {
+		raw, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", template))
+		if err != nil {
+			t.Fatalf("read %s: %v", template, err)
+		}
+		if !strings.Contains(string(raw), "ASTRONOMER_ENCRYPTION_KEY") || !strings.Contains(string(raw), `.Values.secrets.encryptionKeyKey`) {
+			t.Fatalf("%s must expose ASTRONOMER_ENCRYPTION_KEY from the configured Secret key", template)
+		}
 	}
 
 	// The DR runbook must not read/recreate the key under the bare name.

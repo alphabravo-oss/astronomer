@@ -78,9 +78,18 @@ spec:
             - configMapRef:
                 name: {{ include "astronomer.fullname" . }}-config
             - secretRef:
-                name: {{ include "astronomer.fullname" . }}-secrets
-          {{- if or .Values.postgres.external.dsnSecretRef.name .Values.redis.external.address .Values.redis.external.passwordSecretRef.name .Values.worker.env }}
+                name: {{ include "astronomer.secretsSecretName" . }}
           env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.secretKeyKey | quote }}
+            - name: ASTRONOMER_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.encryptionKeyKey | quote }}
             {{- if .Values.postgres.external.dsnSecretRef.name }}
             - name: DATABASE_URL
               valueFrom:
@@ -95,7 +104,13 @@ spec:
                   name: {{ .Values.redis.external.passwordSecretRef.name | quote }}
                   key: {{ .Values.redis.external.passwordSecretRef.key | quote }}
             {{- end }}
-            {{- if .Values.redis.external.address }}
+            {{- if .Values.redis.external.urlSecretRef.name }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.external.urlSecretRef.name | quote }}
+                  key: {{ .Values.redis.external.urlSecretRef.key | quote }}
+            {{- else if .Values.redis.external.address }}
             - name: REDIS_URL
               value: {{ include "astronomer.redisURL" . | quote }}
             {{- end }}
@@ -105,7 +120,6 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             {{- end }}
-          {{- end }}
           {{- if .Values.worker.probes.enabled }}
           # The worker exposes /healthz on the same server as /metrics (9090).
           # Liveness restarts a wedged consumer; readiness gates rollouts on

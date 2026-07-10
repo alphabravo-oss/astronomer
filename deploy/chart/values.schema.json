@@ -43,6 +43,7 @@
           }
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" },
         "productionRequirements": {
           "type": "object",
           "additionalProperties": true,
@@ -77,6 +78,7 @@
             "address": { "type": "string" },
             "tls": { "type": "boolean" },
             "database": { "type": "integer", "minimum": 0 },
+            "urlSecretRef": { "$ref": "#/definitions/secretKeyRef" },
             "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" }
           }
         },
@@ -92,6 +94,7 @@
         "enabled": { "type": "boolean" },
         "replicaCount": { "type": "integer", "minimum": 1 },
         "clientSecret": { "type": "string" },
+        "clientSecretRef": { "$ref": "#/definitions/secretKeyRef" },
         "image": { "$ref": "#/definitions/imageRef" }
       }
     },
@@ -127,6 +130,10 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "existingSecret": { "type": "string" },
+        "secretKeyKey": { "type": "string", "minLength": 1 },
+        "encryptionKeyKey": { "type": "string", "minLength": 1 },
+        "postgresPasswordKey": { "type": "string", "minLength": 1 },
         "secretKey": { "type": "string" },
         "encryptionKey": { "type": "string" }
       }
@@ -138,7 +145,8 @@
         "username": { "type": "string", "minLength": 1 },
         "email": { "type": "string" },
         "password": { "type": "string" },
-        "existingSecret": { "type": "string" }
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string", "minLength": 1 }
       }
     },
     "tls": {
@@ -287,10 +295,10 @@
                 "required": ["enabled"]
               },
               "external": {
-                "properties": {
-                  "address": { "type": "string", "minLength": 1 }
-                },
-                "required": ["address"]
+                "anyOf": [
+                  { "required": ["address"], "properties": { "address": { "type": "string", "minLength": 1 } } },
+                  { "required": ["urlSecretRef"], "properties": { "urlSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+                ]
               }
             },
             "required": ["bundled", "external"]
@@ -316,18 +324,20 @@
           },
           "secrets": {
             "properties": {
-              "secretKey": {
-                "type": "string",
-                "minLength": 1,
-                "not": { "const": "local-dev-secret-key-change-in-production" }
-              },
-              "encryptionKey": {
-                "type": "string",
-                "minLength": 1,
-                "not": { "const": "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }
-              }
+              "existingSecret": { "type": "string" },
+              "secretKey": { "type": "string" },
+              "encryptionKey": { "type": "string" }
             },
-            "required": ["secretKey", "encryptionKey"]
+            "anyOf": [
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "type": "string", "minLength": 1 } } },
+              {
+                "required": ["secretKey", "encryptionKey"],
+                "properties": {
+                  "secretKey": { "type": "string", "minLength": 1, "not": { "const": "local-dev-secret-key-change-in-production" } },
+                  "encryptionKey": { "type": "string", "minLength": 1, "not": { "const": "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" } }
+                }
+              }
+            ]
           },
           "bootstrap": {
             "properties": {
@@ -393,10 +403,10 @@
       "then": {
         "properties": {
           "dex": {
-            "properties": {
-              "clientSecret": { "type": "string", "minLength": 1 }
-            },
-            "required": ["clientSecret"]
+            "anyOf": [
+              { "required": ["clientSecret"], "properties": { "clientSecret": { "type": "string", "minLength": 1 } } },
+              { "required": ["clientSecretRef"], "properties": { "clientSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+            ]
           }
         }
       }

@@ -112,7 +112,8 @@ tls:
 bootstrap:
   username: admin
   email: admin@alphabravo.io
-  password: new-bootstrap
+  existingSecret: astronomer-bootstrap
+  existingSecretKey: password
 `
 
 	mergedYAML, err := mergeSelfManagedValues(current, bootstrap)
@@ -161,8 +162,8 @@ bootstrap:
 		t.Fatalf("tls.secretName = %v, want astronomer-tls", got)
 	}
 	bootstrapValues := merged["bootstrap"].(map[string]any)
-	if got := bootstrapValues["password"]; got != "new-bootstrap" {
-		t.Fatalf("bootstrap.password = %v, want new-bootstrap", got)
+	if got := bootstrapValues["existingSecret"]; got != "astronomer-bootstrap" {
+		t.Fatalf("bootstrap.existingSecret = %v, want astronomer-bootstrap", got)
 	}
 	if got := bootstrapValues["email"]; got != "admin@alphabravo.io" {
 		t.Fatalf("bootstrap.email = %v, want admin@alphabravo.io", got)
@@ -253,6 +254,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 				"SECRET_KEY":                []byte("secret-key"),
 				"ASTRONOMER_ENCRYPTION_KEY": []byte("encryption-key"),
 				"POSTGRES_PASSWORD":         []byte("postgres"),
+				"DATABASE_URL":              []byte("postgres://reference"),
+				"REDIS_URL":                 []byte("redis://reference"),
 			},
 		},
 		&corev1.Secret{
@@ -279,7 +282,18 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 				Replicas: &replicas,
 				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{{Name: "migrate", Image: "registry.example:5000/platform/migrate:migrate-tag"}},
-					Containers:     []corev1.Container{{Name: "server", Image: "localastro/astronomer-go-server:server-tag"}},
+					Containers: []corev1.Container{{
+						Name:  "server",
+						Image: "localastro/astronomer-go-server:server-tag",
+						EnvFrom: []corev1.EnvFromSource{{
+							SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-secrets"}},
+						}},
+						Env: []corev1.EnvVar{
+							{Name: "ASTRONOMER_BOOTSTRAP_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-bootstrap"}, Key: "password"}}},
+							{Name: "DATABASE_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-secrets"}, Key: "DATABASE_URL"}}},
+							{Name: "REDIS_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-secrets"}, Key: "REDIS_URL"}}},
+						},
+					}},
 				}},
 			},
 		},
@@ -302,6 +316,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 			},
 		},
 	)
+	if err := client.Tracker().Add(helmReleaseSecretFixture(t, 7, "deployed", map[string]any{
+		"image":     map[string]any{"registry": ""},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+	})); err != nil {
+		t.Fatal(err)
+	}
 
 	valuesYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent",
@@ -338,8 +359,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		t.Fatalf("image.frontend should not be set; frontend chart reads frontend.image")
 	}
 	bootstrapValues := values["bootstrap"].(map[string]any)
-	if got := bootstrapValues["password"]; got != "bootstrap-password" {
-		t.Fatalf("bootstrap.password = %v, want bootstrap-password", got)
+	if got := bootstrapValues["existingSecret"]; got != localAstronomerReleaseName+"-bootstrap" {
+		t.Fatalf("bootstrap.existingSecret = %v", got)
 	}
 	if got := bootstrapValues["username"]; got != "admin" {
 		t.Fatalf("bootstrap.username = %v, want admin", got)
@@ -350,6 +371,21 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	configValues := values["config"].(map[string]any)
 	if got := configValues["agentImageRepository"]; got != "agents.registry:5001/team/astronomer-go-agent" {
 		t.Fatalf("config.agentImageRepository = %v", got)
+	}
+	imageValues["server"].(map[string]any)["tag"] = "server-upgraded"
+	upgradedSource, err := yaml.Marshal(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent", AgentImageTag: "agent-tag",
+	}, client, "https://astronomer.dev.alphabravo.io", string(upgradedSource))
+	if err != nil {
+		t.Fatalf("second fixed-point build: %v", err)
+	}
+	second := unmarshalSelfManagedValues(t, secondYAML)
+	if got := second["image"].(map[string]any)["server"].(map[string]any)["tag"]; got != "server-upgraded" {
+		t.Fatalf("reference-only current Application image upgrade reverted to live/Helm source: %v", got)
 	}
 }
 

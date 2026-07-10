@@ -138,7 +138,9 @@ Computed DATABASE_URL — uses chart-managed Postgres unless overridden.
 Computed REDIS_URL.
 */}}
 {{- define "astronomer.redisURL" -}}
-{{- if .Values.redis.external.address -}}
+{{- if .Values.redis.external.urlSecretRef.name -}}
+{{- "" -}}
+{{- else if .Values.redis.external.address -}}
 {{- $scheme := ternary "rediss" "redis" .Values.redis.external.tls -}}
 {{- $auth := "" -}}
 {{- if .Values.redis.external.passwordSecretRef.name -}}
@@ -148,10 +150,15 @@ Computed REDIS_URL.
 {{- else if .Values.config.redisURL -}}
 {{- .Values.config.redisURL -}}
 {{- else if not .Values.redis.bundled.enabled -}}
-{{- fail "redis.bundled.enabled=false requires redis.external.address or config.redisURL" -}}
+{{- fail "redis.bundled.enabled=false requires redis.external.address, redis.external.urlSecretRef, or config.redisURL" -}}
 {{- else -}}
 {{- printf "redis://%s-redis:%d/0" (include "astronomer.fullname" .) (int .Values.redis.port) -}}
 {{- end -}}
+{{- end }}
+
+{{/* Secret containing core runtime credentials. */}}
+{{- define "astronomer.secretsSecretName" -}}
+{{- default (printf "%s-secrets" (include "astronomer.fullname" .)) .Values.secrets.existingSecret -}}
 {{- end }}
 
 {{- define "astronomer.postgresBundledEnabled" -}}
@@ -329,6 +336,10 @@ server wires straight to the operator-provided one; otherwise the chart-managed
 {{- end -}}
 {{- end }}
 
+{{- define "astronomer.bootstrapSecretKey" -}}
+{{- default "password" .Values.bootstrap.existingSecretKey -}}
+{{- end }}
+
 {{/*
 astronomer.validateImageSkew (F1 · BLOCKER) runs on every render, any env.
 
@@ -385,8 +396,8 @@ rendered manifest.
     {{- if .Values.redis.bundled.enabled }}
       {{- $errs = append $errs "  - redis.bundled.enabled must be false when config.env=production" }}
     {{- end }}
-    {{- if not .Values.redis.external.address }}
-      {{- $errs = append $errs "  - redis.external.address must be set when config.env=production" }}
+    {{- if not (or .Values.redis.external.address .Values.redis.external.urlSecretRef.name) }}
+      {{- $errs = append $errs "  - redis.external.address or redis.external.urlSecretRef.name must be set when config.env=production" }}
     {{- end }}
     {{- if not .Values.config.serverURL }}
       {{- $errs = append $errs "  - config.serverURL must be set to the external https URL of this install" }}
@@ -403,16 +414,16 @@ rendered manifest.
         {{- $errs = append $errs "  - tls.letsEncrypt.email must be set when tls.source=letsEncrypt" }}
       {{- end }}
     {{- end }}
-    {{- if eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production" }}
+    {{- if and (not .Values.secrets.existingSecret) (eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production") }}
       {{- $errs = append $errs "  - secrets.secretKey is still the chart's known dev value — replace it (JWT signing key)" }}
     {{- end }}
-    {{- if eq (default "" .Values.secrets.encryptionKey) "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }}
+    {{- if and (not .Values.secrets.existingSecret) (eq (default "" .Values.secrets.encryptionKey) "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=") }}
       {{- $errs = append $errs "  - secrets.encryptionKey is still the chart's known dev Fernet key — replace it" }}
     {{- end }}
-    {{- if not .Values.secrets.secretKey }}
+    {{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.secretKey) }}
       {{- $errs = append $errs "  - secrets.secretKey is empty (required)" }}
     {{- end }}
-    {{- if not .Values.secrets.encryptionKey }}
+    {{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.encryptionKey) }}
       {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
     {{- end }}
     {{- /* F8 (C-04): bootstrap-secret.yaml generates randAlphaNum when
@@ -433,8 +444,8 @@ rendered manifest.
     {{- end }}
     {{- /* Production must replace the chart's known weak dex.clientSecret
            default so the static-client secret is unique per install. */ -}}
-    {{- if and .Values.dex.enabled (eq (default "" .Values.dex.clientSecret) "") }}
-      {{- $errs = append $errs "  - dex.clientSecret is empty; replace with a freshly-generated value (the chart's default is intentionally weak and refused in production)" }}
+    {{- if and .Values.dex.enabled (not (or .Values.dex.clientSecret .Values.dex.clientSecretRef.name)) }}
+      {{- $errs = append $errs "  - dex.clientSecret or dex.clientSecretRef.name must be set; use a Secret reference for GitOps so the credential never enters Application values" }}
     {{- end }}
     {{- /* Management-plane backups must be wired in production or the DR story
            is a no-op (RPO silently becomes infinite). managementBackup.enabled

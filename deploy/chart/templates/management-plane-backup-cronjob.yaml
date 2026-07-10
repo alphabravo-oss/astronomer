@@ -246,7 +246,7 @@ spec:
             # and back it up. Defaults to the chart's own <release>-secrets.
             - name: encryption-keys
               secret:
-                secretName: {{ .Values.managementBackup.encryptionKeyBackup.secretName | default (printf "%s-secrets" (include "astronomer.fullname" .)) | quote }}
+                secretName: {{ .Values.managementBackup.encryptionKeyBackup.secretName | default (include "astronomer.secretsSecretName" .) | quote }}
             # Separately-held wrapping passphrase. Custody MUST be distinct from
             # the S3 backup credentials (see docs/management-plane-dr-runbook.md).
             - name: wrapping-passphrase

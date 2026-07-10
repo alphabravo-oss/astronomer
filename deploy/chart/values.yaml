@@ -236,6 +236,11 @@ postgres:
     registry: ""    # T23 air-gapped override; falls back to image.registry
   user: astronomer
   password: astronomer    # Override in production!
+  # Canonical bundled-Postgres credential source for GitOps/self-management.
+  # The same Secret may also carry a `dsn` key referenced below.
+  passwordSecretRef:
+    name: ""
+    key: password
   database: astronomer
   port: 5432
   storage:
@@ -323,6 +328,12 @@ redis:
         - ALL
   external:
     address: ""
+    # Full Redis URL escape hatch for existing-secret/GitOps workflows. When
+    # set, address/passwordSecretRef are ignored and workloads read REDIS_URL
+    # directly from this Secret key.
+    urlSecretRef:
+      name: ""
+      key: "url"
     passwordSecretRef:
       name: ""
       key: ""
@@ -473,6 +484,11 @@ dex:
   # Dex. Empty = use the chart's shipped weak default which production-mode
   # preflight refuses. Replace with a freshly-generated value in production.
   clientSecret: ""
+  # Preferred GitOps contract. Dex reads this through staticClients.secretEnv;
+  # the secret value never enters a ConfigMap or Argo Application values.
+  clientSecretRef:
+    name: ""
+    key: "clientSecret"
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1001
@@ -498,6 +514,12 @@ dex:
 # Secrets — set these from --set-file or external secret manager in real usage.
 # =============================================================================
 secrets:
+  # Point at a pre-created Secret to prevent Helm/Argo from owning credential
+  # contents. Optional OAuth keys retain their environment-variable names.
+  existingSecret: ""
+  secretKeyKey: SECRET_KEY
+  encryptionKeyKey: ASTRONOMER_ENCRYPTION_KEY
+  postgresPasswordKey: POSTGRES_PASSWORD
   secretKey: "local-dev-secret-key-change-in-production"
   # Fernet key (32 random bytes, url-safe base64). REQUIRED to be a real
   # Fernet key — Astronomer wraps SSO/agent secrets with it. Replace in any
@@ -539,6 +561,7 @@ bootstrap:
   # use bootstrap.password / the chart-generated <release>-bootstrap Secret.
   # In production the render fails unless bootstrap.password OR this is set.
   existingSecret: ""
+  existingSecretKey: password
 
 # =============================================================================
 # TLS — single source of truth, consumed by both gateway.* and ingress.*.

@@ -213,6 +213,7 @@ config:
 #   --set-file secrets.encryptionKey=./prod-fernet-key
 # (Same for secrets.secretKey — JWT signing material.)
 secrets:
+  existingSecret: ""
   secretKey: ""        # required — JWT signing
   encryptionKey: ""    # required — wraps SSO/agent secrets
 
@@ -225,6 +226,9 @@ dex:
   enabled: true
   replicaCount: 2
   clientSecret: ""    # required — replace with `openssl rand -hex 32` or similar
+  clientSecretRef:
+    name: ""
+    key: clientSecret
 
 # F8 (C-04): in production the render FAILS unless bootstrap.password is pinned
 # OR bootstrap.existingSecret is provided. This is deliberate — an empty
@@ -239,6 +243,7 @@ bootstrap:
   email: ""
   password: ""       # REQUIRED in production unless existingSecret is set
   existingSecret: "" # OR set this to a pre-created Secret (key: password)
+  existingSecretKey: password
 
 # ── ServiceAccount + RBAC ─────────────────────────────────────────────────
 serviceAccount:

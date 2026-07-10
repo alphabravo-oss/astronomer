@@ -225,6 +225,11 @@ Threats:
 - Hook or backup jobs running with weaker security contexts than the steady-state deployments.
 - Ingress/Gateway, Argo CD, external DB/Redis, and Kubernetes API egress being broader than intended.
 - Bootstrap credentials or generated secrets becoming long-lived unknowns.
+- Argo CD persisting inline Helm credentials in Application spec, compared
+  source, operation results, history, API responses, or controller logs. The
+  self-manage path therefore accepts only closed-vocabulary non-sensitive
+  values plus native Secret references, scrubs legacy copies with the
+  controller stopped, and requires digest-bound operator approval before prune.
 
 Controls:
 

@@ -104,8 +104,18 @@ spec:
             - configMapRef:
                 name: {{ include "astronomer.fullname" . }}-config
             - secretRef:
-                name: {{ include "astronomer.fullname" . }}-secrets
+                name: {{ include "astronomer.secretsSecretName" . }}
           env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.secretKeyKey | quote }}
+            - name: ASTRONOMER_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.encryptionKeyKey | quote }}
             # Pod IP is the address sibling replicas use to reverse-proxy
             # tunnel-bound requests (kubectl shell, k8s passthrough, image
             # scans) to whichever pod holds the agent's WebSocket. Without
@@ -128,7 +138,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "astronomer.bootstrapSecretName" . }}
-                  key: password
+                  key: {{ include "astronomer.bootstrapSecretKey" . | quote }}
             - name: ASTRONOMER_BOOTSTRAP_USERNAME
               value: {{ .Values.bootstrap.username | quote }}
             - name: ASTRONOMER_BOOTSTRAP_EMAIL
@@ -147,7 +157,13 @@ spec:
                   name: {{ .Values.redis.external.passwordSecretRef.name | quote }}
                   key: {{ .Values.redis.external.passwordSecretRef.key | quote }}
             {{- end }}
-            {{- if .Values.redis.external.address }}
+            {{- if .Values.redis.external.urlSecretRef.name }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.external.urlSecretRef.name | quote }}
+                  key: {{ .Values.redis.external.urlSecretRef.key | quote }}
+            {{- else if .Values.redis.external.address }}
             - name: REDIS_URL
               value: {{ include "astronomer.redisURL" . | quote }}
             {{- end }}

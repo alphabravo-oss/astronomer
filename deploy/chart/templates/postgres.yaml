@@ -55,8 +55,13 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "astronomer.fullname" . }}-secrets
-                  key: POSTGRES_PASSWORD
+                  {{ if .Values.postgres.passwordSecretRef.name }}
+                  name: {{ .Values.postgres.passwordSecretRef.name | quote }}
+                  key: {{ .Values.postgres.passwordSecretRef.key | quote }}
+                  {{ else }}
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.postgresPasswordKey | quote }}
+                  {{ end }}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:

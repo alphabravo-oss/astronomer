@@ -52,6 +52,14 @@ spec:
             - name: http
               containerPort: 5556
               protocol: TCP
+          {{- if .Values.dex.clientSecretRef.name }}
+          env:
+            - name: ASTRONOMER_DEX_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dex.clientSecretRef.name | quote }}
+                  key: {{ .Values.dex.clientSecretRef.key | quote }}
+          {{- end }}
           volumeMounts:
             - name: config
               mountPath: /etc/dex
