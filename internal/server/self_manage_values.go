@@ -41,9 +41,11 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	// scheduling, TLS, backup, network-policy, observability, or bundled Argo
 	// settings. Refuse to create a pruning Application if that source is absent.
 	var values map[string]any
+	var deployedReleaseValues map[string]any
 	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0].ValuesYAML) == ""
-	adoptRuntime := initialTakeover || referenceOnlySource[0].AdoptLiveUpgrade
-	if !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade {
+	liveUpgradeAdoption := !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade
+	adoptRuntime := initialTakeover || liveUpgradeAdoption
+	if liveUpgradeAdoption {
 		if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
 			return "", fmt.Errorf("adopt live upgrade only while the Argo application controller is quiesced: %w", err)
 		}
@@ -55,12 +57,20 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		if err := yaml.Unmarshal([]byte(referenceOnlySource[0].ValuesYAML), &values); err != nil {
 			return "", fmt.Errorf("parse current reference-only self-managed values: %w", err)
 		}
+		if liveUpgradeAdoption {
+			var err error
+			deployedReleaseValues, err = currentHelmReleaseValues(ctx, k8s)
+			if err != nil {
+				return "", fmt.Errorf("load highest deployed external Helm release values for bounded frontend adoption: %w", err)
+			}
+		}
 	} else {
 		var err error
 		values, err = currentHelmReleaseValues(ctx, k8s)
 		if err != nil {
 			return "", fmt.Errorf("load current Helm release values for safe takeover: %w", err)
 		}
+		deployedReleaseValues = values
 	}
 	if err := stripKnownInlineSelfManagedCredentials(values); err != nil {
 		return "", err
@@ -138,12 +148,31 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		}
 		runtimeOverlay["server"] = map[string]any{"replicaCount": serverReplicas}
 		runtimeOverlay["worker"] = map[string]any{"replicaCount": workerReplicas}
-		if frontendRef, frontendReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend"); err == nil {
+		frontendEnabled, frontendIntentFound, err := deployedHelmFrontendIntent(deployedReleaseValues)
+		if err != nil {
+			return "", err
+		}
+		frontendRef, frontendReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend")
+		switch {
+		case err == nil:
+			if frontendIntentFound && !frontendEnabled {
+				return "", fmt.Errorf("highest deployed Helm release disables frontend but Deployment %s still exists; wait for deletion to converge before self-management adoption", localAstronomerReleaseName+"-frontend")
+			}
 			frontendImage, parseErr := parseImageRef(frontendRef)
 			if parseErr != nil {
 				return "", fmt.Errorf("adopt frontend image: %w", parseErr)
 			}
 			runtimeOverlay["frontend"] = map[string]any{"enabled": true, "replicaCount": frontendReplicas, "image": frontendImage}
+		case !apierrors.IsNotFound(err):
+			return "", fmt.Errorf("read frontend Deployment for self-management adoption: %w", err)
+		case liveUpgradeAdoption:
+			if !frontendIntentFound || frontendEnabled {
+				return "", fmt.Errorf("frontend Deployment is absent but the highest deployed Helm release does not explicitly set frontend.enabled=false; refusing bounded upgrade adoption")
+			}
+			runtimeOverlay["frontend"] = map[string]any{"enabled": false}
+		case initialTakeover:
+			// Initial takeover preserves the already validated Helm release intent
+			// when the optional frontend Deployment is absent.
 		}
 	}
 	bootstrapRef, ok := deploymentEnvSecretRef(serverDeployment, "server", "ASTRONOMER_BOOTSTRAP_PASSWORD")
@@ -231,6 +260,17 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		return "", err
 	}
 	return valuesYAML, nil
+}
+
+func deployedHelmFrontendIntent(values map[string]any) (bool, bool, error) {
+	if values == nil {
+		return false, false, fmt.Errorf("highest deployed Helm release values are unavailable for frontend adoption")
+	}
+	enabled, found, err := unstructured.NestedBool(values, "frontend", "enabled")
+	if err != nil {
+		return false, false, fmt.Errorf("highest deployed Helm release frontend.enabled is not a boolean: %w", err)
+	}
+	return enabled, found, nil
 }
 
 func parseSelfManagedFirstPartyImageRef(ref, globalRegistry string) (map[string]any, error) {

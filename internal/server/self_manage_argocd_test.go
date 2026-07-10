@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,7 +13,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -481,6 +484,76 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	}
 	if pullSecrets, ok := adoptedImages["pullSecrets"].([]any); !ok || len(pullSecrets) != 0 {
 		t.Fatalf("empty live pull Secrets did not clear old source list: %#v", adoptedImages["pullSecrets"])
+	}
+	adoptedFrontend := adopted["frontend"].(map[string]any)
+	if adoptedFrontend["enabled"] != true || adoptedFrontend["replicaCount"] != float64(1) || adoptedFrontend["image"].(map[string]any)["tag"] != "v10" {
+		t.Fatalf("live frontend image/replica tuple was not adopted: %#v", adoptedFrontend)
+	}
+	frontendDisabledRelease := helmReleaseSecretFixture(t, 9, "deployed", map[string]any{
+		"image":     map[string]any{"registry": globalMirror},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"frontend":  map[string]any{"enabled": false},
+	})
+	if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), frontendDisabledRelease, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "still exists") {
+		t.Fatalf("disabled release with live frontend error = %v", err)
+	}
+	if err := client.CoreV1().Secrets(localAstronomerNamespace).Delete(context.Background(), frontendDisabledRelease.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AppsV1().Deployments(localAstronomerNamespace).Delete(context.Background(), localAstronomerReleaseName+"-frontend", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "does not explicitly set frontend.enabled=false") {
+		t.Fatalf("frontend absence without authoritative disable error = %v", err)
+	}
+	if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), frontendDisabledRelease, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	disabledYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true})
+	if err != nil {
+		t.Fatalf("authoritative frontend disable adoption: %v", err)
+	}
+	disabledFrontend := unmarshalSelfManagedValues(t, disabledYAML)["frontend"].(map[string]any)
+	if disabledFrontend["enabled"] != false {
+		t.Fatalf("true-to-false frontend intent was not overlaid: %#v", disabledFrontend)
+	}
+	failFrontendRead := true
+	client.Fake.PrependReactor("get", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		get, ok := action.(k8stesting.GetAction)
+		if failFrontendRead && ok && get.GetName() == localAstronomerReleaseName+"-frontend" {
+			return true, nil, errors.New("frontend API unavailable")
+		}
+		return false, nil, nil
+	})
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "read frontend Deployment") {
+		t.Fatalf("bounded-adoption frontend API error was not propagated: %v", err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "read frontend Deployment") {
+		t.Fatalf("initial-takeover frontend API error was not propagated: %v", err)
+	}
+	failFrontendRead = false
+	initialDisabledYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io")
+	if err != nil {
+		t.Fatalf("initial takeover did not preserve absent disabled frontend intent: %v", err)
+	}
+	if got := unmarshalSelfManagedValues(t, initialDisabledYAML)["frontend"].(map[string]any)["enabled"]; got != false {
+		t.Fatalf("initial takeover frontend.enabled = %v, want false", got)
 	}
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/same-revision/server:drift", "outside.example/same-revision/migrate:drift")
 	adoptedSecondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/same-revision/agent", AgentImageTag: "drift"}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: adoptedYAML})

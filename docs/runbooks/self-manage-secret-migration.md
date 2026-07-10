@@ -103,9 +103,12 @@ and replica tuples while the new server is trying to adopt them.
 5. Let the new server reconcile while the controller remains stopped. For an
    older same-major active Application with the exact expected identity and
    hash, it adopts the live server, worker, migrate, agent, pull-Secret, and
-   replica tuples and stages the newer embedded chart revision. A non-active,
-   inconsistent, non-semantic, cross-major, or newer revision fails closed and
-   requires operator remediation; it never silently reuses old runtime tags.
+   replica tuples and stages the newer embedded chart revision. Optional
+   frontend absence is adopted as disabled only when the highest deployed Helm
+   release explicitly records `frontend.enabled=false`; wait for its Deployment
+   deletion to converge before reconciliation. A non-active, inconsistent,
+   non-semantic, cross-major, or newer revision fails closed and requires
+   operator remediation; it never silently reuses old runtime tags.
 6. Restore the controller only after the new reference-only Application is
    staged. Run the full non-pruning sync, verify exact source/destination status,
    health, completed operation, workload rollout, login, and protected Secret
