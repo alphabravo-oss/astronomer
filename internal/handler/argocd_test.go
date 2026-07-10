@@ -31,6 +31,8 @@ type argoCDQueryRecorder struct {
 	failed     []sqlc.FailArgoCDOperationWithResultParams
 	appUpdate  []sqlc.UpdateArgoCDApplicationParams
 	events     []sqlc.CreateArgoCDOperationEventParams
+	created    []sqlc.CreateArgoCDOperationParams
+	auditRows  []sqlc.CreateAuditLogV1Params
 	runningOps []sqlc.ArgocdOperation
 }
 
@@ -110,8 +112,15 @@ func (q *argoCDQueryRecorder) CountArgoCDApplications(context.Context) (int64, e
 func (q *argoCDQueryRecorder) CountAppsByInstance(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
-func (q *argoCDQueryRecorder) CreateArgoCDOperation(context.Context, sqlc.CreateArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+func (q *argoCDQueryRecorder) CreateArgoCDOperation(_ context.Context, arg sqlc.CreateArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
+	q.created = append(q.created, arg)
+	now := time.Now().UTC()
+	return sqlc.ArgocdOperation{ID: uuid.New(), TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType, Payload: arg.Payload, Status: arg.Status, CreatedAt: now, UpdatedAt: now}, nil
+}
+
+func (q *argoCDQueryRecorder) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	q.auditRows = append(q.auditRows, arg)
+	return nil
 }
 func (q *argoCDQueryRecorder) GetArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
 	return q.operation, nil

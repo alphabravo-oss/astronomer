@@ -13,11 +13,22 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
 )
 
 const argoHandlerCanary = "ARGO_HANDLER_CANARY_38b1ca"
+
+type argoAuditBusCapture struct {
+	names []string
+	data  []any
+}
+
+func (c *argoAuditBusCapture) Publish(name string, data any) {
+	c.names = append(c.names, name)
+	c.data = append(c.data, data)
+}
 
 func TestArgoCDTypedCreateAndPatchRejectUnsafeSourcesBeforeUpstream(t *testing.T) {
 	for name, tc := range map[string]struct {
@@ -69,6 +80,11 @@ func TestArgoCDTypedCreateAndPatchRejectUnsafeSourcesBeforeUpstream(t *testing.T
 			body:   `{"repo":"https://git.example/repo?sig=` + argoHandlerCanary + `"}`,
 			call:   (*ArgoCDHandler).CreateRepo,
 		},
+		"generator bearer scalar": {
+			method: http.MethodPost,
+			body:   `{"name":"demo-set","spec":{"generators":[{"list":{"elements":[{"note":"Bearer ` + argoHandlerCanary + `"}]}}],"template":{"metadata":{"name":"{{name}}"},"spec":{"project":"default","source":{"repoURL":"https://git.example/repo"},"destination":{"server":"{{server}}","namespace":"prod"}}}}}`,
+			call:   (*ArgoCDHandler).CreateApplicationSet,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			upstreamCalls := 0
@@ -91,6 +107,19 @@ func TestArgoCDTypedCreateAndPatchRejectUnsafeSourcesBeforeUpstream(t *testing.T
 				t.Fatalf("validation response leaked canary: %s", rr.Body.String())
 			}
 		})
+	}
+}
+
+func TestArgoCDTypedResponseMalformedWrapperFailsClosed(t *testing.T) {
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{map[string]any{"status": map[string]any{"message": `{"token":"` + argoHandlerCanary}}}})
+	})
+	req := argoHandlerRouteRequest(http.MethodGet, "/typed", "", map[string]string{"id": rec.instance.ID.String()})
+	rr := httptest.NewRecorder()
+	h.LiveApplications(rr, req)
+	if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), argoHandlerCanary) || !strings.Contains(rr.Body.String(), "[redacted]") {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -235,21 +264,54 @@ func TestArgoCDTypedErrorsNeverEchoUpstreamBody(t *testing.T) {
 }
 
 func TestRecordArgoAuditSanitizesPersistedAndPublishedEventInput(t *testing.T) {
+	bus := &argoAuditBusCapture{}
+	audit.SetBusPublisher(bus)
+	t.Cleanup(func() { audit.SetBusPublisher(nil) })
 	writer := &serviceProxyTestAuditWriter{}
 	req := httptest.NewRequest(http.MethodPost, "/argocd", nil)
 	recordArgoAudit(req, writer, "argocd.test", "argocd_resource", "id", "https://user:pass@example.test/repo?sig="+argoHandlerCanary+"#x", map[string]any{
-		"reason": "token=" + argoHandlerCanary,
-		"server": "https://user:pass@example.test/api?sig=" + argoHandlerCanary + "#x",
+		"reason":    `{"token":"` + argoHandlerCanary,
+		"oversized": `{"safe":"` + strings.Repeat("x", (1<<20)+1) + `"}`,
+		"note":      "credential=" + argoHandlerCanary,
+		"server":    "https://user:pass@example.test/api?sig=" + argoHandlerCanary + "#x",
 	})
-	if len(writer.rows) != 1 {
-		t.Fatalf("audit rows=%d", len(writer.rows))
+	if len(writer.rows) != 1 || len(bus.data) != 1 {
+		t.Fatalf("audit rows=%d published=%d", len(writer.rows), len(bus.data))
 	}
-	raw, _ := json.Marshal(writer.rows[0])
+	raw, _ := json.Marshal(map[string]any{"row": writer.rows[0], "published": bus.data[0]})
 	if strings.Contains(string(raw), argoHandlerCanary) || strings.Contains(string(raw), "user:pass") || strings.Contains(string(raw), "?sig=") || strings.Contains(string(raw), "#x") {
 		t.Fatalf("persisted/published audit input leaked diagnostics: %s", raw)
 	}
 	if !strings.Contains(string(raw), "example.test") {
 		t.Fatalf("audit lost safe host diagnostic: %s", raw)
+	}
+}
+
+func TestSyncReasonIsSanitizedBeforeDurableAndPublishedSinks(t *testing.T) {
+	bus := &argoAuditBusCapture{}
+	audit.SetBusPublisher(bus)
+	t.Cleanup(func() { audit.SetBusPublisher(nil) })
+	h, rec, _ := newArgoCDFixture(t, func(http.ResponseWriter, *http.Request) {})
+	reason := "deploy https://user:pass@example.test/object?X-Amz-Signature=" + argoHandlerCanary + "#fragment token=" + argoHandlerCanary
+	body := `{"reason":` + string(mustJSON(t, reason)) + `,"sync_window_override":true}`
+	req := argoHandlerRouteRequest(http.MethodPost, "/typed", body, map[string]string{"id": rec.app.ID.String()})
+	rr := httptest.NewRecorder()
+	h.SyncApp(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(rec.created) != 1 || len(rec.auditRows) != 1 || len(bus.data) != 1 {
+		t.Fatalf("created=%d audit=%d published=%d", len(rec.created), len(rec.auditRows), len(bus.data))
+	}
+	all, _ := json.Marshal(map[string]any{"payload": rec.created[0].Payload, "audit": rec.auditRows[0], "published": bus.data[0]})
+	text := string(all)
+	for _, forbidden := range []string{argoHandlerCanary, "user:pass", "?X-Amz", "#fragment"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("durable/published sync reason leaked %q: %s", forbidden, text)
+		}
+	}
+	if !strings.Contains(text, "https://example.test/object") || !strings.Contains(text, "[redacted]") {
+		t.Fatalf("sanitized reason lost safe context: %s", text)
 	}
 }
 

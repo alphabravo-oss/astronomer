@@ -661,7 +661,7 @@ func validateArgoCDProxyMutationRequest(r *http.Request) (int, error) {
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
-	if err := argosecurity.ValidateMutationJSON(decoded); err != nil {
+	if err := argosecurity.ValidateMutationJSONForPath(decoded, r.URL.Path); err != nil {
 		return http.StatusBadRequest, err
 	}
 	return 0, nil

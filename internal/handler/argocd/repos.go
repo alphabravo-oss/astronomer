@@ -55,7 +55,7 @@ type RepositoryCreate struct {
 
 // CreateRepository registers a repo (git or helm) with upstream ArgoCD.
 func (c *Client) CreateRepository(ctx context.Context, repo RepositoryCreate) (*Repository, error) {
-	if err := argosecurity.ValidateCredentialFreeURL(repo.Repo); err != nil {
+	if err := argosecurity.ValidateRepositoryURL(repo.Repo); err != nil {
 		return nil, err
 	}
 	body, err := json.Marshal(repo)
@@ -82,7 +82,7 @@ func (c *Client) ListRepositories(ctx context.Context) ([]Repository, error) {
 
 // DeleteRepository removes a repo by its URL.
 func (c *Client) DeleteRepository(ctx context.Context, repoURL string) error {
-	if err := argosecurity.ValidateCredentialFreeURL(repoURL); err != nil {
+	if err := argosecurity.ValidateRepositoryURL(repoURL); err != nil {
 		return err
 	}
 	return c.do(ctx, http.MethodDelete, "/api/v1/repositories/"+url.PathEscape(repoURL), nil, nil)
@@ -92,7 +92,7 @@ func (c *Client) DeleteRepository(ctx context.Context, repoURL string) error {
 // performing a quick connectivity check. The response carries
 // ConnectionState.Status ("Successful" or "Failed").
 func (c *Client) TestRepository(ctx context.Context, repo RepositoryCreate) (*Repository, error) {
-	if err := argosecurity.ValidateCredentialFreeURL(repo.Repo); err != nil {
+	if err := argosecurity.ValidateRepositoryURL(repo.Repo); err != nil {
 		return nil, err
 	}
 	body, err := json.Marshal(repo)

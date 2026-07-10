@@ -312,6 +312,8 @@ func TestArgoCDUIProxyRejectsUnsafeMutationBodiesBeforeUpstream(t *testing.T) {
 		"non json":             {contentType: "text/plain", body: []byte(argoProxyCanary), wantStatus: http.StatusUnsupportedMediaType},
 		"gzip":                 {contentType: "application/json", contentEncoding: "gzip", body: gzipTestBytes(t, []byte(`{"spec":{"sources":[{"repoURL":"https://git.example/repo","helm":{"values":"`+argoProxyCanary+`"}}]}}`)), wantStatus: http.StatusBadRequest},
 		"unsupported encoding": {contentType: "application/json", contentEncoding: "br", body: []byte(`{"safe":true}`), wantStatus: http.StatusBadRequest},
+		"generator bearer":     {contentType: "application/json", body: []byte(`{"spec":{"generators":[{"list":{"elements":[{"note":"Bearer ` + argoProxyCanary + `"}]}}]}}`), wantStatus: http.StatusBadRequest},
+		"value file traversal": {contentType: "application/json", body: []byte(`{"spec":{"sources":[{"repoURL":"https://charts.example/repo","chart":"platform","helm":{"valueFiles":["$values/../secret.yaml"]}},{"repoURL":"https://git.example/values","ref":"values"}]}}`), wantStatus: http.StatusBadRequest},
 	} {
 		t.Run(name, func(t *testing.T) {
 			upstreamCalls := 0
@@ -347,6 +349,71 @@ func TestArgoCDUIProxyRejectsUnsafeMutationBodiesBeforeUpstream(t *testing.T) {
 			auditRaw, _ := json.Marshal(audit.rows)
 			if strings.Contains(string(auditRaw), argoProxyCanary) {
 				t.Fatalf("audit leaked canary: %s", auditRaw)
+			}
+		})
+	}
+}
+
+func TestArgoCDUIProxyAllowsSchemaScopedProjectWildcardAndSafeValueRepositories(t *testing.T) {
+	for name, tc := range map[string]struct {
+		path string
+		body string
+	}{
+		"project wildcard and ordinary brackets": {
+			path: "/argocd/api/v1/projects/demo",
+			body: `{"spec":{"description":"[ordinary maintenance note","destinations":[{"server":"*","namespace":"*"}]}}`,
+		},
+		"multi-source value repository": {
+			path: "/argocd/api/v1/applications/demo",
+			body: `{"spec":{"sources":[{"repoURL":"https://charts.example/repo","chart":"platform","helm":{"valueFiles":["$values/prod.yaml","defaults.yaml"]}},{"repoURL":"git@github.com:team/values.git","targetRevision":"main","ref":"values"}]}}`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer upstream.Close()
+			proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPatch, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			proxy.ServeHTTP(rr, req)
+			if rr.Code != http.StatusOK || calls != 1 {
+				t.Fatalf("status=%d calls=%d body=%s", rr.Code, calls, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestArgoCDUIProxyMalformedAndOversizedWrapperResponsesFailClosedWithoutLogLeak(t *testing.T) {
+	for name, message := range map[string]string{
+		"malformed": `{"token":"` + argoProxyCanary,
+		"oversized": `{"safe":"` + strings.Repeat("x", (1<<20)+1) + `"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"message": message})
+			}))
+			defer upstream.Close()
+			var logs bytes.Buffer
+			proxy, err := NewArgoCDUIProxy(upstream.URL, slog.New(slog.NewJSONHandler(&logs, nil)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rr := httptest.NewRecorder()
+			proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil))
+			if rr.Code != http.StatusOK || strings.Contains(rr.Body.String(), argoProxyCanary) || !strings.Contains(rr.Body.String(), "[redacted]") {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			if strings.Contains(logs.String(), argoProxyCanary) {
+				t.Fatalf("proxy log leaked canary: %s", logs.String())
 			}
 		})
 	}

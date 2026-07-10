@@ -274,6 +274,10 @@ func normalizeSyncRequest(req SyncRequest) (SyncRequest, error) {
 	if len(req.Reason) > 500 {
 		return req, fmt.Errorf("reason must be 500 characters or fewer")
 	}
+	// The reason is durable: it is copied into the operation payload, audit
+	// row, published audit event and later operation timeline events. Sanitize
+	// once before any of those sinks rather than relying on every consumer.
+	req.Reason = argosecurity.SanitizeString(req.Reason)
 	if req.SyncWindowOverride && req.Reason == "" {
 		return req, fmt.Errorf("sync_window_override requires a reason")
 	}
@@ -2902,7 +2906,7 @@ func (h *ArgoCDHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL is required")
 		return
 	}
-	if err := argosecurity.ValidateCredentialFreeURL(req.Repo); err != nil {
+	if err := argosecurity.ValidateRepositoryURL(req.Repo); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL must be canonical and credential-free")
 		return
 	}
@@ -2968,7 +2972,7 @@ func (h *ArgoCDHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo query parameter is required")
 		return
 	}
-	if err := argosecurity.ValidateCredentialFreeURL(repoURL); err != nil {
+	if err := argosecurity.ValidateRepositoryURL(repoURL); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL must be canonical and credential-free")
 		return
 	}
@@ -2998,7 +3002,7 @@ func (h *ArgoCDHandler) TestRepo(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL is required")
 		return
 	}
-	if err := argosecurity.ValidateCredentialFreeURL(req.Repo); err != nil {
+	if err := argosecurity.ValidateRepositoryURL(req.Repo); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "repo URL must be canonical and credential-free")
 		return
 	}

@@ -424,6 +424,53 @@ func TestTypedWriteClientsRejectCredentialURLsBeforeUpstream(t *testing.T) {
 	}
 }
 
+func TestTypedClientsAllowSafeGitTransportAndMultiSourceValueRepository(t *testing.T) {
+	var calls []string
+	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "repositories"):
+			_, _ = w.Write([]byte(`{"repo":"git@github.com:team/repo.git"}`))
+		default:
+			_, _ = w.Write([]byte(`{"metadata":{"name":"multi"}}`))
+		}
+	})
+	if _, err := c.CreateRepository(context.Background(), RepositoryCreate{Repo: "git@github.com:team/repo.git"}); err != nil {
+		t.Fatalf("safe SCP repository rejected: %v", err)
+	}
+	if _, err := c.CreateApplication(context.Background(), "multi", ApplicationSpec{
+		Project: "default",
+		Sources: []ApplicationSource{
+			{RepoURL: "https://charts.example/repo", Chart: "platform", Helm: &HelmSource{ValueFiles: []string{"$values/prod.yaml", "defaults.yaml"}}},
+			{RepoURL: "ssh://git@git.example/team/values.git", TargetRevision: "main", Ref: "values"},
+		},
+		Destination: &ApplicationDestination{Server: "https://kube.example:6443", Namespace: "prod"},
+	}); err != nil {
+		t.Fatalf("safe multi-source value repository rejected: %v", err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("upstream calls=%v", calls)
+	}
+}
+
+func TestTypedApplicationRejectsUnsafeMultiSourceValueRepositoryBeforeUpstream(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(http.ResponseWriter, *http.Request) { calls++ })
+	if _, err := c.CreateApplication(context.Background(), "multi", ApplicationSpec{
+		Project: "default",
+		Sources: []ApplicationSource{
+			{RepoURL: "https://charts.example/repo", Chart: "platform", Helm: &HelmSource{ValueFiles: []string{"$values/../secret.yaml"}}},
+			{RepoURL: "https://git.example/values", Ref: "values"},
+		},
+	}); err == nil {
+		t.Fatal("unsafe typed multi-source value repository accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("unsafe typed application made %d upstream calls", calls)
+	}
+}
+
 func TestDeleteProjectAlwaysSendsContentType(t *testing.T) {
 	// Bodyless DELETEs against ArgoCD must still carry Content-Type: application/json
 	// or upstream returns 415.
