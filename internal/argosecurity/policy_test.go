@@ -159,13 +159,41 @@ func TestValidateMutationRejectsNestedJSONWrapperSmuggling(t *testing.T) {
 	double, _ := json.Marshal(unsafe)
 	for name, payload := range map[string]any{
 		"double": map[string]any{"patch": string(double)},
-		"array":  map[string]any{"items": []any{unsafe}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateMutation(payload); err == nil {
 				t.Fatal("wrapped unsafe mutation accepted")
 			}
 		})
+	}
+	if err := ValidateMutation(map[string]any{"description": "[ordinary bracket text", "note": unsafe}); err != nil {
+		t.Fatalf("ordinary strings were interpreted as encoded mutations: %v", err)
+	}
+}
+
+func TestSanitizeMalformedAndOversizedWrappersFailClosed(t *testing.T) {
+	for name, value := range map[string]string{
+		"malformed object": `{"token":"` + policyCanary,
+		"malformed array":  `[ordinary bracket text`,
+		"oversized":        `{"safe":"` + strings.Repeat("x", maxStructuredStringLen) + `"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := Sanitize(map[string]any{"message": value}).(map[string]any)["message"]
+			if got != Marker {
+				t.Fatalf("wrapper sanitized to %#v, want marker", got)
+			}
+		})
+	}
+}
+
+func TestSanitizePrefixedCredentialURLsAndCloudSignatures(t *testing.T) {
+	input := "upstream failed at https://user:pass@example.test/object?X-Amz-Signature=" + policyCanary + "#fragment; retry Signature=" + policyCanary
+	got := SanitizeString(input)
+	if strings.Contains(got, policyCanary) || strings.Contains(got, "user:pass") || strings.Contains(got, "?") || strings.Contains(got, "#fragment") {
+		t.Fatalf("prefixed diagnostic leaked credential: %q", got)
+	}
+	if !strings.Contains(got, "upstream failed at https://example.test/object") || !strings.Contains(got, Marker) {
+		t.Fatalf("safe diagnostic context lost: %q", got)
 	}
 }
 
@@ -192,6 +220,35 @@ func TestCredentialFreeURLPolicy(t *testing.T) {
 	}
 }
 
+func TestRepositoryURLPolicyAllowsConventionalGitIdentityOnly(t *testing.T) {
+	for _, safe := range []string{
+		"git@github.com:team/repo.git",
+		"ssh://git@git.example/team/repo.git",
+		"git://git@git.example/team/repo.git",
+		"https://git.example/team/repo.git",
+	} {
+		if err := ValidateRepositoryURL(safe); err != nil {
+			t.Errorf("safe repository URL %q rejected: %v", safe, err)
+		}
+	}
+	for _, unsafe := range []string{
+		"root@git.example:team/repo.git",
+		"git@git.example:../repo.git",
+		"git@git.example:/etc/repo.git",
+		"ssh://git:password@git.example/team/repo.git",
+		"ssh://root@git.example/team/repo.git",
+		"https://git@git.example/team/repo.git",
+		"https://git.example/team/repo.git?token=secret",
+	} {
+		if err := ValidateRepositoryURL(unsafe); err == nil {
+			t.Errorf("unsafe repository URL %q accepted", unsafe)
+		}
+	}
+	if err := ValidateCredentialFreeURL("ssh://git@git.example/team/repo.git"); err == nil {
+		t.Fatal("strict endpoint validator accepted userinfo")
+	}
+}
+
 func TestSanitizeURLDiagnosticsStripAllQueryFragmentAndUserinfo(t *testing.T) {
 	got := SanitizeString("https://user:pass@git.example/repo?ref=main#revision")
 	if got != "https://git.example/repo" {
@@ -210,6 +267,74 @@ func TestValidateApplicationSetGeneratorAndAnnotationBounds(t *testing.T) {
 		if err := ValidateMutation(payload); err == nil {
 			t.Errorf("unsafe ApplicationSet payload %d accepted", i)
 		}
+	}
+}
+
+func TestValidateApplicationSetGeneratorRejectsCredentialScalars(t *testing.T) {
+	for _, scalar := range []string{
+		"Bearer " + policyCanary,
+		"token=" + policyCanary,
+		"credential=" + policyCanary,
+		"fetch https://storage.example/object?X-Amz-Signature=" + policyCanary,
+	} {
+		payload := map[string]any{"spec": map[string]any{"generators": []any{map[string]any{"list": map[string]any{"elements": []any{map[string]any{"note": scalar}}}}}}}
+		if err := ValidateMutation(payload); err == nil {
+			t.Errorf("credential generator scalar %q accepted", scalar)
+		}
+	}
+	if err := ValidateMutation(map[string]any{"spec": map[string]any{"generators": []any{map[string]any{"list": map[string]any{"elements": []any{map[string]any{"credential": "opaque"}}}}}}}); err == nil {
+		t.Fatal("singular credential key accepted")
+	}
+}
+
+func TestValidateMutationProjectDestinationWildcardIsSchemaAndPathScoped(t *testing.T) {
+	project := []byte(`{"spec":{"description":"[ordinary]","destinations":[{"server":"*","namespace":"*"}]}}`)
+	if err := ValidateMutationJSONForPath(project, "/argocd/api/v1/projects/demo"); err != nil {
+		t.Fatalf("project destination wildcard rejected: %v", err)
+	}
+	for _, tc := range []struct {
+		path string
+		raw  string
+	}{
+		{"/argocd/api/v1/applications/demo", `{"spec":{"destination":{"server":"*"}}}`},
+		{"/argocd/api/v1/applications/demo", `{"spec":{"destinations":[{"server":"*"}]}}`},
+		{"/argocd/api/v1/projects/demo", `{"spec":{"server":"*"}}`},
+	} {
+		if err := ValidateMutationJSONForPath([]byte(tc.raw), tc.path); err == nil {
+			t.Errorf("wildcard smuggling accepted for %s: %s", tc.path, tc.raw)
+		}
+	}
+}
+
+func TestValidateMutationAllowsConstrainedMultiSourceHelmValueRepositories(t *testing.T) {
+	safe := map[string]any{"spec": map[string]any{"sources": []any{
+		map[string]any{"repoURL": "https://charts.example/repo", "chart": "platform", "helm": map[string]any{"valueFiles": []any{"$values/environments/prod.yaml", "defaults/base.yaml"}}},
+		map[string]any{"repoURL": "git@github.com:team/values.git", "targetRevision": "main", "ref": "values"},
+	}}}
+	if err := ValidateMutation(safe); err != nil {
+		t.Fatalf("safe value repository rejected: %v", err)
+	}
+	for name, valueFile := range map[string]string{
+		"traversal":   "$values/../secret.yaml",
+		"absolute":    "/etc/secret",
+		"url":         "https://evil.example/values.yaml",
+		"template":    "{{values}}/prod.yaml",
+		"credential":  "token=secret",
+		"unknown ref": "$unknown/prod.yaml",
+		"query":       "$values/prod.yaml?token=secret",
+	} {
+		t.Run(name, func(t *testing.T) {
+			payload := map[string]any{"spec": map[string]any{"sources": []any{
+				map[string]any{"repoURL": "https://charts.example/repo", "chart": "platform", "helm": map[string]any{"valueFiles": []any{valueFile}}},
+				map[string]any{"repoURL": "https://git.example/values", "ref": "values"},
+			}}}
+			if err := ValidateMutation(payload); err == nil {
+				t.Fatal("unsafe value repository reference accepted")
+			}
+		})
+	}
+	if err := ValidateMutation(map[string]any{"spec": map[string]any{"source": map[string]any{"repoURL": "https://charts.example/repo", "helm": map[string]any{"valueFiles": []any{"defaults.yaml"}}}}}); err == nil {
+		t.Fatal("single-source valueFiles accepted")
 	}
 }
 
