@@ -40,7 +40,7 @@ SELECT * FROM dex_settings WHERE id = $1;
 INSERT INTO dex_settings (
     id, issuer_url, cluster_id, namespace, release_name, configmap_name,
     runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra
-) VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, $8, $9, $10)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, sqlc.arg(public_clients), $8, $9, $10)
 ON CONFLICT (id) DO UPDATE SET
     issuer_url     = EXCLUDED.issuer_url,
     cluster_id     = EXCLUDED.cluster_id,
@@ -48,7 +48,7 @@ ON CONFLICT (id) DO UPDATE SET
     release_name   = EXCLUDED.release_name,
     configmap_name = EXCLUDED.configmap_name,
     runtime_secret_name = EXCLUDED.runtime_secret_name,
-    public_clients = '[]'::jsonb,
+    public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
     public_clients_encrypted = EXCLUDED.public_clients_encrypted,
     expiry         = EXCLUDED.expiry,
     extra          = EXCLUDED.extra,
@@ -63,7 +63,7 @@ WITH settings_upsert AS (
     ) VALUES (
         sqlc.arg(settings_id), sqlc.arg(issuer_url), sqlc.arg(cluster_id),
         sqlc.arg(namespace), sqlc.arg(release_name), sqlc.arg(runtime_secret_name),
-        sqlc.arg(runtime_secret_name), '[]'::jsonb, sqlc.arg(public_clients_encrypted),
+        sqlc.arg(runtime_secret_name), sqlc.arg(public_clients), sqlc.arg(public_clients_encrypted),
         sqlc.arg(expiry), sqlc.arg(extra)
     )
     ON CONFLICT (id) DO UPDATE SET
@@ -73,7 +73,7 @@ WITH settings_upsert AS (
         release_name = EXCLUDED.release_name,
         configmap_name = EXCLUDED.configmap_name,
         runtime_secret_name = EXCLUDED.runtime_secret_name,
-        public_clients = '[]'::jsonb,
+        public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
         public_clients_encrypted = EXCLUDED.public_clients_encrypted,
         expiry = EXCLUDED.expiry,
         extra = EXCLUDED.extra,
@@ -103,12 +103,12 @@ ON CONFLICT (provider) DO UPDATE SET
     updated_at = now()
 RETURNING *;
 
--- name: MigrateLegacyDexPublicClients :one
+-- name: BackfillDexPublicClientsEnvelope :one
 UPDATE dex_settings
 SET public_clients_encrypted = $2,
-    public_clients = '[]'::jsonb,
     updated_at = now()
 WHERE id = $1
+  AND public_clients_cutover_at IS NULL
   AND public_clients_encrypted = ''
   AND public_clients = sqlc.arg(legacy_public_clients)::jsonb
 RETURNING *;

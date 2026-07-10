@@ -13,6 +13,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backfillDexPublicClientsEnvelope = `-- name: BackfillDexPublicClientsEnvelope :one
+UPDATE dex_settings
+SET public_clients_encrypted = $2,
+    updated_at = now()
+WHERE id = $1
+  AND public_clients_cutover_at IS NULL
+  AND public_clients_encrypted = ''
+  AND public_clients = $3::jsonb
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at
+`
+
+type BackfillDexPublicClientsEnvelopeParams struct {
+	ID                     uuid.UUID       `json:"id"`
+	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
+	LegacyPublicClients    json.RawMessage `json:"legacy_public_clients"`
+}
+
+func (q *Queries) BackfillDexPublicClientsEnvelope(ctx context.Context, arg BackfillDexPublicClientsEnvelopeParams) (DexSetting, error) {
+	row := q.db.QueryRow(ctx, backfillDexPublicClientsEnvelope, arg.ID, arg.PublicClientsEncrypted, arg.LegacyPublicClients)
+	var i DexSetting
+	err := row.Scan(
+		&i.ID,
+		&i.IssuerUrl,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.ReleaseName,
+		&i.ConfigmapName,
+		&i.PublicClients,
+		&i.Expiry,
+		&i.Extra,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RuntimeSecretName,
+		&i.PublicClientsEncrypted,
+		&i.PublicClientsCutoverAt,
+	)
+	return i, err
+}
+
 const createDexConnector = `-- name: CreateDexConnector :one
 INSERT INTO dex_connectors (name, type, display_name, config, enabled)
 VALUES ($1, $2, $3, $4, $5)
@@ -104,7 +143,7 @@ func (q *Queries) GetDexConnectorByName(ctx context.Context, name string) (DexCo
 }
 
 const getDexSettings = `-- name: GetDexSettings :one
-SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted FROM dex_settings WHERE id = $1
+SELECT id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at FROM dex_settings WHERE id = $1
 `
 
 func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error) {
@@ -124,6 +163,7 @@ func (q *Queries) GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting,
 		&i.UpdatedAt,
 		&i.RuntimeSecretName,
 		&i.PublicClientsEncrypted,
+		&i.PublicClientsCutoverAt,
 	)
 	return i, err
 }
@@ -194,44 +234,6 @@ func (q *Queries) ListEnabledDexConnectors(ctx context.Context) ([]DexConnector,
 	return items, nil
 }
 
-const migrateLegacyDexPublicClients = `-- name: MigrateLegacyDexPublicClients :one
-UPDATE dex_settings
-SET public_clients_encrypted = $2,
-    public_clients = '[]'::jsonb,
-    updated_at = now()
-WHERE id = $1
-  AND public_clients_encrypted = ''
-  AND public_clients = $3::jsonb
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted
-`
-
-type MigrateLegacyDexPublicClientsParams struct {
-	ID                     uuid.UUID       `json:"id"`
-	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
-	LegacyPublicClients    json.RawMessage `json:"legacy_public_clients"`
-}
-
-func (q *Queries) MigrateLegacyDexPublicClients(ctx context.Context, arg MigrateLegacyDexPublicClientsParams) (DexSetting, error) {
-	row := q.db.QueryRow(ctx, migrateLegacyDexPublicClients, arg.ID, arg.PublicClientsEncrypted, arg.LegacyPublicClients)
-	var i DexSetting
-	err := row.Scan(
-		&i.ID,
-		&i.IssuerUrl,
-		&i.ClusterID,
-		&i.Namespace,
-		&i.ReleaseName,
-		&i.ConfigmapName,
-		&i.PublicClients,
-		&i.Expiry,
-		&i.Extra,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.RuntimeSecretName,
-		&i.PublicClientsEncrypted,
-	)
-	return i, err
-}
-
 const updateDexConnector = `-- name: UpdateDexConnector :one
 UPDATE dex_connectors SET
     type         = $2,
@@ -277,7 +279,7 @@ const upsertDexSettings = `-- name: UpsertDexSettings :one
 INSERT INTO dex_settings (
     id, issuer_url, cluster_id, namespace, release_name, configmap_name,
     runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra
-) VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, $8, $9, $10)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $11, $8, $9, $10)
 ON CONFLICT (id) DO UPDATE SET
     issuer_url     = EXCLUDED.issuer_url,
     cluster_id     = EXCLUDED.cluster_id,
@@ -285,12 +287,12 @@ ON CONFLICT (id) DO UPDATE SET
     release_name   = EXCLUDED.release_name,
     configmap_name = EXCLUDED.configmap_name,
     runtime_secret_name = EXCLUDED.runtime_secret_name,
-    public_clients = '[]'::jsonb,
+    public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
     public_clients_encrypted = EXCLUDED.public_clients_encrypted,
     expiry         = EXCLUDED.expiry,
     extra          = EXCLUDED.extra,
     updated_at     = now()
-RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted
+RETURNING id, issuer_url, cluster_id, namespace, release_name, configmap_name, public_clients, expiry, extra, created_at, updated_at, runtime_secret_name, public_clients_encrypted, public_clients_cutover_at
 `
 
 type UpsertDexSettingsParams struct {
@@ -304,6 +306,7 @@ type UpsertDexSettingsParams struct {
 	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
 	Expiry                 json.RawMessage `json:"expiry"`
 	Extra                  json.RawMessage `json:"extra"`
+	PublicClients          json.RawMessage `json:"public_clients"`
 }
 
 func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error) {
@@ -318,6 +321,7 @@ func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsPa
 		arg.PublicClientsEncrypted,
 		arg.Expiry,
 		arg.Extra,
+		arg.PublicClients,
 	)
 	var i DexSetting
 	err := row.Scan(
@@ -334,6 +338,7 @@ func (q *Queries) UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsPa
 		&i.UpdatedAt,
 		&i.RuntimeSecretName,
 		&i.PublicClientsEncrypted,
+		&i.PublicClientsCutoverAt,
 	)
 	return i, err
 }
@@ -346,8 +351,8 @@ WITH settings_upsert AS (
     ) VALUES (
         $9, $10, $11,
         $12, $13, $14,
-        $14, '[]'::jsonb, $15,
-        $16, $17
+        $14, $15, $16,
+        $17, $18
     )
     ON CONFLICT (id) DO UPDATE SET
         issuer_url = EXCLUDED.issuer_url,
@@ -356,7 +361,7 @@ WITH settings_upsert AS (
         release_name = EXCLUDED.release_name,
         configmap_name = EXCLUDED.configmap_name,
         runtime_secret_name = EXCLUDED.runtime_secret_name,
-        public_clients = '[]'::jsonb,
+        public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
         public_clients_encrypted = EXCLUDED.public_clients_encrypted,
         expiry = EXCLUDED.expiry,
         extra = EXCLUDED.extra,
@@ -402,6 +407,7 @@ type UpsertDexSettingsAndSSOParams struct {
 	Namespace              string          `json:"namespace"`
 	ReleaseName            string          `json:"release_name"`
 	RuntimeSecretName      string          `json:"runtime_secret_name"`
+	PublicClients          json.RawMessage `json:"public_clients"`
 	PublicClientsEncrypted string          `json:"public_clients_encrypted"`
 	Expiry                 json.RawMessage `json:"expiry"`
 	Extra                  json.RawMessage `json:"extra"`
@@ -423,6 +429,7 @@ func (q *Queries) UpsertDexSettingsAndSSO(ctx context.Context, arg UpsertDexSett
 		arg.Namespace,
 		arg.ReleaseName,
 		arg.RuntimeSecretName,
+		arg.PublicClients,
 		arg.PublicClientsEncrypted,
 		arg.Expiry,
 		arg.Extra,

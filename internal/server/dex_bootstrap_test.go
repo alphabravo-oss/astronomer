@@ -112,9 +112,8 @@ func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{
 		getResult: sqlc.DexSetting{
-			ID:        dexBootstrapSingletonID,
-			IssuerUrl: "https://operator-managed.example.com/dex",
-			Namespace: "auth",
+			ID: dexBootstrapSingletonID, IssuerUrl: "https://operator-managed.example.com/dex",
+			Namespace: "auth", RuntimeSecretName: "operator-managed-runtime",
 		},
 	}
 	env := envMap{
@@ -130,6 +129,19 @@ func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 	}
 	if q.upsertCalls != 0 {
 		t.Fatalf("expected no UpsertDexSettings calls; got %d", q.upsertCalls)
+	}
+}
+
+func TestDexBootstrap_ReconcilesOnlyImplicitMigratedRuntimeName(t *testing.T) {
+	q := &fakeDexBootstrapQuerier{getResult: sqlc.DexSetting{
+		ID: dexBootstrapSingletonID, IssuerUrl: "https://operator.example/dex", Namespace: "auth",
+		ReleaseName: "custom-dex", RuntimeSecretName: "astronomer-dex-runtime",
+		ConfigmapName: "custom-dex-config", PublicClients: []byte(`[]`), Expiry: []byte(`{}`), Extra: []byte(`{}`),
+	}}
+	env := envMap{"DEX_BUNDLED_ENABLED": "true", "DEX_BUNDLED_ISSUER_URL": "https://operator.example/dex", "DEX_BUNDLED_RUNTIME_SECRET_NAME": "custom-dex-runtime"}
+	changed, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	if err != nil || !changed || q.upsertLastParam.RuntimeSecretName != "custom-dex-runtime" || string(q.upsertLastParam.PublicClients) != "[]" {
+		t.Fatalf("changed=%v err=%v params=%#v", changed, err, q.upsertLastParam)
 	}
 }
 

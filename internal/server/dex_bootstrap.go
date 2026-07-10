@@ -98,6 +98,20 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	// should be no-ops.
 	existing, err := queries.GetDexSettings(ctx, dexBootstrapSingletonID)
 	if err == nil && existing.ID == dexBootstrapSingletonID {
+		desiredRuntimeName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
+			envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
+		// Migration 134 assigns the generic default to legacy rows. Reconcile only
+		// that implicit value; any other runtime name is operator intent.
+		if existing.RuntimeSecretName == "" || (existing.RuntimeSecretName == "astronomer-dex-runtime" && desiredRuntimeName != existing.RuntimeSecretName) {
+			_, updateErr := queries.UpsertDexSettings(ctx, sqlc.UpsertDexSettingsParams{
+				ID: existing.ID, IssuerUrl: existing.IssuerUrl, ClusterID: existing.ClusterID,
+				Namespace: existing.Namespace, ReleaseName: existing.ReleaseName,
+				ConfigmapName: desiredRuntimeName, RuntimeSecretName: desiredRuntimeName,
+				PublicClients: existing.PublicClients, PublicClientsEncrypted: existing.PublicClientsEncrypted,
+				Expiry: existing.Expiry, Extra: existing.Extra,
+			})
+			return updateErr == nil, updateErr
+		}
 		logger.Debug("dex bootstrap: settings already exist; skipping seed",
 			"existing_issuer", existing.IssuerUrl,
 		)
@@ -128,6 +142,7 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		ConfigmapName:          runtimeSecretName,
 		RuntimeSecretName:      runtimeSecretName,
 		PublicClientsEncrypted: "",
+		PublicClients:          []byte("[]"),
 		Expiry:                 []byte("{}"),
 		Extra:                  []byte("{}"),
 	})

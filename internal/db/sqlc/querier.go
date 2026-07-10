@@ -47,6 +47,7 @@ type Querier interface {
 	// against the cluster_id as a string.
 	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
 	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
+	BackfillDexPublicClientsEnvelope(ctx context.Context, arg BackfillDexPublicClientsEnvelopeParams) (DexSetting, error)
 	// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
 	// (jsonb_to_recordset) so a whole chart's versions land in one query
 	// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
@@ -1674,7 +1675,6 @@ type Querier interface {
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
-	MigrateLegacyDexPublicClients(ctx context.Context, arg MigrateLegacyDexPublicClientsParams) (DexSetting, error)
 	// Retention sweep: delete apiserver audit rows older than the cutoff. The table
 	// is otherwise append-only and unbounded (one row per apiserver request, fleet
 	// wide), so a periodic sweeper must call this to keep it from growing forever.

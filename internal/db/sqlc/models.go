@@ -1021,7 +1021,7 @@ type DexSetting struct {
 	ReleaseName string      `json:"release_name"`
 	// Deprecated compatibility alias. Must never identify a ConfigMap containing Dex runtime configuration.
 	ConfigmapName string `json:"configmap_name"`
-	// Legacy migration input only. Application code must atomically scrub this column to [] after Fernet migration.
+	// Compatibility copy dual-written until an explicit quiesced Fernet cutover; must be [] after public_clients_cutover_at.
 	PublicClients json.RawMessage `json:"public_clients"`
 	Expiry        json.RawMessage `json:"expiry"`
 	Extra         json.RawMessage `json:"extra"`
@@ -1031,6 +1031,8 @@ type DexSetting struct {
 	RuntimeSecretName string `json:"runtime_secret_name"`
 	// Fernet-encrypted canonical JSON array of Dex static clients.
 	PublicClientsEncrypted string `json:"public_clients_encrypted"`
+	// Durable cutover marker; non-null means old writers are prohibited and public_clients is scrubbed.
+	PublicClientsCutoverAt pgtype.Timestamptz `json:"public_clients_cutover_at"`
 }
 
 type EmailMessage struct {
