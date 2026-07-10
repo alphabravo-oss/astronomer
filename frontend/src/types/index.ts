@@ -2243,6 +2243,7 @@ export interface DexPublicClient {
   name?: string;
   redirectURIs?: string[];
   secret?: string;
+  secretConfigured?: boolean;
   public?: boolean;
 }
 
@@ -2252,7 +2253,7 @@ export interface DexSettings {
   clusterId: string;
   namespace: string;
   releaseName: string;
-  configmapName: string;
+  runtimeSecretName: string;
   publicClients: DexPublicClient[];
   expiry: Record<string, unknown>;
   extra: Record<string, unknown>;
@@ -2267,7 +2268,7 @@ export interface DexSettingsWriteRequest {
   cluster_id?: string;
   namespace?: string;
   release_name?: string;
-  configmap_name?: string;
+  runtime_secret_name?: string;
   public_clients?: DexPublicClient[];
   expiry?: Record<string, unknown>;
   extra?: Record<string, unknown>;
@@ -2278,7 +2279,7 @@ export interface DexApplyResponse {
   applied: boolean;
   clusterId: string;
   namespace: string;
-  configmapName: string;
+  runtimeSecretName: string;
   connectorCount: number;
   appliedAt: string;
 }

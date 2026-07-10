@@ -183,7 +183,7 @@ export default function AuthOverviewPage() {
               disabled={applyMutation.isPending || connectors.length === 0}
               className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm
                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-              title="Re-render the ConfigMap and trigger Dex hot-reload"
+              title="Reconcile the retained runtime Secret and roll Dex when changed"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${applyMutation.isPending ? 'animate-spin' : ''}`} />
               Apply to Dex

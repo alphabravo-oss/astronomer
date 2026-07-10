@@ -2818,8 +2818,26 @@ components:
           type: string
         release_name:
           type: string
-        configmap_name:
+        runtime_secret_name:
           type: string
+        public_clients:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              redirectURIs:
+                type: array
+                items:
+                  type: string
+              secret:
+                type: string
+                description: Always redacted to an empty string on reads.
+              secret_configured:
+                type: boolean
         cluster_id:
           type: string
           format: uuid
@@ -2838,8 +2856,13 @@ components:
           type: string
         release_name:
           type: string
-        configmap_name:
+        runtime_secret_name:
           type: string
+        public_clients:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         cluster_id:
           type: string
           format: uuid
@@ -15738,7 +15761,7 @@ paths:
                         $ref: '#/components/schemas/DexSettings'
     put:
       summary: Upsert Dex singleton settings
-      description: Upserts the Dex settings row. `issuer_url` is required; namespace/release_name/configmap_name default to `dex`/`dex`/`astronomer-dex-config`.
+      description: Upserts the Dex settings row. `issuer_url` is required; namespace/release_name/runtime_secret_name default to `dex`/`dex`/`astronomer-dex-runtime`. The deprecated `configmap_name` request alias is accepted for one compatibility release but never causes a ConfigMap write.
       tags:
         - auth
       security:
@@ -15774,11 +15797,13 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/auth/dex/apply/:
     post:
-      summary: Render and apply the Dex ConfigMap
+      summary: Render and apply the Dex runtime Secret
       description: |
-        Renders settings + enabled connectors into a Dex-shaped YAML ConfigMap,
-        PATCHes it into the management cluster, and forces a Deployment rollout
-        so Dex reloads. Requires settings with issuer_url and cluster_id.
+        Renders settings + enabled connectors in memory and merge-patches the
+        exact retained runtime Secret created metadata-only by the chart. A
+        changed Secret triggers a Deployment rollout keyed by Kubernetes
+        resourceVersion; an identical repeat apply is a no-op. Requires settings
+        with issuer_url and cluster_id.
         Returns 503 when the Kubernetes requester (tunnel) is not configured.
       tags:
         - auth
@@ -15804,7 +15829,7 @@ paths:
                             format: uuid
                           namespace:
                             type: string
-                          configmap_name:
+                          runtime_secret_name:
                             type: string
                           deployment_name:
                             type: string
@@ -15826,7 +15851,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '502':
-          description: ConfigMap apply or Deployment restart failed against the cluster.
+          description: Runtime Secret apply or Deployment restart failed against the cluster.
           content:
             application/json:
               schema:

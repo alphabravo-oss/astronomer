@@ -1767,8 +1767,8 @@ configs:
 //     should treat as the OIDC provider (e.g. https://dex.example.com).
 //  2. POST /api/v1/auth/dex/connectors/ for each upstream IdP (Azure AD,
 //     LDAP, SAML, ...).
-//  3. POST /api/v1/auth/dex/apply/ to render + write the ConfigMap that the
-//     chart's deployment mounts. Dex hot-reloads; no pod restart needed.
+//  3. POST /api/v1/auth/dex/apply/ to reconcile the retained runtime Secret
+//     that the chart's Deployment mounts read-only.
 //  4. POST /api/v1/auth/dex/register-as-sso/ to add a `dex` row in
 //     sso_configurations so A1's generic OIDC path treats Dex as a regular
 //     /auth/login/dex/ provider.
@@ -1778,13 +1778,13 @@ configs:
 // alongside the new dex_connectors / dex_settings tables. Chart coordinates
 // stay here as Go constants so handlers/tests have one source of truth.
 const (
-	DexToolSlug         = "dex"
-	DexToolName         = "Dex Identity Broker"
-	DexChartName        = "dex"
-	DexChartRepoURL     = "https://charts.dexidp.io"
-	DexChartCategory    = "auth"
-	DexDefaultNamespace = "dex"
-	DexConfigMapName    = "astronomer-dex-config"
+	DexToolSlug          = "dex"
+	DexToolName          = "Dex Identity Broker"
+	DexChartName         = "dex"
+	DexChartRepoURL      = "https://charts.dexidp.io"
+	DexChartCategory     = "auth"
+	DexDefaultNamespace  = "dex"
+	DexRuntimeSecretName = "astronomer-dex-runtime"
 )
 
 // DexChartCoordinates returns the chart coordinates for dex as the same

@@ -77,7 +77,7 @@ export default function InstallDexPage() {
         cluster_id: cluster.id,
         namespace: 'dex',
         release_name: 'dex',
-        configmap_name: 'astronomer-dex-config',
+        runtime_secret_name: 'astronomer-dex-runtime',
         public_clients: [],
         expiry: {},
         extra: {},
@@ -396,7 +396,7 @@ function ReviewStep({
         <ReviewRow label="Environment" value={cluster.environment} />
         <ReviewRow label="Issuer URL" value={issuerUrl} mono />
         <ReviewRow label="Namespace" value="dex" mono />
-        <ReviewRow label="ConfigMap" value="astronomer-dex-config" mono />
+        <ReviewRow label="Runtime Secret" value="astronomer-dex-runtime" mono />
       </dl>
       {!dexAvailable && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 flex items-start gap-2">

@@ -5,7 +5,7 @@
  *
  * Lives under the auth/ sub-tree to keep all Dex UI co-located. Three sections:
  *   1. Issuer + cluster — edited as plain text fields. Changing the issuer
- *      requires re-applying for the change to land in the rendered ConfigMap.
+ *      requires re-applying for the change to land in the runtime Secret.
  *   2. Public clients — list editor for Dex's `staticClients` array. Each
  *      client carries an id, optional secret, and redirect URIs. The `public`
  *      flag toggles between confidential and public OIDC client behaviour.
@@ -35,7 +35,7 @@ export default function DexSettingsPage() {
   const [clusterId, setClusterId] = useState('');
   const [namespace, setNamespace] = useState('dex');
   const [releaseName, setReleaseName] = useState('dex');
-  const [configmapName, setConfigmapName] = useState('astronomer-dex-config');
+  const [runtimeSecretName, setRuntimeSecretName] = useState('astronomer-dex-runtime');
   const [publicClients, setPublicClients] = useState<DexPublicClient[]>([]);
   const [idTokenExpiry, setIdTokenExpiry] = useState<string>('24h');
   const [refreshTokenExpiry, setRefreshTokenExpiry] = useState<string>('2160h');
@@ -47,7 +47,7 @@ export default function DexSettingsPage() {
     setClusterId(settings.clusterId || '');
     setNamespace(settings.namespace || 'dex');
     setReleaseName(settings.releaseName || 'dex');
-    setConfigmapName(settings.configmapName || 'astronomer-dex-config');
+    setRuntimeSecretName(settings.runtimeSecretName || 'astronomer-dex-runtime');
     setPublicClients(Array.isArray(settings.publicClients) ? settings.publicClients : []);
     const expiry = (settings.expiry || {}) as Record<string, unknown>;
     if (typeof expiry.idTokens === 'string') setIdTokenExpiry(expiry.idTokens);
@@ -74,7 +74,7 @@ export default function DexSettingsPage() {
       cluster_id: clusterId || undefined,
       namespace,
       release_name: releaseName,
-      configmap_name: configmapName,
+      runtime_secret_name: runtimeSecretName,
       public_clients: publicClients,
       expiry,
       extra: (settings?.extra as Record<string, unknown>) ?? {},
@@ -109,7 +109,7 @@ export default function DexSettingsPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Issuer URL, public clients, token expiry. Changes are written to the rendered
-            ConfigMap on Apply.
+            retained runtime Secret on Apply.
           </p>
         </div>
         <button
@@ -135,7 +135,7 @@ export default function DexSettingsPage() {
             className={inputCls}
           />
         </FieldRow>
-        <FieldRow label="Target cluster" helper="Where the ConfigMap is written on Apply.">
+        <FieldRow label="Target cluster" helper="Where the runtime Secret is updated on Apply.">
           <select
             value={clusterId}
             onChange={(e) => setClusterId(e.target.value)}
@@ -166,11 +166,11 @@ export default function DexSettingsPage() {
               className={inputCls}
             />
           </FieldRow>
-          <FieldRow label="ConfigMap name">
+          <FieldRow label="Runtime Secret name">
             <input
               type="text"
-              value={configmapName}
-              onChange={(e) => setConfigmapName(e.target.value)}
+              value={runtimeSecretName}
+              onChange={(e) => setRuntimeSecretName(e.target.value)}
               className={inputCls}
             />
           </FieldRow>

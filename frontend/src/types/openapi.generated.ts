@@ -537,7 +537,14 @@ export interface OpenAPIComponents {
           "issuer_url"?: string;
           "namespace"?: string;
           "release_name"?: string;
-          "configmap_name"?: string;
+          "runtime_secret_name"?: string;
+          "public_clients"?: Array<{
+            "id"?: string;
+            "name"?: string;
+            "redirectURIs"?: string[];
+            "secret"?: string;
+            "secret_configured"?: boolean;
+          }>;
           "cluster_id"?: string | null;
           "updated_at"?: string;
         } & Record<string, unknown>;
@@ -545,7 +552,8 @@ export interface OpenAPIComponents {
           "issuer_url": string;
           "namespace"?: string;
           "release_name"?: string;
-          "configmap_name"?: string;
+          "runtime_secret_name"?: string;
+          "public_clients"?: Record<string, unknown>[];
           "cluster_id"?: string;
         };
     Error: {
