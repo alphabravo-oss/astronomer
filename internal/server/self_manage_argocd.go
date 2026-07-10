@@ -188,7 +188,7 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	if err != nil {
 		return fmt.Errorf("resolve current self-managed values source: %w", err)
 	}
-	valuesBuild, err := buildSelfManagedAstronomerValuesResult(ctx, cfg, k8s, serverURL, currentSafeValues)
+	valuesBuild, err := buildSelfManagedAstronomerValues(ctx, cfg, k8s, serverURL, currentSafeValues)
 	if err != nil {
 		return fmt.Errorf("build self-managed values: %w", err)
 	}

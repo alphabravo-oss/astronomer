@@ -27,6 +27,10 @@ rollout and prove that only Pods from its current ReplicaSet remain. Use the
 rollout, Deployment-count, ReplicaSet, and Pod checks in the legacy-scrub
 section below. The server enforces this fence even when no Application exists
 and even when the existing Application hash appears unchanged.
+Scale `astro-argocd-application-controller` to zero and wait for its workload
+status and matching Pod count to reach zero before the initial takeover or any
+Helm-to-Argo restage. Keep it quiesced through staging; the server never scales
+it on the operator's behalf.
 
 1. Render the embedded chart and review the complete Argo diff, including
    storage classes/sizes, Argo itself, image mirrors/pull Secrets, scheduling,
@@ -120,10 +124,13 @@ and replica tuples while the new server is trying to adopt them.
 
 The server checks both controller quiescence and complete server rollout before
 reading live tuples. Immediately before restaging the Application, it rechecks
-those gates, the exact highest deployed Helm release identity/version, and the
-presence plus UID/resourceVersion of every optional topology workload. Any
-intervening controller restart, Helm release change, or workload convergence
-event aborts the write and the next reconcile rebuilds from fresh evidence.
+those gates, the exact highest deployed Helm release identity/version, mandatory
+server/worker Deployment identity, optional topology presence/identity, and the
+UID/resourceVersion of referenced Secrets and any fallback ConfigMaps that fed
+the generated values. Any intervening controller restart, Helm release change,
+workload convergence event, or credential/config input change aborts the write
+and the next reconcile rebuilds from fresh evidence. Initial takeover and
+bounded live upgrade use the same compare-before-write evidence contract.
 Live adoption with concurrent Argo self-healing is not a supported or safe
 upgrade path.
 

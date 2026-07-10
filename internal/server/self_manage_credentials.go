@@ -137,7 +137,7 @@ func statefulSetEnvSecretRef(statefulSet *appsv1.StatefulSet, containerName, env
 	return selfManagedSecretRef{}, false
 }
 
-func selfManagedDatabaseSecretRefs(ctx context.Context, k8s kubernetes.Interface, server *appsv1.Deployment, coreSecret *corev1.Secret, postgres *appsv1.StatefulSet) (selfManagedSecretRef, selfManagedSecretRef, error) {
+func selfManagedDatabaseSecretRefs(ctx context.Context, k8s kubernetes.Interface, server *appsv1.Deployment, coreSecret *corev1.Secret, postgres *appsv1.StatefulSet, configMap *corev1.ConfigMap) (selfManagedSecretRef, selfManagedSecretRef, error) {
 	bundled := postgres != nil
 	if ref, ok := deploymentEnvSecretRef(server, "server", "DATABASE_URL"); ok {
 		if bundled {
@@ -149,9 +149,8 @@ func selfManagedDatabaseSecretRefs(ctx context.Context, k8s kubernetes.Interface
 		}
 		return ref, selfManagedSecretRef{}, nil
 	}
-	configMap, err := k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-config", metav1.GetOptions{})
-	if err != nil {
-		return selfManagedSecretRef{}, selfManagedSecretRef{}, fmt.Errorf("read current DATABASE_URL source: %w", err)
+	if configMap == nil {
+		return selfManagedSecretRef{}, selfManagedSecretRef{}, fmt.Errorf("current DATABASE_URL has no captured ConfigMap source")
 	}
 	dsn := strings.TrimSpace(configMap.Data["DATABASE_URL"])
 	if dsn == "" {
@@ -174,13 +173,22 @@ func selfManagedDatabaseSecretRefs(ctx context.Context, k8s kubernetes.Interface
 	return ref, passwordRef, nil
 }
 
-func selfManagedExternalRedisValues(ctx context.Context, k8s kubernetes.Interface, server *appsv1.Deployment) (map[string]any, error) {
+func selfManagedExternalRedisValues(ctx context.Context, k8s kubernetes.Interface, server *appsv1.Deployment, configMaps ...*corev1.ConfigMap) (map[string]any, error) {
 	if ref, ok := deploymentEnvSecretRef(server, "server", "REDIS_URL"); ok {
 		return map[string]any{"urlSecretRef": secretRefValues(ref)}, nil
 	}
-	configMap, err := k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-config", metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("read current REDIS_URL source: %w", err)
+	var configMap *corev1.ConfigMap
+	if len(configMaps) > 0 {
+		configMap = configMaps[0]
+	} else {
+		var err error
+		configMap, err = k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-config", metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("read current REDIS_URL source: %w", err)
+		}
+	}
+	if configMap == nil {
+		return nil, fmt.Errorf("current REDIS_URL has no ConfigMap source")
 	}
 	redisURL := strings.TrimSpace(configMap.Data["REDIS_URL"])
 	if redisURL == "" {
@@ -240,15 +248,14 @@ func decomposableSelfManagedRedisURL(raw string) (*url.URL, int, bool) {
 	return parsed, database, true
 }
 
-func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface, deploy *appsv1.Deployment) (map[string]any, error) {
+func selfManagedDexValues(ctx context.Context, k8s kubernetes.Interface, deploy *appsv1.Deployment, configMap *corev1.ConfigMap) (map[string]any, error) {
 	if deploy == nil {
 		return map[string]any{"enabled": false}, nil
 	}
 	ref, ok := deploymentEnvSecretRef(deploy, "dex", "ASTRONOMER_DEX_CLIENT_SECRET")
 	if !ok {
-		configMap, err := k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-dex-config", metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("read Dex client credential source: %w", err)
+		if configMap == nil {
+			return nil, fmt.Errorf("Dex client credential has no captured ConfigMap source")
 		}
 		secret, err := dexAstronomerStaticClientSecret(configMap.Data["config.yaml"])
 		if err != nil {

@@ -30,6 +30,9 @@ func preflightSelfManagedApplicationCredentialMigration(ctx context.Context, k8s
 		if rolloutErr := verifySelfManagedServerRolloutComplete(ctx, k8s); rolloutErr != nil {
 			return fmt.Errorf("first self-managed Application creation requires a complete server rollout: %w", rolloutErr)
 		}
+		if controllerErr := verifyLocalArgoApplicationControllerStopped(ctx, k8s); controllerErr != nil {
+			return fmt.Errorf("first self-managed Application creation requires a quiesced Argo controller: %w", controllerErr)
+		}
 		return nil
 	}
 	if err != nil {
@@ -59,7 +62,7 @@ func preflightSelfManagedApplicationCredentialMigration(ctx context.Context, k8s
 }
 
 func verifySelfManagedAdoptionSnapshot(ctx context.Context, k8s kubernetes.Interface, snapshot *selfManagedAdoptionSnapshot) error {
-	if snapshot == nil || !snapshot.BoundedAdoption {
+	if snapshot == nil || !snapshot.RuntimeAdoption {
 		return nil
 	}
 	if !snapshot.RequireControllerStopped {
@@ -78,7 +81,7 @@ func verifySelfManagedAdoptionSnapshot(ctx context.Context, k8s kubernetes.Inter
 	if selected.Name != snapshot.ReleaseName || selected.UID != snapshot.ReleaseUID || selected.ResourceVersion != snapshot.ReleaseResourceVersion || selected.Version != snapshot.ReleaseVersion {
 		return fmt.Errorf("bounded adoption evidence changed before Application restage: highest deployed Helm release identity/version changed")
 	}
-	for _, evidence := range snapshot.Workloads {
+	for _, evidence := range snapshot.Objects {
 		var object metav1.Object
 		switch evidence.Resource {
 		case "statefulsets":
@@ -107,11 +110,29 @@ func verifySelfManagedAdoptionSnapshot(ctx context.Context, k8s kubernetes.Inter
 			if getErr == nil && !evidence.Present {
 				return fmt.Errorf("bounded adoption evidence changed before Application restage: Deployment %s appeared", evidence.Name)
 			}
+		case "secrets":
+			secret, getErr := k8s.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, evidence.Name, metav1.GetOptions{})
+			if getErr != nil {
+				if apierrors.IsNotFound(getErr) {
+					return fmt.Errorf("runtime adoption evidence changed before Application restage: Secret %s disappeared", evidence.Name)
+				}
+				return fmt.Errorf("reverify runtime adoption Secret %s: %w", evidence.Name, getErr)
+			}
+			object = secret
+		case "configmaps":
+			configMap, getErr := k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, evidence.Name, metav1.GetOptions{})
+			if getErr != nil {
+				if apierrors.IsNotFound(getErr) {
+					return fmt.Errorf("runtime adoption evidence changed before Application restage: ConfigMap %s disappeared", evidence.Name)
+				}
+				return fmt.Errorf("reverify runtime adoption ConfigMap %s: %w", evidence.Name, getErr)
+			}
+			object = configMap
 		default:
-			return fmt.Errorf("bounded adoption snapshot contains unsupported workload resource %q", evidence.Resource)
+			return fmt.Errorf("runtime adoption snapshot contains unsupported evidence resource %q", evidence.Resource)
 		}
 		if evidence.Present && (object.GetUID() != evidence.UID || object.GetResourceVersion() != evidence.ResourceVersion) {
-			return fmt.Errorf("bounded adoption evidence changed before Application restage: %s %s identity/resourceVersion changed", evidence.Resource, evidence.Name)
+			return fmt.Errorf("runtime adoption evidence changed before Application restage: %s %s identity/resourceVersion changed", evidence.Resource, evidence.Name)
 		}
 	}
 	return nil
@@ -275,6 +296,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 	}
 	if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
 		return fmt.Errorf("unsafe legacy Application requires an operator-gated migration: %w", err)
+	}
+	if err := verifySelfManagedAdoptionSnapshot(ctx, k8s, adoptionSnapshot); err != nil {
+		return err
 	}
 	// The bundled Argo 9.5.21 CRD has no status subresource. A single full-object
 	// replacement therefore removes legacy plaintext from spec, operation,

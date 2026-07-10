@@ -45,17 +45,14 @@ type selfManagedObjectEvidence struct {
 }
 
 type selfManagedAdoptionSnapshot struct {
+	RuntimeAdoption          bool
 	BoundedAdoption          bool
 	RequireControllerStopped bool
 	ReleaseName              string
 	ReleaseUID               types.UID
 	ReleaseResourceVersion   string
 	ReleaseVersion           int
-	Workloads                []selfManagedObjectEvidence
-}
-
-func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...selfManagedValuesSource) (string, error) {
-	return buildSelfManagedAstronomerValuesCaptured(ctx, cfg, k8s, serverURL, nil, referenceOnlySource...)
+	Objects                  []selfManagedObjectEvidence
 }
 
 type selfManagedValuesBuild struct {
@@ -63,7 +60,7 @@ type selfManagedValuesBuild struct {
 	AdoptionSnapshot *selfManagedAdoptionSnapshot
 }
 
-func buildSelfManagedAstronomerValuesResult(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...selfManagedValuesSource) (selfManagedValuesBuild, error) {
+func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...selfManagedValuesSource) (selfManagedValuesBuild, error) {
 	var snapshot *selfManagedAdoptionSnapshot
 	valuesYAML, err := buildSelfManagedAstronomerValuesCaptured(ctx, cfg, k8s, serverURL, &snapshot, referenceOnlySource...)
 	return selfManagedValuesBuild{ValuesYAML: valuesYAML, AdoptionSnapshot: snapshot}, err
@@ -80,10 +77,15 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0].ValuesYAML) == ""
 	liveUpgradeAdoption := !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade
 	adoptRuntime := initialTakeover || liveUpgradeAdoption
-	if liveUpgradeAdoption {
+	if adoptRuntime {
 		if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
-			return "", fmt.Errorf("adopt live upgrade only while the Argo application controller is quiesced: %w", err)
+			if liveUpgradeAdoption {
+				return "", fmt.Errorf("adopt live upgrade only while the Argo application controller is quiesced: %w", err)
+			}
+			return "", fmt.Errorf("initial self-management takeover requires the Argo application controller to be quiesced: %w", err)
 		}
+	}
+	if liveUpgradeAdoption {
 		if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
 			return "", fmt.Errorf("adopt live upgrade only after a complete server rollout: %w", err)
 		}
@@ -144,16 +146,21 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 	coreSecretName := coreSecret.Name
 	runtimeOverlay := map[string]any{}
 	var frontendDeployment *appsv1.Deployment
+	var workerDeployment *appsv1.Deployment
 	if adoptRuntime {
 		globalRegistry, _, _ := unstructured.NestedString(values, "image", "registry")
-		serverRef, serverReplicas, migrateRef, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-server")
+		serverRef, serverReplicas, migrateRef, err := deploymentImagesFromDeployment(serverDeployment)
 		if err != nil {
 			return "", err
 		}
 		if migrateRef == "" {
 			return "", fmt.Errorf("server Deployment has no migrate init-container image for safe takeover")
 		}
-		workerRef, workerReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-worker")
+		workerDeployment, err = k8s.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-worker", metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		workerRef, workerReplicas, _, err := deploymentImagesFromDeployment(workerDeployment)
 		if err != nil {
 			return "", err
 		}
@@ -252,20 +259,38 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		return "", err
 	}
 	postgresBundled := postgresStatefulSet != nil
-	databaseRef, postgresPasswordRef, err := selfManagedDatabaseSecretRefs(ctx, k8s, serverDeployment, coreSecret, postgresStatefulSet)
+	_, databaseHasSecretRef := deploymentEnvSecretRef(serverDeployment, "server", "DATABASE_URL")
+	_, redisHasSecretRef := deploymentEnvSecretRef(serverDeployment, "server", "REDIS_URL")
+	var runtimeConfigMap *corev1.ConfigMap
+	if !databaseHasSecretRef || (redisStatefulSet == nil && !redisHasSecretRef) {
+		runtimeConfigMap, err = k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-config", metav1.GetOptions{})
+		if err != nil {
+			return "", fmt.Errorf("read management runtime ConfigMap evidence: %w", err)
+		}
+	}
+	databaseRef, postgresPasswordRef, err := selfManagedDatabaseSecretRefs(ctx, k8s, serverDeployment, coreSecret, postgresStatefulSet, runtimeConfigMap)
 	if err != nil {
 		return "", err
 	}
 	redisBundled := redisStatefulSet != nil
 	redisValues := map[string]any{"bundled": map[string]any{"enabled": redisBundled}}
 	if !redisBundled {
-		externalRedis, err := selfManagedExternalRedisValues(ctx, k8s, serverDeployment)
+		externalRedis, err := selfManagedExternalRedisValues(ctx, k8s, serverDeployment, runtimeConfigMap)
 		if err != nil {
 			return "", err
 		}
 		redisValues["external"] = externalRedis
 	}
-	dexValues, err := selfManagedDexValues(ctx, k8s, dexDeployment)
+	var dexConfigMap *corev1.ConfigMap
+	if dexDeployment != nil {
+		if _, ok := deploymentEnvSecretRef(dexDeployment, "dex", "ASTRONOMER_DEX_CLIENT_SECRET"); !ok {
+			dexConfigMap, err = k8s.CoreV1().ConfigMaps(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-dex-config", metav1.GetOptions{})
+			if err != nil {
+				return "", fmt.Errorf("read Dex ConfigMap evidence: %w", err)
+			}
+		}
+	}
+	dexValues, err := selfManagedDexValues(ctx, k8s, dexDeployment, dexConfigMap)
 	if err != nil {
 		return "", err
 	}
@@ -283,25 +308,6 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 				return "", err
 			}
 			runtimeOverlay["redis"] = redisRuntime
-		}
-	}
-	if liveUpgradeAdoption && snapshotOut != nil {
-		if deployedRelease == nil {
-			return "", fmt.Errorf("bounded topology/runtime adoption has no selected Helm release evidence")
-		}
-		*snapshotOut = &selfManagedAdoptionSnapshot{
-			BoundedAdoption:          true,
-			RequireControllerStopped: true,
-			ReleaseName:              deployedRelease.Name,
-			ReleaseUID:               deployedRelease.UID,
-			ReleaseResourceVersion:   deployedRelease.ResourceVersion,
-			ReleaseVersion:           deployedRelease.Version,
-			Workloads: []selfManagedObjectEvidence{
-				selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-postgres", postgresStatefulSet != nil, postgresStatefulSet),
-				selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-redis", redisStatefulSet != nil, redisStatefulSet),
-				selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-dex", dexDeployment != nil, dexDeployment),
-				selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-frontend", frontendDeployment != nil, frontendDeployment),
-			},
 		}
 	}
 	protectedSecrets := []string{coreSecretName, bootstrapRef.Name, databaseRef.Name}
@@ -322,6 +328,46 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		seenProtected[name] = struct{}{}
 		if err := protectSelfManagedSecret(ctx, k8s, name); err != nil {
 			return "", fmt.Errorf("protect referenced Secret %s from Argo prune: %w", name, err)
+		}
+	}
+	if adoptRuntime && snapshotOut != nil {
+		if deployedRelease == nil {
+			return "", fmt.Errorf("runtime adoption has no selected Helm release evidence")
+		}
+		objects := []selfManagedObjectEvidence{
+			selfManagedWorkloadEvidence("deployments", serverDeployment.Name, true, serverDeployment),
+			selfManagedWorkloadEvidence("deployments", workerDeployment.Name, true, workerDeployment),
+			selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-postgres", postgresStatefulSet != nil, postgresStatefulSet),
+			selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-redis", redisStatefulSet != nil, redisStatefulSet),
+			selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-dex", dexDeployment != nil, dexDeployment),
+			selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-frontend", frontendDeployment != nil, frontendDeployment),
+		}
+		// Re-read every referenced Secret after protection because protection may
+		// update metadata. Secret contents are never copied into the snapshot or
+		// an error; UID/resourceVersion binds all credential discovery/fallback
+		// inputs to the Application write.
+		for name := range seenProtected {
+			secret, err := k8s.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return "", fmt.Errorf("refresh referenced Secret %s evidence: %w", name, err)
+			}
+			objects = append(objects, selfManagedWorkloadEvidence("secrets", name, true, secret))
+		}
+		if runtimeConfigMap != nil {
+			objects = append(objects, selfManagedWorkloadEvidence("configmaps", runtimeConfigMap.Name, true, runtimeConfigMap))
+		}
+		if dexConfigMap != nil {
+			objects = append(objects, selfManagedWorkloadEvidence("configmaps", dexConfigMap.Name, true, dexConfigMap))
+		}
+		*snapshotOut = &selfManagedAdoptionSnapshot{
+			RuntimeAdoption:          true,
+			BoundedAdoption:          liveUpgradeAdoption,
+			RequireControllerStopped: true,
+			ReleaseName:              deployedRelease.Name,
+			ReleaseUID:               deployedRelease.UID,
+			ReleaseResourceVersion:   deployedRelease.ResourceVersion,
+			ReleaseVersion:           deployedRelease.Version,
+			Objects:                  objects,
 		}
 	}
 	discovered := map[string]any{

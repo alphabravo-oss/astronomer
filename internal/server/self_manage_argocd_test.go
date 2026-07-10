@@ -253,7 +253,9 @@ func TestSelfManagedPublicListenerValuesFallsBackToGateway(t *testing.T) {
 func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *testing.T) {
 	className := "nginx"
 	replicas := int32(1)
+	zero := int32(0)
 	client := fake.NewClientset(
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}},
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      localAstronomerReleaseName + "-secrets",
@@ -335,13 +337,14 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		t.Fatal(err)
 	}
 
-	valuesYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	valuesBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent",
 		AgentImageTag:        "agent-tag",
 	}, client, "https://astronomer.dev.alphabravo.io")
 	if err != nil {
 		t.Fatalf("buildSelfManagedAstronomerValues returned error: %v", err)
 	}
+	valuesYAML := valuesBuild.ValuesYAML
 
 	var values map[string]any
 	if err := yaml.Unmarshal([]byte(valuesYAML), &values); err != nil {
@@ -388,12 +391,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	secondBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent", AgentImageTag: "agent-tag",
 	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: string(upgradedSource)})
 	if err != nil {
 		t.Fatalf("second fixed-point build: %v", err)
 	}
+	secondYAML := secondBuild.ValuesYAML
 	second := unmarshalSelfManagedValues(t, secondYAML)
 	if got := second["image"].(map[string]any)["server"].(map[string]any)["tag"]; got != "server-upgraded" {
 		t.Fatalf("reference-only current Application image upgrade reverted to live/Helm source: %v", got)
@@ -412,12 +416,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v10", "mirror.example/platform/database/migrate:v10")
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-frontend", "frontend.example/team/frontend:v10", "")
-	mirroredYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	mirroredBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v10",
 	}, client, "https://astronomer.dev.alphabravo.io")
 	if err != nil {
 		t.Fatalf("mirrored first takeover: %v", err)
 	}
+	mirroredYAML := mirroredBuild.ValuesYAML
 	mirrored := unmarshalSelfManagedValues(t, mirroredYAML)
 	mirroredImages := mirrored["image"].(map[string]any)
 	if got := mirroredImages["registry"]; got != globalMirror {
@@ -435,12 +440,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	// Once staged, the validated Application is canonical: neither live drift
 	// nor a changed process config silently rewrites its declared image intent.
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/drift/server:bad", "outside.example/drift/migrate:bad")
-	mirroredSecondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	mirroredSecondBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "outside.example/drift/agent", AgentImageTag: "bad",
 	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: mirroredYAML})
 	if err != nil {
 		t.Fatalf("mirrored second cycle: %v", err)
 	}
+	mirroredSecondYAML := mirroredSecondBuild.ValuesYAML
 	mirroredSecond := unmarshalSelfManagedValues(t, mirroredSecondYAML)
 	if !reflect.DeepEqual(mirrored["image"], mirroredSecond["image"]) || !reflect.DeepEqual(mirrored["config"], mirroredSecond["config"]) {
 		t.Fatalf("safe Application image/config changed on cycle two:\nfirst=%#v\nsecond=%#v", mirrored["image"], mirroredSecond["image"])
@@ -452,12 +458,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v11", "")
 	markServerDeploymentRolloutCompleteForTest(t, client)
 	oneController := int32(1)
-	controllerWorkload := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace},
-		Spec:       appsv1.StatefulSetSpec{Replicas: &oneController},
-		Status:     appsv1.StatefulSetStatus{Replicas: 1, ReadyReplicas: 1},
+	controllerWorkload, err := client.AppsV1().StatefulSets(localArgoNamespace).Get(context.Background(), localArgoControllerWorkload, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), controllerWorkload, metav1.CreateOptions{}); err != nil {
+	controllerWorkload.Spec.Replicas = &oneController
+	controllerWorkload.Status = appsv1.StatefulSetStatus{Replicas: 1, ReadyReplicas: 1}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controllerWorkload, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	controllerPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astro-argocd-application-controller-0", Namespace: localArgoNamespace, Labels: map[string]string{"app.kubernetes.io/name": "argocd-application-controller"}}}
@@ -478,12 +485,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	if err := client.CoreV1().Pods(localArgoNamespace).Delete(context.Background(), controllerPod.Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	adoptedYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	adoptedBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
 	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true})
 	if err != nil {
 		t.Fatalf("bounded chart-revision upgrade adoption: %v", err)
 	}
+	adoptedYAML := adoptedBuild.ValuesYAML
 	adopted := unmarshalSelfManagedValues(t, adoptedYAML)
 	adoptedImages := adopted["image"].(map[string]any)
 	for _, component := range []string{"server", "worker", "migrate", "agent"} {
@@ -528,12 +536,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), frontendDisabledRelease, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	disabledYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	disabledBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
 	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true})
 	if err != nil {
 		t.Fatalf("authoritative frontend disable adoption: %v", err)
 	}
+	disabledYAML := disabledBuild.ValuesYAML
 	disabledFrontend := unmarshalSelfManagedValues(t, disabledYAML)["frontend"].(map[string]any)
 	if disabledFrontend["enabled"] != false {
 		t.Fatalf("true-to-false frontend intent was not overlaid: %#v", disabledFrontend)
@@ -557,20 +566,22 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		t.Fatalf("initial-takeover frontend API error was not propagated: %v", err)
 	}
 	failFrontendRead = false
-	initialDisabledYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	initialDisabledBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
 	}, client, "https://astronomer.dev.alphabravo.io")
 	if err != nil {
 		t.Fatalf("initial takeover did not preserve absent disabled frontend intent: %v", err)
 	}
+	initialDisabledYAML := initialDisabledBuild.ValuesYAML
 	if got := unmarshalSelfManagedValues(t, initialDisabledYAML)["frontend"].(map[string]any)["enabled"]; got != false {
 		t.Fatalf("initial takeover frontend.enabled = %v, want false", got)
 	}
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/same-revision/server:drift", "outside.example/same-revision/migrate:drift")
-	adoptedSecondYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/same-revision/agent", AgentImageTag: "drift"}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: adoptedYAML})
+	adoptedSecondBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/same-revision/agent", AgentImageTag: "drift"}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: adoptedYAML})
 	if err != nil {
 		t.Fatal(err)
 	}
+	adoptedSecondYAML := adoptedSecondBuild.ValuesYAML
 	adoptedSecond := unmarshalSelfManagedValues(t, adoptedSecondYAML)
 	if !reflect.DeepEqual(adopted["image"], adoptedSecond["image"]) || !reflect.DeepEqual(adopted["config"], adoptedSecond["config"]) {
 		t.Fatal("post-upgrade canonical values were not a fixed point")
@@ -679,12 +690,12 @@ func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing
 						objects = append(objects, component.object(state.terminating))
 					}
 					client := fake.NewSimpleClientset(objects...)
+					zero := int32(0)
+					if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+						t.Fatal(err)
+					}
 					if mode == "bounded-upgrade" {
 						markServerDeploymentRolloutCompleteForTest(t, client)
-						zero := int32(0)
-						if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
-							t.Fatal(err)
-						}
 					}
 					if state.apiError {
 						client.Fake.PrependReactor("get", component.resource, func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -696,12 +707,12 @@ func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing
 						})
 					}
 					cfg := &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}
-					var output string
+					var build selfManagedValuesBuild
 					var err error
 					if mode == "bounded-upgrade" {
-						output, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
+						build, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
 					} else {
-						output, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example")
+						build, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example")
 					}
 					if state.wantError != "" {
 						if err == nil || !strings.Contains(err.Error(), state.wantError) {
@@ -712,7 +723,7 @@ func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing
 					if err != nil {
 						t.Fatal(err)
 					}
-					values := unmarshalSelfManagedValues(t, output)
+					values := unmarshalSelfManagedValues(t, build.ValuesYAML)
 					if state.enabled {
 						component.assertLive(t, values)
 					} else {
@@ -747,17 +758,21 @@ func TestSelfManagedBundledComponentIntentUsesChartDefaults(t *testing.T) {
 }
 
 func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
-	t.Run("initial and same-revision builds carry no bounded evidence", func(t *testing.T) {
+	t.Run("initial carries runtime evidence and same revision does not", func(t *testing.T) {
 		client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+		zero := int32(0)
+		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
 		cfg := &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}
-		initial, err := buildSelfManagedAstronomerValuesResult(context.Background(), cfg, client, "https://astronomer.example")
+		initial, err := buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if initial.AdoptionSnapshot != nil {
-			t.Fatal("initial takeover unexpectedly carried bounded-adoption evidence")
+		if initial.AdoptionSnapshot == nil || !initial.AdoptionSnapshot.RuntimeAdoption || initial.AdoptionSnapshot.BoundedAdoption {
+			t.Fatalf("initial takeover evidence = %#v", initial.AdoptionSnapshot)
 		}
-		sameRevision, err := buildSelfManagedAstronomerValuesResult(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: initial.ValuesYAML})
+		sameRevision, err := buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: initial.ValuesYAML})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -765,6 +780,74 @@ func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
 			t.Fatal("same-revision build unexpectedly carried bounded-adoption evidence")
 		}
 	})
+
+	t.Run("initial unchanged evidence creates Application", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		dyn.ClearActions()
+		if err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, build.ValuesYAML, build.AdoptionSnapshot); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedApplicationWriteCount(t, dyn, 1)
+	})
+
+	t.Run("initial controller restart", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		controller, _ := client.AppsV1().StatefulSets(localArgoNamespace).Get(context.Background(), localArgoControllerWorkload, metav1.GetOptions{})
+		one := int32(1)
+		controller.Spec.Replicas = &one
+		controller.Status.Replicas = 1
+		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controller, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "controller is not quiesced")
+	})
+
+	t.Run("initial release drift", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		secret, _ := client.CoreV1().Secrets(localAstronomerNamespace).Get(context.Background(), "sh.helm.release.v1.astronomer.v12", metav1.GetOptions{})
+		secret.ResourceVersion = "initial-release-drift"
+		if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "Helm release identity/version changed")
+	})
+
+	t.Run("initial credential Secret drift", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		secret, _ := client.CoreV1().Secrets(localAstronomerNamespace).Get(context.Background(), "astronomer-secrets", metav1.GetOptions{})
+		secret.ResourceVersion = "credential-drift"
+		if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+	})
+
+	for _, fallback := range []string{"runtime-config", "dex-config"} {
+		t.Run("initial "+fallback+" drift", func(t *testing.T) {
+			client, dyn, build, configMapName := selfManagedInitialFallbackSnapshotTestBuild(t, fallback == "dex-config")
+			configMap, _ := client.CoreV1().ConfigMaps(localAstronomerNamespace).Get(context.Background(), configMapName, metav1.GetOptions{})
+			configMap.ResourceVersion = "config-drift"
+			if _, err := client.CoreV1().ConfigMaps(localAstronomerNamespace).Update(context.Background(), configMap, metav1.UpdateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+		})
+	}
+
+	for _, component := range []string{"postgres", "redis", "dex", "frontend"} {
+		t.Run("initial optional "+component+" drift", func(t *testing.T) {
+			client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+			mutateSelfManagedSnapshotWorkload(t, client, component, "create")
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+		})
+	}
+	for _, component := range []string{"server", "worker"} {
+		t.Run("initial "+component+" drift", func(t *testing.T) {
+			client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+			mutateSelfManagedSnapshotWorkload(t, client, component, "mutate")
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+		})
+	}
 
 	t.Run("unchanged evidence restages", func(t *testing.T) {
 		client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
@@ -835,10 +918,96 @@ func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
 				presentAtBuild := mutation != "create"
 				client, dyn, build := selfManagedSnapshotTestBuild(t, component, presentAtBuild)
 				mutateSelfManagedSnapshotWorkload(t, client, component, mutation)
-				assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "bounded adoption evidence changed")
+				assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "adoption evidence changed")
 			})
 		}
 	}
+	for _, component := range []string{"server", "worker"} {
+		for _, mutation := range []string{"mutate", "replace"} {
+			t.Run(component+" "+mutation, func(t *testing.T) {
+				client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+				mutateSelfManagedSnapshotWorkload(t, client, component, mutation)
+				wantError := "evidence changed"
+				if component == "server" && mutation == "replace" {
+					wantError = "complete server rollout"
+				}
+				assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, wantError)
+			})
+		}
+	}
+}
+
+func selfManagedInitialSnapshotTestBuild(t *testing.T) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild) {
+	t.Helper()
+	client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	controller := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), controller, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	build, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if build.AdoptionSnapshot == nil || !build.AdoptionSnapshot.RuntimeAdoption || build.AdoptionSnapshot.BoundedAdoption {
+		t.Fatalf("initial adoption evidence = %#v", build.AdoptionSnapshot)
+	}
+	return client, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), build
+}
+
+func selfManagedInitialFallbackSnapshotTestBuild(t *testing.T, dexFallback bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild, string) {
+	t.Helper()
+	releaseValues := selfManagedBundledIntentReleaseValues()
+	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+	client := fake.NewSimpleClientset(objects...)
+	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	filtered := server.Spec.Template.Spec.Containers[0].Env[:0]
+	for _, env := range server.Spec.Template.Spec.Containers[0].Env {
+		if env.Name != "DATABASE_URL" && env.Name != "REDIS_URL" {
+			filtered = append(filtered, env)
+		}
+	}
+	server.Spec.Template.Spec.Containers[0].Env = filtered
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	runtimeConfig := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-config", Namespace: localAstronomerNamespace, UID: "runtime-config", ResourceVersion: "config-1"}, Data: map[string]string{"DATABASE_URL": "postgres://runtime.example/astronomer", "REDIS_URL": "redis://runtime.example:6379/0"}}
+	if _, err := client.CoreV1().ConfigMaps(localAstronomerNamespace).Create(context.Background(), runtimeConfig, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	configMapName := runtimeConfig.Name
+	if dexFallback {
+		releaseValues["dex"].(map[string]any)["enabled"] = true
+		// Replace the already encoded release so the selected Helm evidence carries
+		// the enabled Dex intent.
+		if err := client.CoreV1().Secrets(localAstronomerNamespace).Delete(context.Background(), "sh.helm.release.v1.astronomer.v12", metav1.DeleteOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), helmReleaseSecretFixture(t, 12, "deployed", releaseValues), metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		dex := selfManagedDexDeploymentFixture(false)
+		dex.Spec.Template.Spec.Containers[0].Env = nil
+		if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Create(context.Background(), dex, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		dexConfig := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex-config", Namespace: localAstronomerNamespace, UID: "dex-config", ResourceVersion: "dex-config-1"}, Data: map[string]string{"config.yaml": "staticClients:\n- id: astronomer\n  secret: fallback-secret\n"}}
+		if _, err := client.CoreV1().ConfigMaps(localAstronomerNamespace).Create(context.Background(), dexConfig, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		configMapName = dexConfig.Name
+	}
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	build, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), build, configMapName
 }
 
 func selfManagedSnapshotTestBuild(t *testing.T, component string, present bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild) {
@@ -882,7 +1051,7 @@ func selfManagedSnapshotTestBuild(t *testing.T, component string, present bool) 
 		t.Fatal(err)
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), activeSelfManagedApplicationForRevision(t, "0.2.0", "https://kubernetes.default.svc"))
-	build, err := buildSelfManagedAstronomerValuesResult(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
+	build, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -907,6 +1076,9 @@ func mutateSelfManagedSnapshotWorkload(t *testing.T, client *fake.Clientset, com
 			object = selfManagedDexDeploymentFixture(false)
 		case "frontend":
 			object = selfManagedFrontendDeploymentFixture()
+		case "server", "worker":
+			replicas := int32(1)
+			object = &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas}}
 		}
 		metadata := object.(metav1.Object)
 		metadata.SetUID(types.UID("new-" + component))
@@ -952,7 +1124,10 @@ func mutateSelfManagedSnapshotWorkload(t *testing.T, client *fake.Clientset, com
 	}
 	switch mutation {
 	case "mutate":
-		current.Spec.Template.Spec.Containers[0].Image += "-mutated"
+		if current.Annotations == nil {
+			current.Annotations = map[string]string{}
+		}
+		current.Annotations["test.astronomer.io/mutated"] = "true"
 		current.ResourceVersion = "101"
 		_, err = client.AppsV1().Deployments(localArgoNamespace).Update(ctx, current, metav1.UpdateOptions{})
 	case "delete", "replace":
@@ -1037,7 +1212,7 @@ func selfManagedBundledIntentBaseObjects(t *testing.T, releaseValues map[string]
 		},
 	}
 	server := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-server", Namespace: localAstronomerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-server", Namespace: localAstronomerNamespace, UID: "runtime-server", ResourceVersion: "server-1"},
 		Spec: appsv1.DeploymentSpec{Replicas: &one, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 			InitContainers: []corev1.Container{{Name: "migrate", Image: "runtime.example/team/migrate:v12"}},
 			Containers: []corev1.Container{{
@@ -1052,7 +1227,7 @@ func selfManagedBundledIntentBaseObjects(t *testing.T, releaseValues map[string]
 		}}},
 	}
 	worker := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-worker", Namespace: localAstronomerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-worker", Namespace: localAstronomerNamespace, UID: "runtime-worker", ResourceVersion: "worker-1"},
 		Spec:       appsv1.DeploymentSpec{Replicas: &one, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "runtime.example/team/worker:v12"}}}}},
 	}
 	return []runtime.Object{
@@ -1147,6 +1322,7 @@ func markServerDeploymentRolloutCompleteForTest(t *testing.T, client *fake.Clien
 	}
 	labels := map[string]string{"app.kubernetes.io/name": "astronomer", "app.kubernetes.io/instance": "astronomer", "app.kubernetes.io/component": "server"}
 	deployment.UID = "build-test-deployment"
+	deployment.ResourceVersion = "build-test-server-11"
 	deployment.Generation = 11
 	deployment.Annotations = map[string]string{"deployment.kubernetes.io/revision": "11"}
 	deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
