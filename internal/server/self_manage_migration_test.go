@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -658,6 +659,7 @@ func helmReleaseSecretFixture(t *testing.T, version int, status string, config m
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "sh.helm.release.v1.astronomer.v" + fmt.Sprint(version), Namespace: localAstronomerNamespace,
+			UID: types.UID("helm-release-" + fmt.Sprint(version)), ResourceVersion: fmt.Sprint(version),
 			Labels: map[string]string{"owner": "helm", "name": localAstronomerReleaseName, "status": status, "version": fmt.Sprint(version)},
 		},
 		Data: map[string][]byte{"release": []byte(base64.StdEncoding.EncodeToString(compressed.Bytes()))},

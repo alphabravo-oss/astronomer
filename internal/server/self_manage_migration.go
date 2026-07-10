@@ -58,7 +58,70 @@ func preflightSelfManagedApplicationCredentialMigration(ctx context.Context, k8s
 	return nil
 }
 
-func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface, cluster sqlc.Cluster, valuesYAML string) error {
+func verifySelfManagedAdoptionSnapshot(ctx context.Context, k8s kubernetes.Interface, snapshot *selfManagedAdoptionSnapshot) error {
+	if snapshot == nil || !snapshot.BoundedAdoption {
+		return nil
+	}
+	if !snapshot.RequireControllerStopped {
+		return fmt.Errorf("bounded adoption snapshot does not require a quiesced Argo controller")
+	}
+	if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
+		return fmt.Errorf("bounded adoption evidence changed before Application restage: Argo controller is not quiesced: %w", err)
+	}
+	if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
+		return fmt.Errorf("bounded adoption evidence changed before Application restage: server rollout is incomplete: %w", err)
+	}
+	selected, err := currentHelmReleaseSelection(ctx, k8s)
+	if err != nil {
+		return fmt.Errorf("reselect highest deployed Helm release before bounded Application restage: %w", err)
+	}
+	if selected.Name != snapshot.ReleaseName || selected.UID != snapshot.ReleaseUID || selected.ResourceVersion != snapshot.ReleaseResourceVersion || selected.Version != snapshot.ReleaseVersion {
+		return fmt.Errorf("bounded adoption evidence changed before Application restage: highest deployed Helm release identity/version changed")
+	}
+	for _, evidence := range snapshot.Workloads {
+		var object metav1.Object
+		switch evidence.Resource {
+		case "statefulsets":
+			statefulSet, getErr := k8s.AppsV1().StatefulSets(localAstronomerNamespace).Get(ctx, evidence.Name, metav1.GetOptions{})
+			if getErr == nil {
+				object = statefulSet
+			} else if !apierrors.IsNotFound(getErr) {
+				return fmt.Errorf("reverify bounded adoption StatefulSet %s: %w", evidence.Name, getErr)
+			}
+			if getErr != nil && evidence.Present {
+				return fmt.Errorf("bounded adoption evidence changed before Application restage: StatefulSet %s disappeared", evidence.Name)
+			}
+			if getErr == nil && !evidence.Present {
+				return fmt.Errorf("bounded adoption evidence changed before Application restage: StatefulSet %s appeared", evidence.Name)
+			}
+		case "deployments":
+			deployment, getErr := k8s.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, evidence.Name, metav1.GetOptions{})
+			if getErr == nil {
+				object = deployment
+			} else if !apierrors.IsNotFound(getErr) {
+				return fmt.Errorf("reverify bounded adoption Deployment %s: %w", evidence.Name, getErr)
+			}
+			if getErr != nil && evidence.Present {
+				return fmt.Errorf("bounded adoption evidence changed before Application restage: Deployment %s disappeared", evidence.Name)
+			}
+			if getErr == nil && !evidence.Present {
+				return fmt.Errorf("bounded adoption evidence changed before Application restage: Deployment %s appeared", evidence.Name)
+			}
+		default:
+			return fmt.Errorf("bounded adoption snapshot contains unsupported workload resource %q", evidence.Resource)
+		}
+		if evidence.Present && (object.GetUID() != evidence.UID || object.GetResourceVersion() != evidence.ResourceVersion) {
+			return fmt.Errorf("bounded adoption evidence changed before Application restage: %s %s identity/resourceVersion changed", evidence.Resource, evidence.Name)
+		}
+	}
+	return nil
+}
+
+func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.Interface, dyn dynamic.Interface, cluster sqlc.Cluster, valuesYAML string, adoptionSnapshots ...*selfManagedAdoptionSnapshot) error {
+	var adoptionSnapshot *selfManagedAdoptionSnapshot
+	if len(adoptionSnapshots) > 0 {
+		adoptionSnapshot = adoptionSnapshots[0]
+	}
 	if err := validateSelfManagedHelmValues(valuesYAML); err != nil {
 		return fmt.Errorf("refuse unsafe self-managed Helm values: %w", err)
 	}
@@ -115,6 +178,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 	if apierrors.IsNotFound(err) {
 		if rolloutErr := verifySelfManagedServerRolloutComplete(ctx, k8s); rolloutErr != nil {
 			return fmt.Errorf("first self-managed Application creation requires a complete server rollout: %w", rolloutErr)
+		}
+		if err := verifySelfManagedAdoptionSnapshot(ctx, k8s, adoptionSnapshot); err != nil {
+			return err
 		}
 		stageSelfManagedApplication(obj, desiredHash)
 		_, err = res.Create(ctx, obj, metav1.CreateOptions{})
@@ -181,6 +247,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		updated := current.DeepCopy()
 		if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
 			return fmt.Errorf("self-managed restage requires a complete server rollout: %w", err)
+		}
+		if err := verifySelfManagedAdoptionSnapshot(ctx, k8s, adoptionSnapshot); err != nil {
+			return err
 		}
 		if err := unstructured.SetNestedMap(updated.Object, stagedSelfManagedSpec(desiredSpec), "spec"); err != nil {
 			return err

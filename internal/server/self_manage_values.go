@@ -20,6 +20,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	kvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -35,13 +36,47 @@ type selfManagedValuesSource struct {
 	AdoptLiveUpgrade bool
 }
 
+type selfManagedObjectEvidence struct {
+	Resource        string
+	Name            string
+	Present         bool
+	UID             types.UID
+	ResourceVersion string
+}
+
+type selfManagedAdoptionSnapshot struct {
+	BoundedAdoption          bool
+	RequireControllerStopped bool
+	ReleaseName              string
+	ReleaseUID               types.UID
+	ReleaseResourceVersion   string
+	ReleaseVersion           int
+	Workloads                []selfManagedObjectEvidence
+}
+
 func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...selfManagedValuesSource) (string, error) {
+	return buildSelfManagedAstronomerValuesCaptured(ctx, cfg, k8s, serverURL, nil, referenceOnlySource...)
+}
+
+type selfManagedValuesBuild struct {
+	ValuesYAML       string
+	AdoptionSnapshot *selfManagedAdoptionSnapshot
+}
+
+func buildSelfManagedAstronomerValuesResult(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, referenceOnlySource ...selfManagedValuesSource) (selfManagedValuesBuild, error) {
+	var snapshot *selfManagedAdoptionSnapshot
+	valuesYAML, err := buildSelfManagedAstronomerValuesCaptured(ctx, cfg, k8s, serverURL, &snapshot, referenceOnlySource...)
+	return selfManagedValuesBuild{ValuesYAML: valuesYAML, AdoptionSnapshot: snapshot}, err
+}
+
+func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.Config, k8s kubernetes.Interface, serverURL string, snapshotOut **selfManagedAdoptionSnapshot, referenceOnlySource ...selfManagedValuesSource) (string, error) {
 	// A takeover must begin from Helm's complete operator-supplied values. Live
 	// workload discovery alone cannot safely reconstruct storage, air-gap,
 	// scheduling, TLS, backup, network-policy, observability, or bundled Argo
 	// settings. Refuse to create a pruning Application if that source is absent.
 	var values map[string]any
 	var deployedReleaseValues map[string]any
+	var deployedRelease *selfManagedHelmReleaseSelection
 	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0].ValuesYAML) == ""
 	liveUpgradeAdoption := !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade
 	adoptRuntime := initialTakeover || liveUpgradeAdoption
@@ -59,17 +94,19 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		}
 		if liveUpgradeAdoption {
 			var err error
-			deployedReleaseValues, err = currentHelmReleaseValues(ctx, k8s)
+			deployedRelease, err = currentHelmReleaseSelection(ctx, k8s)
 			if err != nil {
 				return "", fmt.Errorf("load highest deployed external Helm release values for bounded topology/runtime adoption: %w", err)
 			}
+			deployedReleaseValues = deployedRelease.Values
 		}
 	} else {
 		var err error
-		values, err = currentHelmReleaseValues(ctx, k8s)
+		deployedRelease, err = currentHelmReleaseSelection(ctx, k8s)
 		if err != nil {
 			return "", fmt.Errorf("load current Helm release values for safe takeover: %w", err)
 		}
+		values = deployedRelease.Values
 		deployedReleaseValues = values
 	}
 	if err := stripKnownInlineSelfManagedCredentials(values); err != nil {
@@ -106,6 +143,7 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	}
 	coreSecretName := coreSecret.Name
 	runtimeOverlay := map[string]any{}
+	var frontendDeployment *appsv1.Deployment
 	if adoptRuntime {
 		globalRegistry, _, _ := unstructured.NestedString(values, "image", "registry")
 		serverRef, serverReplicas, migrateRef, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-server")
@@ -152,11 +190,15 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		if err != nil {
 			return "", err
 		}
-		frontendRef, frontendReplicas, _, err := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend")
+		frontendDeployment, err = k8s.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-frontend", metav1.GetOptions{})
 		switch {
 		case err == nil:
 			if frontendIntentFound && !frontendEnabled {
 				return "", fmt.Errorf("highest deployed Helm release disables frontend but Deployment %s still exists; wait for deletion to converge before self-management adoption", localAstronomerReleaseName+"-frontend")
+			}
+			frontendRef, frontendReplicas, _, imageErr := deploymentImagesFromDeployment(frontendDeployment)
+			if imageErr != nil {
+				return "", fmt.Errorf("read frontend Deployment runtime tuple: %w", imageErr)
 			}
 			frontendImage, parseErr := parseImageRef(frontendRef)
 			if parseErr != nil {
@@ -166,11 +208,13 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 		case !apierrors.IsNotFound(err):
 			return "", fmt.Errorf("read frontend Deployment for self-management adoption: %w", err)
 		case liveUpgradeAdoption:
+			frontendDeployment = nil
 			if !frontendIntentFound || frontendEnabled {
 				return "", fmt.Errorf("frontend Deployment is absent but the highest deployed Helm release does not explicitly set frontend.enabled=false; refusing bounded upgrade adoption")
 			}
 			runtimeOverlay["frontend"] = map[string]any{"enabled": false}
 		case initialTakeover:
+			frontendDeployment = nil
 			// Initial takeover preserves the already validated Helm release intent
 			// when the optional frontend Deployment is absent.
 		}
@@ -241,6 +285,25 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 			runtimeOverlay["redis"] = redisRuntime
 		}
 	}
+	if liveUpgradeAdoption && snapshotOut != nil {
+		if deployedRelease == nil {
+			return "", fmt.Errorf("bounded topology/runtime adoption has no selected Helm release evidence")
+		}
+		*snapshotOut = &selfManagedAdoptionSnapshot{
+			BoundedAdoption:          true,
+			RequireControllerStopped: true,
+			ReleaseName:              deployedRelease.Name,
+			ReleaseUID:               deployedRelease.UID,
+			ReleaseResourceVersion:   deployedRelease.ResourceVersion,
+			ReleaseVersion:           deployedRelease.Version,
+			Workloads: []selfManagedObjectEvidence{
+				selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-postgres", postgresStatefulSet != nil, postgresStatefulSet),
+				selfManagedWorkloadEvidence("statefulsets", localAstronomerReleaseName+"-redis", redisStatefulSet != nil, redisStatefulSet),
+				selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-dex", dexDeployment != nil, dexDeployment),
+				selfManagedWorkloadEvidence("deployments", localAstronomerReleaseName+"-frontend", frontendDeployment != nil, frontendDeployment),
+			},
+		}
+	}
 	protectedSecrets := []string{coreSecretName, bootstrapRef.Name, databaseRef.Name}
 	if !redisBundled {
 		if external, ok := redisValues["external"].(map[string]any); ok {
@@ -309,6 +372,15 @@ func deployedHelmFrontendIntent(values map[string]any) (bool, bool, error) {
 		return false, false, fmt.Errorf("highest deployed Helm release frontend.enabled is not a boolean: %w", err)
 	}
 	return enabled, found, nil
+}
+
+func selfManagedWorkloadEvidence(resource, name string, present bool, object metav1.Object) selfManagedObjectEvidence {
+	evidence := selfManagedObjectEvidence{Resource: resource, Name: name, Present: present}
+	if present {
+		evidence.UID = object.GetUID()
+		evidence.ResourceVersion = object.GetResourceVersion()
+	}
+	return evidence
 }
 
 func effectiveSelfManagedChartBool(defaults, overrides map[string]any, path ...string) (bool, error) {
@@ -554,11 +626,27 @@ func validateActiveSelfManagedUpgradeIdentity(current *unstructured.Unstructured
 	return nil
 }
 
+type selfManagedHelmReleaseSelection struct {
+	Values          map[string]any
+	Name            string
+	UID             types.UID
+	ResourceVersion string
+	Version         int
+}
+
 // currentHelmReleaseValues reads the deployed release's operator-supplied
 // values. Kubernetes Secret data is never logged or returned to an API; callers
 // must rewrite known credentials and run validateSelfManagedHelmValues before
 // putting the result in an Argo Application.
 func currentHelmReleaseValues(ctx context.Context, k8s kubernetes.Interface) (map[string]any, error) {
+	selection, err := currentHelmReleaseSelection(ctx, k8s)
+	if err != nil {
+		return nil, err
+	}
+	return selection.Values, nil
+}
+
+func currentHelmReleaseSelection(ctx context.Context, k8s kubernetes.Interface) (*selfManagedHelmReleaseSelection, error) {
 	secrets, err := k8s.CoreV1().Secrets(localAstronomerNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "owner=helm,name=" + localAstronomerReleaseName + ",status=deployed",
 	})
@@ -605,7 +693,10 @@ func currentHelmReleaseValues(ctx context.Context, k8s kubernetes.Interface) (ma
 	if release.Config == nil {
 		return nil, fmt.Errorf("deployed Helm release has no recoverable values")
 	}
-	return release.Config, nil
+	return &selfManagedHelmReleaseSelection{
+		Values: release.Config, Name: selected.Name, UID: selected.UID,
+		ResourceVersion: selected.ResourceVersion, Version: selectedVersion,
+	}, nil
 }
 
 func stripKnownInlineSelfManagedCredentials(values map[string]any) error {

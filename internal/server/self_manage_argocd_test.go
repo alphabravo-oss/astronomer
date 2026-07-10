@@ -16,6 +16,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
@@ -744,6 +746,249 @@ func TestSelfManagedBundledComponentIntentUsesChartDefaults(t *testing.T) {
 	}
 }
 
+func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
+	t.Run("initial and same-revision builds carry no bounded evidence", func(t *testing.T) {
+		client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+		cfg := &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}
+		initial, err := buildSelfManagedAstronomerValuesResult(context.Background(), cfg, client, "https://astronomer.example")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if initial.AdoptionSnapshot != nil {
+			t.Fatal("initial takeover unexpectedly carried bounded-adoption evidence")
+		}
+		sameRevision, err := buildSelfManagedAstronomerValuesResult(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: initial.ValuesYAML})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sameRevision.AdoptionSnapshot != nil {
+			t.Fatal("same-revision build unexpectedly carried bounded-adoption evidence")
+		}
+	})
+
+	t.Run("unchanged evidence restages", func(t *testing.T) {
+		client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+		dyn.ClearActions()
+		if err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, build.ValuesYAML, build.AdoptionSnapshot); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedApplicationWriteCount(t, dyn, 1)
+	})
+
+	t.Run("controller restarted", func(t *testing.T) {
+		client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+		controller, err := client.AppsV1().StatefulSets(localArgoNamespace).Get(context.Background(), localArgoControllerWorkload, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		one := int32(1)
+		controller.Spec.Replicas = &one
+		controller.Status.Replicas = 1
+		controller.Status.ReadyReplicas = 1
+		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controller, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "controller is not quiesced")
+	})
+
+	for _, releaseMutation := range []string{"mutate", "replace", "newer"} {
+		t.Run("release "+releaseMutation, func(t *testing.T) {
+			client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+			ctx := context.Background()
+			name := "sh.helm.release.v1.astronomer.v12"
+			switch releaseMutation {
+			case "mutate":
+				secret, err := client.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				mutatedValues := selfManagedBundledIntentReleaseValues()
+				mutatedValues["config"].(map[string]any)["logLevel"] = "warn"
+				mutated := helmReleaseSecretFixture(t, 12, "deployed", mutatedValues)
+				secret.Data = mutated.Data
+				secret.ResourceVersion = "1201"
+				if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			case "replace":
+				if err := client.CoreV1().Secrets(localAstronomerNamespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+					t.Fatal(err)
+				}
+				replacement := helmReleaseSecretFixture(t, 12, "deployed", selfManagedBundledIntentReleaseValues())
+				replacement.UID = "replacement-release"
+				replacement.ResourceVersion = "1202"
+				if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, replacement, metav1.CreateOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			case "newer":
+				if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, helmReleaseSecretFixture(t, 13, "deployed", selfManagedBundledIntentReleaseValues()), metav1.CreateOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "Helm release identity/version changed")
+		})
+	}
+
+	for _, component := range []string{"postgres", "redis", "dex", "frontend"} {
+		for _, mutation := range []string{"create", "mutate", "delete", "replace"} {
+			t.Run(component+" "+mutation, func(t *testing.T) {
+				presentAtBuild := mutation != "create"
+				client, dyn, build := selfManagedSnapshotTestBuild(t, component, presentAtBuild)
+				mutateSelfManagedSnapshotWorkload(t, client, component, mutation)
+				assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "bounded adoption evidence changed")
+			})
+		}
+	}
+}
+
+func selfManagedSnapshotTestBuild(t *testing.T, component string, present bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild) {
+	t.Helper()
+	releaseValues := selfManagedBundledIntentReleaseValues()
+	var workload runtime.Object
+	switch component {
+	case "postgres":
+		releaseValues["postgres"].(map[string]any)["bundled"] = map[string]any{"enabled": present}
+		if present {
+			workload = selfManagedPostgresStatefulSetFixture(false)
+		}
+	case "redis":
+		releaseValues["redis"].(map[string]any)["bundled"] = map[string]any{"enabled": present}
+		if present {
+			workload = selfManagedRedisStatefulSetFixture(false)
+		}
+	case "dex":
+		releaseValues["dex"].(map[string]any)["enabled"] = present
+		if present {
+			workload = selfManagedDexDeploymentFixture(false)
+		}
+	case "frontend":
+		releaseValues["frontend"].(map[string]any)["enabled"] = present
+		if present {
+			workload = selfManagedFrontendDeploymentFixture()
+		}
+	}
+	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+	if workload != nil {
+		metadata := workload.(metav1.Object)
+		metadata.SetUID(types.UID("snapshot-" + component))
+		metadata.SetResourceVersion("100")
+		objects = append(objects, workload)
+	}
+	client := fake.NewSimpleClientset(objects...)
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	controller := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace, UID: "snapshot-controller", ResourceVersion: "1"}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), controller, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), activeSelfManagedApplicationForRevision(t, "0.2.0", "https://kubernetes.default.svc"))
+	build, err := buildSelfManagedAstronomerValuesResult(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if build.AdoptionSnapshot == nil || !build.AdoptionSnapshot.BoundedAdoption {
+		t.Fatal("bounded build did not return adoption evidence")
+	}
+	return client, dyn, build
+}
+
+func mutateSelfManagedSnapshotWorkload(t *testing.T, client *fake.Clientset, component, mutation string) {
+	t.Helper()
+	ctx := context.Background()
+	resourceName := localAstronomerReleaseName + "-" + component
+	newObject := func() runtime.Object {
+		var object runtime.Object
+		switch component {
+		case "postgres":
+			object = selfManagedPostgresStatefulSetFixture(false)
+		case "redis":
+			object = selfManagedRedisStatefulSetFixture(false)
+		case "dex":
+			object = selfManagedDexDeploymentFixture(false)
+		case "frontend":
+			object = selfManagedFrontendDeploymentFixture()
+		}
+		metadata := object.(metav1.Object)
+		metadata.SetUID(types.UID("new-" + component))
+		metadata.SetResourceVersion("200")
+		return object
+	}
+	isStatefulSet := component == "postgres" || component == "redis"
+	if mutation == "create" {
+		object := newObject()
+		if isStatefulSet {
+			if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(ctx, object.(*appsv1.StatefulSet), metav1.CreateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := client.AppsV1().Deployments(localArgoNamespace).Create(ctx, object.(*appsv1.Deployment), metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if isStatefulSet {
+		current, err := client.AppsV1().StatefulSets(localArgoNamespace).Get(ctx, resourceName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch mutation {
+		case "mutate":
+			current.Spec.Template.Spec.Containers[0].Image += "-mutated"
+			current.ResourceVersion = "101"
+			_, err = client.AppsV1().StatefulSets(localArgoNamespace).Update(ctx, current, metav1.UpdateOptions{})
+		case "delete", "replace":
+			err = client.AppsV1().StatefulSets(localArgoNamespace).Delete(ctx, resourceName, metav1.DeleteOptions{})
+			if err == nil && mutation == "replace" {
+				_, err = client.AppsV1().StatefulSets(localArgoNamespace).Create(ctx, newObject().(*appsv1.StatefulSet), metav1.CreateOptions{})
+			}
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	current, err := client.AppsV1().Deployments(localArgoNamespace).Get(ctx, resourceName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch mutation {
+	case "mutate":
+		current.Spec.Template.Spec.Containers[0].Image += "-mutated"
+		current.ResourceVersion = "101"
+		_, err = client.AppsV1().Deployments(localArgoNamespace).Update(ctx, current, metav1.UpdateOptions{})
+	case "delete", "replace":
+		err = client.AppsV1().Deployments(localArgoNamespace).Delete(ctx, resourceName, metav1.DeleteOptions{})
+		if err == nil && mutation == "replace" {
+			_, err = client.AppsV1().Deployments(localArgoNamespace).Create(ctx, newObject().(*appsv1.Deployment), metav1.CreateOptions{})
+		}
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertSelfManagedSnapshotRefusesWrite(t *testing.T, client *fake.Clientset, dyn *dynamicfake.FakeDynamicClient, build selfManagedValuesBuild, wantError string) {
+	t.Helper()
+	dyn.ClearActions()
+	err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, build.ValuesYAML, build.AdoptionSnapshot)
+	if err == nil || !strings.Contains(err.Error(), wantError) {
+		t.Fatalf("restage error = %v, want substring %q", err, wantError)
+	}
+	assertSelfManagedApplicationWriteCount(t, dyn, 0)
+}
+
+func assertSelfManagedApplicationWriteCount(t *testing.T, dyn *dynamicfake.FakeDynamicClient, want int) {
+	t.Helper()
+	writes := 0
+	for _, action := range dyn.Actions() {
+		if action.GetResource().Resource == argocdApplicationGVR.Resource && (action.GetVerb() == "create" || action.GetVerb() == "update" || action.GetVerb() == "patch") {
+			writes++
+		}
+	}
+	if writes != want {
+		t.Fatalf("Application writes = %d, want %d; actions=%#v", writes, want, dyn.Actions())
+	}
+}
+
 const selfManagedBundledUpgradeSource = `
 image:
   registry: ""
@@ -849,6 +1094,14 @@ func selfManagedDexDeploymentFixture(terminating bool) *appsv1.Deployment {
 	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex", Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "dex", Image: "dex.runtime/team/dex:v2.99.0", Env: []corev1.EnvVar{{Name: "ASTRONOMER_DEX_CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "runtime-dex"}, Key: "client-secret"}}}}}}}}}}
 	setSelfManagedFixtureTerminating(&deployment.ObjectMeta, terminating)
 	return deployment
+}
+
+func selfManagedFrontendDeploymentFixture() *appsv1.Deployment {
+	replicas := int32(2)
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-frontend", Namespace: localAstronomerNamespace},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "frontend", Image: "frontend.runtime/team/frontend:v12"}}}}},
+	}
 }
 
 func setSelfManagedFixtureTerminating(metadata *metav1.ObjectMeta, terminating bool) {

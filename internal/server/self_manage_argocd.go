@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	appsv1 "k8s.io/api/apps/v1"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -187,11 +188,11 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	if err != nil {
 		return fmt.Errorf("resolve current self-managed values source: %w", err)
 	}
-	valuesYAML, err := buildSelfManagedAstronomerValues(ctx, cfg, k8s, serverURL, currentSafeValues)
+	valuesBuild, err := buildSelfManagedAstronomerValuesResult(ctx, cfg, k8s, serverURL, currentSafeValues)
 	if err != nil {
 		return fmt.Errorf("build self-managed values: %w", err)
 	}
-	if err := ensureSelfManagedAstronomerApplication(ctx, k8s, dyn, localCluster, valuesYAML); err != nil {
+	if err := ensureSelfManagedAstronomerApplication(ctx, k8s, dyn, localCluster, valuesBuild.ValuesYAML, valuesBuild.AdoptionSnapshot); err != nil {
 		return fmt.Errorf("ensure self-managed application: %w", err)
 	}
 	return nil
@@ -432,6 +433,11 @@ func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, 
 	if err != nil {
 		return "", 0, "", err
 	}
+	return deploymentImagesFromDeployment(deploy)
+}
+
+func deploymentImagesFromDeployment(deploy *appsv1.Deployment) (string, int32, string, error) {
+	name := deploy.Name
 	replicas := int32(1)
 	if deploy.Spec.Replicas != nil {
 		replicas = *deploy.Spec.Replicas
@@ -440,7 +446,7 @@ func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, 
 	var migrateImage string
 	for _, c := range deploy.Spec.Template.Spec.Containers {
 		if c.Name == "server" || c.Name == "worker" || c.Name == "frontend" {
-			_, err = parseImageRef(c.Image)
+			_, err := parseImageRef(c.Image)
 			if err != nil {
 				return "", 0, "", fmt.Errorf("deployment %s primary image: %w", name, err)
 			}
@@ -450,7 +456,7 @@ func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, 
 	}
 	for _, c := range deploy.Spec.Template.Spec.InitContainers {
 		if c.Name == "migrate" {
-			_, err = parseImageRef(c.Image)
+			_, err := parseImageRef(c.Image)
 			if err != nil {
 				return "", 0, "", fmt.Errorf("deployment %s migrate image: %w", name, err)
 			}

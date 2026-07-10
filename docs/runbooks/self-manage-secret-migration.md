@@ -119,8 +119,13 @@ and replica tuples while the new server is trying to adopt them.
    identity, then approve the exact new digest as described above.
 
 The server checks both controller quiescence and complete server rollout before
-reading live tuples. Live adoption with concurrent Argo self-healing is not a
-supported or safe upgrade path.
+reading live tuples. Immediately before restaging the Application, it rechecks
+those gates, the exact highest deployed Helm release identity/version, and the
+presence plus UID/resourceVersion of every optional topology workload. Any
+intervening controller restart, Helm release change, or workload convergence
+event aborts the write and the next reconcile rebuilds from fresh evidence.
+Live adoption with concurrent Argo self-healing is not a supported or safe
+upgrade path.
 
 ## Scrubbing a legacy plaintext Application
 
