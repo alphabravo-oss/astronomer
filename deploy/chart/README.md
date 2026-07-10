@@ -298,6 +298,14 @@ This chart renders Gateway API resources, but it does not install a Gateway
 controller. That controller is treated as cluster infrastructure and should be
 bootstrapped separately.
 
+The supported local bootstrap pins the Gateway API standard CRD bundle to
+`v1.4.1`; it never follows a moving `latest` URL. This matches the supported
+version reported by NGINX Gateway Fabric 2.4.x and is also the default used by
+`scripts/k3d-bootstrap.sh`. Operators that install the controller separately
+must pin an explicit compatible CRD bundle and require the `nginx`
+`GatewayClass` `Accepted=True` and `SupportedVersion=True` conditions before
+deploying Astronomer.
+
 Before install or upgrade, the preflight hook validates:
 
 - the `gateways.gateway.networking.k8s.io` CRD exists
@@ -325,6 +333,15 @@ on TCP 443/6443. Development may source the narrow port rules from the legacy
 `externalEgressCIDRs` bucket. Production requires dedicated Postgres and API
 CIDRs and rejects `0.0.0.0/0` and `::/0` rather than falling back to unrestricted
 egress.
+
+The release-wide default-deny policy selects only the exact Astronomer pod
+ownership tuple (`app.kubernetes.io/name`, `app.kubernetes.io/instance`, and
+`app.kubernetes.io/part-of=astronomer`). It deliberately does not select
+unlabelled namespace pods, bundled Argo CD, or controller-generated Gateway
+data planes such as `astronomer-nginx`. Those independently managed workloads
+must retain their controller-defined network contract; a negative `NotIn`
+selector is unsafe because Kubernetes also matches pods where the label is
+absent.
 
 NetworkPolicy handling of Kubernetes Service DNAT varies by CNI. Populate
 `kubernetesAPIEgressCIDRs` with CIDR coverage for both the `kubernetes.default`

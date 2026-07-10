@@ -14,17 +14,16 @@ metadata:
     {{- include "astronomer.labels" . | nindent 4 }}
     app.kubernetes.io/component: network-policy
 spec:
-  # Exclude the bundled astro-argocd subchart pods. ArgoCD is trusted
-  # control-plane infra (needs the k8s API, DNS, git/OCI repos, intra-argo),
-  # and its pre-install/pre-upgrade hooks (e.g. redis-secret-init) run BEFORE
-  # any allow-policy could be applied — so on upgrade a prior default-deny would
-  # block them and stall the release. Stock ArgoCD ships no NetworkPolicies;
-  # leaving its pods unselected here matches that and keeps installs hands-off.
+  # Select only pods owned by this Astronomer chart release. A negative
+  # part-of selector also matches pods where that label is absent, which would
+  # capture independently managed namespace infrastructure such as the NGINX
+  # Gateway Fabric data plane and leave it unable to reach its controller.
+  # The exact ownership tuple keeps every Astronomer platform component under
+  # default deny while excluding bundled Argo CD, NGF, and unrelated pods.
   podSelector:
-    matchExpressions:
-      - key: app.kubernetes.io/part-of
-        operator: NotIn
-        values: ["argocd"]
+    matchLabels:
+      {{- include "astronomer.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/part-of: astronomer
   policyTypes:
     - Ingress
     - Egress

@@ -16,10 +16,9 @@ func TestNetworkPolicyRendersNamespaceDefaultDeny(t *testing.T) {
 	for _, want := range []string{
 		"name: astronomer-default-deny",
 		"app.kubernetes.io/component: network-policy",
-		// The default-deny selector carves out the bundled astro-argocd pods
-		// (see networkpolicy.yaml) so their pre-install hooks aren't blocked.
-		"key: app.kubernetes.io/part-of",
-		`values: ["argocd"]`,
+		"app.kubernetes.io/name: astronomer",
+		"app.kubernetes.io/instance: astronomer",
+		"app.kubernetes.io/part-of: astronomer",
 		"- Ingress",
 		"- Egress",
 	} {
@@ -79,16 +78,17 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
 
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
-	// The default-deny selects every pod EXCEPT the bundled astro-argocd pods,
-	// which are carved out via a part-of NotIn argocd expression so their
-	// pre-install/upgrade hooks aren't blocked (see networkpolicy.yaml).
-	exprs, _ := nestedMap(defaultDeny, "spec", "podSelector")["matchExpressions"].([]any)
-	if len(exprs) != 1 {
-		t.Fatalf("default-deny podSelector should carve out argocd via one matchExpression: %#v", nestedMap(defaultDeny, "spec", "podSelector"))
+	selector := nestedMap(defaultDeny, "spec", "podSelector")
+	if _, ok := selector["matchExpressions"]; ok {
+		t.Fatalf("default-deny must not use negative or open-ended expressions: %#v", selector)
 	}
-	expr, _ := exprs[0].(map[string]any)
-	if stringValue(expr["key"]) != "app.kubernetes.io/part-of" || stringValue(expr["operator"]) != "NotIn" {
-		t.Fatalf("default-deny carve-out expression = %#v, want part-of NotIn", expr)
+	wantOwnership := map[string]any{
+		"app.kubernetes.io/name":     "astronomer",
+		"app.kubernetes.io/instance": "astronomer",
+		"app.kubernetes.io/part-of":  "astronomer",
+	}
+	if got := nestedMap(defaultDeny, "spec", "podSelector", "matchLabels"); !reflect.DeepEqual(got, wantOwnership) {
+		t.Fatalf("default-deny ownership selector = %#v, want exactly %#v", got, wantOwnership)
 	}
 	assertPolicyTypes(t, defaultDeny, "Ingress", "Egress")
 
@@ -118,6 +118,83 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 			t.Fatalf("%s should not allow outbound egress, got %#v", name, rawEgress)
 		}
 	}
+}
+
+func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
+	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
+	selector := nestedMap(defaultDeny, "spec", "podSelector", "matchLabels")
+
+	for _, workload := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "Deployment", name: "astronomer-server"},
+		{kind: "Deployment", name: "astronomer-worker"},
+		{kind: "Deployment", name: "astronomer-frontend"},
+		{kind: "Deployment", name: "astronomer-dex"},
+		{kind: "StatefulSet", name: "astronomer-postgres"},
+		{kind: "StatefulSet", name: "astronomer-redis"},
+		{kind: "Job", name: "astronomer-migrate"},
+		{kind: "Job", name: "astronomer-preflight"},
+	} {
+		doc := findRenderedDoc(t, docs, workload.kind, workload.name)
+		labels := nestedStringMap(doc, "spec", "template", "metadata", "labels")
+		if !matchExactLabels(selector, labels) {
+			t.Errorf("default-deny does not select platform %s/%s labels %#v", workload.kind, workload.name, labels)
+		}
+	}
+	argoServer := findRenderedDoc(t, docs, "Deployment", "astro-argocd-server")
+	argoLabels := nestedStringMap(argoServer, "spec", "template", "metadata", "labels")
+	if matchExactLabels(selector, argoLabels) {
+		t.Errorf("default-deny unexpectedly captures rendered bundled Argo CD labels %#v", argoLabels)
+	}
+
+	for name, labels := range map[string]map[string]string{
+		"bundled Argo CD": {
+			"app.kubernetes.io/name":     "argocd-server",
+			"app.kubernetes.io/instance": "astronomer",
+			"app.kubernetes.io/part-of":  "argocd",
+		},
+		"NGF generated Gateway data plane": {
+			"app.kubernetes.io/name":                 "astronomer-nginx",
+			"app.kubernetes.io/instance":             "ngf",
+			"app.kubernetes.io/managed-by":           "ngf-nginx",
+			"gateway.networking.k8s.io/gateway-name": "astronomer",
+		},
+		"unlabeled namespace pod": {},
+		"look-alike missing ownership": {
+			"app.kubernetes.io/name":     "astronomer",
+			"app.kubernetes.io/instance": "astronomer",
+		},
+		"different Astronomer release": {
+			"app.kubernetes.io/name":     "astronomer",
+			"app.kubernetes.io/instance": "other-release",
+			"app.kubernetes.io/part-of":  "astronomer",
+		},
+	} {
+		if matchExactLabels(selector, labels) {
+			t.Errorf("default-deny unexpectedly captures %s labels %#v", name, labels)
+		}
+	}
+}
+
+func nestedStringMap(root map[string]any, path ...string) map[string]string {
+	raw := nestedMap(root, path...)
+	result := make(map[string]string, len(raw))
+	for key, value := range raw {
+		result[key] = stringValue(value)
+	}
+	return result
+}
+
+func matchExactLabels(selector map[string]any, labels map[string]string) bool {
+	for key, value := range selector {
+		if labels[key] != stringValue(value) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T) {

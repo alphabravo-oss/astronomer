@@ -282,6 +282,12 @@ What happens:
 2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present
+   - Gateway API standard CRDs pinned to the controller-supported bundle
+     (`v1.4.1` for the supported local NGINX Gateway Fabric bootstrap); do not
+     use a moving `latest` URL. Before continuing, require the `nginx`
+     GatewayClass to report both `Accepted=True` and
+     `SupportedVersion=True`. `Accepted=True` alone does not prove the CRD
+     bundle is supported.
    - cert-manager CRDs present (if `tls.source` needs them)
    - Postgres DSN enforces TLS (production only)
    - `schema_migrations` connectivity + dirty-flag check

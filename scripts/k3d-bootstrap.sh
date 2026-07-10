@@ -25,7 +25,7 @@
 #   HOST          External hostname for the dashboard        (default: astronomer.localtest.me)
 #   HTTP_PORT     Host port mapped to the gateway :80        (default: 8080)
 #   SERVER_URL    Override the externally-reachable URL      (default: http://${HOST}:${HTTP_PORT})
-#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.3.0)
+#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.4.1)
 #   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
 #   SKIP_BUILD    Skip docker build step                     (default: 0)
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
@@ -39,7 +39,7 @@ NAMESPACE="${NAMESPACE:-astronomer}"
 HOST="${HOST:-astronomer.localtest.me}"
 HTTP_PORT="${HTTP_PORT:-8080}"
 SERVER_URL="${SERVER_URL:-http://${HOST}:${HTTP_PORT}}"
-GW_API_VER="${GW_API_VER:-v1.3.0}"
+GW_API_VER="${GW_API_VER:-v1.4.1}"
 NGF_VERSION="${NGF_VERSION:-2.6.0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PREREQS="${SKIP_PREREQS:-0}"
