@@ -155,6 +155,11 @@ func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing
 
 func TestPreflightOwnershipAndOrderingAreIsolatedByDeploymentEngine(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
+	argoConfig := findRenderedDoc(t, docs, "ConfigMap", "argocd-cm")
+	argoConfigData := nestedMap(argoConfig, "data")
+	if globalIgnore, found := argoConfigData["resource.customizations.ignoreResourceUpdates.all"]; found {
+		t.Fatalf("Argo global status-update suppression = %q, want key omitted so hook Job completion is observed", stringValue(globalIgnore))
+	}
 
 	for _, target := range []struct {
 		kind string

@@ -331,6 +331,10 @@ alongside the validation `Sync` hook Job. Argo's deterministic kind ordering
 applies those prerequisites before Jobs, and the Job is removed after success.
 Using one wave avoids treating Kubernetes RBAC and NetworkPolicy kinds—which
 have no resource health assessment—as health gates for a later wave.
+The bundled Argo configuration also disables the upstream catch-all
+`ignoreResourceUpdates` rule for `/status`: otherwise a completed hook Job can
+remain logically `Running` until a hard reconciliation. Argo's targeted
+high-churn exclusions remain enabled.
 This keeps Argo from adopting and delete-before-creating Helm's named support
 hooks, while still blocking wave `0` release changes until validation passes.
 The Argo Job carries a Helm `test` annotation so Helm install/upgrade never

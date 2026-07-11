@@ -1207,6 +1207,12 @@ argo-cd:
     cm:
       # Account Astronomer's self-management authenticates as.
       accounts.astronomer: apiKey, login
+      # The upstream chart ignores /status-only updates for every resource by
+      # default. That can leave completed Sync hook Jobs stuck in Running until
+      # the next hard reconciliation because hook health lives in Job status.
+      # Keep the chart's targeted high-churn exclusions, but never suppress
+      # status events globally in the self-managing control plane.
+      resource.customizations.ignoreResourceUpdates.all: ""
     rbac:
       policy.csv: |
         g, astronomer, role:admin
