@@ -49,6 +49,7 @@ type selfManagedAdoptionSnapshot struct {
 	RuntimeAdoption          bool
 	BoundedAdoption          bool
 	RequireControllerStopped bool
+	RequireRedisInitAbsent   bool
 	ReleaseName              string
 	ReleaseUID               types.UID
 	ReleaseResourceVersion   string
@@ -367,6 +368,11 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		}
 		secretEvidence = append(secretEvidence, selfManagedWorkloadEvidence("secrets", name, true, secret))
 	}
+	if adoptRuntime {
+		if err := removeHelmOwnedArgoRedisSecretInitHooks(ctx, k8s); err != nil {
+			return "", fmt.Errorf("retire Helm-owned Argo Redis bootstrap hooks before self-management: %w", err)
+		}
+	}
 	if snapshotOut != nil {
 		if deployedRelease == nil {
 			return "", fmt.Errorf("runtime adoption has no selected Helm release evidence")
@@ -383,7 +389,7 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		if runtimeConfigMap != nil {
 			objects = append(objects, selfManagedWorkloadEvidence("configmaps", runtimeConfigMap.Name, true, runtimeConfigMap))
 		}
-		*snapshotOut = &selfManagedAdoptionSnapshot{RuntimeAdoption: true, BoundedAdoption: liveUpgradeAdoption, RequireControllerStopped: true, ReleaseName: deployedRelease.Name, ReleaseUID: deployedRelease.UID, ReleaseResourceVersion: deployedRelease.ResourceVersion, ReleaseVersion: deployedRelease.Version, Objects: objects}
+		*snapshotOut = &selfManagedAdoptionSnapshot{RuntimeAdoption: true, BoundedAdoption: liveUpgradeAdoption, RequireControllerStopped: true, RequireRedisInitAbsent: true, ReleaseName: deployedRelease.Name, ReleaseUID: deployedRelease.UID, ReleaseResourceVersion: deployedRelease.ResourceVersion, ReleaseVersion: deployedRelease.Version, Objects: objects}
 	}
 	valuesYAML := string(yamlOrPanic(values))
 	if err := validateSelfManagedHelmValues(valuesYAML); err != nil {

@@ -81,6 +81,11 @@ func verifySelfManagedAdoptionSnapshot(ctx context.Context, k8s kubernetes.Inter
 	if selected.Name != snapshot.ReleaseName || selected.UID != snapshot.ReleaseUID || selected.ResourceVersion != snapshot.ReleaseResourceVersion || selected.Version != snapshot.ReleaseVersion {
 		return fmt.Errorf("bounded adoption evidence changed before Application restage: highest deployed Helm release identity/version changed")
 	}
+	if snapshot.RequireRedisInitAbsent {
+		if err := verifyHelmOwnedArgoRedisSecretInitHooksAbsent(ctx, k8s); err != nil {
+			return fmt.Errorf("bounded adoption evidence changed before Application restage: %w", err)
+		}
+	}
 	for _, evidence := range snapshot.Objects {
 		var object metav1.Object
 		switch evidence.Resource {
