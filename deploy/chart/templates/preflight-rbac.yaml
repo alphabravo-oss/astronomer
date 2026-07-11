@@ -1,4 +1,6 @@
-{{- if .Values.preflight.enabled }}
+{{- define "astronomer.preflightRBAC" -}}
+{{- $mode := .mode -}}
+{{- with .root }}
 {{- /*
   Dedicated SA + RBAC for the preflight hook Job. These MUST be created
   before the Job (hook-weight -5) so the pod can schedule and run its
@@ -14,6 +16,9 @@
   rules before every install/upgrade without widening their permissions.
 */}}
 {{- $name := printf "%s-preflight" (include "astronomer.serviceAccountName" .) }}
+{{- if eq $mode "argocd" }}
+  {{- $name = printf "%s-preflight-argocd" (include "astronomer.serviceAccountName" .) }}
+{{- end }}
 {{- $tlsSrc := include "astronomer.tls.source" . }}
 {{- $certManagerRequired := and (or (eq $tlsSrc "selfSigned") (eq $tlsSrc "letsEncrypt")) .Values.tls.requireCertManager }}
 {{- $crdNames := list }}
@@ -48,13 +53,14 @@
 {{- end }}
 {{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
 {{- $legacyPVC := printf "data-%s-postgres-0" (include "astronomer.fullname" .) }}
-{{- $hookAnnotations := dict
-      "helm.sh/hook" "pre-install,pre-upgrade"
-      "helm.sh/hook-weight" "-10"
-      "helm.sh/hook-delete-policy" "before-hook-creation"
-      "argocd.argoproj.io/hook" "PreSync"
-      "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation"
-      "argocd.argoproj.io/sync-wave" "-10" }}
+{{- $hookAnnotations := dict "argocd.argoproj.io/sync-wave" "-10" }}
+{{- if eq $mode "helm" }}
+  {{- $hookAnnotations = dict
+        "helm.sh/hook" "pre-install,pre-upgrade"
+        "helm.sh/hook-weight" "-10"
+        "helm.sh/hook-delete-policy" "before-hook-creation"
+        "argocd.argoproj.io/hook" "Skip" }}
+{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -168,4 +174,16 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.preflight.enabled }}
+# Helm-only prerequisites. Argo CD skips these resources and therefore never
+# adopts or deletes objects that Helm owns as pre-release hooks.
+{{ include "astronomer.preflightRBAC" (dict "root" . "mode" "helm") }}
+---
+# Persistent prerequisites for the Argo CD Sync preflight Job. These are
+# ordinary wave -10 resources so Argo updates them in place without a named
+# hook's delete-before-create lifecycle.
+{{ include "astronomer.preflightRBAC" (dict "root" . "mode" "argocd") }}
 {{- end }}

@@ -5,7 +5,7 @@
 #   -database "$DATABASE_URL" -path /migrations up
 FROM migrate/migrate:v4.18.1@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539
 
-ARG VERSION=dev
+ARG VERSION=0.3.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 

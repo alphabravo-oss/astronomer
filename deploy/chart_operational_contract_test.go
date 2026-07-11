@@ -100,8 +100,9 @@ func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
 func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	allowedHooks := map[string]string{
-		"Job/astronomer-migrate":   "post-install,post-upgrade",
-		"Job/astronomer-preflight": "pre-install,pre-upgrade",
+		"Job/astronomer-migrate":          "post-install,post-upgrade",
+		"Job/astronomer-preflight":        "pre-install,pre-upgrade",
+		"Job/astronomer-preflight-argocd": "test",
 		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
 		// hook-weight) so a fresh install doesn't deadlock on the main SA not
 		// existing yet — see templates/preflight-rbac.yaml. The matching hook
@@ -149,6 +150,69 @@ func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing
 		if !seen[key] {
 			t.Fatalf("expected Helm hook resource %s was not rendered", key)
 		}
+	}
+}
+
+func TestPreflightOwnershipAndOrderingAreIsolatedByDeploymentEngine(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+
+	for _, target := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "ServiceAccount", name: "astronomer-preflight"},
+		{kind: "ClusterRole", name: "astronomer-preflight"},
+		{kind: "ClusterRoleBinding", name: "astronomer-preflight"},
+		{kind: "Role", name: "astronomer-preflight"},
+		{kind: "RoleBinding", name: "astronomer-preflight"},
+		{kind: "NetworkPolicy", name: "astronomer-preflight"},
+		{kind: "Job", name: "astronomer-preflight"},
+	} {
+		doc := findRenderedDoc(t, docs, target.kind, target.name)
+		annotations := nestedMap(doc, "metadata", "annotations")
+		if got := stringValue(annotations["argocd.argoproj.io/hook"]); got != "Skip" {
+			t.Errorf("Helm-owned %s/%s Argo hook = %q, want Skip", target.kind, target.name, got)
+		}
+	}
+
+	for _, target := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "ServiceAccount", name: "astronomer-preflight-argocd"},
+		{kind: "ClusterRole", name: "astronomer-preflight-argocd"},
+		{kind: "ClusterRoleBinding", name: "astronomer-preflight-argocd"},
+		{kind: "Role", name: "astronomer-preflight-argocd"},
+		{kind: "RoleBinding", name: "astronomer-preflight-argocd"},
+		{kind: "NetworkPolicy", name: "astronomer-preflight-argocd"},
+	} {
+		doc := findRenderedDoc(t, docs, target.kind, target.name)
+		annotations := nestedMap(doc, "metadata", "annotations")
+		if got := stringValue(annotations["argocd.argoproj.io/sync-wave"]); got != "-10" {
+			t.Errorf("Argo prerequisite %s/%s wave = %q, want -10", target.kind, target.name, got)
+		}
+		for _, forbidden := range []string{"helm.sh/hook", "argocd.argoproj.io/hook", "argocd.argoproj.io/hook-delete-policy"} {
+			if got := stringValue(annotations[forbidden]); got != "" {
+				t.Errorf("Argo prerequisite %s/%s has lifecycle annotation %s=%q", target.kind, target.name, forbidden, got)
+			}
+		}
+	}
+
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight-argocd")
+	annotations := nestedMap(job, "metadata", "annotations")
+	wantAnnotations := map[string]string{
+		"helm.sh/hook":                          "test",
+		"argocd.argoproj.io/hook":               "Sync",
+		"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded",
+		"argocd.argoproj.io/sync-wave":          "-5",
+	}
+	for key, want := range wantAnnotations {
+		if got := stringValue(annotations[key]); got != want {
+			t.Errorf("Argo preflight Job %s = %q, want %q", key, got, want)
+		}
+	}
+	if got := stringAt(podSpecFor(job), "serviceAccountName"); got != "astronomer-preflight-argocd" {
+		t.Errorf("Argo preflight Job serviceAccountName = %q, want astronomer-preflight-argocd", got)
 	}
 }
 

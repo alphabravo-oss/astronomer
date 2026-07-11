@@ -81,7 +81,7 @@ import {
 // Baked at build time by the Dockerfile (ARG VERSION → NEXT_PUBLIC_APP_VERSION),
 // which the release workflow stamps from the git tag. Falls back to the current
 // dev version for local/un-stamped builds — keep in sync with pkg/version.
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.2.0-dev';
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.3.0';
 
 type NavItem = {
   label: string;

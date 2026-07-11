@@ -44,6 +44,33 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 	"frontend": {context: "frontend", dockerfile: "frontend/Dockerfile", imageName: "astronomer-frontend"},
 }
 
+func TestReleaseIdentityIsConsistent(t *testing.T) {
+	const releaseVersion = "0.3.0"
+	files := map[string][]string{
+		"chart/Chart.yaml":              {"version: " + releaseVersion, `appVersion: "` + releaseVersion + `"`},
+		"../pkg/version/version.go":     {`Version   = "` + releaseVersion + `"`},
+		"../frontend/package.json":      {`"version": "` + releaseVersion + `"`},
+		"../frontend/package-lock.json": {`"version": "` + releaseVersion + `"`},
+		"../frontend/Dockerfile":        {"ARG VERSION=" + releaseVersion},
+		"docker/Dockerfile.server":      {"ARG VERSION=" + releaseVersion},
+		"docker/Dockerfile.agent":       {"ARG VERSION=" + releaseVersion},
+		"docker/Dockerfile.worker":      {"ARG VERSION=" + releaseVersion},
+		"docker/Dockerfile.migrate":     {"ARG VERSION=" + releaseVersion},
+		"docker/Dockerfile.shell":       {"ARG VERSION=" + releaseVersion},
+	}
+	for path, required := range files {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read release identity source %s: %v", path, err)
+		}
+		for _, marker := range required {
+			if !bytes.Contains(contents, []byte(marker)) {
+				t.Errorf("release identity source %s is missing %q", path, marker)
+			}
+		}
+	}
+}
+
 func TestReleasePublishesSixTrueMultiPlatformImages(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	job, ok := workflow.Jobs["build-sign"]
@@ -260,7 +287,7 @@ func TestFrontendVersionIsBakedIntoShippedStaticOutput(t *testing.T) {
 	}
 	dockerfile := string(dockerfileBytes)
 	ordered := []string{
-		"ARG VERSION=0.2.0-dev",
+		"ARG VERSION=0.3.0",
 		"ENV NEXT_PUBLIC_APP_VERSION=$VERSION",
 		"RUN npm run build",
 		`grep -R -F -q -- "${VERSION}" .next/static`,

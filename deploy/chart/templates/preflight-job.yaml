@@ -1,17 +1,6 @@
-{{- if .Values.preflight.enabled }}
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ include "astronomer.fullname" . }}-preflight
-  labels:
-    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    argocd.argoproj.io/sync-wave: "-5"
+{{- define "astronomer.preflightJobSpec" -}}
+{{- $serviceAccountName := .serviceAccountName -}}
+{{- with .root }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600
@@ -24,7 +13,7 @@ spec:
       # Dedicated hook SA/RBAC and default-deny allow NetworkPolicy are created
       # at hook-weight -10 so this later -5 Job can authenticate and reach the
       # API on both fresh installs and upgrades.
-      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}-preflight
+      serviceAccountName: {{ $serviceAccountName }}
       {{- with .Values.preflight.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -439,4 +428,39 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}
+{{- end }}
+
+{{- if .Values.preflight.enabled }}
+# Helm and Argo CD need different hook lifecycles. Helm executes this isolated
+# pre-release Job and Argo CD explicitly skips it. Keeping the engine-specific
+# hook name prevents Argo from adopting or deleting a Helm-created hook.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astronomer.fullname" . }}-preflight
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    argocd.argoproj.io/hook: Skip
+{{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight" (include "astronomer.serviceAccountName" .))) }}
+---
+# Argo CD applies the persistent RBAC/NetworkPolicy prerequisites at wave -10,
+# then runs this Sync hook before ordinary release resources at wave 0. Helm
+# records it as a test hook, so install/upgrade never executes both Jobs.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astronomer.fullname" . }}-preflight-argocd
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "-5"
+{{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight-argocd" (include "astronomer.serviceAccountName" .))) }}
 {{- end }}

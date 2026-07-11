@@ -315,20 +315,30 @@ Before install or upgrade, the preflight hook validates:
 - the `httproutes.gateway.networking.k8s.io` CRD exists
 - `gateway.className` resolves to an existing `GatewayClass`
 
-The Job uses a dedicated, least-privilege ServiceAccount and RBAC hooks. Helm
-creates those prerequisites at hook weight `-10`, before the Job at weight
-`-5`, and retains them after success. This retention is intentional: Helm
+The Job uses dedicated, least-privilege ServiceAccount and RBAC resources with
+separate ownership for each deployment engine. Helm creates its prerequisites
+at hook weight `-10`, before the Job at weight `-5`, and explicitly marks that
+set `argocd.argoproj.io/hook: Skip`. This retention is intentional: Helm
 considers non-Job hooks complete as soon as they are created, so a
 `hook-succeeded` policy would remove the ServiceAccount and RBAC before the Job
-could use them. On every subsequent install or upgrade,
+could use them. On every subsequent Helm install or upgrade,
 `before-hook-creation` replaces the retained resources with the rules from the
-new chart before running the Job. The permissions are limited to `get` on the
+new chart before running the Job.
+
+Argo CD owns a distinct `-preflight-argocd` set. Its ServiceAccount, RBAC, and
+NetworkPolicy are ordinary persistent resources applied at sync wave `-10`;
+the validation Job is a `Sync` hook at wave `-5` and is removed after success.
+This keeps Argo from adopting and delete-before-creating Helm's named support
+hooks, while still blocking wave `0` release changes until validation passes.
+The Argo Job carries a Helm `test` annotation so Helm install/upgrade never
+executes both paths. The permissions in both sets are limited to `get` on the
 exact CRDs and GatewayClass enabled by the rendered configuration, the exact
 referenced namespace-local Secrets, and the exact legacy PVC name checked in
 external-Postgres mode. Rules for disabled checks are not rendered.
 
-When default deny is enabled, a retained preflight NetworkPolicy is created at
-the same `-10` hook weight and replaced by stable name on every release. It
+When default deny is enabled, Helm's retained preflight NetworkPolicy is
+created at the same `-10` hook weight and replaced by stable name on every
+release; Argo's persistent policy is applied at wave `-10`. Each policy
 selects only the preflight pod labels and permits the flows that pod actually
 uses: DNS on TCP/UDP 53, external Postgres on the configured Postgres port when
 the database connectivity init container is enabled, and Kubernetes API access

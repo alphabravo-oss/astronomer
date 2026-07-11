@@ -25,7 +25,7 @@ ENV NODE_ENV=production
 # Bake the release version so the dashboard can display it (the release
 # workflow passes VERSION to every component build). NEXT_PUBLIC_* is inlined
 # at build time, so it must be set before `next build`.
-ARG VERSION=0.2.0-dev
+ARG VERSION=0.3.0
 ENV NEXT_PUBLIC_APP_VERSION=$VERSION
 
 RUN npm run build \
@@ -35,7 +35,7 @@ RUN npm run build \
 FROM base AS runner
 WORKDIR /app
 
-ARG VERSION=0.2.0-dev
+ARG VERSION=0.3.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 

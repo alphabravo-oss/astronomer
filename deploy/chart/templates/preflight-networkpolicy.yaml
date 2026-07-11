@@ -1,4 +1,7 @@
-{{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
+{{- define "astronomer.preflightNetworkPolicy" -}}
+{{- $mode := .mode -}}
+{{- with .root }}
+{{- $root := . -}}
 {{- /*
   The retained namespace default-deny selects hook pods during upgrades. This
   earlier hook policy therefore has to exist before the preflight Job (weight
@@ -39,14 +42,19 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "astronomer.fullname" . }}-preflight
+  name: {{ include "astronomer.fullname" . }}-preflight{{ if eq $mode "argocd" }}-argocd{{ end }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
   annotations:
+    {{- if eq $mode "helm" }}
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation
+    argocd.argoproj.io/hook: Skip
+    {{- else }}
+    argocd.argoproj.io/sync-wave: "-10"
+    {{- end }}
 spec:
   podSelector:
     matchLabels:
@@ -67,7 +75,7 @@ spec:
             cidr: {{ $cidr | quote }}
       ports:
         - protocol: TCP
-          port: {{ $.Values.postgres.port }}
+          port: {{ $root.Values.postgres.port }}
     {{- end }}
     {{- range $cidr := $apiCIDRs }}
     # kubernetes.default:443 before DNAT / API endpoint:6443 after DNAT.
@@ -80,4 +88,11 @@ spec:
         - protocol: TCP
           port: 6443
     {{- end }}
+{{- end }}
+{{- end }}
+
+{{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
+{{ include "astronomer.preflightNetworkPolicy" (dict "root" . "mode" "helm") }}
+---
+{{ include "astronomer.preflightNetworkPolicy" (dict "root" . "mode" "argocd") }}
 {{- end }}
