@@ -53,6 +53,7 @@ Anything with a `runbook_url` on a PrometheusRule in
 | License expiry | [license-expiry.md](license-expiry.md) |
 | Postgres PVC near full | [postgres-disk-full.md](postgres-disk-full.md) |
 | CRD stuck deleting / finalizer recovery | [crd-finalizer-recovery.md](crd-finalizer-recovery.md) |
+| Self-managed Application acceptance / write barrier | [self-manage-acceptance.md](self-manage-acceptance.md) |
 
 ## Cross-references
 
