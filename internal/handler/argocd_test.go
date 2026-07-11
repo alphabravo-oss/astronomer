@@ -14,6 +14,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // argoCDQueryRecorder captures the calls executeOperation makes against the
@@ -30,6 +31,15 @@ type argoCDQueryRecorder struct {
 	appUpdate  []sqlc.UpdateArgoCDApplicationParams
 	events     []sqlc.CreateArgoCDOperationEventParams
 	runningOps []sqlc.ArgocdOperation
+
+	// instances backs ListArgoCDInstances (health-probe fan-out tests).
+	instances []sqlc.ArgocdInstance
+	// pendingOps backs ListPendingArgoCDOperations and markRunning is the
+	// row MarkArgoCDOperationRunning returns; both drive processPendingOperations
+	// in the submission-retry tests. requeued records RequeueArgoCDOperation calls.
+	pendingOps  []sqlc.ArgocdOperation
+	markRunning sqlc.ArgocdOperation
+	requeued    []uuid.UUID
 }
 
 func (q *argoCDQueryRecorder) GetArgoCDApplicationByID(_ context.Context, _ uuid.UUID) (sqlc.ArgocdApplication, error) {
@@ -85,7 +95,7 @@ func (q *argoCDQueryRecorder) GetArgoCDApplicationByName(context.Context, sqlc.G
 	panic("not used")
 }
 func (q *argoCDQueryRecorder) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
-	return nil, nil
+	return q.instances, nil
 }
 func (q *argoCDQueryRecorder) CreateArgoCDInstance(context.Context, sqlc.CreateArgoCDInstanceParams) (sqlc.ArgocdInstance, error) {
 	panic("not used")
@@ -121,13 +131,13 @@ func (q *argoCDQueryRecorder) CountArgoCDOperations(context.Context, sqlc.CountA
 	return 0, nil
 }
 func (q *argoCDQueryRecorder) ListPendingArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
-	return nil, nil
+	return q.pendingOps, nil
 }
 func (q *argoCDQueryRecorder) GetLatestArgoCDOperationForTarget(context.Context, sqlc.GetLatestArgoCDOperationForTargetParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
 func (q *argoCDQueryRecorder) MarkArgoCDOperationRunning(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+	return q.markRunning, nil
 }
 func (q *argoCDQueryRecorder) MarkArgoCDOperationCompleted(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
@@ -138,8 +148,11 @@ func (q *argoCDQueryRecorder) MarkArgoCDOperationFailed(context.Context, sqlc.Ma
 func (q *argoCDQueryRecorder) MarkArgoCDOperationSuperseded(context.Context, sqlc.MarkArgoCDOperationSupersededParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argoCDQueryRecorder) RequeueArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+func (q *argoCDQueryRecorder) RequeueArgoCDOperation(_ context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.requeued = append(q.requeued, id)
+	return sqlc.ArgocdOperation{ID: id, Status: "pending"}, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperationEvents(context.Context, uuid.UUID) ([]sqlc.ArgocdOperationEvent, error) {
 	return nil, nil
@@ -181,6 +194,11 @@ func (q *argoCDQueryRecorder) UpsertArgoCDBaselineOwnershipDecision(context.Cont
 // recorder, and a handler ready for executeOperation/pollRunningOperations.
 func newArgoCDFixture(t *testing.T, handler http.HandlerFunc) (*ArgoCDHandler, *argoCDQueryRecorder, *httptest.Server) {
 	t.Helper()
+	// The instance client dials the upstream via httpclient.SafeClient, whose
+	// dial guard blocks loopback. httptest always listens on loopback, so
+	// disable the guard for the lifetime of the test (same pattern as the
+	// other loopback-dialing tests in this package).
+	t.Cleanup(httpclient.DisableGuardForTest())
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 

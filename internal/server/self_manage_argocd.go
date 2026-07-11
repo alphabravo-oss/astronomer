@@ -52,8 +52,8 @@ const (
 	// The argo-cd subchart's fullnameOverride prefixes workloads
 	// (astro-argocd-server, astro-argocd-application-controller) but its
 	// ServiceAccounts keep the chart's fixed unprefixed names.
-	localArgoAppControllerSA  = "argocd-application-controller"
-	localArgoServerDeployment = "astro-argocd-server"
+	localArgoAppControllerSA   = "argocd-application-controller"
+	localArgoServerDeployment  = "astro-argocd-server"
 	localArgoAppControllerTTL  = 24 * time.Hour
 	localArgoBootstrapPeriod   = 30 * time.Second
 	localArgoBootstrapTimeout  = 60 * time.Second
@@ -570,26 +570,35 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, dyn dynamic.Int
 		},
 	}
 	res := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
-	current, err := res.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = res.Create(ctx, obj, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if currentValues, found, err := unstructured.NestedString(current.Object, "spec", "source", "helm", "values"); err == nil && found && strings.TrimSpace(currentValues) != "" {
-		mergedValues, mergeErr := mergeSelfManagedValues(currentValues, valuesYAML)
-		if mergeErr != nil {
-			return mergeErr
-		}
-		if err := unstructured.SetNestedField(obj.Object, mergedValues, "spec", "source", "helm", "values"); err != nil {
+	// Argo's application controller writes status onto this Application on its
+	// own cadence, so a naive Get→Update on every 30s reconcile tick loses to a
+	// Conflict on a stale resourceVersion and fails the whole tick.
+	// retry.RetryOnConflict re-fetches the freshest object, re-merges the helm
+	// values against it, and reapplies the resourceVersion on Conflict — the
+	// same pattern applyLocalArgoSecret uses. The NotFound→Create path and all
+	// other errors bubble up unchanged.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := res.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			_, err = res.Create(ctx, obj, metav1.CreateOptions{})
 			return err
 		}
-	}
-	obj.SetResourceVersion(current.GetResourceVersion())
-	_, err = res.Update(ctx, obj, metav1.UpdateOptions{})
-	return err
+		if err != nil {
+			return err
+		}
+		if currentValues, found, err := unstructured.NestedString(current.Object, "spec", "source", "helm", "values"); err == nil && found && strings.TrimSpace(currentValues) != "" {
+			mergedValues, mergeErr := mergeSelfManagedValues(currentValues, valuesYAML)
+			if mergeErr != nil {
+				return mergeErr
+			}
+			if err := unstructured.SetNestedField(obj.Object, mergedValues, "spec", "source", "helm", "values"); err != nil {
+				return err
+			}
+		}
+		obj.SetResourceVersion(current.GetResourceVersion())
+		_, err = res.Update(ctx, obj, metav1.UpdateOptions{})
+		return err
+	})
 }
 
 func mergeSelfManagedValues(currentValuesYAML, bootstrapValuesYAML string) (string, error) {

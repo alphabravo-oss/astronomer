@@ -45,6 +45,12 @@ const MaxArgoCDOperationPolls = 60
 // to check for completion. Runs as a tick inside runReconciler.
 const argoCDPollCadence = 30 * time.Second
 
+// maxArgoCDSubmitAttempts caps how many times a pending operation is
+// re-submitted to upstream ArgoCD before a transient submission failure is
+// treated as terminal. Without a cap a permanently-unreachable instance would
+// requeue forever; with it, transient blips retry a handful of times.
+const maxArgoCDSubmitAttempts = 5
+
 const (
 	// ArgoCD ships as the bundled astro-argocd subchart in the astronomer
 	// namespace, so its ServiceAccounts/cluster Secrets live there.
@@ -181,19 +187,24 @@ func (h *ArgoCDHandler) instanceResponses(instances []sqlc.ArgocdInstance) []map
 	return out
 }
 
-// decryptInstanceToken returns the plaintext auth token for an instance,
-// falling back to the encrypted column when no encryptor is configured.
-// This keeps existing health probes working in dev environments where the
-// "encrypted" column may already hold raw text.
-func (h *ArgoCDHandler) decryptInstanceToken(instance sqlc.ArgocdInstance) string {
+// decryptInstanceToken returns the plaintext auth token for an instance.
+// In dev environments without a configured encryptor (or with an empty token
+// column) the stored value is returned as-is, which keeps health probes
+// working where the "encrypted" column already holds raw text. When an
+// encryptor IS configured, a Decrypt failure is surfaced as an error rather
+// than silently returning the raw ciphertext: sending ciphertext as a bearer
+// token yields opaque upstream 401s that mask a real key-rotation or
+// ASTRONOMER_ENCRYPTION_KEY misconfiguration.
+func (h *ArgoCDHandler) decryptInstanceToken(instance sqlc.ArgocdInstance) (string, error) {
 	token := strings.TrimSpace(instance.AuthTokenEncrypted)
 	if h.encryptor == nil || token == "" {
-		return token
+		return token, nil
 	}
-	if plaintext, err := h.encryptor.Decrypt(token); err == nil {
-		return plaintext
+	plaintext, err := h.encryptor.Decrypt(token)
+	if err != nil {
+		return "", fmt.Errorf("decrypt argocd instance %s auth token (check ASTRONOMER_ENCRYPTION_KEY / key rotation): %w", instance.Name, err)
 	}
-	return token
+	return plaintext, nil
 }
 
 // --- Request types ---
@@ -865,7 +876,11 @@ func (h *ArgoCDHandler) callInstance(ctx context.Context, instance sqlc.ArgocdIn
 	if err != nil {
 		return nil, err
 	}
-	if token := strings.TrimSpace(h.decryptInstanceToken(instance)); token != "" {
+	token, err := h.decryptInstanceToken(instance)
+	if err != nil {
+		return nil, err
+	}
+	if token = strings.TrimSpace(token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Accept", "application/json")
@@ -1262,7 +1277,20 @@ func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []clai
 				Run: func(ctx context.Context) error {
 					result, err := h.executeOperation(ctx, running)
 					if err != nil {
-						return err
+						if argoCDSubmitErrorTerminal(running, err) {
+							return err
+						}
+						// Transient submission failure (unreachable / 5xx /
+						// instance-not-healthy). Requeue so the op returns to
+						// 'pending' and processPendingOperations re-submits it
+						// next tick instead of permanently failing on a blip.
+						// Return nil so the dispatcher's OnFailure does NOT fire.
+						h.recordArgoCDOperationEvent(ctx, running.ID, "warn", "sync", "operation submission failed transiently; requeueing for retry", map[string]any{
+							"error":        err.Error(),
+							"attemptCount": running.AttemptCount,
+						})
+						_, _ = h.queries.RequeueArgoCDOperation(ctx, running.ID)
+						return nil
 					}
 					// If the operation is still in flight upstream, leave
 					// it as 'running' and let pollRunningOperations drive
@@ -1326,6 +1354,36 @@ type operationResult struct {
 	message     string
 }
 
+// argoCDSubmitErrorTerminal decides whether an executeOperation error should
+// permanently fail the operation (terminal) or be requeued for another
+// submission attempt (transient). It mirrors the poll path's classification:
+// auth/not-found rejections are terminal, and so is exhausting the submit
+// attempt cap. Transient upstream conditions (unreachable, 5xx, 409 operation
+// in progress, 429 rate limit, the instance-not-healthy sentinel) get another
+// attempt. Every other error is a non-retryable local failure (bad payload,
+// unsupported operation type, unparseable id, DB lookup miss) and is terminal —
+// retrying cannot help.
+func argoCDSubmitErrorTerminal(op sqlc.ArgocdOperation, err error) bool {
+	if argocdclient.IsKind(err, argocdclient.ErrUnauthorized) || argocdclient.IsKind(err, argocdclient.ErrNotFound) {
+		return true
+	}
+	if op.AttemptCount >= maxArgoCDSubmitAttempts {
+		return true
+	}
+	if argocdclient.IsKind(err, argocdclient.ErrUnreachable) ||
+		argocdclient.IsKind(err, argocdclient.ErrServer) ||
+		argocdclient.IsKind(err, argocdclient.ErrConflict) {
+		return false
+	}
+	// A 429 (Too Many Requests) is classified ErrUnknown by classifyError
+	// (only 401/403/404/409/5xx get a specific kind), so match it by status.
+	var ae *argocdclient.APIError
+	if errors.As(err, &ae) && ae.Status == http.StatusTooManyRequests {
+		return false
+	}
+	return true
+}
+
 func (h *ArgoCDHandler) executeOperation(ctx context.Context, op sqlc.ArgocdOperation) (operationResult, error) {
 	var env argocdOperationEnvelope
 	if err := json.Unmarshal(op.Payload, &env); err != nil {
@@ -1358,7 +1416,10 @@ func (h *ArgoCDHandler) executeSync(ctx context.Context, op sqlc.ArgocdOperation
 		return operationResult{}, err
 	}
 	if !instance.IsHealthy {
-		return operationResult{}, fmt.Errorf("argocd instance %s is not healthy", instance.Name)
+		// Typed as ErrUnreachable so the submission-error classifier treats a
+		// temporarily-unhealthy instance as transient (requeue) rather than a
+		// terminal failure — the next health tick may flip it back to healthy.
+		return operationResult{}, &argocdclient.APIError{Kind: argocdclient.ErrUnreachable, Message: fmt.Sprintf("argocd instance %s is not healthy", instance.Name)}
 	}
 	h.recordArgoCDOperationEvent(ctx, op.ID, "info", "sync", "calling upstream ArgoCD sync", map[string]any{
 		"applicationId":            app.ID.String(),
@@ -1685,7 +1746,18 @@ func (h *ArgoCDHandler) instanceHTTPClient(instance sqlc.ArgocdInstance) *http.C
 // necessary, and the underlying HTTP client honors instance.VerifySsl via
 // instanceHTTPClient.
 func (h *ArgoCDHandler) argoCDClient(instance sqlc.ArgocdInstance) *argocdclient.Client {
-	return argocdclient.NewClient(instance.ApiUrl, h.decryptInstanceToken(instance), argocdclient.Options{
+	token, err := h.decryptInstanceToken(instance)
+	if err != nil {
+		// Never fall back to sending ciphertext as a bearer token. Log the
+		// decrypt failure and issue the request without an Authorization
+		// header; upstream will answer 401 (classified terminal) rather than
+		// masking the misconfiguration behind an opaque ciphertext token.
+		if h.log != nil {
+			h.log.Warn("argocd instance token decrypt failed; issuing request without bearer token", "instance_id", instance.ID.String(), "error", err)
+		}
+		token = ""
+	}
+	return argocdclient.NewClient(instance.ApiUrl, token, argocdclient.Options{
 		VerifySSL:  instance.VerifySsl,
 		Timeout:    argocdclient.DefaultTimeout,
 		HTTPClient: h.instanceHTTPClient(instance),
@@ -1732,18 +1804,44 @@ func (h *ArgoCDHandler) recordArgoCDOperationEvent(ctx context.Context, operatio
 }
 
 func (h *ArgoCDHandler) reconcileInstanceHealth(ctx context.Context) {
+	// Claim the instance list under the lock (cheap DB read), then fan the
+	// per-instance registration refresh + reachability probe + health write
+	// out through the same bounded pool the poll loop uses. A serial loop
+	// here blocked the single reconciler goroutine for the full probe timeout
+	// (~10s) per unreachable instance, starving opTicker/pollTicker for
+	// N×timeout; the fan-out caps one pass at ~ceil(N/helmConcurrency)×timeout.
+	dispatchClaimed(ctx, h.helmConcurrency, h.claimInstanceHealthProbes(ctx))
+}
+
+// claimInstanceHealthProbes lists the argocd instances under h.mu (cheap DB
+// read only) and packs each instance's registration refresh + probe + health
+// write into an independent claimedOp.Run closure. Each closure targets a
+// distinct instance row, so they fan out safely; only the scheduling changes,
+// per-instance behavior is unchanged.
+func (h *ArgoCDHandler) claimInstanceHealthProbes(ctx context.Context) []claimedOp {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	instances, err := h.queries.ListArgoCDInstances(ctx, sqlc.ListArgoCDInstancesParams{Limit: 1000, Offset: 0})
 	if err != nil {
-		return
+		return nil
 	}
+	claimed := make([]claimedOp, 0, len(instances))
 	for _, instance := range instances {
-		h.refreshLocalManagedClusterRegistrations(ctx, instance)
-		healthy := h.probeInstance(ctx, instance)
-		_ = h.queries.UpdateArgoCDInstanceHealth(ctx, sqlc.UpdateArgoCDInstanceHealthParams{
-			ID:        instance.ID,
-			IsHealthy: healthy,
+		instance := instance
+		claimed = append(claimed, claimedOp{
+			ID: instance.ID,
+			Run: func(ctx context.Context) error {
+				h.refreshLocalManagedClusterRegistrations(ctx, instance)
+				healthy := h.probeInstance(ctx, instance)
+				_ = h.queries.UpdateArgoCDInstanceHealth(ctx, sqlc.UpdateArgoCDInstanceHealthParams{
+					ID:        instance.ID,
+					IsHealthy: healthy,
+				})
+				return nil
+			},
 		})
 	}
+	return claimed
 }
 
 func (h *ArgoCDHandler) probeInstance(ctx context.Context, instance sqlc.ArgocdInstance) bool {
@@ -1755,7 +1853,17 @@ func (h *ArgoCDHandler) probeInstance(ctx context.Context, instance sqlc.ArgocdI
 	if err != nil {
 		return false
 	}
-	if token := strings.TrimSpace(h.decryptInstanceToken(instance)); token != "" {
+	token, err := h.decryptInstanceToken(instance)
+	if err != nil {
+		// A decrypt failure is a real config/rotation problem, not an
+		// unhealthy upstream — but probing with ciphertext would just yield
+		// a misleading 401. Log clearly and report unhealthy.
+		if h.log != nil {
+			h.log.Warn("argocd instance token decrypt failed; treating instance as unhealthy", "instance_id", instance.ID.String(), "error", err)
+		}
+		return false
+	}
+	if token = strings.TrimSpace(token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := h.instanceHTTPClient(instance).Do(req)

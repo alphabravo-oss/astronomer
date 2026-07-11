@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // TestSanitizeLabelKey covers truncation at 63 chars and char-set rules. This
@@ -156,6 +157,7 @@ func TestManagedClusterLabels_ProjectMembership(t *testing.T) {
 // the two static labels. Drives the production code path that talks to upstream
 // Argo so we know the labels actually leave the handler.
 func TestRegisterClusterWithArgoCD_StampsLabels(t *testing.T) {
+	defer httpclient.DisableGuardForTest()() // reach the httptest upstream on loopback
 	instanceID := uuid.New()
 	clusterID := uuid.New()
 	clusterServer := "https://k8s.example.test:6443"
