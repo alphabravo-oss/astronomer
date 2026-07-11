@@ -256,6 +256,7 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	zero := int32(0)
 	client := fake.NewClientset(
 		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "argocd-redis", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"auth": []byte("redis-password")}},
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      localAstronomerReleaseName + "-secrets",
@@ -360,6 +361,9 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	}
 	if got := frontendImage["tag"]; got != "f03fcf5" {
 		t.Fatalf("frontend.image.tag = %v, want f03fcf5", got)
+	}
+	if enabled, found, err := unstructured.NestedBool(values, "argo-cd", "redisSecretInit", "enabled"); err != nil || !found || enabled {
+		t.Fatalf("self-managed Argo Redis secret-init enabled=%v found=%v err=%v, want explicit false", enabled, found, err)
 	}
 	imageValues := values["image"].(map[string]any)
 	if got := imageValues["registry"]; got != "" {
@@ -511,6 +515,9 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	}
 	if got := adopted["kubectlShell"].(map[string]any)["image"]; got != "release.example/astronomer-shell:v11" {
 		t.Fatalf("bounded upgrade retained stale Application kubectl shell image %v", got)
+	}
+	if enabled, found, err := unstructured.NestedBool(adopted, "argo-cd", "redisSecretInit", "enabled"); err != nil || !found || enabled {
+		t.Fatalf("bounded Argo Redis secret-init enabled=%v found=%v err=%v, want explicit false", enabled, found, err)
 	}
 	adoptedFrontend := adopted["frontend"].(map[string]any)
 	if adoptedFrontend["enabled"] != true || adoptedFrontend["replicaCount"] != float64(1) || adoptedFrontend["image"].(map[string]any)["tag"] != "v10" {
@@ -1140,6 +1147,10 @@ func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool, scenario str
 	}
 	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
 	for _, name := range extraNames {
+		if name == "argocd-redis" {
+			// The base fixture models the Secret created by Helm's bootstrap hook.
+			continue
+		}
 		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: localAstronomerNamespace, UID: types.UID("input-" + name), ResourceVersion: "input-1"}, Data: map[string][]byte{"value": []byte("reference")}})
 	}
 	client := fake.NewSimpleClientset(objects...)
@@ -1681,6 +1692,7 @@ func selfManagedBundledIntentBaseObjects(t *testing.T, releaseValues map[string]
 	return []runtime.Object{
 		coreSecret,
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-bootstrap", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"password": []byte("runtime-bootstrap")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "argocd-redis", Namespace: localAstronomerNamespace, UID: "runtime-argocd-redis", ResourceVersion: "redis-secret-1"}, Data: map[string][]byte{"auth": []byte("runtime-redis-password")}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "runtime-postgres", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"runtime-password": []byte("postgres")}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "runtime-dex", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"client-secret": []byte("dex")}},
 		server, worker, helmReleaseSecretFixture(t, 12, "deployed", releaseValues),

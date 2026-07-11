@@ -314,6 +314,13 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		}
 	}
 	discovered := map[string]any{
+		// The bundled chart's redis-secret-init resources are Helm lifecycle
+		// hooks. Helm has already created the referenced argocd-redis Secret
+		// before self-management can begin; rendering those hooks again causes
+		// Argo to adopt/delete Helm-owned bootstrap objects on every sync.
+		"argo-cd": map[string]any{
+			"redisSecretInit": map[string]any{"enabled": false},
+		},
 		"config": map[string]any{
 			"corsAllowedOrigins": serverURL,
 			"serverURL":          serverURL,
