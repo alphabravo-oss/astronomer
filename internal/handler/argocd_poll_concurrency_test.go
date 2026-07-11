@@ -52,7 +52,7 @@ func TestPollRunningOperations_FansOutConcurrently(t *testing.T) {
 	if maxSeen < 2 {
 		t.Fatalf("peak concurrent upstream GetApp = %d, want > 1 (fan-out); a serial poll would show 1", maxSeen)
 	}
-	// Every running sync op is polled: phase=Running folds into an async
+	// Every claimed running sync op is polled: phase=Running folds into an async
 	// progress update, so all n ops must be accounted for.
 	if len(rec.progress) != n {
 		t.Fatalf("progress updates = %d, want %d (all running ops polled)", len(rec.progress), n)

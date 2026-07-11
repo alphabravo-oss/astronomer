@@ -13,6 +13,71 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimRunningArgoCDOperationsForPoll = `-- name: ClaimRunningArgoCDOperationsForPoll :many
+WITH eligible AS (
+    SELECT id
+    FROM argocd_operations
+    WHERE status = 'running'
+      AND (last_polled_at IS NULL OR last_polled_at < now() - interval '25 seconds')
+    ORDER BY started_at ASC NULLS FIRST
+    FOR UPDATE SKIP LOCKED
+    LIMIT $1
+)
+UPDATE argocd_operations AS operation
+SET
+    last_polled_at = now(),
+    poll_attempts  = operation.poll_attempts + 1,
+    updated_at     = now()
+FROM eligible
+WHERE operation.id = eligible.id
+  AND operation.status = 'running'
+RETURNING operation.id, operation.target_type, operation.target_key, operation.operation_type, operation.payload, operation.status, operation.attempt_count, operation.started_at, operation.completed_at, operation.error_message, operation.created_by_id, operation.created_at, operation.updated_at, operation.revision, operation.message, operation.operation_id, operation.phase, operation.poll_attempts, operation.last_polled_at
+`
+
+// Claim a bounded poll batch atomically across server replicas. The 25-second
+// lease is shorter than the 30-second reconciler cadence and longer than the
+// 10-second upstream client timeout. poll_attempts is charged once at claim
+// time so replica count cannot accelerate the timeout budget.
+func (q *Queries) ClaimRunningArgoCDOperationsForPoll(ctx context.Context, limit int32) ([]ArgocdOperation, error) {
+	rows, err := q.db.Query(ctx, claimRunningArgoCDOperationsForPoll, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ArgocdOperation{}
+	for rows.Next() {
+		var i ArgocdOperation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetType,
+			&i.TargetKey,
+			&i.OperationType,
+			&i.Payload,
+			&i.Status,
+			&i.AttemptCount,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ErrorMessage,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Revision,
+			&i.Message,
+			&i.OperationID,
+			&i.Phase,
+			&i.PollAttempts,
+			&i.LastPolledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const completeArgoCDOperationWithResult = `-- name: CompleteArgoCDOperationWithResult :one
 UPDATE argocd_operations
 SET
@@ -25,6 +90,7 @@ SET
     error_message  = '',
     updated_at     = now()
 WHERE id = $1
+  AND status = 'running'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at
 `
 
@@ -161,6 +227,7 @@ SET
     error_message  = $6,
     updated_at     = now()
 WHERE id = $1
+  AND status = 'running'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at
 `
 
@@ -346,60 +413,13 @@ func (q *Queries) ListArgoCDOperations(ctx context.Context, arg ListArgoCDOperat
 
 const listPendingArgoCDOperations = `-- name: ListPendingArgoCDOperations :many
 SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at FROM argocd_operations
-WHERE status IN ('pending', 'running')
+WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1
 `
 
 func (q *Queries) ListPendingArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error) {
 	rows, err := q.db.Query(ctx, listPendingArgoCDOperations, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ArgocdOperation{}
-	for rows.Next() {
-		var i ArgocdOperation
-		if err := rows.Scan(
-			&i.ID,
-			&i.TargetType,
-			&i.TargetKey,
-			&i.OperationType,
-			&i.Payload,
-			&i.Status,
-			&i.AttemptCount,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.ErrorMessage,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Revision,
-			&i.Message,
-			&i.OperationID,
-			&i.Phase,
-			&i.PollAttempts,
-			&i.LastPolledAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRunningArgoCDOperations = `-- name: ListRunningArgoCDOperations :many
-SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at FROM argocd_operations
-WHERE status = 'running'
-ORDER BY started_at ASC NULLS FIRST
-LIMIT $1
-`
-
-func (q *Queries) ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error) {
-	rows, err := q.db.Query(ctx, listRunningArgoCDOperations, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -528,20 +548,15 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
-  AND (
-      status = 'pending'
-      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
-  )
+  AND status = 'pending'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at
 `
 
-// Atomic claim: only transition an op that is still claimable — either
-// 'pending', or a 'running' op whose lease has gone stale (started_at older
-// than the 1-minute fresh-running window the reconciler uses). Under an HA
-// deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
-// the same row; the first UPDATE flips it to running+started_at=now() so the
-// second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
-// skips it — preventing a double `POST /applications/{name}/sync` upstream.
+// Atomic at-most-once dispatch claim. Running Argo operations are asynchronous
+// and are resumed exclusively by ClaimRunningArgoCDOperationsForPoll; replaying
+// the mutation after a local lease expires restarts upstream hooks and can
+// duplicate side effects. Under HA, only one replica can transition pending to
+// running; all competing claimers receive pgx.ErrNoRows.
 func (q *Queries) MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error) {
 	row := q.db.QueryRow(ctx, markArgoCDOperationRunning, id)
 	var i ArgocdOperation
@@ -666,10 +681,9 @@ SET
     operation_id   = $3,
     revision       = $4,
     message        = $5,
-    last_polled_at = now(),
-    poll_attempts  = poll_attempts + 1,
     updated_at     = now()
 WHERE id = $1
+  AND status = 'running'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at, revision, message, operation_id, phase, poll_attempts, last_polled_at
 `
 

@@ -117,7 +117,7 @@ func (q *argocdManagedClusterQueryStub) MarkArgoCDOperationSuperseded(context.Co
 func (q *argocdManagedClusterQueryStub) RequeueArgoCDOperation(context.Context, sqlc.RequeueArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argocdManagedClusterQueryStub) ListRunningArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
+func (q *argocdManagedClusterQueryStub) ClaimRunningArgoCDOperationsForPoll(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
 }
 func (q *argocdManagedClusterQueryStub) UpdateArgoCDOperationProgress(context.Context, sqlc.UpdateArgoCDOperationProgressParams) (sqlc.ArgocdOperation, error) {

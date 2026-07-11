@@ -818,16 +818,56 @@ func currentReferenceOnlySelfManagedValues(ctx context.Context, dyn dynamic.Inte
 	if currentVersion.Major() != embeddedVersion.Major() {
 		return selfManagedValuesSource{}, fmt.Errorf("self-managed chart upgrade from %s to %s crosses a major-version boundary; keep the current Application intact and follow the version-specific upgrade procedure", currentVersion, embeddedVersion)
 	}
-	if current.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseActive {
-		return selfManagedValuesSource{}, fmt.Errorf("self-managed chart revision %s is older than embedded revision %s but the Application is not active; restore the exact old active Application identity before the bounded quiesced-controller upgrade procedure", currentVersion, embeddedVersion)
-	}
 	if currentVersion.LessThan(embeddedVersion) {
-		if err := validateActiveSelfManagedUpgradeIdentity(current, expectedDestinationServer); err != nil {
-			return selfManagedValuesSource{}, err
+		switch current.GetAnnotations()[selfManagedPhaseAnnotation] {
+		case selfManagedPhaseActive:
+			if err := validateActiveSelfManagedUpgradeIdentity(current, expectedDestinationServer); err != nil {
+				return selfManagedValuesSource{}, err
+			}
+		case selfManagedPhaseAwaiting:
+			if err := validateAwaitingSelfManagedUpgradeIdentity(current, expectedDestinationServer); err != nil {
+				return selfManagedValuesSource{}, err
+			}
+		default:
+			return selfManagedValuesSource{}, fmt.Errorf("self-managed chart revision %s is older than embedded revision %s but the Application has no valid active or awaiting-approval identity", currentVersion, embeddedVersion)
 		}
 		return selfManagedValuesSource{ValuesYAML: values, AdoptLiveUpgrade: true}, nil
 	}
 	return selfManagedValuesSource{}, fmt.Errorf("refuse self-managed chart revision transition from %s to %s", currentVersion, embeddedVersion)
+}
+
+// validateAwaitingSelfManagedUpgradeIdentity permits a newer embedded chart to
+// restage a clean, older reference-only Application without first activating
+// the old revision. This is the recovery path for a failed acceptance run: the
+// later build step still requires the Argo controller to be stopped and the new
+// server rollout complete before any Application write.
+func validateAwaitingSelfManagedUpgradeIdentity(current *unstructured.Unstructured, expectedDestinationServer string) error {
+	project, _, _ := unstructured.NestedString(current.Object, "spec", "project")
+	repoURL, _, _ := unstructured.NestedString(current.Object, "spec", "source", "repoURL")
+	chart, _, _ := unstructured.NestedString(current.Object, "spec", "source", "chart")
+	releaseName, _, _ := unstructured.NestedString(current.Object, "spec", "source", "helm", "releaseName")
+	destinationServer, _, _ := unstructured.NestedString(current.Object, "spec", "destination", "server")
+	destinationNamespace, _, _ := unstructured.NestedString(current.Object, "spec", "destination", "namespace")
+	policy, _, _ := unstructured.NestedMap(current.Object, "spec", "syncPolicy")
+	if project != "default" || repoURL != localArgoRepoURL || chart != "astronomer" || releaseName != localAstronomerReleaseName || strings.TrimSpace(expectedDestinationServer) == "" || destinationServer != expectedDestinationServer || destinationNamespace != localAstronomerNamespace || len(policy) != 0 {
+		return fmt.Errorf("claimed awaiting self-managed Application identity is inconsistent; refusing live upgrade adoption")
+	}
+	if _, operationExists := current.Object["operation"]; operationExists {
+		return fmt.Errorf("claimed awaiting self-managed Application still has an operation; refusing live upgrade adoption")
+	}
+	stagedSpec, _, _ := unstructured.NestedMap(current.Object, "spec")
+	desiredSpec := stagedSelfManagedSpec(stagedSpec)
+	desiredSpec["syncPolicy"] = map[string]any{
+		"automated": map[string]any{"prune": true, "selfHeal": true},
+	}
+	hash, err := selfManagedSpecHash(desiredSpec)
+	if err != nil {
+		return err
+	}
+	if !selfManagedApplicationMetadataClean(current, selfManagedPhaseAwaiting, hash) {
+		return fmt.Errorf("claimed awaiting self-managed Application metadata/hash is inconsistent; refusing live upgrade adoption")
+	}
+	return nil
 }
 
 func validateActiveSelfManagedUpgradeIdentity(current *unstructured.Unstructured, expectedDestinationServer string) error {

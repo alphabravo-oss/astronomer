@@ -57,6 +57,11 @@ type Querier interface {
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
+	// Claim a bounded poll batch atomically across server replicas. The 25-second
+	// lease is shorter than the 30-second reconciler cadence and longer than the
+	// 10-second upstream client timeout. poll_attempts is charged once at claim
+	// time so replica count cannot accelerate the timeout budget.
+	ClaimRunningArgoCDOperationsForPoll(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	// Backstop sweep: clear previous_token_hash for rows whose rotation completed
 	// more than the supplied interval ago but whose old hash was never cleared by
 	// a new-token CONNECT (e.g. the agent crashed before reconnecting).
@@ -1452,7 +1457,6 @@ type Querier interface {
 	// Quota plans CRUD --------------------------------------------------------
 	ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error)
 	ListRestoreOperations(ctx context.Context, arg ListRestoreOperationsParams) ([]RestoreOperation, error)
-	ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]Backup, error)
 	// In-flight rows across all clusters, oldest-first, so the sweep can poll
 	// each snapshot Job to completion and move it off 'running'. Only 'running'
@@ -1560,13 +1564,11 @@ type Querier interface {
 	LockUser(ctx context.Context, arg LockUserParams) error
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)
-	// Atomic claim: only transition an op that is still claimable — either
-	// 'pending', or a 'running' op whose lease has gone stale (started_at older
-	// than the 1-minute fresh-running window the reconciler uses). Under an HA
-	// deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
-	// the same row; the first UPDATE flips it to running+started_at=now() so the
-	// second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
-	// skips it — preventing a double `POST /applications/{name}/sync` upstream.
+	// Atomic at-most-once dispatch claim. Running Argo operations are asynchronous
+	// and are resumed exclusively by ClaimRunningArgoCDOperationsForPoll; replaying
+	// the mutation after a local lease expires restarts upstream hooks and can
+	// duplicate side effects. Under HA, only one replica can transition pending to
+	// running; all competing claimers receive pgx.ErrNoRows.
 	MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationSuperseded(ctx context.Context, arg MarkArgoCDOperationSupersededParams) (ArgocdOperation, error)
 	MarkCatalogOperationCompleted(ctx context.Context, id uuid.UUID) (CatalogOperation, error)

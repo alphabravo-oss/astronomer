@@ -480,11 +480,36 @@ func TestCurrentReferenceOnlyValuesAuthorizesOnlyStrongOlderRevisionAdoption(t *
 		t.Fatalf("same embedded revision was not canonical: source=%#v err=%v", source, err)
 	}
 	awaitingOlder := active.DeepCopy()
-	annotations := awaitingOlder.GetAnnotations()
-	annotations[selfManagedPhaseAnnotation] = selfManagedPhaseAwaiting
-	awaitingOlder.SetAnnotations(annotations)
-	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), awaitingOlder), destination); err == nil || !strings.Contains(err.Error(), "not active") {
-		t.Fatalf("awaiting older revision error = %v", err)
+	awaitingSpec, _, _ := unstructured.NestedMap(awaitingOlder.Object, "spec")
+	awaitingHash, err := selfManagedSpecHash(awaitingSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stageSelfManagedApplication(awaitingOlder, awaitingHash)
+	source, err = currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), awaitingOlder), destination)
+	if err != nil || !source.AdoptLiveUpgrade || strings.TrimSpace(source.ValuesYAML) == "" {
+		t.Fatalf("clean awaiting older revision was not authorized for safe restage: source=%#v err=%v", source, err)
+	}
+	for name, mutate := range map[string]func(*unstructured.Unstructured){
+		"unexpected approval": func(app *unstructured.Unstructured) {
+			annotations := app.GetAnnotations()
+			annotations[selfManagedApproveAnnotation] = annotations[selfManagedHashAnnotation]
+			app.SetAnnotations(annotations)
+		},
+		"operation present": func(app *unstructured.Unstructured) {
+			app.Object["operation"] = map[string]any{"sync": map[string]any{"prune": false}}
+		},
+		"automated policy": func(app *unstructured.Unstructured) {
+			_ = unstructured.SetNestedMap(app.Object, map[string]any{"automated": map[string]any{"prune": true, "selfHeal": true}}, "spec", "syncPolicy")
+		},
+	} {
+		t.Run("awaiting "+name, func(t *testing.T) {
+			candidate := awaitingOlder.DeepCopy()
+			mutate(candidate)
+			if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), candidate), destination); err == nil || !strings.Contains(err.Error(), "awaiting") {
+				t.Fatalf("unsafe awaiting identity error = %v", err)
+			}
+		})
 	}
 	newer := activeSelfManagedApplicationForRevision(t, "0.2.3", destination)
 	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), newer), destination); err == nil || !strings.Contains(err.Error(), "downgrade") {

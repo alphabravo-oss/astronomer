@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -39,7 +40,9 @@ type argoCDQueryRecorder struct {
 	getAppErr      error
 	auditRows      []sqlc.CreateAuditLogV1Params
 	requeued       []sqlc.RequeueArgoCDOperationParams
+	pendingOps     []sqlc.ArgocdOperation
 	runningOps     []sqlc.ArgocdOperation
+	markRunCalls   int
 }
 
 func (q *argoCDQueryRecorder) GetArgoCDApplicationByID(_ context.Context, _ uuid.UUID) (sqlc.ArgocdApplication, error) {
@@ -172,13 +175,26 @@ func (q *argoCDQueryRecorder) CountArgoCDOperations(context.Context, sqlc.CountA
 	return 0, nil
 }
 func (q *argoCDQueryRecorder) ListPendingArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
-	return nil, nil
+	return q.pendingOps, nil
 }
 func (q *argoCDQueryRecorder) GetLatestArgoCDOperationForTarget(context.Context, sqlc.GetLatestArgoCDOperationForTargetParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argoCDQueryRecorder) MarkArgoCDOperationRunning(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+func (q *argoCDQueryRecorder) MarkArgoCDOperationRunning(_ context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error) {
+	q.markRunCalls++
+	for i, op := range q.pendingOps {
+		if op.ID != id {
+			continue
+		}
+		if op.Status != OpStatusPending {
+			return sqlc.ArgocdOperation{}, pgx.ErrNoRows
+		}
+		op.Status = OpStatusRunning
+		op.AttemptCount++
+		q.pendingOps[i] = op
+		return op, nil
+	}
+	return sqlc.ArgocdOperation{}, pgx.ErrNoRows
 }
 func (q *argoCDQueryRecorder) MarkArgoCDOperationCompleted(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
@@ -199,7 +215,7 @@ func (q *argoCDQueryRecorder) RequeueArgoCDOperation(_ context.Context, arg sqlc
 func (q *argoCDQueryRecorder) ListArgoCDOperationEvents(context.Context, uuid.UUID) ([]sqlc.ArgocdOperationEvent, error) {
 	return q.operationEvents, nil
 }
-func (q *argoCDQueryRecorder) ListRunningArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
+func (q *argoCDQueryRecorder) ClaimRunningArgoCDOperationsForPoll(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return q.runningOps, nil
 }
 
@@ -268,6 +284,48 @@ func newArgoCDFixture(t *testing.T, handler http.HandlerFunc) (*ArgoCDHandler, *
 	h := NewArgoCDHandler(rec)
 	h.http = srv.Client()
 	return h, rec, srv
+}
+
+func TestArgoCDAsyncOperationIsDispatchedAtMostOnce(t *testing.T) {
+	posts := 0
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posts++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp","uid":"upstream-myapp-uid"},"status":{"sync":{"status":"OutOfSync","revision":"deadbeef"},"health":{"status":"Healthy"},"operationState":{"phase":"Running"}}}`))
+	})
+	op := sqlc.ArgocdOperation{
+		ID:            uuid.New(),
+		TargetType:    "application",
+		TargetKey:     rec.app.ID.String(),
+		OperationType: "sync",
+		Status:        OpStatusPending,
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
+		CreatedAt:     time.Now().Add(-2 * time.Minute),
+	}
+	rec.pendingOps = []sqlc.ArgocdOperation{op}
+
+	claimed := h.claimPendingArgoCDOperations(context.Background())
+	if len(claimed) != 1 {
+		t.Fatalf("initial claims = %d, want 1", len(claimed))
+	}
+	if err := claimed[0].Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a stale query snapshot returning the now-running row. The
+	// database CAS must reject it; a running async operation is poll-only.
+	claimed = h.claimPendingArgoCDOperations(context.Background())
+	if len(claimed) != 0 {
+		t.Fatalf("running operation was redispatched: %d claims", len(claimed))
+	}
+	if posts != 1 {
+		t.Fatalf("upstream sync POSTs = %d, want exactly 1", posts)
+	}
+	if rec.markRunCalls != 2 {
+		t.Fatalf("claim attempts = %d, want initial claim plus rejected stale snapshot", rec.markRunCalls)
+	}
 }
 
 func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
@@ -497,7 +555,7 @@ func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 		}`))
 	})
 
-	// Replace the recorder's ListRunningArgoCDOperations with a single op so
+	// Replace the recorder's claimed poll batch with a single op so
 	// pollRunningOperations has work to do.
 	op := sqlc.ArgocdOperation{
 		ID:            uuid.New(),

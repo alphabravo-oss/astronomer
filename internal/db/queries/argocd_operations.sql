@@ -37,7 +37,7 @@ WHERE (
 
 -- name: ListPendingArgoCDOperations :many
 SELECT * FROM argocd_operations
-WHERE status IN ('pending', 'running')
+WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1;
 
@@ -48,13 +48,11 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: MarkArgoCDOperationRunning :one
--- Atomic claim: only transition an op that is still claimable — either
--- 'pending', or a 'running' op whose lease has gone stale (started_at older
--- than the 1-minute fresh-running window the reconciler uses). Under an HA
--- deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
--- the same row; the first UPDATE flips it to running+started_at=now() so the
--- second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
--- skips it — preventing a double `POST /applications/{name}/sync` upstream.
+-- Atomic at-most-once dispatch claim. Running Argo operations are asynchronous
+-- and are resumed exclusively by ClaimRunningArgoCDOperationsForPoll; replaying
+-- the mutation after a local lease expires restarts upstream hooks and can
+-- duplicate side effects. Under HA, only one replica can transition pending to
+-- running; all competing claimers receive pgx.ErrNoRows.
 UPDATE argocd_operations
 SET
     status = 'running',
@@ -63,10 +61,7 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
-  AND (
-      status = 'pending'
-      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
-  )
+  AND status = 'pending'
 RETURNING *;
 
 -- name: MarkArgoCDOperationCompleted :one
@@ -113,11 +108,29 @@ SET
 WHERE id = $1
 RETURNING *;
 
--- name: ListRunningArgoCDOperations :many
-SELECT * FROM argocd_operations
-WHERE status = 'running'
-ORDER BY started_at ASC NULLS FIRST
-LIMIT $1;
+-- name: ClaimRunningArgoCDOperationsForPoll :many
+-- Claim a bounded poll batch atomically across server replicas. The 25-second
+-- lease is shorter than the 30-second reconciler cadence and longer than the
+-- 10-second upstream client timeout. poll_attempts is charged once at claim
+-- time so replica count cannot accelerate the timeout budget.
+WITH eligible AS (
+    SELECT id
+    FROM argocd_operations
+    WHERE status = 'running'
+      AND (last_polled_at IS NULL OR last_polled_at < now() - interval '25 seconds')
+    ORDER BY started_at ASC NULLS FIRST
+    FOR UPDATE SKIP LOCKED
+    LIMIT $1
+)
+UPDATE argocd_operations AS operation
+SET
+    last_polled_at = now(),
+    poll_attempts  = operation.poll_attempts + 1,
+    updated_at     = now()
+FROM eligible
+WHERE operation.id = eligible.id
+  AND operation.status = 'running'
+RETURNING operation.*;
 
 -- name: UpdateArgoCDOperationProgress :one
 UPDATE argocd_operations
@@ -126,10 +139,9 @@ SET
     operation_id   = $3,
     revision       = $4,
     message        = $5,
-    last_polled_at = now(),
-    poll_attempts  = poll_attempts + 1,
     updated_at     = now()
 WHERE id = $1
+  AND status = 'running'
 RETURNING *;
 
 -- name: CompleteArgoCDOperationWithResult :one
@@ -144,6 +156,7 @@ SET
     error_message  = '',
     updated_at     = now()
 WHERE id = $1
+  AND status = 'running'
 RETURNING *;
 
 -- name: FailArgoCDOperationWithResult :one
@@ -158,4 +171,5 @@ SET
     error_message  = $6,
     updated_at     = now()
 WHERE id = $1
+  AND status = 'running'
 RETURNING *;

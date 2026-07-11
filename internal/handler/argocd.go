@@ -90,7 +90,7 @@ type ArgoCDQuerier interface {
 	MarkArgoCDOperationFailed(ctx context.Context, arg sqlc.MarkArgoCDOperationFailedParams) (sqlc.ArgocdOperation, error)
 	MarkArgoCDOperationSuperseded(ctx context.Context, arg sqlc.MarkArgoCDOperationSupersededParams) (sqlc.ArgocdOperation, error)
 	RequeueArgoCDOperation(ctx context.Context, arg sqlc.RequeueArgoCDOperationParams) (sqlc.ArgocdOperation, error)
-	ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]sqlc.ArgocdOperation, error)
+	ClaimRunningArgoCDOperationsForPoll(ctx context.Context, limit int32) ([]sqlc.ArgocdOperation, error)
 	UpdateArgoCDOperationProgress(ctx context.Context, arg sqlc.UpdateArgoCDOperationProgressParams) (sqlc.ArgocdOperation, error)
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg sqlc.CompleteArgoCDOperationWithResultParams) (sqlc.ArgocdOperation, error)
 	FailArgoCDOperationWithResult(ctx context.Context, arg sqlc.FailArgoCDOperationWithResultParams) (sqlc.ArgocdOperation, error)
@@ -332,6 +332,9 @@ func (h *ArgoCDHandler) runReconciler(ctx context.Context) {
 	defer pollTicker.Stop()
 	h.processPendingOperations(ctx)
 	h.reconcileInstanceHealth(ctx)
+	// Running Argo operations are durable asynchronous work. Resume them by
+	// polling immediately after restart; never replay the upstream mutation.
+	h.pollRunningOperations(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -1410,9 +1413,6 @@ func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []clai
 		ID:        func(op sqlc.ArgocdOperation) uuid.UUID { return op.ID },
 		TargetKey: func(op sqlc.ArgocdOperation) string { return op.TargetType + ":" + op.TargetKey },
 		Status:    func(op sqlc.ArgocdOperation) string { return op.Status },
-		IsFreshRunning: func(op sqlc.ArgocdOperation, now time.Time) bool {
-			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) < time.Minute
-		},
 		Supersede: func(ctx context.Context, op sqlc.ArgocdOperation) {
 			h.recordArgoCDOperationEvent(ctx, op.ID, "info", "queue", "operation superseded by newer desired state", map[string]any{
 				"targetType": op.TargetType,
@@ -1448,31 +1448,35 @@ func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []clai
 					// it as 'running' and let pollRunningOperations drive
 					// completion. Otherwise mark it complete.
 					if result.async {
-						h.recordArgoCDOperationEvent(ctx, running.ID, "info", "sync", "operation accepted upstream; polling for completion", map[string]any{
-							"phase":       result.phase,
-							"operationId": result.operationID,
-							"revision":    result.revision,
-						})
-						_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
+						_, foldErr := h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
 							ID:          running.ID,
 							Phase:       result.phase,
 							OperationID: result.operationID,
 							Revision:    result.revision,
 							Message:     result.message,
 						})
+						if h.argoCDOperationFoldApplied("record accepted sync", running.ID, foldErr) {
+							h.recordArgoCDOperationEvent(ctx, running.ID, "info", "sync", "operation accepted upstream; polling for completion", map[string]any{
+								"phase":       result.phase,
+								"operationId": result.operationID,
+								"revision":    result.revision,
+							})
+						}
 						return nil
 					}
-					h.recordArgoCDOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{
-						"phase":    result.phase,
-						"revision": result.revision,
-					})
-					_, _ = h.queries.CompleteArgoCDOperationWithResult(ctx, sqlc.CompleteArgoCDOperationWithResultParams{
+					_, foldErr := h.queries.CompleteArgoCDOperationWithResult(ctx, sqlc.CompleteArgoCDOperationWithResultParams{
 						ID:          running.ID,
 						Phase:       firstNonEmptyString(result.phase, "Succeeded"),
 						OperationID: result.operationID,
 						Revision:    result.revision,
 						Message:     result.message,
 					})
+					if h.argoCDOperationFoldApplied("complete synchronous sync", running.ID, foldErr) {
+						h.recordArgoCDOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{
+							"phase":    result.phase,
+							"revision": result.revision,
+						})
+					}
 					return nil
 				},
 				// OnComplete intentionally nil: Run inlines the success
@@ -1480,13 +1484,15 @@ func (h *ArgoCDHandler) claimPendingArgoCDOperations(ctx context.Context) []clai
 				// the operationResult.async flag.
 				OnFailure: func(ctx context.Context, err error) {
 					safeError := argocdclient.PublicErrorMessage(err)
-					h.recordArgoCDOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": safeError})
-					_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
+					_, foldErr := h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
 						ID:           running.ID,
 						Phase:        "Failed",
 						ErrorMessage: safeError,
 						Message:      safeError,
 					})
+					if h.argoCDOperationFoldApplied("fail sync dispatch", running.ID, foldErr) {
+						h.recordArgoCDOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": safeError})
+					}
 					if h.log != nil {
 						h.log.Warn("argocd operation failed", "id", running.ID.String(), "error", safeError)
 					}
@@ -1741,16 +1747,17 @@ func (h *ArgoCDHandler) pollRunningOperations(ctx context.Context) {
 	dispatchClaimed(ctx, h.helmConcurrency, h.claimRunningArgoCDPolls(ctx))
 }
 
-// claimRunningArgoCDPolls lists the running sync operations and, for each
-// pollable one, resolves its application + instance rows under h.mu and packs
-// the upstream GetApp + result-fold into a claimedOp.Run closure. The cheap
+// claimRunningArgoCDPolls atomically claims a cadence-bounded batch of running
+// sync operations across every server replica. For each claimed row it resolves
+// application + instance metadata under h.mu and packs the upstream GetApp +
+// result-fold into a claimedOp.Run closure. The cheap
 // terminal cases (bad payload, unparsable app id, poll-attempt timeout) are
 // handled inline under the lock exactly as before; only the upstream round-trip
 // and its DB fold move to the concurrent dispatch phase.
 func (h *ArgoCDHandler) claimRunningArgoCDPolls(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	ops, err := h.queries.ListRunningArgoCDOperations(ctx, 50)
+	ops, err := h.queries.ClaimRunningArgoCDOperationsForPoll(ctx, 50)
 	if err != nil {
 		return nil
 	}
@@ -1821,13 +1828,14 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 				h.failOperationWithMessage(ctx, op, "Failed", argocdclient.PublicErrorMessage(err))
 				return
 			}
-			_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
+			_, foldErr := h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
 				ID:          op.ID,
 				Phase:       op.Phase,
 				OperationID: op.OperationID,
 				Revision:    op.Revision,
 				Message:     argocdclient.PublicErrorMessage(err),
 			})
+			h.argoCDOperationFoldApplied("record transient poll failure", op.ID, foldErr)
 			return
 		}
 		var env argocdOperationEnvelope
@@ -1865,36 +1873,35 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 			LastSynced:           lastSyncedFor(app, res),
 		})
 		if res.async {
-			_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
+			_, foldErr := h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
 				ID:          op.ID,
 				Phase:       firstNonEmptyString(res.phase, "Running"),
 				OperationID: firstNonEmptyString(res.operationID, op.OperationID),
 				Revision:    firstNonEmptyString(res.revision, op.Revision),
 				Message:     res.message,
 			})
+			h.argoCDOperationFoldApplied("record running poll", op.ID, foldErr)
 			return
 		}
 		// Terminal upstream phase.
 		if res.phase == "Succeeded" {
-			h.recordArgoCDOperationEvent(ctx, op.ID, "info", "complete", "ArgoCD sync converged", map[string]any{
-				"phase":    res.phase,
-				"revision": res.revision,
-			})
-			_, _ = h.queries.CompleteArgoCDOperationWithResult(ctx, sqlc.CompleteArgoCDOperationWithResultParams{
+			_, foldErr := h.queries.CompleteArgoCDOperationWithResult(ctx, sqlc.CompleteArgoCDOperationWithResultParams{
 				ID:          op.ID,
 				Phase:       res.phase,
 				OperationID: firstNonEmptyString(res.operationID, op.OperationID),
 				Revision:    res.revision,
 				Message:     res.message,
 			})
+			if h.argoCDOperationFoldApplied("complete polled sync", op.ID, foldErr) {
+				h.recordArgoCDOperationEvent(ctx, op.ID, "info", "complete", "ArgoCD sync converged", map[string]any{
+					"phase":    res.phase,
+					"revision": res.revision,
+				})
+			}
 			return
 		}
 		// Failed / Error.
-		h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "ArgoCD sync failed", map[string]any{
-			"phase":   res.phase,
-			"message": res.message,
-		})
-		_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
+		_, foldErr := h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
 			ID:           op.ID,
 			Phase:        res.phase,
 			OperationID:  firstNonEmptyString(res.operationID, op.OperationID),
@@ -1902,6 +1909,12 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 			Message:      res.message,
 			ErrorMessage: firstNonEmptyString(res.message, res.phase),
 		})
+		if h.argoCDOperationFoldApplied("fail polled sync", op.ID, foldErr) {
+			h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "ArgoCD sync failed", map[string]any{
+				"phase":   res.phase,
+				"message": res.message,
+			})
+		}
 	}
 }
 
@@ -1940,11 +1953,7 @@ func (h *ArgoCDHandler) argoCDClient(instance sqlc.ArgocdInstance) *argocdclient
 
 func (h *ArgoCDHandler) failOperationWithMessage(ctx context.Context, op sqlc.ArgocdOperation, phase, msg string) {
 	msg = argosecurity.SanitizeString(msg)
-	h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "ArgoCD sync failed", map[string]any{
-		"phase":   phase,
-		"message": msg,
-	})
-	_, _ = h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
+	_, err := h.queries.FailArgoCDOperationWithResult(ctx, sqlc.FailArgoCDOperationWithResultParams{
 		ID:           op.ID,
 		Phase:        phase,
 		OperationID:  op.OperationID,
@@ -1952,6 +1961,29 @@ func (h *ArgoCDHandler) failOperationWithMessage(ctx context.Context, op sqlc.Ar
 		Message:      msg,
 		ErrorMessage: msg,
 	})
+	if h.argoCDOperationFoldApplied("fail sync", op.ID, err) {
+		h.recordArgoCDOperationEvent(ctx, op.ID, "error", "complete", "ArgoCD sync failed", map[string]any{
+			"phase":   phase,
+			"message": msg,
+		})
+	}
+}
+
+// argoCDOperationFoldApplied distinguishes an expected lost CAS race from a
+// persistence failure. A no-row result means another replica/operator already
+// terminalized or superseded the operation; the stale goroutine must stop
+// silently and must not append a contradictory event.
+func (h *ArgoCDHandler) argoCDOperationFoldApplied(action string, id uuid.UUID, err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	if h.log != nil {
+		h.log.Warn("failed to fold argocd operation state", "action", action, "id", id.String(), "error", argosecurity.SanitizeString(err.Error()))
+	}
+	return false
 }
 
 func lastSyncedFor(app sqlc.ArgocdApplication, res operationResult) pgtype.Timestamptz {
