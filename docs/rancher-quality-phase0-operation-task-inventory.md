@@ -219,7 +219,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | Operation helper |Create helper |Idempotent helper |Handler create uses |Handler idempotent uses |
 | --- |--- |--- |--- |--- |
 | AgentLifecycleOperation |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:94`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:94) |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:149`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:149) |2 |2 |
-| ArgoCDOperation |[`internal/db/sqlc/argocd_operations.sql.go:118`](internal/db/sqlc/argocd_operations.sql.go:118) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226) |2 |2 |
+| ArgoCDOperation |[`internal/db/sqlc/argocd_operations.sql.go:184`](internal/db/sqlc/argocd_operations.sql.go:184) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226) |2 |2 |
 | CatalogOperation |[`internal/db/sqlc/catalog_operations.sql.go:38`](internal/db/sqlc/catalog_operations.sql.go:38) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:96`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:96) |2 |2 |
 | DeferredOperation |[`internal/db/sqlc/maintenance_windows_ext.sql.go:269`](internal/db/sqlc/maintenance_windows_ext.sql.go:269) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:229`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:229) |2 |2 |
 | FleetOperation |[`internal/db/sqlc/fleet.sql.go:150`](internal/db/sqlc/fleet.sql.go:150) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:95`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:95) |2 |2 |
@@ -234,7 +234,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | Scope |Call sites |Examples |
 | --- |--- |--- |
 | `agent_lifecycle` |1 |[`internal/handler/agent_fleet.go:804`](internal/handler/agent_fleet.go:804) |
-| `argocd` |1 |[`internal/handler/argocd.go:724`](internal/handler/argocd.go:724) |
+| `argocd` |1 |[`internal/handler/argocd.go:727`](internal/handler/argocd.go:727) |
 | `catalog` |4 |[`internal/handler/catalog.go:1013`](internal/handler/catalog.go:1013)<br>[`internal/handler/catalog.go:1074`](internal/handler/catalog.go:1074)<br>[`internal/handler/catalog.go:1209`](internal/handler/catalog.go:1209)<br>[`internal/handler/catalog.go:1276`](internal/handler/catalog.go:1276) |
 | `deferred` |1 |[`internal/handler/maintenance_gate.go:137`](internal/handler/maintenance_gate.go:137) |
 | `fleet` |1 |[`internal/handler/fleet_operations.go:411`](internal/handler/fleet_operations.go:411) |
