@@ -133,6 +133,23 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 		}
 	}
 	staged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	transientAnnotations := staged.GetAnnotations()
+	transientAnnotations["argocd.argoproj.io/refresh"] = "normal"
+	staged.SetAnnotations(transientAnnotations)
+	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+		t.Fatal(err)
+	}
+	staged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	if _, ok := staged.Object["operation"]; !ok {
+		t.Fatal("valid non-pruning manual operation was cancelled while normalizing transient Argo metadata")
+	}
+	if _, ok := staged.GetAnnotations()["argocd.argoproj.io/refresh"]; ok {
+		t.Fatal("transient Argo metadata was not normalized")
+	}
+	staged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	annotations[selfManagedApproveAnnotation] = "stale-" + hash
 	staged.SetAnnotations(annotations)
 	staged.Object["operation"] = map[string]any{"sync": map[string]any{"prune": true}}

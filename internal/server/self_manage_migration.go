@@ -253,8 +253,20 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 				return err
 			}
 			stagedSpec := stagedSelfManagedSpec(desiredSpec)
-			if reflect.DeepEqual(currentSpec, stagedSpec) && operationSafe && selfManagedApplicationMetadataClean(current, selfManagedPhaseAwaiting, desiredHash) {
-				return nil
+			if reflect.DeepEqual(currentSpec, stagedSpec) && operationSafe {
+				if selfManagedApplicationMetadataClean(current, selfManagedPhaseAwaiting, desiredHash) {
+					return nil
+				}
+				// Argo may add transient annotations while a valid, non-pruning
+				// acceptance sync is running. Normalize platform metadata without
+				// falling through to the restage path, which deliberately removes
+				// .operation and would cancel the in-flight validation after its
+				// first hook/wave.
+				updated := current.DeepCopy()
+				setSelfManagedApplicationMetadata(updated, selfManagedPhaseAwaiting, desiredHash)
+				updated.SetFinalizers(obj.GetFinalizers())
+				_, err = res.Update(ctx, updated, metav1.UpdateOptions{})
+				return err
 			}
 		}
 		if reflect.DeepEqual(currentSpec, desiredSpec) && selfManagedApplicationMetadataClean(current, selfManagedPhaseActive, desiredHash) {
