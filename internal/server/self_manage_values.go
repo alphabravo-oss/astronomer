@@ -78,12 +78,14 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 	initialTakeover := len(referenceOnlySource) == 0 || strings.TrimSpace(referenceOnlySource[0].ValuesYAML) == ""
 	liveUpgradeAdoption := !initialTakeover && referenceOnlySource[0].AdoptLiveUpgrade
 	adoptRuntime := initialTakeover || liveUpgradeAdoption
-	if !adoptRuntime {
+	if !initialTakeover {
 		canonical := referenceOnlySource[0].ValuesYAML
 		if err := validateReferenceOnlySelfManagedHelmValues(canonical); err != nil {
 			return "", fmt.Errorf("current self-managed Application values are not canonical reference-only values: %w", err)
 		}
-		return canonical, nil
+		if !liveUpgradeAdoption {
+			return canonical, nil
+		}
 	}
 	if adoptRuntime {
 		if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
@@ -99,15 +101,17 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		}
 	}
 	if !initialTakeover {
-		if err := yaml.Unmarshal([]byte(referenceOnlySource[0].ValuesYAML), &values); err != nil {
-			return "", fmt.Errorf("parse current reference-only self-managed values: %w", err)
-		}
 		if liveUpgradeAdoption {
 			var err error
 			deployedRelease, err = currentHelmReleaseSelection(ctx, k8s)
 			if err != nil {
 				return "", fmt.Errorf("load highest deployed external Helm release values for bounded topology/runtime adoption: %w", err)
 			}
+			// An external Helm upgrade is the authoritative operator intent for a
+			// bounded restage. Starting from the older Application values can carry
+			// stale non-workload settings (notably preflight/kubectl-shell images)
+			// into the newer chart even after the Helm rollout is complete.
+			values = deployedRelease.Values
 			deployedReleaseValues = deployedRelease.Values
 		}
 	} else {

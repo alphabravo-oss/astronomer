@@ -405,11 +405,13 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 
 	const globalMirror = "mirror.example/platform"
 	if err := client.Tracker().Add(helmReleaseSecretFixture(t, 8, "deployed", map[string]any{
-		"image":     map[string]any{"registry": globalMirror},
-		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
-		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
-		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}},
-		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}},
+		"image":        map[string]any{"registry": globalMirror},
+		"config":       map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap":    map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"postgres":     map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":        map[string]any{"bundled": map[string]any{"enabled": false}},
+		"preflight":    map[string]any{"image": map[string]any{"tag": "release-preflight-v11"}},
+		"kubectlShell": map[string]any{"image": "release.example/astronomer-shell:v11"},
 	})); err != nil {
 		t.Fatal(err)
 	}
@@ -453,6 +455,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	}
 	oldRevisionValues := unmarshalSelfManagedValues(t, mirroredYAML)
 	oldRevisionValues["image"].(map[string]any)["pullSecrets"] = []any{map[string]any{"name": "old-registry-auth"}}
+	oldRevisionValues["preflight"] = map[string]any{"image": map[string]any{"tag": "stale-preflight-v10"}}
+	oldRevisionValues["kubectlShell"] = map[string]any{"image": "stale.example/astronomer-shell:v10"}
 	oldRevisionYAML := string(yamlOrPanic(oldRevisionValues))
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v11", "mirror.example/platform/database/migrate:v11")
 	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v11", "")
@@ -501,6 +505,12 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	}
 	if pullSecrets, ok := adoptedImages["pullSecrets"].([]any); !ok || len(pullSecrets) != 0 {
 		t.Fatalf("empty live pull Secrets did not clear old source list: %#v", adoptedImages["pullSecrets"])
+	}
+	if got := adopted["preflight"].(map[string]any)["image"].(map[string]any)["tag"]; got != "release-preflight-v11" {
+		t.Fatalf("bounded upgrade retained stale Application preflight image tag %v", got)
+	}
+	if got := adopted["kubectlShell"].(map[string]any)["image"]; got != "release.example/astronomer-shell:v11" {
+		t.Fatalf("bounded upgrade retained stale Application kubectl shell image %v", got)
 	}
 	adoptedFrontend := adopted["frontend"].(map[string]any)
 	if adoptedFrontend["enabled"] != true || adoptedFrontend["replicaCount"] != float64(1) || adoptedFrontend["image"].(map[string]any)["tag"] != "v10" {
