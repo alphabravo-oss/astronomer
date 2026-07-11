@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -100,7 +101,11 @@ func TestRestageRequiresRolloutEvenWhenForgedHashMatchesDesired(t *testing.T) {
 func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.T) {
 	ctx := context.Background()
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	// A quiesced (zero-replica) Argo controller is part of this fixture so the
+	// unsafe-operation sanitation paths below remain legal single-writer writes.
+	zeroControllerReplicas := int32(0)
+	fixtures := append(completeServerRolloutFixtures(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zeroControllerReplicas}})
+	kube := k8sfake.NewSimpleClientset(fixtures...)
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
 
 	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
@@ -139,15 +144,21 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
+	dyn.ClearActions()
 	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
 		t.Fatal(err)
 	}
+	for _, action := range dyn.Actions() {
+		if action.GetVerb() == "update" || action.GetVerb() == "patch" {
+			t.Fatalf("Application was written while Argo owned an active acceptance operation: %#v", action)
+		}
+	}
 	staged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	if _, ok := staged.Object["operation"]; !ok {
-		t.Fatal("valid non-pruning manual operation was cancelled while normalizing transient Argo metadata")
+		t.Fatal("valid non-pruning manual operation was cancelled while Argo owned the Application")
 	}
-	if _, ok := staged.GetAnnotations()["argocd.argoproj.io/refresh"]; ok {
-		t.Fatal("transient Argo metadata was not normalized")
+	if _, ok := staged.GetAnnotations()["argocd.argoproj.io/refresh"]; !ok {
+		t.Fatal("transient Argo metadata was cleaned during the active operation window instead of after terminal ownership return")
 	}
 	staged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	annotations[selfManagedApproveAnnotation] = "stale-" + hash
@@ -317,6 +328,254 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	restaged, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
 	if restaged.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
 		t.Fatal("stale Synced/Healthy status from previous values activated changed desired spec")
+	}
+}
+
+// stagedSelfManagedApplicationForBarrierTest stages a fresh awaiting-approval
+// Application whose live spec/hash exactly match the desired values.
+func stagedSelfManagedApplicationForBarrierTest(t *testing.T, ctx context.Context, kube *k8sfake.Clientset) *dynamicfake.FakeDynamicClient {
+	t.Helper()
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, safeSelfManagedValuesForTest); err != nil {
+		t.Fatalf("create staged Application: %v", err)
+	}
+	return dyn
+}
+
+func safeSelfManagedAcceptanceOperationForTest() map[string]any {
+	return map[string]any{
+		"sync":        map[string]any{"revision": "0.3.0", "prune": false},
+		"initiatedBy": map[string]any{"username": "operator@example.com"},
+	}
+}
+
+func TestSelfManagedWriteBarrierDuringActiveAcceptanceOperation(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
+	for _, tc := range []struct {
+		name    string
+		mutate  func(t *testing.T, app *unstructured.Unstructured)
+		wantErr string
+	}{
+		{
+			name: "top-level active safe operation",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["operation"] = safeSelfManagedAcceptanceOperationForTest()
+			},
+		},
+		{
+			name: "status-only running safe operation",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["status"] = map[string]any{"operationState": map[string]any{"phase": "Running", "operation": safeSelfManagedAcceptanceOperationForTest(), "startedAt": "2026-07-11T00:00:00Z"}}
+			},
+		},
+		{
+			name: "status-only terminating safe operation",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["status"] = map[string]any{"operationState": map[string]any{"phase": "Terminating", "operation": safeSelfManagedAcceptanceOperationForTest()}}
+			},
+		},
+		{
+			name: "unsafe active top-level prune",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.3.0", "prune": true}}
+			},
+			wantErr: "quiesce",
+		},
+		{
+			name: "unsafe status-only running prune",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["status"] = map[string]any{"operationState": map[string]any{"phase": "Running", "operation": map[string]any{"sync": map[string]any{"revision": "0.3.0", "prune": true}}}}
+			},
+			wantErr: "quiesce",
+		},
+		{
+			name: "unsafe active force apply",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.3.0", "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}}
+			},
+			wantErr: "quiesce",
+		},
+		{
+			name: "unsafe active dry run",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.3.0", "dryRun": true}}
+			},
+			wantErr: "quiesce",
+		},
+		{
+			name: "unsafe active revision mismatch",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "9.9.9", "prune": false}}
+			},
+			wantErr: "quiesce",
+		},
+		{
+			name: "running phase without operation evidence",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["status"] = map[string]any{"operationState": map[string]any{"phase": "Running"}}
+			},
+			wantErr: "quiesce",
+		},
+		{
+			name: "safe operation with drifted staged spec",
+			mutate: func(t *testing.T, app *unstructured.Unstructured) {
+				app.Object["operation"] = safeSelfManagedAcceptanceOperationForTest()
+				_ = unstructured.SetNestedField(app.Object, "tampered-project", "spec", "project")
+			},
+			wantErr: "quiesce",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// No quiesced controller workload exists in this fixture, so every
+			// unsafe case must fail closed instead of sanitizing concurrently.
+			kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+			dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
+			resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
+			app, err := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			transient := app.GetAnnotations()
+			transient["argocd.argoproj.io/refresh"] = "normal"
+			app.SetAnnotations(transient)
+			tc.mutate(t, app)
+			if _, err := resource.Update(ctx, app, metav1.UpdateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			before, err := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			beforeJSON, err := json.Marshal(before.Object)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dyn.ClearActions()
+			for pass := 0; pass < 2; pass++ {
+				err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest)
+				if tc.wantErr == "" && err != nil {
+					t.Fatalf("reconcile %d: %v", pass, err)
+				}
+				if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+					t.Fatalf("reconcile %d error = %v, want substring %q", pass, err, tc.wantErr)
+				}
+			}
+			for _, action := range dyn.Actions() {
+				switch action.GetVerb() {
+				case "create", "update", "patch", "delete":
+					t.Fatalf("Application written during active operation window: %#v", action)
+				}
+			}
+			after, err := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			afterJSON, err := json.Marshal(after.Object)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(beforeJSON, afterJSON) {
+				t.Fatalf("Application changed during active operation window:\nbefore: %s\nafter:  %s", beforeJSON, afterJSON)
+			}
+		})
+	}
+}
+
+func TestSelfManagedWriteBarrierTerminalOwnershipReturn(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
+
+	t.Run("terminal failure stays awaiting and never activates", func(t *testing.T) {
+		kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+		dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
+		resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
+		app, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+		for _, phase := range []string{"Failed", "Error"} {
+			status := successfulSelfManagedAcceptanceStatus(t, app)
+			_ = unstructured.SetNestedField(status, phase, "operationState", "phase")
+			app.Object["status"] = status
+			annotations := app.GetAnnotations()
+			annotations[selfManagedApproveAnnotation] = annotations[selfManagedHashAnnotation]
+			app.SetAnnotations(annotations)
+			if _, err := resource.Update(ctx, app, metav1.UpdateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+				t.Fatalf("%s reconcile: %v", phase, err)
+			}
+			app, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+			if app.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+				t.Fatalf("terminal %s operation activated automation", phase)
+			}
+			if policy, _, _ := unstructured.NestedMap(app.Object, "spec", "syncPolicy"); len(policy) != 0 {
+				t.Fatalf("terminal %s operation armed sync policy: %#v", phase, policy)
+			}
+		}
+	})
+
+	t.Run("terminal success normalizes transient metadata to a fixed point", func(t *testing.T) {
+		kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+		dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
+		resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
+		app, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+		app.Object["status"] = successfulSelfManagedAcceptanceStatus(t, app)
+		transient := app.GetAnnotations()
+		transient["argocd.argoproj.io/refresh"] = "normal"
+		app.SetAnnotations(transient)
+		if _, err := resource.Update(ctx, app, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+			t.Fatal(err)
+		}
+		app, _ = resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+		if _, ok := app.GetAnnotations()["argocd.argoproj.io/refresh"]; ok {
+			t.Fatal("transient metadata survived terminal normalization")
+		}
+		if app.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
+			t.Fatal("terminal normalization changed acceptance phase without approval")
+		}
+		if _, found, _ := unstructured.NestedMap(app.Object, "status"); !found {
+			t.Fatal("terminal normalization cleared status evidence")
+		}
+		dyn.ClearActions()
+		if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
+			t.Fatal(err)
+		}
+		for _, action := range dyn.Actions() {
+			switch action.GetVerb() {
+			case "create", "update", "patch", "delete":
+				t.Fatalf("terminal metadata repair is not a fixed point: %#v", action)
+			}
+		}
+	})
+}
+
+func TestSelfManagedOperationConflictRequiresFreshReconcileNotBlindRetry(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
+	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
+	resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
+	app, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
+	transient := app.GetAnnotations()
+	transient["argocd.argoproj.io/refresh"] = "normal"
+	app.SetAnnotations(transient)
+	if _, err := resource.Update(ctx, app, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	updates := 0
+	dyn.PrependReactor("update", "applications", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		updates++
+		return true, nil, apierrors.NewConflict(schema.GroupResource{Group: "argoproj.io", Resource: "applications"}, localArgoApplicationName, fmt.Errorf("argo wrote new evidence"))
+	})
+	err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest)
+	if err == nil || !apierrors.IsConflict(err) {
+		t.Fatalf("conflict error = %v, want returned Conflict for a fresh reconcile", err)
+	}
+	if updates != 1 {
+		t.Fatalf("update attempts = %d, want exactly 1 (no blind retry on a stale object)", updates)
 	}
 }
 

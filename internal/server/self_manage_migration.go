@@ -208,6 +208,9 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		if err := verifySelfManagedAdoptionSnapshot(ctx, k8s, adoptionSnapshot); err != nil {
 			return err
 		}
+		// Write boundary: first staged create. No Application exists, so no Argo
+		// operation can be in flight; the reconcile-level preflight additionally
+		// requires a quiesced controller before this first-create path runs.
 		stageSelfManagedApplication(obj, desiredHash)
 		_, err = res.Create(ctx, obj, metav1.CreateOptions{})
 		return err
@@ -224,9 +227,32 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		currentSpec, _, _ := unstructured.NestedMap(current.Object, "spec")
 		annotations := current.GetAnnotations()
 		if annotations[selfManagedPhaseAnnotation] == selfManagedPhaseAwaiting && annotations[selfManagedHashAnnotation] == desiredHash {
-			operationSafe := selfManagedAwaitingOperationSafe(current, stagedSelfManagedSpec(desiredSpec))
+			stagedSpec := stagedSelfManagedSpec(desiredSpec)
+			state := classifySelfManagedAcceptanceOperation(current, stagedSpec)
+			specMatchesStaged := reflect.DeepEqual(currentSpec, stagedSpec)
+			if state == selfManagedOperationActiveSafe && specMatchesStaged {
+				// Write barrier: the bundled Application CRD has no status
+				// subresource, so any full-object write here can replace the
+				// controller's in-progress status.operationState. While a
+				// correctly bound, non-pruning acceptance operation is active,
+				// Argo is the single writer. Validation stays read-only and
+				// transient-metadata repair waits for a terminal phase.
+				return nil
+			}
+			if state == selfManagedOperationActiveSafe || state == selfManagedOperationActiveUnsafe {
+				// An active operation that is unsafe, unverifiable, or no longer
+				// bound to the staged spec cannot be sanitized concurrently with
+				// the controller for the same single-writer reason.
+				if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
+					return fmt.Errorf("self-managed Application has an active operation that is unsafe, unverifiable, or unbound from the staged spec; quiesce the Argo application controller before sanitation: %w", err)
+				}
+			}
+			operationSafe := state != selfManagedOperationActiveUnsafe
 			if approved := annotations[selfManagedApproveAnnotation]; approved == desiredHash {
 				if !operationSafe {
+					// Write boundary: unsafe-operation sanitation. Only reachable
+					// with a verifiably stopped controller (gate above), so the
+					// full-object rewrite cannot race Argo's status writes.
 					updated := current.DeepCopy()
 					_ = unstructured.SetNestedMap(updated.Object, stagedSelfManagedSpec(desiredSpec), "spec")
 					unstructured.RemoveNestedField(updated.Object, "operation")
@@ -244,6 +270,10 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 				if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
 					return fmt.Errorf("approved self-managed Application requires a complete server rollout before automated sync: %w", err)
 				}
+				// Write boundary: activation. Only reachable in a terminal
+				// Succeeded state with exact approved-hash and acceptance
+				// evidence, starting from this reconcile's fresh GET. A Conflict
+				// is returned for full reclassification, never retried stale.
 				updated := current.DeepCopy()
 				if err := unstructured.SetNestedMap(updated.Object, desiredSpec, "spec"); err != nil {
 					return err
@@ -252,16 +282,15 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 				_, err = res.Update(ctx, updated, metav1.UpdateOptions{})
 				return err
 			}
-			stagedSpec := stagedSelfManagedSpec(desiredSpec)
-			if reflect.DeepEqual(currentSpec, stagedSpec) && operationSafe {
+			if specMatchesStaged && operationSafe {
 				if selfManagedApplicationMetadataClean(current, selfManagedPhaseAwaiting, desiredHash) {
 					return nil
 				}
-				// Argo may add transient annotations while a valid, non-pruning
-				// acceptance sync is running. Normalize platform metadata without
-				// falling through to the restage path, which deliberately removes
-				// .operation and would cancel the in-flight validation after its
-				// first hook/wave.
+				// Only idle, terminal, or quiesced-controller states reach this
+				// repair: the active-safe barrier above returned already, and
+				// active-unsafe states required a stopped controller. Normalize
+				// platform metadata without falling through to the restage path,
+				// which deliberately removes .operation.
 				updated := current.DeepCopy()
 				setSelfManagedApplicationMetadata(updated, selfManagedPhaseAwaiting, desiredHash)
 				updated.SetFinalizers(obj.GetFinalizers())
@@ -273,6 +302,12 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 			return nil
 		}
 		if reflect.DeepEqual(currentSpec, desiredSpec) && annotations[selfManagedPhaseAnnotation] == selfManagedPhaseActive && annotations[selfManagedHashAnnotation] == desiredHash {
+			if selfManagedOperationInFlight(current) {
+				// Same single-writer rule as acceptance: an automated sync on the
+				// active Application may be recording progress right now, so
+				// cosmetic metadata repair defers to the next idle/terminal tick.
+				return nil
+			}
 			updated := current.DeepCopy()
 			setSelfManagedApplicationMetadata(updated, selfManagedPhaseActive, desiredHash)
 			updated.SetFinalizers(obj.GetFinalizers())
@@ -282,6 +317,14 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 		// Every first takeover and later desired-spec change is staged with sync
 		// disabled. An operator must review the Argo diff and copy spec-hash into
 		// approved-hash before prune/self-heal can be armed.
+		if selfManagedOperationInFlight(current) {
+			// Restaging removes .operation and rewrites spec; while Argo owns an
+			// in-flight operation that write is only legal once the controller is
+			// verifiably stopped.
+			if err := verifyLocalArgoApplicationControllerStopped(ctx, k8s); err != nil {
+				return fmt.Errorf("defer self-managed Application restage: Argo owns an in-flight operation; quiesce the application controller before sanitation: %w", err)
+			}
+		}
 		updated := current.DeepCopy()
 		if err := verifySelfManagedServerRolloutComplete(ctx, k8s); err != nil {
 			return fmt.Errorf("self-managed restage requires a complete server rollout: %w", err)
@@ -346,13 +389,66 @@ func ensureSelfManagedAstronomerApplication(ctx context.Context, k8s kubernetes.
 	return nil
 }
 
-func selfManagedAwaitingOperationSafe(application *unstructured.Unstructured, stagedSpec map[string]any) bool {
-	raw, exists := application.Object["operation"]
-	if !exists {
+// selfManagedOperationState classifies who currently owns writes to the
+// self-managed Application: Astronomer (idle/terminal) or Argo (active).
+type selfManagedOperationState int
+
+const (
+	selfManagedOperationIdle selfManagedOperationState = iota
+	selfManagedOperationActiveSafe
+	selfManagedOperationActiveUnsafe
+	selfManagedOperationTerminal
+)
+
+// classifySelfManagedAcceptanceOperation distinguishes "no operation exists"
+// from "Argo accepted the request, removed top-level .operation, and now
+// records the active operation under status.operationState". Evidence is read
+// in that order: the top-level request while still present, then the status
+// copy. An active phase with missing or malformed operation evidence is never
+// safe.
+func classifySelfManagedAcceptanceOperation(application *unstructured.Unstructured, stagedSpec map[string]any) selfManagedOperationState {
+	if raw, exists := application.Object["operation"]; exists {
+		operation, ok := raw.(map[string]any)
+		if ok && selfManagedOperationPayloadSafe(operation, stagedSpec) {
+			return selfManagedOperationActiveSafe
+		}
+		return selfManagedOperationActiveUnsafe
+	}
+	phase, _, _ := unstructured.NestedString(application.Object, "status", "operationState", "phase")
+	switch phase {
+	case "Running", "Terminating":
+		operation, found, err := unstructured.NestedMap(application.Object, "status", "operationState", "operation")
+		if err == nil && found && selfManagedOperationPayloadSafe(operation, stagedSpec) {
+			return selfManagedOperationActiveSafe
+		}
+		return selfManagedOperationActiveUnsafe
+	case "Succeeded", "Failed", "Error":
+		return selfManagedOperationTerminal
+	case "":
+		return selfManagedOperationIdle
+	default:
+		// Unknown controller phase: fail closed as an active, unverifiable owner.
+		return selfManagedOperationActiveUnsafe
+	}
+}
+
+// selfManagedOperationInFlight reports whether Argo may be actively writing
+// operation progress to the Application right now, regardless of whether the
+// operation payload passes the acceptance safety contract.
+func selfManagedOperationInFlight(application *unstructured.Unstructured) bool {
+	if _, exists := application.Object["operation"]; exists {
 		return true
 	}
-	operation, ok := raw.(map[string]any)
-	if !ok || len(operation) == 0 {
+	phase, _, _ := unstructured.NestedString(application.Object, "status", "operationState", "phase")
+	return phase == "Running" || phase == "Terminating"
+}
+
+// selfManagedOperationPayloadSafe validates a present operation payload
+// against the non-pruning acceptance contract. An absent payload is NOT safe;
+// callers must classify absence explicitly via
+// classifySelfManagedAcceptanceOperation.
+func selfManagedOperationPayloadSafe(operation map[string]any, stagedSpec map[string]any) bool {
+	if len(operation) == 0 {
 		return false
 	}
 	for key := range operation {
@@ -466,11 +562,7 @@ func selfManagedAcceptanceStatusReady(application *unstructured.Unstructured, st
 		return false
 	}
 	completedOperation, foundOperation, _ := unstructured.NestedMap(application.Object, "status", "operationState", "operation")
-	if !foundOperation {
-		return false
-	}
-	completed := &unstructured.Unstructured{Object: map[string]any{"operation": completedOperation}}
-	if !selfManagedAwaitingOperationSafe(completed, stagedSpec) {
+	if !foundOperation || !selfManagedOperationPayloadSafe(completedOperation, stagedSpec) {
 		return false
 	}
 	desiredSource, _, _ := unstructured.NestedMap(stagedSpec, "source")
