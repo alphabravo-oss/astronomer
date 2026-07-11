@@ -188,8 +188,8 @@ func TestPreflightOwnershipAndOrderingAreIsolatedByDeploymentEngine(t *testing.T
 	} {
 		doc := findRenderedDoc(t, docs, target.kind, target.name)
 		annotations := nestedMap(doc, "metadata", "annotations")
-		if got := stringValue(annotations["argocd.argoproj.io/sync-wave"]); got != "-10" {
-			t.Errorf("Argo prerequisite %s/%s wave = %q, want -10", target.kind, target.name, got)
+		if got := stringValue(annotations["argocd.argoproj.io/sync-wave"]); got != "-5" {
+			t.Errorf("Argo prerequisite %s/%s wave = %q, want -5 (same wave as Job)", target.kind, target.name, got)
 		}
 		for _, forbidden := range []string{"helm.sh/hook", "argocd.argoproj.io/hook", "argocd.argoproj.io/hook-delete-policy"} {
 			if got := stringValue(annotations[forbidden]); got != "" {

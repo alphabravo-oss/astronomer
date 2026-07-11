@@ -53,7 +53,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
     argocd.argoproj.io/hook: Skip
     {{- else }}
-    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-wave: "-5"
     {{- end }}
 spec:
   podSelector:

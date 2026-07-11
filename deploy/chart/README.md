@@ -326,8 +326,11 @@ could use them. On every subsequent Helm install or upgrade,
 new chart before running the Job.
 
 Argo CD owns a distinct `-preflight-argocd` set. Its ServiceAccount, RBAC, and
-NetworkPolicy are ordinary persistent resources applied at sync wave `-10`;
-the validation Job is a `Sync` hook at wave `-5` and is removed after success.
+NetworkPolicy are ordinary persistent resources applied in sync wave `-5`
+alongside the validation `Sync` hook Job. Argo's deterministic kind ordering
+applies those prerequisites before Jobs, and the Job is removed after success.
+Using one wave avoids treating Kubernetes RBAC and NetworkPolicy kinds—which
+have no resource health assessment—as health gates for a later wave.
 This keeps Argo from adopting and delete-before-creating Helm's named support
 hooks, while still blocking wave `0` release changes until validation passes.
 The Argo Job carries a Helm `test` annotation so Helm install/upgrade never
@@ -338,7 +341,7 @@ external-Postgres mode. Rules for disabled checks are not rendered.
 
 When default deny is enabled, Helm's retained preflight NetworkPolicy is
 created at the same `-10` hook weight and replaced by stable name on every
-release; Argo's persistent policy is applied at wave `-10`. Each policy
+release; Argo's persistent policy is applied at wave `-5`. Each policy
 selects only the preflight pod labels and permits the flows that pod actually
 uses: DNS on TCP/UDP 53, external Postgres on the configured Postgres port when
 the database connectivity init container is enabled, and Kubernetes API access

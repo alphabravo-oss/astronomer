@@ -53,7 +53,7 @@
 {{- end }}
 {{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
 {{- $legacyPVC := printf "data-%s-postgres-0" (include "astronomer.fullname" .) }}
-{{- $hookAnnotations := dict "argocd.argoproj.io/sync-wave" "-10" }}
+{{- $hookAnnotations := dict "argocd.argoproj.io/sync-wave" "-5" }}
 {{- if eq $mode "helm" }}
   {{- $hookAnnotations = dict
         "helm.sh/hook" "pre-install,pre-upgrade"
@@ -183,7 +183,9 @@ subjects:
 {{ include "astronomer.preflightRBAC" (dict "root" . "mode" "helm") }}
 ---
 # Persistent prerequisites for the Argo CD Sync preflight Job. These are
-# ordinary wave -10 resources so Argo updates them in place without a named
-# hook's delete-before-create lifecycle.
+# ordinary wave -5 resources so Argo updates them in place before the Job in
+# the same wave (Argo's kind ordering places RBAC before Jobs). Keeping them in
+# the Job's wave is required because these Kubernetes kinds have no health
+# assessment and therefore cannot gate a later wave.
 {{ include "astronomer.preflightRBAC" (dict "root" . "mode" "argocd") }}
 {{- end }}

@@ -448,9 +448,12 @@ metadata:
     argocd.argoproj.io/hook: Skip
 {{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight" (include "astronomer.serviceAccountName" .))) }}
 ---
-# Argo CD applies the persistent RBAC/NetworkPolicy prerequisites at wave -10,
-# then runs this Sync hook before ordinary release resources at wave 0. Helm
-# records it as a test hook, so install/upgrade never executes both Jobs.
+# Argo CD applies the persistent RBAC/NetworkPolicy prerequisites and this Job
+# in wave -5. Argo's kind ordering applies NetworkPolicy, ServiceAccount, and
+# RBAC kinds before Job; using one wave avoids waiting forever for health on
+# Kubernetes resource kinds that do not expose a health assessment. Wave 0
+# release resources still remain blocked until the Sync hook succeeds. Helm
+# records the Job as a test hook, so install/upgrade never executes both paths.
 apiVersion: batch/v1
 kind: Job
 metadata:
