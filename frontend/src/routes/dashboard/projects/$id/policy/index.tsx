@@ -131,7 +131,7 @@ function PolicyPage() {
   // single "X/Y" alongside the input so the operator has a sanity check.
   const usageSummary = useMemo(() => {
     if (!usage) return null;
-    const rows = usage.rows;
+    const rows = usage.rows ?? [];
     return {
       cpuUsed: rows.reduce((a, r) => a + parseCpu(r.cpuUsed), 0),
       cpuLimit: rows.reduce((a, r) => a + parseCpu(r.cpuLimit), 0),
@@ -346,7 +346,7 @@ function PolicyPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usage?.rows.length ? (
+              {usage?.rows?.length ? (
                 usage.rows.map((row) => (
                   <TableRow
                     key={`${row.clusterId}/${row.namespace}`}

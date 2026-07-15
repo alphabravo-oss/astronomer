@@ -87,6 +87,9 @@ jobs:
       - name: End-to-end tests
         run: npm run test:e2e
 
+      - name: Route-smoke crawl
+        run: npm run test:e2e:smoke
+
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

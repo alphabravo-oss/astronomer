@@ -41,5 +41,19 @@ export default defineConfig({
           : undefined,
       },
     },
+    {
+      // P7.1 route-smoke crawl: one cheap render check per manifest URL, so
+      // the whole tier is fully parallel and chromium-only. `test:e2e` is
+      // pinned to the two tier-1 projects and never picks this up.
+      name: 'route-smoke',
+      testDir: './tests/e2e-smoke',
+      fullyParallel: true,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: chromiumExecutable
+          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
+          : undefined,
+      },
+    },
   ],
 });

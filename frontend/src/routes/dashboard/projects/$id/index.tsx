@@ -42,8 +42,8 @@ function ProjectOverviewPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SummaryCard icon={Server} label="Clusters" value={(project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1} />
-        <SummaryCard icon={Layers} label="Namespaces" value={project.namespaces.length} />
-        <SummaryCard icon={Users} label="Members" value={project.members.length} />
+        <SummaryCard icon={Layers} label="Namespaces" value={project.namespaces?.length ?? 0} />
+        <SummaryCard icon={Users} label="Members" value={project.members?.length ?? 0} />
 
         <div className="md:col-span-3 rounded-xl border border-border bg-card p-5 space-y-2">
           <h3 className="text-sm font-medium text-foreground">Identifiers</h3>

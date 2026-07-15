@@ -130,8 +130,8 @@ function ClusterNetworkAccessPage() {
   // Sync editor state with the latest server payload when not editing.
   useMemo(() => {
     if (data && !editing) {
-      setEditedCIDRs(data.operatorCidrs);
-      setEditedMode(data.mode);
+      setEditedCIDRs(data.operatorCidrs ?? []);
+      setEditedMode(data.mode ?? 'monitor');
     }
   }, [data, editing]);
 
