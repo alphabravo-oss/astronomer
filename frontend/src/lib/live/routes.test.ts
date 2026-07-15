@@ -97,6 +97,15 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   ],
 };
 
+/** Velero CRD kinds share one expected-key set (Backup/Restore/Schedule). */
+const veleroKeys = [
+  qk.backups.all,
+  qk.backups.b2All,
+  qk.clusterPages.snapshots(CID),
+  qk.clusterPages.snapshotSchedules(CID),
+  qk.clusterPages.veleroStatus(CID),
+];
+
 /** Expected keys per `cluster.k8s_changed` kind, factory-built. */
 const KIND_CASES: Record<string, QueryKey[]> = {
   Pod: [qk.clusters.podsAll(CID), qk.workloads.byCluster(CID)],
@@ -109,6 +118,39 @@ const KIND_CASES: Record<string, QueryKey[]> = {
   Event: [qk.clusters.eventsAll(CID)],
   ConfigMap: [qk.generic.resources(CID, 'configmaps')],
   Secret: [qk.generic.resources(CID, 'secrets')],
+  // P4.6 informer expansion (agent metadata informers).
+  Namespace: [qk.clusters.namespaces(CID)],
+  Job: [
+    qk.clusterPages.workloadKind(CID, 'jobs'),
+    qk.generic.resources(CID, 'jobs'),
+    qk.workloads.byCluster(CID),
+  ],
+  CronJob: [
+    qk.clusterPages.workloadKind(CID, 'cronjobs'),
+    qk.generic.resources(CID, 'cronjobs'),
+    qk.workloads.byCluster(CID),
+  ],
+  Ingress: [qk.networking.ingresses(CID)],
+  NetworkPolicy: [qk.networking.networkPolicies(CID)],
+  PersistentVolume: [qk.storage.pvs(CID)],
+  PersistentVolumeClaim: [qk.storage.pvcs(CID)],
+  StorageClass: [qk.storage.storageClasses(CID)],
+  HorizontalPodAutoscaler: [qk.generic.resources(CID, 'hpa')],
+  Role: [qk.generic.resources(CID, 'k8s-roles')],
+  RoleBinding: [qk.generic.resources(CID, 'k8s-rolebindings')],
+  ClusterRole: [qk.generic.resources(CID, 'k8s-clusterroles')],
+  ClusterRoleBinding: [qk.generic.resources(CID, 'k8s-clusterrolebindings')],
+  // P4.6 CRD informers (discover-if-present).
+  Backup: veleroKeys,
+  Restore: veleroKeys,
+  Schedule: veleroKeys,
+  Application: [qk.argocd.all],
+  ApplicationSet: [qk.argocd.all],
+  VulnerabilityReport: [
+    qk.clusterPages.imageVulnsAll(CID),
+    qk.clusterPages.vulnerabilitySummary(CID),
+  ],
+  Constraint: [qk.gatekeeperConstraints(CID)],
 };
 
 const fixture = (kind?: string) => ({ clusterId: CID, id: EID, kind, namespace: 'ns', name: 'x' });
@@ -157,17 +199,14 @@ describe('K8S_KIND_ROUTES', () => {
   });
 
   it('defaults unmapped kinds to the generic resource list', () => {
-    expect(defaultK8sRoute(CID, fixture('Namespace'))).toEqual([
-      qk.generic.resources(CID, 'namespaces'),
+    expect(defaultK8sRoute(CID, fixture('ServiceAccount'))).toEqual([
+      qk.generic.resources(CID, 'serviceaccounts'),
     ]);
-    expect(defaultK8sRoute(CID, fixture('NetworkPolicy'))).toEqual([
-      qk.generic.resources(CID, 'networkpolicies'),
+    expect(defaultK8sRoute(CID, fixture('ResourceQuota'))).toEqual([
+      qk.generic.resources(CID, 'resourcequotas'),
     ]);
-    expect(defaultK8sRoute(CID, fixture('Ingress'))).toEqual([
-      qk.generic.resources(CID, 'ingresses'),
-    ]);
-    expect(defaultK8sRoute(CID, fixture('StorageClass'))).toEqual([
-      qk.generic.resources(CID, 'storageclasses'),
+    expect(defaultK8sRoute(CID, fixture('PodDisruptionBudget'))).toEqual([
+      qk.generic.resources(CID, 'poddisruptionbudgets'),
     ]);
     expect(defaultK8sRoute(CID, fixture())).toEqual([]);
   });

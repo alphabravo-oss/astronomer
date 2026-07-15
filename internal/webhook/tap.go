@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,6 +81,17 @@ func (t *Tap) Start(ctx context.Context) {
 func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
 	// CORR-R02: only the publishing pod enqueues webhook deliveries.
 	if ev.Remote {
+		return
+	}
+	// R9 (P4.6): sys.* is stream plumbing (sys.ping heartbeats), never a
+	// deliverable event — a `*` filter would otherwise enqueue a delivery
+	// row every heartbeat tick. `cluster.k8s_changed` tap semantics are
+	// deliberately unchanged (existing subscriptions may rely on it); its
+	// delivery-row write rate on a broad-filter subscription is measured
+	// during the D7 24h fleet soak (pre/post informer-expansion delta) —
+	// unbounded amplification triggers the per-type tap-exclusion
+	// follow-up (plan 004 Section 9).
+	if strings.HasPrefix(string(ev.Type), "sys.") {
 		return
 	}
 	subs, err := t.subscriptions(ctx)

@@ -42,10 +42,22 @@ function clusterLivenessRoute(d: LiveEventData): QueryKey[] {
 
 /**
  * `cluster.k8s_changed` routing, per `data.kind`. Kinds listed here map to
- * the precise keys their views read from; kinds with no row (including the
- * P4.6 informer expansion + CRDs until their rows land) fall through to
- * `defaultK8sRoute` — the generic resource list for the kind.
+ * the precise keys their views read from; kinds with no row (e.g.
+ * ServiceAccount, ResourceQuota) fall through to `defaultK8sRoute` — the
+ * generic resource list for the kind. The P4.6 informer expansion (agent
+ * metadata informers + discover-if-present CRDs) feeds the rows below.
  */
+/** Velero CRDs: global backup pages + the per-cluster snapshots page. */
+function veleroKindRoute(cid: string): QueryKey[] {
+  return [
+    qk.backups.all,
+    qk.backups.b2All,
+    qk.clusterPages.snapshots(cid),
+    qk.clusterPages.snapshotSchedules(cid),
+    qk.clusterPages.veleroStatus(cid),
+  ];
+}
+
 export const K8S_KIND_ROUTES: Record<
   string,
   (clusterId: string, d: LiveEventData) => QueryKey[]
@@ -74,7 +86,47 @@ export const K8S_KIND_ROUTES: Record<
   Node: (cid) => [qk.clusters.nodes(cid)],
   Event: (cid) => [qk.clusters.eventsAll(cid)],
   ConfigMap: (cid) => [qk.generic.resources(cid, 'configmaps')],
+  // Helm release storage churn also refreshes the installed-apps views
+  // (P4.6 agent-side Helm filter; P4.9 converts the installed-charts polls).
   Secret: (cid) => [qk.generic.resources(cid, 'secrets')],
+  // ── P4.6 informer expansion (agent metadata informers) ──
+  Namespace: (cid) => [qk.clusters.namespaces(cid)],
+  Job: (cid) => [
+    qk.clusterPages.workloadKind(cid, 'jobs'),
+    qk.generic.resources(cid, 'jobs'),
+    qk.workloads.byCluster(cid),
+  ],
+  CronJob: (cid) => [
+    qk.clusterPages.workloadKind(cid, 'cronjobs'),
+    qk.generic.resources(cid, 'cronjobs'),
+    qk.workloads.byCluster(cid),
+  ],
+  Ingress: (cid) => [qk.networking.ingresses(cid)],
+  NetworkPolicy: (cid) => [qk.networking.networkPolicies(cid)],
+  PersistentVolume: (cid) => [qk.storage.pvs(cid)],
+  PersistentVolumeClaim: (cid) => [qk.storage.pvcs(cid)],
+  StorageClass: (cid) => [qk.storage.storageClasses(cid)],
+  // Explorer path segment is 'hpa', not the pluralized kind.
+  HorizontalPodAutoscaler: (cid) => [qk.generic.resources(cid, 'hpa')],
+  // RBAC kinds render under 'k8s-'-prefixed explorer segments.
+  Role: (cid) => [qk.generic.resources(cid, 'k8s-roles')],
+  RoleBinding: (cid) => [qk.generic.resources(cid, 'k8s-rolebindings')],
+  ClusterRole: (cid) => [qk.generic.resources(cid, 'k8s-clusterroles')],
+  ClusterRoleBinding: (cid) => [qk.generic.resources(cid, 'k8s-clusterrolebindings')],
+  // ── P4.6 CRD informers (discover-if-present) ──
+  Backup: veleroKindRoute,
+  Restore: veleroKindRoute,
+  Schedule: veleroKindRoute,
+  // Coarse by design, matching `argocd.changed` (see EVENT_ROUTES note).
+  Application: () => [qk.argocd.all],
+  ApplicationSet: () => [qk.argocd.all],
+  VulnerabilityReport: (cid) => [
+    qk.clusterPages.imageVulnsAll(cid),
+    qk.clusterPages.vulnerabilitySummary(cid),
+  ],
+  // Gatekeeper constraints — the agent normalizes every
+  // constraints.gatekeeper.sh resource to this stable kind.
+  Constraint: (cid) => [qk.gatekeeperConstraints(cid)],
 };
 
 /**

@@ -153,6 +153,13 @@ func (t *BusTap) HandleEvent(ctx context.Context, ev events.Event) {
 	if ev.Remote {
 		return
 	}
+	// R9 (P4.6): sys.* is stream plumbing (sys.ping heartbeats), never a
+	// forwardable event — a `*` filter would otherwise enqueue a row per
+	// heartbeat tick. See internal/webhook/tap.go for the matching
+	// exclusion and the D7 soak-measurement note on cluster.k8s_changed.
+	if stringHasPrefix(string(ev.Type), "sys.") {
+		return
+	}
 	subs, err := t.subscriptions(ctx)
 	if err != nil {
 		t.log.WarnContext(ctx, "siem tap: list forwarders failed",

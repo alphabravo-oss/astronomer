@@ -284,7 +284,9 @@ function OverviewTab({
   const { data: apps } = useQuery({
     queryKey: queryKeys.argocd.liveApps(instanceId),
     queryFn: () => listArgoApplicationsLive(instanceId),
-    refetchInterval: 30000,
+    // Application CRD informer events (P4.6) + `argocd.changed` drive
+    // freshness while the stream is open; poll only as the fallback.
+    refetchInterval: liveFallback(30000),
   });
   const { data: projects } = useQuery({
     queryKey: queryKeys.argocd.projects(instanceId),
@@ -601,7 +603,9 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   const { data: apps = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.liveApps(instanceId),
     queryFn: () => listArgoApplicationsLive(instanceId),
-    refetchInterval: 15000,
+    // Application CRD informer events (P4.6) + `argocd.changed` drive
+    // freshness while the stream is open; poll only as the fallback.
+    refetchInterval: liveFallback(15000),
   });
 
   // Pull DB-backed list to get the per-app UUID — that's what the row click

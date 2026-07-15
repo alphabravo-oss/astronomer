@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
@@ -220,6 +221,14 @@ func runConnect(logger *slog.Logger) error {
 			}
 			subscriber := agent.NewStateSubscriber(client, tunnel, logger)
 			subscriber.SetWatchSecrets(agent.ProfileAllowsSecrets(cfg.PrivilegeProfile))
+			// P4.6 informer expansion: metadata-only informers (extra
+			// built-in kinds, Helm release Secrets, discover-if-present
+			// CRDs). Failure to build the client just skips the expansion.
+			if mc, mErr := metadata.NewForConfig(restConfig); mErr == nil {
+				subscriber.SetMetadataClient(mc)
+			} else {
+				logger.Warn("state subscriber: metadata client init failed; expanded informer set disabled", "error", mErr)
+			}
 			// Wire the tunnel as the connection watcher so the subscriber's
 			// replay loop re-emits cached informer state on every WS reconnect
 			// (L12 defense-in-depth — mirrors the MirrorSubscriber wiring below).

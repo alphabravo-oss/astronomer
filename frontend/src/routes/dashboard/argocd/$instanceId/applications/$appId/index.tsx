@@ -86,7 +86,9 @@ function ApplicationDetailPage() {
   const { data: liveApps } = useQuery({
     queryKey: queryKeys.argocd.liveApps(instanceId),
     queryFn: () => listArgoApplicationsLive(instanceId),
-    refetchInterval: 15000,
+    // Application CRD informer events (P4.6) + `argocd.changed` drive
+    // freshness while the stream is open; poll only as the fallback.
+    refetchInterval: liveFallback(15000),
   });
   const liveApp: ArgoLiveApplication | undefined = useMemo(
     () => liveApps?.find((a) => a.metadata?.name === dbApp?.name),

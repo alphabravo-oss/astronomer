@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
@@ -241,6 +242,13 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 			}
 		}
 		subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
+		// P4.6 informer expansion: metadata-only informers (extra built-in
+		// kinds, Helm release Secrets, discover-if-present CRDs).
+		if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
+			subscriber.SetMetadataClient(mc)
+		} else {
+			logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
+		}
 		go subscriber.Run(ctx)
 		health.SetConnected(true)
 		health.Start(ctx, tunnelClient.Send)

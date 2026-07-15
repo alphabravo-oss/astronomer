@@ -217,3 +217,27 @@ func TestEventBusTap_MalformedFiltersSkippedNotPanic(t *testing.T) {
 		t.Errorf("expected 1 insert (broken subscription skipped, good one inserted), got %d", got)
 	}
 }
+
+// TestEventBusTap_ExcludesSysEvents locks the R9 (P4.6) decision: sys.*
+// stream-plumbing events (sys.ping heartbeats) never create delivery rows,
+// even for a `*` filter — otherwise a broad subscription would enqueue one
+// row per heartbeat tick.
+func TestEventBusTap_ExcludesSysEvents(t *testing.T) {
+	q := &fakeTapQuerier{
+		subs: []sqlc.WebhookSubscription{
+			newTapSubscription("catch-all", []string{"*"}),
+		},
+	}
+	tap := NewTap(q, nil, nil)
+	tap.SetCacheTTL(time.Millisecond)
+	tap.HandleEvent(context.Background(), events.Event{ID: 1, Type: "sys.ping", Time: time.Now()})
+	if got := len(q.inserted); got != 0 {
+		t.Fatalf("expected 0 inserts for sys.ping (sys.* excluded from tap matching), got %d", got)
+	}
+	// A non-sys event on the same subscription still queues — the exclusion
+	// is prefix-scoped, not a general filter change.
+	tap.HandleEvent(context.Background(), events.Event{ID: 2, Type: "cluster.k8s_changed", Time: time.Now()})
+	if got := len(q.inserted); got != 1 {
+		t.Fatalf("expected 1 insert for cluster.k8s_changed (tap semantics unchanged), got %d", got)
+	}
+}

@@ -33,10 +33,7 @@ import {
   useDeletePVC,
   useK8sDelete,
   useK8sPatch,
-  queryKeys,
 } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live/hooks';
-import { useResourceWatchInvalidation } from '@/hooks/use-resource-watch';
 import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -49,7 +46,7 @@ import { useWindowManagerStore } from '@/lib/window-manager-store';
 import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
 import { ConfigMapFormDialog } from '@/components/resources/configmap-form';
-import { k8sResourcePath, k8sListPath, getResourceDef, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
+import { k8sResourcePath, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
 import { usePermissionDecision, canonicalPermissionResource } from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
@@ -2778,50 +2775,13 @@ function ClusterResourcePage() {
   const title = resourceTitles[resource];
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
 
-  // The agent doesn't yet emit per-kind change events (full informer fan-
-  // out is a follow-up). Until then we listen for the coarse
-  // `cluster.k8s_changed` signal plus cluster-lifecycle events and refetch
-  // the resource list whose query keys live under this cluster id.
-  useLiveQueryInvalidation(
-    [
-      'cluster.k8s_changed',
-      'cluster.connected',
-      'cluster.disconnected',
-      'cluster.heartbeat',
-      'cluster.status_changed',
-    ],
-    [
-      // Prefix matches every per-resource list under this cluster
-      // (workloads, pods, namespaces, events, services, ingresses, etc.).
-      ['clusters', clusterId],
-      ['workloads', clusterId],
-      ['storage', clusterId],
-      ['networking', clusterId],
-      ['generic', clusterId],
-      queryKeys.clusters.detail(clusterId),
-    ],
-  );
-
-  // Precise, immediate liveness for the kind actually on screen: watch its k8s
-  // list stream and refetch this cluster's lists the moment it changes, instead
-  // of waiting for the coarse cluster-wide signal above (which the agent emits
-  // only on a heartbeat cadence). Only core/apps/batch/networking kinds with a
-  // known API path are watchable; unknown or custom types fall through to the
-  // coarse signal + polling. React Query only refetches *active* queries, so a
-  // change to the on-screen kind refreshes just that table.
-  const watchDef = getResourceDef(resource);
-  useResourceWatchInvalidation({
-    clusterId,
-    path: watchDef ? k8sListPath(resource) : '',
-    queryKeys: [
-      ['clusters', clusterId],
-      ['workloads', clusterId],
-      ['storage', clusterId],
-      ['networking', clusterId],
-      ['generic', clusterId],
-    ],
-    enabled: !!clusterId && !!watchDef,
-  });
+  // Live updates (P4.6): the agent's informer fan-out emits per-kind
+  // `cluster.k8s_changed` events which the central dispatcher routes
+  // through `K8S_KIND_ROUTES` to exactly the keys these tables read,
+  // paced by the shared invalidator. No per-page listener or dedicated
+  // proxy watch is needed anymore (the old per-kind `?watch=true` stream
+  // fought the ClassK8sProxy rate limiter); when the stream is down, the
+  // tables' `liveFallback` polls keep them fresh.
 
   if (clusterLoading) {
     return (

@@ -279,3 +279,42 @@ func TestBusTap_Invalidate_RefreshesCache(t *testing.T) {
 		t.Errorf("post-invalidate fetch should see new row: %d", len(fresh))
 	}
 }
+
+// TestBusTap_ExcludesSysEvents locks the R9 (P4.6) decision for the SIEM
+// pipeline: sys.* stream-plumbing events never enqueue forward rows, even
+// for a catch-all filter; non-sys events on the same forwarder still do.
+func TestBusTap_ExcludesSysEvents(t *testing.T) {
+	q := &fakeTapQuerier{
+		forwarders: []sqlc.SiemForwarder{
+			{ID: mustUUID(), Name: "catch-all", EventFilters: json.RawMessage(`[""]`), Enabled: true},
+		},
+	}
+	tap := NewBusTap(q, nil, matchByPrefix, nil)
+	tap.SetCacheTTL(1 * time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tap.Start(ctx)
+
+	tap.HandleEvent(ctx, events.Event{ID: 1, Type: events.Type("sys.ping"), Time: time.Now()})
+	tap.HandleEvent(ctx, events.Event{ID: 2, Type: events.Type("cluster.k8s_changed"), Time: time.Now()})
+
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		q.mu.Lock()
+		if len(q.enqueued) >= 1 {
+			q.mu.Unlock()
+			break
+		}
+		q.mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.enqueued) != 1 {
+		t.Fatalf("expected exactly 1 enqueued row, got %d: %#v", len(q.enqueued), q.enqueued)
+	}
+	if q.enqueued[0].EventName != "cluster.k8s_changed" {
+		t.Fatalf("enqueued event = %q, want cluster.k8s_changed (sys.ping excluded)", q.enqueued[0].EventName)
+	}
+}

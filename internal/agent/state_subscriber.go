@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,8 +14,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/metadata"
+	"k8s.io/client-go/metadata/metadatainformer"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -54,6 +58,18 @@ var (
 	// of stale Events on startup; we only forward Events that are
 	// newer than this window.
 	stateSubscriberEventCutoff atomic.Int64
+
+	// stateSubscriberCRDRetry is the interval between attempts to bring
+	// up an informer for a discover-if-present CRD (Velero, Argo,
+	// Gatekeeper, Trivy). The CRD may be installed after the agent
+	// starts, so absence is retried forever rather than treated as
+	// fatal (P4.6).
+	stateSubscriberCRDRetry atomic.Int64
+
+	// stateSubscriberCRDSyncTimeout bounds each per-attempt cache-sync
+	// wait for a CRD informer. Long enough for a healthy apiserver;
+	// short enough that an unbacked GVR retries promptly.
+	stateSubscriberCRDSyncTimeout atomic.Int64
 )
 
 func init() {
@@ -62,6 +78,8 @@ func init() {
 	stateSubscriberEvictAfter.Store(int64(60 * time.Second))
 	stateSubscriberEvictEvery.Store(int64(1 * time.Minute))
 	stateSubscriberEventCutoff.Store(int64(5 * time.Minute))
+	stateSubscriberCRDRetry.Store(int64(60 * time.Second))
+	stateSubscriberCRDSyncTimeout.Store(int64(20 * time.Second))
 }
 
 // getStateSubscriberMinInterval and friends provide race-free reads
@@ -83,6 +101,70 @@ func getStateSubscriberEvictEvery() time.Duration {
 func getStateSubscriberEventCutoff() time.Duration {
 	return time.Duration(stateSubscriberEventCutoff.Load())
 }
+func getStateSubscriberCRDRetry() time.Duration {
+	return time.Duration(stateSubscriberCRDRetry.Load())
+}
+func getStateSubscriberCRDSyncTimeout() time.Duration {
+	return time.Duration(stateSubscriberCRDSyncTimeout.Load())
+}
+
+// metadataKind pairs the wire labels a StateUpdate carries with the GVR
+// its metadata informer watches (P4.6 informer expansion).
+type metadataKind struct {
+	kind       string
+	apiGroup   string
+	apiVersion string
+	gvr        schema.GroupVersionResource
+}
+
+// metadataInformerKinds is the P4.6 expansion set: built-in kinds watched
+// metadata-only (same MsgStateUpdate shape, no bodies, no secret surface).
+// Always present on any supported apiserver, so they share the main
+// metadata factory; RBAC-denied informers fail to sync and are logged
+// without crashing the subscriber (bounded sync wait in Run).
+var metadataInformerKinds = []metadataKind{
+	{"Namespace", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}},
+	{"Job", "batch", "v1", schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}},
+	{"CronJob", "batch", "v1", schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"}},
+	{"Ingress", "networking.k8s.io", "v1", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}},
+	{"NetworkPolicy", "networking.k8s.io", "v1", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}},
+	{"PersistentVolume", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumes"}},
+	{"PersistentVolumeClaim", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}},
+	{"StorageClass", "storage.k8s.io", "v1", schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"}},
+	{"HorizontalPodAutoscaler", "autoscaling", "v2", schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}},
+	{"ServiceAccount", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}},
+	{"Role", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}},
+	{"RoleBinding", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}},
+	{"ClusterRole", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}},
+	{"ClusterRoleBinding", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}},
+	{"ResourceQuota", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}},
+}
+
+// crdInformerKinds are the discover-if-present CRDs. Each gets its own
+// retry loop (mirroring MirrorSubscriber.runDynamicGVR) because the CRD
+// may be installed after the agent starts and a missing GVR must never
+// stall the main factory's readiness.
+var crdInformerKinds = []metadataKind{
+	{"Backup", "velero.io", "v1", schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: "backups"}},
+	{"Restore", "velero.io", "v1", schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: "restores"}},
+	{"Schedule", "velero.io", "v1", schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: "schedules"}},
+	{"Application", "argoproj.io", "v1alpha1", schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}},
+	{"ApplicationSet", "argoproj.io", "v1alpha1", schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applicationsets"}},
+	{"VulnerabilityReport", "aquasecurity.github.io", "v1alpha1", schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "vulnerabilityreports"}},
+}
+
+// gatekeeperConstraintsGV is the group/version whose resources are
+// discovered dynamically: every ConstraintTemplate creates a new CRD in
+// this group, so the resource list can't be pinned at compile time.
+const gatekeeperConstraintsGV = "constraints.gatekeeper.sh/v1beta1"
+
+// helm secret filtering (P4.6/P4.9 installed charts): only Helm release
+// storage secrets are forwarded by the dedicated metadata informer —
+// non-Helm secret metadata never rides this path.
+const (
+	helmSecretType       = "helm.sh/release.v1"
+	helmSecretNamePrefix = "sh.helm.release.v1."
+)
 
 // stateSender is the minimal slice of TunnelClient the subscriber needs.
 // Defining the interface here (instead of taking *TunnelClient directly)
@@ -183,6 +265,12 @@ type StateSubscriber struct {
 	readyCh chan struct{}
 	once    sync.Once
 
+	// meta is the metadata-only client for the P4.6 informer expansion
+	// (built-in kinds beyond the typed set, Helm release Secrets, and
+	// discover-if-present CRDs). Optional; nil keeps the pre-P4.6
+	// typed-informer-only behavior.
+	meta metadata.Interface
+
 	// startedAt is captured before the informer factory starts so the Events
 	// filter can drop pre-existing items (resyncs include them as Adds).
 	startedAt time.Time
@@ -236,6 +324,15 @@ func (s *StateSubscriber) SetConnectionWatcher(c StateConnectionWatcher) {
 	}
 }
 
+// SetMetadataClient wires the metadata-only client used by the expanded
+// informer set (P4.6). Call before Run. Optional; nil skips the expansion
+// and keeps the typed informer set only.
+func (s *StateSubscriber) SetMetadataClient(mc metadata.Interface) {
+	if s != nil {
+		s.meta = mc
+	}
+}
+
 // SetWatchSecrets enables/disables the Secret informer. Call before Run with
 // the result of ProfileAllowsSecrets so read-only profiles (viewer,
 // namespace-*) don't error-loop on a Forbidden secrets watch.
@@ -285,6 +382,25 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 
 	factory.Start(stopCh)
 
+	// P4.6 informer expansion: metadata-only informers for the built-in
+	// kinds beyond the typed set, a Helm-release-filtered Secret informer,
+	// per-CRD retry loops (tolerate absence), and gatekeeper-constraint
+	// discovery. All reuse the shared dispatch path (per-key 1/s limiter)
+	// and, where recorded, the reconnect replay.
+	var metaFactory metadatainformer.SharedInformerFactory
+	if s.meta != nil {
+		metaFactory = metadatainformer.NewSharedInformerFactory(s.meta, getStateSubscriberResyncPeriod())
+		for _, k := range metadataInformerKinds {
+			s.attach(metaFactory.ForResource(k.gvr).Informer(), k.kind, k.apiGroup, k.apiVersion)
+		}
+		metaFactory.Start(stopCh)
+		s.startHelmSecretInformer(stopCh)
+		for _, k := range crdInformerKinds {
+			go s.runCRDInformer(ctx, k, stopCh)
+		}
+		go s.runGatekeeperConstraints(ctx, stopCh)
+	}
+
 	// Wait for the initial list to populate; if some informers fail to sync
 	// (typically RBAC), log and continue. We do NOT abort: a partial subscriber
 	// is still better than polling-only.
@@ -292,6 +408,25 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 	for typ, ok := range synced {
 		if !ok {
 			s.log.Warn("state subscriber: cache failed to sync (RBAC?)", "type", fmt.Sprintf("%T", typ))
+		}
+	}
+	if metaFactory != nil {
+		// Bounded wait: a single RBAC-denied metadata informer must not
+		// stall readiness forever (that would suppress every typed kind's
+		// events too — the ready gate is subscriber-wide).
+		syncStop := make(chan struct{})
+		go func() {
+			select {
+			case <-stopCh:
+			case <-time.After(30 * time.Second):
+			}
+			close(syncStop)
+		}()
+		msynced := metaFactory.WaitForCacheSync(syncStop)
+		for typ, ok := range msynced {
+			if !ok {
+				s.log.Warn("state subscriber: metadata cache failed to sync (RBAC?)", "type", fmt.Sprintf("%v", typ))
+			}
 		}
 	}
 	s.ready.Store(true)
@@ -400,7 +535,17 @@ func (s *StateSubscriber) registerEvents(factory informers.SharedInformerFactory
 func (s *StateSubscriber) attach(inf cache.SharedIndexInformer, kind, apiGroup, apiVersion string) {
 	// Record the store so reconnect-replay can re-emit this kind's cache.
 	s.recordStore(kind, apiGroup, apiVersion, inf.GetStore())
-	_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := inf.AddEventHandler(s.handlers(kind, apiGroup, apiVersion))
+	if err != nil {
+		s.log.Warn("state subscriber: failed to register handler", "kind", kind, "error", err)
+	}
+}
+
+// handlers builds the shared Add/Update/Delete handler set for a kind so
+// the typed factory, the metadata factory, and the CRD retry loops all
+// funnel through the same ready-gate + dispatch path.
+func (s *StateSubscriber) handlers(kind, apiGroup, apiVersion string) cache.ResourceEventHandlerFuncs {
+	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if meta, ok := metaFromObj(obj); ok {
 				if !s.ready.Load() {
@@ -426,9 +571,149 @@ func (s *StateSubscriber) attach(inf cache.SharedIndexInformer, kind, apiGroup, 
 				s.dispatch(protocol.StateUpdateOpDeleted, kind, apiGroup, apiVersion, meta)
 			}
 		},
+	}
+}
+
+// startHelmSecretInformer runs a metadata informer over Secrets filtered to
+// Helm release storage only: server-side by the `type` field selector, plus
+// a defensive agent-side name-prefix check — non-Helm secret metadata is
+// never forwarded on this path. Gated on watchSecrets exactly like the
+// typed Secret informer so read-only profiles don't error-loop on
+// Forbidden. When the typed Secret informer also runs, the per-key rate
+// limiter collapses the duplicate emits (same `Secret|ns|name` key). Not
+// recorded for reconnect replay — the typed Secret store already covers
+// these objects.
+func (s *StateSubscriber) startHelmSecretInformer(stopCh <-chan struct{}) {
+	if !s.watchSecrets {
+		s.log.Debug("helm secret metadata informer disabled for read-only profile")
+		return
+	}
+	secretsGVR := schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+	inf := metadatainformer.NewFilteredMetadataInformer(
+		s.meta, secretsGVR, metav1.NamespaceAll, getStateSubscriberResyncPeriod(),
+		cache.Indexers{}, func(o *metav1.ListOptions) { o.FieldSelector = "type=" + helmSecretType },
+	).Informer()
+	base := s.handlers("Secret", "", "v1")
+	onlyHelm := func(next func(any)) func(any) {
+		return func(obj any) {
+			if meta, ok := metaFromObj(obj); ok && strings.HasPrefix(meta.GetName(), helmSecretNamePrefix) {
+				next(obj)
+			}
+		}
+	}
+	_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    onlyHelm(base.AddFunc),
+		UpdateFunc: func(oldObj, newObj any) { onlyHelm(func(o any) { base.UpdateFunc(oldObj, o) })(newObj) },
+		DeleteFunc: onlyHelm(base.DeleteFunc),
 	})
 	if err != nil {
-		s.log.Warn("state subscriber: failed to register handler", "kind", kind, "error", err)
+		s.log.Warn("state subscriber: failed to register helm secret handler", "error", err)
+		return
+	}
+	go inf.Run(stopCh)
+}
+
+// runCRDInformer loops trying to bring up a metadata informer for a
+// discover-if-present CRD. The CRD may be installed after the agent starts
+// (Velero/Argo/Trivy commonly arrive via the platform baseline post-boot),
+// so each failed bounded sync attempt sleeps and retries instead of giving
+// up. Mirrors MirrorSubscriber.runDynamicGVR's stop-channel discipline.
+func (s *StateSubscriber) runCRDInformer(ctx context.Context, k metadataKind, parentStop <-chan struct{}) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-parentStop:
+			return
+		default:
+		}
+
+		attempt := metadatainformer.NewSharedInformerFactory(s.meta, getStateSubscriberResyncPeriod())
+		inf := attempt.ForResource(k.gvr).Informer()
+		_, _ = inf.AddEventHandler(s.handlers(k.kind, k.apiGroup, k.apiVersion))
+
+		// iterDone scopes the stop-watcher goroutine to THIS iteration; the
+		// watcher owns innerStop's close exclusively so a failed attempt
+		// can't leak a blocked goroutine or double-close on shutdown.
+		innerStop := make(chan struct{})
+		iterDone := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-parentStop:
+			case <-iterDone:
+			}
+			close(innerStop)
+		}()
+		attempt.Start(innerStop)
+
+		syncStop := make(chan struct{})
+		go func() {
+			select {
+			case <-innerStop:
+			case <-time.After(getStateSubscriberCRDSyncTimeout()):
+			}
+			close(syncStop)
+		}()
+		ok := false
+		for _, v := range attempt.WaitForCacheSync(syncStop) {
+			ok = v
+			break
+		}
+		if ok {
+			s.log.Info("state subscriber: CRD informer online", "gvr", k.gvr.String(), "kind", k.kind)
+			s.recordStore(k.kind, k.apiGroup, k.apiVersion, inf.GetStore())
+			// Block until shutdown — the informer is running; the watcher
+			// goroutine closes innerStop when ctx/parentStop fire.
+			<-innerStop
+			return
+		}
+
+		close(iterDone)
+		s.log.Debug("state subscriber: CRD not yet available, will retry",
+			"gvr", k.gvr.String(), "retry_in", getStateSubscriberCRDRetry().String())
+		select {
+		case <-ctx.Done():
+			return
+		case <-parentStop:
+			return
+		case <-time.After(getStateSubscriberCRDRetry()):
+		}
+	}
+}
+
+// runGatekeeperConstraints discovers the resources under
+// constraints.gatekeeper.sh (one CRD per ConstraintTemplate — the set is
+// dynamic, so it can't be pinned like crdInformerKinds) and starts a
+// metadata informer per discovered resource, normalized to the stable wire
+// kind "Constraint" so the dashboard has one routing row. Re-discovers on
+// every retry tick to pick up templates installed after agent start.
+// Constraint stores are NOT recorded for reconnect replay: entries are
+// keyed by kind and multiple constraint resources share "Constraint"; the
+// frontend's reconnect bulk invalidation covers the gap.
+func (s *StateSubscriber) runGatekeeperConstraints(ctx context.Context, parentStop <-chan struct{}) {
+	started := make(map[string]bool)
+	for {
+		if rl, err := s.client.Discovery().ServerResourcesForGroupVersion(gatekeeperConstraintsGV); err == nil && rl != nil {
+			for _, r := range rl.APIResources {
+				if started[r.Name] || strings.Contains(r.Name, "/") {
+					continue // already watching, or a subresource
+				}
+				gvr := schema.GroupVersionResource{Group: "constraints.gatekeeper.sh", Version: "v1beta1", Resource: r.Name}
+				factory := metadatainformer.NewSharedInformerFactory(s.meta, getStateSubscriberResyncPeriod())
+				_, _ = factory.ForResource(gvr).Informer().AddEventHandler(s.handlers("Constraint", gvr.Group, gvr.Version))
+				factory.Start(parentStop)
+				started[r.Name] = true
+				s.log.Info("state subscriber: gatekeeper constraint informer online", "resource", r.Name)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-parentStop:
+			return
+		case <-time.After(getStateSubscriberCRDRetry()):
+		}
 	}
 }
 
