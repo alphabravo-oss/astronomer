@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,15 @@ const (
 )
 
 var argoCDProxyTokenTTL = 180 * 24 * time.Hour
+
+// localArgoCDClusterTokenExpiryDriftWindow is the remaining bearer-token
+// lifetime below which the sweep treats the LOCAL cluster Secret as drifted
+// and re-mints the credential. The server self-manage loop renews at half the
+// 24h TTL (12h remaining) and the handler reconciler backstops at 2h, but
+// both run inside the server process — this is the only renewal path that
+// survives a prolonged server outage. Kept well under 12h so a healthy
+// server always wins the race and the worker never writes in steady state.
+const localArgoCDClusterTokenExpiryDriftWindow = 4 * time.Hour
 
 // argoCDAutoRegisterSweepPageSize bounds each ListClusters batch during the
 // periodic sweep so fleets larger than the old fixed 1000-row cap are fully
@@ -355,6 +365,18 @@ func autoRegisterClusterIntoArgoCDWithInstances(ctx context.Context, deps ArgoCD
 			return nil
 		}
 		recordArgoCDRegistrationFailure(ctx, deps, cluster.ID, errors.New("no ArgoCD instances configured"))
+		return nil
+	}
+	if cluster.IsLocal && alreadyManaged && len(repairReasons) == 0 && argoCDManagedRowsCoverInstances(managedRows, instances) {
+		// The server's self-manage loop owns the local cluster Secret in
+		// steady state (ensureLocalArgoClusterSecret: skip-unless-drift plus
+		// the renew-after token annotation). Re-upserting here would mint a
+		// fresh application-controller token, rewrite the Secret, invalidate
+		// ArgoCD's cluster cache, and clobber the renew annotation on every
+		// sweep. Step in only when drift needs repair or an instance has no
+		// registration yet (a newly added instance is not modeled as drift —
+		// drift detection only inspects existing managed rows).
+		upsertArgoCDAdoptionCondition(ctx, deps, cluster.ID, "True", "Registered", "Cluster already has an ArgoCD managed-cluster record.")
 		return nil
 	}
 	var firstErr error
@@ -731,6 +753,18 @@ func detectArgoCDManagedClusterDrift(ctx context.Context, deps ArgoCDAutoRegiste
 		if managedClusterSecretLabelsDrift(secret.Labels, desired) {
 			reasons["stale_labels"] = struct{}{}
 		}
+		// Local-only token-expiry backstop: the server's self-manage loop
+		// renews the local bearer token at half its 24h TTL, so while the
+		// server is healthy the remaining lifetime never drops below ~12h and
+		// this never fires (single-owner steady state preserved). It only
+		// trips when the server has been down long enough to miss its renew
+		// window — without it a server outage longer than ~22h would expire
+		// ArgoCD's local-cluster credential with no writer left to fix it.
+		if cluster.IsLocal {
+			if expiry, ok := argoCDClusterSecretBearerTokenExpiry(secret); ok && time.Until(expiry) <= localArgoCDClusterTokenExpiryDriftWindow {
+				reasons["token_expiring"] = struct{}{}
+			}
+		}
 	}
 	out := make([]string, 0, len(reasons))
 	for reason := range reasons {
@@ -738,6 +772,58 @@ func detectArgoCDManagedClusterDrift(ctx context.Context, deps ArgoCDAutoRegiste
 	}
 	sort.Strings(out)
 	return out
+}
+
+// argoCDManagedRowsCoverInstances reports whether every configured ArgoCD
+// instance already has a managed-cluster row for this cluster. A newly added
+// instance with no row still needs the registration loop even when the
+// existing registrations show no drift.
+func argoCDManagedRowsCoverInstances(rows []sqlc.ArgocdManagedCluster, instances []sqlc.ArgocdInstance) bool {
+	covered := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		covered[row.ArgocdInstanceID] = struct{}{}
+	}
+	for _, instance := range instances {
+		if _, ok := covered[instance.ID]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// argoCDClusterSecretBearerTokenExpiry extracts the exp claim from the bearer
+// token inside an ArgoCD cluster Secret's config blob (same JWT shape the
+// handler reconciler parses in argoCDClusterTokenExpiry). ok is false when the
+// Secret carries no parseable JWT with an exp claim.
+func argoCDClusterSecretBearerTokenExpiry(secret *corev1.Secret) (time.Time, bool) {
+	if len(secret.Data["config"]) == 0 {
+		return time.Time{}, false
+	}
+	var cfg struct {
+		BearerToken string `json:"bearerToken"`
+	}
+	if json.Unmarshal(secret.Data["config"], &cfg) != nil {
+		return time.Time{}, false
+	}
+	parts := strings.Split(strings.TrimSpace(cfg.BearerToken), ".")
+	if len(parts) < 2 {
+		return time.Time{}, false
+	}
+	raw := parts[1]
+	if mod := len(raw) % 4; mod != 0 {
+		raw += strings.Repeat("=", 4-mod)
+	}
+	payload, err := base64.URLEncoding.DecodeString(raw)
+	if err != nil {
+		return time.Time{}, false
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if json.Unmarshal(payload, &claims) != nil || claims.Exp == 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(claims.Exp, 0).UTC(), true
 }
 
 func managedClusterSecretLabelsDrift(existing, desired map[string]string) bool {

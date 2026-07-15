@@ -2,23 +2,29 @@ package tasks
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
@@ -783,6 +789,475 @@ func TestArgoCDManagedClusterIndexRepairDoesNotDuplicateExistingRow(t *testing.T
 	}
 	if len(q.created) != 0 {
 		t.Fatalf("created rows = %d, want 0", len(q.created))
+	}
+}
+
+// localClusterSecretWithLabels builds an astronomer-local-cluster Secret
+// carrying exactly the given labels plus the ArgoCD cluster-secret marker.
+func localClusterSecretWithLabels(name string, labels map[string]string) *corev1.Secret {
+	merged := map[string]string{argoCDClusterSecretTypeLabel: argoCDClusterSecretTypeValue}
+	for k, v := range labels {
+		merged[k] = v
+	}
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: argoCDNamespace,
+			Labels:    merged,
+		},
+		Data: map[string][]byte{"server": []byte("https://kubernetes.default.svc")},
+	}
+}
+
+// TestArgoCDAutoRegisterLocalAlreadyManagedNoDriftSkipsUpsert locks single
+// steady-state ownership of the local cluster Secret: when the local cluster
+// already has a managed-cluster row and the Secret carries the desired
+// labels, the sweep must NOT re-upsert it through the ArgoCD API (which would
+// mint a fresh application-controller token, rewrite the Secret, and clobber
+// the server loop's renew-after annotation) — it only refreshes the
+// Registered condition.
+func TestArgoCDAutoRegisterLocalAlreadyManagedNoDriftSkipsUpsert(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	upstreamPosts := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamPosts++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "astronomer-local-cluster"})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:           clusterID,
+		Name:         "local",
+		IsLocal:      true,
+		ApiServerUrl: "https://kubernetes.default.svc",
+		AgentVersion: "v0.3.0",
+	}
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "local",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: "argocd-token",
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "astronomer-local-cluster",
+			ServerUrl:         "https://kubernetes.default.svc",
+		}},
+	}
+	k8s := k8sfake.NewClientset(localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(cluster, nil)))
+	timeline := &argoCDTimelineRecorder{}
+
+	err := autoRegisterClusterIntoArgoCD(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries:      q,
+		K8s:          k8s,
+		Registration: timeline,
+	}, cluster)
+	if err != nil {
+		t.Fatalf("auto-register: %v", err)
+	}
+	if upstreamPosts != 0 {
+		t.Fatalf("upstream posts = %d, want 0 (converged local cluster must not be re-upserted)", upstreamPosts)
+	}
+	if len(q.created) != 0 {
+		t.Fatalf("created rows = %d, want none for converged local cluster", len(q.created))
+	}
+	if len(timeline.steps) != 0 {
+		t.Fatalf("timeline steps = %+v, want none for converged local cluster", timeline.steps)
+	}
+	if len(q.conditions) != 1 || q.conditions[0].Status != "True" || q.conditions[0].Reason != "Registered" {
+		t.Fatalf("conditions = %+v, want Registered True", q.conditions)
+	}
+}
+
+// TestArgoCDAutoRegisterLocalStaleAgentVersionLabelStillRepairs is the drift
+// counterpart: a local Secret whose agent-version label lags the DB row is
+// repaired with exactly one upsert stamping the DB row's version.
+func TestArgoCDAutoRegisterLocalStaleAgentVersionLabelStillRepairs(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	upstreamPosts := 0
+	var seenRegistration struct {
+		Labels map[string]string `json:"labels"`
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/clusters" {
+			t.Fatalf("unexpected upstream request: %s %s", r.Method, r.URL.RequestURI())
+		}
+		upstreamPosts++
+		if err := json.NewDecoder(r.Body).Decode(&seenRegistration); err != nil {
+			t.Fatalf("decode registration: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "astronomer-local-cluster"})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:           clusterID,
+		Name:         "local",
+		IsLocal:      true,
+		ApiServerUrl: "https://kubernetes.default.svc",
+		AgentVersion: "v0.3.0-new",
+	}
+	staleCluster := cluster
+	staleCluster.AgentVersion = "v0.2.0-old"
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "local",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: "argocd-token",
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "astronomer-local-cluster",
+			ServerUrl:         "https://kubernetes.default.svc",
+		}},
+	}
+	k8s := k8sfake.NewClientset(localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(staleCluster, nil)))
+	k8s.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "token" {
+			return false, nil, nil
+		}
+		return true, &authv1.TokenRequest{Status: authv1.TokenRequestStatus{Token: "minted-token"}}, nil
+	})
+	timeline := &argoCDTimelineRecorder{}
+
+	err := autoRegisterClusterIntoArgoCD(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries:      q,
+		K8s:          k8s,
+		Registration: timeline,
+	}, cluster)
+	if err != nil {
+		t.Fatalf("auto-register: %v", err)
+	}
+	if upstreamPosts != 1 {
+		t.Fatalf("upstream posts = %d, want exactly one repair upsert", upstreamPosts)
+	}
+	if got := seenRegistration.Labels[astronomerAgentVersionLabelKey]; got != "v0.3.0-new" {
+		t.Fatalf("upserted agent-version label = %q, want DB row version v0.3.0-new", got)
+	}
+	if len(timeline.steps) != 1 || timeline.steps[0].StepName != "argocd_registration_repaired" || timeline.steps[0].Status != "success" {
+		t.Fatalf("timeline steps = %+v, want one repaired step", timeline.steps)
+	}
+	repairs, ok := timeline.steps[0].Detail["repairs"].([]string)
+	if !ok || len(repairs) != 1 || repairs[0] != "stale_labels" {
+		t.Fatalf("repair detail = %#v, want [stale_labels]", timeline.steps[0].Detail["repairs"])
+	}
+}
+
+// TestArgoCDAutoRegisterAdoptedAlreadyManagedStillUpserts locks the
+// no-regression guarantee for adopted clusters: their unconditional upsert is
+// load-bearing (it renews the proxy-token credential, which label drift does
+// not model), so a converged non-local cluster is still re-upserted.
+func TestArgoCDAutoRegisterAdoptedAlreadyManagedStillUpserts(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	encryptor, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("new encryptor: %v", err)
+	}
+	instanceToken, err := encryptor.Encrypt("argocd-token")
+	if err != nil {
+		t.Fatalf("encrypt instance token: %v", err)
+	}
+	proxyToken := auth.ArgoCDClusterProxyTokenPrefix + "stored-token"
+	encryptedProxyToken, err := encryptor.Encrypt(proxyToken)
+	if err != nil {
+		t.Fatalf("encrypt proxy token: %v", err)
+	}
+
+	upstreamPosts := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/clusters" {
+			t.Fatalf("unexpected upstream request: %s %s", r.Method, r.URL.RequestURI())
+		}
+		upstreamPosts++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "cluster-prod-east"})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:            clusterID,
+		Name:          "prod-east",
+		AgentVersion:  "v0.4.1",
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}
+	serverURL := "https://astronomer.example/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "built-in",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: instanceToken,
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "cluster-prod-east",
+			ServerUrl:         serverURL,
+		}},
+		activeProxyToken: &sqlc.ArgocdClusterProxyToken{
+			ID:             uuid.New(),
+			ClusterID:      clusterID,
+			Purpose:        "argocd_cluster_proxy",
+			TokenHash:      auth.HashArgoCDClusterProxyToken(proxyToken),
+			TokenEncrypted: encryptedProxyToken,
+			ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		},
+	}
+	k8s := k8sfake.NewClientset(localClusterSecretWithLabels("cluster-prod-east", managedClusterArgoLabelsForProjects(cluster, nil)))
+	timeline := &argoCDTimelineRecorder{}
+
+	err = autoRegisterClusterIntoArgoCD(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries:             q,
+		Encryptor:           encryptor,
+		K8s:                 k8s,
+		ClusterProxyBaseURL: "https://astronomer.example",
+		Registration:        timeline,
+	}, cluster)
+	if err != nil {
+		t.Fatalf("auto-register: %v", err)
+	}
+	if upstreamPosts != 1 {
+		t.Fatalf("upstream posts = %d, want 1 (adopted clusters keep the unconditional upsert)", upstreamPosts)
+	}
+	if len(q.conditions) != 1 || q.conditions[0].Status != "True" || q.conditions[0].Reason != "Registered" {
+		t.Fatalf("conditions = %+v, want Registered True", q.conditions)
+	}
+}
+
+// bearerTokenSecretConfig builds the config blob of an ArgoCD cluster Secret
+// whose bearer token is an unsigned JWT expiring at exp.
+func bearerTokenSecretConfig(t *testing.T, exp time.Time) []byte {
+	t.Helper()
+	payload, err := json.Marshal(map[string]int64{"exp": exp.Unix()})
+	if err != nil {
+		t.Fatalf("marshal claims: %v", err)
+	}
+	token := fmt.Sprintf("%s.%s.sig",
+		base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`)),
+		base64.RawURLEncoding.EncodeToString(payload))
+	cfg, err := json.Marshal(map[string]string{"bearerToken": token})
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	return cfg
+}
+
+// TestArgoCDAutoRegisterLocalExpiringTokenStillRepairs covers the
+// out-of-server-process renewal backstop: a converged local Secret whose
+// bearer token is still fresh must be skipped, but once the remaining token
+// lifetime drops inside localArgoCDClusterTokenExpiryDriftWindow (i.e. the
+// server has missed both of its in-process renewal paths) the sweep re-mints
+// the credential with exactly one repair upsert.
+func TestArgoCDAutoRegisterLocalExpiringTokenStillRepairs(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	upstreamPosts := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamPosts++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "astronomer-local-cluster"})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:           clusterID,
+		Name:         "local",
+		IsLocal:      true,
+		ApiServerUrl: "https://kubernetes.default.svc",
+		AgentVersion: "v0.3.0",
+	}
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "local",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: "argocd-token",
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "astronomer-local-cluster",
+			ServerUrl:         "https://kubernetes.default.svc",
+		}},
+	}
+	secret := localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(cluster, nil))
+	secret.Data["config"] = bearerTokenSecretConfig(t, time.Now().Add(20*time.Hour))
+	k8s := k8sfake.NewClientset(secret)
+	k8s.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "token" {
+			return false, nil, nil
+		}
+		return true, &authv1.TokenRequest{Status: authv1.TokenRequestStatus{Token: "minted-token"}}, nil
+	})
+	timeline := &argoCDTimelineRecorder{}
+	deps := ArgoCDAutoRegisterDeps{
+		Queries:      q,
+		K8s:          k8s,
+		Registration: timeline,
+	}
+
+	// Fresh token (renewal not due for hours): converged, no upsert.
+	if err := autoRegisterClusterIntoArgoCD(context.Background(), deps, cluster); err != nil {
+		t.Fatalf("auto-register with fresh token: %v", err)
+	}
+	if upstreamPosts != 0 {
+		t.Fatalf("upstream posts with fresh token = %d, want 0", upstreamPosts)
+	}
+
+	// Token inside the expiry drift window: exactly one repair upsert.
+	secret.Data["config"] = bearerTokenSecretConfig(t, time.Now().Add(time.Hour))
+	if _, err := k8s.CoreV1().Secrets(argoCDNamespace).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("update secret: %v", err)
+	}
+	if err := autoRegisterClusterIntoArgoCD(context.Background(), deps, cluster); err != nil {
+		t.Fatalf("auto-register with expiring token: %v", err)
+	}
+	if upstreamPosts != 1 {
+		t.Fatalf("upstream posts with expiring token = %d, want exactly one repair upsert", upstreamPosts)
+	}
+	if len(timeline.steps) != 1 || timeline.steps[0].StepName != "argocd_registration_repaired" || timeline.steps[0].Status != "success" {
+		t.Fatalf("timeline steps = %+v, want one repaired step", timeline.steps)
+	}
+	repairs, ok := timeline.steps[0].Detail["repairs"].([]string)
+	if !ok || len(repairs) != 1 || repairs[0] != "token_expiring" {
+		t.Fatalf("repair detail = %#v, want [token_expiring]", timeline.steps[0].Detail["repairs"])
+	}
+}
+
+// TestArgoCDAutoRegisterLocalNewInstanceStillRegisters guards the skip
+// against the new-instance gap: a local cluster already registered in the
+// bundled instance with zero drift must still be registered into an ArgoCD
+// instance added later — instance non-coverage is not modeled as drift, so
+// the skip must not fire before checking it.
+func TestArgoCDAutoRegisterLocalNewInstanceStillRegisters(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+
+	clusterID := uuid.New()
+	existingInstanceID := uuid.New()
+	newInstanceID := uuid.New()
+	upstreamPosts := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamPosts++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "astronomer-local-cluster"})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:           clusterID,
+		Name:         "local",
+		IsLocal:      true,
+		ApiServerUrl: "https://kubernetes.default.svc",
+		AgentVersion: "v0.3.0",
+	}
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 existingInstanceID,
+			Name:               "local",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: "argocd-token",
+		}, {
+			ID:                 newInstanceID,
+			Name:               "second",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: "argocd-token",
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  existingInstanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "astronomer-local-cluster",
+			ServerUrl:         "https://kubernetes.default.svc",
+		}},
+	}
+	k8s := k8sfake.NewClientset(localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(cluster, nil)))
+	k8s.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "token" {
+			return false, nil, nil
+		}
+		return true, &authv1.TokenRequest{Status: authv1.TokenRequestStatus{Token: "minted-token"}}, nil
+	})
+	timeline := &argoCDTimelineRecorder{}
+
+	err := autoRegisterClusterIntoArgoCD(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries:      q,
+		K8s:          k8s,
+		Registration: timeline,
+	}, cluster)
+	if err != nil {
+		t.Fatalf("auto-register: %v", err)
+	}
+	if upstreamPosts != 2 {
+		t.Fatalf("upstream posts = %d, want 2 (registration loop must cover the new instance)", upstreamPosts)
+	}
+	var newInstanceRegistered bool
+	for _, row := range q.created {
+		if row.ArgocdInstanceID == newInstanceID {
+			newInstanceRegistered = true
+		}
+	}
+	if !newInstanceRegistered {
+		t.Fatalf("created rows = %+v, want a managed-cluster row for the newly added instance", q.created)
+	}
+}
+
+// TestLocalClusterServerWorkerDesiredLabelParity pins cross-component label
+// parity for the local cluster Secret. The server's writer
+// (internal/server.localArgoClusterSecretLabelsForProjects) emits
+// argolabels.SecretLabels for a local row — its own test pins that equality —
+// and this test asserts that shared output is drift-free against the worker's
+// baseline in both directions, so a label added on only one side fails a test
+// instead of resurrecting the agent-version ping-pong in production.
+func TestLocalClusterServerWorkerDesiredLabelParity(t *testing.T) {
+	cluster := sqlc.Cluster{
+		ID:           uuid.New(),
+		Name:         "local",
+		IsLocal:      true,
+		ApiServerUrl: "https://kubernetes.default.svc",
+		AgentVersion: "v0.3.0",
+		Environment:  "dev",
+	}
+	projects := []sqlc.Project{{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}}
+
+	serverWritten := argolabels.SecretLabels(cluster, projects)
+	workerDesired := managedClusterArgoLabelsForProjects(cluster, projects)
+	if managedClusterSecretLabelsDrift(serverWritten, workerDesired) {
+		t.Fatal("server-written local Secret labels drift against the worker baseline")
+	}
+
+	// A worker-written registration lands with the worker labels plus the
+	// ArgoCD cluster-secret marker; it must satisfy the server's desired set.
+	workerWritten := map[string]string{argoCDClusterSecretTypeLabel: argoCDClusterSecretTypeValue}
+	for k, v := range workerDesired {
+		workerWritten[k] = v
+	}
+	if managedClusterSecretLabelsDrift(workerWritten, serverWritten) {
+		t.Fatal("worker-written local Secret labels drift against the server baseline")
 	}
 }
 

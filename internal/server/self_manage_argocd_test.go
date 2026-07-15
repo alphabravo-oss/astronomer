@@ -118,7 +118,7 @@ func TestEnsureLocalArgoClusterSecretRenewsWhenAnnotationExpiredOrGarbled(t *tes
 	}
 	for i, annotation := range []string{
 		time.Now().Add(-time.Hour).UTC().Format(time.RFC3339), // past → renew now
-		"not-a-timestamp",                                     // garbled → renew now (self-healing)
+		"not-a-timestamp", // garbled → renew now (self-healing)
 	} {
 		secret, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
 		if err != nil {
@@ -222,6 +222,79 @@ func TestEnsureLocalArgoClusterSecretRewritesOnProjectLabelDrift(t *testing.T) {
 	}
 	if _, stale := secret.Labels[mirroredLabel]; stale {
 		t.Fatalf("stale mirrored label %s survived cluster label removal: %#v", mirroredLabel, secret.Labels)
+	}
+}
+
+// TestEnsureLocalArgoClusterSecretRewritesOnAgentVersionDrift pins the
+// property the per-tick DB re-read in reconcileLocalArgoSelfManagement relies
+// on: whoever holds the fresh cluster row wins. A Secret labeled with an
+// older agent-version is drift against a row carrying a newer one, and the
+// rewrite stamps the row's version.
+func TestEnsureLocalArgoClusterSecretRewritesOnAgentVersionDrift(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ID: uuid.New(), Name: "local", ApiServerUrl: "https://kubernetes.default.svc", AgentVersion: "v0.2.0-old"}
+	projects := []sqlc.Project{{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}}
+	client, tokenMints := newLocalArgoTokenCountingClientset(t)
+
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	secret, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret.Labels[argolabels.AgentVersionLabelKey] != "v0.2.0-old" {
+		t.Fatalf("initial agent-version label = %q, want v0.2.0-old", secret.Labels[argolabels.AgentVersionLabelKey])
+	}
+
+	// The DB row moves to the new build (heartbeat landed) → the existing
+	// Secret's older label is drift and must be rewritten to the row's value.
+	cluster.AgentVersion = "v0.3.0-new"
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("agent-version-drift reconcile: %v", err)
+	}
+	if *tokenMints != 2 {
+		t.Fatalf("token mints after agent-version drift = %d, want 2 (drift must force a rewrite)", *tokenMints)
+	}
+	secret, err = client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret.Labels[argolabels.AgentVersionLabelKey] != "v0.3.0-new" {
+		t.Fatalf("agent-version label = %q, want v0.3.0-new", secret.Labels[argolabels.AgentVersionLabelKey])
+	}
+
+	// Converged again → no further mint.
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("steady-state reconcile: %v", err)
+	}
+	if *tokenMints != 2 {
+		t.Fatalf("token mints at steady state = %d, want 2", *tokenMints)
+	}
+}
+
+// TestLocalArgoClusterSecretLabelsMatchSharedSecretLabels pins the server's
+// desired label set for the local cluster Secret to the shared
+// argolabels.SecretLabels output. The worker-side parity test
+// (TestLocalClusterServerWorkerDesiredLabelParity in internal/worker/tasks)
+// asserts that same shared output is drift-free against its baseline, so a
+// label added on only one side fails a test instead of resurrecting the
+// agent-version ping-pong between the two writers.
+func TestLocalArgoClusterSecretLabelsMatchSharedSecretLabels(t *testing.T) {
+	cluster := sqlc.Cluster{
+		ID:           uuid.New(),
+		Name:         "local",
+		ApiServerUrl: "https://kubernetes.default.svc",
+		AgentVersion: "v0.3.0",
+		Environment:  "dev",
+	}
+	projects := []sqlc.Project{{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}}
+	got := localArgoClusterSecretLabelsForProjects(cluster, projects)
+	localRow := cluster
+	localRow.IsLocal = true
+	want := argolabels.SecretLabels(localRow, projects)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("server-desired local Secret labels = %v, want shared argolabels.SecretLabels output %v", got, want)
 	}
 }
 

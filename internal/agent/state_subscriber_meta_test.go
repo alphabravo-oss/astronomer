@@ -107,6 +107,10 @@ func TestStateSubscriberMetadataInformerRegistration(t *testing.T) {
 
 	subscriber := NewStateSubscriber(client, sender, logger)
 	subscriber.SetMetadataClient(mc)
+	// Secret informers (typed + Helm metadata) are opt-in by privilege
+	// profile (see cmd/agent/main.go); this test locks the full expansion
+	// set, so opt in like a secrets-allowed profile does.
+	subscriber.SetWatchSecrets(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -185,6 +189,9 @@ func TestStateSubscriberHelmSecretFilter(t *testing.T) {
 
 	subscriber := NewStateSubscriber(client, sender, logger)
 	subscriber.SetMetadataClient(mc)
+	// The Helm-filtered Secret metadata informer is gated on watchSecrets;
+	// opt in like a secrets-allowed profile does.
+	subscriber.SetWatchSecrets(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

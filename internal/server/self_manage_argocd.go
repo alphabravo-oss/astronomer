@@ -127,6 +127,18 @@ func startLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg 
 }
 
 func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, encryptor *auth.Encryptor, k8s kubernetes.Interface, dyn dynamic.Interface, localCluster sqlc.Cluster, toolHandler *handler.ToolHandler) error {
+	// The boot-time cluster snapshot goes stale the moment the embedded local
+	// agent's first heartbeat lands (it rewrites clusters.agent_version to the
+	// running build), while every other cluster-Secret writer reads the row
+	// fresh — reconciling from the snapshot ping-pongs the agent-version label
+	// against those writers across staggered deploys. Re-read the row every
+	// tick so all writers converge on the same DB-derived desired state; the
+	// snapshot only seeds the cluster ID.
+	row, err := queries.GetClusterByID(ctx, localCluster.ID)
+	if err != nil {
+		return fmt.Errorf("refresh local cluster row: %w", err)
+	}
+	localCluster = row
 	// ArgoCD ships as the bundled astro-argocd subchart of the astronomer
 	// release, so it is already installed. We just wait for it to be ready
 	// instead of helm-installing it as a separate tool — that would collide on
