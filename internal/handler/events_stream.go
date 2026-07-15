@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,6 +35,8 @@ type EventStreamHandler struct {
 	queries middleware.TokenUserQuerier
 	tickets *auth.StreamTicketStore
 	authz   authorizationSupport
+	// keepaliveInterval overrides the 25s heartbeat cadence (tests only).
+	keepaliveInterval time.Duration
 }
 
 // NewEventStreamHandler wraps a bus.
@@ -123,10 +126,14 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
-	// Keepalive comment every 25s. EventSource auto-reconnects on close, but
-	// some intermediate proxies idle-close silent connections — sending a
-	// comment frame keeps the path warm without producing a frontend event.
-	keepalive := time.NewTicker(25 * time.Second)
+	// Heartbeat every 25s: a real data frame the client can observe (its
+	// watchdog resets on any frame), unlike an SSE comment which never
+	// reaches onmessage. Also keeps idle-closing proxies warm.
+	interval := h.keepaliveInterval
+	if interval <= 0 {
+		interval = 25 * time.Second
+	}
+	keepalive := time.NewTicker(interval)
 	defer keepalive.Stop()
 
 	ch := h.bus.Subscribe(r.Context())
@@ -135,7 +142,14 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-keepalive.C:
-			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+			ping, err := json.Marshal(struct {
+				Type string    `json:"type"`
+				Time time.Time `json:"time"`
+			}{Type: "sys.ping", Time: time.Now().UTC()})
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", ping); err != nil {
 				return
 			}
 			flusher.Flush()
@@ -143,20 +157,31 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if restricted && !eventAllowedForUser(h.authz, bindings, ev) {
+			// sys.* frames are unscoped control-plane signals (no cluster_id)
+			// and are exempt from the SEC-R07 drop — without this, restricted
+			// users' client watchdogs would fire spuriously.
+			if restricted && !isSysEvent(ev.Type) && !eventAllowedForUser(h.authz, bindings, ev) {
 				continue
 			}
 			payload, err := json.Marshal(ev)
 			if err != nil {
 				continue
 			}
-			// SSE frame: id + event + data + blank line.
-			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.Type, payload); err != nil {
+			// Default-message SSE frame: id + data + blank line (no event:
+			// line — the JSON envelope carries `type` and the client
+			// dispatches on it in onmessage).
+			if _, err := fmt.Fprintf(w, "id: %d\ndata: %s\n\n", ev.ID, payload); err != nil {
 				return
 			}
 			flusher.Flush()
 		}
 	}
+}
+
+// isSysEvent reports whether the event type is a sys.* control frame,
+// which carries no cluster_id and bypasses per-event cluster RBAC.
+func isSysEvent(t events.Type) bool {
+	return strings.HasPrefix(string(t), "sys.")
 }
 
 // eventAllowedForUser implements SEC-R07 per-event cluster RBAC.
