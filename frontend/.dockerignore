@@ -14,3 +14,6 @@ jest.config.cjs
 jest.setup.ts
 **/*.test.ts
 **/*.test.tsx
+dist
+test-results
+playwright-report

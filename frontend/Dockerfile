@@ -1,63 +1,46 @@
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS base
+# syntax=docker/dockerfile:1.6
 
-# Install dependencies only when needed
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
+# Stage 1: build the SPA (Node 22, matching CI).
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS build
 WORKDIR /app
 
-COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci --legacy-peer-deps; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else npm install --legacy-peer-deps; \
-  fi
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
-
-# Bake the release version so the dashboard can display it (the release
-# workflow passes VERSION to every component build). NEXT_PUBLIC_* is inlined
-# at build time, so it must be set before `next build`.
+# Baked into the bundle via the Vite `define` (__APP_VERSION__); the release
+# workflow passes VERSION to every component build.
 ARG VERSION=0.2.0-dev
-ENV NEXT_PUBLIC_APP_VERSION=$VERSION
+ENV VERSION=$VERSION
 
 RUN npm run build
 
-# Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
+# Stage 2: static nginx. Same base pin as deploy/nginx/Dockerfile.nginx —
+# bump both digests in lockstep (D16).
+FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
 
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
+ARG VERSION=0.2.0-dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+LABEL org.opencontainers.image.title="astronomer-frontend" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Pull Alpine package fixes newer than the base image build (CI scans this
+# image with Trivy at HIGH/CRITICAL, ignore-unfixed, exit-code 1).
+RUN apk upgrade --no-cache
 
-COPY --from=builder /app/public ./public
-
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Automatically leverage output traces to reduce image size
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
+RUN rm -rf /etc/nginx/conf.d /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/healthz || exit 1
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
-
-CMD ["node", "server.js"]
+# Bypass /docker-entrypoint.d scripts — they write outside /tmp, which fails
+# under readOnlyRootFilesystem.
+ENTRYPOINT ["nginx", "-g", "daemon off;"]

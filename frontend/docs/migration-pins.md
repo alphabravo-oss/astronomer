@@ -64,3 +64,12 @@ Non-blocking install warnings (deprecations, not advisories): `whatwg-encoding@3
   them per the repo's existing Trivy CI policy before first CI push.
 
 All scans run 2026-07-15 with `aquasec/trivy:latest` at `--severity HIGH,CRITICAL`.
+
+### P6.1 execution-time re-scan (2026-07-15, later the same day)
+
+Re-resolved `nginx:1.29-alpine` — digest unchanged (`sha256:5616878291a2eed…`).
+Alpine had since shipped fixes for several of the 13 HIGHs (libexpat, libssl3,
+libxml2, nghttp2-libs), so `--ignore-unfixed` no longer excludes them. Per the
+repo's Trivy CI policy (fixable HIGH/CRITICAL fail the build), the frontend
+Dockerfile's nginx stage runs `apk upgrade --no-cache`; the built image scans
+**0 findings** at `--severity HIGH,CRITICAL --ignore-unfixed`.
