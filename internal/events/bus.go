@@ -83,6 +83,60 @@ const (
 	TypeClusterRegistrationPhase Type = "cluster.registration.phase"
 )
 
+// `<resource>.changed` types published via PublishChanged (see publish.go for
+// the envelope contract). Cluster-scoped types MUST carry `cluster_id` in
+// their payload — the SSE stream drops events without it fail-closed for
+// restricted users (SEC-R07). `admin_queue.changed` and `siem_forwarder.changed`
+// are deliberately unscoped: the fail-closed drop makes them superuser-only.
+const (
+	// TypeBackupChanged fires when a backup, restore, or schedule row is
+	// written (payload `kind` field: backup|restore|schedule).
+	TypeBackupChanged Type = "backup.changed"
+
+	// TypeFleetOperationChanged fires per fleet-operation target with the
+	// target's cluster_id.
+	TypeFleetOperationChanged Type = "fleet_operation.changed"
+
+	// TypeLoggingOperationChanged fires when a logging stack operation row
+	// is written.
+	TypeLoggingOperationChanged Type = "logging_operation.changed"
+
+	// TypeToolOperationChanged fires when a tool operation row is written.
+	TypeToolOperationChanged Type = "tool_operation.changed"
+
+	// TypeCISScanChanged fires when a CIS benchmark scan row is written.
+	TypeCISScanChanged Type = "cis_scan.changed"
+
+	// TypeImageScanChanged fires when an image vulnerability scan row is
+	// written.
+	TypeImageScanChanged Type = "image_scan.changed"
+
+	// TypeArgoCDChanged fires on own ArgoCD writes and at the end of each
+	// server-side reconcile pass (payload `scope` field).
+	TypeArgoCDChanged Type = "argocd.changed"
+
+	// TypeAdminQueueChanged fires when the admin task queue mutates.
+	// Unscoped (no cluster_id): superuser-only by fail-closed drop.
+	TypeAdminQueueChanged Type = "admin_queue.changed"
+
+	// TypeSIEMForwarderChanged fires when a SIEM forwarder row is written.
+	// Unscoped (no cluster_id): superuser-only by fail-closed drop.
+	TypeSIEMForwarderChanged Type = "siem_forwarder.changed"
+
+	// TypeAgentFleetChanged fires when an agent fleet row is written.
+	TypeAgentFleetChanged Type = "agent_fleet.changed"
+
+	// TypeTemplateBindingChanged fires when a template binding row is
+	// written.
+	TypeTemplateBindingChanged Type = "template_binding.changed"
+
+	// TypeRegistryChanged fires when a registry row is written.
+	TypeRegistryChanged Type = "registry.changed"
+
+	// TypeSnapshotChanged fires when a snapshot row is written.
+	TypeSnapshotChanged Type = "snapshot.changed"
+)
+
 // DefaultRedisChannel is the pub/sub channel for cross-pod event fan-out.
 const DefaultRedisChannel = "astronomer:events:v1"
 
