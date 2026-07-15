@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Astronomer - Kubernetes Multi-Cluster Management</title>
+    <link rel="icon" href="/icon.svg" />
+    <script>
+      // No-flash theme bootstrap: apply the stored theme before first paint.
+      // Key is 'astronomer-theme' (never bare 'theme' — the co-hosted ArgoCD
+      // SPA JSON-parses that key). Default and failure mode are both dark.
+      (function () {
+        try {
+          var t = localStorage.getItem('astronomer-theme');
+          var dark =
+            t === 'light'
+              ? false
+              : t === 'system'
+                ? window.matchMedia('(prefers-color-scheme: dark)').matches
+                : true;
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
