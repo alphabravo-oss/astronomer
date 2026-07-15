@@ -7,6 +7,7 @@ import { sanitizeReturnTo } from '@/lib/auth/session';
 import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight, Shield, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useSSOProviders } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import {
   loginWithCredentialsChallengeAware,
   verifyTotpChallenge,
@@ -29,9 +30,7 @@ function LoginPage() {
   const { returnTo } = Route.useSearch();
   const { login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
-  const [form, setForm] = useState({ email: '', password: '' });
   // 423 challenge state: when present, render the TOTP screen instead of the
   // credentials form. `enrollmentRequired` distinguishes the "you must enroll
   // now" branch from the standard "enter your code" branch.
@@ -43,28 +42,31 @@ function LoginPage() {
   const { data: ssoProvidersData } = useSSOProviders();
   const ssoProviders = (ssoProvidersData ?? []).filter((provider) => provider.enabled);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.email || !form.password) {
-      toastError('Please enter your email address and password');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await loginWithCredentialsChallengeAware(form.email, form.password);
-      if (result.kind === 'challenge') {
-        setChallenge(result.challenge);
-        return;
+  const form = useAppForm({
+    defaultValues: { email: '', password: '' },
+    validators: {
+      // Old check (imperative, pre-submit): `if (!form.email || !form.password)`
+      // → ported 1:1 as a form-level onSubmit validator.
+      onSubmit: ({ value }) =>
+        !value.email || !value.password ? 'Please enter your email address and password' : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: () => toastError('Please enter your email address and password'),
+    onSubmit: async ({ value }) => {
+      try {
+        const result = await loginWithCredentialsChallengeAware(value.email, value.password);
+        if (result.kind === 'challenge') {
+          setChallenge(result.challenge);
+          return;
+        }
+        login(result.user);
+        router.push(sanitizeReturnTo(returnTo));
+      } catch (error) {
+        toastApiError('', error, 'Login failed');
       }
-      login(result.user);
-      router.push(sanitizeReturnTo(returnTo));
-    } catch (error) {
-      toastApiError('', error, 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
+  const loading = useStore(form.store, (state) => state.isSubmitting);
 
   const completeTotp = (_token: string, _refresh: string | undefined, user: User) => {
     login(user);
@@ -229,52 +231,68 @@ function LoginPage() {
 
           {/* Login Form */}
           {!challenge && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="identifier" className="text-sm font-medium text-foreground">
-                Email
-              </label>
-              <input
-                id="identifier"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="you@example.com"
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                  text-foreground placeholder:text-muted-foreground
-                  focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
-                  transition-colors"
-                autoComplete="email"
-                autoFocus
-              />
-            </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void form.handleSubmit();
+            }}
+            className="space-y-4"
+          >
+            <form.Field name="email">
+              {(field) => (
+                <div className="space-y-1.5">
+                  <label htmlFor="identifier" className="text-sm font-medium text-foreground">
+                    Email
+                  </label>
+                  <input
+                    id="identifier"
+                    type="email"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="you@example.com"
+                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                      text-foreground placeholder:text-muted-foreground
+                      focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
+                      transition-colors"
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </div>
+              )}
+            </form.Field>
 
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium text-foreground">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="Enter your password"
-                  className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm
-                    text-foreground placeholder:text-muted-foreground
-                    focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
-                    transition-colors"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
+            <form.Field name="password">
+              {(field) => (
+                <div className="space-y-1.5">
+                  <label htmlFor="password" className="text-sm font-medium text-foreground">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Enter your password"
+                      className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm
+                        text-foreground placeholder:text-muted-foreground
+                        focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
+                        transition-colors"
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </form.Field>
 
             <button
               type="submit"
@@ -335,9 +353,28 @@ function TotpChallengeForm({
   onCancel: () => void;
   onSuccess: (token: string, refresh: string | undefined, user: User) => void;
 }) {
-  const [code, setCode] = useState('');
   const [useRecovery, setUseRecovery] = useState(false);
-  const [busy, setBusy] = useState(false);
+
+  const form = useAppForm({
+    defaultValues: { code: '' },
+    validators: {
+      // Old checks (imperative): `if (!code) return` in submit plus the
+      // disabled-button gate requiring 6 digits in authenticator mode —
+      // ported 1:1 as a form-level onSubmit validator.
+      onSubmit: ({ value }) =>
+        !value.code || (!useRecovery && value.code.length !== 6) ? 'Enter your code' : undefined,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        const data = await verifyTotpChallenge(challenge.challengeToken, value.code);
+        onSuccess(data.token, data.refresh, data.user);
+      } catch (err) {
+        toastApiError('', err, 'Invalid code');
+      }
+    },
+  });
+  const code = useStore(form.store, (state) => state.values.code);
+  const busy = useStore(form.store, (state) => state.isSubmitting);
 
   if (challenge.error === 'totp_enrollment_required') {
     return (
@@ -374,22 +411,14 @@ function TotpChallengeForm({
     );
   }
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code) return;
-    setBusy(true);
-    try {
-      const data = await verifyTotpChallenge(challenge.challengeToken, code);
-      onSuccess(data.token, data.refresh, data.user);
-    } catch (err) {
-      toastApiError('', err, 'Invalid code');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void form.handleSubmit();
+      }}
+      className="space-y-4"
+    >
       <div className="flex items-start gap-3 p-3 rounded-md border border-border bg-card">
         <Shield className="h-4 w-4 text-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground">
@@ -400,30 +429,36 @@ function TotpChallengeForm({
         <label className="text-sm font-medium text-foreground">
           {useRecovery ? 'Recovery code' : 'Authenticator code'}
         </label>
-        {useRecovery ? (
-          <input
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value.trim())}
-            placeholder="xxxx-xxxx-xxxx"
-            autoFocus
-            autoComplete="off"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        ) : (
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={6}
-            value={code}
-            autoFocus
-            autoComplete="one-time-code"
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="123 456"
-            className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        )}
+        <form.Field name="code">
+          {(field) =>
+            useRecovery ? (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value.trim())}
+                onBlur={field.handleBlur}
+                placeholder="xxxx-xxxx-xxxx"
+                autoFocus
+                autoComplete="off"
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            ) : (
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={field.state.value}
+                autoFocus
+                autoComplete="one-time-code"
+                onChange={(e) => field.handleChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onBlur={field.handleBlur}
+                placeholder="123 456"
+                className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            )
+          }
+        </form.Field>
       </div>
       <button
         type="submit"
@@ -444,7 +479,7 @@ function TotpChallengeForm({
           type="button"
           onClick={() => {
             setUseRecovery((v) => !v);
-            setCode('');
+            form.setFieldValue('code', '');
           }}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >

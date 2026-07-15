@@ -32,6 +32,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { formatRelativeTime, cn } from '@/lib/utils';
+import { useAppForm, useStore } from '@/lib/form';
 import { ModalShell } from '@/components/ui/modal-shell';
 import {
   getTotpStatus,
@@ -212,7 +213,6 @@ type WizardStep = 'scan' | 'verify' | 'codes';
 function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [step, setStep] = useState<WizardStep>('scan');
   const [enrollment, setEnrollment] = useState<TotpEnrollStart | null>(null);
-  const [code, setCode] = useState('');
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -220,18 +220,6 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
     mutationFn: startTotpEnrollment,
     onSuccess: (data) => setEnrollment(data),
     onError: (err: Error) => toastApiError('', err, 'Failed to start enrollment'),
-  });
-
-  const confirmMut = useMutation({
-    mutationFn: async () => {
-      if (!enrollment) throw new Error('No enrollment session');
-      return confirmTotpEnrollment(enrollment.sessionToken, code);
-    },
-    onSuccess: (data) => {
-      setRecoveryCodes(data.recoveryCodes);
-      setStep('codes');
-    },
-    onError: (err: Error) => toastApiError('', err, 'Invalid code'),
   });
 
   useEffect(() => {
@@ -324,37 +312,16 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
         </div>
       )}
 
-      {step === 'verify' && (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Enter the 6-digit code your authenticator app is showing right now.
-          </p>
-          <CodeInput value={code} onChange={setCode} autoFocus />
-          <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
-            <button
-              onClick={() => setStep('scan')}
-              className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-            >
-              Back
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onClose}
-                className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => confirmMut.mutate()}
-                disabled={code.length !== 6 || confirmMut.isPending}
-                className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-              >
-                {confirmMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Verify and continue
-              </button>
-            </div>
-          </div>
-        </div>
+      {step === 'verify' && enrollment && (
+        <VerifyStepForm
+          sessionToken={enrollment.sessionToken}
+          onBack={() => setStep('scan')}
+          onCancel={onClose}
+          onVerified={(codes) => {
+            setRecoveryCodes(codes);
+            setStep('codes');
+          }}
+        />
       )}
 
       {step === 'codes' && recoveryCodes && (
@@ -369,23 +336,111 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
   );
 }
 
+/** Wizard step 2 — its own small form (one per step, not a mega-form). */
+function VerifyStepForm({
+  sessionToken,
+  onBack,
+  onCancel,
+  onVerified,
+}: {
+  sessionToken: string;
+  onBack: () => void;
+  onCancel: () => void;
+  onVerified: (recoveryCodes: string[]) => void;
+}) {
+  const confirmMut = useMutation({
+    mutationFn: (code: string) => confirmTotpEnrollment(sessionToken, code),
+    onSuccess: (data) => onVerified(data.recoveryCodes),
+    onError: (err: Error) => toastApiError('', err, 'Invalid code'),
+  });
+
+  const form = useAppForm({
+    defaultValues: { code: '' },
+    validators: {
+      // Old check (disabled-button gate): a full 6-digit code — ported 1:1.
+      onSubmit: ({ value }) => (value.code.length !== 6 ? 'Enter the 6-digit code' : undefined),
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await confirmMut.mutateAsync(value.code);
+      } catch {
+        // Mutation toasts on error.
+      }
+    },
+  });
+  const code = useStore(form.store, (state) => state.values.code);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Enter the 6-digit code your authenticator app is showing right now.
+      </p>
+      <form.Field name="code">
+        {(field) => <CodeInput value={field.state.value} onChange={field.handleChange} autoFocus />}
+      </form.Field>
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+        >
+          Back
+        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void form.handleSubmit()}
+            disabled={code.length !== 6 || confirmMut.isPending}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+          >
+            {confirmMut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Verify and continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------
 // Disable / Regenerate dialogs
 // ------------------------------------------------------------------
 
 function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const mut = useMutation({
-    mutationFn: () => disableTotp(password, code),
+    mutationFn: (value: { password: string; code: string }) => disableTotp(value.password, value.code),
     onSuccess: () => {
       toastSuccess('Two-factor authentication disabled');
       onDone();
     },
     onError: (err: Error) => toastApiError('', err, 'Could not disable 2FA'),
   });
+
+  const form = useAppForm({
+    defaultValues: { password: '', code: '' },
+    validators: {
+      // Old check (disabled-button gate): password present + full 6-digit
+      // code — ported 1:1.
+      onSubmit: ({ value }) =>
+        !value.password || value.code.length !== 6
+          ? 'Enter your password and a current code'
+          : undefined,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await mut.mutateAsync(value);
+      } catch {
+        // Mutation toasts on error.
+      }
+    },
+  });
+  const { password, code } = useStore(form.store, (state) => state.values);
 
   return (
     <ModalShell onClose={onClose} title="Disable two-factor authentication">
@@ -399,28 +454,35 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Password</label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full h-10 px-3 pr-10 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              autoComplete="current-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-              tabIndex={-1}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <form.Field name="password">
+            {(field) => (
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-10 px-3 pr-10 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Current 6-digit code</label>
-          <CodeInput value={code} onChange={setCode} />
+          <form.Field name="code">
+            {(field) => <CodeInput value={field.state.value} onChange={field.handleChange} />}
+          </form.Field>
         </div>
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
           <button
@@ -430,7 +492,7 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
             Cancel
           </button>
           <button
-            onClick={() => mut.mutate()}
+            onClick={() => void form.handleSubmit()}
             disabled={!password || code.length !== 6 || mut.isPending}
             className="inline-flex items-center gap-2 h-9 px-4 rounded bg-status-error text-white text-sm font-medium hover:bg-status-error/90 disabled:opacity-50"
           >
@@ -444,15 +506,30 @@ function DisableDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
 }
 
 function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [code, setCode] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
   const [codes, setCodes] = useState<string[] | null>(null);
 
   const mut = useMutation({
-    mutationFn: () => regenerateRecoveryCodes(code),
+    mutationFn: (code: string) => regenerateRecoveryCodes(code),
     onSuccess: (data) => setCodes(data.recoveryCodes),
     onError: (err: Error) => toastApiError('', err, 'Could not regenerate codes'),
   });
+
+  const form = useAppForm({
+    defaultValues: { code: '' },
+    validators: {
+      // Old check (disabled-button gate): a full 6-digit code — ported 1:1.
+      onSubmit: ({ value }) => (value.code.length !== 6 ? 'Enter the 6-digit code' : undefined),
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await mut.mutateAsync(value.code);
+      } catch {
+        // Mutation toasts on error.
+      }
+    },
+  });
+  const code = useStore(form.store, (state) => state.values.code);
 
   return (
     <ModalShell onClose={onClose} title="Regenerate recovery codes">
@@ -469,7 +546,9 @@ function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
             Generating new codes invalidates any previous codes. Enter a current 6-digit code to
             confirm.
           </p>
-          <CodeInput value={code} onChange={setCode} autoFocus />
+          <form.Field name="code">
+            {(field) => <CodeInput value={field.state.value} onChange={field.handleChange} autoFocus />}
+          </form.Field>
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
             <button
               onClick={onClose}
@@ -478,7 +557,7 @@ function RegenerateDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
               Cancel
             </button>
             <button
-              onClick={() => mut.mutate()}
+              onClick={() => void form.handleSubmit()}
               disabled={code.length !== 6 || mut.isPending}
               className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >

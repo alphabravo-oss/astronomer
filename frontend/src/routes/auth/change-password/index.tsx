@@ -6,6 +6,7 @@ import { Orbit, Eye, EyeOff, Loader2, KeyRound, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '@/lib/store';
 import { changeOwnPassword } from '@/lib/api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 
 // Forced password-rotation screen for the bootstrap admin and for any user
 // whose `must_change_password` flag is set. Reachable directly at
@@ -18,31 +19,44 @@ function ChangePasswordPage() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
 
-  const newLongEnough = form.next.length >= 12;
-  const newDiffers = form.next !== form.current;
-  const matches = form.next === form.confirm;
-  const canSubmit = !!form.current && newLongEnough && newDiffers && matches;
+  const form = useAppForm({
+    defaultValues: { current: '', next: '', confirm: '' },
+    validators: {
+      // Old imperative gate (`if (!canSubmit) return`) ported 1:1: current
+      // required, new ≥ 12 chars, new ≠ current, confirm matches. The button
+      // below is additionally disabled on the same checks, exactly as before.
+      onSubmit: ({ value }) =>
+        !value.current ||
+        value.next.length < 12 ||
+        value.next === value.current ||
+        value.next !== value.confirm
+          ? 'Password requirements not met'
+          : undefined,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await changeOwnPassword(value.current, value.next);
+        updateUser({ must_change_password: false, mustChangePassword: false });
+        toastSuccess('Password updated');
+        router.push('/dashboard');
+      } catch (err) {
+        toastApiError('', err, 'Failed to update password');
+      }
+    },
+  });
+  // Whole-values subscription: the hint lines below are live cross-field
+  // feedback (success/muted/danger tones), recomputed per keystroke exactly
+  // like the old useState form.
+  const values = useStore(form.store, (state) => state.values);
+  const loading = useStore(form.store, (state) => state.isSubmitting);
+
+  const newLongEnough = values.next.length >= 12;
+  const newDiffers = values.next !== values.current;
+  const matches = values.next === values.confirm;
+  const canSubmit = !!values.current && newLongEnough && newDiffers && matches;
 
   const forced = !!(user?.must_change_password || user?.mustChangePassword);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setLoading(true);
-    try {
-      await changeOwnPassword(form.current, form.next);
-      updateUser({ must_change_password: false, mustChangePassword: false });
-      toastSuccess('Password updated');
-      router.push('/dashboard');
-    } catch (err) {
-      toastApiError('', err, 'Failed to update password');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
@@ -60,50 +74,68 @@ function ChangePasswordPage() {
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm">
-          <PasswordField
-            label="Current password"
-            id="current"
-            visible={showCurrent}
-            onToggleVisible={() => setShowCurrent((v) => !v)}
-            value={form.current}
-            onChange={(v) => setForm((f) => ({ ...f, current: v }))}
-            autoFocus
-          />
-          <PasswordField
-            label="New password"
-            id="next"
-            visible={showNew}
-            onToggleVisible={() => setShowNew((v) => !v)}
-            value={form.next}
-            onChange={(v) => setForm((f) => ({ ...f, next: v }))}
-            hint={
-              form.next.length === 0
-                ? 'At least 12 characters.'
-                : !newLongEnough
-                  ? 'Must be at least 12 characters.'
-                  : !newDiffers
-                    ? 'Must differ from the current password.'
-                    : 'Looks good.'
-            }
-            hintTone={form.next.length === 0 ? 'muted' : (newLongEnough && newDiffers) ? 'success' : 'danger'}
-          />
-          <PasswordField
-            label="Confirm new password"
-            id="confirm"
-            visible={showConfirm}
-            onToggleVisible={() => setShowConfirm((v) => !v)}
-            value={form.confirm}
-            onChange={(v) => setForm((f) => ({ ...f, confirm: v }))}
-            hint={
-              form.confirm.length === 0
-                ? ' '
-                : matches
-                  ? 'Matches.'
-                  : 'Does not match the new password.'
-            }
-            hintTone={form.confirm.length === 0 ? 'muted' : matches ? 'success' : 'danger'}
-          />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void form.handleSubmit();
+          }}
+          className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
+        >
+          <form.Field name="current">
+            {(field) => (
+              <PasswordField
+                label="Current password"
+                id="current"
+                visible={showCurrent}
+                onToggleVisible={() => setShowCurrent((v) => !v)}
+                value={field.state.value}
+                onChange={field.handleChange}
+                autoFocus
+              />
+            )}
+          </form.Field>
+          <form.Field name="next">
+            {(field) => (
+              <PasswordField
+                label="New password"
+                id="next"
+                visible={showNew}
+                onToggleVisible={() => setShowNew((v) => !v)}
+                value={field.state.value}
+                onChange={field.handleChange}
+                hint={
+                  values.next.length === 0
+                    ? 'At least 12 characters.'
+                    : !newLongEnough
+                      ? 'Must be at least 12 characters.'
+                      : !newDiffers
+                        ? 'Must differ from the current password.'
+                        : 'Looks good.'
+                }
+                hintTone={values.next.length === 0 ? 'muted' : (newLongEnough && newDiffers) ? 'success' : 'danger'}
+              />
+            )}
+          </form.Field>
+          <form.Field name="confirm">
+            {(field) => (
+              <PasswordField
+                label="Confirm new password"
+                id="confirm"
+                visible={showConfirm}
+                onToggleVisible={() => setShowConfirm((v) => !v)}
+                value={field.state.value}
+                onChange={field.handleChange}
+                hint={
+                  values.confirm.length === 0
+                    ? ' '
+                    : matches
+                      ? 'Matches.'
+                      : 'Does not match the new password.'
+                }
+                hintTone={values.confirm.length === 0 ? 'muted' : matches ? 'success' : 'danger'}
+              />
+            )}
+          </form.Field>
 
           <button
             type="submit"

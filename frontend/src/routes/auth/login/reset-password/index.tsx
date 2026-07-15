@@ -17,18 +17,42 @@ import { Link } from '@/lib/link';
 import { Orbit, Loader2, Eye, EyeOff, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { completePasswordReset } from '@/lib/api/account-security';
+import { useAppForm, useStore } from '@/lib/form';
 
 function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get('token') ?? '';
 
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [showNext, setShowNext] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+
+  const form = useAppForm({
+    defaultValues: { next: '', confirm: '' },
+    validators: {
+      // Old imperative gate (`if (!canSubmit) return`) ported 1:1: token
+      // present, new ≥ 12 chars, confirm matches. The button below is
+      // additionally disabled on the same checks, exactly as before.
+      onSubmit: ({ value }) =>
+        !token || value.next.length < 12 || value.next !== value.confirm
+          ? 'Password requirements not met'
+          : undefined,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await completePasswordReset(token, value.next);
+        toastSuccess('Password reset — sign in with your new password.');
+        setDone(true);
+      } catch (err) {
+        toastApiError('', err, 'Reset failed. The link may have expired.');
+      }
+    },
+  });
+  // Whole-values subscription: the hint lines are live cross-field feedback
+  // (success/muted/danger tones), recomputed per keystroke like before.
+  const { next, confirm } = useStore(form.store, (state) => state.values);
+  const loading = useStore(form.store, (state) => state.isSubmitting);
 
   const longEnough = next.length >= 12;
   const matches = next === confirm;
@@ -42,21 +66,6 @@ function ResetPasswordPage() {
       return () => clearTimeout(t);
     }
   }, [done, router]);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setLoading(true);
-    try {
-      await completePasswordReset(token, next);
-      toastSuccess('Password reset — sign in with your new password.');
-      setDone(true);
-    } catch (err) {
-      toastApiError('', err, 'Reset failed. The link may have expired.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (!token) {
     return (
@@ -110,40 +119,54 @@ function ResetPasswordPage() {
             </Link>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm">
-            <PasswordField
-              id="next"
-              label="New password"
-              value={next}
-              onChange={setNext}
-              visible={showNext}
-              onToggleVisible={() => setShowNext((v) => !v)}
-              hint={
-                next.length === 0
-                  ? 'At least 12 characters.'
-                  : !longEnough
-                    ? 'Must be at least 12 characters.'
-                    : 'Looks good.'
-              }
-              hintTone={next.length === 0 ? 'muted' : longEnough ? 'success' : 'danger'}
-              autoFocus
-            />
-            <PasswordField
-              id="confirm"
-              label="Confirm new password"
-              value={confirm}
-              onChange={setConfirm}
-              visible={showConfirm}
-              onToggleVisible={() => setShowConfirm((v) => !v)}
-              hint={
-                confirm.length === 0
-                  ? ' '
-                  : matches
-                    ? 'Matches.'
-                    : 'Does not match the new password.'
-              }
-              hintTone={confirm.length === 0 ? 'muted' : matches ? 'success' : 'danger'}
-            />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void form.handleSubmit();
+            }}
+            className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
+          >
+            <form.Field name="next">
+              {(field) => (
+                <PasswordField
+                  id="next"
+                  label="New password"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  visible={showNext}
+                  onToggleVisible={() => setShowNext((v) => !v)}
+                  hint={
+                    next.length === 0
+                      ? 'At least 12 characters.'
+                      : !longEnough
+                        ? 'Must be at least 12 characters.'
+                        : 'Looks good.'
+                  }
+                  hintTone={next.length === 0 ? 'muted' : longEnough ? 'success' : 'danger'}
+                  autoFocus
+                />
+              )}
+            </form.Field>
+            <form.Field name="confirm">
+              {(field) => (
+                <PasswordField
+                  id="confirm"
+                  label="Confirm new password"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  visible={showConfirm}
+                  onToggleVisible={() => setShowConfirm((v) => !v)}
+                  hint={
+                    confirm.length === 0
+                      ? ' '
+                      : matches
+                        ? 'Matches.'
+                        : 'Does not match the new password.'
+                  }
+                  hintTone={confirm.length === 0 ? 'muted' : matches ? 'success' : 'danger'}
+                />
+              )}
+            </form.Field>
             <button
               type="submit"
               disabled={!canSubmit || loading}
