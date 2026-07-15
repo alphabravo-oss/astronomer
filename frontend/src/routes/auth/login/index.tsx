@@ -1,7 +1,10 @@
-'use client';
-
+// NOTE (P1.7): this route file uses @tanstack/react-router's useNavigate
+// directly instead of @/lib/navigation because the wrapper still re-exports
+// next/navigation until the P2.1 in-place rewrite (next's useRouter throws
+// outside a Next app). Route files are the eslint-exempted surface for direct
+// router imports.
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
-import { useRouter } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight, Shield, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
@@ -14,8 +17,12 @@ import {
 import type { SSOProvider, User } from '@/types';
 import { toastApiError, toastError } from '@/lib/toast';
 
-export default function LoginPage() {
-  const router = useRouter();
+export const Route = createFileRoute('/auth/login/')({
+  component: LoginPage,
+});
+
+function LoginPage() {
+  const navigate = useNavigate();
   const { login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -47,7 +54,7 @@ export default function LoginPage() {
         return;
       }
       login(result.user);
-      router.push('/dashboard');
+      navigate({ to: '/dashboard' as never });
     } catch (error) {
       toastApiError('', error, 'Login failed');
     } finally {
@@ -57,7 +64,7 @@ export default function LoginPage() {
 
   const completeTotp = (_token: string, _refresh: string | undefined, user: User) => {
     login(user);
-    router.push('/dashboard');
+    navigate({ to: '/dashboard' as never });
   };
 
   const handleSSO = async (provider: string) => {

@@ -98,6 +98,7 @@ const config = [
       'src/lib/link.tsx',
       'src/routes/**',
       'src/router.tsx',
+      'src/main.tsx',
     ],
     rules: {
       'no-restricted-imports': 'off',

@@ -51,7 +51,7 @@ export function PodTerminal({
   embedded = false,
   actionsRef,
 }: PodTerminalProps) {
-  const { ref, write, resize, focus } = useTerminal();
+  const { ref, write, focus } = useTerminal();
   const wsRef = useRef<WebSocket | null>(null);
   // Tracks the in-flight connect attempt so a cleanup (unmount, container
   // switch, StrictMode double-invoke) that runs *before* the stream-ticket XHR
@@ -192,14 +192,18 @@ export function PodTerminal({
     }
   }, []);
 
+  // Critical: do NOT call resize(cols, rows) here. The handler runs *after*
+  // the terminal has already resized to (cols, rows), so calling resize()
+  // back into the terminal triggers another onResize, recursing until the JS
+  // stack blows up ("Maximum call stack size exceeded"). Same rule as
+  // cluster-shell.tsx — record the size and forward it to the WS only.
   const handleResize = useCallback((cols: number, rows: number) => {
     sizeRef.current = { cols, rows };
-    resize(cols, rows);
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'resize', cols, rows }));
     }
-  }, [resize]);
+  }, []);
 
   // Clear the imperative actions handle on unmount. (WS teardown is handled
   // by the connect effect above.)

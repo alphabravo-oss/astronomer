@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
-import { Providers } from './(components)/providers';
+import { Providers } from '@/components/providers';
 import '@/styles/globals.css';
 
 // All pages in this app require runtime data (auth, API), so disable static prerendering.

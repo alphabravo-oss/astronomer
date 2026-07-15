@@ -1,20 +1,20 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import { lazy, Suspense, useRef, useCallback } from 'react';
 import { CheckCircle2, Copy, Download, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { ActionButton } from '@/components/ui/action-button';
 
-const MonacoEditor = dynamic(() => import('@monaco-editor/react').then((m) => m.default), {
-  ssr: false,
-  loading: () => (
+const MonacoEditor = lazy(() => import('@monaco-editor/react'));
+
+function EditorLoading() {
+  return (
     <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
     </div>
-  ),
-});
+  );
+}
 
 interface YamlEditorProps {
   value: string;
@@ -121,26 +121,28 @@ export function YamlEditor({
 
       {/* Editor */}
       <div className="flex-1 min-h-0" style={{ height }}>
-        <MonacoEditor
-          language="yaml"
-          theme="vs-dark"
-          value={value}
-          onChange={(v) => onChange?.(v || '')}
-          onMount={handleEditorDidMount}
-          options={{
-            readOnly,
-            minimap: { enabled: false },
-            fontSize: 13,
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            wordWrap: 'on',
-            tabSize: 2,
-            automaticLayout: true,
-            renderLineHighlight: 'line',
-            folding: true,
-            padding: { top: 8 },
-          }}
-        />
+        <Suspense fallback={<EditorLoading />}>
+          <MonacoEditor
+            language="yaml"
+            theme="vs-dark"
+            value={value}
+            onChange={(v) => onChange?.(v || '')}
+            onMount={handleEditorDidMount}
+            options={{
+              readOnly,
+              minimap: { enabled: false },
+              fontSize: 13,
+              lineNumbers: 'on',
+              scrollBeyondLastLine: false,
+              wordWrap: 'on',
+              tabSize: 2,
+              automaticLayout: true,
+              renderLineHighlight: 'line',
+              folding: true,
+              padding: { top: 8 },
+            }}
+          />
+        </Suspense>
       </div>
     </div>
   );
