@@ -1,12 +1,11 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+import { seedAuth } from './helpers/auth';
 
 // GATE A drill-down: a resource table row is clickable into the generic
 // ResourceDetail (Overview + YAML tabs), while a per-row action button does
 // NOT navigate. Auth + API are faked via cookies + route interception (no
 // backend), mirroring data-table.spec.ts.
-
-const SESSION_COOKIE = 'astronomer_session';
-const CSRF_COOKIE = 'astronomer_csrf';
 
 const adminUser = {
   id: 'user-admin',
@@ -130,25 +129,12 @@ async function mockApi(page: Page) {
   });
 }
 
-async function authenticate(context: BrowserContext, page: Page) {
-  await context.addCookies([
-    { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
-    { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
-  ]);
-  await page.addInitScript((user) => {
-    window.localStorage.setItem(
-      'astronomer-auth',
-      JSON.stringify({ state: { user, isAuthenticated: true }, version: 2 }),
-    );
-  }, adminUser);
-}
-
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
 test('drilldown: clicking a Service row opens its detail (Overview + YAML)', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services`);
 
   await expect(page.getByRole('heading', { name: 'Services' })).toBeVisible();
@@ -168,14 +154,15 @@ test('drilldown: clicking a Service row opens its detail (Overview + YAML)', asy
   await expect(page.getByText('Labels')).toBeVisible();
   await expect(page.getByText('platform')).toBeVisible();
 
-  // YAML tab renders the panel (View/Edit toggle + editor toolbar).
-  await page.getByRole('button', { name: 'YAML' }).click();
+  // YAML tab renders the panel (View/Edit toggle + editor toolbar). Scope to
+  // the tab nav — the header also has a "Download YAML" action button named YAML.
+  await page.getByRole('navigation').getByRole('button', { name: 'YAML' }).click();
   await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
   await expect(page.getByText('YAML', { exact: true }).last()).toBeVisible();
 });
 
 test('drilldown: clicking the row action button does NOT navigate', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services`);
 
   await expect(page.getByRole('heading', { name: 'Services' })).toBeVisible();
@@ -184,8 +171,12 @@ test('drilldown: clicking the row action button does NOT navigate', async ({ con
   await expect(row).toBeVisible();
 
   // The per-row actions trigger (ActionMenu) lives in the last cell. Clicking
-  // it opens the menu but must NOT drill into the detail route.
-  await row.locator('button').last().click();
+  // it opens the menu but must NOT drill into the detail route. Scroll it into
+  // view first: on narrow viewports the click's own auto-scroll can fire a
+  // trailing scroll event that immediately closes the just-opened menu.
+  const trigger = row.locator('button').last();
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.click();
 
   // Still on the list page (the action's stopPropagation prevented row click).
   await expect(page).toHaveURL(new RegExp(`/dashboard/clusters/${CLUSTER_ID}/services$`));
@@ -195,7 +186,7 @@ test('drilldown: clicking the row action button does NOT navigate', async ({ con
 });
 
 test('drilldown: Events tab lists this object\'s events; Related shows owner refs', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}`);
 
   await expect(page.getByRole('heading', { name: SERVICE_NAME })).toBeVisible();

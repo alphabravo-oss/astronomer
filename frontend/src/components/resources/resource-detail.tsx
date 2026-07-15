@@ -137,7 +137,7 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4">
+      <div className="flex flex-wrap items-start gap-4">
         <button
           onClick={() => router.back()}
           className="mt-1 p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
@@ -145,7 +145,9 @@ export function ResourceDetail({ clusterId, resourceType, namespace, name, k8sPa
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div className="flex-1 min-w-0">
+        {/* min-w-[10rem] (not min-w-0) so on narrow viewports the actions wrap
+            below instead of squeezing the title to zero width. */}
+        <div className="flex-1 min-w-[10rem]">
           <h1 className="text-xl font-semibold text-foreground tracking-tight font-mono truncate">{name}</h1>
           <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
             <span>Kind: {kind}</span>

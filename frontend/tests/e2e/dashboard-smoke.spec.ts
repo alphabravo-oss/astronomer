@@ -1,7 +1,6 @@
-import { expect, type BrowserContext, type Page, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
-const SESSION_COOKIE = 'astronomer_session';
-const CSRF_COOKIE = 'astronomer_csrf';
+import { CSRF_COOKIE, SESSION_COOKIE, seedAuth } from './helpers/auth';
 
 type SmokeUser = {
   id: string;
@@ -256,19 +255,6 @@ async function mockApi(page: Page, user = adminUser) {
   });
 }
 
-async function authenticate(context: BrowserContext, page: Page, user: SmokeUser = adminUser) {
-  await context.addCookies([
-    { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
-    { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
-  ]);
-  await page.addInitScript((storedUser) => {
-    window.localStorage.setItem(
-      'astronomer-auth',
-      JSON.stringify({ state: { user: storedUser, isAuthenticated: true }, version: 2 }),
-    );
-  }, user);
-}
-
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
@@ -291,9 +277,9 @@ test('redirects unauthenticated dashboard users and supports login/logout', asyn
 });
 
 test('cluster registration wizard creates a cluster and advances to connect step', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto('/dashboard/clusters/register');
-  await expect(page.getByRole('heading', { name: /register cluster/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /register an existing cluster/i })).toBeVisible();
 
   await page.getByPlaceholder('my-cluster').fill('e2e-cluster');
   await page.getByPlaceholder('My Production Cluster').fill('E2E Cluster');
@@ -304,7 +290,7 @@ test('cluster registration wizard creates a cluster and advances to connect step
 
 test('read-only cluster detail hides admin-only settings navigation', async ({ context, page }) => {
   await mockApi(page, readOnlyUser);
-  await authenticate(context, page, readOnlyUser);
+  await seedAuth(context, page, readOnlyUser);
   await page.goto('/dashboard/clusters/cluster-1');
 
   await expect(page.getByRole('heading', { name: /prod east/i })).toBeVisible();
@@ -312,7 +298,7 @@ test('read-only cluster detail hides admin-only settings navigation', async ({ c
 });
 
 test('ArgoCD page lists registered instances for authenticated users', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto('/dashboard/argocd');
 
   await expect(page.getByRole('heading', { name: /^ArgoCD$/ })).toBeVisible();
@@ -320,7 +306,7 @@ test('ArgoCD page lists registered instances for authenticated users', async ({ 
 });
 
 test('catalog install modal remains usable on responsive viewports', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto('/dashboard/catalog');
 
   await expect(page.getByRole('heading', { name: /^Catalog$/ })).toBeVisible();
@@ -337,7 +323,7 @@ test('catalog install modal remains usable on responsive viewports', async ({ co
 });
 
 test('settings general form remains usable on responsive viewports', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto('/dashboard/settings/general');
 
   await expect(page.getByRole('heading', { name: /^Settings$/ })).toBeVisible();

@@ -1,12 +1,11 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+import { seedAuth } from './helpers/auth';
 
 // GATE B pod detail: clicking a Pod row opens the generic ResourceDetail with
 // a pod-specific Overview (containers) and pod-only Logs/Exec tabs. The Logs
 // tab renders PodLogsViewer with logs mocked. Auth + API are faked via cookies
 // + route interception (no backend), mirroring resource-drilldown.spec.ts.
-
-const SESSION_COOKIE = 'astronomer_session';
-const CSRF_COOKIE = 'astronomer_csrf';
 
 const adminUser = {
   id: 'user-admin',
@@ -133,25 +132,12 @@ async function mockApi(page: Page) {
   });
 }
 
-async function authenticate(context: BrowserContext, page: Page) {
-  await context.addCookies([
-    { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
-    { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
-  ]);
-  await page.addInitScript((user) => {
-    window.localStorage.setItem(
-      'astronomer-auth',
-      JSON.stringify({ state: { user, isAuthenticated: true }, version: 2 }),
-    );
-  }, adminUser);
-}
-
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
 test('pod drilldown: row opens pod detail with containers + Logs tab renders', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/pods`);
 
   await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible();

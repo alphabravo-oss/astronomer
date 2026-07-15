@@ -107,7 +107,7 @@ export function ResourceActions({
     });
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {WORKLOAD_SCALABLE_KINDS.includes(kind) && (
         <button type="button" className={BTN} disabled={!scalePerm.allowed} title={denied(scalePerm)}
           onClick={() => setShowScale(true)}>

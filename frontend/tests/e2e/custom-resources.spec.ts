@@ -1,11 +1,10 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+import { seedAuth } from './helpers/auth';
 
 // GATE C custom-resource explorer: CRD list -> CR list (virtualized) -> CR
 // detail (generic ResourceDetail Overview + YAML). Auth + API are faked via
 // cookies + route interception (no backend), mirroring resource-drilldown.spec.
-
-const SESSION_COOKIE = 'astronomer_session';
-const CSRF_COOKIE = 'astronomer_csrf';
 
 const adminUser = {
   id: 'user-admin',
@@ -140,25 +139,12 @@ async function mockApi(page: Page) {
   });
 }
 
-async function authenticate(context: BrowserContext, page: Page) {
-  await context.addCookies([
-    { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
-    { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
-  ]);
-  await page.addInitScript((user) => {
-    window.localStorage.setItem(
-      'astronomer-auth',
-      JSON.stringify({ state: { user, isAuthenticated: true }, version: 2 }),
-    );
-  }, adminUser);
-}
-
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
 test('custom resources: CRD list -> CR list -> CR detail (Overview + YAML)', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/custom-resources`);
 
   // E1: CRD list renders the widget CRD row.
@@ -190,7 +176,8 @@ test('custom resources: CRD list -> CR list -> CR detail (Overview + YAML)', asy
   await expect(page.getByText('Labels')).toBeVisible();
   await expect(page.getByText('platform')).toBeVisible();
 
-  // YAML tab renders the panel (View/Edit toggle).
-  await page.getByRole('button', { name: 'YAML' }).click();
+  // YAML tab renders the panel (View/Edit toggle). Scope to the tab nav — the
+  // header also has a "Download YAML" action button named YAML.
+  await page.getByRole('navigation').getByRole('button', { name: 'YAML' }).click();
   await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
 });

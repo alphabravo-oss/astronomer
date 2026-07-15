@@ -1,11 +1,11 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+import { seedAuth } from './helpers/auth';
 
 // Confirms DataTable server-side mode (B4) against the real Audit page: each
 // page is a separate offset-based fetch, and the table footer reports the
 // server total — not the number of loaded rows.
 
-const SESSION_COOKIE = 'astronomer_session';
-const CSRF_COOKIE = 'astronomer_csrf';
 const TOTAL = 125;
 const PAGE_SIZE = 50;
 
@@ -60,19 +60,6 @@ async function mockApi(page: Page) {
   });
 }
 
-async function authenticate(context: BrowserContext, page: Page) {
-  await context.addCookies([
-    { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
-    { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
-  ]);
-  await page.addInitScript((user) => {
-    window.localStorage.setItem(
-      'astronomer-auth',
-      JSON.stringify({ state: { user, isAuthenticated: true }, version: 2 }),
-    );
-  }, adminUser);
-}
-
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
@@ -86,7 +73,7 @@ test('DataTable server-side: audit paginates via per-page offset requests (B4)',
     }
   });
 
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto('/dashboard/audit');
 
   // Footer reports the SERVER total (125), not the 50 loaded rows.

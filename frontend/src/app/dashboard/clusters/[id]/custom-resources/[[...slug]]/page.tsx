@@ -246,7 +246,11 @@ function CRList({ clusterId, group, version, plural }: {
           <Link
             href={crDetailHref(clusterId, group, version, plural, row.name, row.namespace)}
             onClick={(e) => e.stopPropagation()}
-            className="font-medium text-foreground font-mono text-xs hover:underline"
+            // min-w-0 + truncate: without them the <a> refuses to shrink below
+            // its content width inside the virtualized grid's flex cell, spills
+            // under the neighboring gridcell on narrow viewports, and becomes
+            // unclickable (the neighbor intercepts pointer events).
+            className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
           >
             {row.name}
           </Link>

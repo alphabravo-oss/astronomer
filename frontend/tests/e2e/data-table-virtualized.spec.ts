@@ -1,4 +1,6 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+import { seedAuth } from './helpers/auth';
 
 // Verifies that the DataTable's `virtualized` opt-in (a DIV-based ARIA grid that
 // windows the full filtered+sorted row model) works end-to-end in a real
@@ -12,9 +14,6 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 // data-table.spec.ts. The scan is mocked with 1000+ findings; we assert that
 // the grid windows them (a bounded number of body rows in the DOM) and that
 // scrolling reveals later rows.
-
-const SESSION_COOKIE = 'astronomer_session';
-const CSRF_COOKIE = 'astronomer_csrf';
 
 const SCAN_ID = 'scan-virtualized-e2e';
 const CLUSTER_ID = 'cluster-01';
@@ -123,25 +122,12 @@ async function mockApi(page: Page) {
   });
 }
 
-async function authenticate(context: BrowserContext, page: Page) {
-  await context.addCookies([
-    { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
-    { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
-  ]);
-  await page.addInitScript((user) => {
-    window.localStorage.setItem(
-      'astronomer-auth',
-      JSON.stringify({ state: { user, isAuthenticated: true }, version: 2 }),
-    );
-  }, adminUser);
-}
-
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
 test('DataTable(virtualized): windows a 1200-row CIS findings list', async ({ context, page }) => {
-  await authenticate(context, page);
+  await seedAuth(context, page, adminUser);
   await page.goto(`/dashboard/security/scans/${SCAN_ID}`);
 
   // The findings heading reports the full filtered count, proving all 1200 rows
