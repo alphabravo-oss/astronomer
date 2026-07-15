@@ -67,6 +67,15 @@ const (
 	selfManagedApproveAnnotation = "astronomer.io/self-manage-approved-hash"
 	selfManagedPhaseAwaiting     = "awaiting-approval"
 	selfManagedPhaseActive       = "active"
+	// localArgoTokenRenewAnnotation records (RFC3339) when the bearer token in
+	// the local cluster Secret should be re-minted. It is set to half the
+	// TokenRequest TTL so a fresh token is always in place well before expiry.
+	// Note that re-minting does NOT revoke the superseded token: TokenRequest
+	// tokens stay valid until their full 24h TTL expires, so responding to a
+	// leaked token requires deleting and recreating the
+	// argocd-application-controller ServiceAccount (which invalidates all of
+	// its tokens), not merely rewriting this Secret.
+	localArgoTokenRenewAnnotation = "astronomer.io/argocd-token-renew-after"
 )
 
 type selfManagedSecretRef struct {
@@ -280,6 +289,20 @@ func ensureLocalArgoRepoSecret(ctx context.Context, k8s kubernetes.Interface) er
 }
 
 func ensureLocalArgoClusterSecret(ctx context.Context, k8s kubernetes.Interface, cluster sqlc.Cluster, projects []sqlc.Project) (string, error) {
+	desiredLabels := localArgoClusterSecretLabelsForProjects(cluster, projects)
+	// Every write to this Secret makes the ArgoCD application-controller
+	// invalidate and rebuild its cluster cache and races Argo's own status
+	// writes, so skip the TokenRequest and the write entirely while the
+	// existing Secret matches the desired shape and its token is not yet due
+	// for renewal. A missing or garbled annotation, or any field/label drift,
+	// falls through to a full renew-now rewrite (self-healing).
+	existing, err := k8s.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err == nil && localArgoClusterSecretUpToDate(existing, cluster, desiredLabels, time.Now()) {
+		return localArgoClusterSecretName, nil
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return "", err
+	}
 	token, err := createLocalArgoApplicationControllerToken(ctx, k8s)
 	if err != nil {
 		return "", err
@@ -301,7 +324,10 @@ func ensureLocalArgoClusterSecret(ctx context.Context, k8s kubernetes.Interface,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      localArgoClusterSecretName,
 			Namespace: localArgoNamespace,
-			Labels:    localArgoClusterSecretLabelsForProjects(cluster, projects),
+			Labels:    desiredLabels,
+			Annotations: map[string]string{
+				localArgoTokenRenewAnnotation: time.Now().Add(localArgoAppControllerTTL / 2).UTC().Format(time.RFC3339),
+			},
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
@@ -311,6 +337,57 @@ func ensureLocalArgoClusterSecret(ctx context.Context, k8s kubernetes.Interface,
 		},
 	}
 	return localArgoClusterSecretName, applyLocalArgoSecret(ctx, k8s, secret)
+}
+
+// localArgoClusterSecretUpToDate reports whether the existing cluster Secret
+// already carries every desired non-token field and a token that is not yet
+// due for renewal. Extra labels or annotations added by other controllers do
+// not force a rewrite, but stale astronomer-owned labels do — the desired
+// label set encodes the project list and mirrored cluster labels, so project
+// or label changes must converge.
+func localArgoClusterSecretUpToDate(secret *corev1.Secret, cluster sqlc.Cluster, desiredLabels map[string]string, now time.Time) bool {
+	if string(secret.Data["name"]) != cluster.Name || string(secret.Data["server"]) != cluster.ApiServerUrl {
+		return false
+	}
+	// The non-token parts of config must also match: a missing/garbled config,
+	// an empty bearer token, or TLS drift (CA rotation, insecure flip) means
+	// the ArgoCD connection is broken or stale and must self-heal now rather
+	// than waiting out the renew annotation.
+	var existingCfg struct {
+		BearerToken     string `json:"bearerToken"`
+		TLSClientConfig struct {
+			Insecure bool   `json:"insecure"`
+			CAData   string `json:"caData"`
+		} `json:"tlsClientConfig"`
+	}
+	if err := json.Unmarshal(secret.Data["config"], &existingCfg); err != nil {
+		return false
+	}
+	if strings.TrimSpace(existingCfg.BearerToken) == "" {
+		return false
+	}
+	if existingCfg.TLSClientConfig.Insecure != (cluster.CaCertificate == "") ||
+		existingCfg.TLSClientConfig.CAData != cluster.CaCertificate {
+		return false
+	}
+	for key, value := range desiredLabels {
+		if secret.Labels[key] != value {
+			return false
+		}
+	}
+	for key := range secret.Labels {
+		if !argolabels.IsOwnedLabel(key) {
+			continue
+		}
+		if _, ok := desiredLabels[key]; !ok {
+			return false
+		}
+	}
+	renewAfter, err := time.Parse(time.RFC3339, secret.Annotations[localArgoTokenRenewAnnotation])
+	if err != nil {
+		return false
+	}
+	return renewAfter.After(now)
 }
 
 func localArgoClusterSecretLabelsForProjects(cluster sqlc.Cluster, projects []sqlc.Project) map[string]string {
@@ -528,7 +605,9 @@ func loginToArgoCDWithInitialAdminSecret(ctx context.Context, k8s kubernetes.Int
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpclient.New(localArgoHTTPTimeout).Do(req)
+	// In-cluster argocd-server resolves to a private ClusterIP, which the
+	// default public-only SafeClient rejects at dial time (SEC-03).
+	resp, err := httpclient.SafeClientAllowPrivate(localArgoHTTPTimeout).Do(req)
 	if err != nil {
 		return "", err
 	}

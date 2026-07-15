@@ -7,9 +7,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	appsv1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -23,9 +25,299 @@ import (
 	"sigs.k8s.io/yaml"
 
 	chartdeploy "github.com/alphabravocompany/astronomer-go/deploy"
+	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+// newLocalArgoTokenCountingClientset returns a fake clientset that serves
+// ServiceAccount TokenRequests and counts how many tokens were minted.
+func newLocalArgoTokenCountingClientset(t *testing.T) (*fake.Clientset, *int) {
+	t.Helper()
+	client := fake.NewClientset()
+	tokenMints := 0
+	client.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "token" {
+			return false, nil, nil
+		}
+		tokenMints++
+		return true, &authv1.TokenRequest{Status: authv1.TokenRequestStatus{Token: "minted-token"}}, nil
+	})
+	return client, &tokenMints
+}
+
+func localArgoClusterSecretMutationActions(client *fake.Clientset) []k8stesting.Action {
+	var mutations []k8stesting.Action
+	for _, action := range client.Fake.Actions() {
+		if action.GetResource().Resource != "secrets" {
+			continue
+		}
+		switch action.GetVerb() {
+		case "create", "update", "patch", "delete":
+			mutations = append(mutations, action)
+		}
+	}
+	return mutations
+}
+
+func TestEnsureLocalArgoClusterSecretSkipsRewriteWhileTokenFresh(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ID: uuid.New(), Name: "local", ApiServerUrl: "https://kubernetes.default.svc"}
+	projects := []sqlc.Project{{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}}
+	client, tokenMints := newLocalArgoTokenCountingClientset(t)
+
+	name, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects)
+	if err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	if name != localArgoClusterSecretName {
+		t.Fatalf("secret name = %q, want %q", name, localArgoClusterSecretName)
+	}
+	if *tokenMints != 1 {
+		t.Fatalf("token mints after first reconcile = %d, want 1", *tokenMints)
+	}
+	first, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renewAfter, err := time.Parse(time.RFC3339, first.Annotations[localArgoTokenRenewAnnotation])
+	if err != nil {
+		t.Fatalf("renew-after annotation %q: %v", first.Annotations[localArgoTokenRenewAnnotation], err)
+	}
+	if !renewAfter.After(time.Now().Add(localArgoAppControllerTTL/2 - time.Minute)) {
+		t.Fatalf("renew-after %v not roughly half the token TTL in the future", renewAfter)
+	}
+
+	client.ClearActions()
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	if *tokenMints != 1 {
+		t.Fatalf("token mints after second reconcile = %d, want 1 (no re-mint while fresh)", *tokenMints)
+	}
+	if mutations := localArgoClusterSecretMutationActions(client); len(mutations) != 0 {
+		t.Fatalf("second reconcile mutated the cluster secret: %#v", mutations)
+	}
+	second, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ResourceVersion != first.ResourceVersion {
+		t.Fatalf("resourceVersion changed on no-op reconcile: %q -> %q", first.ResourceVersion, second.ResourceVersion)
+	}
+}
+
+func TestEnsureLocalArgoClusterSecretRenewsWhenAnnotationExpiredOrGarbled(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ID: uuid.New(), Name: "local", ApiServerUrl: "https://kubernetes.default.svc"}
+	projects := []sqlc.Project{{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}}
+	client, tokenMints := newLocalArgoTokenCountingClientset(t)
+
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	for i, annotation := range []string{
+		time.Now().Add(-time.Hour).UTC().Format(time.RFC3339), // past → renew now
+		"not-a-timestamp",                                     // garbled → renew now (self-healing)
+	} {
+		secret, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		secret.Annotations[localArgoTokenRenewAnnotation] = annotation
+		if _, err := client.CoreV1().Secrets(localArgoNamespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+			t.Fatalf("renew reconcile %d: %v", i, err)
+		}
+		if want := 2 + i; *tokenMints != want {
+			t.Fatalf("token mints = %d, want %d (annotation %q must force a re-mint)", *tokenMints, want, annotation)
+		}
+		renewed, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		renewAfter, err := time.Parse(time.RFC3339, renewed.Annotations[localArgoTokenRenewAnnotation])
+		if err != nil || !renewAfter.After(time.Now()) {
+			t.Fatalf("rewrite did not restore a future renew-after annotation: %q err=%v", renewed.Annotations[localArgoTokenRenewAnnotation], err)
+		}
+	}
+}
+
+func TestEnsureLocalArgoClusterSecretRewritesOnProjectLabelDrift(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ID: uuid.New(), Name: "local", ApiServerUrl: "https://kubernetes.default.svc"}
+	alpha := sqlc.Project{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}
+	beta := sqlc.Project{ID: uuid.New(), Name: "beta", ClusterID: cluster.ID}
+	client, tokenMints := newLocalArgoTokenCountingClientset(t)
+
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, []sqlc.Project{alpha}); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	// Project added → labels drift → rewrite with a fresh token.
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, []sqlc.Project{alpha, beta}); err != nil {
+		t.Fatalf("project-added reconcile: %v", err)
+	}
+	if *tokenMints != 2 {
+		t.Fatalf("token mints after project add = %d, want 2", *tokenMints)
+	}
+	betaLabel := argolabels.ProjectMembershipPrefix + "beta"
+	secret, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret.Labels[betaLabel] != argolabels.ProjectMembershipLabelValue {
+		t.Fatalf("membership label %s missing after project add: %#v", betaLabel, secret.Labels)
+	}
+	// Same projects again → converged, no rewrite.
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, []sqlc.Project{alpha, beta}); err != nil {
+		t.Fatalf("steady-state reconcile: %v", err)
+	}
+	if *tokenMints != 2 {
+		t.Fatalf("token mints at steady state = %d, want 2", *tokenMints)
+	}
+	// Project removed → stale membership label must be cleaned up.
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, []sqlc.Project{alpha}); err != nil {
+		t.Fatalf("project-removed reconcile: %v", err)
+	}
+	if *tokenMints != 3 {
+		t.Fatalf("token mints after project removal = %d, want 3", *tokenMints)
+	}
+	secret, err = client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, stale := secret.Labels[betaLabel]; stale {
+		t.Fatalf("stale membership label %s survived project removal: %#v", betaLabel, secret.Labels)
+	}
+
+	// Mirrored cluster label (astronomer.io/label-*) removed → the stale key
+	// must trigger a rewrite even though no membership label drifted with it.
+	mirroredLabel := argolabels.LabelPrefix + "team"
+	cluster.Labels = json.RawMessage(`{"team":"platform"}`)
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, []sqlc.Project{alpha}); err != nil {
+		t.Fatalf("mirrored-label-added reconcile: %v", err)
+	}
+	if *tokenMints != 4 {
+		t.Fatalf("token mints after mirrored label add = %d, want 4", *tokenMints)
+	}
+	secret, err = client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret.Labels[mirroredLabel] != "platform" {
+		t.Fatalf("mirrored label %s missing after cluster label add: %#v", mirroredLabel, secret.Labels)
+	}
+	cluster.Labels = nil
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, []sqlc.Project{alpha}); err != nil {
+		t.Fatalf("mirrored-label-removed reconcile: %v", err)
+	}
+	if *tokenMints != 5 {
+		t.Fatalf("token mints after mirrored label removal = %d, want 5", *tokenMints)
+	}
+	secret, err = client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, stale := secret.Labels[mirroredLabel]; stale {
+		t.Fatalf("stale mirrored label %s survived cluster label removal: %#v", mirroredLabel, secret.Labels)
+	}
+}
+
+func TestEnsureLocalArgoClusterSecretRewritesOnConfigDrift(t *testing.T) {
+	ctx := context.Background()
+	cluster := sqlc.Cluster{ID: uuid.New(), Name: "local", ApiServerUrl: "https://kubernetes.default.svc"}
+	projects := []sqlc.Project{{ID: uuid.New(), Name: "alpha", ClusterID: cluster.ID}}
+	client, tokenMints := newLocalArgoTokenCountingClientset(t)
+
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+
+	// Each mutation corrupts only Data["config"] while the renew-after
+	// annotation stays in the future; every one must force a re-mint.
+	mutations := []struct {
+		name   string
+		mutate func(*corev1.Secret)
+	}{
+		{"config deleted", func(s *corev1.Secret) { delete(s.Data, "config") }},
+		{"config garbled", func(s *corev1.Secret) { s.Data["config"] = []byte("{not-json") }},
+		{"bearer token empty", func(s *corev1.Secret) {
+			s.Data["config"] = []byte(`{"bearerToken":"","tlsClientConfig":{"insecure":true}}`)
+		}},
+		{"tls drift", func(s *corev1.Secret) {
+			s.Data["config"] = []byte(`{"bearerToken":"minted-token","tlsClientConfig":{"insecure":false,"caData":"stale-ca"}}`)
+		}},
+	}
+	for i, tc := range mutations {
+		secret, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		tc.mutate(secret)
+		if _, err := client.CoreV1().Secrets(localArgoNamespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+			t.Fatalf("%s reconcile: %v", tc.name, err)
+		}
+		if want := 2 + i; *tokenMints != want {
+			t.Fatalf("token mints after %q = %d, want %d (config drift must force a re-mint)", tc.name, *tokenMints, want)
+		}
+		healed, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg struct {
+			BearerToken     string `json:"bearerToken"`
+			TLSClientConfig struct {
+				Insecure bool   `json:"insecure"`
+				CAData   string `json:"caData"`
+			} `json:"tlsClientConfig"`
+		}
+		if err := json.Unmarshal(healed.Data["config"], &cfg); err != nil {
+			t.Fatalf("healed config after %q unparseable: %v", tc.name, err)
+		}
+		if cfg.BearerToken != "minted-token" || !cfg.TLSClientConfig.Insecure || cfg.TLSClientConfig.CAData != "" {
+			t.Fatalf("healed config after %q = %#v, want fresh insecure config", tc.name, cfg)
+		}
+	}
+
+	// CA rotation: the desired caData changes while the secret is otherwise
+	// converged with a future annotation → rewrite with the new CA.
+	cluster.CaCertificate = "rotated-ca-data"
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("ca-rotation reconcile: %v", err)
+	}
+	if *tokenMints != 2+len(mutations) {
+		t.Fatalf("token mints after CA rotation = %d, want %d", *tokenMints, 2+len(mutations))
+	}
+	rotated, err := client.CoreV1().Secrets(localArgoNamespace).Get(ctx, localArgoClusterSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rotatedCfg struct {
+		BearerToken     string `json:"bearerToken"`
+		TLSClientConfig struct {
+			Insecure bool   `json:"insecure"`
+			CAData   string `json:"caData"`
+		} `json:"tlsClientConfig"`
+	}
+	if err := json.Unmarshal(rotated.Data["config"], &rotatedCfg); err != nil {
+		t.Fatal(err)
+	}
+	if rotatedCfg.TLSClientConfig.Insecure || rotatedCfg.TLSClientConfig.CAData != "rotated-ca-data" {
+		t.Fatalf("rotated config = %#v, want caData=rotated-ca-data insecure=false", rotatedCfg)
+	}
+	// Converged again → no further mint.
+	if _, err := ensureLocalArgoClusterSecret(ctx, client, cluster, projects); err != nil {
+		t.Fatalf("post-rotation steady-state reconcile: %v", err)
+	}
+	if *tokenMints != 2+len(mutations) {
+		t.Fatalf("token mints at post-rotation steady state = %d, want %d", *tokenMints, 2+len(mutations))
+	}
+}
 
 func TestParseImageRefForSelfManagedHelmValues(t *testing.T) {
 	tests := []struct {
