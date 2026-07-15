@@ -108,7 +108,7 @@ function directToastCallSites(files) {
     const r = rel(file);
     if (r === 'frontend/src/lib/toast.ts') return null;
     if (
-      r === 'frontend/src/app/(components)/providers.tsx' &&
+      r === 'frontend/src/components/providers.tsx' &&
       /import\s*\{\s*Toaster\s*\}\s*from\s*['"]sonner['"]/.test(line)
     ) {
       return null;
@@ -123,9 +123,17 @@ function directToastCallSites(files) {
   });
 }
 
+const gateFileCounts = new Map();
+
+function routeScopedFiles(files, gateName) {
+  const scoped = files.filter((file) => rel(file).startsWith('frontend/src/routes/'));
+  gateFileCounts.set(gateName, scoped.length);
+  return scoped;
+}
+
 function localResponseShapes(files) {
   return lineFindings(
-    files.filter((file) => rel(file).startsWith('frontend/src/app/')),
+    routeScopedFiles(files, 'localResponseShapes'),
     (line) =>
       /\b(type|interface)\s+ResponseShape\b/.test(line)
         ? 'local ResponseShape type should move into a feature API module'
@@ -215,7 +223,7 @@ function authSessionLiteralCallSites(files) {
 
 function pageQueryKeys(files) {
   return lineFindings(
-    files.filter((file) => rel(file).startsWith('frontend/src/app/')),
+    routeScopedFiles(files, 'pageQueryKeys'),
     (line) => {
       if (/\bqueryKey\s*:\s*\[/.test(line)) {
         return 'inline React Query key in page component';
@@ -604,6 +612,11 @@ if (args.has('--check')) {
     ...inventory.authSessionLiteralCallSites.map((item) => `auth session literal: ${item.file}:${item.line}`),
     ...inventory.pageQueryKeys.map((item) => `page-local query key: ${item.file}:${item.line}`),
   ];
+  for (const [name, count] of gateFileCounts) {
+    if (count === 0) {
+      failures.push(`gate ${name} matched 0 files — path filter is stale`);
+    }
+  }
   if (failures.length > 0) {
     console.error('Code-health hard gates failed:');
     for (const failure of failures) console.error(`- ${failure}`);
