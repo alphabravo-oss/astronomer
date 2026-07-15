@@ -4,7 +4,7 @@ Migration 045 — Dex as the single auth-provider source of truth.
 The chart now templates a minimal in-cluster Dex deployment behind a
 `dex.enabled` toggle. Astronomer's existing dex_settings + dex_connectors
 tables continue to drive the runtime configuration; the server's bootstrap
-seeds the singleton settings row to point at this Deployment + ConfigMap so
+seeds the singleton settings row to point at this Deployment + runtime Secret so
 the operator's first connector + Apply works without any manual settings
 step.
 

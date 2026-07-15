@@ -1,0 +1,27 @@
+{{- /*
+Resolved blackhole backend for the public /internal route guard.
+
+Gateway API requires every Service backendRef to resolve before it marks an
+HTTPRoute ResolvedRefs=True. A deliberately nonexistent Service therefore
+invalidates the route and can prevent unrelated UI rules from programming.
+This Service has a dedicated selector for which the chart renders no workload,
+so it has zero endpoints and returns only the gateway's unavailable response.
+It must never gain a Deployment or other pod-producing controller.
+*/ -}}
+{{- if or .Values.gateway.enabled .Values.ingress.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astronomer.fullname" . }}-internal-deny
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "internal-deny") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "internal-deny") | nindent 4 }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.server.service.port }}
+      targetPort: {{ .Values.server.service.port }}
+{{- end }}

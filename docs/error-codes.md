@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 217**
+**Total codes: 219**
 
 ## Codes by category
 
@@ -47,6 +47,7 @@ Dominant HTTP status: 400 · Provenance: seed
 | `ImmutableName` | `immutable_name` | 400 / 422 | indicates a immutable name condition. |
 | `ImmutableProvider` | `immutable_provider` | 400 / 422 | indicates a immutable provider condition. |
 | `IncompatibleExtension` | `incompatible_extension` | 400 / 422 | indicates a incompatible extension condition. |
+| `ExtensionRBACDenied` | `extension_rbac_denied` | 400 / 422 | indicates the requesting user's own RBAC bindings do not grant the data source the extension declared (§DataProxy step 4). The extension can never exceed the user — this is the load-bearing deny. |
 | `InvalidAddr` | `invalid_addr` | 400 / 422 | indicates a invalid addr condition. |
 | `InvalidCIDR` | `invalid_cidr` | 400 / 422 | indicates a invalid cidr condition. |
 | `InvalidChallenge` | `invalid_challenge` | 400 / 422 | indicates a invalid challenge condition. |
@@ -70,6 +71,7 @@ Dominant HTTP status: 400 · Provenance: seed
 | `InvalidRange` | `invalid_range` | 400 / 422 | indicates a invalid range condition. |
 | `InvalidResource` | `invalid_resource` | 400 / 422 | indicates a invalid resource condition. |
 | `InvalidScope` | `invalid_scope` | 400 / 422 | indicates a invalid scope condition. |
+| `InvalidSignature` | `invalid_signature` | 400 / 422 | indicates a supplied cryptographic signature failed verification against the trusted key. |
 | `InvalidScopeParams` | `invalid_scope_params` | 400 / 422 | indicates a invalid scope params condition. |
 | `InvalidServiceProxyTarget` | `invalid_service_proxy_target` | 400 / 422 | indicates a invalid service proxy target condition. |
 | `InvalidSince` | `invalid_since` | 400 / 422 | indicates a invalid since condition. Aliases: `since_invalid` |

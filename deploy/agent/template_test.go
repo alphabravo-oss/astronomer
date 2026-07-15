@@ -485,9 +485,9 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 		`kind: RoleBinding`,
 		`namespace: astronomer-system`,
 		`Namespace-scoped workload operations`,
-		// The agent's own token Role is always present, scoped to one secret name.
-		`name: astronomer-agent-token`,
-		`resourceNames: ["astronomer-agent-token"]`,
+		// Credential access has a distinct current-layout RBAC object.
+		`name: astronomer-agent-identity`,
+		`resourceNames: ["astronomer-agent-identity", "astronomer-agent-token"]`,
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Fatalf("manifest missing %q:\n%s", want, manifest)
@@ -522,11 +522,145 @@ func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
 			t.Fatalf("namespace-operator must bind the agent via a namespaced RoleBinding, found a ClusterRoleBinding to %q", d.RoleRef.Name)
 		}
 	}
-	// The only secrets grant must be the resourceName-scoped token Role — the
+	// The only secrets grant must be the resourceName-scoped identity Role — the
 	// namespace-operator's own ClusterRole rules must not include secrets.
 	if strings.Contains(RBACRulesYAML(PrivilegeProfileNamespaceOperator), `"secrets"`) {
 		t.Fatal("namespace-operator RBAC rules must not grant secrets")
 	}
+}
+
+func TestRenderInstallYAMLSplitsBootstrapAndDurableCredentialOwnership(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "https://astro.example.com",
+		ClusterID:         "c1",
+		RegistrationToken: "registration-material",
+		AgentImage:        "example.com/agent:v1",
+		PrivilegeProfile:  PrivilegeProfileViewer,
+	})
+	if strings.Contains(manifest, "kubectl.kubernetes.io/last-applied-configuration") {
+		t.Fatal("rendered manifest must not contain a client-side last-applied annotation")
+	}
+	if strings.Contains(manifest, "ASTRONOMER_AGENT_TOKEN") {
+		t.Fatal("current in-cluster manifest must resolve credentials through exact-name API reads, not token env")
+	}
+
+	type rule struct {
+		Resources     []string `yaml:"resources"`
+		ResourceNames []string `yaml:"resourceNames"`
+		Verbs         []string `yaml:"verbs"`
+	}
+	type doc struct {
+		Kind     string `yaml:"kind"`
+		Metadata struct {
+			Name   string            `yaml:"name"`
+			Labels map[string]string `yaml:"labels"`
+		} `yaml:"metadata"`
+		StringData map[string]string `yaml:"stringData"`
+		Data       map[string]string `yaml:"data"`
+		Rules      []rule            `yaml:"rules"`
+	}
+	var identityRole []rule
+	credentialRBACObjects := map[string]bool{}
+	secretNames := map[string]bool{}
+	dec := yaml.NewDecoder(strings.NewReader(manifest))
+	for {
+		var d doc
+		if err := dec.Decode(&d); err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			t.Fatal(err)
+		}
+		if d.Kind == "Secret" {
+			secretNames[d.Metadata.Name] = true
+			if d.Metadata.Name == "astronomer-agent-registration-token" && d.StringData["token"] != "registration-material" {
+				t.Fatal("bootstrap Secret does not contain rendered registration material")
+			}
+			if d.Metadata.Name == "astronomer-agent-identity" {
+				if len(d.StringData) != 0 || len(d.Data) != 0 {
+					t.Fatal("installer identity container must not contain token data")
+				}
+				if d.Metadata.Labels["astronomer.io/agent-credential-purpose"] != "durable-identity-container" {
+					t.Fatal("identity container purpose label is missing")
+				}
+			}
+		}
+		if (d.Kind == "Role" || d.Kind == "RoleBinding") && (d.Metadata.Name == "astronomer-agent-identity" || d.Metadata.Name == "astronomer-agent-token") {
+			credentialRBACObjects[d.Kind+"/"+d.Metadata.Name] = true
+		}
+		if d.Kind == "Role" && d.Metadata.Name == "astronomer-agent-identity" {
+			identityRole = d.Rules
+		}
+	}
+	if !secretNames["astronomer-agent-registration-token"] {
+		t.Fatal("installer-owned bootstrap Secret is missing")
+	}
+	if !secretNames["astronomer-agent-identity"] {
+		t.Fatal("installer-owned empty identity container is missing")
+	}
+	if secretNames["astronomer-agent-token"] {
+		t.Fatal("legacy durable Secret must be absent from current installer manifest")
+	}
+	if len(identityRole) != 3 {
+		t.Fatalf("credential Role has %d rules, want exact-name get, patch, and delete", len(identityRole))
+	}
+	if !credentialRBACObjects["Role/astronomer-agent-identity"] || !credentialRBACObjects["RoleBinding/astronomer-agent-identity"] {
+		t.Fatal("current credential Role/Binding is missing")
+	}
+	if credentialRBACObjects["Role/astronomer-agent-token"] || credentialRBACObjects["RoleBinding/astronomer-agent-token"] {
+		t.Fatal("current manifest must not own the cached-manifest legacy credential Role/Binding names")
+	}
+
+	allows := func(verb, name string) bool {
+		for _, r := range identityRole {
+			if !containsString(r.Resources, "secrets") || !containsString(r.Verbs, verb) {
+				continue
+			}
+			if len(r.ResourceNames) == 0 || containsString(r.ResourceNames, name) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, verb := range []string{"get", "patch"} {
+		if !allows(verb, "astronomer-agent-identity") {
+			t.Fatalf("active identity must allow %s", verb)
+		}
+		if allows(verb, "arbitrary-secret") {
+			t.Fatalf("arbitrary existing Secret unexpectedly allows %s", verb)
+		}
+	}
+	if !allows("get", "astronomer-agent-registration-token") || allows("patch", "astronomer-agent-registration-token") {
+		t.Fatal("bootstrap must be exact-name read-only")
+	}
+	if !allows("get", "astronomer-agent-token") || !allows("patch", "astronomer-agent-token") {
+		t.Fatal("legacy identity requires exact-name read plus annotation scrub patch")
+	}
+	if !allows("get", "astronomer-agent-ca") || allows("patch", "astronomer-agent-ca") {
+		t.Fatal("agent CA must be exact-name readable for guarded decommission and never patchable")
+	}
+	for _, name := range []string{"astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token", "astronomer-agent-ca"} {
+		if !allows("delete", name) {
+			t.Fatalf("full decommission must allow exact-name delete of %s", name)
+		}
+	}
+	if allows("delete", "arbitrary-secret") {
+		t.Fatal("arbitrary Secret unexpectedly allows delete")
+	}
+	for _, verb := range []string{"create", "update", "list", "watch"} {
+		if allows(verb, "astronomer-agent-identity") || allows(verb, "arbitrary-secret") {
+			t.Fatalf("credential Role unexpectedly allows %s", verb)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRenderInstallYAMLUsesInstallMetadata(t *testing.T) {

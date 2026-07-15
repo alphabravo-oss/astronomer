@@ -9,7 +9,7 @@ Status as of Wave B (SEC-R01 / DEBT-R01 prep). **Install default remains legacy
 | --- | --- | --- |
 | Agent install manifest | `astronomer-agent connect` | **Yes** — `deploy/agent/install.yaml.template` container `command` is `["astronomer-agent", "connect"]` |
 | Agent CLI | `connect` | Legacy full-handler tunnel |
-| Agent CLI | `connect2` | Documented as **preferred** for new ad-hoc use (`cmd/agent/main.go`), but not the install default |
+| Agent CLI | `connect2` | **Experimental, existing-durable-identity-only**; rejects bootstrap/legacy/environment sources |
 | Management routes | `/api/v1/ws/agent/tunnel/{cluster_id}/` | Legacy hub WebSocket |
 | Management routes | `/api/v1/connect/...` | remotedialer (`internal/tunnel2`) |
 
@@ -34,9 +34,9 @@ Status as of Wave B (SEC-R01 / DEBT-R01 prep). **Install default remains legacy
 
 | Check | Hub (`connect`) | tunnel2 (`connect2`) |
 | --- | --- | --- |
-| Registration token, cluster match | Yes | Yes |
+| Registration token, cluster match | Yes | **Client rejects bootstrap source before dial** |
 | Registration token after durable **adopted** (replay) | **Denied** (A3) | **Denied** (shared `connectauth`) |
-| Registration token pre-adoption / re-import after re-mint | Allowed | Allowed |
+| Registration token pre-adoption / re-import after re-mint | Allowed | **Not supported** |
 | Durable agent token (hash / grace previous) | Yes | Yes |
 | Mint / rotate durable on CONNECT_ACK | Yes | N/A (remotedialer has no CONNECT_ACK token channel) |
 | Shared per-IP connect failure limiter | Yes | Yes (same limiter instance when wired) |
@@ -45,7 +45,7 @@ Status as of Wave B (SEC-R01 / DEBT-R01 prep). **Install default remains legacy
 
 | Capability | Hub `connect` | remotedialer `connect2` |
 | --- | --- | --- |
-| Agent auth (reg + durable, A3 gate) | Yes | Yes (SEC-R01) |
+| Agent auth (reg + durable, A3 gate) | Yes | Durable identity only (bootstrap fails closed) |
 | K8s API proxy / dial-through | Yes | Yes (primary strength) |
 | Multi-replica locator HA | Yes | **No** |
 | Exec / logs consumers (ticket WS) | Yes (hub streams) | Not on remotedialer path |
@@ -63,8 +63,8 @@ minimum:
 - Port or dual-path for exec/logs and any install-critical RPCs
 - Dual-run metrics and a deprecation timeline for the hub
 
-Do **not** flip `install.yaml.template` to `connect2` solely because the CLI
-marks it preferred.
+Do **not** flip `install.yaml.template` to `connect2`; the CLI marks it
+experimental and it cannot perform ACK-based adoption or rotation.
 
 ## Related code
 

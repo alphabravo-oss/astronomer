@@ -24,10 +24,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -54,10 +56,11 @@ func main() {
 		envKey = os.Getenv("ASTRONOMER_ENCRYPTION_KEY")
 	}
 	var (
-		dbURL     = flag.String("database-url", os.Getenv("DATABASE_URL"), "Postgres connection string (env: DATABASE_URL)")
-		keyFlag   = flag.String("encryption-key", envKey, "comma-separated Fernet keys, new primary FIRST (env: ENCRYPTION_KEY or ASTRONOMER_ENCRYPTION_KEY)")
-		dryRun    = flag.Bool("dry-run", false, "report what would be re-encrypted; write nothing")
-		batchSize = flag.Int("batch-size", 100, "rows per transaction (default 100)")
+		dbURL      = flag.String("database-url", os.Getenv("DATABASE_URL"), "Postgres connection string (env: DATABASE_URL)")
+		keyFlag    = flag.String("encryption-key", envKey, "comma-separated Fernet keys, new primary FIRST (env: ENCRYPTION_KEY or ASTRONOMER_ENCRYPTION_KEY)")
+		dryRun     = flag.Bool("dry-run", false, "report what would be re-encrypted; write nothing")
+		batchSize  = flag.Int("batch-size", 100, "rows per transaction (default 100)")
+		dexCutover = flag.Bool("dex-public-clients-cutover-confirmed", false, "after all old server replicas are quiesced, encrypt and scrub legacy Dex public_clients")
 	)
 	flag.Parse()
 
@@ -75,6 +78,12 @@ func main() {
 	enc, err := auth.NewEncryptor(*keyFlag)
 	if err != nil {
 		log.Error("invalid encryption key", "err", err)
+		os.Exit(2)
+	}
+	primaryKey := strings.TrimSpace(strings.Split(*keyFlag, ",")[0])
+	primaryOnly, err := auth.NewEncryptor(primaryKey)
+	if err != nil {
+		log.Error("invalid primary encryption key")
 		os.Exit(2)
 	}
 	log.Info("keyrotate starting", "keys_loaded", enc.KeyCount(), "dry_run", *dryRun)
@@ -110,21 +119,22 @@ func main() {
 			"table", t.table, "column", t.column,
 			"scanned", s.scanned, "rewrote", s.rewrote, "skipped", s.skipped, "failed", s.failed)
 	}
-
-	// Dex connector secrets live inside a JSONB blob (dex_connectors.config)
-	// where the encrypted fields are not column-typed. Rather than special-
-	// casing them here (the schema is per-connector-type), the runbook tells
-	// the operator to re-save each connector via PATCH /api/v1/dex/connectors/{id}
-	// once the server is running with the new key — the handler's
-	// SetEncryptor path then re-writes the JSON. We surface the
-	// outstanding count so the operator knows how many to touch.
-	dexCount := 0
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM dex_connectors`).Scan(&dexCount); err != nil {
-		log.Warn("could not count dex_connectors", "err", err)
-	} else if dexCount > 0 {
-		log.Info("dex_connectors require manual re-save",
-			"count", dexCount,
-			"hint", "PATCH /api/v1/dex/connectors/{id} for each, or toggle enabled off/on to force re-encrypt")
+	dexStats := rewriteDexConnectorConfigs(ctx, log, db, enc, *batchSize, *dryRun)
+	total.scanned += dexStats.scanned
+	total.rewrote += dexStats.rewrote
+	total.skipped += dexStats.skipped
+	total.failed += dexStats.failed
+	if *dexCutover {
+		cutoverStats := cutoverDexPublicClients(ctx, log, db, enc, *batchSize, *dryRun)
+		total.scanned += cutoverStats.scanned
+		total.rewrote += cutoverStats.rewrote
+		total.skipped += cutoverStats.skipped
+		total.failed += cutoverStats.failed
+	}
+	if !*dryRun {
+		verified := verifyPrimaryOnly(ctx, log, db, primaryOnly, *batchSize)
+		total.scanned += verified.scanned
+		total.failed += verified.failed
 	}
 
 	log.Info("keyrotate complete",
@@ -152,6 +162,7 @@ type target struct {
 // exempted (jsonbExemptColumns). See docs/secret-column-inventory.md.
 var rewriteTargets = []target{
 	{"sso_configurations", "id", "client_secret_encrypted"},
+	{"dex_settings", "id", "public_clients_encrypted"},
 	{"argocd_instances", "id", "auth_token_encrypted"},
 	{"backup_storage_configs", "id", "encrypted_credentials"},
 	{"vault_connections", "id", "auth_encrypted"},
@@ -173,7 +184,13 @@ var rewriteTargets = []target{
 // the owning handler (see the dex_connectors note below and the runbook).
 var jsonbExemptColumns = map[string]string{
 	// table.column -> reason
-	"dex_connectors.config": "encrypted fields live inside per-connector-type JSONB; re-saved via PATCH /api/v1/dex/connectors/{id}",
+	"dex_connectors.config": "encrypted fields live inside typed JSONB and are CAS-rewritten by rewriteDexConnectorConfigs",
+}
+
+var dexConnectorSecretFields = map[string][]string{
+	"oidc": {"clientSecret"}, "okta": {"clientSecret"}, "microsoft": {"clientSecret"},
+	"github": {"clientSecret"}, "gitlab": {"clientSecret"}, "bitbucket": {"clientSecret"},
+	"google": {"clientSecret"}, "ldap": {"bindPW"}, "oauth": {"clientSecret"}, "saml": {},
 }
 
 // selectBatchSQL builds the paged SELECT used by rewriteColumn (CORR-04).
@@ -260,9 +277,11 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 				continue
 			}
 			n, _ := res.RowsAffected()
-			if n == 0 {
-				// Concurrent writer changed ciphertext — skip rather than clobber.
-				log.Info("cas miss — row changed under us, skipping", "id", r.id)
+			if err := requireCASUpdate(n); err != nil {
+				// A concurrent writer may have used a fallback key. Treat every miss
+				// as fatal so the final primary-only verification cannot be skipped.
+				log.Error("cas miss — row changed during rotation; retry required", "id", r.id)
+				s.failed++
 				continue
 			}
 			s.rewrote++
@@ -272,4 +291,408 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 		}
 	}
 	return s
+}
+
+func requireCASUpdate(rowsAffected int64) error {
+	if rowsAffected != 1 {
+		return fmt.Errorf("CAS update affected %d rows", rowsAffected)
+	}
+	return nil
+}
+
+func rewriteDexConnectorConfigs(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.Encryptor, batchSize int, dryRun bool) stats {
+	result := stats{}
+	if batchSize < 1 {
+		batchSize = 100
+	}
+	offset := 0
+	for {
+		rows, err := db.QueryContext(ctx, `SELECT id::text, type, config::text FROM dex_connectors ORDER BY id LIMIT $1 OFFSET $2`, batchSize, offset)
+		if err != nil {
+			result.failed++
+			return result
+		}
+		type item struct{ id, connectorType, raw string }
+		batch := []item{}
+		for rows.Next() {
+			var v item
+			if err := rows.Scan(&v.id, &v.connectorType, &v.raw); err != nil {
+				result.failed++
+				continue
+			}
+			batch = append(batch, v)
+		}
+		if err := rows.Err(); err != nil {
+			result.failed++
+		}
+		_ = rows.Close()
+		if len(batch) == 0 {
+			break
+		}
+		offset += len(batch)
+		for _, row := range batch {
+			result.scanned++
+			updated, changed, err := rotateDexConnectorConfig(row.raw, row.connectorType, enc)
+			if err != nil {
+				log.Error("Dex connector rotation failed", "id", row.id)
+				result.failed++
+				continue
+			}
+			if !changed {
+				continue
+			}
+			if dryRun {
+				result.rewrote++
+				continue
+			}
+			res, err := db.ExecContext(ctx, `WITH bypass AS MATERIALIZED (SELECT set_config('astronomer.dex_connector_stage_bypass','1',true)) UPDATE dex_connectors SET config = $1::jsonb, updated_at = now() WHERE id = $2::uuid AND config = $3::jsonb AND EXISTS (SELECT 1 FROM bypass)`, updated, row.id, row.raw)
+			if err != nil {
+				result.failed++
+				continue
+			}
+			n, _ := res.RowsAffected()
+			if n == 0 {
+				result.failed++
+				continue
+			}
+			result.rewrote++
+		}
+		if len(batch) < batchSize {
+			break
+		}
+	}
+	return result
+}
+
+func rotateDexConnectorConfig(raw, connectorType string, enc *auth.Encryptor) (string, bool, error) {
+	fields, known := dexConnectorSecretFields[strings.ToLower(connectorType)]
+	if !known {
+		return "", false, fmt.Errorf("unknown Dex connector type")
+	}
+	var config map[string]any
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		return "", false, err
+	}
+	changed := false
+	allowedSecret := map[string]struct{}{}
+	for _, field := range fields {
+		allowedSecret[field] = struct{}{}
+	}
+	if err := rejectUnexpectedDexSecretFields(config, allowedSecret, true); err != nil {
+		return "", false, err
+	}
+	for _, field := range fields {
+		ciphertext, _ := config[field].(string)
+		if ciphertext == "" {
+			continue
+		}
+		plain, err := enc.Decrypt(ciphertext)
+		if err != nil {
+			return "", false, fmt.Errorf("decrypt connector field")
+		}
+		rotated, err := enc.Encrypt(plain)
+		if err != nil {
+			return "", false, fmt.Errorf("encrypt connector field")
+		}
+		config[field], changed = rotated, true
+	}
+	updated, err := json.Marshal(config)
+	if err != nil {
+		return "", false, err
+	}
+	return string(updated), changed, nil
+}
+
+func rejectUnexpectedDexSecretFields(value any, allowed map[string]struct{}, top bool) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(key))
+			sensitive := false
+			for _, fragment := range []string{"secret", "password", "passwd", "token", "apikey", "privatekey", "bindpw", "credential"} {
+				sensitive = sensitive || strings.Contains(normalized, fragment)
+			}
+			_, admitted := allowed[key]
+			if sensitive && (!top || !admitted) {
+				return fmt.Errorf("unexpected secret-shaped Dex connector field")
+			}
+			if err := rejectUnexpectedDexSecretFields(item, nil, false); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if err := rejectUnexpectedDexSecretFields(item, nil, false); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func cutoverDexPublicClients(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.Encryptor, batchSize int, dryRun bool) stats {
+	result := stats{}
+	if batchSize < 1 {
+		batchSize = 100
+	}
+	offset := 0
+	for {
+		rows, err := db.QueryContext(ctx, `SELECT id::text, public_clients::text FROM dex_settings WHERE public_clients_cutover_at IS NULL ORDER BY id LIMIT $1 OFFSET $2`, batchSize, offset)
+		if err != nil {
+			result.failed++
+			return result
+		}
+		type item struct{ id, raw string }
+		batch := []item{}
+		for rows.Next() {
+			var v item
+			if err := rows.Scan(&v.id, &v.raw); err != nil {
+				result.failed++
+				continue
+			}
+			batch = append(batch, v)
+		}
+		if err := rows.Err(); err != nil {
+			result.failed++
+		}
+		_ = rows.Close()
+		if len(batch) == 0 {
+			break
+		}
+		for _, row := range batch {
+			result.scanned++
+			var clients []map[string]any
+			if err := json.Unmarshal([]byte(row.raw), &clients); err != nil {
+				result.failed++
+				continue
+			}
+			canonical, _ := json.Marshal(clients)
+			envelope := ""
+			if len(clients) > 0 {
+				var err error
+				envelope, err = enc.Encrypt(string(canonical))
+				if err != nil {
+					result.failed++
+					continue
+				}
+			}
+			if dryRun {
+				result.rewrote++
+				continue
+			}
+			res, err := db.ExecContext(ctx, `UPDATE dex_settings SET public_clients_encrypted=$1, public_clients='[]'::jsonb, public_clients_cutover_at=now(), updated_at=now() WHERE id=$2::uuid AND public_clients_cutover_at IS NULL AND public_clients=$3::jsonb`, envelope, row.id, row.raw)
+			if err != nil {
+				result.failed++
+				continue
+			}
+			n, _ := res.RowsAffected()
+			if n == 0 {
+				result.failed++
+				continue
+			}
+			result.rewrote++
+		}
+		if dryRun {
+			offset += len(batch)
+		}
+		if len(batch) < batchSize {
+			break
+		}
+	}
+	log.Info("Dex public-client cutover complete", "scanned", result.scanned, "rewrote", result.rewrote, "failed", result.failed, "dry_run", dryRun)
+	return result
+}
+
+func verifyPrimaryOnly(ctx context.Context, log *slog.Logger, db *sql.DB, primary *auth.Encryptor, batchSize int) stats {
+	result := stats{}
+	for _, target := range rewriteTargets {
+		verified := verifyPrimaryColumn(ctx, log, db, primary, target, batchSize)
+		result.scanned += verified.scanned
+		result.failed += verified.failed
+	}
+	connectors := verifyPrimaryDexConnectors(ctx, log, db, primary, batchSize)
+	result.scanned += connectors.scanned
+	result.failed += connectors.failed
+	clients := verifyPrimaryDexStaticClients(ctx, log, db, primary, batchSize)
+	result.scanned += clients.scanned
+	result.failed += clients.failed
+	log.Info("primary-only verification complete", "scanned", result.scanned, "failed", result.failed)
+	return result
+}
+
+func verifyPrimaryColumn(ctx context.Context, log *slog.Logger, db *sql.DB, primary *auth.Encryptor, target target, batchSize int) stats {
+	result := stats{}
+	if batchSize < 1 {
+		batchSize = 100
+	}
+	for offset := 0; ; offset += batchSize {
+		rows, err := db.QueryContext(ctx, selectBatchSQL(target), batchSize, offset)
+		if err != nil {
+			result.failed++
+			return result
+		}
+		count := 0
+		for rows.Next() {
+			var id, ciphertext string
+			if err := rows.Scan(&id, &ciphertext); err != nil {
+				result.failed++
+				continue
+			}
+			count++
+			result.scanned++
+			if _, err := primary.Decrypt(ciphertext); err != nil {
+				log.Error("primary-only verification failed", "table", target.table, "column", target.column, "id", id)
+				result.failed++
+			}
+		}
+		if err := rows.Err(); err != nil {
+			result.failed++
+		}
+		_ = rows.Close()
+		if count < batchSize {
+			break
+		}
+	}
+	return result
+}
+
+func verifyPrimaryDexConnectors(ctx context.Context, log *slog.Logger, db *sql.DB, primary *auth.Encryptor, batchSize int) stats {
+	result := stats{}
+	if batchSize < 1 {
+		batchSize = 100
+	}
+	for offset := 0; ; offset += batchSize {
+		rows, err := db.QueryContext(ctx, `SELECT id::text, type, config::text FROM dex_connectors ORDER BY id LIMIT $1 OFFSET $2`, batchSize, offset)
+		if err != nil {
+			result.failed++
+			return result
+		}
+		count := 0
+		for rows.Next() {
+			var id, connectorType, raw string
+			if err := rows.Scan(&id, &connectorType, &raw); err != nil {
+				result.failed++
+				continue
+			}
+			count++
+			result.scanned++
+			if err := verifyDexConnectorPrimary(raw, connectorType, primary); err != nil {
+				log.Error("Dex connector primary-only verification failed", "id", id)
+				result.failed++
+			}
+		}
+		if err := rows.Err(); err != nil {
+			result.failed++
+		}
+		_ = rows.Close()
+		if count < batchSize {
+			break
+		}
+	}
+	return result
+}
+
+func verifyDexConnectorPrimary(raw, connectorType string, primary *auth.Encryptor) error {
+	fields, known := dexConnectorSecretFields[strings.ToLower(connectorType)]
+	if !known {
+		return fmt.Errorf("unknown connector type")
+	}
+	var config map[string]any
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		return err
+	}
+	allowed := map[string]struct{}{}
+	for _, field := range fields {
+		allowed[field] = struct{}{}
+	}
+	if err := rejectUnexpectedDexSecretFields(config, allowed, true); err != nil {
+		return err
+	}
+	for _, field := range fields {
+		value, exists := config[field]
+		if !exists || value == "" {
+			continue
+		}
+		ciphertext, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("secret field is not a string")
+		}
+		if _, err := primary.Decrypt(ciphertext); err != nil {
+			return fmt.Errorf("secret field is not encrypted by primary")
+		}
+	}
+	return nil
+}
+
+func verifyPrimaryDexStaticClients(ctx context.Context, log *slog.Logger, db *sql.DB, primary *auth.Encryptor, batchSize int) stats {
+	result := stats{}
+	if batchSize < 1 {
+		batchSize = 100
+	}
+	for offset := 0; ; offset += batchSize {
+		rows, err := db.QueryContext(ctx, `SELECT id::text, public_clients::text, public_clients_encrypted, public_clients_cutover_at IS NOT NULL FROM dex_settings ORDER BY id LIMIT $1 OFFSET $2`, batchSize, offset)
+		if err != nil {
+			result.failed++
+			return result
+		}
+		count := 0
+		for rows.Next() {
+			var id, plaintext, envelope string
+			var cutover bool
+			if err := rows.Scan(&id, &plaintext, &envelope, &cutover); err != nil {
+				result.failed++
+				continue
+			}
+			count++
+			result.scanned++
+			if err := verifyDexStaticClientRow(plaintext, envelope, cutover, primary); err != nil {
+				log.Error("Dex static-client primary-only verification failed", "id", id)
+				result.failed++
+			}
+		}
+		if err := rows.Err(); err != nil {
+			result.failed++
+		}
+		_ = rows.Close()
+		if count < batchSize {
+			break
+		}
+	}
+	return result
+}
+
+func verifyDexStaticClientRow(plaintext, envelope string, cutover bool, primary *auth.Encryptor) error {
+	canonical := func(raw string) ([]byte, int, error) {
+		var clients []map[string]any
+		if err := json.Unmarshal([]byte(raw), &clients); err != nil {
+			return nil, 0, err
+		}
+		encoded, err := json.Marshal(clients)
+		return encoded, len(clients), err
+	}
+	plainCanonical, plainCount, err := canonical(plaintext)
+	if err != nil {
+		return err
+	}
+	if cutover && plainCount != 0 {
+		return fmt.Errorf("cutover row retains plaintext clients")
+	}
+	if envelope == "" {
+		if plainCount != 0 {
+			return fmt.Errorf("non-empty clients have no envelope")
+		}
+		return nil
+	}
+	decrypted, err := primary.Decrypt(envelope)
+	if err != nil {
+		return err
+	}
+	envelopeCanonical, _, err := canonical(decrypted)
+	if err != nil {
+		return err
+	}
+	if !cutover && string(plainCanonical) != string(envelopeCanonical) {
+		return fmt.Errorf("pre-cutover envelope differs from compatibility copy")
+	}
+	return nil
 }

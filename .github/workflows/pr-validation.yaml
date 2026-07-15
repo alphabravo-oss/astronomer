@@ -10,8 +10,9 @@ permissions:
 
 jobs:
   backend:
-    name: backend tests
+    name: enterprise backend gate
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -20,8 +21,17 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Migration safety check
-        run: ./scripts/check-migrations.sh
+      # Backend contract checks consume js-yaml from the locked frontend tree.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install contract dependencies
+        working-directory: frontend
+        run: npm ci
 
       - name: Migration roundtrip smoke (TEST-05)
         run: ./scripts/migrate-roundtrip-smoke.sh
@@ -29,24 +39,59 @@ jobs:
           # Job uses service container when present; script also self-starts docker PG.
           DATABASE_URL: ${{ env.DATABASE_URL }}
 
-      - name: SQLC generated code check
-        run: ./scripts/check-sqlc-generated.sh
+      - name: Run authoritative backend gate
+        run: ./scripts/verify-enterprise.sh backend
+        env:
+          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-backend
 
-      - name: Go tests
-        run: go test ./...
-
-      - name: Route inventory JSON validation
-        run: |
-          python3 -m json.tool docs/generated-route-inventory.json >/dev/null
-          python3 -m json.tool docs/security-sensitive-routes.json >/dev/null
-          python3 -m json.tool docs/route-risk-classifications.json >/dev/null
-
-      - name: Route security and inventory gates
-        run: go test ./internal/server -run 'Test(AdminRouteRegistrationsAreAuthProtected|HighRiskRoutesDenyUnauthenticatedRequests|MutatingRoutesHaveSecurityClassification|BrowserCookieMutatingRoutesRequireCSRF|RouteInventoryCanBeGenerated|ForwardingRoutesAreDocumentedInProxyInventory|K8sProxy|ServiceProxy|RegistrationEvents|ArgoCDInternalK8sProxy)' -count=1
+      - name: Upload failed backend test reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-backend-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/astronomer-verify-enterprise-backend
+          if-no-files-found: warn
+          retention-days: 14
 
   frontend:
-    name: frontend tests
+    name: enterprise frontend gate
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run authoritative frontend gate
+        run: ./scripts/verify-enterprise.sh frontend
+        env:
+          # Preserve the existing moderate threshold, which is stricter than
+          # the enterprise high/critical minimum.
+          NPM_AUDIT_LEVEL: moderate
+          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
+
+      - name: Upload failed frontend test reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-frontend-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend-e2e:
+    name: Playwright end-to-end tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
@@ -62,24 +107,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Code health inventory gate
-        run: npm run code-health
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type-check
-        run: npm run type-check
-
-      - name: Unit tests
-        run: npm test
-
-      # routeTree.gen.ts is committed (D5) so type-check and unit tests run
-      # without Vite; the build regenerates it, and any diff means the
-      # committed tree drifted from the route files.
-      - name: Build + routeTree drift check
-        run: npm run build && git diff --exit-code src/routeTree.gen.ts
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -109,9 +136,6 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
           retention-days: 14
-
-      - name: Dependency vulnerability scan
-        run: npm audit --audit-level=moderate
 
   # P7.2 live e2e tier: the 4 live specs run against a REAL Go backend
   # (postgres + redis services, bootstrap admin, SSE bus) through the vite
@@ -223,53 +247,38 @@ jobs:
         run: tail -n 200 server.log
 
   helm:
-    name: helm validation
+    name: enterprise Helm gate
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Helm lint
-        run: helm lint deploy/chart
+      - name: Run authoritative Helm gate
+        run: ./scripts/verify-enterprise.sh helm
+        env:
+          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-helm
 
-      - name: Render development values
-        run: |
-          helm template astronomer deploy/chart \
-            --set frontend.enabled=true \
-            --set dex.enabled=true \
-            --set config.env=development \
-            >/tmp/astronomer-dev.yaml
-
-      - name: Render production values
-        # Keep this --set list aligned with productionWiringSets in
-        # deploy/chart_operational_contract_test.go plus the backup + key-wrap
-        # knobs required by production preflight (OPS-01 / F8 / NP schema).
-        run: |
-          helm template astronomer deploy/chart \
-            -f deploy/chart/values-production.yaml \
-            --set config.serverURL=https://astronomer.example.com \
-            --set 'gateway.hosts={astronomer.example.com}' \
-            --set tls.source=secret \
-            --set tls.secretName=astronomer-tls \
-            --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
-            --set redis.external.address=redis.example.com:6379 \
-            --set secrets.secretKey=prod-secret-key \
-            --set secrets.encryptionKey='prod-encryption-key-prod-encryption-key12' \
-            --set bootstrap.email=admin@example.com \
-            --set bootstrap.password=prod-admin-initial \
-            --set dex.clientSecret=prod-dex-client-secret \
-            --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
-            --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
-            --set managementBackup.s3.bucket=astronomer-backups \
-            --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
-            --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
-            >/tmp/astronomer-prod.yaml
+      - name: Upload failed Helm renders and reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-helm-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/astronomer-verify-enterprise-helm
+          if-no-files-found: warn
+          retention-days: 14
 
   container-supply-chain:
     name: image scan and sbom
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

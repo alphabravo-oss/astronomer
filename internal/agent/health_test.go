@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/client-go/kubernetes/fake"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -210,6 +214,51 @@ func TestSetGarbagePrivilegeProfileDoesNotAdvertiseAdminCapabilities(t *testing.
 		if containsString(hr.enabledFeatures, forbidden) {
 			t.Fatalf("enabledFeatures = %+v unexpectedly advertises %q for garbage profile", hr.enabledFeatures, forbidden)
 		}
+	}
+}
+
+func TestHeartbeatEffectiveProfileMatchesRBACProfile(t *testing.T) {
+	tests := map[string]string{
+		"":                   agenttemplate.PrivilegeProfileViewer,
+		"  ":                 agenttemplate.PrivilegeProfileViewer,
+		"unknown":            agenttemplate.PrivilegeProfileViewer,
+		"viewer":             agenttemplate.PrivilegeProfileViewer,
+		"operator":           agenttemplate.PrivilegeProfileOperator,
+		"namespace_viewer":   agenttemplate.PrivilegeProfileNamespaceViewer,
+		"namespace operator": agenttemplate.PrivilegeProfileNamespaceOperator,
+		"custom":             agenttemplate.PrivilegeProfileCustom,
+		" ADMIN ":            agenttemplate.PrivilegeProfileAdmin,
+	}
+	for input, want := range tests {
+		t.Run(input, func(t *testing.T) {
+			hr := NewHealthReporter(nil, slog.Default(), 30, 60)
+			hr.SetPrivilegeProfile(input)
+			if hr.privilegeProfile != want {
+				t.Fatalf("heartbeat effective profile = %q, want %q", hr.privilegeProfile, want)
+			}
+			if rendered := agenttemplate.NormalizePrivilegeProfile(input); rendered != hr.privilegeProfile {
+				t.Fatalf("RBAC profile %q != heartbeat profile %q", rendered, hr.privilegeProfile)
+			}
+		})
+	}
+}
+
+func TestUnsetHeartbeatProfileDefaultsToViewerCapabilities(t *testing.T) {
+	hr := NewHealthReporter(fake.NewClientset(), slog.Default(), 30, 60)
+	hb, err := hr.collectHeartbeat(context.Background())
+	if err != nil {
+		t.Fatalf("collectHeartbeat: %v", err)
+	}
+	if hb.PrivilegeProfile != agenttemplate.PrivilegeProfileViewer {
+		t.Fatalf("unset heartbeat profile = %q, want viewer", hb.PrivilegeProfile)
+	}
+	for _, forbidden := range []string{"cluster_admin", "rbac", "mutate", "secrets"} {
+		if containsString(hb.EnabledFeatures, forbidden) {
+			t.Fatalf("unset heartbeat enabled features = %+v, unexpectedly contains %q", hb.EnabledFeatures, forbidden)
+		}
+	}
+	if !containsString(hb.DeniedFeatures, "secrets") {
+		t.Fatalf("unset heartbeat denied features = %+v, want secrets", hb.DeniedFeatures)
 	}
 }
 

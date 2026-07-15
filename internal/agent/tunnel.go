@@ -56,17 +56,25 @@ type TunnelClient struct {
 	// auditAckTimeout bounds the SendAuditBatch wait. Zero means use the
 	// package default (auditAckTimeout const); set by tests to a short value.
 	auditAckTimeout time.Duration
+
+	// tokenPersister is invoked before a CONNECT_ACK-delivered durable token is
+	// activated in memory. pendingAgentToken survives reconnect attempts within
+	// this process when Kubernetes persistence is temporarily unavailable; the
+	// old credential remains active and therefore is never falsely adopted.
+	tokenPersister    func(context.Context, *AgentConfig, string) error
+	pendingAgentToken string
 }
 
 // NewTunnelClient creates a new tunnel client with the given configuration.
 func NewTunnelClient(cfg *AgentConfig, log *slog.Logger) *TunnelClient {
 	return &TunnelClient{
-		config:        cfg,
-		log:           log,
-		handlers:      make(map[protocol.MessageType]MessageHandler),
-		sendCh:        make(chan *protocol.Message, 256),
-		failCloseOnce: &sync.Once{},
-		auditAcks:     make(map[string]chan protocol.ApiserverAuditAckPayload),
+		config:         cfg,
+		log:            log,
+		handlers:       make(map[protocol.MessageType]MessageHandler),
+		sendCh:         make(chan *protocol.Message, 256),
+		failCloseOnce:  &sync.Once{},
+		auditAcks:      make(map[string]chan protocol.ApiserverAuditAckPayload),
+		tokenPersister: persistRotatedToken,
 	}
 }
 
@@ -133,6 +141,9 @@ func (tc *TunnelClient) Connect(ctx context.Context) error {
 
 // dial performs the WebSocket handshake and the CONNECT/CONNECT_ACK exchange.
 func (tc *TunnelClient) dial(ctx context.Context) error {
+	if err := tc.persistPendingAgentToken(ctx); err != nil {
+		return err
+	}
 	url := fmt.Sprintf("%s/api/v1/ws/agent/tunnel/%s/", tc.config.ServerURL, tc.config.ClusterID)
 	tc.log.Info("dialing server", "url", url)
 
@@ -215,13 +226,11 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 		_ = conn.Close(websocket.StatusNormalClosure, "rejected")
 		return fmt.Errorf("connection rejected: %s", ack.Reason)
 	}
-	if ack.AgentToken != "" && ack.AgentToken != tc.config.AgentToken {
-		tc.config.AgentToken = ack.AgentToken
-		if err := persistRotatedToken(ctx, tc.config, ack.AgentToken); err != nil {
-			tc.log.Warn("failed to persist rotated agent token", "error", err)
-		} else {
-			tc.log.Info("rotated durable agent token")
-		}
+	if migrated, err := tc.persistAcceptedAgentToken(ctx, ack.AgentToken); err != nil {
+		_ = conn.Close(websocket.StatusInternalError, "durable credential persistence failed")
+		return err
+	} else if migrated {
+		tc.log.Info("rotated durable agent token")
 	}
 	// PATH A delivery: capture the scoped apiserver-audit ingest token if the
 	// server issued one, so an httpAuditSender can be wired on top of it. Never
@@ -242,6 +251,70 @@ func (tc *TunnelClient) dial(ctx context.Context) error {
 	tc.mu.Unlock()
 	tc.setConnected(true)
 	tc.log.Info("connected to server", "cluster_id", tc.config.ClusterID)
+	return nil
+}
+
+// persistAcceptedAgentToken runs only after Accepted=true. This ordering is the
+// cluster-binding proof that permits bootstrap/legacy material to migrate into
+// active identity even when the server returns an empty or identical ACK token.
+func (tc *TunnelClient) persistAcceptedAgentToken(ctx context.Context, ackToken string) (bool, error) {
+	if tc == nil || tc.config == nil {
+		return false, fmt.Errorf("agent config is required")
+	}
+	if tc.config.CredentialSource == credentialSourceBootstrap && (ackToken == "" || ackToken == tc.config.AgentToken) {
+		return false, fmt.Errorf("accepted bootstrap connection did not provide a distinct durable agent credential")
+	}
+	durableToken := ackToken
+	if durableToken == "" {
+		durableToken = tc.config.AgentToken
+	}
+	legacyImageFirst := tc.config.CredentialSource == credentialSourceLegacy && tc.config.LegacyLayoutConfigured
+	needsIdentityMigration := tc.config.CredentialSource == credentialSourceBootstrap || (tc.config.CredentialSource == credentialSourceLegacy && !legacyImageFirst)
+	needsRotation := ackToken != "" && ackToken != tc.config.AgentToken
+	if tc.config.CredentialSource == CredentialSourceEnvironment {
+		if needsRotation {
+			tc.config.AgentToken = ackToken
+		}
+		return needsRotation, nil
+	}
+	if !needsIdentityMigration && !needsRotation {
+		return false, nil
+	}
+	if err := tc.persistAndActivateAgentToken(ctx, durableToken); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (tc *TunnelClient) persistAndActivateAgentToken(ctx context.Context, token string) error {
+	if tc == nil || tc.config == nil || token == "" {
+		return fmt.Errorf("durable agent credential is required")
+	}
+	persist := tc.tokenPersister
+	if persist == nil {
+		persist = persistRotatedToken
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, credentialWriteTimeout)
+	defer cancel()
+	if err := persist(writeCtx, tc.config, token); err != nil {
+		tc.pendingAgentToken = token
+		return fmt.Errorf("persist durable agent credential before activation: %w", err)
+	}
+	tc.config.AgentToken = token
+	if !usesLegacyCredentialStorage(tc.config) {
+		tc.config.CredentialSource = CredentialSourceIdentity
+	}
+	tc.pendingAgentToken = ""
+	return nil
+}
+
+func (tc *TunnelClient) persistPendingAgentToken(ctx context.Context) error {
+	if tc == nil || tc.pendingAgentToken == "" {
+		return nil
+	}
+	if err := tc.persistAndActivateAgentToken(ctx, tc.pendingAgentToken); err != nil {
+		return fmt.Errorf("retry pending durable agent credential persistence: %w", err)
+	}
 	return nil
 }
 

@@ -64,6 +64,8 @@ helm upgrade <release> deploy/chart \
 ## Validation
 
 - `kubectl get pods -n <namespace>` shows healthy server/worker pods
-- `kubectl logs -n <namespace> job/<release>-astronomer-preflight` shows a pass
+- Helm: `kubectl logs -n <namespace> job/<release>-astronomer-preflight` shows a pass
+- Argo CD: the Application operation records a successful
+  `<release>-astronomer-preflight-argocd` Sync hook before wave `0`
 - the application can load `/health/` and `/metrics`
 - a sample login and read/write action succeed against the restored data

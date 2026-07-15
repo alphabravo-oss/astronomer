@@ -7,6 +7,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 func TestJWTManager(t *testing.T) {
@@ -275,6 +277,15 @@ func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
 	// Boot TTL unchanged; provider only affects mint.
 	if mgr.AccessTokenTTL() != 60*time.Minute {
 		t.Errorf("AccessTokenTTL() = %v, want 60m base", mgr.AccessTokenTTL())
+	}
+}
+
+func TestNewJWTManagerBoundsBootSessionTimeout(t *testing.T) {
+	for _, minutes := range []int{0, -1, sessionpolicy.MinMinutes - 1, sessionpolicy.MaxMinutes + 1} {
+		mgr := NewJWTManager("test-secret", minutes)
+		if got := mgr.AccessTokenTTL(); got != sessionpolicy.DefaultMinutes*time.Minute {
+			t.Errorf("NewJWTManager(_, %d) TTL = %s, want %s", minutes, got, sessionpolicy.DefaultMinutes*time.Minute)
+		}
 	}
 }
 

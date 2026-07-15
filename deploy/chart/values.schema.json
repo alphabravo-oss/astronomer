@@ -43,6 +43,7 @@
           }
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" },
         "productionRequirements": {
           "type": "object",
           "additionalProperties": true,
@@ -77,6 +78,7 @@
             "address": { "type": "string" },
             "tls": { "type": "boolean" },
             "database": { "type": "integer", "minimum": 0 },
+            "urlSecretRef": { "$ref": "#/definitions/secretKeyRef" },
             "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" }
           }
         },
@@ -87,12 +89,38 @@
     "preflight": { "$ref": "#/definitions/workload" },
     "dex": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
         "replicaCount": { "type": "integer", "minimum": 1 },
-        "clientSecret": { "type": "string" },
-        "image": { "$ref": "#/definitions/imageRef" }
+        "issuerURL": { "type": "string" },
+        "runtimeSecretName": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)*$"
+        },
+        "runtimeWriterServiceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "namespace": { "type": "string" }
+          },
+          "required": ["name", "namespace"]
+        },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "phase": { "type": "string", "enum": ["fresh", "prepare", "cutover"] },
+            "requirePreparedConfig": { "type": "boolean" }
+          },
+          "required": ["phase", "requirePreparedConfig"]
+        },
+        "image": { "$ref": "#/definitions/imageRef" },
+        "resources": { "type": "object", "additionalProperties": true },
+        "podSecurityContext": { "type": "object", "additionalProperties": true },
+        "securityContext": { "type": "object", "additionalProperties": true }
       }
     },
     "config": {
@@ -127,6 +155,10 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "existingSecret": { "type": "string" },
+        "secretKeyKey": { "type": "string", "minLength": 1 },
+        "encryptionKeyKey": { "type": "string", "minLength": 1 },
+        "postgresPasswordKey": { "type": "string", "minLength": 1 },
         "secretKey": { "type": "string" },
         "encryptionKey": { "type": "string" }
       }
@@ -138,7 +170,8 @@
         "username": { "type": "string", "minLength": 1 },
         "email": { "type": "string" },
         "password": { "type": "string" },
-        "existingSecret": { "type": "string" }
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string", "minLength": 1 }
       }
     },
     "tls": {
@@ -287,10 +320,10 @@
                 "required": ["enabled"]
               },
               "external": {
-                "properties": {
-                  "address": { "type": "string", "minLength": 1 }
-                },
-                "required": ["address"]
+                "anyOf": [
+                  { "required": ["address"], "properties": { "address": { "type": "string", "minLength": 1 } } },
+                  { "required": ["urlSecretRef"], "properties": { "urlSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+                ]
               }
             },
             "required": ["bundled", "external"]
@@ -316,18 +349,20 @@
           },
           "secrets": {
             "properties": {
-              "secretKey": {
-                "type": "string",
-                "minLength": 1,
-                "not": { "const": "local-dev-secret-key-change-in-production" }
-              },
-              "encryptionKey": {
-                "type": "string",
-                "minLength": 1,
-                "not": { "const": "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }
-              }
+              "existingSecret": { "type": "string" },
+              "secretKey": { "type": "string" },
+              "encryptionKey": { "type": "string" }
             },
-            "required": ["secretKey", "encryptionKey"]
+            "anyOf": [
+              { "required": ["existingSecret"], "properties": { "existingSecret": { "type": "string", "minLength": 1 } } },
+              {
+                "required": ["secretKey", "encryptionKey"],
+                "properties": {
+                  "secretKey": { "type": "string", "minLength": 1, "not": { "const": "local-dev-secret-key-change-in-production" } },
+                  "encryptionKey": { "type": "string", "minLength": 1, "not": { "const": "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" } }
+                }
+              }
+            ]
           },
           "bootstrap": {
             "properties": {
@@ -363,41 +398,13 @@
               "enabled": { "const": true },
               "defaultDeny": { "const": true },
               "externalPostgresEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
-              "externalRedisEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" }
+              "externalRedisEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
+              "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" }
             },
-            "required": ["enabled", "defaultDeny", "externalPostgresEgressCIDRs", "externalRedisEgressCIDRs"]
+            "required": ["enabled", "defaultDeny", "externalPostgresEgressCIDRs", "externalRedisEgressCIDRs", "kubernetesAPIEgressCIDRs"]
           }
         },
         "required": ["postgres", "redis", "gateway", "tls", "secrets", "bootstrap", "networkPolicy"]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "config": {
-            "properties": {
-              "env": { "const": "production" }
-            },
-            "required": ["env"]
-          },
-          "dex": {
-            "properties": {
-              "enabled": { "const": true }
-            },
-            "required": ["enabled"]
-          }
-        },
-        "required": ["config", "dex"]
-      },
-      "then": {
-        "properties": {
-          "dex": {
-            "properties": {
-              "clientSecret": { "type": "string", "minLength": 1 }
-            },
-            "required": ["clientSecret"]
-          }
-        }
       }
     },
     {
@@ -540,6 +547,7 @@
         "resources": { "type": "object" },
         "podSecurityContext": { "type": "object" },
         "securityContext": { "type": "object" },
+        "eventRelayQueueCapacity": { "type": "integer", "minimum": 1, "maximum": 65536 },
         "env": { "type": "object" }
       }
     },

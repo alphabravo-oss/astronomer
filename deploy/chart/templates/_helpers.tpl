@@ -138,7 +138,9 @@ Computed DATABASE_URL — uses chart-managed Postgres unless overridden.
 Computed REDIS_URL.
 */}}
 {{- define "astronomer.redisURL" -}}
-{{- if .Values.redis.external.address -}}
+{{- if .Values.redis.external.urlSecretRef.name -}}
+{{- "" -}}
+{{- else if .Values.redis.external.address -}}
 {{- $scheme := ternary "rediss" "redis" .Values.redis.external.tls -}}
 {{- $auth := "" -}}
 {{- if .Values.redis.external.passwordSecretRef.name -}}
@@ -148,10 +150,15 @@ Computed REDIS_URL.
 {{- else if .Values.config.redisURL -}}
 {{- .Values.config.redisURL -}}
 {{- else if not .Values.redis.bundled.enabled -}}
-{{- fail "redis.bundled.enabled=false requires redis.external.address or config.redisURL" -}}
+{{- fail "redis.bundled.enabled=false requires redis.external.address, redis.external.urlSecretRef, or config.redisURL" -}}
 {{- else -}}
 {{- printf "redis://%s-redis:%d/0" (include "astronomer.fullname" .) (int .Values.redis.port) -}}
 {{- end -}}
+{{- end }}
+
+{{/* Secret containing core runtime credentials. */}}
+{{- define "astronomer.secretsSecretName" -}}
+{{- default (printf "%s-secrets" (include "astronomer.fullname" .)) .Values.secrets.existingSecret -}}
 {{- end }}
 
 {{- define "astronomer.postgresBundledEnabled" -}}
@@ -329,6 +336,10 @@ server wires straight to the operator-provided one; otherwise the chart-managed
 {{- end -}}
 {{- end }}
 
+{{- define "astronomer.bootstrapSecretKey" -}}
+{{- default "password" .Values.bootstrap.existingSecretKey -}}
+{{- end }}
+
 {{/*
 astronomer.validateImageSkew (F1 · BLOCKER) runs on every render, any env.
 
@@ -385,8 +396,8 @@ rendered manifest.
     {{- if .Values.redis.bundled.enabled }}
       {{- $errs = append $errs "  - redis.bundled.enabled must be false when config.env=production" }}
     {{- end }}
-    {{- if not .Values.redis.external.address }}
-      {{- $errs = append $errs "  - redis.external.address must be set when config.env=production" }}
+    {{- if not (or .Values.redis.external.address .Values.redis.external.urlSecretRef.name) }}
+      {{- $errs = append $errs "  - redis.external.address or redis.external.urlSecretRef.name must be set when config.env=production" }}
     {{- end }}
     {{- if not .Values.config.serverURL }}
       {{- $errs = append $errs "  - config.serverURL must be set to the external https URL of this install" }}
@@ -403,16 +414,16 @@ rendered manifest.
         {{- $errs = append $errs "  - tls.letsEncrypt.email must be set when tls.source=letsEncrypt" }}
       {{- end }}
     {{- end }}
-    {{- if eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production" }}
+    {{- if and (not .Values.secrets.existingSecret) (eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production") }}
       {{- $errs = append $errs "  - secrets.secretKey is still the chart's known dev value — replace it (JWT signing key)" }}
     {{- end }}
-    {{- if eq (default "" .Values.secrets.encryptionKey) "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }}
+    {{- if and (not .Values.secrets.existingSecret) (eq (default "" .Values.secrets.encryptionKey) "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=") }}
       {{- $errs = append $errs "  - secrets.encryptionKey is still the chart's known dev Fernet key — replace it" }}
     {{- end }}
-    {{- if not .Values.secrets.secretKey }}
+    {{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.secretKey) }}
       {{- $errs = append $errs "  - secrets.secretKey is empty (required)" }}
     {{- end }}
-    {{- if not .Values.secrets.encryptionKey }}
+    {{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.encryptionKey) }}
       {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
     {{- end }}
     {{- /* F8 (C-04): bootstrap-secret.yaml generates randAlphaNum when
@@ -430,11 +441,6 @@ rendered manifest.
            the misconfigured-install path fail closed. */ -}}
     {{- if and (not .Values.dex.enabled) (not (and .Values.config.auth (and .Values.config.auth.localPasswordOnly)) ) }}
       {{- $errs = append $errs "  - dex.enabled=false but config.auth.localPasswordOnly is not true. Either flip dex.enabled=true (recommended) or set config.auth.localPasswordOnly=true to confirm the install will only ever use local passwords (no SSO)." }}
-    {{- end }}
-    {{- /* Production must replace the chart's known weak dex.clientSecret
-           default so the static-client secret is unique per install. */ -}}
-    {{- if and .Values.dex.enabled (eq (default "" .Values.dex.clientSecret) "") }}
-      {{- $errs = append $errs "  - dex.clientSecret is empty; replace with a freshly-generated value (the chart's default is intentionally weak and refused in production)" }}
     {{- end }}
     {{- /* Management-plane backups must be wired in production or the DR story
            is a no-op (RPO silently becomes infinite). managementBackup.enabled
@@ -461,6 +467,20 @@ rendered manifest.
         {{- if not (and .Values.managementBackup.encryptionKeyBackup .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name) }}
           {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.wrappingSecretRef.name is empty but managementBackup.enabled=true — production DR requires encryption-key custody (see values-production.yaml and docs/management-plane-dr-runbook.md). Create a separate wrap Secret and set the name, or set managementBackup.encryptionKeyBackup.enabled=false to explicitly opt out of key backup (restored Fernet data will be undecryptable on a new cluster)." }}
         {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- /* The retained namespace default-deny already selects Helm hook pods
+           during upgrades. The preflight allow-policy cannot safely infer API
+           addresses because NetworkPolicy may evaluate Service traffic before
+           or after DNAT depending on the CNI. Require the operator to configure
+           CIDR coverage for both address classes explicitly. */ -}}
+    {{- if and .Values.preflight.enabled .Values.networkPolicy.enabled .Values.networkPolicy.defaultDeny }}
+      {{- if eq (len (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list))) 0 }}
+        {{- $errs = append $errs "  - networkPolicy.kubernetesAPIEgressCIDRs must contain CIDR coverage for the kubernetes.default Service ClusterIP and Kubernetes API endpoint or node network when production preflight runs under default deny. CNI DNAT ordering varies, so both pre-DNAT Service and post-DNAT endpoint destinations must be covered. Helm cannot inspect live addresses to prove semantic coverage; inventory the target cluster before setting this value." }}
+      {{- end }}
+      {{- $preflightCIDRs := concat (.Values.networkPolicy.externalEgressCIDRs | default (list)) (.Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list)) (.Values.networkPolicy.externalPostgresEgressCIDRs | default (list)) }}
+      {{- if or (has "0.0.0.0/0" $preflightCIDRs) (has "::/0" $preflightCIDRs) }}
+        {{- $errs = append $errs "  - production preflight NetworkPolicy CIDRs must not contain 0.0.0.0/0 or ::/0. Configure narrow kubernetesAPIEgressCIDRs and externalPostgresEgressCIDRs; externalEgressCIDRs is a development compatibility bucket, not a production fallback." }}
       {{- end }}
     {{- end }}
     {{- if gt (len $errs) 0 }}

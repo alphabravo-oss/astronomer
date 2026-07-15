@@ -311,9 +311,11 @@ toward Rancher-grade day-2 operations without adding cluster provisioning.
     `go test ./deploy`, and `deploy/chart/README.md`.
   - Completed cleanup: bundled Postgres/Redis and BusyBox wait containers now
     declare `imagePullPolicy`, and render tests prove only short-lived
-    migrate/preflight Jobs use Helm hooks, ServiceAccount/RBAC remain normal
-    managed release resources, bootstrap Secret/env wiring is stable, and
-    rendered workload containers declare pull policies.
+    migrate/preflight Jobs use Helm hooks, runtime ServiceAccount/RBAC remain
+    normal managed release resources, the preflight Job's dedicated
+    least-privilege prerequisites use earlier-weighted replace-before-create
+    hooks, bootstrap Secret/env wiring is stable, and rendered workload
+    containers declare pull policies.
   - Completed cleanup: NetworkPolicy render tests now cover the default-deny
     policy, expected frontend/server/worker/Dex/Postgres/Redis component
     policies, no egress from bundled Postgres/Redis pods, no broad production

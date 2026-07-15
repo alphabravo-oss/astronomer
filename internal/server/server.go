@@ -15,6 +15,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
@@ -57,6 +58,37 @@ type busPublisherAdapter struct{ bus *events.Bus }
 
 func (a busPublisherAdapter) Publish(eventType string, data any) {
 	a.bus.Publish(events.Type(eventType), data)
+}
+
+type securityCacheTarget struct {
+	jwt  *auth.JWTManager
+	rbac *appmiddleware.RBACCache
+}
+
+func (t securityCacheTarget) InvalidateJWTJTILocal(jti string) {
+	if t.jwt != nil {
+		t.jwt.InvalidateJWTJTILocal(jti)
+	}
+}
+func (t securityCacheTarget) InvalidateJWTUserLocal(userID string) {
+	if t.jwt != nil {
+		t.jwt.InvalidateJWTUserLocal(userID)
+	}
+}
+func (t securityCacheTarget) InvalidateJWTAllLocal() {
+	if t.jwt != nil {
+		t.jwt.InvalidateJWTAllLocal()
+	}
+}
+func (t securityCacheTarget) InvalidateRBACUserLocal(userID string) {
+	if t.rbac != nil {
+		t.rbac.InvalidateRBACUserLocal(userID)
+	}
+}
+func (t securityCacheTarget) InvalidateRBACAllLocal() {
+	if t.rbac != nil {
+		t.rbac.InvalidateRBACAllLocal()
+	}
 }
 
 // runServerReconcilerLeader holds a Postgres advisory lock and starts server
@@ -115,7 +147,6 @@ func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log
 		}
 	}
 }
-
 
 // emailNotifierAdapter wraps *email.Enqueuer in the handler-local
 // EmailNotifier surface. The two-type indirection keeps the handler
@@ -211,8 +242,8 @@ func resolveCallbackBaseURL(ctx context.Context, _ *config.Config, queries *sqlc
 type Server struct {
 	httpServer *http.Server
 	handler    http.Handler
-	// internalArgoCDHandler serves the dedicated, network-isolated
-	// ArgoCD->cluster proxy on a separate (non-public) port. nil in
+	// internalArgoCDHandler serves the dedicated, authenticated and
+	// network-isolated ArgoCD->cluster proxy on a separate non-public port. nil in
 	// lightweight test servers.
 	internalArgoCDHandler http.Handler
 	logger                *slog.Logger
@@ -472,6 +503,23 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", cfg.RedisURL, redisErr)
 	}
 	queue := asynq.NewClient(redisOpt)
+	var securityCacheCoordinator *cacheinvalidate.Coordinator
+	securityTarget := securityCacheTarget{jwt: jwtManager, rbac: rbacQuerier.Cache()}
+	if redisClient, ok := redisOpt.MakeRedisClient().(redis.UniversalClient); ok && redisClient != nil {
+		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
+		go securityCacheCoordinator.Run(ctx)
+		go func() { <-ctx.Done(); _ = redisClient.Close() }()
+	} else if cfg.ServerReplicas > 1 {
+		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
+		logger.Error("distributed security cache invalidation is unavailable in a multi-replica deployment")
+	} else {
+		securityCacheCoordinator = cacheinvalidate.NewLocalOnly(securityTarget, os.Getenv("HOSTNAME"), logger)
+		logger.Warn("distributed security cache invalidation is disabled; using local-only caches")
+	}
+	jwtManager.SetCacheInvalidationCoordinator(securityCacheCoordinator)
+	if securityTarget.rbac != nil {
+		securityTarget.rbac.SetInvalidationCoordinator(securityCacheCoordinator)
+	}
 	// Phase B5 — give the security handler the asynq queue. The handler's
 	// IngestEnqueuer interface is satisfied directly by *asynq.Client.
 	securityHandler.SetIngestQueue(queue)
@@ -705,6 +753,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	authHandler.SetLockoutQuerier(queries)
 	authHandler.SetRevocationQuerier(queries)
 	authHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
+	// Session lifetime is independent of encryption, SSO, and TOTP. Wire the
+	// runtime policy for every deployment so password login and refresh cannot
+	// silently fall back to boot configuration when encrypted features are off.
+	configureSessionTimeoutPolicy(authHandler, jwtManager, queries, logger)
 	// Single sign-out (migration 054 / NIST 800-53 AC-12). Wired when
 	// the encryptor is available: the stored upstream id_token is
 	// Fernet-encrypted at rest, so without the key Logout has nothing
@@ -752,34 +804,6 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return true // unparseable value -> enforce rather than silently disable
 			}
 			return v
-		})
-		// DIR-05 / AUTH-R02: session.timeout_minutes from platform settings
-		// (compliance baselines write this key) is applied on every access
-		// token mint — password login, refresh, SSO, and TOTP complete —
-		// via the JWT manager provider so no mint path can skip it.
-		sessionTimeoutMins := func(ctx context.Context) int {
-			row, err := queries.GetPlatformSetting(ctx, "session.timeout_minutes")
-			if err != nil || len(row.Value) == 0 {
-				return 0
-			}
-			var mins int
-			if json.Unmarshal(row.Value, &mins) != nil {
-				// Also accept JSON number as float.
-				var f float64
-				if json.Unmarshal(row.Value, &f) != nil {
-					return 0
-				}
-				mins = int(f)
-			}
-			return mins
-		}
-		authHandler.SetSessionTimeoutPolicy(sessionTimeoutMins)
-		jwtManager.SetAccessTokenTTLProvider(func(ctx context.Context) time.Duration {
-			mins := sessionTimeoutMins(ctx)
-			if mins <= 0 {
-				return 0
-			}
-			return time.Duration(mins) * time.Minute
 		})
 	}
 	// Wire the same revocation + cutoff backend into the JWT validator
@@ -1109,9 +1133,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if cfg.RedisURL != "" {
 		if opt, rerr := asynq.ParseRedisURI(cfg.RedisURL); rerr == nil {
 			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
-				bus.AttachRedis(client, events.DefaultRedisChannel, logger)
+				bus.AttachRedis(client, events.DefaultRedisChannel, logger,
+					events.WithRedisRelayQueueCapacity(cfg.EventRelayQueueCapacity))
 				go bus.StartRedisRelay(ctx)
-				logger.Info("events bus redis fan-out enabled", "channel", events.DefaultRedisChannel)
+				logger.Info("events bus redis fan-out enabled",
+					"channel", events.DefaultRedisChannel,
+					"queue_capacity", bus.RelayStatus().Capacity)
 			}
 		}
 	}
@@ -1179,7 +1206,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h.SetEventBus(bus)
 			return h
 		}(),
-		Readyz:    newReadinessHandler(database, queue, hub).withLocatorError(locatorReadinessErr),
+		Readyz: newReadinessHandler(database, queue, hub).
+			withLocatorError(locatorReadinessErr).
+			withSecurityCacheCoordinator(securityCacheCoordinator, cfg.ServerReplicas > 1),
 		DexConfig: dexHandler,
 		RBAC: func() *handler.RBACHandler {
 			h := handler.NewRBACHandler(queries)
@@ -1298,7 +1327,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// SCIM 2.0 provisioning (migration 114). Bearer-token-authed
 		// /scim/v2/* User CRUD + read-only Group list, mapped onto the
 		// existing users + identity_group_mappings tables.
-		SCIM: handler.NewSCIMHandler(queries),
+		SCIM: func() *handler.SCIMHandler {
+			h := handler.NewSCIMHandler(queries)
+			h.SetJWTManager(jwtManager)
+			if cache := rbacQuerier.Cache(); cache != nil {
+				h.SetRBACCacheInvalidator(cache)
+			}
+			return h
+		}(),
 		// Operator-facing admin surface to mint/list/revoke the static
 		// bearer tokens the /scim/v2/* chain authenticates against.
 		SCIMTokenAdmin: handler.NewSCIMTokenAdminHandler(queries),
@@ -1949,10 +1985,10 @@ func (s *Server) Start(addr string) error {
 	return s.httpServer.Serve(ln)
 }
 
-// StartInternalArgoCDProxy serves the network-isolated ArgoCD->cluster proxy on
-// its own listener. addr must be a non-public port (the deployment maps the
-// public ingress only to the main :8000 listener, and a NetworkPolicy restricts
-// this port to the argocd namespace). Blocks until the listener errors.
+// StartInternalArgoCDProxy serves the authenticated, network-isolated
+// ArgoCD->cluster proxy on its own listener. addr must be a non-public port (the
+// deployment maps public ingress only to :8000, and a NetworkPolicy restricts
+// this port to the ArgoCD namespace). Blocks until the listener errors.
 func (s *Server) StartInternalArgoCDProxy(addr string) error {
 	if s.internalArgoCDHandler == nil || strings.TrimSpace(addr) == "" {
 		return nil

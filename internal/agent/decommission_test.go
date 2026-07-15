@@ -57,6 +57,12 @@ func seedFullFootprint() *fake.Clientset {
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent", Labels: map[string]string{tPartOf: "astronomer"}}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-kube-state-metrics", Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"}}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-kube-state-metrics", Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"}}},
+		&rbacv1.Role{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
+		&rbacv1.RoleBinding{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
+		&rbacv1.Role{ObjectMeta: partOfMeta("astronomer-agent-token", "astronomer-system")},
+		&rbacv1.RoleBinding{ObjectMeta: partOfMeta("astronomer-agent-token", "astronomer-system")},
+		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-registration-token", "astronomer-system")},
+		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
 		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-token", "astronomer-system")},
 		&corev1.Secret{ObjectMeta: partOfMeta("astronomer-agent-ca", "astronomer-system")},
 		&corev1.ConfigMap{ObjectMeta: partOfMeta("astronomer-agent-config", "astronomer-system")},
@@ -204,9 +210,12 @@ func TestFullCleanup_DeletesExactlyManagedSet(t *testing.T) {
 		"namespaces/astronomer-cert-manager", "namespaces/astronomer-gatekeeper-system",
 		"clusterroles/astronomer-kube-state-metrics", "clusterrolebindings/astronomer-kube-state-metrics",
 		"clusterroles/astronomer-agent", "clusterrolebindings/astronomer-agent",
+		"secrets/astronomer-agent-identity", "secrets/astronomer-agent-registration-token",
 		"secrets/astronomer-agent-token", "secrets/astronomer-agent-ca",
 		"configmaps/astronomer-agent-config", "services/astronomer-agent",
 		"networkpolicies/astronomer-agent", "poddisruptionbudgets/astronomer-agent",
+		"rolebindings/astronomer-agent-identity", "rolebindings/astronomer-agent-token",
+		"roles/astronomer-agent-identity", "roles/astronomer-agent-token",
 		"deployments/astronomer-agent",
 		"namespaces/astronomer-system",
 		// NOTE: serviceaccounts/astronomer-agent is intentionally NOT in this set
@@ -233,9 +242,20 @@ func TestFullCleanup_DeletesExactlyManagedSet(t *testing.T) {
 	if idxDep < 0 || idxSys < 0 || idxCRB < 0 || !(idxDep < idxSys && idxSys < idxCRB) {
 		t.Errorf("expected order deployment(%d) < astronomer-system(%d) < agent-clusterrolebinding(%d): %v", idxDep, idxSys, idxCRB, dels)
 	}
-	// Token Secret deleted before the agent Deployment (live credential first).
-	if idxToken, idxDep := indexOf(dels, "secrets/astronomer-agent-token"), indexOf(dels, "deployments/astronomer-agent"); idxToken < 0 || idxDep < 0 || idxToken > idxDep {
-		t.Errorf("token Secret must be removed before the agent Deployment: %v", dels)
+	// Every credential Secret is deleted before the agent Deployment, with the
+	// active durable identity first.
+	idxDep = indexOf(dels, "deployments/astronomer-agent")
+	for _, credential := range []string{
+		"secrets/astronomer-agent-identity",
+		"secrets/astronomer-agent-registration-token",
+		"secrets/astronomer-agent-token",
+	} {
+		if idxCredential := indexOf(dels, credential); idxCredential < 0 || idxCredential > idxDep {
+			t.Errorf("credential Secret %s must be removed before the agent Deployment: %v", credential, dels)
+		}
+	}
+	if idxIdentity, idxBootstrap := indexOf(dels, "secrets/astronomer-agent-identity"), indexOf(dels, "secrets/astronomer-agent-registration-token"); idxIdentity > idxBootstrap {
+		t.Errorf("active identity must be removed before bootstrap material: %v", dels)
 	}
 
 	// Velero: Backup deleted, BSL listed as orphan (NOT deleted).
@@ -265,8 +285,10 @@ func TestFullCleanup_NeverDeletesUnmanaged(t *testing.T) {
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 		// astronomer-agent ClusterRole WITHOUT part-of.
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent"}},
-		// token Secret WITHOUT part-of.
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent-token", Namespace: "astronomer-system"}},
+		// current credential Role WITHOUT part-of.
+		&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent-identity", Namespace: "astronomer-system"}},
+		// active identity Secret WITHOUT part-of.
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent-identity", Namespace: "astronomer-system"}},
 		// astronomer-system WITHOUT managed-by (operator-precreated).
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-system", Labels: map[string]string{tPartOf: "astronomer"}}},
 	)
@@ -281,14 +303,15 @@ func TestFullCleanup_NeverDeletesUnmanaged(t *testing.T) {
 		"namespaces/kube-system",
 		"namespaces/astronomer-system",
 		"clusterroles/astronomer-agent",
-		"secrets/astronomer-agent-token",
+		"roles/astronomer-agent-identity",
+		"secrets/astronomer-agent-identity",
 	} {
 		if contains(dels, forbidden) {
 			t.Errorf("OVER-DELETION: %s was deleted despite missing managed label; actions=%v", forbidden, dels)
 		}
 	}
 	// The guard fired → the step that targets a seeded unmanaged resource notes
-	// the label guard. The unmanaged token Secret is handled by
+	// the label guard. The unmanaged identity Secret is handled by
 	// remove_agent_singletons (the unmanaged astronomer-agent ClusterRole is
 	// guarded in the deferred self-delete path, which can't add an ACK step; its
 	// safety is proven by the not-deleted assertions above).
@@ -317,7 +340,7 @@ func TestFullCleanup_IdempotentReRun(t *testing.T) {
 }
 
 // TestFullCleanup_ForbiddenProfile: a non-admin profile gets 403 on namespace +
-// ClusterRole deletes but can still delete the live token Secret and its own
+// ClusterRole deletes but can still delete credential Secrets and its own
 // Deployment. Cleanup must not panic; the ACK is still produced.
 func TestFullCleanup_ForbiddenProfile(t *testing.T) {
 	cs := seedFullFootprint()
@@ -332,9 +355,11 @@ func TestFullCleanup_ForbiddenProfile(t *testing.T) {
 
 	ack := runDecommission(t, h, fullFootprintPayload())
 
-	// Token Secret + Deployment still removed.
-	if _, err := cs.CoreV1().Secrets("astronomer-system").Get(context.Background(), "astronomer-agent-token", metav1.GetOptions{}); err == nil {
-		t.Errorf("token Secret should have been deleted even on a forbidden profile")
+	// Active identity + bootstrap + legacy Secrets and Deployment still removed.
+	for _, credential := range []string{"astronomer-agent-identity", "astronomer-agent-registration-token", "astronomer-agent-token"} {
+		if _, err := cs.CoreV1().Secrets("astronomer-system").Get(context.Background(), credential, metav1.GetOptions{}); err == nil {
+			t.Errorf("credential Secret %s should have been deleted even on a forbidden profile", credential)
+		}
 	}
 	if _, err := cs.AppsV1().Deployments("astronomer-system").Get(context.Background(), "astronomer-agent", metav1.GetOptions{}); err == nil {
 		t.Errorf("agent Deployment should have been deleted even on a forbidden profile")
@@ -369,6 +394,12 @@ func TestLegacyPayload_BackCompat(t *testing.T) {
 		"namespaces/astronomer-monitoring",
 		"namespaces/astronomer-system",
 		"clusterroles/astronomer-agent",
+		"roles/astronomer-agent-identity",
+		"rolebindings/astronomer-agent-identity",
+		"roles/astronomer-agent-token",
+		"rolebindings/astronomer-agent-token",
+		"secrets/astronomer-agent-identity",
+		"secrets/astronomer-agent-registration-token",
 		"secrets/astronomer-agent-token",
 	} {
 		if contains(dels, forbidden) {

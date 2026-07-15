@@ -30,7 +30,7 @@ func TestRenderAgentInstallManifestUsesTemplate(t *testing.T) {
 		`token: "reg-token"`,
 		`image: "example.com/astronomer-agent:v1.2.3"`,
 		"- connect",
-		"ASTRONOMER_AGENT_TOKEN",
+		"ASTRONOMER_IDENTITY_TOKEN_SECRET_NAME",
 		`prometheus.io/port: "8081"`,
 		"- port: 80",
 		"- port: 443",
@@ -46,7 +46,7 @@ func TestRenderAgentInstallManifestUsesTemplate(t *testing.T) {
 	if strings.Contains(manifest, "placeholder") {
 		t.Fatal("manifest still contains placeholder text")
 	}
-	for _, unwanted := range []string{"--server-url", "--token", "--cluster-id", "ASTRONOMER_TOKEN", "HEALTH_PORT"} {
+	for _, unwanted := range []string{"--server-url", "--token", "--cluster-id", "ASTRONOMER_TOKEN", "ASTRONOMER_AGENT_TOKEN", "HEALTH_PORT"} {
 		if strings.Contains(manifest, unwanted) {
 			t.Fatalf("manifest still contains obsolete %q", unwanted)
 		}

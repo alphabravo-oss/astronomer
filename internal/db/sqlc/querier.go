@@ -47,6 +47,7 @@ type Querier interface {
 	// against the cluster_id as a string.
 	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
 	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
+	BackfillDexPublicClientsEnvelope(ctx context.Context, arg BackfillDexPublicClientsEnvelopeParams) (DexSetting, error)
 	// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
 	// (jsonb_to_recordset) so a whole chart's versions land in one query
 	// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
@@ -56,6 +57,11 @@ type Querier interface {
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
+	// Claim a bounded poll batch atomically across server replicas. The 25-second
+	// lease is shorter than the 30-second reconciler cadence and longer than the
+	// 10-second upstream client timeout. poll_attempts is charged once at claim
+	// time so replica count cannot accelerate the timeout budget.
+	ClaimRunningArgoCDOperationsForPoll(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	// Backstop sweep: clear previous_token_hash for rows whose rotation completed
 	// more than the supplied interval ago but whose old hash was never cleared by
 	// a new-token CONNECT (e.g. the agent crashed before reconnecting).
@@ -281,7 +287,6 @@ type Querier interface {
 	CreateDashboardWidget(ctx context.Context, arg CreateDashboardWidgetParams) (DashboardWidget, error)
 	// Deferred operations --------------------------------------------------
 	CreateDeferredOperation(ctx context.Context, arg CreateDeferredOperationParams) (DeferredOperation, error)
-	CreateDexConnector(ctx context.Context, arg CreateDexConnectorParams) (DexConnector, error)
 	// Fleet operations (migration 056). Backs:
 	//   * /api/v1/fleet-operations/*       — CRUD + lifecycle endpoints
 	//   * fleet:orchestrate worker         — periodic, idempotent dispatcher
@@ -474,7 +479,6 @@ type Querier interface {
 	DeleteControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDashboardWidget(ctx context.Context, id uuid.UUID) error
 	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	DeleteDexConnector(ctx context.Context, id uuid.UUID) error
 	// Retention sweep, runs daily. Returns the row count so the task can
 	// emit a "rows deleted" log line for the operator.
 	DeleteEmailsOlderThan(ctx context.Context, createdAt time.Time) (int64, error)
@@ -586,6 +590,10 @@ type Querier interface {
 	// delivery history; the handler doesn't have to do that explicitly.
 	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
+	// The generation predicate is evaluated in the same statement that enables
+	// the provider. A stale reconcile can therefore never win a check-then-write
+	// race against a newer settings/register mutation.
+	EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (EnableDexSSOForGenerationRow, error)
 	// Bus-tap insert. Called once per (forwarder, event) pair that matched
 	// at least one filter glob. The dispatcher picks rows up in batch
 	// order via the (forwarder_id, id) index.
@@ -698,6 +706,7 @@ type Querier interface {
 	GetDexConnectorByID(ctx context.Context, id uuid.UUID) (DexConnector, error)
 	GetDexConnectorByName(ctx context.Context, name string) (DexConnector, error)
 	GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error)
+	GetDexSettingsForGeneration(ctx context.Context, arg GetDexSettingsForGenerationParams) (DexSetting, error)
 	GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error)
 	// Effective quota lookups ------------------------------------------------
 	GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error)
@@ -1448,7 +1457,6 @@ type Querier interface {
 	// Quota plans CRUD --------------------------------------------------------
 	ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error)
 	ListRestoreOperations(ctx context.Context, arg ListRestoreOperationsParams) ([]RestoreOperation, error)
-	ListRunningArgoCDOperations(ctx context.Context, limit int32) ([]ArgocdOperation, error)
 	ListRunningBackupsForPolling(ctx context.Context, limit int32) ([]Backup, error)
 	// In-flight rows across all clusters, oldest-first, so the sweep can poll
 	// each snapshot Job to completion and move it off 'running'. Only 'running'
@@ -1556,13 +1564,11 @@ type Querier interface {
 	LockUser(ctx context.Context, arg LockUserParams) error
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)
-	// Atomic claim: only transition an op that is still claimable — either
-	// 'pending', or a 'running' op whose lease has gone stale (started_at older
-	// than the 1-minute fresh-running window the reconciler uses). Under an HA
-	// deployment (server.replicaCount>1) two workers can ListPendingArgoCDOperations
-	// the same row; the first UPDATE flips it to running+started_at=now() so the
-	// second matches zero rows (pgx.ErrNoRows) and its claimLatestOperations loop
-	// skips it — preventing a double `POST /applications/{name}/sync` upstream.
+	// Atomic at-most-once dispatch claim. Running Argo operations are asynchronous
+	// and are resumed exclusively by ClaimRunningArgoCDOperationsForPoll; replaying
+	// the mutation after a local lease expires restarts upstream hooks and can
+	// duplicate side effects. Under HA, only one replica can transition pending to
+	// running; all competing claimers receive pgx.ErrNoRows.
 	MarkArgoCDOperationRunning(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationSuperseded(ctx context.Context, arg MarkArgoCDOperationSupersededParams) (ArgocdOperation, error)
 	MarkCatalogOperationCompleted(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
@@ -1602,6 +1608,8 @@ type Querier interface {
 	MarkDeferredDispatched(ctx context.Context, arg MarkDeferredDispatchedParams) error
 	MarkDeferredExpired(ctx context.Context, arg MarkDeferredExpiredParams) error
 	MarkDeferredFailed(ctx context.Context, arg MarkDeferredFailedParams) error
+	MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeAppliedParams) (DexSetting, error)
+	MarkDexRuntimeStaged(ctx context.Context, arg MarkDexRuntimeStagedParams) (DexSetting, error)
 	// Records a delivery failure. attempts is the NEW count (caller computes
 	// prev+1) so the dispatcher can decide whether to mark the row 'failed'
 	// (still retryable) or escalate to a final state. last_error is kept
@@ -1701,7 +1709,7 @@ type Querier interface {
 	// 'pending' before returning the task to asynq.
 	ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
-	RequeueArgoCDOperation(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
+	RequeueArgoCDOperation(ctx context.Context, arg RequeueArgoCDOperationParams) (ArgocdOperation, error)
 	RequeueCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	// Bulk reset for the retry-failed endpoint. Resets every 'failed'
 	// target on this operation back to 'pending' so the next orchestrator
@@ -1716,6 +1724,7 @@ type Querier interface {
 	// failed-attempt cycle starts from a clean state.
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
+	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
 	// Admin-triggered re-dispatch. Resets the row so the next dispatcher
 	// tick picks it up immediately, regardless of where it was in the
 	// backoff schedule.
@@ -1779,6 +1788,15 @@ type Querier interface {
 	SetPlatformDefaultClusterTemplate(ctx context.Context, defaultClusterTemplateID pgtype.UUID) (PlatformConfiguration, error)
 	SetProjectDefaultVaultConnection(ctx context.Context, arg SetProjectDefaultVaultConnectionParams) error
 	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
+	// All logical connector mutations stage a new runtime generation and disable
+	// SSO under the same transaction-scoped advisory lock used by activation.
+	StageCreateDexConnector(ctx context.Context, arg StageCreateDexConnectorParams) (StageCreateDexConnectorRow, error)
+	StageDeleteDexConnector(ctx context.Context, connectorID uuid.UUID) (int64, error)
+	// The previous SSO state, new settings generation, and fail-closed provider
+	// disablement are one PostgreSQL statement. No process-local pre-snapshot can
+	// race a concurrent stage.
+	StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDexSettingsAndDisableSSOParams) (int64, error)
+	StageUpdateDexConnector(ctx context.Context, arg StageUpdateDexConnectorParams) (StageUpdateDexConnectorRow, error)
 	// Stamped on a hard sync failure (clone error, walk error, etc).
 	StampGitOpsSourceError(ctx context.Context, arg StampGitOpsSourceErrorParams) error
 	// Called by the sync worker after every successful tick. Clearing
@@ -1889,7 +1907,6 @@ type Querier interface {
 	// rather keep them in Go where the validator lives.
 	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
 	UpdateDashboardWidget(ctx context.Context, arg UpdateDashboardWidgetParams) (DashboardWidget, error)
-	UpdateDexConnector(ctx context.Context, arg UpdateDexConnectorParams) (DexConnector, error)
 	// Bulk counter refresh. The orchestrator recomputes the aggregate
 	// counts from fleet_operation_targets when it observes a target
 	// transition, then writes them back here so the read endpoints
@@ -1975,7 +1992,12 @@ type Querier interface {
 	// who disabled a default repo keeps it disabled across reconciles.
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
-	UpsertDexSettings(ctx context.Context, arg UpsertDexSettingsParams) (DexSetting, error)
+	// A single statement is the transaction boundary for concurrent discovery.
+	// The stable local ID is preserved on conflict so already-audited operation
+	// targets never drift. Discovery refreshes only bounded reference metadata;
+	// last-good status, resource counts and last_synced are intentionally not
+	// clobbered when another server replica won the insert race.
+	UpsertDiscoveredArgoCDApplication(ctx context.Context, arg UpsertDiscoveredArgoCDApplicationParams) (ArgocdApplication, error)
 	// The sync worker calls this after a YAML's contents have been applied
 	// so subsequent ticks no-op when last_yaml_sha matches. ON CONFLICT
 	// promotes any tombstoned row back to active — that's the

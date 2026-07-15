@@ -6,10 +6,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
 )
 
 func validateArgoProjectSpec(spec argocdclient.AppProjectSpec) error {
+	for i, repo := range spec.SourceRepos {
+		if err := argosecurity.ValidateSourceRepoPattern(repo); err != nil {
+			return fmt.Errorf("sourceRepos[%d] must be a canonical credential-free repository pattern", i)
+		}
+	}
+	for i, destination := range spec.Destinations {
+		if destination.Server != "" && destination.Server != "*" {
+			if err := argosecurity.ValidateCredentialFreeURL(destination.Server); err != nil {
+				return fmt.Errorf("destinations[%d].server must be a canonical credential-free URL", i)
+			}
+		}
+	}
 	return validateArgoProjectSyncWindows(spec.SyncWindows)
 }
 
@@ -18,12 +31,21 @@ func validateArgoProjectPatch(raw []byte) error {
 		return nil
 	}
 	var patch struct {
-		SyncWindows []argocdclient.AppProjectSyncWindow `json:"syncWindows"`
+		SourceRepos  *[]string                              `json:"sourceRepos"`
+		Destinations *[]argocdclient.ApplicationDestination `json:"destinations"`
+		SyncWindows  []argocdclient.AppProjectSyncWindow    `json:"syncWindows"`
 	}
 	if err := json.Unmarshal(raw, &patch); err != nil {
 		return fmt.Errorf("invalid project patch JSON")
 	}
-	return validateArgoProjectSyncWindows(patch.SyncWindows)
+	partial := argocdclient.AppProjectSpec{SyncWindows: patch.SyncWindows}
+	if patch.SourceRepos != nil {
+		partial.SourceRepos = *patch.SourceRepos
+	}
+	if patch.Destinations != nil {
+		partial.Destinations = *patch.Destinations
+	}
+	return validateArgoProjectSpec(partial)
 }
 
 func validateArgoProjectSyncWindows(windows []argocdclient.AppProjectSyncWindow) error {

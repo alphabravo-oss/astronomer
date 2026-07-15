@@ -97,11 +97,11 @@ func TestF8_ProductionWithoutBootstrapPasswordFails(t *testing.T) {
 		"secrets.secretKey=prod-jwt-signing-key",
 		"secrets.encryptionKey=prod-fernet-key",
 		"bootstrap.email=admin@example.com",
-		"dex.clientSecret=prod-dex-client-secret",
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
 		"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 	)...)
 	if !strings.Contains(errOut, "bootstrap.password or bootstrap.existingSecret must be set") {
 		t.Fatalf("production render without a pinned bootstrap password did not fail on F8:\n%s", errOut)

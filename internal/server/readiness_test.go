@@ -25,6 +25,11 @@ type fakeHubStatus struct {
 	clusters []string
 }
 
+type fakeSecurityCacheHealth struct{ started, healthy bool }
+
+func (f fakeSecurityCacheHealth) Started() bool { return f.started }
+func (f fakeSecurityCacheHealth) Healthy() bool { return f.healthy }
+
 func (f fakeHubStatus) ConnectedClusters() []string { return f.clusters }
 
 func TestReadinessHandlerOK(t *testing.T) {
@@ -140,6 +145,37 @@ func TestReadinessHandlerDependencyFailure(t *testing.T) {
 	}
 	if redisCheck := checks["redis"].(map[string]any); redisCheck["error"] != "redis down" {
 		t.Fatalf("expected redis error, got %v", redisCheck)
+	}
+}
+
+func TestReadinessRequiresInitialSecurityCacheEpochStateInHA(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		provider securityCacheHealthProvider
+		want     int
+	}{
+		{name: "missing", provider: nil, want: http.StatusServiceUnavailable},
+		{name: "not started", provider: fakeSecurityCacheHealth{}, want: http.StatusServiceUnavailable},
+		{name: "unhealthy", provider: fakeSecurityCacheHealth{started: true}, want: http.StatusServiceUnavailable},
+		{name: "healthy", provider: fakeSecurityCacheHealth{started: true, healthy: true}, want: http.StatusOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newReadinessHandler(fakeDBHealth{}, fakeQueuePing{}, fakeHubStatus{}).
+				withSecurityCacheCoordinator(tt.provider, true)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.want)
+			}
+		})
+	}
+
+	local := newReadinessHandler(fakeDBHealth{}, fakeQueuePing{}, fakeHubStatus{}).
+		withSecurityCacheCoordinator(nil, false)
+	rec := httptest.NewRecorder()
+	local.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("single-replica local-only readiness = %d, want 200", rec.Code)
 	}
 }
 

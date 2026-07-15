@@ -22,13 +22,15 @@
 2. **Agent pod healthy?**
    ```bash
    # From the affected member cluster:
-   kubectl -n astronomer-agent get pods
-   kubectl -n astronomer-agent logs deploy/astronomer-agent --tail=200 | grep -iE 'reconnect|error|dropped'
+   kubectl -n astronomer-system get pods
+   kubectl -n astronomer-system logs deploy/astronomer-agent --tail=200 | grep -iE 'credential_source|reconnect|error|dropped'
    ```
    Look for:
    - Repeated `dial server` failures → network / DNS issue
    - `force-closing tunnel due to congestion` (T33) → server send-buffer saturated
-   - Expired / rotated token → registration token issue
+   - `credential_source=durable_identity` plus rejection → durable token binding/revocation issue
+   - `credential_source=bootstrap_secret` plus rejection → expired or wrong-cluster registration bootstrap
+   - durable Secret read error → fix API/RBAC; the agent intentionally does not downgrade to bootstrap
 
 3. **Server-side hub state**:
    ```bash
@@ -45,16 +47,18 @@
 
 ```bash
 # Affected member cluster:
-kubectl -n astronomer-agent rollout restart deploy/astronomer-agent
+kubectl -n astronomer-system rollout restart deploy/astronomer-agent
 ```
 The reconnect loop uses jittered exponential backoff (T10), so a fleet
 restart spreads safely.
 
-### Re-pair (token rotation needed)
+### Recover credential state
 
-If the agent token has been rotated server-side and the agent doesn't
-have the new value, see [secret-rotation-runbook.md](../secret-rotation-runbook.md)
-for the re-registration procedure.
+If durable rotation or persistence failed, see
+[secret-rotation-runbook.md](../secret-rotation-runbook.md) and
+[agent-credential-ownership.md](../agent-credential-ownership.md). Do not
+overwrite the durable Secret by reapplying bootstrap YAML; they are separate
+objects and the agent owns durable rotation.
 
 ### Clear a stuck circuit breaker (server-side)
 
@@ -76,9 +80,10 @@ agent's connection.
 
 ## Prevention
 
-- Run the agent with multiple replicas where the member cluster
-  supports it
-- Pre-stage rotated tokens before invalidating the old one
+- Preserve the singleton `Recreate` deployment strategy; multiple replicas
+  compete for the same cluster tunnel identity.
+- Use the control-plane durable rotation endpoint and wait for agent adoption
+  before revoking old material.
 - Watch `astronomer_dropped_events_total{component="agent_tunnel_send"}` —
   congestion drops are an early warning before the disconnect fires (T33)
 

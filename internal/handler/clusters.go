@@ -1954,7 +1954,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 // the token in plaintext. This exists so operators can run the
 // Rancher-style one-liner:
 //
-//	curl -sfL https://<server>/api/v1/register/<token>.yaml | kubectl apply -f -
+//	curl -sfL https://<server>/api/v1/register/<token>.yaml | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 //
 // rather than copy-paste a multi-kilobyte heredoc.
 func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Request) {

@@ -221,19 +221,14 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 	// Invalidate all existing sessions: anyone holding a JWT issued
 	// before now should be forced to re-auth with the new password.
 	if h.revocation != nil {
-		_ = h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
+		if err := h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
 			ID:                  user.ID,
 			TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		})
-	}
-	// Flush the JWT validation cache so the freshly-bumped cutoff takes
-	// effect on the very next request. checkRevocations short-circuits on
-	// its positive-result cache for up to JWTValidationCacheTTL (30s), so
-	// without this an attacker session validated within the last window
-	// keeps passing for up to 30s after the reset. Mirrors the force-logout
-	// and SCIM revocation paths.
-	if h.jwt != nil {
-		h.jwt.InvalidateCache()
+		}); err == nil {
+			h.jwt.InvalidateUser(r.Context(), user.ID)
+		} else if h.log != nil {
+			h.log.Error("password reset completed but session invalidation failed", "user_id", user.ID.String(), "error", err)
+		}
 	}
 
 	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},

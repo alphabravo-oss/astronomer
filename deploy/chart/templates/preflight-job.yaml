@@ -1,14 +1,6 @@
-{{- if .Values.preflight.enabled }}
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ include "astronomer.fullname" . }}-preflight
-  labels:
-    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation
+{{- define "astronomer.preflightJobSpec" -}}
+{{- $serviceAccountName := .serviceAccountName -}}
+{{- with .root }}
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600
@@ -18,9 +10,10 @@ spec:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 8 }}
     spec:
       restartPolicy: Never
-      # Dedicated hook SA (templates/preflight-rbac.yaml, hook-weight -10) so a
-      # fresh install doesn't deadlock on the main SA not existing yet.
-      serviceAccountName: {{ include "astronomer.serviceAccountName" . }}-preflight
+      # Dedicated hook SA/RBAC and default-deny allow NetworkPolicy are created
+      # at hook-weight -10 so this later -5 Job can authenticate and reach the
+      # API on both fresh installs and upgrades.
+      serviceAccountName: {{ $serviceAccountName }}
       {{- with .Values.preflight.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -137,22 +130,168 @@ spec:
             - /bin/sh
             - -ec
             - |
+              umask 077
+              PREFLIGHT_TMP_DIR=$(mktemp -d /tmp/astronomer-preflight.XXXXXX)
+              trap 'rm -rf "${PREFLIGHT_TMP_DIR}"' EXIT HUP INT TERM
+              # Hook RBAC objects are created before this Job, but Kubernetes
+              # authorization caches/informers can observe the Job before the
+              # new RoleBindings become usable. Every live API read therefore
+              # uses one bounded helper with three explicit outcomes:
+              #   0 = object present / read succeeded
+              #   1 = authorized read returned Kubernetes NotFound
+              #   2 = authorization or transport never became usable
+              # Callers decide whether outcome 1 is allowed; outcome 2 always
+              # fails closed. Per-call files live in a private, uniquely
+              # named directory and are removed by the process-level trap.
+              PREFLIGHT_READ_ATTEMPTS=10
+              PREFLIGHT_READ_DELAY_SECONDS=1
+              KUBE_READ_OUTPUT=""
+
+              kube_read() {
+                read_description="$1"
+                shift
+                read_attempt=1
+                read_stdout=$(mktemp "${PREFLIGHT_TMP_DIR}/read.stdout.XXXXXX")
+                read_stderr=$(mktemp "${PREFLIGHT_TMP_DIR}/read.stderr.XXXXXX")
+                while [ "$read_attempt" -le "$PREFLIGHT_READ_ATTEMPTS" ]; do
+                  read_rc=0
+                  kubectl "$@" >"$read_stdout" 2>"$read_stderr" || read_rc=$?
+                  if [ "$read_rc" -eq 0 ]; then
+                    KUBE_READ_OUTPUT=$(cat "$read_stdout")
+                    rm -f "$read_stdout" "$read_stderr"
+                    return 0
+                  fi
+
+                  read_error=$(cat "$read_stderr")
+                  if echo "$read_error" | grep -Fq 'Error from server (NotFound)'; then
+                    echo "Kubernetes API reports ${read_description} absent: ${read_error}" >&2
+                    rm -f "$read_stdout" "$read_stderr"
+                    return 1
+                  fi
+
+                  echo "Kubernetes API read not ready for ${read_description} (attempt ${read_attempt}/${PREFLIGHT_READ_ATTEMPTS}, exit ${read_rc}): ${read_error}" >&2
+                  if [ "$read_attempt" -lt "$PREFLIGHT_READ_ATTEMPTS" ]; then
+                    sleep "$PREFLIGHT_READ_DELAY_SECONDS"
+                  fi
+                  read_attempt=$((read_attempt + 1))
+                done
+
+                echo "Kubernetes API read failed for ${read_description} after ${PREFLIGHT_READ_ATTEMPTS} attempts." >&2
+                echo "Check preflight ServiceAccount RBAC propagation and Kubernetes API connectivity, then retry the release." >&2
+                rm -f "$read_stdout" "$read_stderr"
+                return 2
+              }
+
+              {{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "fresh") }}
+              DEX_LEGACY_CONFIGMAP={{ printf "%s-dex-config" (include "astronomer.fullname" .) | quote }}
+              if kube_read "legacy Dex ConfigMap ${DEX_LEGACY_CONFIGMAP}" get configmap "${DEX_LEGACY_CONFIGMAP}" -n {{ .Release.Namespace | quote }} -o name; then
+                echo "Refusing direct Dex cutover: legacy ConfigMap detected. Run prepare, populate the runtime Secret, then run cutover."
+                exit 1
+              else
+                legacy_status=$?
+                if [ "${legacy_status}" -ne 1 ]; then
+                  echo "Refusing release: could not prove the legacy Dex ConfigMap is absent."
+                  exit 1
+                fi
+              fi
+              KUBE_READ_OUTPUT=""
+              {{- end }}
+              {{- if and .Values.dex.enabled (or .Values.dex.migration.requirePreparedConfig (eq .Values.dex.migration.phase "cutover")) }}
+              {{- if eq .Values.dex.migration.phase "cutover" }}
+              DEX_LEGACY_CONFIGMAP={{ printf "%s-dex-config-retained" (include "astronomer.fullname" .) | quote }}
+              if ! kube_read "prepared legacy Dex ConfigMap ${DEX_LEGACY_CONFIGMAP}" get configmap "${DEX_LEGACY_CONFIGMAP}" -n {{ .Release.Namespace | quote }} -o json; then
+                echo "Refusing Dex cutover: the prepare release and retained legacy ConfigMap are required first."
+                exit 1
+              fi
+              if ! printf '%s' "${KUBE_READ_OUTPUT}" | jq -e '.metadata.annotations["astronomer.io/dex-migration-phase"] == "prepared"' >/dev/null; then
+                echo "Refusing Dex cutover: legacy ConfigMap lacks the durable prepare-phase marker."
+                exit 1
+              fi
+              KUBE_READ_OUTPUT=""
+              {{- end }}
+              DEX_RUNTIME_SECRET={{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
+              if ! kube_read "prepared Dex runtime Secret metadata ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o 'jsonpath={.type}{"\n"}{.metadata.labels.astronomer\.io/runtime-writer}{"\n"}{.metadata.labels.astronomer\.io/secret-purpose}'; then
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} is missing. Prepare it before volume cutover; see docs/dex-runtime-secret-migration.md."
+                exit 1
+              fi
+              dex_secret_metadata=${KUBE_READ_OUTPUT}
+              KUBE_READ_OUTPUT=""
+              if [ "${dex_secret_metadata}" != "$(printf 'Opaque\ndex-handler\ndex-runtime')" ]; then
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} lacks exact ownership labels or Opaque type."
+                exit 1
+              fi
+              dex_secret_metadata=""
+              if ! kube_read "prepared Dex runtime Secret config field ${DEX_RUNTIME_SECRET}" get secret "${DEX_RUNTIME_SECRET}" -n {{ .Release.Namespace | quote }} -o 'jsonpath={.data.config\.yaml}'; then
+                echo "Refusing release: Dex runtime Secret ${DEX_RUNTIME_SECRET} has an unreadable config.yaml field."
+                exit 1
+              fi
+              dex_config_b64=${KUBE_READ_OUTPUT}
+              KUBE_READ_OUTPUT=""
+              # The exact base64 field is bounded before decoding. Decoded
+              # bytes flow through a private FIFO directly to the validator;
+              # plaintext configuration is never written to a regular file.
+              if [ -z "${dex_config_b64}" ] || [ "${#dex_config_b64}" -gt 1398104 ]; then
+                echo "Refusing release: Dex runtime config exceeds the 1 MiB preflight limit."
+                exit 1
+              fi
+              dex_config_fifo=$(mktemp "${PREFLIGHT_TMP_DIR}/dex-config.XXXXXX")
+              rm -f "${dex_config_fifo}"
+              mkfifo -m 600 "${dex_config_fifo}"
+              printf '%s' "${dex_config_b64}" | base64 -d >"${dex_config_fifo}" 2>/dev/null &
+              dex_decode_pid=$!
+              dex_config_b64=""
+              dex_validate_rc=0
+              dexconfigcheck --max-bytes 1048576 <"${dex_config_fifo}" || dex_validate_rc=$?
+              dex_decode_rc=0
+              wait "${dex_decode_pid}" || dex_decode_rc=$?
+              rm -f "${dex_config_fifo}"
+              if [ "${dex_decode_rc}" -ne 0 ]; then
+                echo "Refusing release: Dex runtime config is not valid base64."
+                exit 1
+              fi
+              if [ "${dex_validate_rc}" -ne 0 ]; then
+                echo "Refusing release: Dex runtime config failed YAML and semantic validation."
+                exit 1
+              fi
+              {{- end }}
+
               if [ "{{ .Values.gateway.enabled }}" = "true" ]; then
-                if ! kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1; then
-                  echo "Refusing release: Gateway API CRD gateways.gateway.networking.k8s.io is missing."
-                  echo "Install Gateway API support and a compatible controller before installing this chart."
+                if kube_read "Gateway API CRD gateways.gateway.networking.k8s.io" get crd gateways.gateway.networking.k8s.io -o name; then
+                  :
+                else
+                  read_status=$?
+                  if [ "$read_status" -eq 1 ]; then
+                    echo "Refusing release: Gateway API CRD gateways.gateway.networking.k8s.io is missing."
+                    echo "Install Gateway API support and a compatible controller before installing this chart."
+                  else
+                    echo "Refusing release: could not verify Gateway API CRD gateways.gateway.networking.k8s.io because the Kubernetes API read never became usable."
+                  fi
                   exit 1
                 fi
 
-                if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
-                  echo "Refusing release: Gateway API CRD httproutes.gateway.networking.k8s.io is missing."
-                  echo "Install Gateway API support and a compatible controller before installing this chart."
+                if kube_read "Gateway API CRD httproutes.gateway.networking.k8s.io" get crd httproutes.gateway.networking.k8s.io -o name; then
+                  :
+                else
+                  read_status=$?
+                  if [ "$read_status" -eq 1 ]; then
+                    echo "Refusing release: Gateway API CRD httproutes.gateway.networking.k8s.io is missing."
+                    echo "Install Gateway API support and a compatible controller before installing this chart."
+                  else
+                    echo "Refusing release: could not verify Gateway API CRD httproutes.gateway.networking.k8s.io because the Kubernetes API read never became usable."
+                  fi
                   exit 1
                 fi
 
-                if ! kubectl get gatewayclass "{{ .Values.gateway.className }}" >/dev/null 2>&1; then
-                  echo "Refusing release: GatewayClass {{ .Values.gateway.className }} is missing."
-                  echo "Install a Gateway controller that provides that class before installing this chart."
+                if kube_read "GatewayClass {{ .Values.gateway.className }}" get gatewayclass "{{ .Values.gateway.className }}" -o name; then
+                  :
+                else
+                  read_status=$?
+                  if [ "$read_status" -eq 1 ]; then
+                    echo "Refusing release: GatewayClass {{ .Values.gateway.className }} is missing."
+                    echo "Install a Gateway controller that provides that class before installing this chart."
+                  else
+                    echo "Refusing release: could not verify GatewayClass {{ .Values.gateway.className }} because the Kubernetes API read never became usable."
+                  fi
                   exit 1
                 fi
 
@@ -163,21 +302,35 @@ spec:
               # actually needs the CRDs (selfSigned or letsEncrypt). source=secret
               # is BYO and source=none is HTTP-only, so neither requires cert-manager.
               {{- $tlsSrc := include "astronomer.tls.source" . }}
-              {{- if and (or (eq $tlsSrc "selfSigned") (eq $tlsSrc "letsEncrypt")) (default true .Values.tls.requireCertManager) }}
-              if ! kubectl get crd issuers.cert-manager.io >/dev/null 2>&1; then
-                echo "Refusing release: tls.source={{ $tlsSrc }} requires cert-manager but the CRD"
-                echo "issuers.cert-manager.io was not found in the cluster."
-                echo ""
-                echo "Install cert-manager:"
-                echo "  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml"
-                echo ""
-                echo "Or set tls.requireCertManager=false if cert-manager will be installed"
-                echo "after this release applies (e.g. via Argo CD sync waves)."
+              {{- if and (or (eq $tlsSrc "selfSigned") (eq $tlsSrc "letsEncrypt")) .Values.tls.requireCertManager }}
+              if kube_read "cert-manager CRD issuers.cert-manager.io" get crd issuers.cert-manager.io -o name; then
+                :
+              else
+                read_status=$?
+                if [ "$read_status" -eq 1 ]; then
+                  echo "Refusing release: tls.source={{ $tlsSrc }} requires cert-manager but the CRD"
+                  echo "issuers.cert-manager.io was not found in the cluster."
+                  echo ""
+                  echo "Install cert-manager:"
+                  echo "  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml"
+                  echo ""
+                  echo "Or set tls.requireCertManager=false if cert-manager will be installed"
+                  echo "after this release applies (e.g. via Argo CD sync waves)."
+                else
+                  echo "Refusing release: could not verify cert-manager CRD issuers.cert-manager.io because the Kubernetes API read never became usable."
+                fi
                 exit 1
               fi
-              if ! kubectl get crd certificates.cert-manager.io >/dev/null 2>&1; then
-                echo "Refusing release: cert-manager CRD certificates.cert-manager.io is missing."
-                echo "Reinstall cert-manager (the issuers.cert-manager.io CRD was found but certificates.cert-manager.io was not)."
+              if kube_read "cert-manager CRD certificates.cert-manager.io" get crd certificates.cert-manager.io -o name; then
+                :
+              else
+                read_status=$?
+                if [ "$read_status" -eq 1 ]; then
+                  echo "Refusing release: cert-manager CRD certificates.cert-manager.io is missing."
+                  echo "Reinstall cert-manager (the issuers.cert-manager.io CRD was found but certificates.cert-manager.io was not)."
+                else
+                  echo "Refusing release: could not verify cert-manager CRD certificates.cert-manager.io because the Kubernetes API read never became usable."
+                fi
                 exit 1
               fi
               echo "cert-manager prerequisites found."
@@ -185,9 +338,16 @@ spec:
 
               # Validate additional-trusted-CAs Secret exists when referenced.
               {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
-              if ! kubectl get secret "{{ .Values.tls.additionalTrustedCAs.existingSecret }}" -n "{{ .Release.Namespace }}" >/dev/null 2>&1; then
-                echo "Refusing release: tls.additionalTrustedCAs.existingSecret={{ .Values.tls.additionalTrustedCAs.existingSecret }} not found in namespace {{ .Release.Namespace }}."
-                echo "Create the Secret with key tls.crt (PEM bundle) first."
+              if kube_read "additional trusted CA Secret {{ .Values.tls.additionalTrustedCAs.existingSecret }}" get secret "{{ .Values.tls.additionalTrustedCAs.existingSecret }}" -n "{{ .Release.Namespace }}" -o name; then
+                :
+              else
+                read_status=$?
+                if [ "$read_status" -eq 1 ]; then
+                  echo "Refusing release: tls.additionalTrustedCAs.existingSecret={{ .Values.tls.additionalTrustedCAs.existingSecret }} not found in namespace {{ .Release.Namespace }}."
+                  echo "Create the Secret with key tls.crt (PEM bundle) first."
+                else
+                  echo "Refusing release: could not verify additional trusted CA Secret {{ .Values.tls.additionalTrustedCAs.existingSecret }} because the Kubernetes API read never became usable."
+                fi
                 exit 1
               fi
               echo "additionalTrustedCAs Secret found."
@@ -200,9 +360,26 @@ spec:
               {{- if and (eq (default "" .Values.config.env) "production") .Values.postgres.external.dsnSecretRef.name }}
               dsn_secret="{{ .Values.postgres.external.dsnSecretRef.name }}"
               dsn_key="{{ .Values.postgres.external.dsnSecretRef.key }}"
-              dsn_val=$(kubectl get secret "$dsn_secret" -n "{{ .Release.Namespace }}" -o jsonpath="{.data.${dsn_key}}" 2>/dev/null | base64 -d 2>/dev/null || true)
+              if kube_read "Postgres DSN Secret ${dsn_secret} key ${dsn_key}" get secret "$dsn_secret" -n "{{ .Release.Namespace }}" -o "jsonpath={.data.${dsn_key}}"; then
+                dsn_encoded="$KUBE_READ_OUTPUT"
+              else
+                read_status=$?
+                if [ "$read_status" -eq 1 ]; then
+                  echo "Refusing release: postgres DSN secret/${dsn_secret} was not found in namespace {{ .Release.Namespace }}."
+                else
+                  echo "Refusing release: could not read postgres DSN secret/${dsn_secret} because the Kubernetes API read never became usable."
+                fi
+                exit 1
+              fi
+              dsn_val=""
+              if [ -n "$dsn_encoded" ]; then
+                dsn_val=$(printf '%s' "$dsn_encoded" | base64 -d) || {
+                  echo "Refusing release: postgres DSN secret/${dsn_secret} key=${dsn_key} is not valid base64 data."
+                  exit 1
+                }
+              fi
               if [ -z "$dsn_val" ]; then
-                echo "Refusing release: could not read postgres DSN from secret/${dsn_secret} key=${dsn_key} in namespace {{ .Release.Namespace }}."
+                echo "Refusing release: postgres DSN secret/${dsn_secret} key=${dsn_key} is missing or empty."
                 exit 1
               fi
               # Match any of require / verify-ca / verify-full. Anything else
@@ -225,10 +402,16 @@ spec:
               fi
 
               legacy_pvc="data-{{ include "astronomer.fullname" . }}-postgres-0"
-              if kubectl get pvc "${legacy_pvc}" -n "{{ .Release.Namespace }}" >/dev/null 2>&1; then
+              if kube_read "legacy bundled Postgres PVC ${legacy_pvc}" get pvc "${legacy_pvc}" -n "{{ .Release.Namespace }}" -o name; then
                 echo "Refusing upgrade: detected legacy bundled Postgres PVC ${legacy_pvc} in namespace {{ .Release.Namespace }}."
                 echo "Externalize or migrate the database first. See docs/migrations/2026-05-postgres-cnpg.md."
                 exit 1
+              else
+                read_status=$?
+                if [ "$read_status" -ne 1 ]; then
+                  echo "Refusing release: could not determine whether legacy bundled Postgres PVC ${legacy_pvc} exists because the Kubernetes API read never became usable."
+                  exit 1
+                fi
               fi
 
               echo "No legacy bundled Postgres PVC detected; preflight passes."
@@ -245,4 +428,42 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}
+{{- end }}
+
+{{- if .Values.preflight.enabled }}
+# Helm and Argo CD need different hook lifecycles. Helm executes this isolated
+# pre-release Job and Argo CD explicitly skips it. Keeping the engine-specific
+# hook name prevents Argo from adopting or deleting a Helm-created hook.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astronomer.fullname" . }}-preflight
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    argocd.argoproj.io/hook: Skip
+{{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight" (include "astronomer.serviceAccountName" .))) }}
+---
+# Argo CD applies the persistent RBAC/NetworkPolicy prerequisites and this Job
+# in wave -5. Argo's kind ordering applies NetworkPolicy, ServiceAccount, and
+# RBAC kinds before Job; using one wave avoids waiting forever for health on
+# Kubernetes resource kinds that do not expose a health assessment. Wave 0
+# release resources still remain blocked until the Sync hook succeeds. Helm
+# records the Job as a test hook, so install/upgrade never executes both paths.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "astronomer.fullname" . }}-preflight-argocd
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "-5"
+{{ include "astronomer.preflightJobSpec" (dict "root" . "serviceAccountName" (printf "%s-preflight-argocd" (include "astronomer.serviceAccountName" .))) }}
 {{- end }}

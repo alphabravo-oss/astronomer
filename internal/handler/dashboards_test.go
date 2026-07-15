@@ -509,7 +509,9 @@ func TestRender_AllowedIframeHostsEnforced(t *testing.T) {
 // sparkline render: stub Prom upstream, datasource row, widget pointing
 // at it, render endpoint returns a non-empty SVG.
 func TestRender_PromSparkline_RoundTrip(t *testing.T) {
-	defer httpclient.DisableGuardForTest()() // reach the httptest "Prometheus" on loopback
+	// This test intentionally dials the loopback httptest Prometheus upstream.
+	defer httpclient.DisableGuardForTest()()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/api/v1/query_range") {
 			t.Errorf("unexpected path %s", r.URL.Path)
@@ -559,7 +561,9 @@ func TestRender_PromSparkline_RoundTrip(t *testing.T) {
 // TestRender_PromStat_RoundTrip is the symmetric companion for stat
 // widgets.
 func TestRender_PromStat_RoundTrip(t *testing.T) {
-	defer httpclient.DisableGuardForTest()() // reach the httptest "Prometheus" on loopback
+	// This test intentionally dials the loopback httptest Prometheus upstream.
+	defer httpclient.DisableGuardForTest()()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1700000000,"42.5"]}]}}`))
 	}))
@@ -599,7 +603,9 @@ func TestRender_PromStat_RoundTrip(t *testing.T) {
 // TestDatasource_CRUD_And_Test exercises datasource admin CRUD + the
 // /test/ endpoint. We use an httptest server as the "Prometheus".
 func TestDatasource_CRUD_And_Test(t *testing.T) {
-	defer httpclient.DisableGuardForTest()() // reach the httptest "Prometheus" on loopback
+	// This test intentionally dials the loopback httptest Prometheus upstream.
+	defer httpclient.DisableGuardForTest()()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
 	}))

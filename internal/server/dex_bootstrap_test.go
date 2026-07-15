@@ -31,7 +31,7 @@ type fakeDexBootstrapQuerier struct {
 	upsertCalls     int
 	upsertResult    sqlc.DexSetting
 	upsertErr       error
-	upsertLastParam sqlc.UpsertDexSettingsParams
+	upsertLastParam sqlc.StageDexSettingsAndDisableSSOParams
 }
 
 func (f *fakeDexBootstrapQuerier) GetDexSettings(_ context.Context, id uuid.UUID) (sqlc.DexSetting, error) {
@@ -46,23 +46,17 @@ func (f *fakeDexBootstrapQuerier) GetDexSettings(_ context.Context, id uuid.UUID
 	return f.getResult, nil
 }
 
-func (f *fakeDexBootstrapQuerier) UpsertDexSettings(_ context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error) {
+func (f *fakeDexBootstrapQuerier) StageDexSettingsAndDisableSSO(_ context.Context, arg sqlc.StageDexSettingsAndDisableSSOParams) (int64, error) {
 	f.upsertCalls++
 	f.upsertLastParam = arg
 	if f.upsertErr != nil {
-		return sqlc.DexSetting{}, f.upsertErr
+		return 0, f.upsertErr
 	}
 	if f.upsertResult.ID == uuid.Nil {
 		// Synthesize a return value the bootstrap doesn't actually consume.
-		return sqlc.DexSetting{
-			ID:            arg.ID,
-			IssuerUrl:     arg.IssuerUrl,
-			Namespace:     arg.Namespace,
-			ReleaseName:   arg.ReleaseName,
-			ConfigmapName: arg.ConfigmapName,
-		}, nil
+		return 1, nil
 	}
-	return f.upsertResult, nil
+	return f.upsertResult.RuntimeGeneration, nil
 }
 
 // envMap is a test substitute for os.LookupEnv that draws from a fixed table.
@@ -76,11 +70,13 @@ func (e envMap) lookup(key string) (string, bool) {
 func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{}
 	env := envMap{
-		"DEX_BUNDLED_ENABLED":        "true",
-		"DEX_BUNDLED_NAMESPACE":      "astronomer",
-		"DEX_BUNDLED_RELEASE_NAME":   "astronomer-dex",
-		"DEX_BUNDLED_CONFIGMAP_NAME": "astronomer-dex-config",
-		"DEX_BUNDLED_ISSUER_URL":     "https://astronomer.example.com/dex",
+		"DEX_BUNDLED_ENABLED":         "true",
+		"DEX_BUNDLED_NAMESPACE":       "astronomer",
+		"DEX_BUNDLED_RELEASE_NAME":    "astronomer",
+		"DEX_BUNDLED_DEPLOYMENT_NAME": "astronomer-dex",
+		"DEX_BUNDLED_SERVICE_NAME":    "astronomer-dex",
+		"DEX_BUNDLED_CONFIGMAP_NAME":  "astronomer-dex-config",
+		"DEX_BUNDLED_ISSUER_URL":      "https://astronomer.example.com/dex",
 	}
 	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
 	if err != nil {
@@ -112,9 +108,9 @@ func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{
 		getResult: sqlc.DexSetting{
-			ID:        dexBootstrapSingletonID,
-			IssuerUrl: "https://operator-managed.example.com/dex",
-			Namespace: "auth",
+			ID: dexBootstrapSingletonID, IssuerUrl: "https://operator-managed.example.com/dex",
+			Namespace: "astronomer", ReleaseName: "astronomer-dex", ChartReleaseName: "astronomer",
+			DeploymentName: "astronomer-dex", ServiceName: "astronomer-dex", RuntimeSecretName: "astronomer-dex-runtime", RuntimePhase: "fresh",
 		},
 	}
 	env := envMap{
@@ -130,6 +126,19 @@ func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 	}
 	if q.upsertCalls != 0 {
 		t.Fatalf("expected no UpsertDexSettings calls; got %d", q.upsertCalls)
+	}
+}
+
+func TestDexBootstrap_ReconcilesOnlyImplicitMigratedRuntimeName(t *testing.T) {
+	q := &fakeDexBootstrapQuerier{getResult: sqlc.DexSetting{
+		ID: dexBootstrapSingletonID, IssuerUrl: "https://operator.example/dex", Namespace: "auth",
+		ReleaseName: "custom-dex", RuntimeSecretName: "astronomer-dex-runtime",
+		ConfigmapName: "custom-dex-config", PublicClients: []byte(`[]`), Expiry: []byte(`{}`), Extra: []byte(`{}`),
+	}}
+	env := envMap{"DEX_BUNDLED_ENABLED": "true", "DEX_BUNDLED_ISSUER_URL": "https://operator.example/dex", "DEX_BUNDLED_RUNTIME_SECRET_NAME": "custom-dex-runtime"}
+	changed, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	if err != nil || !changed || q.upsertLastParam.RuntimeSecretName != "custom-dex-runtime" || string(q.upsertLastParam.PublicClients) != "[]" {
+		t.Fatalf("changed=%v err=%v params=%#v", changed, err, q.upsertLastParam)
 	}
 }
 
@@ -189,8 +198,8 @@ func TestDexBootstrap_UsesFallbackDefaultsForMissingEnv(t *testing.T) {
 	if q.upsertLastParam.ReleaseName != "astronomer-dex" {
 		t.Errorf("expected default release 'astronomer-dex'; got %q", q.upsertLastParam.ReleaseName)
 	}
-	if q.upsertLastParam.ConfigmapName != "astronomer-dex-config" {
-		t.Errorf("expected default configmap 'astronomer-dex-config'; got %q", q.upsertLastParam.ConfigmapName)
+	if q.upsertLastParam.RuntimeSecretName != "astronomer-dex-runtime" {
+		t.Errorf("expected default runtime Secret 'astronomer-dex-runtime'; got %q", q.upsertLastParam.RuntimeSecretName)
 	}
 	// Trailing slash on the issuer URL must be trimmed.
 	if q.upsertLastParam.IssuerUrl != "https://astronomer.example.com/dex" {

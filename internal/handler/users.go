@@ -293,6 +293,10 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset password")
 		return
 	}
+	if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "admin_password_reset"); err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Password changed but session invalidation failed")
+		return
+	}
 	recordAudit(r, h.queries, "user.reset_password", "user", existing.ID.String(), existing.Username, map[string]any{
 		"generated": generated,
 	})
@@ -390,11 +394,7 @@ func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request
 		return
 	}
 	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "admin_force_logout")...).Inc()
-	if h.jwt != nil {
-		// Drop the positive-validation cache so a JWT we'd JUST
-		// confirmed valid doesn't stick around for one more TTL.
-		h.jwt.InvalidateCache()
-	}
+	h.jwt.InvalidateUser(r.Context(), id)
 
 	// Single sign-out clean-up (migration 054). When sso_sessions is
 	// wired we additionally:
@@ -518,7 +518,7 @@ func revokeUserSessions(ctx context.Context, q tokenInvalidator, jwt *auth.JWTMa
 		return err
 	}
 	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", reason)...).Inc()
-	jwt.InvalidateCache()
+	jwt.InvalidateUser(ctx, id)
 	return nil
 }
 

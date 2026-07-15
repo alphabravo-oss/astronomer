@@ -201,6 +201,10 @@ type ArgocdApplication struct {
 	LastSynced           pgtype.Timestamptz `json:"last_synced"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+	// Non-secret upstream Kubernetes UID used to bind durable operations to one Application incarnation.
+	UpstreamUid string `json:"upstream_uid"`
+	// Non-secret upstream Application object namespace; never stores Application spec or credentials.
+	ApplicationNamespace string `json:"application_namespace"`
 }
 
 type ArgocdBaselineOwnershipDecision struct {
@@ -1014,17 +1018,41 @@ type DexConnector struct {
 }
 
 type DexSetting struct {
-	ID            uuid.UUID       `json:"id"`
-	IssuerUrl     string          `json:"issuer_url"`
-	ClusterID     pgtype.UUID     `json:"cluster_id"`
-	Namespace     string          `json:"namespace"`
-	ReleaseName   string          `json:"release_name"`
-	ConfigmapName string          `json:"configmap_name"`
+	ID          uuid.UUID   `json:"id"`
+	IssuerUrl   string      `json:"issuer_url"`
+	ClusterID   pgtype.UUID `json:"cluster_id"`
+	Namespace   string      `json:"namespace"`
+	ReleaseName string      `json:"release_name"`
+	// Deprecated compatibility alias. Must never identify a ConfigMap containing Dex runtime configuration.
+	ConfigmapName string `json:"configmap_name"`
+	// Compatibility copy dual-written until an explicit quiesced Fernet cutover; must be [] after public_clients_cutover_at.
 	PublicClients json.RawMessage `json:"public_clients"`
 	Expiry        json.RawMessage `json:"expiry"`
 	Extra         json.RawMessage `json:"extra"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
+	// Stable retained Secret mounted read-only by Dex; owned by the Dex runtime reconciler.
+	RuntimeSecretName string `json:"runtime_secret_name"`
+	// Fernet-encrypted canonical JSON array of Dex static clients.
+	PublicClientsEncrypted string `json:"public_clients_encrypted"`
+	// Durable cutover marker; non-null means old writers are prohibited and public_clients is scrubbed.
+	PublicClientsCutoverAt pgtype.Timestamptz `json:"public_clients_cutover_at"`
+	// Immutable Helm/Argo release identity for bundled Dex; empty for operator-managed Dex.
+	ChartReleaseName string `json:"chart_release_name"`
+	// Exact Kubernetes Deployment name reconciled by DexHandler.
+	DeploymentName string `json:"deployment_name"`
+	// Exact Kubernetes Service name used for the verified health proxy.
+	ServiceName string `json:"service_name"`
+	// Opaque monotonic generation for Dex runtime candidates; never content-derived.
+	RuntimeGeneration int64 `json:"runtime_generation"`
+	// Last generation conditionally verified in Secret, Deployment, and health checks.
+	RuntimeAppliedGeneration int64 `json:"runtime_applied_generation"`
+	// fresh/cutover require Secret-mounted rollout+health; prepare stops after verified Secret staging.
+	RuntimePhase string `json:"runtime_phase"`
+	// Last generation verified in the owned runtime Secret, before Deployment activation.
+	RuntimeStagedGeneration int64 `json:"runtime_staged_generation"`
+	// SSO enabled snapshot captured atomically with generation staging; restoration is generation-CAS guarded.
+	SagaPreviousSsoEnabled bool `json:"saga_previous_sso_enabled"`
 }
 
 type EmailMessage struct {

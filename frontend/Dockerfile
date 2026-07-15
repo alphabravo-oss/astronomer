@@ -11,19 +11,23 @@ COPY . .
 
 # Baked into the bundle via the Vite `define` (__APP_VERSION__); the release
 # workflow passes VERSION to every component build.
-ARG VERSION=0.2.0-dev
+ARG VERSION=0.3.0
 ENV VERSION=$VERSION
 
-RUN npm run build
+# The trailing grep verifies the version string was actually baked into the
+# emitted bundle (release builds must be traceable to their tag).
+RUN npm run build \
+  && grep -R -F -q -- "${VERSION}" dist
 
 # Stage 2: static nginx. Same base pin as deploy/nginx/Dockerfile.nginx —
 # bump both digests in lockstep (D16).
 FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
 
-ARG VERSION=0.2.0-dev
+ARG VERSION=0.3.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="astronomer-frontend" \
+      org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}"

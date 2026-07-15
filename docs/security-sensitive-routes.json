@@ -210,6 +210,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"

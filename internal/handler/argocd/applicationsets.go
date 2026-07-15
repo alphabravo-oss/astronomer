@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // ApplicationSetSpec is the writable subset of an ApplicationSet.
@@ -33,6 +35,7 @@ type ApplicationSetGenerator struct {
 	Cluster *ClusterGenerator `json:"clusters,omitempty"`
 	Git     *GitGenerator     `json:"git,omitempty"`
 	Matrix  *MatrixGenerator  `json:"matrix,omitempty"`
+	Merge   *MergeGenerator   `json:"merge,omitempty"`
 }
 
 // ListGenerator emits one Application per element. Each element is a
@@ -72,6 +75,7 @@ type GitGenerator struct {
 	Revision    string                  `json:"revision,omitempty"`
 	Files       []GitGeneratorItem      `json:"files,omitempty"`
 	Directories []GitGeneratorDirectory `json:"directories,omitempty"`
+	Values      map[string]string       `json:"values,omitempty"`
 }
 
 // GitGeneratorItem matches a file path inside the repo.
@@ -89,6 +93,12 @@ type GitGeneratorDirectory struct {
 // supports nested matrix only one level deep.
 type MatrixGenerator struct {
 	Generators []ApplicationSetGenerator `json:"generators"`
+}
+
+// MergeGenerator combines child parameter sets using one or more stable keys.
+type MergeGenerator struct {
+	Generators []ApplicationSetGenerator `json:"generators"`
+	MergeKeys  []string                  `json:"mergeKeys"`
 }
 
 // ApplicationSetTemplate is the per-row Application rendered by the set.
@@ -124,6 +134,9 @@ type applicationSetEnvelope struct {
 
 // CreateApplicationSet creates an ApplicationSet upstream.
 func (c *Client) CreateApplicationSet(ctx context.Context, name string, spec ApplicationSetSpec) (*ApplicationSet, error) {
+	if err := argosecurity.ValidateApplicationSetMutation(map[string]any{"spec": spec}); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(applicationSetEnvelope{
 		APIVersion: "argoproj.io/v1alpha1",
 		Kind:       "ApplicationSet",

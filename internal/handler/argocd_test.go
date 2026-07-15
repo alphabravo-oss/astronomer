@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -22,31 +23,45 @@ import (
 type argoCDQueryRecorder struct {
 	mu sync.Mutex
 
-	app      sqlc.ArgocdApplication
-	instance sqlc.ArgocdInstance
+	app             sqlc.ArgocdApplication
+	instance        sqlc.ArgocdInstance
+	operation       sqlc.ArgocdOperation
+	operationEvents []sqlc.ArgocdOperationEvent
 
-	progress   []sqlc.UpdateArgoCDOperationProgressParams
-	completed  []sqlc.CompleteArgoCDOperationWithResultParams
-	failed     []sqlc.FailArgoCDOperationWithResultParams
-	appUpdate  []sqlc.UpdateArgoCDApplicationParams
-	events     []sqlc.CreateArgoCDOperationEventParams
-	runningOps []sqlc.ArgocdOperation
+	progress       []sqlc.UpdateArgoCDOperationProgressParams
+	completed      []sqlc.CompleteArgoCDOperationWithResultParams
+	failed         []sqlc.FailArgoCDOperationWithResultParams
+	appUpdate      []sqlc.UpdateArgoCDApplicationParams
+	events         []sqlc.CreateArgoCDOperationEventParams
+	created        []sqlc.CreateArgoCDOperationParams
+	upserts        []sqlc.UpsertDiscoveredArgoCDApplicationParams
+	upsertErr      error
+	getOpErr       error
+	getInstanceErr error
+	getAppErr      error
+	auditRows      []sqlc.CreateAuditLogV1Params
+	requeued       []sqlc.RequeueArgoCDOperationParams
+	pendingOps     []sqlc.ArgocdOperation
+	runningOps     []sqlc.ArgocdOperation
+	markRunCalls   int
 
 	// instances backs ListArgoCDInstances (health-probe fan-out tests).
 	instances []sqlc.ArgocdInstance
-	// pendingOps backs ListPendingArgoCDOperations and markRunning is the
-	// row MarkArgoCDOperationRunning returns; both drive processPendingOperations
-	// in the submission-retry tests. requeued records RequeueArgoCDOperation calls.
-	pendingOps  []sqlc.ArgocdOperation
-	markRunning sqlc.ArgocdOperation
-	requeued    []uuid.UUID
 }
 
 func (q *argoCDQueryRecorder) GetArgoCDApplicationByID(_ context.Context, _ uuid.UUID) (sqlc.ArgocdApplication, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.getAppErr != nil {
+		return sqlc.ArgocdApplication{}, q.getAppErr
+	}
 	return q.app, nil
 }
 
 func (q *argoCDQueryRecorder) GetArgoCDInstanceByID(_ context.Context, _ uuid.UUID) (sqlc.ArgocdInstance, error) {
+	if q.getInstanceErr != nil {
+		return sqlc.ArgocdInstance{}, q.getInstanceErr
+	}
 	return q.instance, nil
 }
 
@@ -94,6 +109,25 @@ func (q *argoCDQueryRecorder) GetArgoCDInstanceByName(context.Context, string) (
 func (q *argoCDQueryRecorder) GetArgoCDApplicationByName(context.Context, sqlc.GetArgoCDApplicationByNameParams) (sqlc.ArgocdApplication, error) {
 	panic("not used")
 }
+func (q *argoCDQueryRecorder) UpsertDiscoveredArgoCDApplication(_ context.Context, arg sqlc.UpsertDiscoveredArgoCDApplicationParams) (sqlc.ArgocdApplication, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.upserts = append(q.upserts, arg)
+	if q.upsertErr != nil {
+		return sqlc.ArgocdApplication{}, q.upsertErr
+	}
+	q.app.ArgocdInstanceID = arg.ArgocdInstanceID
+	q.app.Name = arg.Name
+	q.app.UpstreamUid = arg.UpstreamUid
+	q.app.ApplicationNamespace = arg.ApplicationNamespace
+	q.app.Project = arg.Project
+	q.app.RepoUrl = arg.RepoUrl
+	q.app.Path = arg.Path
+	q.app.TargetRevision = arg.TargetRevision
+	q.app.DestinationCluster = arg.DestinationCluster
+	q.app.DestinationNamespace = arg.DestinationNamespace
+	return q.app, nil
+}
 func (q *argoCDQueryRecorder) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
 	return q.instances, nil
 }
@@ -118,11 +152,25 @@ func (q *argoCDQueryRecorder) CountArgoCDApplications(context.Context) (int64, e
 func (q *argoCDQueryRecorder) CountAppsByInstance(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
-func (q *argoCDQueryRecorder) CreateArgoCDOperation(context.Context, sqlc.CreateArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+func (q *argoCDQueryRecorder) CreateArgoCDOperation(_ context.Context, arg sqlc.CreateArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.created = append(q.created, arg)
+	now := time.Now().UTC()
+	return sqlc.ArgocdOperation{ID: uuid.New(), TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType, Payload: arg.Payload, Status: arg.Status, CreatedAt: now, UpdatedAt: now}, nil
+}
+
+func (q *argoCDQueryRecorder) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.auditRows = append(q.auditRows, arg)
+	return nil
 }
 func (q *argoCDQueryRecorder) GetArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return sqlc.ArgocdOperation{}, nil
+	if q.getOpErr != nil {
+		return sqlc.ArgocdOperation{}, q.getOpErr
+	}
+	return q.operation, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperations(context.Context, sqlc.ListArgoCDOperationsParams) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
@@ -136,8 +184,21 @@ func (q *argoCDQueryRecorder) ListPendingArgoCDOperations(context.Context, int32
 func (q *argoCDQueryRecorder) GetLatestArgoCDOperationForTarget(context.Context, sqlc.GetLatestArgoCDOperationForTargetParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argoCDQueryRecorder) MarkArgoCDOperationRunning(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
-	return q.markRunning, nil
+func (q *argoCDQueryRecorder) MarkArgoCDOperationRunning(_ context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error) {
+	q.markRunCalls++
+	for i, op := range q.pendingOps {
+		if op.ID != id {
+			continue
+		}
+		if op.Status != OpStatusPending {
+			return sqlc.ArgocdOperation{}, pgx.ErrNoRows
+		}
+		op.Status = OpStatusRunning
+		op.AttemptCount++
+		q.pendingOps[i] = op
+		return op, nil
+	}
+	return sqlc.ArgocdOperation{}, pgx.ErrNoRows
 }
 func (q *argoCDQueryRecorder) MarkArgoCDOperationCompleted(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
@@ -148,16 +209,19 @@ func (q *argoCDQueryRecorder) MarkArgoCDOperationFailed(context.Context, sqlc.Ma
 func (q *argoCDQueryRecorder) MarkArgoCDOperationSuperseded(context.Context, sqlc.MarkArgoCDOperationSupersededParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argoCDQueryRecorder) RequeueArgoCDOperation(_ context.Context, id uuid.UUID) (sqlc.ArgocdOperation, error) {
+func (q *argoCDQueryRecorder) RequeueArgoCDOperation(_ context.Context, arg sqlc.RequeueArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.requeued = append(q.requeued, id)
-	return sqlc.ArgocdOperation{ID: id, Status: "pending"}, nil
+	q.requeued = append(q.requeued, arg)
+	row := q.operation
+	row.Payload = arg.Payload
+	row.Status = OpStatusPending
+	return row, nil
 }
 func (q *argoCDQueryRecorder) ListArgoCDOperationEvents(context.Context, uuid.UUID) ([]sqlc.ArgocdOperationEvent, error) {
-	return nil, nil
+	return q.operationEvents, nil
 }
-func (q *argoCDQueryRecorder) ListRunningArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
+func (q *argoCDQueryRecorder) ClaimRunningArgoCDOperationsForPoll(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return q.runningOps, nil
 }
 
@@ -207,6 +271,8 @@ func newArgoCDFixture(t *testing.T, handler http.HandlerFunc) (*ArgoCDHandler, *
 			ID:                   uuid.New(),
 			ArgocdInstanceID:     uuid.New(),
 			Name:                 "myapp",
+			UpstreamUid:          "upstream-myapp-uid",
+			ApplicationNamespace: "astronomer",
 			Project:              "default",
 			RepoUrl:              "https://example.com/repo",
 			Path:                 "manifests",
@@ -223,11 +289,54 @@ func newArgoCDFixture(t *testing.T, handler http.HandlerFunc) (*ArgoCDHandler, *
 		ApiUrl:             srv.URL,
 		AuthTokenEncrypted: "test-token",
 		IsHealthy:          true,
+		VerifySsl:          true,
 	}
 
 	h := NewArgoCDHandler(rec)
 	h.http = srv.Client()
 	return h, rec, srv
+}
+
+func TestArgoCDAsyncOperationIsDispatchedAtMostOnce(t *testing.T) {
+	posts := 0
+	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posts++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp","uid":"upstream-myapp-uid"},"status":{"sync":{"status":"OutOfSync","revision":"deadbeef"},"health":{"status":"Healthy"},"operationState":{"phase":"Running"}}}`))
+	})
+	op := sqlc.ArgocdOperation{
+		ID:            uuid.New(),
+		TargetType:    "application",
+		TargetKey:     rec.app.ID.String(),
+		OperationType: "sync",
+		Status:        OpStatusPending,
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
+		CreatedAt:     time.Now().Add(-2 * time.Minute),
+	}
+	rec.pendingOps = []sqlc.ArgocdOperation{op}
+
+	claimed := h.claimPendingArgoCDOperations(context.Background())
+	if len(claimed) != 1 {
+		t.Fatalf("initial claims = %d, want 1", len(claimed))
+	}
+	if err := claimed[0].Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a stale query snapshot returning the now-running row. The
+	// database CAS must reject it; a running async operation is poll-only.
+	claimed = h.claimPendingArgoCDOperations(context.Background())
+	if len(claimed) != 0 {
+		t.Fatalf("running operation was redispatched: %d claims", len(claimed))
+	}
+	if posts != 1 {
+		t.Fatalf("upstream sync POSTs = %d, want exactly 1", posts)
+	}
+	if rec.markRunCalls != 2 {
+		t.Fatalf("claim attempts = %d, want initial claim plus rejected stale snapshot", rec.markRunCalls)
+	}
 }
 
 func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
@@ -240,7 +349,7 @@ func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
 		seenBody = string(raw)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"metadata": {"name": "myapp"},
+			"metadata": {"name": "myapp", "uid": "upstream-myapp-uid", "namespace": "astronomer"},
 			"status": {
 				"sync": {"status": "OutOfSync", "revision": "abc123"},
 				"health": {"status": "Progressing"},
@@ -260,7 +369,7 @@ func TestExecuteSyncCallsUpstreamAndReflectsResponse(t *testing.T) {
 		ID:            uuid.New(),
 		OperationType: "sync",
 		Status:        "running",
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), SyncOptions: &argocdclient.SyncOptions{Revision: "main", Prune: true}}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid, SyncOptions: &argocdclient.SyncOptions{Revision: "main", Prune: true}}),
 	}
 
 	res, err := h.executeOperation(context.Background(), op)
@@ -444,7 +553,7 @@ func TestBuildArgoCDOrphanReportDetectsLiveArgoApplications(t *testing.T) {
 func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
-			"metadata": {"name": "myapp"},
+			"metadata": {"name": "myapp", "uid": "upstream-myapp-uid"},
 			"status": {
 				"sync": {"status": "Synced", "revision": "deadbeef"},
 				"health": {"status": "Healthy"},
@@ -457,7 +566,7 @@ func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 		}`))
 	})
 
-	// Replace the recorder's ListRunningArgoCDOperations with a single op so
+	// Replace the recorder's claimed poll batch with a single op so
 	// pollRunningOperations has work to do.
 	op := sqlc.ArgocdOperation{
 		ID:            uuid.New(),
@@ -466,7 +575,7 @@ func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 		Phase:         "Running",
 		PollAttempts:  3,
 		StartedAt:     pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 	}
 	rec.injectRunning(op)
 
@@ -486,7 +595,7 @@ func TestPollRunningOperationCompletesOnSucceeded(t *testing.T) {
 func TestPollRunningOperationFailsOnTerminalFailed(t *testing.T) {
 	h, rec, _ := newArgoCDFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
-			"metadata": {"name": "myapp"},
+			"metadata": {"name": "myapp", "uid": "upstream-myapp-uid"},
 			"status": {
 				"sync": {"status": "OutOfSync"},
 				"operationState": {"phase": "Failed", "message": "manifest error"}
@@ -498,7 +607,7 @@ func TestPollRunningOperationFailsOnTerminalFailed(t *testing.T) {
 		OperationType: "sync",
 		Status:        "running",
 		Phase:         "Running",
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 	}
 	rec.injectRunning(op)
 	h.pollRunningOperations(context.Background())
@@ -509,7 +618,7 @@ func TestPollRunningOperationFailsOnTerminalFailed(t *testing.T) {
 	if rec.failed[0].Phase != "Failed" {
 		t.Errorf("phase = %s", rec.failed[0].Phase)
 	}
-	if rec.failed[0].Message != "manifest error" {
+	if rec.failed[0].Message != "Argo CD sync failed" {
 		t.Errorf("message = %s", rec.failed[0].Message)
 	}
 }
@@ -525,7 +634,7 @@ func TestPollRunningOperationCapsAttempts(t *testing.T) {
 		Status:        "running",
 		Phase:         "Running",
 		PollAttempts:  MaxArgoCDOperationPolls,
-		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+		Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 	}
 	rec.injectRunning(op)
 	h.pollRunningOperations(context.Background())

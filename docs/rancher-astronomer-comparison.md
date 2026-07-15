@@ -65,7 +65,7 @@ missing SCIM, MFA, namespace bindings, or SSA.
 
 1. **Explorer form density** vs Rancher Steve (YAML-first; partial structured forms).
 2. **`namespace_scoped_rbac_enabled` default remains OFF** until product sign-off after F7-b soak.
-3. **Dual tunnel cutover** incomplete — remotedialer preferred in CLI but not install default; see dual-tunnel matrix.
+3. **Dual tunnel cutover** incomplete — remotedialer is experimental and existing-durable-identity-only; see dual-tunnel matrix.
 4. **Measured scale baseline** empty — see `docs/scale-baseline.md` (blocked row when no live plane).
 5. Non-Loki log query backends may still return 501.
 

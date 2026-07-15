@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -39,14 +40,13 @@ func main() {
 		},
 	}
 
-	// DEBT-01: connect2 (remotedialer) is the preferred default tunnel path for
-	// new installs; legacy `connect` remains for agents that still register the
-	// full per-feature message handlers. Prefer connect2 unless you need an
-	// agent feature that has not yet been ported to the remotedialer path.
+	// connect2 is experimental and supports already-adopted durable identity
+	// only. It has no CONNECT_ACK credential handoff, so bootstrap adoption and
+	// rotation remain on the deployed `connect` path.
 	connect2Cmd := &cobra.Command{
 		Use:   "connect2",
-		Short: "Connect using the remotedialer-based tunnel (preferred default)",
-		Long:  "Preferred agent connection path. Uses remotedialer to ferry dial requests to the agent network. Use legacy `connect` only when a feature still requires the older full-handler tunnel.",
+		Short: "Experimental remotedialer tunnel for already-adopted agents",
+		Long:  "Experimental existing-durable-identity-only path. It cannot adopt bootstrap credentials or receive durable-token rotations; use the deployed connect command for those workflows.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runConnect2(logger)
 		},
@@ -60,14 +60,16 @@ func main() {
 	}
 }
 
-// runConnect2 is the entry point for the new tunnel. It uses the same env
-// vars as `connect` (ASTRONOMER_SERVER_URL / ASTRONOMER_CLUSTER_ID /
-// ASTRONOMER_AGENT_TOKEN) but does not need any of the per-feature handlers —
-// remotedialer ferries dial requests directly to the agent's local network.
+// runConnect2 is the experimental remotedialer tunnel. It deliberately rejects
+// bootstrap/legacy/environment sources because remotedialer has no CONNECT_ACK
+// channel for durable identity handoff or rotation.
 func runConnect2(logger *slog.Logger) error {
-	cfg, err := agent.LoadAgentConfig()
+	cfg, err := agent.LoadAgentConfigWithLogger(logger)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
+		return err
+	}
+	if err := validateConnect2CredentialSource(cfg.CredentialSource); err != nil {
 		return err
 	}
 
@@ -92,8 +94,15 @@ func runConnect2(logger *slog.Logger) error {
 	return nil
 }
 
+func validateConnect2CredentialSource(source string) error {
+	if source != agent.CredentialSourceIdentity {
+		return fmt.Errorf("connect2 requires credential_source=%s; bootstrap, legacy, and environment credentials must use connect", agent.CredentialSourceIdentity)
+	}
+	return nil
+}
+
 func runConnect(logger *slog.Logger) error {
-	cfg, err := agent.LoadAgentConfig()
+	cfg, err := agent.LoadAgentConfigWithLogger(logger)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return err

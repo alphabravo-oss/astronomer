@@ -245,20 +245,90 @@ helm upgrade astronomer ./deploy/chart \
 
 What happens:
 
-1. **Preflight Job** runs first (`pre-upgrade` hook, weight `-5`). This
+1. **Preflight prerequisites** are replaced first (`pre-upgrade` hooks, weight
+   `-10`). The dedicated ServiceAccount, Role/ClusterRole, bindings, and
+   default-deny allow NetworkPolicy intentionally use only
+   `before-hook-creation`, so they remain available to the later Job.
+   Do not add `hook-succeeded` or manually delete these resources during an
+   install/upgrade: Helm treats non-Job hooks as immediately successful and
+   would remove the authorization before the Job starts. The retained rules
+   allow only `get`, constrained by `resourceNames` to the exact CRDs,
+   GatewayClass, referenced namespace-local Secrets, and legacy PVC rendered
+   for enabled checks. Rules for disabled checks are omitted.
+
+   The NetworkPolicy selects only preflight pods. It permits DNS on TCP/UDP 53,
+   the external Postgres check on the configured database port, and Kubernetes
+   API access on TCP 443/6443. Before production upgrades, ensure
+   `networkPolicy.kubernetesAPIEgressCIDRs` covers both the
+   `kubernetes.default` Service ClusterIP and API endpoint/node networks. CNIs
+   differ on whether policy sees Service traffic before or after DNAT. One
+   appropriately scoped CIDR may cover both address classes; array length does
+   not prove coverage, and Helm cannot inspect the live cluster to validate it.
+
+   Inventory both address classes before setting the CIDRs:
+
+   ```bash
+   kubectl -n default get service kubernetes \
+     -o jsonpath='{.spec.clusterIP}{"\n"}'
+   kubectl -n default get endpointslice \
+     -l kubernetes.io/service-name=kubernetes -o wide
+   kubectl get nodes -o wide
+   ```
+
+   Prefer an exact `/32` (`/128` for IPv6) for the Service address and the
+   narrowest provider-supported endpoint or node ranges. Confirm managed
+   control-plane addresses with the provider when they are not exposed by the
+   EndpointSlice.
+
+   Dex migration hooks follow the same fail-closed model. In `prepare`, the
+   `dex-legacy-prepare` policy is created at weight / sync wave `-10`, before
+   its Job at `-5`. In `cutover`, the `dex-legacy-cleanup` policy is created at
+   weight / sync wave `5`, before its Job at `10`. Both allow only DNS TCP/UDP
+   53 and API TCP 443/6443 to the de-duplicated union of
+   `kubernetesAPIEgressCIDRs` and the legacy development
+   `externalEgressCIDRs`. The phase-specific policy renders even when the new
+   values disable NetworkPolicy/default deny, because the old release's
+   default-deny can still select pre-upgrade pods and can remain through Argo
+   PostSync pruning. The cleanup ServiceAccount, Role, RoleBinding, and policy
+   are retained until replacement at wave `5`; only the Job at wave `10` uses
+   success deletion. All non-Job hook prerequisites deliberately omit
+   `hook-succeeded` so Helm and Argo cannot delete authorization or network
+   access before the Job runs. Retain valid API CIDRs through both migration
+   releases and verify their live destination coverage before either phase.
+2. **Preflight Job** runs next (`pre-upgrade` hook, weight `-5`). This
    includes:
    - Gateway API CRDs present
+   - Gateway API standard CRDs pinned to the controller-supported bundle. The
+     chart preflight verifies CRD and GatewayClass existence; it does not
+     validate controller-owned status conditions. The supported local
+     bootstrap separately binds Gateway API `v1.4.1` to NGINX Gateway Fabric
+     `2.6.0` and fails closed unless the `nginx` GatewayClass reports
+     generation-current `Accepted=True` and `SupportedVersion=True`. Operators
+     using an externally installed controller must perform that same status
+     check before invoking the upgrade. `Accepted=True` alone does not prove
+     the CRD bundle is supported, and stale True conditions do not prove the
+     current class spec is ready.
    - cert-manager CRDs present (if `tls.source` needs them)
    - Postgres DSN enforces TLS (production only)
    - `schema_migrations` connectivity + dirty-flag check
    - Bundled-Postgres PVC absence (when externalised)
    - Any additional `tls.additionalTrustedCAs` Secret exists
-2. **Migrate Job** runs next, applying any new schema migrations. Helm
+
+   Every Kubernetes API read is limited to 10 attempts, one second apart, so
+   newly replaced hook RBAC can propagate before preflight decides the result.
+   Only an explicit Kubernetes `NotFound` response is treated as absence.
+   `Forbidden`, API discovery, and transport failures preserve the API
+   diagnostic, retry, and then stop the upgrade as an authorization or API
+   availability failure. The legacy bundled-Postgres PVC is the only resource
+   whose genuine absence is a successful result. Preflight never prints
+   Secret data or the Postgres DSN.
+
+3. **Migrate Job** runs next, applying any new schema migrations. Helm
    waits for completion before proceeding (init container in the server
    Deployment also runs migrate, but the Job is the canonical owner).
-3. **Server / worker / frontend rolling restart**. PDBs enforce
+4. **Server / worker / frontend rolling restart**. PDBs enforce
    quorum-safe drains.
-4. **Argo CD self-manage** picks up any chart values changes that affect
+5. **Argo CD self-manage** picks up any chart values changes that affect
    it, sometime within its next sync window.
 
 ### Step 3 — verify

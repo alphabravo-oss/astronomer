@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+
+	"github.com/alphabravocompany/astronomer-go/internal/argosecurity"
 )
 
 // ApplicationSpec is the writable subset of an ArgoCD Application's spec
@@ -37,6 +39,7 @@ type ApplicationSource struct {
 	Path           string           `json:"path,omitempty"`
 	TargetRevision string           `json:"targetRevision,omitempty"`
 	Chart          string           `json:"chart,omitempty"`
+	Ref            string           `json:"ref,omitempty"`
 	Helm           *HelmSource      `json:"helm,omitempty"`
 	Kustomize      *KustomizeSource `json:"kustomize,omitempty"`
 	Directory      *DirectorySource `json:"directory,omitempty"`
@@ -120,6 +123,9 @@ type ApplicationMetadata struct {
 // the caller hasn't created one). Either Spec.Source or Spec.Sources must be
 // populated; the upstream rejects empty bodies.
 func (c *Client) CreateApplication(ctx context.Context, name string, spec ApplicationSpec) (*Application, error) {
+	if err := argosecurity.ValidateMutation(map[string]any{"spec": spec}); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(applicationEnvelope{
 		APIVersion: "argoproj.io/v1alpha1",
 		Kind:       "Application",
@@ -154,6 +160,9 @@ func (c *Client) ListApplications(ctx context.Context) ([]Application, error) {
 func (c *Client) PatchApplication(ctx context.Context, name string, mergeBody json.RawMessage) (*Application, error) {
 	if len(mergeBody) == 0 {
 		mergeBody = json.RawMessage(`{}`)
+	}
+	if err := argosecurity.ValidateMutationJSON(mergeBody); err != nil {
+		return nil, err
 	}
 	// ArgoCD's PATCH endpoint expects a JSON envelope: {"name":"...","patch":"<json-string>","patchType":"merge"}.
 	// We accept the convenient shape (a real JSON object) and serialize it

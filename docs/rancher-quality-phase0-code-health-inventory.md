@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 347
-- Frontend source lines: 98081
-- Go source files under `internal/` excluding generated sqlc and tests: 419
-- Go source files scanned for sqlc query references excluding generated sqlc: 2018
-- sqlc query declarations: 878
-- Component files scanned: 108
+- Frontend source files: 352
+- Frontend source lines: 98545
+- Go source files under `internal/` excluding generated sqlc and tests: 429
+- Go source files scanned for sqlc query references excluding generated sqlc: 2059
+- sqlc query declarations: 885
+- Component files scanned: 109
 - Helm top-level values scanned: 33
 
 ## Hard Gates
@@ -89,8 +89,10 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:196`](internal/handler/scim.go:196), [`internal/server/routes.go:1888`](internal/server/routes.go:1888)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:1901`](internal/server/routes.go:1901)
+- `copyStringMap` in [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:341`](internal/server/self_manage_credentials.go:341)
 - `decodeRoleRules` in [`internal/handler/rbac.go:971`](internal/handler/rbac.go:971), [`internal/server/middleware/rbac_queries.go:261`](internal/server/middleware/rbac_queries.go:261)
+- `isEmpty` in [`internal/dexconfig/validate.go:503`](internal/dexconfig/validate.go:503), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
 - `requireSuperuser` in [`internal/handler/authorization.go:87`](internal/handler/authorization.go:87), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:165`](internal/server/middleware/read_audit.go:165)
@@ -104,6 +106,7 @@ Owner: database/backend. Classification rule: remove only after confirming no ha
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.
 
 - `@/components/auth/connector-form.test` (frontend/src/components/auth/connector-form.test.tsx) has no absolute `@/components/...` import
+- `@/components/auth/hooks.test` (frontend/src/components/auth/hooks.test.ts) has no absolute `@/components/...` import
 - `@/components/backups/restore-modal.test` (frontend/src/components/backups/restore-modal.test.tsx) has no absolute `@/components/...` import
 - `@/components/dashboards/widget-grid.test` (frontend/src/components/dashboards/widget-grid.test.tsx) has no absolute `@/components/...` import
 - `@/components/extensions/declarative.test` (frontend/src/components/extensions/declarative.test.ts) has no absolute `@/components/...` import
@@ -126,8 +129,8 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 5
-- Dead-code candidates: 16
+- Duplicate-code candidates: 7
+- Dead-code candidates: 17
 
 ## Definition Of Done For Each Candidate
 

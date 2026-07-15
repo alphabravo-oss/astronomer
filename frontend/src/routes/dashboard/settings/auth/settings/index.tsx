@@ -4,7 +4,7 @@ import { createFileRoute } from '@tanstack/react-router';
  *
  * Lives under the auth/ sub-tree to keep all Dex UI co-located. Three sections:
  *   1. Issuer + cluster — edited as plain text fields. Changing the issuer
- *      requires re-applying for the change to land in the rendered ConfigMap.
+ *      requires re-applying for the change to land in the runtime Secret.
  *   2. Public clients — list editor for Dex's `staticClients` array. Each
  *      client carries an id, optional secret, and redirect URIs. The `public`
  *      flag toggles between confidential and public OIDC client behaviour.
@@ -37,7 +37,7 @@ function DexSettingsPage() {
       clusterId: '',
       namespace: 'dex',
       releaseName: 'dex',
-      configmapName: 'astronomer-dex-config',
+      runtimeSecretName: 'astronomer-dex-runtime',
       publicClients: [] as DexPublicClient[],
       idTokenExpiry: '24h',
       refreshTokenExpiry: '2160h',
@@ -57,7 +57,7 @@ function DexSettingsPage() {
         cluster_id: value.clusterId || undefined,
         namespace: value.namespace,
         release_name: value.releaseName,
-        configmap_name: value.configmapName,
+        runtime_secret_name: value.runtimeSecretName,
         public_clients: value.publicClients,
         expiry,
         extra: (settings?.extra as Record<string, unknown>) ?? {},
@@ -86,7 +86,7 @@ function DexSettingsPage() {
       clusterId: settings.clusterId || '',
       namespace: settings.namespace || 'dex',
       releaseName: settings.releaseName || 'dex',
-      configmapName: settings.configmapName || 'astronomer-dex-config',
+      runtimeSecretName: settings.runtimeSecretName || 'astronomer-dex-runtime',
       publicClients: Array.isArray(settings.publicClients) ? settings.publicClients : [],
       idTokenExpiry,
       refreshTokenExpiry,
@@ -121,8 +121,8 @@ function DexSettingsPage() {
             Dex Top-level Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Issuer URL, public clients, token expiry. Changes are written to the rendered
-            ConfigMap on Apply.
+            Issuer URL, public clients, token expiry. Changes are written to the
+            rendered retained runtime Secret on Apply.
           </p>
         </div>
         <button
@@ -136,6 +136,14 @@ function DexSettingsPage() {
           Apply to Dex
         </button>
       </div>
+
+      {applyMutation.data?.staged && !applyMutation.data.applied && (
+        <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm text-status-warning">
+          Runtime Secret generation {applyMutation.data.runtimeGeneration ?? 'current'} is staged.
+          Keep Dex on the legacy ConfigMap during prepare, commit the cutover phase, then apply
+          again to verify the Deployment and restore eligible SSO.
+        </div>
+      )}
 
       {/* Section: Identity */}
       <Section title="Identity" description="Where Dex lives and what it calls itself.">
@@ -151,7 +159,7 @@ function DexSettingsPage() {
         </form.AppField>
         <form.AppField name="clusterId">
           {(field) => (
-            <field.SelectField label="Target cluster" helper="Where the ConfigMap is written on Apply.">
+            <field.SelectField label="Target cluster" helper="Where the runtime Secret is updated on Apply.">
               <option value="">— None —</option>
               {clusters.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -168,8 +176,8 @@ function DexSettingsPage() {
           <form.AppField name="releaseName">
             {(field) => <field.TextField label="Release name" />}
           </form.AppField>
-          <form.AppField name="configmapName">
-            {(field) => <field.TextField label="ConfigMap name" />}
+          <form.AppField name="runtimeSecretName">
+            {(field) => <field.TextField label="Runtime Secret name" />}
           </form.AppField>
         </div>
       </Section>

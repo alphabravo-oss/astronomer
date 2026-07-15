@@ -80,7 +80,9 @@ import {
 } from '@/lib/hooks';
 
 // APP_VERSION is baked at build time via the vite `define` (VERSION env →
-// __APP_VERSION__); see src/lib/env.ts. Keep in sync with pkg/version.
+// __APP_VERSION__), which the release workflow stamps from the git tag; see
+// src/lib/env.ts. Falls back to the current dev version for local/un-stamped
+// builds — keep in sync with pkg/version.
 
 type NavItem = {
   label: string;

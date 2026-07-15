@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	BearerAuthScopes = "bearerAuth.Scopes"
-	BearerJWTScopes  = "bearerJWT.Scopes"
+	ArgoCDClusterProxyTokenScopes = "argoCDClusterProxyToken.Scopes"
+	BearerAuthScopes              = "bearerAuth.Scopes"
+	BearerJWTScopes               = "bearerJWT.Scopes"
 )
 
 // Defines values for AgentFleetItemAgentStatus.
@@ -76,6 +77,25 @@ const (
 	AgentSelfTestStatusFailed  AgentSelfTestStatus = "failed"
 	AgentSelfTestStatusPassed  AgentSelfTestStatus = "passed"
 	AgentSelfTestStatusWarning AgentSelfTestStatus = "warning"
+)
+
+// Defines values for ArgoOperationOperationType.
+const (
+	ArgoOperationOperationTypeSync ArgoOperationOperationType = "sync"
+)
+
+// Defines values for ArgoOperationStatus.
+const (
+	ArgoOperationStatusCompleted  ArgoOperationStatus = "completed"
+	ArgoOperationStatusFailed     ArgoOperationStatus = "failed"
+	ArgoOperationStatusPending    ArgoOperationStatus = "pending"
+	ArgoOperationStatusRunning    ArgoOperationStatus = "running"
+	ArgoOperationStatusSuperseded ArgoOperationStatus = "superseded"
+)
+
+// Defines values for ArgoOperationTargetType.
+const (
+	ArgoOperationTargetTypeApplication ArgoOperationTargetType = "application"
 )
 
 // Defines values for ArgoOrphanApplicationReason.
@@ -142,6 +162,19 @@ const (
 	ClusterStatusDisconnected ClusterStatus = "disconnected"
 	ClusterStatusError        ClusterStatus = "error"
 	ClusterStatusPending      ClusterStatus = "pending"
+)
+
+// Defines values for DexRegisterSSOResultRuntimeState.
+const (
+	DexRegisterSSOResultRuntimeStateApplied DexRegisterSSOResultRuntimeState = "applied"
+	DexRegisterSSOResultRuntimeStateStaged  DexRegisterSSOResultRuntimeState = "staged"
+)
+
+// Defines values for DexSettingsRuntimePhase.
+const (
+	DexSettingsRuntimePhaseCutover DexSettingsRuntimePhase = "cutover"
+	DexSettingsRuntimePhaseFresh   DexSettingsRuntimePhase = "fresh"
+	DexSettingsRuntimePhasePrepare DexSettingsRuntimePhase = "prepare"
 )
 
 // Defines values for ExtensionManifestApiVersion.
@@ -650,6 +683,50 @@ type ApplyClusterTemplateRequest map[string]interface{}
 // ApplyNetworkPolicyRequest Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type ApplyNetworkPolicyRequest map[string]interface{}
 
+// ArgoOperation defines model for ArgoOperation.
+type ArgoOperation struct {
+	AttemptCount int        `json:"attemptCount"`
+	CompletedAt  *time.Time `json:"completedAt"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	ErrorMessage *string    `json:"errorMessage,omitempty"`
+
+	// Events Present on operation detail responses.
+	Events        *[]ArgoOperationEvent      `json:"events,omitempty"`
+	Id            openapi_types.UUID         `json:"id"`
+	OperationType ArgoOperationOperationType `json:"operationType"`
+	StartedAt     *time.Time                 `json:"startedAt"`
+	Status        ArgoOperationStatus        `json:"status"`
+
+	// TargetKey Stable Astronomer-local Application UUID.
+	TargetKey  string                  `json:"targetKey"`
+	TargetType ArgoOperationTargetType `json:"targetType"`
+	UpdatedAt  time.Time               `json:"updatedAt"`
+}
+
+// ArgoOperationOperationType defines model for ArgoOperation.OperationType.
+type ArgoOperationOperationType string
+
+// ArgoOperationStatus defines model for ArgoOperation.Status.
+type ArgoOperationStatus string
+
+// ArgoOperationTargetType defines model for ArgoOperation.TargetType.
+type ArgoOperationTargetType string
+
+// ArgoOperationEnvelope defines model for ArgoOperationEnvelope.
+type ArgoOperationEnvelope struct {
+	Data ArgoOperation `json:"data"`
+}
+
+// ArgoOperationEvent defines model for ArgoOperationEvent.
+type ArgoOperationEvent struct {
+	CreatedAt time.Time               `json:"createdAt"`
+	Detail    *map[string]interface{} `json:"detail,omitempty"`
+	Id        openapi_types.UUID      `json:"id"`
+	Level     string                  `json:"level"`
+	Message   string                  `json:"message"`
+	Stage     string                  `json:"stage"`
+}
+
 // ArgoOrphanApplication defines model for ArgoOrphanApplication.
 type ArgoOrphanApplication struct {
 	ApplicationSetName   *string                      `json:"application_set_name,omitempty"`
@@ -680,6 +757,18 @@ type ArgoOrphanReport struct {
 	ManagedTargetCount     *int                     `json:"managed_target_count,omitempty"`
 	OrphanApplicationCount *int                     `json:"orphan_application_count,omitempty"`
 	OrphanApplications     *[]ArgoOrphanApplication `json:"orphan_applications,omitempty"`
+}
+
+// ArgoSyncRequest Bounded manual-sync options. Application source/spec and credential
+// material are never accepted by this operation endpoint.
+type ArgoSyncRequest struct {
+	DryRun   *bool   `json:"dry_run,omitempty"`
+	Prune    *bool   `json:"prune,omitempty"`
+	Reason   *string `json:"reason,omitempty"`
+	Revision *string `json:"revision,omitempty"`
+
+	// SyncWindowOverride Audit intent only; does not bypass ArgoCD AppProject sync windows.
+	SyncWindowOverride *bool `json:"sync_window_override,omitempty"`
 }
 
 // AuditLogEntry defines model for AuditLogEntry.
@@ -1115,10 +1204,11 @@ type DexConnector struct {
 
 // DexConnectorRequest defines model for DexConnectorRequest.
 type DexConnectorRequest struct {
-	Config  *map[string]interface{} `json:"config,omitempty"`
-	Enabled *bool                   `json:"enabled,omitempty"`
-	Name    *string                 `json:"name,omitempty"`
-	Type    *string                 `json:"type,omitempty"`
+	Config      *map[string]interface{} `json:"config,omitempty"`
+	DisplayName *string                 `json:"display_name,omitempty"`
+	Enabled     *bool                   `json:"enabled,omitempty"`
+	Name        *string                 `json:"name,omitempty"`
+	Type        *string                 `json:"type,omitempty"`
 }
 
 // DexConnectorType defines model for DexConnectorType.
@@ -1131,36 +1221,124 @@ type DexConnectorType struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// DexExpiry defines model for DexExpiry.
+type DexExpiry struct {
+	IdTokens      *string `json:"idTokens,omitempty"`
+	RefreshTokens *struct {
+		AbsoluteLifetime  *string `json:"absoluteLifetime,omitempty"`
+		ReuseInterval     *string `json:"reuseInterval,omitempty"`
+		ValidIfNotUsedFor *string `json:"validIfNotUsedFor,omitempty"`
+	} `json:"refreshTokens,omitempty"`
+	SigningKeys *string `json:"signingKeys,omitempty"`
+}
+
+// DexExtra defines model for DexExtra.
+type DexExtra struct {
+	Frontend *struct {
+		Dir     *string `json:"dir,omitempty"`
+		Issuer  *string `json:"issuer,omitempty"`
+		LogoURL *string `json:"logoURL,omitempty"`
+		Theme   *string `json:"theme,omitempty"`
+	} `json:"frontend,omitempty"`
+	Grpc *struct {
+		Addr *string `json:"addr,omitempty"`
+	} `json:"grpc,omitempty"`
+	Logger *struct {
+		Format *string `json:"format,omitempty"`
+		Level  *string `json:"level,omitempty"`
+	} `json:"logger,omitempty"`
+	Telemetry *struct {
+		Http *string `json:"http,omitempty"`
+	} `json:"telemetry,omitempty"`
+}
+
 // DexRegisterSSOResult defines model for DexRegisterSSOResult.
 type DexRegisterSSOResult struct {
-	ClientId             *string                `json:"client_id,omitempty"`
-	CreatedAt            *time.Time             `json:"created_at,omitempty"`
-	DisplayName          *string                `json:"display_name,omitempty"`
-	Id                   *openapi_types.UUID    `json:"id,omitempty"`
-	Provider             *string                `json:"provider,omitempty"`
-	UpdatedAt            *time.Time             `json:"updated_at,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Applied               *bool                             `json:"applied,omitempty"`
+	ClientId              *string                           `json:"client_id,omitempty"`
+	Created               *bool                             `json:"created,omitempty"`
+	DisplayName           *string                           `json:"display_name,omitempty"`
+	Id                    *openapi_types.UUID               `json:"id,omitempty"`
+	IsEnabled             *bool                             `json:"is_enabled,omitempty"`
+	IssuerUrl             *string                           `json:"issuer_url,omitempty"`
+	Provider              *string                           `json:"provider,omitempty"`
+	RuntimeChanged        *bool                             `json:"runtime_changed,omitempty"`
+	RuntimeGeneration     *int64                            `json:"runtime_generation,omitempty"`
+	RuntimeState          *DexRegisterSSOResultRuntimeState `json:"runtime_state,omitempty"`
+	SecretResourceVersion *string                           `json:"secret_resource_version,omitempty"`
+	Staged                *bool                             `json:"staged,omitempty"`
+	Updated               *bool                             `json:"updated,omitempty"`
+	Verified              *bool                             `json:"verified,omitempty"`
 }
+
+// DexRegisterSSOResultRuntimeState defines model for DexRegisterSSOResult.RuntimeState.
+type DexRegisterSSOResultRuntimeState string
 
 // DexSettings defines model for DexSettings.
 type DexSettings struct {
-	ClusterId            *openapi_types.UUID    `json:"cluster_id"`
-	ConfigmapName        *string                `json:"configmap_name,omitempty"`
-	Configured           *bool                  `json:"configured,omitempty"`
-	IssuerUrl            *string                `json:"issuer_url,omitempty"`
-	Namespace            *string                `json:"namespace,omitempty"`
-	ReleaseName          *string                `json:"release_name,omitempty"`
-	UpdatedAt            *time.Time             `json:"updated_at,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
+	ClusterId        *openapi_types.UUID `json:"cluster_id"`
+
+	// ConfigmapName Compatibility alias of runtime_secret_name; never identifies a credential-bearing ConfigMap.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	ConfigmapName  *string    `json:"configmap_name,omitempty"`
+	Configured     *bool      `json:"configured,omitempty"`
+	DeploymentName *string    `json:"deployment_name,omitempty"`
+	Expiry         *DexExpiry `json:"expiry,omitempty"`
+	Extra          *DexExtra  `json:"extra,omitempty"`
+	IssuerUrl      *string    `json:"issuer_url,omitempty"`
+	Namespace      *string    `json:"namespace,omitempty"`
+	PublicClients  *[]struct {
+		Id           *string   `json:"id,omitempty"`
+		Name         *string   `json:"name,omitempty"`
+		Public       *bool     `json:"public,omitempty"`
+		RedirectURIs *[]string `json:"redirectURIs,omitempty"`
+
+		// Secret Always redacted to an empty string on reads.
+		Secret           *string   `json:"secret,omitempty"`
+		SecretConfigured *bool     `json:"secret_configured,omitempty"`
+		TrustedPeers     *[]string `json:"trustedPeers,omitempty"`
+	} `json:"public_clients,omitempty"`
+	ReleaseName              *string                  `json:"release_name,omitempty"`
+	RuntimeAppliedGeneration *int64                   `json:"runtime_applied_generation,omitempty"`
+	RuntimeGeneration        *int64                   `json:"runtime_generation,omitempty"`
+	RuntimePhase             *DexSettingsRuntimePhase `json:"runtime_phase,omitempty"`
+	RuntimeSecretName        *string                  `json:"runtime_secret_name,omitempty"`
+	RuntimeStagedGeneration  *int64                   `json:"runtime_staged_generation,omitempty"`
+	ServiceName              *string                  `json:"service_name,omitempty"`
+	UpdatedAt                *time.Time               `json:"updated_at,omitempty"`
+	AdditionalProperties     map[string]interface{}   `json:"-"`
 }
+
+// DexSettingsRuntimePhase defines model for DexSettings.RuntimePhase.
+type DexSettingsRuntimePhase string
 
 // DexSettingsRequest defines model for DexSettingsRequest.
 type DexSettingsRequest struct {
-	ClusterId     *openapi_types.UUID `json:"cluster_id,omitempty"`
-	ConfigmapName *string             `json:"configmap_name,omitempty"`
-	IssuerUrl     string              `json:"issuer_url"`
-	Namespace     *string             `json:"namespace,omitempty"`
-	ReleaseName   *string             `json:"release_name,omitempty"`
+	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
+	ClusterId        *openapi_types.UUID `json:"cluster_id,omitempty"`
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	ConfigmapName  *string    `json:"configmap_name,omitempty"`
+	DeploymentName *string    `json:"deployment_name,omitempty"`
+	Expiry         *DexExpiry `json:"expiry,omitempty"`
+	Extra          *DexExtra  `json:"extra,omitempty"`
+	IssuerUrl      string     `json:"issuer_url"`
+	Namespace      *string    `json:"namespace,omitempty"`
+	PublicClients  *[]struct {
+		Id           string    `json:"id"`
+		Name         *string   `json:"name,omitempty"`
+		Public       *bool     `json:"public,omitempty"`
+		RedirectURIs *[]string `json:"redirectURIs,omitempty"`
+		Secret       *string   `json:"secret,omitempty"`
+		// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+		SecretConfiguredLegacy *bool `json:"secretConfigured,omitempty"`
+		// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+		SecretConfigured *bool     `json:"secret_configured,omitempty"`
+		TrustedPeers     *[]string `json:"trustedPeers,omitempty"`
+	} `json:"public_clients,omitempty"`
+	ReleaseName       *string `json:"release_name,omitempty"`
+	RuntimeSecretName *string `json:"runtime_secret_name,omitempty"`
+	ServiceName       *string `json:"service_name,omitempty"`
 }
 
 // Error defines model for Error.
@@ -2552,6 +2730,15 @@ type GetApiV1ArgocdInstancesIdOrphanReportParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetApiV1ArgocdOperationsParams defines parameters for GetApiV1ArgocdOperations.
+type GetApiV1ArgocdOperationsParams struct {
+	TargetType *string `form:"targetType,omitempty" json:"targetType,omitempty"`
+	TargetKey  *string `form:"targetKey,omitempty" json:"targetKey,omitempty"`
+	Status     *string `form:"status,omitempty" json:"status,omitempty"`
+	Limit      *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int    `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // ListAuditLogsParams defines parameters for ListAuditLogs.
 type ListAuditLogsParams struct {
 	// Limit Page size. Aliases pageSize / page_size are also accepted. Defaults to 20; values <1 reset to 20; capped at 500.
@@ -3575,6 +3762,12 @@ type PostApiV1AgentsFleetClusterIdUpgradePlanJSONRequestBody = AgentUpgradePlanR
 
 // PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody defines body for PostApiV1AgentsFleetClusterIdUpgrade for application/json ContentType.
 type PostApiV1AgentsFleetClusterIdUpgradeJSONRequestBody = AgentUpgradePlanRequest
+
+// PostApiV1ArgocdApplicationsIdSyncJSONRequestBody defines body for PostApiV1ArgocdApplicationsIdSync for application/json ContentType.
+type PostApiV1ArgocdApplicationsIdSyncJSONRequestBody = ArgoSyncRequest
+
+// PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody defines body for PostApiV1ArgocdInstancesIdApplicationsNameSync for application/json ContentType.
+type PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody = ArgoSyncRequest
 
 // PostApiV1AuthChangePasswordJSONRequestBody defines body for PostApiV1AuthChangePassword for application/json ContentType.
 type PostApiV1AuthChangePasswordJSONRequestBody PostApiV1AuthChangePasswordJSONBody
@@ -4821,149 +5014,6 @@ func (a DexConnectorType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
-// Getter for additional properties for DexRegisterSSOResult. Returns the specified
-// element and whether it was found
-func (a DexRegisterSSOResult) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for DexRegisterSSOResult
-func (a *DexRegisterSSOResult) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for DexRegisterSSOResult to handle AdditionalProperties
-func (a *DexRegisterSSOResult) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["client_id"]; found {
-		err = json.Unmarshal(raw, &a.ClientId)
-		if err != nil {
-			return fmt.Errorf("error reading 'client_id': %w", err)
-		}
-		delete(object, "client_id")
-	}
-
-	if raw, found := object["created_at"]; found {
-		err = json.Unmarshal(raw, &a.CreatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'created_at': %w", err)
-		}
-		delete(object, "created_at")
-	}
-
-	if raw, found := object["display_name"]; found {
-		err = json.Unmarshal(raw, &a.DisplayName)
-		if err != nil {
-			return fmt.Errorf("error reading 'display_name': %w", err)
-		}
-		delete(object, "display_name")
-	}
-
-	if raw, found := object["id"]; found {
-		err = json.Unmarshal(raw, &a.Id)
-		if err != nil {
-			return fmt.Errorf("error reading 'id': %w", err)
-		}
-		delete(object, "id")
-	}
-
-	if raw, found := object["provider"]; found {
-		err = json.Unmarshal(raw, &a.Provider)
-		if err != nil {
-			return fmt.Errorf("error reading 'provider': %w", err)
-		}
-		delete(object, "provider")
-	}
-
-	if raw, found := object["updated_at"]; found {
-		err = json.Unmarshal(raw, &a.UpdatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'updated_at': %w", err)
-		}
-		delete(object, "updated_at")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for DexRegisterSSOResult to handle AdditionalProperties
-func (a DexRegisterSSOResult) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.ClientId != nil {
-		object["client_id"], err = json.Marshal(a.ClientId)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'client_id': %w", err)
-		}
-	}
-
-	if a.CreatedAt != nil {
-		object["created_at"], err = json.Marshal(a.CreatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
-		}
-	}
-
-	if a.DisplayName != nil {
-		object["display_name"], err = json.Marshal(a.DisplayName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'display_name': %w", err)
-		}
-	}
-
-	if a.Id != nil {
-		object["id"], err = json.Marshal(a.Id)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'id': %w", err)
-		}
-	}
-
-	if a.Provider != nil {
-		object["provider"], err = json.Marshal(a.Provider)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'provider': %w", err)
-		}
-	}
-
-	if a.UpdatedAt != nil {
-		object["updated_at"], err = json.Marshal(a.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
 // Getter for additional properties for DexSettings. Returns the specified
 // element and whether it was found
 func (a DexSettings) Get(fieldName string) (value interface{}, found bool) {
@@ -4987,6 +5037,14 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 	err := json.Unmarshal(b, &object)
 	if err != nil {
 		return err
+	}
+
+	if raw, found := object["chart_release_name"]; found {
+		err = json.Unmarshal(raw, &a.ChartReleaseName)
+		if err != nil {
+			return fmt.Errorf("error reading 'chart_release_name': %w", err)
+		}
+		delete(object, "chart_release_name")
 	}
 
 	if raw, found := object["cluster_id"]; found {
@@ -5013,6 +5071,30 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 		delete(object, "configured")
 	}
 
+	if raw, found := object["deployment_name"]; found {
+		err = json.Unmarshal(raw, &a.DeploymentName)
+		if err != nil {
+			return fmt.Errorf("error reading 'deployment_name': %w", err)
+		}
+		delete(object, "deployment_name")
+	}
+
+	if raw, found := object["expiry"]; found {
+		err = json.Unmarshal(raw, &a.Expiry)
+		if err != nil {
+			return fmt.Errorf("error reading 'expiry': %w", err)
+		}
+		delete(object, "expiry")
+	}
+
+	if raw, found := object["extra"]; found {
+		err = json.Unmarshal(raw, &a.Extra)
+		if err != nil {
+			return fmt.Errorf("error reading 'extra': %w", err)
+		}
+		delete(object, "extra")
+	}
+
 	if raw, found := object["issuer_url"]; found {
 		err = json.Unmarshal(raw, &a.IssuerUrl)
 		if err != nil {
@@ -5029,12 +5111,68 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 		delete(object, "namespace")
 	}
 
+	if raw, found := object["public_clients"]; found {
+		err = json.Unmarshal(raw, &a.PublicClients)
+		if err != nil {
+			return fmt.Errorf("error reading 'public_clients': %w", err)
+		}
+		delete(object, "public_clients")
+	}
+
 	if raw, found := object["release_name"]; found {
 		err = json.Unmarshal(raw, &a.ReleaseName)
 		if err != nil {
 			return fmt.Errorf("error reading 'release_name': %w", err)
 		}
 		delete(object, "release_name")
+	}
+
+	if raw, found := object["runtime_applied_generation"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeAppliedGeneration)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_applied_generation': %w", err)
+		}
+		delete(object, "runtime_applied_generation")
+	}
+
+	if raw, found := object["runtime_generation"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeGeneration)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_generation': %w", err)
+		}
+		delete(object, "runtime_generation")
+	}
+
+	if raw, found := object["runtime_phase"]; found {
+		err = json.Unmarshal(raw, &a.RuntimePhase)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_phase': %w", err)
+		}
+		delete(object, "runtime_phase")
+	}
+
+	if raw, found := object["runtime_secret_name"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeSecretName)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_secret_name': %w", err)
+		}
+		delete(object, "runtime_secret_name")
+	}
+
+	if raw, found := object["runtime_staged_generation"]; found {
+		err = json.Unmarshal(raw, &a.RuntimeStagedGeneration)
+		if err != nil {
+			return fmt.Errorf("error reading 'runtime_staged_generation': %w", err)
+		}
+		delete(object, "runtime_staged_generation")
+	}
+
+	if raw, found := object["service_name"]; found {
+		err = json.Unmarshal(raw, &a.ServiceName)
+		if err != nil {
+			return fmt.Errorf("error reading 'service_name': %w", err)
+		}
+		delete(object, "service_name")
 	}
 
 	if raw, found := object["updated_at"]; found {
@@ -5064,6 +5202,13 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.ChartReleaseName != nil {
+		object["chart_release_name"], err = json.Marshal(a.ChartReleaseName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'chart_release_name': %w", err)
+		}
+	}
+
 	if a.ClusterId != nil {
 		object["cluster_id"], err = json.Marshal(a.ClusterId)
 		if err != nil {
@@ -5085,6 +5230,27 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.DeploymentName != nil {
+		object["deployment_name"], err = json.Marshal(a.DeploymentName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'deployment_name': %w", err)
+		}
+	}
+
+	if a.Expiry != nil {
+		object["expiry"], err = json.Marshal(a.Expiry)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expiry': %w", err)
+		}
+	}
+
+	if a.Extra != nil {
+		object["extra"], err = json.Marshal(a.Extra)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'extra': %w", err)
+		}
+	}
+
 	if a.IssuerUrl != nil {
 		object["issuer_url"], err = json.Marshal(a.IssuerUrl)
 		if err != nil {
@@ -5099,10 +5265,59 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.PublicClients != nil {
+		object["public_clients"], err = json.Marshal(a.PublicClients)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'public_clients': %w", err)
+		}
+	}
+
 	if a.ReleaseName != nil {
 		object["release_name"], err = json.Marshal(a.ReleaseName)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'release_name': %w", err)
+		}
+	}
+
+	if a.RuntimeAppliedGeneration != nil {
+		object["runtime_applied_generation"], err = json.Marshal(a.RuntimeAppliedGeneration)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_applied_generation': %w", err)
+		}
+	}
+
+	if a.RuntimeGeneration != nil {
+		object["runtime_generation"], err = json.Marshal(a.RuntimeGeneration)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_generation': %w", err)
+		}
+	}
+
+	if a.RuntimePhase != nil {
+		object["runtime_phase"], err = json.Marshal(a.RuntimePhase)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_phase': %w", err)
+		}
+	}
+
+	if a.RuntimeSecretName != nil {
+		object["runtime_secret_name"], err = json.Marshal(a.RuntimeSecretName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_secret_name': %w", err)
+		}
+	}
+
+	if a.RuntimeStagedGeneration != nil {
+		object["runtime_staged_generation"], err = json.Marshal(a.RuntimeStagedGeneration)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'runtime_staged_generation': %w", err)
+		}
+	}
+
+	if a.ServiceName != nil {
+		object["service_name"], err = json.Marshal(a.ServiceName)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'service_name': %w", err)
 		}
 	}
 
@@ -8763,11 +8978,27 @@ type ClientInterface interface {
 	// GetApiV1AlertingEvents request
 	GetApiV1AlertingEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1ArgocdApplicationsIdSyncWithBody request with any body
+	PostApiV1ArgocdApplicationsIdSyncWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ArgocdApplicationsIdSync(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1ArgocdInstances request
 	GetApiV1ArgocdInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody request with any body
+	PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostApiV1ArgocdInstancesIdApplicationsNameSync(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiV1ArgocdInstancesIdOrphanReport request
 	GetApiV1ArgocdInstancesIdOrphanReport(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ArgocdOperations request
+	GetApiV1ArgocdOperations(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiV1ArgocdOperationsId request
+	GetApiV1ArgocdOperationsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAuditLogs request
 	ListAuditLogs(ctx context.Context, params *ListAuditLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11009,6 +11240,30 @@ func (c *Client) GetApiV1AlertingEvents(ctx context.Context, reqEditors ...Reque
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostApiV1ArgocdApplicationsIdSyncWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ArgocdApplicationsIdSync(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ArgocdApplicationsIdSyncRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1ArgocdInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ArgocdInstancesRequest(c.Server)
 	if err != nil {
@@ -11021,8 +11276,56 @@ func (c *Client) GetApiV1ArgocdInstances(ctx context.Context, reqEditors ...Requ
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody(c.Server, id, name, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostApiV1ArgocdInstancesIdApplicationsNameSync(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequest(c.Server, id, name, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetApiV1ArgocdInstancesIdOrphanReport(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1ArgocdInstancesIdOrphanReportRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ArgocdOperations(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ArgocdOperationsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetApiV1ArgocdOperationsId(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiV1ArgocdOperationsIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -19358,6 +19661,53 @@ func NewGetApiV1AlertingEventsRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewPostApiV1ArgocdApplicationsIdSyncRequest calls the generic PostApiV1ArgocdApplicationsIdSync builder with application/json body
+func NewPostApiV1ArgocdApplicationsIdSyncRequest(server string, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody generates requests for PostApiV1ArgocdApplicationsIdSync with any type of body
+func NewPostApiV1ArgocdApplicationsIdSyncRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/argocd/applications/%s/sync/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetApiV1ArgocdInstancesRequest generates requests for GetApiV1ArgocdInstances
 func NewGetApiV1ArgocdInstancesRequest(server string) (*http.Request, error) {
 	var err error
@@ -19381,6 +19731,60 @@ func NewGetApiV1ArgocdInstancesRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequest calls the generic PostApiV1ArgocdInstancesIdApplicationsNameSync builder with application/json body
+func NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequest(server string, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody(server, id, name, "application/json", bodyReader)
+}
+
+// NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody generates requests for PostApiV1ArgocdInstancesIdApplicationsNameSync with any type of body
+func NewPostApiV1ArgocdInstancesIdApplicationsNameSyncRequestWithBody(server string, id openapi_types.UUID, name string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/argocd/instances/%s/applications/%s/sync/", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -19431,6 +19835,153 @@ func NewGetApiV1ArgocdInstancesIdOrphanReportRequest(server string, id openapi_t
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ArgocdOperationsRequest generates requests for GetApiV1ArgocdOperations
+func NewGetApiV1ArgocdOperationsRequest(server string, params *GetApiV1ArgocdOperationsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/argocd/operations/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.TargetType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "targetType", runtime.ParamLocationQuery, *params.TargetType); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.TargetKey != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "targetKey", runtime.ParamLocationQuery, *params.TargetKey); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetApiV1ArgocdOperationsIdRequest generates requests for GetApiV1ArgocdOperationsId
+func NewGetApiV1ArgocdOperationsIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/argocd/operations/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -37986,11 +38537,27 @@ type ClientWithResponsesInterface interface {
 	// GetApiV1AlertingEventsWithResponse request
 	GetApiV1AlertingEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AlertingEventsResponse, error)
 
+	// PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse request with any body
+	PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error)
+
+	PostApiV1ArgocdApplicationsIdSyncWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error)
+
 	// GetApiV1ArgocdInstancesWithResponse request
 	GetApiV1ArgocdInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesResponse, error)
 
+	// PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse request with any body
+	PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error)
+
+	PostApiV1ArgocdInstancesIdApplicationsNameSyncWithResponse(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error)
+
 	// GetApiV1ArgocdInstancesIdOrphanReportWithResponse request
 	GetApiV1ArgocdInstancesIdOrphanReportWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesIdOrphanReportResponse, error)
+
+	// GetApiV1ArgocdOperationsWithResponse request
+	GetApiV1ArgocdOperationsWithResponse(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsResponse, error)
+
+	// GetApiV1ArgocdOperationsIdWithResponse request
+	GetApiV1ArgocdOperationsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsIdResponse, error)
 
 	// ListAuditLogsWithResponse request
 	ListAuditLogsWithResponse(ctx context.Context, params *ListAuditLogsParams, reqEditors ...RequestEditorFn) (*ListAuditLogsResponse, error)
@@ -40852,6 +41419,29 @@ func (r GetApiV1AlertingEventsResponse) StatusCode() int {
 	return 0
 }
 
+type PostApiV1ArgocdApplicationsIdSyncResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *ArgoOperationEnvelope
+	JSON404      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ArgocdApplicationsIdSyncResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ArgocdApplicationsIdSyncResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetApiV1ArgocdInstancesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -40868,6 +41458,30 @@ func (r GetApiV1ArgocdInstancesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1ArgocdInstancesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *ArgoOperationEnvelope
+	JSON404      *ErrorEnvelope
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -40892,6 +41506,51 @@ func (r GetApiV1ArgocdInstancesIdOrphanReportResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1ArgocdInstancesIdOrphanReportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ArgocdOperationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *map[string]interface{}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ArgocdOperationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ArgocdOperationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetApiV1ArgocdOperationsIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ArgoOperationEnvelope
+	JSON404      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiV1ArgocdOperationsIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiV1ArgocdOperationsIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -41020,13 +41679,27 @@ type PostApiV1AuthDexApplyResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *struct {
 		Data struct {
-			Applied        *bool               `json:"applied,omitempty"`
-			AppliedAt      *time.Time          `json:"applied_at,omitempty"`
-			ClusterId      *openapi_types.UUID `json:"cluster_id,omitempty"`
-			ConfigmapName  *string             `json:"configmap_name,omitempty"`
-			ConnectorCount *int                `json:"connector_count,omitempty"`
-			DeploymentName *string             `json:"deployment_name,omitempty"`
-			Namespace      *string             `json:"namespace,omitempty"`
+			Applied   *bool               `json:"applied,omitempty"`
+			AppliedAt *time.Time          `json:"applied_at,omitempty"`
+			Changed   *bool               `json:"changed,omitempty"`
+			ClusterId *openapi_types.UUID `json:"cluster_id,omitempty"`
+			// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+			ConfigmapName         *string                                   `json:"configmap_name,omitempty"`
+			ConnectorCount        *int                                      `json:"connector_count,omitempty"`
+			DeploymentName        *string                                   `json:"deployment_name,omitempty"`
+			Namespace             *string                                   `json:"namespace,omitempty"`
+			RuntimeGeneration     *int64                                    `json:"runtime_generation,omitempty"`
+			RuntimeSecretName     *string                                   `json:"runtime_secret_name,omitempty"`
+			RuntimeState          *PostApiV1AuthDexApply200DataRuntimeState `json:"runtime_state,omitempty"`
+			SecretResourceVersion *string                                   `json:"secret_resource_version,omitempty"`
+			Staged                *bool                                     `json:"staged,omitempty"`
+		} `json:"data"`
+	}
+	JSON202 *struct {
+		Data struct {
+			Applied      *bool   `json:"applied,omitempty"`
+			RuntimeState *string `json:"runtime_state,omitempty"`
+			Staged       *bool   `json:"staged,omitempty"`
 		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
@@ -41034,6 +41707,7 @@ type PostApiV1AuthDexApplyResponse struct {
 	JSON502 *ErrorEnvelope
 	JSON503 *ErrorEnvelope
 }
+type PostApiV1AuthDexApply200DataRuntimeState string
 
 // Status returns HTTPResponse.Status
 func (r PostApiV1AuthDexApplyResponse) Status() string {
@@ -41218,8 +41892,12 @@ type PostApiV1AuthDexRegisterAsSsoResponse struct {
 	JSON201 *struct {
 		Data DexRegisterSSOResult `json:"data"`
 	}
+	JSON202 *struct {
+		Data DexRegisterSSOResult `json:"data"`
+	}
 	JSON400 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
+	JSON502 *ErrorEnvelope
 	JSON503 *ErrorEnvelope
 }
 
@@ -51986,6 +52664,23 @@ func (c *ClientWithResponses) GetApiV1AlertingEventsWithResponse(ctx context.Con
 	return ParseGetApiV1AlertingEventsResponse(rsp)
 }
 
+// PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse request with arbitrary body returning *PostApiV1ArgocdApplicationsIdSyncResponse
+func (c *ClientWithResponses) PostApiV1ArgocdApplicationsIdSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error) {
+	rsp, err := c.PostApiV1ArgocdApplicationsIdSyncWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ArgocdApplicationsIdSyncResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ArgocdApplicationsIdSyncWithResponse(ctx context.Context, id openapi_types.UUID, body PostApiV1ArgocdApplicationsIdSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdApplicationsIdSyncResponse, error) {
+	rsp, err := c.PostApiV1ArgocdApplicationsIdSync(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ArgocdApplicationsIdSyncResponse(rsp)
+}
+
 // GetApiV1ArgocdInstancesWithResponse request returning *GetApiV1ArgocdInstancesResponse
 func (c *ClientWithResponses) GetApiV1ArgocdInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesResponse, error) {
 	rsp, err := c.GetApiV1ArgocdInstances(ctx, reqEditors...)
@@ -51995,6 +52690,23 @@ func (c *ClientWithResponses) GetApiV1ArgocdInstancesWithResponse(ctx context.Co
 	return ParseGetApiV1ArgocdInstancesResponse(rsp)
 }
 
+// PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse request with arbitrary body returning *PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse
+func (c *ClientWithResponses) PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error) {
+	rsp, err := c.PostApiV1ArgocdInstancesIdApplicationsNameSyncWithBody(ctx, id, name, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostApiV1ArgocdInstancesIdApplicationsNameSyncWithResponse(ctx context.Context, id openapi_types.UUID, name string, body PostApiV1ArgocdInstancesIdApplicationsNameSyncJSONRequestBody, reqEditors ...RequestEditorFn) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error) {
+	rsp, err := c.PostApiV1ArgocdInstancesIdApplicationsNameSync(ctx, id, name, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse(rsp)
+}
+
 // GetApiV1ArgocdInstancesIdOrphanReportWithResponse request returning *GetApiV1ArgocdInstancesIdOrphanReportResponse
 func (c *ClientWithResponses) GetApiV1ArgocdInstancesIdOrphanReportWithResponse(ctx context.Context, id openapi_types.UUID, params *GetApiV1ArgocdInstancesIdOrphanReportParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdInstancesIdOrphanReportResponse, error) {
 	rsp, err := c.GetApiV1ArgocdInstancesIdOrphanReport(ctx, id, params, reqEditors...)
@@ -52002,6 +52714,24 @@ func (c *ClientWithResponses) GetApiV1ArgocdInstancesIdOrphanReportWithResponse(
 		return nil, err
 	}
 	return ParseGetApiV1ArgocdInstancesIdOrphanReportResponse(rsp)
+}
+
+// GetApiV1ArgocdOperationsWithResponse request returning *GetApiV1ArgocdOperationsResponse
+func (c *ClientWithResponses) GetApiV1ArgocdOperationsWithResponse(ctx context.Context, params *GetApiV1ArgocdOperationsParams, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsResponse, error) {
+	rsp, err := c.GetApiV1ArgocdOperations(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ArgocdOperationsResponse(rsp)
+}
+
+// GetApiV1ArgocdOperationsIdWithResponse request returning *GetApiV1ArgocdOperationsIdResponse
+func (c *ClientWithResponses) GetApiV1ArgocdOperationsIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ArgocdOperationsIdResponse, error) {
+	rsp, err := c.GetApiV1ArgocdOperationsId(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiV1ArgocdOperationsIdResponse(rsp)
 }
 
 // ListAuditLogsWithResponse request returning *ListAuditLogsResponse
@@ -58818,6 +59548,39 @@ func ParseGetApiV1AlertingEventsResponse(rsp *http.Response) (*GetApiV1AlertingE
 	return response, nil
 }
 
+// ParsePostApiV1ArgocdApplicationsIdSyncResponse parses an HTTP response from a PostApiV1ArgocdApplicationsIdSyncWithResponse call
+func ParsePostApiV1ArgocdApplicationsIdSyncResponse(rsp *http.Response) (*PostApiV1ArgocdApplicationsIdSyncResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ArgocdApplicationsIdSyncResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ArgoOperationEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiV1ArgocdInstancesResponse parses an HTTP response from a GetApiV1ArgocdInstancesWithResponse call
 func ParseGetApiV1ArgocdInstancesResponse(rsp *http.Response) (*GetApiV1ArgocdInstancesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -58838,6 +59601,46 @@ func ParseGetApiV1ArgocdInstancesResponse(rsp *http.Response) (*GetApiV1ArgocdIn
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse parses an HTTP response from a PostApiV1ArgocdInstancesIdApplicationsNameSyncWithResponse call
+func ParsePostApiV1ArgocdInstancesIdApplicationsNameSyncResponse(rsp *http.Response) (*PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostApiV1ArgocdInstancesIdApplicationsNameSyncResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ArgoOperationEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -58866,6 +59669,65 @@ func ParseGetApiV1ArgocdInstancesIdOrphanReportResponse(rsp *http.Response) (*Ge
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ArgocdOperationsResponse parses an HTTP response from a GetApiV1ArgocdOperationsWithResponse call
+func ParseGetApiV1ArgocdOperationsResponse(rsp *http.Response) (*GetApiV1ArgocdOperationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ArgocdOperationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetApiV1ArgocdOperationsIdResponse parses an HTTP response from a GetApiV1ArgocdOperationsIdWithResponse call
+func ParseGetApiV1ArgocdOperationsIdResponse(rsp *http.Response) (*GetApiV1ArgocdOperationsIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiV1ArgocdOperationsIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ArgoOperationEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -59106,19 +59968,39 @@ func ParsePostApiV1AuthDexApplyResponse(rsp *http.Response) (*PostApiV1AuthDexAp
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Data struct {
-				Applied        *bool               `json:"applied,omitempty"`
-				AppliedAt      *time.Time          `json:"applied_at,omitempty"`
-				ClusterId      *openapi_types.UUID `json:"cluster_id,omitempty"`
-				ConfigmapName  *string             `json:"configmap_name,omitempty"`
-				ConnectorCount *int                `json:"connector_count,omitempty"`
-				DeploymentName *string             `json:"deployment_name,omitempty"`
-				Namespace      *string             `json:"namespace,omitempty"`
+				Applied   *bool               `json:"applied,omitempty"`
+				AppliedAt *time.Time          `json:"applied_at,omitempty"`
+				Changed   *bool               `json:"changed,omitempty"`
+				ClusterId *openapi_types.UUID `json:"cluster_id,omitempty"`
+				// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+				ConfigmapName         *string                                   `json:"configmap_name,omitempty"`
+				ConnectorCount        *int                                      `json:"connector_count,omitempty"`
+				DeploymentName        *string                                   `json:"deployment_name,omitempty"`
+				Namespace             *string                                   `json:"namespace,omitempty"`
+				RuntimeGeneration     *int64                                    `json:"runtime_generation,omitempty"`
+				RuntimeSecretName     *string                                   `json:"runtime_secret_name,omitempty"`
+				RuntimeState          *PostApiV1AuthDexApply200DataRuntimeState `json:"runtime_state,omitempty"`
+				SecretResourceVersion *string                                   `json:"secret_resource_version,omitempty"`
+				Staged                *bool                                     `json:"staged,omitempty"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data struct {
+				Applied      *bool   `json:"applied,omitempty"`
+				RuntimeState *string `json:"runtime_state,omitempty"`
+				Staged       *bool   `json:"staged,omitempty"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
@@ -59439,6 +60321,15 @@ func ParsePostApiV1AuthDexRegisterAsSsoResponse(rsp *http.Response) (*PostApiV1A
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data DexRegisterSSOResult `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -59452,6 +60343,13 @@ func ParsePostApiV1AuthDexRegisterAsSsoResponse(rsp *http.Response) (*PostApiV1A
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ErrorEnvelope

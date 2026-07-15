@@ -95,8 +95,8 @@ spec:
             - name: metrics
               containerPort: 9090
               protocol: TCP
-            # Network-isolated ArgoCD->cluster proxy. Never mapped by the public
-            # ingress; the NetworkPolicy restricts it to the argocd namespace.
+            # Token-authenticated, network-isolated ArgoCD->cluster proxy. Never
+            # mapped by public ingress; NetworkPolicy restricts it to ArgoCD.
             - name: argocd-proxy
               containerPort: 8090
               protocol: TCP
@@ -104,8 +104,18 @@ spec:
             - configMapRef:
                 name: {{ include "astronomer.fullname" . }}-config
             - secretRef:
-                name: {{ include "astronomer.fullname" . }}-secrets
+                name: {{ include "astronomer.secretsSecretName" . }}
           env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.secretKeyKey | quote }}
+            - name: ASTRONOMER_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.encryptionKeyKey | quote }}
             # Pod IP is the address sibling replicas use to reverse-proxy
             # tunnel-bound requests (kubectl shell, k8s passthrough, image
             # scans) to whichever pod holds the agent's WebSocket. Without
@@ -120,11 +130,15 @@ spec:
             # disables and non-owning replicas 503). Readiness fails loudly if not.
             - name: SERVER_REPLICAS
               value: {{ .Values.server.replicaCount | quote }}
+            # EVENT-01: Publish never waits on Redis. This is the bounded
+            # per-pod relay queue; the process also enforces a hard maximum.
+            - name: EVENT_RELAY_QUEUE_CAPACITY
+              value: {{ .Values.server.eventRelayQueueCapacity | quote }}
             - name: ASTRONOMER_BOOTSTRAP_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "astronomer.bootstrapSecretName" . }}
-                  key: password
+                  key: {{ include "astronomer.bootstrapSecretKey" . | quote }}
             - name: ASTRONOMER_BOOTSTRAP_USERNAME
               value: {{ .Values.bootstrap.username | quote }}
             - name: ASTRONOMER_BOOTSTRAP_EMAIL
@@ -143,7 +157,13 @@ spec:
                   name: {{ .Values.redis.external.passwordSecretRef.name | quote }}
                   key: {{ .Values.redis.external.passwordSecretRef.key | quote }}
             {{- end }}
-            {{- if .Values.redis.external.address }}
+            {{- if .Values.redis.external.urlSecretRef.name }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.external.urlSecretRef.name | quote }}
+                  key: {{ .Values.redis.external.urlSecretRef.key | quote }}
+            {{- else if .Values.redis.external.address }}
             - name: REDIS_URL
               value: {{ include "astronomer.redisURL" . | quote }}
             {{- end }}

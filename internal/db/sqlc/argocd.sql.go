@@ -252,7 +252,7 @@ func (q *Queries) GetActiveArgoCDClusterProxyTokenByClusterID(ctx context.Contex
 
 const getArgoCDApplicationByID = `-- name: GetArgoCDApplicationByID :one
 
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications WHERE id = $1
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace FROM argocd_applications WHERE id = $1
 `
 
 // ArgoCD Applications
@@ -277,12 +277,14 @@ func (q *Queries) GetArgoCDApplicationByID(ctx context.Context, id uuid.UUID) (A
 		&i.LastSynced,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UpstreamUid,
+		&i.ApplicationNamespace,
 	)
 	return i, err
 }
 
 const getArgoCDApplicationByName = `-- name: GetArgoCDApplicationByName :one
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 AND name = $2
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace FROM argocd_applications WHERE argocd_instance_id = $1 AND name = $2
 `
 
 type GetArgoCDApplicationByNameParams struct {
@@ -311,6 +313,8 @@ func (q *Queries) GetArgoCDApplicationByName(ctx context.Context, arg GetArgoCDA
 		&i.LastSynced,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UpstreamUid,
+		&i.ApplicationNamespace,
 	)
 	return i, err
 }
@@ -414,7 +418,7 @@ func (q *Queries) GetArgoCDManagedCluster(ctx context.Context, arg GetArgoCDMana
 }
 
 const listAppsByInstance = `-- name: ListAppsByInstance :many
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications WHERE argocd_instance_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace FROM argocd_applications WHERE argocd_instance_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3
 `
 
 type ListAppsByInstanceParams struct {
@@ -450,6 +454,8 @@ func (q *Queries) ListAppsByInstance(ctx context.Context, arg ListAppsByInstance
 			&i.LastSynced,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UpstreamUid,
+			&i.ApplicationNamespace,
 		); err != nil {
 			return nil, err
 		}
@@ -462,7 +468,7 @@ func (q *Queries) ListAppsByInstance(ctx context.Context, arg ListAppsByInstance
 }
 
 const listArgoCDApplications = `-- name: ListArgoCDApplications :many
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace FROM argocd_applications ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListArgoCDApplicationsParams struct {
@@ -497,6 +503,8 @@ func (q *Queries) ListArgoCDApplications(ctx context.Context, arg ListArgoCDAppl
 			&i.LastSynced,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UpstreamUid,
+			&i.ApplicationNamespace,
 		); err != nil {
 			return nil, err
 		}
@@ -509,7 +517,7 @@ func (q *Queries) ListArgoCDApplications(ctx context.Context, arg ListArgoCDAppl
 }
 
 const listArgoCDApplicationsByManagedClusterTargets = `-- name: ListArgoCDApplicationsByManagedClusterTargets :many
-SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at FROM argocd_applications
+SELECT id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace FROM argocd_applications
 WHERE argocd_instance_id = ANY($1::uuid[])
   AND destination_cluster = ANY($2::text[])
 ORDER BY name ASC
@@ -547,6 +555,8 @@ func (q *Queries) ListArgoCDApplicationsByManagedClusterTargets(ctx context.Cont
 			&i.LastSynced,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UpstreamUid,
+			&i.ApplicationNamespace,
 		); err != nil {
 			return nil, err
 		}
@@ -782,7 +792,7 @@ UPDATE argocd_applications SET
     resource_pruned_count = $12,
     last_synced = $13
 WHERE id = $1
-RETURNING id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at
+RETURNING id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace
 `
 
 type UpdateArgoCDApplicationParams struct {
@@ -836,6 +846,8 @@ func (q *Queries) UpdateArgoCDApplication(ctx context.Context, arg UpdateArgoCDA
 		&i.LastSynced,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UpstreamUid,
+		&i.ApplicationNamespace,
 	)
 	return i, err
 }
@@ -968,6 +980,127 @@ func (q *Queries) UpsertArgoCDClusterProxyToken(ctx context.Context, arg UpsertA
 		&i.IsRevoked,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertDiscoveredArgoCDApplication = `-- name: UpsertDiscoveredArgoCDApplication :one
+INSERT INTO argocd_applications (
+    argocd_instance_id,
+    name,
+    upstream_uid,
+    application_namespace,
+    project,
+    repo_url,
+    path,
+    target_revision,
+    destination_cluster,
+    destination_namespace,
+    sync_status,
+    health_status,
+    resource_created_count,
+    resource_changed_count,
+    resource_pruned_count
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+)
+ON CONFLICT (argocd_instance_id, name) DO UPDATE SET
+    upstream_uid = EXCLUDED.upstream_uid,
+    application_namespace = EXCLUDED.application_namespace,
+    project = EXCLUDED.project,
+    repo_url = EXCLUDED.repo_url,
+    path = EXCLUDED.path,
+    target_revision = EXCLUDED.target_revision,
+    destination_cluster = EXCLUDED.destination_cluster,
+    destination_namespace = EXCLUDED.destination_namespace,
+    sync_status = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.sync_status
+        ELSE argocd_applications.sync_status
+    END,
+    health_status = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.health_status
+        ELSE argocd_applications.health_status
+    END,
+    resource_created_count = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.resource_created_count
+        ELSE argocd_applications.resource_created_count
+    END,
+    resource_changed_count = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.resource_changed_count
+        ELSE argocd_applications.resource_changed_count
+    END,
+    resource_pruned_count = CASE
+        WHEN argocd_applications.upstream_uid = '' THEN EXCLUDED.resource_pruned_count
+        ELSE argocd_applications.resource_pruned_count
+    END,
+    updated_at = now()
+WHERE argocd_applications.upstream_uid = ''
+   OR argocd_applications.upstream_uid = EXCLUDED.upstream_uid
+RETURNING id, argocd_instance_id, name, project, repo_url, path, target_revision, destination_cluster, destination_namespace, sync_status, health_status, resource_created_count, resource_changed_count, resource_pruned_count, last_synced, created_at, updated_at, upstream_uid, application_namespace
+`
+
+type UpsertDiscoveredArgoCDApplicationParams struct {
+	ArgocdInstanceID     uuid.UUID `json:"argocd_instance_id"`
+	Name                 string    `json:"name"`
+	UpstreamUid          string    `json:"upstream_uid"`
+	ApplicationNamespace string    `json:"application_namespace"`
+	Project              string    `json:"project"`
+	RepoUrl              string    `json:"repo_url"`
+	Path                 string    `json:"path"`
+	TargetRevision       string    `json:"target_revision"`
+	DestinationCluster   string    `json:"destination_cluster"`
+	DestinationNamespace string    `json:"destination_namespace"`
+	SyncStatus           string    `json:"sync_status"`
+	HealthStatus         string    `json:"health_status"`
+	ResourceCreatedCount int32     `json:"resource_created_count"`
+	ResourceChangedCount int32     `json:"resource_changed_count"`
+	ResourcePrunedCount  int32     `json:"resource_pruned_count"`
+}
+
+// A single statement is the transaction boundary for concurrent discovery.
+// The stable local ID is preserved on conflict so already-audited operation
+// targets never drift. Discovery refreshes only bounded reference metadata;
+// last-good status, resource counts and last_synced are intentionally not
+// clobbered when another server replica won the insert race.
+func (q *Queries) UpsertDiscoveredArgoCDApplication(ctx context.Context, arg UpsertDiscoveredArgoCDApplicationParams) (ArgocdApplication, error) {
+	row := q.db.QueryRow(ctx, upsertDiscoveredArgoCDApplication,
+		arg.ArgocdInstanceID,
+		arg.Name,
+		arg.UpstreamUid,
+		arg.ApplicationNamespace,
+		arg.Project,
+		arg.RepoUrl,
+		arg.Path,
+		arg.TargetRevision,
+		arg.DestinationCluster,
+		arg.DestinationNamespace,
+		arg.SyncStatus,
+		arg.HealthStatus,
+		arg.ResourceCreatedCount,
+		arg.ResourceChangedCount,
+		arg.ResourcePrunedCount,
+	)
+	var i ArgocdApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ArgocdInstanceID,
+		&i.Name,
+		&i.Project,
+		&i.RepoUrl,
+		&i.Path,
+		&i.TargetRevision,
+		&i.DestinationCluster,
+		&i.DestinationNamespace,
+		&i.SyncStatus,
+		&i.HealthStatus,
+		&i.ResourceCreatedCount,
+		&i.ResourceChangedCount,
+		&i.ResourcePrunedCount,
+		&i.LastSynced,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UpstreamUid,
+		&i.ApplicationNamespace,
 	)
 	return i, err
 }

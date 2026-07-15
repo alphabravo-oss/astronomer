@@ -102,6 +102,21 @@ func TestEventBusTap_IgnoresNonMatching(t *testing.T) {
 	}
 }
 
+func TestEventBusTap_SkipsRemoteDuplicate(t *testing.T) {
+	q := &fakeTapQuerier{
+		subs: []sqlc.WebhookSubscription{newTapSubscription("cluster-events", []string{"cluster.*"})},
+	}
+	tap := NewTap(q, nil, nil)
+	tap.SetCacheTTL(time.Hour)
+	event := events.Event{ID: 42, Type: events.TypeClusterConnected, Time: time.Now().UTC()}
+	tap.HandleEvent(context.Background(), event)
+	event.Remote = true
+	tap.HandleEvent(context.Background(), event)
+	if got := len(q.inserted); got != 1 {
+		t.Fatalf("webhook inserts = %d, want one origin delivery and no remote duplicate", got)
+	}
+}
+
 func TestEventBusTap_MultipleSubscriptionsMatch_OneEvent(t *testing.T) {
 	q := &fakeTapQuerier{
 		subs: []sqlc.WebhookSubscription{

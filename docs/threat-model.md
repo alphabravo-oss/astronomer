@@ -85,8 +85,25 @@ Threats:
 
 Controls:
 
-- ArgoCD uses a dedicated internal `/api/v1/internal/argocd/clusters/{id}/k8s/*` proxy route.
-- Proxy tokens use `astro_argocd_*` material, hash-based validation, encrypted reusable plaintext, and cluster ID scoping.
+- ArgoCD uses a dedicated internal listener for
+  `/api/v1/internal/argocd/clusters/{id}/k8s/*`; the compatibility route on the
+  public listener has the identical machine-auth contract.
+- Proxy tokens use `astro_argocd_*` material, encrypted reusable plaintext,
+  SHA-256 lookup and constant-time hash verification, purpose and cluster ID
+  binding, expiration, and revocation checks. A missing token querier fails
+  closed.
+- The bundled chart 9.5.21 deploys ArgoCD v3.4.3. Its cluster Secret decoder
+  populates `Cluster.Config.BearerToken`; `Cluster.RawRestConfig` copies that
+  value into client-go's `rest.Config`, which is used by cluster discovery,
+  cache, and sync. Therefore every request reaches this route with the
+  per-cluster bearer credential; discovery and apply are not anonymous.
+- Port 8090 is absent from public ingress and NetworkPolicy admits only the
+  bundled ArgoCD application-controller and server pods. These are
+  defense-in-depth controls and do not replace bearer authentication.
+- Token rows are deleted during cluster decommission. Periodic auto-adoption
+  repairs a missing DB token by minting/upserting it and repairs a missing
+  ArgoCD cluster Secret by upserting cluster registration with the reusable
+  encrypted token.
 - Generic public k8s proxy remains human/API-token auth plus RBAC.
 - Baseline cluster-template apply skips ArgoCD-owned baseline tools when ArgoCD baseline ownership is enabled.
 - Cluster responses and CRD status expose ArgoCD adoption and baseline ownership state.
@@ -95,6 +112,9 @@ Review checks:
 
 - ArgoCD proxy tokens must never be accepted by general API auth middleware.
 - Token creation/rotation/deletion must update decommission and repair paths.
+- Changes to the bundled ArgoCD version must re-confirm that cluster Secret
+  `config.bearerToken` still populates the REST transport used by discovery,
+  cache, and sync before rollout.
 - Baseline ownership changes must update `docs/control-plane-state-contract.md`.
 
 ## Service Proxy
@@ -205,6 +225,11 @@ Threats:
 - Hook or backup jobs running with weaker security contexts than the steady-state deployments.
 - Ingress/Gateway, Argo CD, external DB/Redis, and Kubernetes API egress being broader than intended.
 - Bootstrap credentials or generated secrets becoming long-lived unknowns.
+- Argo CD persisting inline Helm credentials in Application spec, compared
+  source, operation results, history, API responses, or controller logs. The
+  self-manage path therefore accepts only closed-vocabulary non-sensitive
+  values plus native Secret references, scrubs legacy copies with the
+  controller stopped, and requires digest-bound operator approval before prune.
 
 Controls:
 

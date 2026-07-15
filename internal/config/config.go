@@ -4,12 +4,17 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
 // Config holds all configuration for the application.
 type Config struct {
 	DatabaseURL string `mapstructure:"database_url"`
 	RedisURL    string `mapstructure:"redis_url"`
+	// EventRelayQueueCapacity bounds local events waiting for cross-replica
+	// Redis fan-out. The events package applies a hard maximum even when an
+	// environment value is larger.
+	EventRelayQueueCapacity int `mapstructure:"event_relay_queue_capacity"`
 
 	// pgxpool sizing — operator-tunable via the chart's `database.*`
 	// values. Zero values fall through to the
@@ -132,16 +137,14 @@ type Config struct {
 
 	// ArgoCDClusterProxyBaseURL is the base URL upstream ArgoCD should use
 	// when talking to Astronomer-managed remote clusters through the tunnel
-	// proxy. The registration handler appends /api/v1/clusters/{id}/k8s.
+	// proxy. The registration handler appends the internal ArgoCD cluster path.
 	ArgoCDClusterProxyBaseURL string `mapstructure:"argocd_cluster_proxy_base_url"`
 
 	// ArgoCDInternalProxyAddr is a dedicated, non-public listen address serving
-	// ONLY the ArgoCD->adopted-cluster k8s proxy. ArgoCD's GitOps apply path
-	// sends no per-request credential (kubectl treats discovery/apply as
-	// anonymous), so this route cannot be token-gated. Instead it runs on its
-	// own port that the public ingress never maps and a NetworkPolicy restricts
-	// to the argocd namespace — network isolation IS the authentication. The
-	// public :8000 listener keeps the token-gated route for any other caller.
+	// ONLY the ArgoCD->adopted-cluster k8s proxy. Every request must carry the
+	// cluster-scoped bearer token stored in ArgoCD's cluster Secret. The port is
+	// not mapped by public ingress and NetworkPolicy restricts it to bundled
+	// ArgoCD pods, providing defense in depth around the application-layer token.
 	ArgoCDInternalProxyAddr string `mapstructure:"argocd_internal_proxy_addr"`
 
 	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
@@ -221,6 +224,7 @@ func Load() (*Config, error) {
 		"agent_image_tag",
 		"database_url",
 		"redis_url",
+		"event_relay_queue_capacity",
 		"secret_key",
 		"server_url",
 		"audit_log_retention_months",
@@ -264,10 +268,11 @@ func Load() (*Config, error) {
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "database_url", Value: "postgres://astronomer:astronomer@localhost:5432/astronomer?sslmode=disable"},
 		envconfig.Default{Key: "redis_url", Value: "redis://localhost:6379/0"},
+		envconfig.Default{Key: "event_relay_queue_capacity", Value: 1024},
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
-		envconfig.Default{Key: "session_timeout_minutes", Value: 60},
+		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
@@ -288,8 +293,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://astro-argocd-server.astronomer.svc.cluster.local:80"},
-		// Adopted clusters register against the dedicated internal proxy port
-		// (network-isolated, tokenless) — not the public :8000 listener.
+		// Adopted clusters register against the authenticated, network-isolated
+		// internal proxy port — not the public :8000 listener.
 		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8090"},
 		envconfig.Default{Key: "argocd_internal_proxy_addr", Value: ":8090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},

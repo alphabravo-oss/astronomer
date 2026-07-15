@@ -25,19 +25,21 @@ import (
 )
 
 type argoCDAutoRegisterTestQuerier struct {
-	setting         *sqlc.PlatformSetting
-	selectorSetting *sqlc.PlatformSetting
-	listTouched     bool
-	cluster         sqlc.Cluster
-	clusters        []sqlc.Cluster
-	projects        []sqlc.Project
-	instances       []sqlc.ArgocdInstance
-	managed         []sqlc.ArgocdManagedCluster
-	created         []sqlc.CreateArgoCDManagedClusterParams
-	conditions      []sqlc.UpsertClusterConditionParams
-	managedLookup   bool
-	repairSuccess   []sqlc.RecordRepairJobSuccessParams
-	repairFailure   []sqlc.RecordRepairJobFailureParams
+	setting           *sqlc.PlatformSetting
+	selectorSetting   *sqlc.PlatformSetting
+	listTouched       bool
+	cluster           sqlc.Cluster
+	clusters          []sqlc.Cluster
+	projects          []sqlc.Project
+	instances         []sqlc.ArgocdInstance
+	managed           []sqlc.ArgocdManagedCluster
+	created           []sqlc.CreateArgoCDManagedClusterParams
+	conditions        []sqlc.UpsertClusterConditionParams
+	managedLookup     bool
+	repairSuccess     []sqlc.RecordRepairJobSuccessParams
+	repairFailure     []sqlc.RecordRepairJobFailureParams
+	activeProxyToken  *sqlc.ArgocdClusterProxyToken
+	proxyTokenUpserts []sqlc.UpsertArgoCDClusterProxyTokenParams
 }
 
 func (q *argoCDAutoRegisterTestQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -86,12 +88,16 @@ func (q *argoCDAutoRegisterTestQuerier) CreateArgoCDManagedCluster(_ context.Con
 	return row, nil
 }
 
-func (q *argoCDAutoRegisterTestQuerier) GetActiveArgoCDClusterProxyTokenByClusterID(context.Context, uuid.UUID) (sqlc.ArgocdClusterProxyToken, error) {
+func (q *argoCDAutoRegisterTestQuerier) GetActiveArgoCDClusterProxyTokenByClusterID(_ context.Context, clusterID uuid.UUID) (sqlc.ArgocdClusterProxyToken, error) {
+	if q.activeProxyToken != nil && q.activeProxyToken.ClusterID == clusterID {
+		return *q.activeProxyToken, nil
+	}
 	return sqlc.ArgocdClusterProxyToken{}, pgx.ErrNoRows
 }
 
-func (q *argoCDAutoRegisterTestQuerier) UpsertArgoCDClusterProxyToken(context.Context, sqlc.UpsertArgoCDClusterProxyTokenParams) (sqlc.ArgocdClusterProxyToken, error) {
-	return sqlc.ArgocdClusterProxyToken{}, nil
+func (q *argoCDAutoRegisterTestQuerier) UpsertArgoCDClusterProxyToken(_ context.Context, arg sqlc.UpsertArgoCDClusterProxyTokenParams) (sqlc.ArgocdClusterProxyToken, error) {
+	q.proxyTokenUpserts = append(q.proxyTokenUpserts, arg)
+	return sqlc.ArgocdClusterProxyToken{ClusterID: arg.ClusterID, TokenHash: arg.TokenHash, TokenEncrypted: arg.TokenEncrypted, ExpiresAt: arg.ExpiresAt}, nil
 }
 
 func (q *argoCDAutoRegisterTestQuerier) UpsertClusterCondition(_ context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error) {
@@ -260,10 +266,9 @@ func TestArgoCDAutoRegisterSweepSkippedOnNonLeader(t *testing.T) {
 }
 
 func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
-	// The argocd client dials the loopback httptest upstream; the SSRF dial
-	// guard blocks loopback unless disabled (same switch every other test in
-	// this package that dials httptest uses).
+	// This test intentionally dials the loopback httptest Argo CD upstream.
 	defer httpclient.DisableGuardForTest()()
+
 	ResetArgoCDAutoRegister()
 	t.Cleanup(ResetArgoCDAutoRegister)
 	clusterID := uuid.New()
@@ -380,6 +385,12 @@ func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
 	if !strings.HasPrefix(seenRegistration.Config.BearerToken, auth.ArgoCDClusterProxyTokenPrefix) {
 		t.Fatalf("registration bearer token prefix = %q, want %q", seenRegistration.Config.BearerToken, auth.ArgoCDClusterProxyTokenPrefix)
 	}
+	if len(q.proxyTokenUpserts) != 1 {
+		t.Fatalf("proxy token upserts = %d, want 1 when the DB row is missing", len(q.proxyTokenUpserts))
+	}
+	if q.proxyTokenUpserts[0].ClusterID != clusterID || q.proxyTokenUpserts[0].TokenHash != auth.HashArgoCDClusterProxyToken(seenRegistration.Config.BearerToken) {
+		t.Fatalf("proxy token upsert does not match registration credential: %+v", q.proxyTokenUpserts[0])
+	}
 	wantLabels := map[string]string{
 		astronomerManagedByLabelKey:                         astronomerManagedByLabelValue,
 		astronomerClusterIDLabelKey:                         clusterID.String(),
@@ -426,6 +437,106 @@ func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
 	repairs, ok := timeline.steps[0].Detail["repairs"].([]string)
 	if !ok || len(repairs) != 1 || repairs[0] != "stale_labels" {
 		t.Fatalf("repair detail = %#v, want [stale_labels]", timeline.steps[0].Detail["repairs"])
+	}
+}
+
+func TestArgoCDAutoRegisterRepairsMissingSecretWithStoredProxyToken(t *testing.T) {
+	// The Argo API under test is an explicit loopback upstream.
+	defer httpclient.DisableGuardForTest()()
+
+	clusterID := uuid.New()
+	instanceID := uuid.New()
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	encryptor, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("new encryptor: %v", err)
+	}
+	instanceToken, err := encryptor.Encrypt("argocd-api-token")
+	if err != nil {
+		t.Fatalf("encrypt instance token: %v", err)
+	}
+	proxyToken := auth.ArgoCDClusterProxyTokenPrefix + "stored-repair-token"
+	encryptedProxyToken, err := encryptor.Encrypt(proxyToken)
+	if err != nil {
+		t.Fatalf("encrypt proxy token: %v", err)
+	}
+
+	var seenRegistration struct {
+		Server string `json:"server"`
+		Config struct {
+			BearerToken string `json:"bearerToken"`
+		} `json:"config"`
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/clusters" || r.URL.Query().Get("upsert") != "true" {
+			t.Fatalf("unexpected upstream request: %s %s", r.Method, r.URL.RequestURI())
+		}
+		if r.Header.Get("Authorization") != "Bearer argocd-api-token" {
+			t.Fatalf("Argo API authorization = %q", r.Header.Get("Authorization"))
+		}
+		if err := json.NewDecoder(r.Body).Decode(&seenRegistration); err != nil {
+			t.Fatalf("decode registration: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "cluster-prod-east", "server": seenRegistration.Server})
+	}))
+	defer upstream.Close()
+
+	cluster := sqlc.Cluster{
+		ID:            clusterID,
+		Name:          "prod-east",
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}
+	q := &argoCDAutoRegisterTestQuerier{
+		cluster: cluster,
+		instances: []sqlc.ArgocdInstance{{
+			ID:                 instanceID,
+			Name:               "built-in",
+			ApiUrl:             upstream.URL,
+			AuthTokenEncrypted: instanceToken,
+		}},
+		managed: []sqlc.ArgocdManagedCluster{{
+			ArgocdInstanceID:  instanceID,
+			ClusterID:         clusterID,
+			ClusterSecretName: "missing-secret",
+			ServerUrl:         "https://stale-proxy.example",
+		}},
+		activeProxyToken: &sqlc.ArgocdClusterProxyToken{
+			ID:             uuid.New(),
+			ClusterID:      clusterID,
+			Purpose:        "argocd_cluster_proxy",
+			TokenHash:      auth.HashArgoCDClusterProxyToken(proxyToken),
+			TokenEncrypted: encryptedProxyToken,
+			ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		},
+	}
+	timeline := &argoCDTimelineRecorder{}
+	err = autoRegisterClusterIntoArgoCD(context.Background(), ArgoCDAutoRegisterDeps{
+		Queries:             q,
+		Encryptor:           encryptor,
+		K8s:                 k8sfake.NewClientset(),
+		ClusterProxyBaseURL: "http://astronomer-server.astronomer.svc.cluster.local:8090",
+		Registration:        timeline,
+	}, cluster)
+	if err != nil {
+		t.Fatalf("repair missing Secret: %v", err)
+	}
+	wantServer := "http://astronomer-server.astronomer.svc.cluster.local:8090/api/v1/internal/argocd/clusters/" + clusterID.String() + "/k8s"
+	if seenRegistration.Server != wantServer || seenRegistration.Config.BearerToken != proxyToken {
+		t.Fatalf("registration = server %q token-match %t, want server %q and stored token", seenRegistration.Server, seenRegistration.Config.BearerToken == proxyToken, wantServer)
+	}
+	if len(q.proxyTokenUpserts) != 0 {
+		t.Fatalf("proxy token upserts = %d, want reuse of active DB credential", len(q.proxyTokenUpserts))
+	}
+	if len(timeline.steps) != 1 || timeline.steps[0].StepName != "argocd_registration_repaired" || timeline.steps[0].Status != "success" {
+		t.Fatalf("repair timeline = %+v", timeline.steps)
+	}
+	repairs, ok := timeline.steps[0].Detail["repairs"].([]string)
+	if !ok || len(repairs) != 1 || repairs[0] != "missing_secret" {
+		t.Fatalf("repair reasons = %#v, want [missing_secret]", timeline.steps[0].Detail["repairs"])
 	}
 }
 

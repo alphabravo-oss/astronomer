@@ -178,6 +178,31 @@ export interface OpenAPIComponents {
         };
     ApplyClusterTemplateRequest: Record<string, unknown>;
     ApplyNetworkPolicyRequest: Record<string, unknown>;
+    ArgoOperation: {
+          "id": string;
+          "targetType": "application";
+          "targetKey": string;
+          "operationType": "sync";
+          "status": "pending" | "running" | "completed" | "failed" | "superseded";
+          "attemptCount": number;
+          "startedAt"?: string | null;
+          "completedAt"?: string | null;
+          "errorMessage"?: string;
+          "createdAt": string;
+          "updatedAt": string;
+          "events"?: OpenAPIComponents['schemas']['ArgoOperationEvent'][];
+        };
+    ArgoOperationEnvelope: {
+          "data": OpenAPIComponents['schemas']['ArgoOperation'];
+        };
+    ArgoOperationEvent: {
+          "id": string;
+          "level": string;
+          "stage": string;
+          "message": string;
+          "detail"?: Record<string, unknown>;
+          "createdAt": string;
+        };
     ArgoOrphanApplication: {
           "id"?: string;
           "name"?: string;
@@ -199,6 +224,13 @@ export interface OpenAPIComponents {
           "orphan_applications"?: OpenAPIComponents['schemas']['ArgoOrphanApplication'][];
           "live_error"?: string;
           "generated_at"?: string;
+        };
+    ArgoSyncRequest: {
+          "revision"?: string;
+          "prune"?: boolean;
+          "dry_run"?: boolean;
+          "reason"?: string;
+          "sync_window_override"?: boolean;
         };
     AuditLogEntry: {
           "id"?: string;
@@ -514,6 +546,7 @@ export interface OpenAPIComponents {
     DexConnectorRequest: {
           "name"?: string;
           "type"?: string;
+          "display_name"?: string;
           "config"?: Record<string, unknown>;
           "enabled"?: boolean;
         };
@@ -524,29 +557,100 @@ export interface OpenAPIComponents {
           "optional_fields"?: string[];
           "secret_fields"?: string[];
         } & Record<string, unknown>;
+    DexExpiry: {
+          "idTokens"?: string;
+          "signingKeys"?: string;
+          "refreshTokens"?: {
+            "reuseInterval"?: string;
+            "validIfNotUsedFor"?: string;
+            "absoluteLifetime"?: string;
+          };
+        };
+    DexExtra: {
+          "logger"?: {
+            "level"?: string;
+            "format"?: string;
+          };
+          "frontend"?: {
+            "issuer"?: string;
+            "logoURL"?: string;
+            "dir"?: string;
+            "theme"?: string;
+          };
+          "grpc"?: {
+            "addr"?: string;
+          };
+          "telemetry"?: {
+            "http"?: string;
+          };
+        };
     DexRegisterSSOResult: {
           "id"?: string;
           "provider"?: string;
           "client_id"?: string;
           "display_name"?: string;
-          "created_at"?: string;
-          "updated_at"?: string;
-        } & Record<string, unknown>;
+          "issuer_url"?: string;
+          "is_enabled"?: boolean;
+          "verified"?: boolean;
+          "staged"?: boolean;
+          "applied"?: boolean;
+          "runtime_state"?: "staged" | "applied";
+          "secret_resource_version"?: string;
+          "runtime_changed"?: boolean;
+          "runtime_generation"?: number;
+          "created"?: boolean;
+          "updated"?: boolean;
+        };
     DexSettings: {
           "configured"?: boolean;
           "issuer_url"?: string;
           "namespace"?: string;
           "release_name"?: string;
+          "chart_release_name"?: string;
+          "deployment_name"?: string;
+          "service_name"?: string;
+          "runtime_secret_name"?: string;
           "configmap_name"?: string;
+          "public_clients"?: Array<{
+            "id"?: string;
+            "name"?: string;
+            "redirectURIs"?: string[];
+            "secret"?: string;
+            "secret_configured"?: boolean;
+            "public"?: boolean;
+            "trustedPeers"?: string[];
+          }>;
           "cluster_id"?: string | null;
           "updated_at"?: string;
+          "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
+          "extra"?: OpenAPIComponents['schemas']['DexExtra'];
+          "runtime_generation"?: number;
+          "runtime_phase"?: "fresh" | "prepare" | "cutover";
+          "runtime_staged_generation"?: number;
+          "runtime_applied_generation"?: number;
         } & Record<string, unknown>;
     DexSettingsRequest: {
           "issuer_url": string;
           "namespace"?: string;
           "release_name"?: string;
+          "chart_release_name"?: string;
+          "deployment_name"?: string;
+          "service_name"?: string;
+          "runtime_secret_name"?: string;
           "configmap_name"?: string;
+          "public_clients"?: Array<{
+            "id": string;
+            "name"?: string;
+            "redirectURIs"?: string[];
+            "secret"?: string;
+            "secret_configured"?: boolean;
+            "secretConfigured"?: boolean;
+            "public"?: boolean;
+            "trustedPeers"?: string[];
+          }>;
           "cluster_id"?: string;
+          "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
+          "extra"?: OpenAPIComponents['schemas']['DexExtra'];
         };
     Error: {
           "error": {
@@ -1517,8 +1621,12 @@ export type ApiTokenCreated = OpenAPIComponents['schemas']['ApiTokenCreated'];
 export type ApiTokenListItem = OpenAPIComponents['schemas']['ApiTokenListItem'];
 export type ApplyClusterTemplateRequest = OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
 export type ApplyNetworkPolicyRequest = OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
+export type ArgoOperation = OpenAPIComponents['schemas']['ArgoOperation'];
+export type ArgoOperationEnvelope = OpenAPIComponents['schemas']['ArgoOperationEnvelope'];
+export type ArgoOperationEvent = OpenAPIComponents['schemas']['ArgoOperationEvent'];
 export type ArgoOrphanApplication = OpenAPIComponents['schemas']['ArgoOrphanApplication'];
 export type ArgoOrphanReport = OpenAPIComponents['schemas']['ArgoOrphanReport'];
+export type ArgoSyncRequest = OpenAPIComponents['schemas']['ArgoSyncRequest'];
 export type AuditLogEntry = OpenAPIComponents['schemas']['AuditLogEntry'];
 export type BackupControllerStatus = OpenAPIComponents['schemas']['BackupControllerStatus'];
 export type BackupCreateRequest = OpenAPIComponents['schemas']['BackupCreateRequest'];
@@ -1558,6 +1666,8 @@ export type DecommissionStatusResponse = OpenAPIComponents['schemas']['Decommiss
 export type DexConnector = OpenAPIComponents['schemas']['DexConnector'];
 export type DexConnectorRequest = OpenAPIComponents['schemas']['DexConnectorRequest'];
 export type DexConnectorType = OpenAPIComponents['schemas']['DexConnectorType'];
+export type DexExpiry = OpenAPIComponents['schemas']['DexExpiry'];
+export type DexExtra = OpenAPIComponents['schemas']['DexExtra'];
 export type DexRegisterSSOResult = OpenAPIComponents['schemas']['DexRegisterSSOResult'];
 export type DexSettings = OpenAPIComponents['schemas']['DexSettings'];
 export type DexSettingsRequest = OpenAPIComponents['schemas']['DexSettingsRequest'];

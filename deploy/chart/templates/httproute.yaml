@@ -67,9 +67,9 @@ spec:
     # PSK door at /internal/tunnel/{k8s,helm}/* performs cluster mutations
     # with no per-user authz and must never be externally reachable. This
     # more-specific /internal match takes precedence over the catch-all `/`
-    # rule below; it forwards to a non-existent blackhole service so an
-    # external /internal request is NEVER routed to the real backend in
-    # either frontend.enabled topology.
+    # rule below; it forwards to the chart's endpointless internal-deny
+    # Service so an external /internal request is NEVER routed to the real
+    # backend in either frontend.enabled topology.
     - matches:
         - path:
             type: PathPrefix

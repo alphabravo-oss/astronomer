@@ -1,0 +1,173 @@
+{{- /*
+Post-upgrade cleanup for the explicit Dex cutover release. The prepare release
+marks the old ConfigMap keep/prepared and leaves the Deployment on it. This hook
+runs only after Helm has applied the Secret-mounted Deployment. It independently
+proves the new ReplicaSet is observed, fully ready/available, carries the exact
+Secret volume, and that the Secret still has handler ownership before deleting
+the exact legacy ConfigMap. No credential content is read or logged here.
+*/ -}}
+{{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "cutover") }}
+{{- $name := printf "%s-dex-legacy-cleanup" (include "astronomer.fullname" .) -}}
+{{- $deployment := printf "%s-dex" (include "astronomer.fullname" .) -}}
+{{- $legacy := printf "%s-dex-config" (include "astronomer.fullname" .) -}}
+{{- $retained := printf "%s-dex-config-retained" (include "astronomer.fullname" .) -}}
+{{- $runtime := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName -}}
+{{- $jobHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation,HookSucceeded" -}}
+{{- $prerequisiteHooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-delete-policy" "before-hook-creation" "argocd.argoproj.io/hook" "PostSync" "argocd.argoproj.io/hook-delete-policy" "BeforeHookCreation" -}}
+{{- $legacyCIDRs := .Values.networkPolicy.externalEgressCIDRs | default (list) -}}
+{{- $apiCIDRs := list -}}
+{{- range $cidr := .Values.networkPolicy.kubernetesAPIEgressCIDRs | default (list) -}}
+  {{- if not (has $cidr $apiCIDRs) -}}
+    {{- $apiCIDRs = append $apiCIDRs $cidr -}}
+  {{- end -}}
+{{- end -}}
+{{- range $cidr := $legacyCIDRs -}}
+  {{- if not (has $cidr $apiCIDRs) -}}
+    {{- $apiCIDRs = append $apiCIDRs $cidr -}}
+  {{- end -}}
+{{- end -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ $deployment | quote }}]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $runtime | quote }}]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $legacy | quote }}, {{ $retained | quote }}]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+# Non-Job hooks are considered complete immediately, so this policy must omit
+# hook-succeeded and remain present while the later cleanup Job runs. Render it
+# even when the new values disable default deny: an old release's selecting
+# policy can remain active through Argo PostSync/prune ordering.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex-legacy-cleanup") | nindent 4 }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "5" "argocd.argoproj.io/sync-wave" "5") $prerequisiteHooks) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex-legacy-cleanup") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- range $cidr := $apiCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  annotations:
+    {{- toYaml (merge (dict "helm.sh/hook-weight" "10" "argocd.argoproj.io/sync-wave" "10") $jobHooks) | nindent 4 }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "dex-legacy-cleanup") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cleanup
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "registry" .Values.preflight.image.registry "fallback" (.Values.image.registry | default "ghcr.io/alphabravo-oss")) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              deployment={{ $deployment | quote }}
+              runtime={{ $runtime | quote }}
+              legacy={{ $legacy | quote }}
+              retained={{ $retained | quote }}
+              namespace={{ .Release.Namespace | quote }}
+              attempt=1
+              while [ "${attempt}" -le 60 ]; do
+                deployment_json=$(kubectl get deployment "${deployment}" -n "${namespace}" -o json) || exit 1
+                if printf '%s' "${deployment_json}" | jq -e --arg runtime "${runtime}" '
+                  (.metadata.generation > 0) and
+                  (.status.observedGeneration >= .metadata.generation) and
+                  (.spec.replicas > 0) and
+                  (.status.updatedReplicas == .spec.replicas) and
+                  (.status.readyReplicas == .spec.replicas) and
+                  (.status.availableReplicas == .spec.replicas) and
+                  ((.status.unavailableReplicas // 0) == 0) and
+                  any(.spec.template.spec.volumes[]?; .name == "config" and .secret.secretName == $runtime)
+                ' >/dev/null; then
+                  break
+                fi
+                deployment_json=""
+                if [ "${attempt}" -eq 60 ]; then
+                  echo "Refusing legacy Dex ConfigMap cleanup: Secret-mounted Deployment did not become ready."
+                  exit 1
+                fi
+                sleep 2
+                attempt=$((attempt + 1))
+              done
+              deployment_json=""
+              if ! kubectl get secret "${runtime}" -n "${namespace}" -o json | jq -e '
+                .type == "Opaque" and
+                .metadata.labels["astronomer.io/runtime-writer"] == "dex-handler" and
+                .metadata.labels["astronomer.io/secret-purpose"] == "dex-runtime"
+              ' >/dev/null; then
+                echo "Refusing legacy Dex ConfigMap cleanup: runtime Secret ownership is invalid."
+                exit 1
+              fi
+              kubectl delete configmap "${legacy}" -n "${namespace}" --ignore-not-found=true
+              kubectl delete configmap "${retained}" -n "${namespace}" --ignore-not-found=true
+{{- end }}

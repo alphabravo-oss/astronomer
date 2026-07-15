@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -41,9 +43,35 @@ var productionWiringSets = []string{
 	"bootstrap.email=admin@example.com",
 	// F8: production requires a pinned bootstrap password (or existingSecret).
 	"bootstrap.password=prod-admin-initial",
-	"dex.clientSecret=prod-dex-client-secret",
 	"networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 	"networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
+	// This one CIDR intentionally covers both the example 10.43.0.1 Service
+	// address and 10.40.x API endpoint network. Cardinality cannot prove that;
+	// operators must inventory the target cluster's actual addresses.
+	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
+}
+
+func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) {
+	scriptPath := filepath.Join(repoRoot(t), "scripts", "verify-enterprise.sh")
+	raw, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read enterprise verifier: %v", err)
+	}
+	script := string(raw)
+	start := strings.Index(script, `step "Fully wired production Helm render"`)
+	end := strings.Index(script, `step "Helm chart contract tests"`)
+	if start < 0 || end <= start {
+		t.Fatal("enterprise verifier production Helm render block is missing or malformed")
+	}
+	productionBlock := script[start:end]
+	arrayIndex := regexp.MustCompile(`\[[0-9]+\]`)
+	for _, set := range productionWiringSets {
+		key := strings.SplitN(set, "=", 2)[0]
+		canonicalKey := arrayIndex.ReplaceAllString(key, "")
+		if !strings.Contains(productionBlock, canonicalKey+"=") {
+			t.Errorf("enterprise verifier production render is missing productionWiringSets key %q", canonicalKey)
+		}
+	}
 }
 
 type renderedDoc map[string]any
@@ -69,20 +97,24 @@ func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
 	return docs
 }
 
-func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
+func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	allowedHooks := map[string]string{
-		"Job/astronomer-migrate":   "post-install,post-upgrade",
-		"Job/astronomer-preflight": "pre-install,pre-upgrade",
+		"Job/astronomer-migrate":          "post-install,post-upgrade",
+		"Job/astronomer-preflight":        "pre-install,pre-upgrade",
+		"Job/astronomer-preflight-argocd": "test",
 		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
 		// hook-weight) so a fresh install doesn't deadlock on the main SA not
-		// existing yet — see templates/preflight-rbac.yaml. These are the only
-		// non-Job hook resources the chart is allowed to ship.
+		// existing yet — see templates/preflight-rbac.yaml. The matching hook
+		// NetworkPolicy restores only the preflight pod's required egress under
+		// retained default deny. These are the only non-Job hook resources the
+		// chart is allowed to ship.
 		"ServiceAccount/astronomer-preflight":     "pre-install,pre-upgrade",
 		"ClusterRole/astronomer-preflight":        "pre-install,pre-upgrade",
 		"ClusterRoleBinding/astronomer-preflight": "pre-install,pre-upgrade",
 		"Role/astronomer-preflight":               "pre-install,pre-upgrade",
 		"RoleBinding/astronomer-preflight":        "pre-install,pre-upgrade",
+		"NetworkPolicy/astronomer-preflight":      "pre-install,pre-upgrade",
 	}
 	seen := map[string]bool{}
 
@@ -106,7 +138,7 @@ func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
 		key := fmt.Sprintf("%s/%s", stringValue(doc["kind"]), name)
 		want, ok := allowedHooks[key]
 		if !ok {
-			t.Fatalf("only short-lived migration/preflight Jobs may use Helm hooks; found hook on %s", key)
+			t.Fatalf("only lifecycle Jobs and dedicated preflight prerequisites may use Helm hooks; found hook on %s", key)
 		}
 		if hook != want {
 			t.Fatalf("%s hook mismatch: got %q, want %q", key, hook, want)
@@ -119,6 +151,562 @@ func TestChartHooksAreLimitedToShortLivedJobs(t *testing.T) {
 			t.Fatalf("expected Helm hook resource %s was not rendered", key)
 		}
 	}
+}
+
+func TestPreflightOwnershipAndOrderingAreIsolatedByDeploymentEngine(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	argoConfig := findRenderedDoc(t, docs, "ConfigMap", "argocd-cm")
+	argoConfigData := nestedMap(argoConfig, "data")
+	if globalIgnore, found := argoConfigData["resource.customizations.ignoreResourceUpdates.all"]; found {
+		t.Fatalf("Argo global status-update suppression = %q, want key omitted so hook Job completion is observed", stringValue(globalIgnore))
+	}
+
+	for _, target := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "ServiceAccount", name: "astronomer-preflight"},
+		{kind: "ClusterRole", name: "astronomer-preflight"},
+		{kind: "ClusterRoleBinding", name: "astronomer-preflight"},
+		{kind: "Role", name: "astronomer-preflight"},
+		{kind: "RoleBinding", name: "astronomer-preflight"},
+		{kind: "NetworkPolicy", name: "astronomer-preflight"},
+		{kind: "Job", name: "astronomer-preflight"},
+	} {
+		doc := findRenderedDoc(t, docs, target.kind, target.name)
+		annotations := nestedMap(doc, "metadata", "annotations")
+		if got := stringValue(annotations["argocd.argoproj.io/hook"]); got != "Skip" {
+			t.Errorf("Helm-owned %s/%s Argo hook = %q, want Skip", target.kind, target.name, got)
+		}
+	}
+
+	for _, target := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "ServiceAccount", name: "astronomer-preflight-argocd"},
+		{kind: "ClusterRole", name: "astronomer-preflight-argocd"},
+		{kind: "ClusterRoleBinding", name: "astronomer-preflight-argocd"},
+		{kind: "Role", name: "astronomer-preflight-argocd"},
+		{kind: "RoleBinding", name: "astronomer-preflight-argocd"},
+		{kind: "NetworkPolicy", name: "astronomer-preflight-argocd"},
+	} {
+		doc := findRenderedDoc(t, docs, target.kind, target.name)
+		annotations := nestedMap(doc, "metadata", "annotations")
+		if got := stringValue(annotations["argocd.argoproj.io/sync-wave"]); got != "-5" {
+			t.Errorf("Argo prerequisite %s/%s wave = %q, want -5 (same wave as Job)", target.kind, target.name, got)
+		}
+		for _, forbidden := range []string{"helm.sh/hook", "argocd.argoproj.io/hook", "argocd.argoproj.io/hook-delete-policy"} {
+			if got := stringValue(annotations[forbidden]); got != "" {
+				t.Errorf("Argo prerequisite %s/%s has lifecycle annotation %s=%q", target.kind, target.name, forbidden, got)
+			}
+		}
+	}
+
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight-argocd")
+	annotations := nestedMap(job, "metadata", "annotations")
+	wantAnnotations := map[string]string{
+		"helm.sh/hook":                          "test",
+		"argocd.argoproj.io/hook":               "Sync",
+		"argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded",
+		"argocd.argoproj.io/sync-wave":          "-5",
+	}
+	for key, want := range wantAnnotations {
+		if got := stringValue(annotations[key]); got != want {
+			t.Errorf("Argo preflight Job %s = %q, want %q", key, got, want)
+		}
+	}
+	if got := stringAt(podSpecFor(job), "serviceAccountName"); got != "astronomer-preflight-argocd" {
+		t.Errorf("Argo preflight Job serviceAccountName = %q, want astronomer-preflight-argocd", got)
+	}
+}
+
+func TestPreflightHookRBACSurvivesUntilJobAndIsLeastPrivilege(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight")
+	jobAnnotations := nestedMap(job, "metadata", "annotations")
+	if got := stringValue(jobAnnotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+		t.Fatalf("preflight Job hook = %q, want pre-install,pre-upgrade", got)
+	}
+	if got := stringValue(jobAnnotations["helm.sh/hook-weight"]); got != "-5" {
+		t.Fatalf("preflight Job hook weight = %q, want -5", got)
+	}
+	jobWeight, err := strconv.Atoi(stringValue(jobAnnotations["helm.sh/hook-weight"]))
+	if err != nil {
+		t.Fatalf("parse preflight Job hook weight: %v", err)
+	}
+	if got := stringValue(jobAnnotations["helm.sh/hook-delete-policy"]); got != "before-hook-creation" {
+		t.Fatalf("preflight Job delete policy = %q, want before-hook-creation", got)
+	}
+	if got := stringAt(podSpecFor(job), "serviceAccountName"); got != "astronomer-preflight" {
+		t.Fatalf("preflight Job serviceAccountName = %q, want astronomer-preflight", got)
+	}
+
+	for _, target := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "ServiceAccount", name: "astronomer-preflight"},
+		{kind: "ClusterRole", name: "astronomer-preflight"},
+		{kind: "ClusterRoleBinding", name: "astronomer-preflight"},
+		{kind: "Role", name: "astronomer-preflight"},
+		{kind: "RoleBinding", name: "astronomer-preflight"},
+	} {
+		doc := findRenderedDoc(t, docs, target.kind, target.name)
+		annotations := nestedMap(doc, "metadata", "annotations")
+		if got := stringValue(annotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+			t.Errorf("%s/%s hook = %q, want pre-install,pre-upgrade", target.kind, target.name, got)
+		}
+		if got := stringValue(annotations["helm.sh/hook-weight"]); got != "-10" {
+			t.Errorf("%s/%s hook weight = %q, want -10", target.kind, target.name, got)
+		}
+		prerequisiteWeight, err := strconv.Atoi(stringValue(annotations["helm.sh/hook-weight"]))
+		if err != nil {
+			t.Errorf("parse %s/%s hook weight: %v", target.kind, target.name, err)
+		} else if prerequisiteWeight >= jobWeight {
+			t.Errorf("%s/%s hook weight %d must run before Job weight %d", target.kind, target.name, prerequisiteWeight, jobWeight)
+		}
+		policy := stringValue(annotations["helm.sh/hook-delete-policy"])
+		if policy != "before-hook-creation" {
+			t.Errorf("%s/%s delete policy = %q, want exactly before-hook-creation", target.kind, target.name, policy)
+		}
+		if strings.Contains(policy, "hook-succeeded") || strings.Contains(policy, "hook-failed") {
+			t.Errorf("%s/%s policy %q can delete prerequisite RBAC before the Job runs", target.kind, target.name, policy)
+		}
+	}
+
+	clusterRole := findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight")
+	assertExactRBACRules(t, clusterRole, []rbacRuleContract{
+		{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, resourceNames: []string{"gateways.gateway.networking.k8s.io", "httproutes.gateway.networking.k8s.io"}, verbs: []string{"get"}},
+		{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, resourceNames: []string{"nginx"}, verbs: []string{"get"}},
+	})
+	role := findRenderedDoc(t, docs, "Role", "astronomer-preflight")
+	if got := stringAt(role, "metadata", "namespace"); got != "default" {
+		t.Fatalf("preflight Role namespace = %q, want rendered release namespace default", got)
+	}
+	assertExactRBACRules(t, role, nil)
+	assertExactPreflightBinding(t, findRenderedDoc(t, docs, "ClusterRoleBinding", "astronomer-preflight"), "ClusterRole")
+	assertExactPreflightBinding(t, findRenderedDoc(t, docs, "RoleBinding", "astronomer-preflight"), "Role")
+}
+
+func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
+	t.Run("cert-manager only", func(t *testing.T) {
+		docs := parseRenderedDocs(t, helmTemplate(t, "gateway.enabled=false", "tls.source=selfSigned"))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, resourceNames: []string{"issuers.cert-manager.io", "certificates.cert-manager.io"}, verbs: []string{"get"}},
+		})
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+	})
+
+	t.Run("cert-manager explicit opt out", func(t *testing.T) {
+		sets := []string{"gateway.enabled=false", "tls.source=selfSigned", "tls.requireCertManager=false"}
+		docs := parseRenderedDocs(t, helmTemplate(t, sets...))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+		script := renderedPreflightScript(t, nil, sets...)
+		if strings.Contains(script, `kube_read "cert-manager CRD`) {
+			t.Fatal("tls.requireCertManager=false rendered cert-manager API reads")
+		}
+	})
+
+	t.Run("production references and external PVC", func(t *testing.T) {
+		prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+		sets := append([]string{}, productionWiringSets...)
+		sets = append(sets,
+			"managementBackup.enabled=false",
+			"tls.additionalTrustedCAs.enabled=true",
+			"tls.additionalTrustedCAs.existingSecret=trusted-ca",
+		)
+		docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{prodValues}, sets...))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{"apiextensions.k8s.io"}, resources: []string{"customresourcedefinitions"}, resourceNames: []string{"gateways.gateway.networking.k8s.io", "httproutes.gateway.networking.k8s.io"}, verbs: []string{"get"}},
+			{apiGroups: []string{"gateway.networking.k8s.io"}, resources: []string{"gatewayclasses"}, resourceNames: []string{"nginx"}, verbs: []string{"get"}},
+		})
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"persistentvolumeclaims"}, resourceNames: []string{"data-astronomer-postgres-0"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config"}, verbs: []string{"get"}},
+		})
+	})
+
+	t.Run("no live reads", func(t *testing.T) {
+		docs := parseRenderedDocs(t, helmTemplate(t, "gateway.enabled=false", "tls.source=none"))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
+	})
+
+	t.Run("Dex cutover exact Secret and legacy ConfigMap", func(t *testing.T) {
+		docs := parseRenderedDocs(t, helmTemplate(t,
+			"gateway.enabled=false", "tls.source=none", "dex.enabled=true",
+			"dex.migration.phase=cutover", "dex.runtimeSecretName=dex-runtime-contract"))
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
+		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
+			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"dex-runtime-contract"}, verbs: []string{"get"}},
+			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config-retained"}, verbs: []string{"get"}},
+		})
+	})
+}
+
+func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	for _, kind := range []string{"ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding"} {
+		doc := findRenderedDoc(t, docs, kind, "astronomer-preflight")
+		annotations := nestedMap(doc, "metadata", "annotations")
+		// Stable names plus both lifecycle events let Helm remove any RBAC left by
+		// the current release and recreate it from the upgrading chart. The exact
+		// policy is critical: adding hook-succeeded reintroduces the race with the
+		// later-weighted Job.
+		if got := stringValue(annotations["helm.sh/hook"]); got != "pre-install,pre-upgrade" {
+			t.Errorf("%s upgrade hook = %q, want pre-install,pre-upgrade", kind, got)
+		}
+		if got := stringValue(annotations["helm.sh/hook-delete-policy"]); got != "before-hook-creation" {
+			t.Errorf("%s upgrade replacement policy = %q, want before-hook-creation", kind, got)
+		}
+	}
+
+	disabledDocs := parseRenderedDocs(t, helmTemplate(t, "preflight.enabled=false"))
+	for _, kind := range []string{"Job", "ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding", "NetworkPolicy"} {
+		for _, doc := range disabledDocs {
+			if stringValue(doc["kind"]) == kind && stringAt(doc, "metadata", "name") == "astronomer-preflight" {
+				t.Errorf("preflight.enabled=false unexpectedly rendered %s/astronomer-preflight", kind)
+			}
+		}
+	}
+}
+
+func TestPreflightKubernetesReadsUseBoundedExplicitSemantics(t *testing.T) {
+	defaultScript := renderedPreflightScript(t, nil)
+	for _, want := range []string{
+		"PREFLIGHT_READ_ATTEMPTS=10",
+		"PREFLIGHT_READ_DELAY_SECONDS=1",
+		"kube_read()",
+		"return 0",
+		"return 1",
+		"return 2",
+		"Kubernetes API read not ready",
+		"Check preflight ServiceAccount RBAC propagation",
+	} {
+		if !strings.Contains(defaultScript, want) {
+			t.Fatalf("preflight script missing bounded-read contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"kubectl get crd gateways.gateway.networking.k8s.io >/dev/null 2>&1",
+		"kubectl get pvc \"${legacy_pvc}\" -n \"default\" >/dev/null 2>&1",
+		"2>/dev/null | base64 -d 2>/dev/null",
+	} {
+		if strings.Contains(defaultScript, forbidden) {
+			t.Fatalf("preflight script still suppresses kubectl diagnostics via %q", forbidden)
+		}
+	}
+
+	certScript := renderedPreflightScript(t, nil, "gateway.enabled=false", "tls.source=selfSigned")
+	for _, want := range []string{
+		`kube_read "cert-manager CRD issuers.cert-manager.io"`,
+		`kube_read "cert-manager CRD certificates.cert-manager.io"`,
+	} {
+		if !strings.Contains(certScript, want) {
+			t.Fatalf("cert-manager preflight does not use generic bounded read: missing %q", want)
+		}
+	}
+
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+	prodSets := append([]string{}, productionWiringSets...)
+	prodSets = append(prodSets,
+		"managementBackup.enabled=false",
+		"tls.additionalTrustedCAs.enabled=true",
+		"tls.additionalTrustedCAs.existingSecret=trusted-ca",
+	)
+	prodScript := renderedPreflightScript(t, []string{prodValues}, prodSets...)
+	for _, want := range []string{
+		`kube_read "additional trusted CA Secret trusted-ca"`,
+		`kube_read "Postgres DSN Secret ${dsn_secret} key ${dsn_key}"`,
+		`kube_read "legacy bundled Postgres PVC ${legacy_pvc}"`,
+	} {
+		if !strings.Contains(prodScript, want) {
+			t.Fatalf("production preflight does not use generic bounded read: missing %q", want)
+		}
+	}
+	if strings.Contains(prodScript, "set -x") {
+		t.Fatal("preflight script must not enable shell tracing around DSN material")
+	}
+}
+
+func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
+	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
+	prodSets := append([]string{}, productionWiringSets...)
+	prodSets = append(prodSets, "managementBackup.enabled=false", "dex.enabled=false", "config.auth.localPasswordOnly=true")
+
+	tests := []struct {
+		name        string
+		valueFiles  []string
+		sets        []string
+		mode        string
+		wantSuccess bool
+		wantText    string
+		wantCalls   int
+	}{
+		{
+			name:        "authorization propagation eventually succeeds",
+			mode:        "eventual",
+			wantSuccess: true,
+			wantText:    "Gateway API prerequisites found.",
+			wantCalls:   5,
+		},
+		{
+			name:      "permanent forbidden fails closed after bound",
+			mode:      "forbidden",
+			wantText:  "Kubernetes API read failed for Gateway API CRD gateways.gateway.networking.k8s.io after 10 attempts.",
+			wantCalls: 10,
+		},
+		{
+			name:      "transport failure fails closed after bound",
+			mode:      "transport",
+			wantText:  "Unable to connect to the server",
+			wantCalls: 10,
+		},
+		{
+			name:      "actual missing Gateway CRD is terminal absence",
+			mode:      "gateway-missing",
+			wantText:  "Gateway API CRD gateways.gateway.networking.k8s.io is missing.",
+			wantCalls: 1,
+		},
+		{
+			name:      "actual missing cert-manager CRD",
+			sets:      []string{"gateway.enabled=false", "tls.source=selfSigned"},
+			mode:      "cert-missing",
+			wantText:  "requires cert-manager",
+			wantCalls: 1,
+		},
+		{
+			name:      "trusted CA Secret forbidden is not missing",
+			sets:      []string{"gateway.enabled=false", "tls.source=none", "tls.additionalTrustedCAs.enabled=true", "tls.additionalTrustedCAs.existingSecret=trusted-ca"},
+			mode:      "trusted-forbidden",
+			wantText:  "could not verify additional trusted CA Secret trusted-ca because the Kubernetes API read never became usable.",
+			wantCalls: 10,
+		},
+		{
+			name:        "legacy PVC genuine absence is allowed",
+			sets:        []string{"gateway.enabled=false", "tls.source=none", "postgres.bundled.enabled=false", "postgres.external.dsn=postgres://user:password@db.example.invalid/astronomer?sslmode=require"},
+			mode:        "legacy-missing",
+			wantSuccess: true,
+			wantText:    "No legacy bundled Postgres PVC detected; preflight passes.",
+			wantCalls:   1,
+		},
+		{
+			name:      "legacy PVC forbidden fails closed",
+			sets:      []string{"gateway.enabled=false", "tls.source=none", "postgres.bundled.enabled=false", "postgres.external.dsn=postgres://user:password@db.example.invalid/astronomer?sslmode=require"},
+			mode:      "legacy-forbidden",
+			wantText:  "could not determine whether legacy bundled Postgres PVC",
+			wantCalls: 10,
+		},
+		{
+			name:       "DSN Secret forbidden is not missing",
+			valueFiles: []string{prodValues},
+			sets:       prodSets,
+			mode:       "dsn-forbidden",
+			wantText:   "could not read postgres DSN secret/astronomer-postgres-dsn because the Kubernetes API read never became usable.",
+			wantCalls:  13,
+		},
+		{
+			name:        "DSN Secret success validates TLS without disclosure",
+			valueFiles:  []string{prodValues},
+			sets:        prodSets,
+			mode:        "dsn-success",
+			wantSuccess: true,
+			wantText:    "Production Postgres DSN TLS check passed.",
+			wantCalls:   5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			script := renderedPreflightScript(t, tt.valueFiles, tt.sets...)
+			output, calls, err := runRenderedPreflightScript(t, script, tt.mode)
+			if tt.wantSuccess && err != nil {
+				t.Fatalf("preflight unexpectedly failed: %v\n%s", err, output)
+			}
+			if !tt.wantSuccess && err == nil {
+				t.Fatalf("preflight unexpectedly passed:\n%s", output)
+			}
+			if !strings.Contains(output, tt.wantText) {
+				t.Fatalf("preflight output missing %q:\n%s", tt.wantText, output)
+			}
+			if calls != tt.wantCalls {
+				t.Fatalf("kubectl calls = %d, want %d; output:\n%s", calls, tt.wantCalls, output)
+			}
+			if strings.Contains(output, "user:password") {
+				t.Fatalf("preflight output disclosed DSN material:\n%s", output)
+			}
+		})
+	}
+}
+
+func renderedPreflightScript(t *testing.T, valueFiles []string, sets ...string) string {
+	t.Helper()
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, valueFiles, sets...))
+	job := findRenderedDoc(t, docs, "Job", "astronomer-preflight")
+	container := findContainer(t, podSpecFor(job), "containers", "preflight")
+	command := stringListValue(container["command"])
+	if len(command) != 3 || command[0] != "/bin/sh" || command[1] != "-ec" {
+		t.Fatalf("preflight command = %v, want /bin/sh -ec <script>", command)
+	}
+	return command[2]
+}
+
+func runRenderedPreflightScript(t *testing.T, script, mode string) (string, int, error) {
+	t.Helper()
+	binDir := t.TempDir()
+	countFile := filepath.Join(binDir, "kubectl-count")
+	kubectl := `#!/bin/sh
+count=0
+if [ -f "$FAKE_KUBECTL_COUNT_FILE" ]; then count=$(cat "$FAKE_KUBECTL_COUNT_FILE"); fi
+count=$((count + 1))
+printf '%s' "$count" >"$FAKE_KUBECTL_COUNT_FILE"
+args="$*"
+not_found() { echo "Error from server (NotFound): requested object not found" >&2; exit 1; }
+forbidden() { echo "Error from server (Forbidden): serviceaccount astronomer-preflight cannot get requested resource" >&2; exit 1; }
+transport() { echo "Unable to connect to the server: dial tcp: connection refused" >&2; exit 1; }
+case "$FAKE_KUBECTL_MODE" in
+  eventual)
+    if [ "$count" -le 2 ]; then forbidden; fi
+    ;;
+  forbidden) forbidden ;;
+  transport) transport ;;
+  gateway-missing)
+    echo "$args" | grep -q 'get crd gateways.gateway.networking.k8s.io' && not_found
+    ;;
+  cert-missing)
+    echo "$args" | grep -q 'get crd issuers.cert-manager.io' && not_found
+    ;;
+  trusted-forbidden)
+    echo "$args" | grep -q 'get secret trusted-ca' && forbidden
+    ;;
+  dsn-forbidden)
+    echo "$args" | grep -q 'get secret astronomer-postgres-dsn' && forbidden
+    ;;
+  dsn-success)
+    echo "$args" | grep -q 'get pvc data-astronomer-postgres-0' && not_found
+    ;;
+  legacy-missing)
+    echo "$args" | grep -q 'get pvc data-astronomer-postgres-0' && not_found
+    ;;
+  legacy-forbidden)
+    echo "$args" | grep -q 'get pvc data-astronomer-postgres-0' && forbidden
+    ;;
+esac
+case "$args" in
+  *jsonpath=*) printf '%s' 'postgres://user:password@db.example.invalid/astronomer?sslmode=require' | base64 ;;
+  *) echo 'resource/example' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(binDir, "kubectl"), []byte(kubectl), 0o755); err != nil {
+		t.Fatalf("write fake kubectl: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "sleep"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake sleep: %v", err)
+	}
+	cmd := exec.Command("/bin/sh", "-ec", script)
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"FAKE_KUBECTL_MODE="+mode,
+		"FAKE_KUBECTL_COUNT_FILE="+countFile,
+	)
+	output, err := cmd.CombinedOutput()
+	calls := 0
+	if raw, readErr := os.ReadFile(countFile); readErr == nil {
+		calls, _ = strconv.Atoi(string(raw))
+	}
+	return string(output), calls, err
+}
+
+type rbacRuleContract struct {
+	apiGroups     []string
+	resources     []string
+	resourceNames []string
+	verbs         []string
+}
+
+func assertExactRBACRules(t *testing.T, role renderedDoc, want []rbacRuleContract) {
+	t.Helper()
+	rawRules, ok := role["rules"].([]any)
+	if !ok {
+		t.Fatalf("%s/%s rules are missing or malformed", stringValue(role["kind"]), stringAt(role, "metadata", "name"))
+	}
+	if len(rawRules) != len(want) {
+		t.Fatalf("%s/%s has %d rules, want exactly %d", stringValue(role["kind"]), stringAt(role, "metadata", "name"), len(rawRules), len(want))
+	}
+	for i, rawRule := range rawRules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			t.Fatalf("%s/%s rule %d is malformed", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i)
+		}
+		expectedFields := map[string][]string{
+			"apiGroups":     want[i].apiGroups,
+			"resources":     want[i].resources,
+			"resourceNames": want[i].resourceNames,
+			"verbs":         want[i].verbs,
+		}
+		for field := range rule {
+			if _, allowed := expectedFields[field]; !allowed {
+				t.Errorf("%s/%s rule %d has unexpected field %q", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i, field)
+			}
+		}
+		for field, expected := range expectedFields {
+			got := stringListValue(rule[field])
+			if !reflect.DeepEqual(got, expected) {
+				t.Errorf("%s/%s rule %d %s = %v, want exactly %v", stringValue(role["kind"]), stringAt(role, "metadata", "name"), i, field, got, expected)
+			}
+		}
+	}
+}
+
+func assertExactPreflightBinding(t *testing.T, binding renderedDoc, roleKind string) {
+	t.Helper()
+	if roleKind == "Role" {
+		if got := stringAt(binding, "metadata", "namespace"); got != "default" {
+			t.Errorf("RoleBinding/astronomer-preflight namespace = %q, want rendered release namespace default", got)
+		}
+	}
+	roleRef := nestedMap(binding, "roleRef")
+	if got := stringValue(roleRef["apiGroup"]); got != "rbac.authorization.k8s.io" {
+		t.Errorf("%s roleRef.apiGroup = %q, want rbac.authorization.k8s.io", stringValue(binding["kind"]), got)
+	}
+	if got := stringValue(roleRef["kind"]); got != roleKind {
+		t.Errorf("%s roleRef.kind = %q, want %q", stringValue(binding["kind"]), got, roleKind)
+	}
+	if got := stringValue(roleRef["name"]); got != "astronomer-preflight" {
+		t.Errorf("%s roleRef.name = %q, want astronomer-preflight", stringValue(binding["kind"]), got)
+	}
+	rawSubjects, ok := binding["subjects"].([]any)
+	if !ok || len(rawSubjects) != 1 {
+		t.Fatalf("%s subjects = %v, want exactly one ServiceAccount subject", stringValue(binding["kind"]), binding["subjects"])
+	}
+	subject, ok := rawSubjects[0].(map[string]any)
+	if !ok {
+		t.Fatalf("%s subject is malformed", stringValue(binding["kind"]))
+	}
+	if got := stringValue(subject["kind"]); got != "ServiceAccount" {
+		t.Errorf("%s subject kind = %q, want ServiceAccount", stringValue(binding["kind"]), got)
+	}
+	if got := stringValue(subject["name"]); got != "astronomer-preflight" {
+		t.Errorf("%s subject name = %q, want astronomer-preflight", stringValue(binding["kind"]), got)
+	}
+	if got := stringValue(subject["namespace"]); got != "default" {
+		t.Errorf("%s subject namespace = %q, want rendered release namespace default", stringValue(binding["kind"]), got)
+	}
+}
+
+func stringListValue(value any) []string {
+	raw, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		result = append(result, stringValue(item))
+	}
+	return result
 }
 
 func TestServiceAccountAndRuntimeRBACAreManagedReleaseResources(t *testing.T) {
@@ -491,13 +1079,23 @@ func TestSchemaFloorTracksMaxMigration(t *testing.T) {
 func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
 	root := repoRoot(t)
 
-	// The chart renders the canonical name.
+	// The chart writes the configured canonical key and workloads reference that
+	// exact key from the selected existing Secret.
 	chartSecret, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "secret.yaml"))
 	if err != nil {
 		t.Fatalf("read chart secret.yaml: %v", err)
 	}
-	if !strings.Contains(string(chartSecret), "ASTRONOMER_ENCRYPTION_KEY:") {
-		t.Fatal("chart templates/secret.yaml no longer renders ASTRONOMER_ENCRYPTION_KEY")
+	if !strings.Contains(string(chartSecret), `.Values.secrets.encryptionKeyKey`) {
+		t.Fatal("chart templates/secret.yaml no longer renders the configured encryption key name")
+	}
+	for _, template := range []string{"server-deployment.yaml", "worker-deployment.yaml"} {
+		raw, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", template))
+		if err != nil {
+			t.Fatalf("read %s: %v", template, err)
+		}
+		if !strings.Contains(string(raw), "ASTRONOMER_ENCRYPTION_KEY") || !strings.Contains(string(raw), `.Values.secrets.encryptionKeyKey`) {
+			t.Fatalf("%s must expose ASTRONOMER_ENCRYPTION_KEY from the configured Secret key", template)
+		}
 	}
 
 	// The DR runbook must not read/recreate the key under the bare name.

@@ -1,6 +1,19 @@
 [
   {
     "method": "GET",
+    "pattern": "/api/v1/*/admin/agents/cluster-admin-posture/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/admin/network-policy-templates/",
     "handler_owner": "handler.NetworkPolicyHandler",
     "surface": "administrative API",
@@ -1021,6 +1034,19 @@
     "security_registry_id": "catalog-installed-delete"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/installed/{id}/revisions/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/*/catalog/installed/{id}/rollback/",
     "handler_owner": "handler.CatalogHandler",
@@ -1498,6 +1524,35 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/apiserver-audit/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit policy or explicit audit-log route coverage",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/apiserver-audit/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the cluster:update RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
   },
   {
     "method": "GET",
@@ -2660,6 +2715,38 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "cluster-update"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/agent-token/revoke/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/agent-token/rotate/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
   },
   {
     "method": "GET",
@@ -4350,8 +4437,8 @@
     "pattern": "/api/v1/activity/",
     "handler_owner": "handler.ResourceHandler",
     "surface": "management API",
-    "auth": "router-level public read route; handler response must stay non-sensitive",
-    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
     "csrf": "not applicable: safe HTTP method",
     "audit": "read-side audit when policy matches; no request/response secrets recorded",
     "tests": [
@@ -4383,6 +4470,51 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/scim-tokens/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/scim-tokens/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Mint/revoke the static bearer tokens the /scim/v2 provisioning chain authenticates against; the routes sit inside the JWT auth chain and are superuser-gated inside the handler (RequireSuperuser), the same posture as /admin/settings. The plaintext token is returned once on create and only its SHA-256 hash is persisted, with create/revoke audited via RecordAuditFromRequest."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/scim-tokens/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Mint/revoke the static bearer tokens the /scim/v2 provisioning chain authenticates against; the routes sit inside the JWT auth chain and are superuser-gated inside the handler (RequireSuperuser), the same posture as /admin/settings. The plaintext token is returned once on create and only its SHA-256 hash is persisted, with create/revoke audited via RecordAuditFromRequest."
   },
   {
     "method": "GET",
@@ -4979,6 +5111,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/pods/watch/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{id}/registration/events/",
     "handler_owner": "handler.ClusterRegistrationHandler",
     "surface": "cluster registration server-sent events",
@@ -5145,6 +5290,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5162,6 +5312,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5179,6 +5334,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5196,6 +5356,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5213,6 +5378,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5230,6 +5400,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5247,6 +5422,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5264,6 +5444,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5281,6 +5466,11 @@
     "audit": "argocd.k8s_proxy.forwarded for mutating methods; downstream Kubernetes actions also visible through Argo/Application history",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestInternalArgoCDProxyRouterFailsClosedWithoutTokenQuerier",
+      "TestInternalArgoCDProxyRouterRejectsInvalidTokenForms",
+      "TestInternalArgoCDProxyRouterRejectsInactiveOrMismatchedRows",
+      "TestInternalArgoCDProxyRouterAcceptsValidClusterToken",
+      "TestInternalArgoCDProxyRouterRetainsRateLimit",
       "TestArgoCDInternalK8sProxyRequiresClusterScopedToken",
       "TestArgoCDInternalK8sProxyMutationsAreAudited",
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
@@ -5294,6 +5484,19 @@
     "surface": "management API",
     "auth": "router-level public read route; handler response must stay non-sensitive",
     "rbac": "not applicable for public read, or handler-specific read filtering",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/register/signed/{cluster_id}",
+    "handler_owner": "handler.ClusterRegistrationHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
     "csrf": "not applicable: safe HTTP method",
     "audit": "read-side audit when policy matches; no request/response secrets recorded",
     "tests": [
@@ -5443,8 +5646,8 @@
     "pattern": "/api/v1/users/",
     "handler_owner": "handler.ResourceHandler",
     "surface": "management API",
-    "auth": "router-level public read route; handler response must stay non-sensitive",
-    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
     "csrf": "not applicable: safe HTTP method",
     "audit": "read-side audit when policy matches; no request/response secrets recorded",
     "tests": [
@@ -5456,8 +5659,8 @@
     "pattern": "/api/v1/users/{id}/",
     "handler_owner": "handler.ResourceHandler",
     "surface": "management API",
-    "auth": "router-level public read route; handler response must stay non-sensitive",
-    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
     "csrf": "not applicable: safe HTTP method",
     "audit": "read-side audit when policy matches; no request/response secrets recorded",
     "tests": [

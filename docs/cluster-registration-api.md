@@ -99,7 +99,7 @@ curl -fsSL -X PUT .../clusters/$cluster_id/registration/options/ \
     -d '{"install_baseline": false}'
 
 # 3. Fetch the agent install manifest and apply it on the target.
-curl -fsSL .../clusters/$cluster_id/manifest/ | kubectl apply -f -
+curl -fsSL .../clusters/$cluster_id/manifest/ | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 
 # 4. Confirm - moves to awaiting_agent. The first heartbeat from the
 #    agent advances it to connected.
@@ -115,7 +115,11 @@ The agent manifest supports `viewer`, `operator`, `namespace-viewer`,
 `namespace-operator`, `custom`, and `admin` RBAC profiles. The selected profile
 is stored on the cluster as annotation
 `astronomer.io/agent-privilege-profile` before the manifest is rendered.
-Missing or invalid values default to `admin` for compatibility.
+Missing, blank, or invalid values fail closed to `viewer`. `admin` is available
+only through an explicit annotation or profile selection. Existing deployments
+that intentionally relied on the former implicit-admin behavior must set
+`admin` explicitly before upgrading; see the upgrade note in
+[agent-privilege-profiles.md](agent-privilege-profiles.md).
 
 Declarative operators can set `Cluster.spec.agent.privilegeProfile` directly or
 set `Cluster.spec.agent.profileRef` to a same-namespace `AgentProfile`.

@@ -43,6 +43,11 @@ type hubStatusProvider interface {
 	ConnectedClusters() []string
 }
 
+type securityCacheHealthProvider interface {
+	Healthy() bool
+	Started() bool
+}
+
 type readinessCheck struct {
 	OK                bool   `json:"ok"`
 	Error             string `json:"error,omitempty"`
@@ -63,6 +68,16 @@ type readinessHandler struct {
 	// expectedSchemaVersion is the migration floor /readyz requires (C-03).
 	// 0 disables the check.
 	expectedSchemaVersion int64
+	securityCache         securityCacheHealthProvider
+	securityCacheRequired bool
+}
+
+func (h *readinessHandler) withSecurityCacheCoordinator(provider securityCacheHealthProvider, required bool) *readinessHandler {
+	if h != nil {
+		h.securityCache = provider
+		h.securityCacheRequired = required
+	}
+	return h
 }
 
 func newReadinessHandler(dbChecker dbHealthChecker, queue queuePinger, hub hubStatusProvider) *readinessHandler {
@@ -188,6 +203,16 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.locatorError != "" {
 		checks["tunnel_locator"] = readinessCheck{OK: false, Error: h.locatorError}
 		statusCode = http.StatusServiceUnavailable
+	}
+
+	if h.securityCacheRequired {
+		ready := h.securityCache != nil && h.securityCache.Started() && h.securityCache.Healthy()
+		check := readinessCheck{OK: ready}
+		if !ready {
+			check.Error = "distributed security cache invalidation has not established healthy epoch state"
+			statusCode = http.StatusServiceUnavailable
+		}
+		checks["security_cache_invalidation"] = check
 	}
 
 	body := map[string]any{

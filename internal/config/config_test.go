@@ -1,6 +1,21 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
+)
+
+func TestLoadDefaultSessionTimeoutUsesCanonicalValue(t *testing.T) {
+	t.Setenv("SESSION_TIMEOUT_MINUTES", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.SessionTimeoutMinutes != sessionpolicy.DefaultMinutes {
+		t.Fatalf("SessionTimeoutMinutes = %d, want %d", cfg.SessionTimeoutMinutes, sessionpolicy.DefaultMinutes)
+	}
+}
 
 func TestLoadDefaultsWorkerMetricsAddr(t *testing.T) {
 	t.Setenv("SERVER_METRICS_ADDR", "")
@@ -15,6 +30,26 @@ func TestLoadDefaultsWorkerMetricsAddr(t *testing.T) {
 	}
 	if cfg.WorkerMetricsAddr != ":9090" {
 		t.Fatalf("WorkerMetricsAddr = %q, want %q", cfg.WorkerMetricsAddr, ":9090")
+	}
+}
+
+func TestEventRelayQueueCapacityConfig(t *testing.T) {
+	t.Setenv("EVENT_RELAY_QUEUE_CAPACITY", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EventRelayQueueCapacity != 1024 {
+		t.Fatalf("default EventRelayQueueCapacity = %d, want 1024", cfg.EventRelayQueueCapacity)
+	}
+
+	t.Setenv("EVENT_RELAY_QUEUE_CAPACITY", "2048")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EventRelayQueueCapacity != 2048 {
+		t.Fatalf("configured EventRelayQueueCapacity = %d, want 2048", cfg.EventRelayQueueCapacity)
 	}
 }
 

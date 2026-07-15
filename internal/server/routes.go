@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -1062,7 +1063,10 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		).
 			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
 		if deps.ArgoCDProxyTokens != nil {
-			// Dedicated machine-to-machine front door for built-in ArgoCD.
+			// Compatibility front door for installations whose explicit cluster
+			// proxy base URL still targets the public listener. New registrations
+			// default to :8090; retaining this route avoids breaking existing ArgoCD
+			// cluster Secrets. Both listeners enforce the identical machine identity.
 			// It deliberately does not accept user JWTs or user API tokens:
 			// the bearer token is cluster-scoped and validated by hash
 			// against argocd_cluster_proxy_tokens before the shared tunnel
@@ -1449,14 +1453,11 @@ func auditK8sProxySecretReads(auditWriter any) func(http.Handler) http.Handler {
 // NewInternalArgoCDProxyRouter builds the handler for the dedicated internal
 // ArgoCD->adopted-cluster k8s proxy listener (config.ArgoCDInternalProxyAddr).
 //
-// Unlike the public /api/v1/internal/argocd route, this listener is NOT
-// token-gated. ArgoCD's GitOps apply path (CreateNamespace, manifest apply,
-// even under ServerSideApply) sends requests with no Authorization header at
-// all — kubectl treats discovery/apply as anonymous — so a per-request token
-// can never gate it. Instead this runs on its own port that the public ingress
-// never maps and a NetworkPolicy restricts to the argocd namespace: network
-// isolation IS the authentication boundary. Routing uses the path cluster_id,
-// and mutations are still audited.
+// This listener has the same per-cluster token gate as the compatibility route
+// on the public listener. Bundled ArgoCD stores the token in the standard
+// cluster Secret config.bearerToken field and client-go sends it on discovery,
+// cache, and apply requests. The separate port and NetworkPolicy remain a
+// second, independent control; they are not the caller identity boundary.
 func NewInternalArgoCDProxyRouter(deps RouterDependencies) http.Handler {
 	r := chi.NewRouter()
 	r.Use(appmiddleware.NormalizeAPITrailingSlash)
@@ -1468,6 +1469,7 @@ func NewInternalArgoCDProxyRouter(deps RouterDependencies) http.Handler {
 	}
 	r.With(
 		rateLimit(appmiddleware.ClassArgoCDProxy),
+		requireArgoCDClusterProxyToken(deps.ArgoCDProxyTokens),
 		auditArgoCDK8sProxyMutations(deps.AuditWriter),
 	).HandleFunc("/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
 	return r
@@ -1846,8 +1848,9 @@ func requireArgoCDClusterProxyToken(queries ArgoCDClusterProxyTokenQuerier) func
 				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Valid ArgoCD cluster proxy token is required")
 				return
 			}
-			row, err := queries.GetArgoCDClusterProxyTokenByHash(r.Context(), iauth.HashArgoCDClusterProxyToken(token))
-			if err != nil || row.ClusterID != clusterID {
+			tokenHash := iauth.HashArgoCDClusterProxyToken(token)
+			row, err := queries.GetArgoCDClusterProxyTokenByHash(r.Context(), tokenHash)
+			if err != nil || !validArgoCDClusterProxyTokenRow(row, tokenHash, clusterID, time.Now()) {
 				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Invalid ArgoCD cluster proxy token")
 				return
 			}
@@ -1855,6 +1858,16 @@ func requireArgoCDClusterProxyToken(queries ArgoCDClusterProxyTokenQuerier) func
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func validArgoCDClusterProxyTokenRow(row sqlc.ArgocdClusterProxyToken, tokenHash string, clusterID uuid.UUID, now time.Time) bool {
+	if row.ClusterID != clusterID || row.Purpose != "argocd_cluster_proxy" || row.IsRevoked {
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(row.TokenHash), []byte(tokenHash)) != 1 {
+		return false
+	}
+	return !row.ExpiresAt.Valid || row.ExpiresAt.Time.After(now)
 }
 
 func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {

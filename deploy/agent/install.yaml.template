@@ -84,15 +84,18 @@ subjects:
     namespace: astronomer-system
 
 ---
-# Namespaced Role: the agent persists its own rotated auth token into a single
-# Secret in its own namespace. This is the agent's operational need, not cluster
-# observation, so it is granted for EVERY profile — including read-only viewer,
-# whose ClusterRole intentionally has no secrets access. Scoped to exactly that
-# one Secret name, so it never widens into reading other secrets.
+# Namespaced Role: all credential access is exact-name scoped. The installer
+# pre-creates the empty identity container because Kubernetes RBAC cannot scope
+# Secret CREATE by name. The agent reads bootstrap/new/legacy identity and may
+# patch only the active identity plus the legacy object during annotation scrub.
+# Credential and CA deletion is exact-name scoped for full decommission. The
+# AGENT-02 Role name is distinct from the legacy Role so cached old manifests
+# cannot revoke current identity access. No create/update/list/watch or
+# arbitrary Secret access.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: astronomer-agent-token
+  name: astronomer-agent-identity
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -101,13 +104,21 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: ["astronomer-agent-token"]
-    verbs: ["get", "update", "patch"]
+    resourceNames: ["astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token", "astronomer-agent-ca"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["astronomer-agent-identity", "astronomer-agent-token"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["astronomer-agent-registration-token", "astronomer-agent-identity", "astronomer-agent-token", "astronomer-agent-ca"]
+    verbs: ["delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: astronomer-agent-token
+  name: astronomer-agent-identity
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -116,7 +127,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: astronomer-agent-token
+  name: astronomer-agent-identity
 subjects:
   - kind: ServiceAccount
     name: {{AGENT_SERVICE_ACCOUNT_NAME}}
@@ -474,24 +485,16 @@ data:
   PRIVILEGE_PROFILE: "{{PRIVILEGE_PROFILE}}"
 
 ---
-# Secret for the registration token.
-#
-# RE-APPLY CAVEAT (L4/L17):
-#   - The agent persists its rotated DURABLE token back into THIS Secret
-#     (token_persistence.go). Re-running `kubectl apply` of this manifest
-#     overwrites it with the (short-TTL) registration token again. This is
-#     self-healing — on the next CONNECT the server resolves a still-valid
-#     registration token back to the existing durable token — but a re-apply
-#     after the registration token has expired requires a fresh manifest. For a
-#     true bootstrap-vs-rotated split, manage this Secret out-of-band.
-#   - Prefer `kubectl apply --server-side`: client-side apply persists the
-#     plaintext token in the kubectl.kubernetes.io/last-applied-configuration
-#     annotation. Bounded by the 1h registration-token TTL + namespace RBAC, but
-#     server-side apply avoids it entirely.
+# Installer-owned, short-lived registration bootstrap. The agent never writes
+# this object. After adoption it patches only data.token on the distinct empty
+# `astronomer-agent-identity` container rendered below.
+# Reapplying this manifest can refresh bootstrap material but cannot overwrite or
+# delete a valid durable identity. Apply only with the documented server-side
+# field manager so plaintext is not copied into a last-applied annotation.
 apiVersion: v1
 kind: Secret
 metadata:
-  name: astronomer-agent-token
+  name: astronomer-agent-registration-token
   namespace: astronomer-system
   labels:
     app.kubernetes.io/name: astronomer-agent
@@ -500,6 +503,23 @@ metadata:
 type: Opaque
 stringData:
   token: "{{REGISTRATION_TOKEN}}"
+
+---
+# Installer-owned durable identity container. The agent owns only data.token via
+# exact-name server-side apply. This object intentionally contains NO token data,
+# so manifest reapply cannot overwrite active identity. The purpose label is the
+# fail-closed marker that permits startup to fall through to legacy/bootstrap.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: astronomer-agent-identity
+  namespace: astronomer-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: astronomer
+    astronomer.io/agent-credential-purpose: durable-identity-container
+type: Opaque
 
 ---
 # Secret holding the management server's CA bundle for tunnel CA pinning.
@@ -583,11 +603,18 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: CLUSTER_ID
-            - name: ASTRONOMER_AGENT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: astronomer-agent-token
-                  key: token
+            - name: ASTRONOMER_BOOTSTRAP_TOKEN_SECRET_NAME
+              value: "astronomer-agent-registration-token"
+            - name: ASTRONOMER_BOOTSTRAP_TOKEN_SECRET_KEY
+              value: "token"
+            - name: ASTRONOMER_IDENTITY_TOKEN_SECRET_NAME
+              value: "astronomer-agent-identity"
+            - name: ASTRONOMER_IDENTITY_TOKEN_SECRET_KEY
+              value: "token"
+            - name: ASTRONOMER_LEGACY_TOKEN_SECRET_NAME
+              value: "astronomer-agent-token"
+            - name: ASTRONOMER_LEGACY_TOKEN_SECRET_KEY
+              value: "token"
             - name: ASTRONOMER_HEALTH_ADDR
               valueFrom:
                 configMapKeyRef:

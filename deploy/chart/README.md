@@ -34,8 +34,8 @@ helm upgrade --install astronomer ./deploy/chart \
   --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
   --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
   --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
+  --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.43.0.1/32,10.40.0.0/16}' \
   --set bootstrap.email=admin@example.com \
-  --set dex.clientSecret=<random-dex-client-secret> \
   --set managementBackup.s3.bucket=my-astronomer-backups \
   --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
@@ -58,6 +58,8 @@ they're the bare minimum a production install needs:
   password-gated)
 - `networkPolicy.externalPostgresEgressCIDRs` and
   `networkPolicy.externalRedisEgressCIDRs` when NetworkPolicy is enabled
+- `networkPolicy.kubernetesAPIEgressCIDRs`, covering both the
+  `kubernetes.default` Service ClusterIP and API endpoint/node networks
 - `gateway.hosts` (at least one hostname)
 - `tls.source` — must be `selfSigned`, `letsEncrypt`, or `secret` (not `none`)
 - `tls.letsEncrypt.email` — required when `tls.source=letsEncrypt`
@@ -66,13 +68,27 @@ they're the bare minimum a production install needs:
 - `secrets.secretKey` — JWT signing material
 - `config.serverURL` — external URL; seeds the Argo self-management hostname
 - `bootstrap.email` — the bootstrap admin login email
-- `dex.clientSecret` when bundled Dex is enabled
+- the retained Dex runtime Secret is created metadata-only by the chart and is
+  populated from Fernet-encrypted DB state by `POST /api/v1/auth/dex/apply/`
 - `managementBackup.s3.bucket` and `managementBackup.s3.credentialsSecretRef.name`
   when the production backup CronJob is enabled
 - `managementBackup.encryptionKeyBackup.wrappingSecretRef.name` when backups are
   enabled (or set `encryptionKeyBackup.enabled=false` to explicitly opt out —
   restored Fernet data will be undecryptable on a new cluster)
 - `bootstrap.password` or `bootstrap.existingSecret` (GitOps pin; see below)
+
+### Known Helm 3.21 value-coalescing warning
+
+With exactly Helm v3.21.0 and bundled `argo-cd` 9.5.21, lint and template may
+emit `destination for argo-cd.server.env is a table`. Helm's nested-dependency
+evaluation temporarily compares Astronomer's map-shaped `server.env` with
+Argo CD's list-shaped value while inspecting `redis-ha`; the rendered
+Deployments remain correctly isolated. `TestServerEnvironmentValuesRemainIsolatedFromArgoCD`
+enforces that contract for default, custom, combined, and production values.
+
+Do not filter this warning. Chart maintainers must review this note and the
+contract test on the next Helm or Argo CD dependency change, or by 2026-10-09,
+whichever occurs first.
 
 ### Bootstrap credentials
 
@@ -282,11 +298,107 @@ This chart renders Gateway API resources, but it does not install a Gateway
 controller. That controller is treated as cluster infrastructure and should be
 bootstrapped separately.
 
+The supported local bootstrap treats NGINX Gateway Fabric `2.6.0` and the
+Gateway API standard CRD bundle `v1.4.1` as one tested compatibility unit; it
+never follows a moving `latest` URL or permits one side of that pair to drift.
+After installation (and also when prerequisite installation is skipped),
+`scripts/k3d-bootstrap.sh` waits for the `nginx` `GatewayClass` to report both
+`Accepted=True` and `SupportedVersion=True`. Both conditions must have observed
+the current `GatewayClass` generation. The check is bounded to 30 attempts and
+fails the bootstrap closed if the class is missing, rejected, unsupported, or
+stale. Operators that install the controller separately must apply the same
+pairing and generation-current condition contract before deploying Astronomer.
+
 Before install or upgrade, the preflight hook validates:
 
 - the `gateways.gateway.networking.k8s.io` CRD exists
 - the `httproutes.gateway.networking.k8s.io` CRD exists
 - `gateway.className` resolves to an existing `GatewayClass`
+
+The Job uses dedicated, least-privilege ServiceAccount and RBAC resources with
+separate ownership for each deployment engine. Helm creates its prerequisites
+at hook weight `-10`, before the Job at weight `-5`, and explicitly marks that
+set `argocd.argoproj.io/hook: Skip`. This retention is intentional: Helm
+considers non-Job hooks complete as soon as they are created, so a
+`hook-succeeded` policy would remove the ServiceAccount and RBAC before the Job
+could use them. On every subsequent Helm install or upgrade,
+`before-hook-creation` replaces the retained resources with the rules from the
+new chart before running the Job.
+
+Argo CD owns a distinct `-preflight-argocd` set. Its ServiceAccount, RBAC, and
+NetworkPolicy are ordinary persistent resources applied in sync wave `-5`
+alongside the validation `Sync` hook Job. Argo's deterministic kind ordering
+applies those prerequisites before Jobs, and the Job is removed after success.
+Using one wave avoids treating Kubernetes RBAC and NetworkPolicy kinds—which
+have no resource health assessment—as health gates for a later wave.
+The bundled Argo configuration also disables the upstream catch-all
+`ignoreResourceUpdates` rule for `/status`: otherwise a completed hook Job can
+remain logically `Running` until a hard reconciliation. Argo's targeted
+high-churn exclusions remain enabled.
+This keeps Argo from adopting and delete-before-creating Helm's named support
+hooks, while still blocking wave `0` release changes until validation passes.
+The Argo Job carries a Helm `test` annotation so Helm install/upgrade never
+executes both paths. The permissions in both sets are limited to `get` on the
+exact CRDs and GatewayClass enabled by the rendered configuration, the exact
+referenced namespace-local Secrets, and the exact legacy PVC name checked in
+external-Postgres mode. Rules for disabled checks are not rendered.
+
+When default deny is enabled, Helm's retained preflight NetworkPolicy is
+created at the same `-10` hook weight and replaced by stable name on every
+release; Argo's persistent policy is applied at wave `-5`. Each policy
+selects only the preflight pod labels and permits the flows that pod actually
+uses: DNS on TCP/UDP 53, external Postgres on the configured Postgres port when
+the database connectivity init container is enabled, and Kubernetes API access
+on TCP 443/6443. Development may source the narrow port rules from the legacy
+`externalEgressCIDRs` bucket. Production requires dedicated Postgres and API
+CIDRs and rejects `0.0.0.0/0` and `::/0` rather than falling back to unrestricted
+egress.
+
+The release-wide default-deny policy selects only the exact Astronomer pod
+ownership tuple (`app.kubernetes.io/name`, `app.kubernetes.io/instance`, and
+`app.kubernetes.io/part-of=astronomer`). It deliberately does not select
+unlabelled namespace pods, bundled Argo CD, or controller-generated Gateway
+data planes such as `astronomer-nginx`. Those independently managed workloads
+must retain their controller-defined network contract; a negative `NotIn`
+selector is unsafe because Kubernetes also matches pods where the label is
+absent.
+
+NetworkPolicy handling of Kubernetes Service DNAT varies by CNI. Populate
+`kubernetesAPIEgressCIDRs` with CIDR coverage for both the `kubernetes.default`
+Service ClusterIP and every API endpoint or node network the Service can
+translate to. One appropriately scoped CIDR may cover both; two CIDRs can still
+be wrong. Helm cannot inspect live addresses to prove semantic coverage. Port
+443 covers evaluation before DNAT; port 6443 covers the common post-DNAT API
+endpoint. Validate the CIDRs against the production cluster before upgrading.
+
+The Dex legacy prepare and cutover-cleanup Jobs are also selected by the
+release default-deny policy. Each has an exact Astronomer ownership tuple and a
+dedicated component label, plus a phase-specific hook NetworkPolicy created
+before its Job. Those policies permit only DNS on TCP/UDP 53 and Kubernetes
+API access on TCP 443/6443 to the de-duplicated union of
+`kubernetesAPIEgressCIDRs` and the legacy development
+`externalEgressCIDRs`. They render for the active migration phase even when the
+new values disable NetworkPolicy or default deny, because the previous
+release's default-deny can still select pre-upgrade hooks and can remain through
+Argo PostSync pruning. This makes the disable transition safe without opening
+general egress. The cleanup ServiceAccount, Role, RoleBinding, and policy are
+retained until replacement at weight / sync wave `5`; only the later Job at
+`10` uses success deletion. Adding `hook-succeeded` to a non-Job prerequisite
+would let Helm or Argo remove it before the Job starts. Production must retain
+valid API CIDRs through both migration releases; Helm validates that the list
+is non-empty in the normal production/default-deny posture, but it cannot prove
+that configured CIDRs cover live pre- and post-DNAT destinations.
+
+Kubernetes authorization caches can take a few seconds to observe newly
+created hook RBAC. To avoid reporting that propagation window as a missing
+prerequisite, every preflight API read is bounded to 10 attempts, one second
+apart. Only an explicit Kubernetes `NotFound` response means an object is
+absent. Authorization failures, API discovery failures, and transport errors
+retain their server diagnostic, are retried, and then fail closed as an API
+read failure. These semantics apply to Gateway and cert-manager CRDs,
+GatewayClasses, referenced Secrets, and the legacy Postgres PVC. Genuine PVC
+absence is the only optional-object case. Secret data, including the Postgres
+DSN, is never printed in retry or failure output.
 
 If any of those checks fail, Helm stops with a clear error instead of creating
 an unusable release. The intended model is:

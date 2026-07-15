@@ -30,7 +30,24 @@
 
 # syntax=docker/dockerfile:1.7
 
+FROM golang:1.25-alpine@sha256:8d95af53d0d58e1759ddb4028285d9b1239067e4fbf4f544618cad0f60fbc354 AS dex-validator
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
+COPY internal/dexconfig ./internal/dexconfig
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
+
 FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d AS base
+
+ARG VERSION=0.3.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}"
 
 # kubectl version is pinned in lockstep with the bundled control-plane
 # minor. Bump in the same commit that bumps the k8s.io/* dependencies
@@ -53,6 +70,15 @@ RUN apk add --no-cache \
     # KUBECTL_VERSION fails the build instead of silently shipping
     # whatever HTTP returned (e.g. a 404 HTML page).
     && /usr/local/bin/kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
+
+COPY --from=dex-validator /out/dexconfigcheck /usr/local/bin/dexconfigcheck
+
+# Preflight has no runtime downloads. jq and GNU base64 are declared above;
+# dexconfigcheck is the first-party bounded YAML/semantic validator. These
+# probes make image construction fail if the offline contract drifts.
+RUN jq --version | grep -Eq '^jq-1\.[0-9]+' \
+    && base64 --version | grep -q 'GNU coreutils' \
+    && test "$(dexconfigcheck --version)" = "2"
 
 # Drop a tiny .bashrc that gives the shell session a recognisable prompt
 # so operators know they're inside an Astronomer-managed pod (and not

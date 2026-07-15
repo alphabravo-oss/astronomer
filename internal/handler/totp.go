@@ -382,7 +382,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 	// session pair and log them in — otherwise they'd complete enrollment and
 	// still be stuck at a login wall.
 	if middleware.IsTOTPEnrollOnlyAuth(r.Context()) {
-		accessToken, refreshToken, terr := h.jwt.GenerateTokenPair(userID)
+		accessToken, refreshToken, terr := h.jwt.GenerateTokenPairContext(r.Context(), userID)
 		if terr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate session")
 			return
@@ -709,7 +709,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 
 	// Successful verify — mint the real session pair and (best-effort)
 	// touch last_used_at.
-	accessToken, refreshToken, err := h.jwt.GenerateTokenPair(userID)
+	accessToken, refreshToken, err := h.jwt.GenerateTokenPairContext(r.Context(), userID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
 		return

@@ -91,7 +91,14 @@ type SCIMHandler struct {
 	// validation cache when a SCIM deactivate/deprovision revokes a
 	// user's sessions. Nil-safe: revokeUserSessions handles a nil
 	// manager, so an unwired install still stamps the DB token cutoff.
-	jwt *auth.JWTManager
+	jwt       *auth.JWTManager
+	rbacCache SSORBACInvalidator
+}
+
+func (h *SCIMHandler) SetRBACCacheInvalidator(invalidator SSORBACInvalidator) {
+	if h != nil {
+		h.rbacCache = invalidator
+	}
 }
 
 // NewSCIMHandler builds a usable handler. queries may be nil for
@@ -667,6 +674,9 @@ func (h *SCIMHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if err := h.queries.DeleteUser(r.Context(), id); err != nil {
 		h.scimError(w, http.StatusInternalServerError, "failed to delete user")
 		return
+	}
+	if h.rbacCache != nil {
+		h.rbacCache.Invalidate(id.String())
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

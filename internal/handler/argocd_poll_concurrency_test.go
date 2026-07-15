@@ -31,7 +31,7 @@ func TestPollRunningOperations_FansOutConcurrently(t *testing.T) {
 		time.Sleep(80 * time.Millisecond)
 		atomic.AddInt32(&inFlight, -1)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp"},"status":{"sync":{"status":"Synced"},"health":{"status":"Healthy"},"operationState":{"phase":"Running"}}}`))
+		_, _ = w.Write([]byte(`{"metadata":{"name":"myapp","uid":"upstream-myapp-uid"},"status":{"sync":{"status":"Synced"},"health":{"status":"Healthy"},"operationState":{"phase":"Running"}}}`))
 	})
 	h.helmConcurrency = 8
 
@@ -42,7 +42,7 @@ func TestPollRunningOperations_FansOutConcurrently(t *testing.T) {
 			ID:            uuid.New(),
 			OperationType: "sync",
 			Status:        "running",
-			Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String()}),
+			Payload:       mustJSON(t, argocdOperationEnvelope{ApplicationID: rec.app.ID.String(), InstanceID: rec.instance.ID.String(), UpstreamUID: rec.app.UpstreamUid}),
 		}
 	}
 	rec.runningOps = ops
@@ -52,7 +52,7 @@ func TestPollRunningOperations_FansOutConcurrently(t *testing.T) {
 	if maxSeen < 2 {
 		t.Fatalf("peak concurrent upstream GetApp = %d, want > 1 (fan-out); a serial poll would show 1", maxSeen)
 	}
-	// Every running sync op is polled: phase=Running folds into an async
+	// Every claimed running sync op is polled: phase=Running folds into an async
 	// progress update, so all n ops must be accounted for.
 	if len(rec.progress) != n {
 		t.Fatalf("progress updates = %d, want %d (all running ops polled)", len(rec.progress), n)

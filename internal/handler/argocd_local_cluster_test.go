@@ -45,6 +45,9 @@ func (q *argocdManagedClusterQueryStub) GetArgoCDInstanceByName(context.Context,
 func (q *argocdManagedClusterQueryStub) GetArgoCDApplicationByName(context.Context, sqlc.GetArgoCDApplicationByNameParams) (sqlc.ArgocdApplication, error) {
 	panic("not used")
 }
+func (q *argocdManagedClusterQueryStub) UpsertDiscoveredArgoCDApplication(context.Context, sqlc.UpsertDiscoveredArgoCDApplicationParams) (sqlc.ArgocdApplication, error) {
+	panic("not used")
+}
 func (q *argocdManagedClusterQueryStub) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
 	return nil, nil
 }
@@ -111,10 +114,10 @@ func (q *argocdManagedClusterQueryStub) MarkArgoCDOperationFailed(context.Contex
 func (q *argocdManagedClusterQueryStub) MarkArgoCDOperationSuperseded(context.Context, sqlc.MarkArgoCDOperationSupersededParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argocdManagedClusterQueryStub) RequeueArgoCDOperation(context.Context, uuid.UUID) (sqlc.ArgocdOperation, error) {
+func (q *argocdManagedClusterQueryStub) RequeueArgoCDOperation(context.Context, sqlc.RequeueArgoCDOperationParams) (sqlc.ArgocdOperation, error) {
 	return sqlc.ArgocdOperation{}, nil
 }
-func (q *argocdManagedClusterQueryStub) ListRunningArgoCDOperations(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
+func (q *argocdManagedClusterQueryStub) ClaimRunningArgoCDOperationsForPoll(context.Context, int32) ([]sqlc.ArgocdOperation, error) {
 	return nil, nil
 }
 func (q *argocdManagedClusterQueryStub) UpdateArgoCDOperationProgress(context.Context, sqlc.UpdateArgoCDOperationProgressParams) (sqlc.ArgocdOperation, error) {

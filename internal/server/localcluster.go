@@ -170,6 +170,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 		ClusterID:         clusterID.String(),
 		AgentToken:        tokenStr,
 		AgentID:           "local-agent-" + uuid.NewString(),
+		CredentialSource:  agent.CredentialSourceEnvironment,
 		ReconnectBackoff:  5,
 		MaxReconnect:      300,
 		HeartbeatInterval: 30,

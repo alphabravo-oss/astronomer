@@ -23,8 +23,8 @@
 #   ASTRO_PASSWORD     — admin password (required)
 #   SMOKE_CLUSTER      — k3d cluster name to create (default: astronomer-smoke-$$)
 #   SMOKE_KEEP         — set to 1 to leave the k3d cluster behind on success
-#   AGENT_IMAGE        — astronomer agent image to load (default: astronomer-go-agent:dev)
-#   SHELL_IMAGE        — astronomer-shell image to load (default: astronomer-shell:dev)
+#   AGENT_IMAGE        — astronomer agent image to load (default: ghcr.io/alphabravo-oss/astronomer-go-agent:dev)
+#   SHELL_IMAGE        — astronomer-shell image to load (default: ghcr.io/alphabravo-oss/astronomer-shell:dev)
 #   TIMEOUT_AGENT      — seconds to wait for agent connect (default: 90)
 #   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 300)
 #   TIMEOUT_SCANS      — seconds to wait for first vulnerability report (default: 240)
@@ -38,8 +38,8 @@ set -euo pipefail
 : "${ASTRO_PASSWORD:?ASTRO_PASSWORD is required}"
 : "${SMOKE_CLUSTER:=astronomer-smoke-$$}"
 : "${SMOKE_KEEP:=0}"
-: "${AGENT_IMAGE:=astronomer-go-agent:dev}"
-: "${SHELL_IMAGE:=astronomer-shell:dev}"
+: "${AGENT_IMAGE:=ghcr.io/alphabravo-oss/astronomer-go-agent:dev}"
+: "${SHELL_IMAGE:=ghcr.io/alphabravo-oss/astronomer-shell:dev}"
 : "${TIMEOUT_AGENT:=90}"
 : "${TIMEOUT_BASELINE:=300}"
 : "${TIMEOUT_SCANS:=240}"

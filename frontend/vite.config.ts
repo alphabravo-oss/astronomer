@@ -15,7 +15,7 @@ export default defineConfig({
     react(),
     tsconfigPaths(),
   ],
-  define: { __APP_VERSION__: JSON.stringify(process.env.VERSION ?? '0.2.0-dev') },
+  define: { __APP_VERSION__: JSON.stringify(process.env.VERSION ?? '0.3.0-dev') },
   server: {
     port: Number(process.env.PORT) || 3000,
     proxy: { '/api': { target: process.env.BACKEND_URL ?? 'http://localhost:8000', ws: true } },

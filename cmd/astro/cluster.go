@@ -128,7 +128,7 @@ func newClusterCreateCmd() *cobra.Command {
 		Long: `create posts to /api/v1/clusters/ and prints the new cluster's
 ID + registration phase. The next steps for the operator:
 
-  astro cluster manifest <id> | kubectl --context=<target> apply -f -
+  astro cluster manifest <id> | kubectl --context=<target> apply --server-side --field-manager=astronomer-bootstrap -f -
 
 That installs the agent into the target cluster, which then connects
 back. Run "astro cluster get <id>" to watch the registration phase
@@ -167,7 +167,7 @@ advance.`,
 			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created cluster %s (%s)\n", out.Data.Name, out.Data.ID); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Next: astro cluster manifest %s | kubectl apply -f -\n", out.Data.ID)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Next: astro cluster manifest %s | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -\n", out.Data.ID)
 			return err
 		},
 	}
@@ -224,9 +224,9 @@ func newClusterManifestCmd() *cobra.Command {
 		Long: `Prints the cluster-specific agent install manifest to stdout.
 Pipe directly into kubectl:
 
-  astro cluster manifest <id> | kubectl apply -f -
+  astro cluster manifest <id> | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 
-Each call mints a fresh 24h registration token; safe to re-run.`,
+Each call mints a fresh short-lived registration token; safe to re-run.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, _, err := authedClient(cmd)

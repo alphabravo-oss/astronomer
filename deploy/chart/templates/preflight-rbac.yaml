@@ -1,19 +1,66 @@
-{{- if .Values.preflight.enabled }}
+{{- define "astronomer.preflightRBAC" -}}
+{{- $mode := .mode -}}
+{{- with .root }}
 {{- /*
   Dedicated SA + RBAC for the preflight hook Job. These MUST be created
   before the Job (hook-weight -5) so the pod can schedule and run its
-  `kubectl get crd/gatewayclass/secret` checks. The main "astronomer" SA
+  `kubectl get crd/gatewayclass/secret/pvc` checks. The main "astronomer" SA
   is a regular release resource that doesn't exist at pre-install-hook
   time, so on a *fresh* install the Job would deadlock with
   "serviceaccount not found" (it only worked on upgrades, where the main
   SA already existed). Hook-weight -10 orders these ahead of the Job.
-  hook-succeeded delete-policy keeps the cluster clean after a pass.
+  These prerequisite hooks intentionally remain after a successful Job.
+  Helm considers ServiceAccount/RBAC hooks successful immediately after
+  creation, so `hook-succeeded` would delete them before the later-weighted
+  Job can start. `before-hook-creation` replaces them with the current chart
+  rules before every install/upgrade without widening their permissions.
 */}}
 {{- $name := printf "%s-preflight" (include "astronomer.serviceAccountName" .) }}
-{{- $hookAnnotations := dict
-      "helm.sh/hook" "pre-install,pre-upgrade"
-      "helm.sh/hook-weight" "-10"
-      "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" }}
+{{- if eq $mode "argocd" }}
+  {{- $name = printf "%s-preflight-argocd" (include "astronomer.serviceAccountName" .) }}
+{{- end }}
+{{- $tlsSrc := include "astronomer.tls.source" . }}
+{{- $certManagerRequired := and (or (eq $tlsSrc "selfSigned") (eq $tlsSrc "letsEncrypt")) .Values.tls.requireCertManager }}
+{{- $crdNames := list }}
+{{- if .Values.gateway.enabled }}
+  {{- $crdNames = append $crdNames "gateways.gateway.networking.k8s.io" }}
+  {{- $crdNames = append $crdNames "httproutes.gateway.networking.k8s.io" }}
+{{- end }}
+{{- if $certManagerRequired }}
+  {{- $crdNames = append $crdNames "issuers.cert-manager.io" }}
+  {{- $crdNames = append $crdNames "certificates.cert-manager.io" }}
+{{- end }}
+{{- $secretNames := list }}
+{{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
+  {{- $secretNames = append $secretNames .Values.tls.additionalTrustedCAs.existingSecret }}
+{{- end }}
+{{- if and (eq (default "" .Values.config.env) "production") .Values.postgres.external.dsnSecretRef.name }}
+  {{- if not (has .Values.postgres.external.dsnSecretRef.name $secretNames) }}
+    {{- $secretNames = append $secretNames .Values.postgres.external.dsnSecretRef.name }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.dex.enabled (or .Values.dex.migration.requirePreparedConfig (eq .Values.dex.migration.phase "cutover")) }}
+  {{- $dexRuntimeSecret := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName }}
+  {{- if not (has $dexRuntimeSecret $secretNames) }}
+    {{- $secretNames = append $secretNames $dexRuntimeSecret }}
+  {{- end }}
+{{- end }}
+{{- $configMapNames := list }}
+{{- if and .Values.dex.enabled (eq .Values.dex.migration.phase "fresh") }}
+  {{- $configMapNames = append $configMapNames (printf "%s-dex-config" (include "astronomer.fullname" .)) }}
+{{- else if and .Values.dex.enabled (eq .Values.dex.migration.phase "cutover") }}
+  {{- $configMapNames = append $configMapNames (printf "%s-dex-config-retained" (include "astronomer.fullname" .)) }}
+{{- end }}
+{{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
+{{- $legacyPVC := printf "data-%s-postgres-0" (include "astronomer.fullname" .) }}
+{{- $hookAnnotations := dict "argocd.argoproj.io/sync-wave" "-5" }}
+{{- if eq $mode "helm" }}
+  {{- $hookAnnotations = dict
+        "helm.sh/hook" "pre-install,pre-upgrade"
+        "helm.sh/hook-weight" "-10"
+        "helm.sh/hook-delete-policy" "before-hook-creation"
+        "argocd.argoproj.io/hook" "Skip" }}
+{{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -35,15 +82,26 @@ metadata:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
   annotations:
     {{- toYaml $hookAnnotations | nindent 4 }}
+{{- if or (gt (len $crdNames) 0) .Values.gateway.enabled }}
 rules:
-  # Gateway API + cert-manager + argo CRD presence checks.
+  # Gateway API and cert-manager CRD presence checks.
+  {{- if gt (len $crdNames) 0 }}
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
+    resourceNames:
+      {{- toYaml $crdNames | nindent 6 }}
     verbs: ["get"]
+  {{- end }}
   # GatewayClass presence check (gateway.enabled).
+  {{- if .Values.gateway.enabled }}
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["gatewayclasses"]
+    resourceNames: [{{ .Values.gateway.className | quote }}]
     verbs: ["get"]
+  {{- end }}
+{{- else }}
+rules: []
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -71,11 +129,33 @@ metadata:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "preflight") | nindent 4 }}
   annotations:
     {{- toYaml $hookAnnotations | nindent 4 }}
+{{- if or (gt (len $secretNames) 0) $externalPostgres (gt (len $configMapNames) 0) }}
 rules:
   # additionalTrustedCAs / external-DSN secret presence checks.
+{{- if gt (len $secretNames) 0 }}
   - apiGroups: [""]
     resources: ["secrets"]
+    resourceNames:
+      {{- toYaml $secretNames | nindent 6 }}
     verbs: ["get"]
+  {{- end }}
+  # Legacy bundled-Postgres PVC guard when external Postgres is selected.
+  {{- if $externalPostgres }}
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    resourceNames: [{{ $legacyPVC | quote }}]
+    verbs: ["get"]
+  {{- end }}
+{{- if gt (len $configMapNames) 0 }}
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames:
+      {{- toYaml $configMapNames | nindent 6 }}
+    verbs: ["get"]
+{{- end }}
+{{- else }}
+rules: []
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -94,4 +174,18 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.preflight.enabled }}
+# Helm-only prerequisites. Argo CD skips these resources and therefore never
+# adopts or deletes objects that Helm owns as pre-release hooks.
+{{ include "astronomer.preflightRBAC" (dict "root" . "mode" "helm") }}
+---
+# Persistent prerequisites for the Argo CD Sync preflight Job. These are
+# ordinary wave -5 resources so Argo updates them in place before the Job in
+# the same wave (Argo's kind ordering places RBAC before Jobs). Keeping them in
+# the Job's wave is required because these Kubernetes kinds have no health
+# assessment and therefore cannot gate a later wave.
+{{ include "astronomer.preflightRBAC" (dict "root" . "mode" "argocd") }}
 {{- end }}

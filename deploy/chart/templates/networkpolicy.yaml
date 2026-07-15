@@ -14,27 +14,16 @@ metadata:
     {{- include "astronomer.labels" . | nindent 4 }}
     app.kubernetes.io/component: network-policy
 spec:
-  # Exclude the bundled astro-argocd subchart pods. ArgoCD is trusted
-  # control-plane infra (needs the k8s API, DNS, git/OCI repos, intra-argo),
-  # and its pre-install/pre-upgrade hooks (e.g. redis-secret-init) run BEFORE
-  # any allow-policy could be applied — so on upgrade a prior default-deny would
-  # block them and stall the release. Stock ArgoCD ships no NetworkPolicies;
-  # leaving its pods unselected here matches that and keeps installs hands-off.
-  # Also exclude the NGINX Gateway Fabric data plane. NGF provisions its
-  # per-Gateway nginx Deployment into the Gateway's namespace (ours) with its
-  # own labels (app.kubernetes.io/managed-by=ngf-nginx), AFTER install — so no
-  # chart-owned allow-policy can be written for it ahead of time, and selecting
-  # it here silently breaks DNS/egress for the whole edge (P6.3 k3d smoke:
-  # every request through the gateway times out). It is trusted edge infra;
-  # stock NGF ships no NetworkPolicies, matching the ArgoCD reasoning above.
+  # Select only pods owned by this Astronomer chart release. A negative
+  # part-of selector also matches pods where that label is absent, which would
+  # capture independently managed namespace infrastructure such as the NGINX
+  # Gateway Fabric data plane and leave it unable to reach its controller.
+  # The exact ownership tuple keeps every Astronomer platform component under
+  # default deny while excluding bundled Argo CD, NGF, and unrelated pods.
   podSelector:
-    matchExpressions:
-      - key: app.kubernetes.io/part-of
-        operator: NotIn
-        values: ["argocd"]
-      - key: app.kubernetes.io/managed-by
-        operator: NotIn
-        values: ["ngf-nginx"]
+    matchLabels:
+      {{- include "astronomer.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/part-of: astronomer
   policyTypes:
     - Ingress
     - Egress
@@ -102,12 +91,12 @@ spec:
         - protocol: TCP
           port: 9090
     {{- end }}
-    # Internal ArgoCD->cluster proxy (port 8090). This listener is NOT
-    # token-gated (ArgoCD's apply path is anonymous), so its only authentication
-    # is this network isolation: only ArgoCD's own pods may reach it. The
+    # Internal ArgoCD->cluster proxy (port 8090). Requests are authenticated
+    # with the cluster-scoped token from ArgoCD's cluster Secret. This policy is
+    # a second control limiting network reachability to bundled ArgoCD pods. The
     # application-controller performs cluster syncs; argocd-server connects here
-    # to validate a cluster's reachability when it is registered (cluster upsert),
-    # so both must be allowed or registration hangs. The public ingress never maps 8090.
+    # to validate reachability during cluster upsert, so both must be allowed.
+    # The public ingress never maps 8090.
     - from:
         - namespaceSelector:
             matchLabels:

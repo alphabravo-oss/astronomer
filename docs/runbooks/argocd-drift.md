@@ -34,6 +34,11 @@
 
 ## Recovery
 
+If the Application is in `awaiting-approval`, do not run an ad-hoc sync. Follow
+the [reference-only takeover runbook](self-manage-secret-migration.md), review
+the exact digest-bound diff, and approve it. A legacy plaintext source requires
+the controller-off scrub procedure in that runbook.
+
 ### Sync from Git (preferred — Git is canonical)
 
 ```bash
@@ -70,7 +75,8 @@ for the dev environment.
 ## Prevention
 
 - Treat the cluster as read-only — every change goes through Git
-- Enable Argo CD auto-sync with prune + self-heal for the self-manage app
+- Keep digest-bound approval in front of auto-sync/prune for first takeover and
+  every desired-spec change
 - Add CI lint to catch chart template changes that would produce
   diffs against a known-good rendered baseline (future work)
 

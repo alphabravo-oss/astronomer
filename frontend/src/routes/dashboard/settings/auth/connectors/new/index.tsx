@@ -8,7 +8,7 @@ import { createFileRoute } from '@tanstack/react-router';
  *   2. Schema-driven form — `ConnectorForm` renders required + optional
  *      fields from the chosen type's spec.
  *   3. Apply prompt — after the connector is created we surface the option
- *      to immediately call /apply/ so the rendered ConfigMap goes out and
+ *      to immediately call /apply/ so the runtime Secret is reconciled and
  *      Dex hot-reloads. Operators who want to batch multiple changes can
  *      skip and apply from the overview page.
  */
@@ -175,7 +175,7 @@ function NewConnectorPage() {
             <p className="text-sm font-medium text-foreground">Connector created.</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               The new connector is saved but Dex hasn&apos;t reloaded yet. Apply now to push
-              the rendered ConfigMap to your cluster, or batch with other changes from the
+              the retained runtime Secret in your cluster, or batch with other changes from the
               overview page.
             </p>
           </div>

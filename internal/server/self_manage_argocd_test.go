@@ -3,17 +3,26 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
 
+	chartdeploy "github.com/alphabravocompany/astronomer-go/deploy"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -112,7 +121,8 @@ tls:
 bootstrap:
   username: admin
   email: admin@alphabravo.io
-  password: new-bootstrap
+  existingSecret: astronomer-bootstrap
+  existingSecretKey: password
 `
 
 	mergedYAML, err := mergeSelfManagedValues(current, bootstrap)
@@ -161,8 +171,8 @@ bootstrap:
 		t.Fatalf("tls.secretName = %v, want astronomer-tls", got)
 	}
 	bootstrapValues := merged["bootstrap"].(map[string]any)
-	if got := bootstrapValues["password"]; got != "new-bootstrap" {
-		t.Fatalf("bootstrap.password = %v, want new-bootstrap", got)
+	if got := bootstrapValues["existingSecret"]; got != "astronomer-bootstrap" {
+		t.Fatalf("bootstrap.existingSecret = %v, want astronomer-bootstrap", got)
 	}
 	if got := bootstrapValues["email"]; got != "admin@alphabravo.io" {
 		t.Fatalf("bootstrap.email = %v, want admin@alphabravo.io", got)
@@ -243,7 +253,10 @@ func TestSelfManagedPublicListenerValuesFallsBackToGateway(t *testing.T) {
 func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *testing.T) {
 	className := "nginx"
 	replicas := int32(1)
+	zero := int32(0)
 	client := fake.NewClientset(
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "argocd-redis", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"auth": []byte("redis-password")}},
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      localAstronomerReleaseName + "-secrets",
@@ -253,6 +266,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 				"SECRET_KEY":                []byte("secret-key"),
 				"ASTRONOMER_ENCRYPTION_KEY": []byte("encryption-key"),
 				"POSTGRES_PASSWORD":         []byte("postgres"),
+				"DATABASE_URL":              []byte("postgres://reference"),
+				"REDIS_URL":                 []byte("redis://reference"),
 			},
 		},
 		&corev1.Secret{
@@ -279,7 +294,18 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 				Replicas: &replicas,
 				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{{Name: "migrate", Image: "registry.example:5000/platform/migrate:migrate-tag"}},
-					Containers:     []corev1.Container{{Name: "server", Image: "localastro/astronomer-go-server:server-tag"}},
+					Containers: []corev1.Container{{
+						Name:  "server",
+						Image: "localastro/astronomer-go-server:server-tag",
+						EnvFrom: []corev1.EnvFromSource{{
+							SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-secrets"}},
+						}},
+						Env: []corev1.EnvVar{
+							{Name: "ASTRONOMER_BOOTSTRAP_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-bootstrap"}, Key: "password"}}},
+							{Name: "DATABASE_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-secrets"}, Key: "DATABASE_URL"}}},
+							{Name: "REDIS_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: localAstronomerReleaseName + "-secrets"}, Key: "REDIS_URL"}}},
+						},
+					}},
 				}},
 			},
 		},
@@ -302,14 +328,24 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 			},
 		},
 	)
+	if err := client.Tracker().Add(helmReleaseSecretFixture(t, 7, "deployed", map[string]any{
+		"image":     map[string]any{"registry": ""},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}},
+	})); err != nil {
+		t.Fatal(err)
+	}
 
-	valuesYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+	valuesBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
 		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent",
 		AgentImageTag:        "agent-tag",
 	}, client, "https://astronomer.dev.alphabravo.io")
 	if err != nil {
 		t.Fatalf("buildSelfManagedAstronomerValues returned error: %v", err)
 	}
+	valuesYAML := valuesBuild.ValuesYAML
 
 	var values map[string]any
 	if err := yaml.Unmarshal([]byte(valuesYAML), &values); err != nil {
@@ -326,6 +362,9 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	if got := frontendImage["tag"]; got != "f03fcf5" {
 		t.Fatalf("frontend.image.tag = %v, want f03fcf5", got)
 	}
+	if enabled, found, err := unstructured.NestedBool(values, "argo-cd", "redisSecretInit", "enabled"); err != nil || !found || enabled {
+		t.Fatalf("self-managed Argo Redis secret-init enabled=%v found=%v err=%v, want explicit false", enabled, found, err)
+	}
 	imageValues := values["image"].(map[string]any)
 	if got := imageValues["registry"]; got != "" {
 		t.Fatalf("image.registry = %v, want explicit empty global registry", got)
@@ -338,8 +377,8 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		t.Fatalf("image.frontend should not be set; frontend chart reads frontend.image")
 	}
 	bootstrapValues := values["bootstrap"].(map[string]any)
-	if got := bootstrapValues["password"]; got != "bootstrap-password" {
-		t.Fatalf("bootstrap.password = %v, want bootstrap-password", got)
+	if got := bootstrapValues["existingSecret"]; got != localAstronomerReleaseName+"-bootstrap" {
+		t.Fatalf("bootstrap.existingSecret = %v", got)
 	}
 	if got := bootstrapValues["username"]; got != "admin" {
 		t.Fatalf("bootstrap.username = %v, want admin", got)
@@ -350,6 +389,1443 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 	configValues := values["config"].(map[string]any)
 	if got := configValues["agentImageRepository"]; got != "agents.registry:5001/team/astronomer-go-agent" {
 		t.Fatalf("config.agentImageRepository = %v", got)
+	}
+	imageValues["server"].(map[string]any)["tag"] = "server-upgraded"
+	upgradedSource, err := yaml.Marshal(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent", AgentImageTag: "agent-tag",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: string(upgradedSource)})
+	if err != nil {
+		t.Fatalf("second fixed-point build: %v", err)
+	}
+	secondYAML := secondBuild.ValuesYAML
+	second := unmarshalSelfManagedValues(t, secondYAML)
+	if got := second["image"].(map[string]any)["server"].(map[string]any)["tag"]; got != "server-upgraded" {
+		t.Fatalf("reference-only current Application image upgrade reverted to live/Helm source: %v", got)
+	}
+
+	const globalMirror = "mirror.example/platform"
+	if err := client.Tracker().Add(helmReleaseSecretFixture(t, 8, "deployed", map[string]any{
+		"image":        map[string]any{"registry": globalMirror},
+		"config":       map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap":    map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"postgres":     map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":        map[string]any{"bundled": map[string]any{"enabled": false}},
+		"preflight":    map[string]any{"image": map[string]any{"tag": "release-preflight-v11"}},
+		"kubectlShell": map[string]any{"image": "release.example/astronomer-shell:v11"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v10", "mirror.example/platform/database/migrate:v10")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-frontend", "frontend.example/team/frontend:v10", "")
+	mirroredBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v10",
+	}, client, "https://astronomer.dev.alphabravo.io")
+	if err != nil {
+		t.Fatalf("mirrored first takeover: %v", err)
+	}
+	mirroredYAML := mirroredBuild.ValuesYAML
+	mirrored := unmarshalSelfManagedValues(t, mirroredYAML)
+	mirroredImages := mirrored["image"].(map[string]any)
+	if got := mirroredImages["registry"]; got != globalMirror {
+		t.Fatalf("global mirror = %v", got)
+	}
+	for component, wantRepository := range map[string]string{"server": "team/server", "worker": "team/worker", "migrate": "database/migrate", "agent": "agents/agent"} {
+		image := mirroredImages[component].(map[string]any)
+		if got := image["repository"]; got != wantRepository {
+			t.Fatalf("%s repository = %v, want %s", component, got, wantRepository)
+		}
+		if got := globalMirror + "/" + image["repository"].(string) + ":" + image["tag"].(string); !strings.HasPrefix(got, globalMirror+"/"+wantRepository+":") {
+			t.Fatalf("%s rendered ref = %s", component, got)
+		}
+	}
+	// Once staged, the validated Application is canonical: neither live drift
+	// nor a changed process config silently rewrites its declared image intent.
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/drift/server:bad", "outside.example/drift/migrate:bad")
+	mirroredSecondBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "outside.example/drift/agent", AgentImageTag: "bad",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: mirroredYAML})
+	if err != nil {
+		t.Fatalf("mirrored second cycle: %v", err)
+	}
+	mirroredSecondYAML := mirroredSecondBuild.ValuesYAML
+	mirroredSecond := unmarshalSelfManagedValues(t, mirroredSecondYAML)
+	if !reflect.DeepEqual(mirrored["image"], mirroredSecond["image"]) || !reflect.DeepEqual(mirrored["config"], mirroredSecond["config"]) {
+		t.Fatalf("safe Application image/config changed on cycle two:\nfirst=%#v\nsecond=%#v", mirrored["image"], mirroredSecond["image"])
+	}
+	oldRevisionValues := unmarshalSelfManagedValues(t, mirroredYAML)
+	oldRevisionValues["image"].(map[string]any)["pullSecrets"] = []any{map[string]any{"name": "old-registry-auth"}}
+	oldRevisionValues["preflight"] = map[string]any{"image": map[string]any{"tag": "stale-preflight-v10"}}
+	oldRevisionValues["kubectlShell"] = map[string]any{"image": "stale.example/astronomer-shell:v10"}
+	oldRevisionYAML := string(yamlOrPanic(oldRevisionValues))
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v11", "mirror.example/platform/database/migrate:v11")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v11", "")
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	oneController := int32(1)
+	controllerWorkload, err := client.AppsV1().StatefulSets(localArgoNamespace).Get(context.Background(), localArgoControllerWorkload, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	controllerWorkload.Spec.Replicas = &oneController
+	controllerWorkload.Status = appsv1.StatefulSetStatus{Replicas: 1, ReadyReplicas: 1}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controllerWorkload, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	controllerPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astro-argocd-application-controller-0", Namespace: localArgoNamespace, Labels: map[string]string{"app.kubernetes.io/name": "argocd-application-controller"}}}
+	if _, err := client.CoreV1().Pods(localArgoNamespace).Create(context.Background(), controllerPod, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "controller is quiesced") {
+		t.Fatalf("active-controller adoption error = %v", err)
+	}
+	zeroController := int32(0)
+	controllerWorkload.Spec.Replicas = &zeroController
+	controllerWorkload.Status = appsv1.StatefulSetStatus{}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controllerWorkload, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CoreV1().Pods(localArgoNamespace).Delete(context.Background(), controllerPod.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	adoptedBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true})
+	if err != nil {
+		t.Fatalf("bounded chart-revision upgrade adoption: %v", err)
+	}
+	adoptedYAML := adoptedBuild.ValuesYAML
+	adopted := unmarshalSelfManagedValues(t, adoptedYAML)
+	adoptedImages := adopted["image"].(map[string]any)
+	for _, component := range []string{"server", "worker", "migrate", "agent"} {
+		if got := adoptedImages[component].(map[string]any)["tag"]; got != "v11" {
+			t.Fatalf("adopted %s tag = %v, want v11", component, got)
+		}
+	}
+	if pullSecrets, ok := adoptedImages["pullSecrets"].([]any); !ok || len(pullSecrets) != 0 {
+		t.Fatalf("empty live pull Secrets did not clear old source list: %#v", adoptedImages["pullSecrets"])
+	}
+	if got := adopted["preflight"].(map[string]any)["image"].(map[string]any)["tag"]; got != "release-preflight-v11" {
+		t.Fatalf("bounded upgrade retained stale Application preflight image tag %v", got)
+	}
+	if got := adopted["kubectlShell"].(map[string]any)["image"]; got != "release.example/astronomer-shell:v11" {
+		t.Fatalf("bounded upgrade retained stale Application kubectl shell image %v", got)
+	}
+	if enabled, found, err := unstructured.NestedBool(adopted, "argo-cd", "redisSecretInit", "enabled"); err != nil || !found || enabled {
+		t.Fatalf("bounded Argo Redis secret-init enabled=%v found=%v err=%v, want explicit false", enabled, found, err)
+	}
+	adoptedFrontend := adopted["frontend"].(map[string]any)
+	if adoptedFrontend["enabled"] != true || adoptedFrontend["replicaCount"] != float64(1) || adoptedFrontend["image"].(map[string]any)["tag"] != "v10" {
+		t.Fatalf("live frontend image/replica tuple was not adopted: %#v", adoptedFrontend)
+	}
+	frontendDisabledRelease := helmReleaseSecretFixture(t, 9, "deployed", map[string]any{
+		"image":     map[string]any{"registry": globalMirror},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"username": "admin", "email": "admin@astronomer.local"},
+		"frontend":  map[string]any{"enabled": false},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}},
+	})
+	if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), frontendDisabledRelease, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "still exists") {
+		t.Fatalf("disabled release with live frontend error = %v", err)
+	}
+	if err := client.CoreV1().Secrets(localAstronomerNamespace).Delete(context.Background(), frontendDisabledRelease.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AppsV1().Deployments(localAstronomerNamespace).Delete(context.Background(), localAstronomerReleaseName+"-frontend", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "does not explicitly set frontend.enabled=false") {
+		t.Fatalf("frontend absence without authoritative disable error = %v", err)
+	}
+	if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), frontendDisabledRelease, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	disabledBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true})
+	if err != nil {
+		t.Fatalf("authoritative frontend disable adoption: %v", err)
+	}
+	disabledYAML := disabledBuild.ValuesYAML
+	disabledFrontend := unmarshalSelfManagedValues(t, disabledYAML)["frontend"].(map[string]any)
+	if disabledFrontend["enabled"] != false {
+		t.Fatalf("true-to-false frontend intent was not overlaid: %#v", disabledFrontend)
+	}
+	failFrontendRead := true
+	client.Fake.PrependReactor("get", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		get, ok := action.(k8stesting.GetAction)
+		if failFrontendRead && ok && get.GetName() == localAstronomerReleaseName+"-frontend" {
+			return true, nil, errors.New("frontend API unavailable")
+		}
+		return false, nil, nil
+	})
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: oldRevisionYAML, AdoptLiveUpgrade: true}); err == nil || !strings.Contains(err.Error(), "read frontend Deployment") {
+		t.Fatalf("bounded-adoption frontend API error was not propagated: %v", err)
+	}
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "read frontend Deployment") {
+		t.Fatalf("initial-takeover frontend API error was not propagated: %v", err)
+	}
+	failFrontendRead = false
+	initialDisabledBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
+		AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v11",
+	}, client, "https://astronomer.dev.alphabravo.io")
+	if err != nil {
+		t.Fatalf("initial takeover did not preserve absent disabled frontend intent: %v", err)
+	}
+	initialDisabledYAML := initialDisabledBuild.ValuesYAML
+	if got := unmarshalSelfManagedValues(t, initialDisabledYAML)["frontend"].(map[string]any)["enabled"]; got != false {
+		t.Fatalf("initial takeover frontend.enabled = %v, want false", got)
+	}
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "outside.example/same-revision/server:drift", "outside.example/same-revision/migrate:drift")
+	adoptedSecondBuild, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/same-revision/agent", AgentImageTag: "drift"}, client, "https://astronomer.dev.alphabravo.io", selfManagedValuesSource{ValuesYAML: adoptedYAML})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adoptedSecondYAML := adoptedSecondBuild.ValuesYAML
+	adoptedSecond := unmarshalSelfManagedValues(t, adoptedSecondYAML)
+	if !reflect.DeepEqual(adopted["image"], adoptedSecond["image"]) || !reflect.DeepEqual(adopted["config"], adoptedSecond["config"]) {
+		t.Fatal("post-upgrade canonical values were not a fixed point")
+	}
+
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "outside.example/team/worker:v10", "")
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "mirror.example/platform/agents/agent", AgentImageTag: "v10"}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "adopt server image") {
+		// Server is still deliberately drifted outside the mirror and is checked first.
+		t.Fatalf("incompatible live registry error = %v", err)
+	}
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-server", "mirror.example/platform/team/server:v10", "mirror.example/platform/database/migrate:v10")
+	setDeploymentImagesForTest(t, client, localAstronomerReleaseName+"-worker", "mirror.example/platform/team/worker:v10", "")
+	if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "outside.example/agents/agent", AgentImageTag: "v10"}, client, "https://astronomer.dev.alphabravo.io"); err == nil || !strings.Contains(err.Error(), "configured agent image") {
+		t.Fatalf("incompatible agent registry error = %v", err)
+	}
+}
+
+func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing.T) {
+	type componentCase struct {
+		name       string
+		resource   string
+		workload   string
+		setIntent  func(map[string]any, bool)
+		object     func(bool) runtime.Object
+		assertLive func(*testing.T, map[string]any)
+	}
+	components := []componentCase{
+		{
+			name: "postgres", resource: "statefulsets", workload: localAstronomerReleaseName + "-postgres",
+			setIntent: func(values map[string]any, enabled bool) {
+				values["postgres"].(map[string]any)["bundled"] = map[string]any{"enabled": enabled}
+			},
+			object: func(terminating bool) runtime.Object { return selfManagedPostgresStatefulSetFixture(terminating) },
+			assertLive: func(t *testing.T, values map[string]any) {
+				postgres := values["postgres"].(map[string]any)
+				if postgres["user"] != "runtime-user" || postgres["database"] != "runtime-database" {
+					t.Fatalf("Postgres runtime identity not adopted: %#v", postgres)
+				}
+				assertSelfManagedImageValues(t, postgres["image"], "pg.runtime/team", "postgres", "17.4")
+				storage := postgres["storage"].(map[string]any)
+				if storage["size"] != "12Gi" || storage["storageClassName"] != "runtime-fast" {
+					t.Fatalf("Postgres runtime storage not adopted: %#v", storage)
+				}
+				ref := postgres["passwordSecretRef"].(map[string]any)
+				if ref["name"] != "runtime-postgres" || ref["key"] != "runtime-password" {
+					t.Fatalf("Postgres runtime password ref not adopted: %#v", ref)
+				}
+			},
+		},
+		{
+			name: "redis", resource: "statefulsets", workload: localAstronomerReleaseName + "-redis",
+			setIntent: func(values map[string]any, enabled bool) {
+				values["redis"].(map[string]any)["bundled"] = map[string]any{"enabled": enabled}
+			},
+			object: func(terminating bool) runtime.Object { return selfManagedRedisStatefulSetFixture(terminating) },
+			assertLive: func(t *testing.T, values map[string]any) {
+				redis := values["redis"].(map[string]any)
+				assertSelfManagedImageValues(t, redis["image"], "redis.runtime/team", "valkey", "8.1")
+				storage := redis["storage"].(map[string]any)
+				if storage["size"] != "6Gi" || storage["storageClassName"] != "runtime-cache" {
+					t.Fatalf("Redis runtime storage not adopted: %#v", storage)
+				}
+			},
+		},
+		{
+			name: "dex", resource: "deployments", workload: localAstronomerReleaseName + "-dex",
+			setIntent: func(values map[string]any, enabled bool) {
+				values["dex"].(map[string]any)["enabled"] = enabled
+			},
+			object: func(terminating bool) runtime.Object { return selfManagedDexDeploymentFixture(terminating) },
+			assertLive: func(t *testing.T, values map[string]any) {
+				dex := values["dex"].(map[string]any)
+				assertSelfManagedImageValues(t, dex["image"], "dex.runtime/team", "dex", "v2.99.0")
+				if dex["replicaCount"] != float64(3) {
+					t.Fatalf("Dex runtime replicas not adopted: %#v", dex)
+				}
+				if dex["runtimeSecretName"] != "runtime-dex" {
+					t.Fatalf("Dex runtime Secret name not adopted: %#v", dex)
+				}
+			},
+		},
+	}
+	states := []struct {
+		name        string
+		enabled     bool
+		present     bool
+		terminating bool
+		apiError    bool
+		wantError   string
+	}{
+		{name: "enabled-present", enabled: true, present: true},
+		{name: "enabled-absent", enabled: true, wantError: "enabled by the highest deployed Helm release"},
+		{name: "disabled-present-terminating", present: true, terminating: true, wantError: "disabled by the highest deployed Helm release"},
+		{name: "disabled-absent", enabled: false},
+		{name: "api-error", enabled: true, apiError: true, wantError: "API unavailable"},
+	}
+	for _, component := range components {
+		for _, mode := range []string{"initial", "bounded-upgrade"} {
+			for _, state := range states {
+				t.Run(component.name+"/"+mode+"/"+state.name, func(t *testing.T) {
+					releaseValues := selfManagedBundledIntentReleaseValues()
+					component.setIntent(releaseValues, state.enabled)
+					objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+					if state.present {
+						objects = append(objects, component.object(state.terminating))
+					}
+					client := fake.NewSimpleClientset(objects...)
+					zero := int32(0)
+					if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+						t.Fatal(err)
+					}
+					if mode == "bounded-upgrade" {
+						markServerDeploymentRolloutCompleteForTest(t, client)
+					}
+					if state.apiError {
+						client.Fake.PrependReactor("get", component.resource, func(action k8stesting.Action) (bool, runtime.Object, error) {
+							get, ok := action.(k8stesting.GetAction)
+							if ok && get.GetName() == component.workload {
+								return true, nil, errors.New(component.name + " API unavailable")
+							}
+							return false, nil, nil
+						})
+					}
+					cfg := &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}
+					var build selfManagedValuesBuild
+					var err error
+					if mode == "bounded-upgrade" {
+						build, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
+					} else {
+						build, err = buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example")
+					}
+					if state.wantError != "" {
+						if err == nil || !strings.Contains(err.Error(), state.wantError) {
+							t.Fatalf("error = %v, want substring %q", err, state.wantError)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					values := unmarshalSelfManagedValues(t, build.ValuesYAML)
+					if state.enabled {
+						component.assertLive(t, values)
+					} else {
+						assertSelfManagedComponentDisabled(t, component.name, values)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSelfManagedBundledComponentIntentUsesChartDefaults(t *testing.T) {
+	defaults, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		path []string
+		want bool
+	}{
+		"postgres": {path: []string{"postgres", "bundled", "enabled"}, want: true},
+		"redis":    {path: []string{"redis", "bundled", "enabled"}, want: true},
+		"dex":      {path: []string{"dex", "enabled"}, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := effectiveSelfManagedChartBool(defaults, map[string]any{}, tc.path...)
+			if err != nil || got != tc.want {
+				t.Fatalf("effective default = %v, err=%v, want %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCollectSelfManagedSecretReferencesCoversAuditedContracts(t *testing.T) {
+	shape, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]any{
+		"image":                  map[string]any{"pullSecrets": []any{map[string]any{"name": "registry-auth"}}},
+		"secrets":                map[string]any{"existingSecret": "core-secret"},
+		"bootstrap":              map[string]any{"existingSecret": "bootstrap-secret"},
+		"postgres":               map[string]any{"passwordSecretRef": map[string]any{"name": "pg-password", "key": "password"}, "external": map[string]any{"dsnSecretRef": map[string]any{"name": "pg-dsn", "key": "dsn"}}},
+		"redis":                  map[string]any{"external": map[string]any{"urlSecretRef": map[string]any{"name": "redis-url", "key": "url"}, "passwordSecretRef": map[string]any{"name": "redis-password", "key": "password"}}},
+		"dex":                    map[string]any{"runtimeSecretName": "dex-client"},
+		"tls":                    map[string]any{"secretName": "tls-listener", "additionalTrustedCAs": map[string]any{"existingSecret": "additional-ca"}},
+		"managementBackup":       map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}},
+		"managementRestoreDrill": map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}},
+		"managementLogging":      map[string]any{"auth": map[string]any{"bearerSecretRef": map[string]any{"name": "logging-bearer", "key": "token"}}, "splunk": map[string]any{"hecTokenSecretRef": map[string]any{"name": "logging-hec", "key": "hec_token"}}},
+	}
+	got, err := collectSelfManagedSecretReferences(values, shape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"additional-ca", "backup-bundle", "backup-s3", "backup-wrap", "bootstrap-secret", "core-secret", "dex-client", "logging-bearer", "logging-hec", "pg-dsn", "pg-password", "redis-password", "redis-url", "registry-auth", "restore-wrap", "tls-listener"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Secret inventory = %#v, want %#v", got, want)
+	}
+	for name, malformed := range map[string]map[string]any{
+		"scalar ref":            {"postgres": map[string]any{"passwordSecretRef": "secret"}},
+		"non-string name":       {"tls": map[string]any{"secretName": 42}},
+		"ambiguous pull secret": {"image": map[string]any{"pullSecrets": []any{map[string]any{"name": "registry", "extra": true}}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := collectSelfManagedSecretReferences(malformed, shape); err == nil {
+				t.Fatal("malformed secret-shaped value was accepted")
+			}
+		})
+	}
+	allowedNonReferenceKeys := map[string]struct{}{
+		"secrets": {}, "clientsecret": {}, "secretkeykey": {}, "secretkey": {}, "githubclientsecret": {}, "googleclientsecret": {}, "oidcclientsecret": {}, "existingsecretkey": {},
+	}
+	actualArgoPaths := map[string]string{}
+	var auditShape func(map[string]any, string)
+	auditShape = func(node map[string]any, path string) {
+		for key, value := range node {
+			child := key
+			if path != "" {
+				child = path + "." + key
+			}
+			lower := strings.ToLower(key)
+			if strings.Contains(lower, "secret") {
+				if strings.HasPrefix(child, "argo-cd.") {
+					class := auditedEmbeddedArgoSecretPathClass(child)
+					if class == "" {
+						t.Errorf("vendored Argo secret-shaped path is unclassified: %s", child)
+					}
+					actualArgoPaths[child] = class
+				} else {
+					_, explicitlyNonReference := allowedNonReferenceKeys[lower]
+					recognizedReference := lower == "pullsecrets" || lower == "imagepullsecrets" || lower == "existingsecret" || lower == "secretname" || strings.HasSuffix(lower, "secretname") || strings.HasSuffix(lower, "secretref")
+					if !explicitlyNonReference && !recognizedReference {
+						t.Errorf("audited values shape gained an unclassified secret-bearing contract at %s", child)
+					}
+				}
+			}
+			if nested, ok := value.(map[string]any); ok {
+				auditShape(nested, child)
+			}
+		}
+	}
+	auditShape(shape, "")
+	if want := auditedEmbeddedArgoSecretBearingPathClasses(); !reflect.DeepEqual(actualArgoPaths, want) {
+		t.Fatalf("vendored Argo secret-shaped values changed:\n got: %#v\nwant: %#v", actualArgoPaths, want)
+	}
+	for path, class := range auditedEmbeddedArgoContextualPathClasses() {
+		segments := strings.Split(path, ".")
+		if _, found, err := unstructured.NestedFieldNoCopy(shape, segments...); err != nil || !found {
+			t.Errorf("pinned Argo values shape lost audited %s path %s: found=%v err=%v", class, path, found, err)
+		}
+		if got := auditedEmbeddedArgoSecretPathClass(path); got != class {
+			t.Errorf("embedded Argo path %s class = %q, want %q", path, got, class)
+		}
+	}
+	for _, container := range []string{
+		"argo-cd.configs.secret", "argo-cd.configs.secret.azureDevops",
+		"argo-cd.notifications.secret", "argo-cd.dex.certificateSecret",
+		"argo-cd.server.certificateSecret", "argo-cd.repoServer.certificateSecret",
+	} {
+		segments := strings.Split(container, ".")
+		raw, _, _ := unstructured.NestedMap(shape, segments...)
+		for key := range raw {
+			child := container + "." + key
+			if auditedEmbeddedArgoSecretPathClass(child) == "" {
+				t.Errorf("vendored Argo secret container gained an unclassified child at %s", child)
+			}
+		}
+	}
+}
+
+func auditedEmbeddedArgoSecretPathClass(path string) string {
+	if class := auditedEmbeddedArgoSecretBearingPathClasses()[path]; class != "" {
+		return class
+	}
+	return auditedEmbeddedArgoContextualPathClasses()[path]
+}
+
+func auditedEmbeddedArgoSecretBearingPathClasses() map[string]string {
+	return map[string]string{
+		"argo-cd.global.imagePullSecrets":                      "external-reference",
+		"argo-cd.controller.imagePullSecrets":                  "external-reference",
+		"argo-cd.dex.imagePullSecrets":                         "external-reference",
+		"argo-cd.dex.certificateSecret":                        "safe-metadata",
+		"argo-cd.server.imagePullSecrets":                      "external-reference",
+		"argo-cd.server.certificate.secretTemplateAnnotations": "safe-metadata",
+		"argo-cd.server.certificateSecret":                     "safe-metadata",
+		"argo-cd.repoServer.imagePullSecrets":                  "external-reference",
+		"argo-cd.repoServer.certificateSecret":                 "safe-metadata",
+		"argo-cd.applicationSet.imagePullSecrets":              "external-reference",
+		"argo-cd.redis.imagePullSecrets":                       "external-reference",
+		"argo-cd.redis-ha.existingSecret":                      "external-reference",
+		"argo-cd.externalRedis.existingSecret":                 "external-reference",
+		"argo-cd.externalRedis.secretAnnotations":              "safe-metadata",
+		"argo-cd.redisSecretInit":                              "safe-metadata",
+		"argo-cd.redisSecretInit.imagePullSecrets":             "external-reference",
+		"argo-cd.configs.secret":                               "safe-metadata",
+		"argo-cd.configs.secret.createSecret":                  "safe-metadata",
+		"argo-cd.configs.secret.githubSecret":                  "forbidden-inline",
+		"argo-cd.configs.secret.gitlabSecret":                  "forbidden-inline",
+		"argo-cd.configs.secret.bitbucketServerSecret":         "forbidden-inline",
+		"argo-cd.configs.secret.gogsSecret":                    "forbidden-inline",
+		"argo-cd.notifications.secret":                         "safe-metadata",
+		"argo-cd.notifications.imagePullSecrets":               "external-reference",
+	}
+}
+
+func auditedEmbeddedArgoContextualPathClasses() map[string]string {
+	result := map[string]string{
+		"argo-cd.configs.clusterCredentials":                    "forbidden-inline",
+		"argo-cd.configs.credentialTemplates":                   "forbidden-inline",
+		"argo-cd.configs.repositories":                          "forbidden-inline",
+		"argo-cd.configs.secret.labels":                         "safe-metadata",
+		"argo-cd.configs.secret.annotations":                    "safe-metadata",
+		"argo-cd.configs.secret.bitbucketUUID":                  "forbidden-inline",
+		"argo-cd.configs.secret.azureDevops":                    "safe-metadata",
+		"argo-cd.configs.secret.azureDevops.username":           "forbidden-inline",
+		"argo-cd.configs.secret.azureDevops.password":           "forbidden-inline",
+		"argo-cd.configs.secret.extra":                          "forbidden-inline",
+		"argo-cd.configs.secret.argocdServerAdminPassword":      "forbidden-inline",
+		"argo-cd.configs.secret.argocdServerAdminPasswordMtime": "safe-metadata",
+		"argo-cd.notifications.secret.create":                   "safe-metadata",
+		"argo-cd.notifications.secret.name":                     "external-reference",
+		"argo-cd.notifications.secret.annotations":              "safe-metadata",
+		"argo-cd.notifications.secret.labels":                   "safe-metadata",
+		"argo-cd.notifications.secret.items":                    "forbidden-inline",
+		"argo-cd.externalRedis.username":                        "forbidden-inline",
+		"argo-cd.externalRedis.password":                        "forbidden-inline",
+	}
+	for _, component := range []string{"dex", "server", "repoServer"} {
+		prefix := "argo-cd." + component + ".certificateSecret."
+		result[prefix+"enabled"] = "safe-metadata"
+		result[prefix+"labels"] = "safe-metadata"
+		result[prefix+"annotations"] = "safe-metadata"
+		result[prefix+"key"] = "forbidden-inline"
+		result[prefix+"crt"] = "forbidden-inline"
+		if component != "server" {
+			result[prefix+"ca"] = "forbidden-inline"
+		}
+	}
+	return result
+}
+
+func TestEmbeddedArgoConditionalSecretReferenceTaxonomy(t *testing.T) {
+	shape, err := chartdeploy.AstronomerDefaultValuesShape()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		values map[string]any
+		want   []string
+	}{
+		"standard init disabled": {values: map[string]any{"redisSecretInit": map[string]any{"enabled": false}}, want: []string{"argocd-redis"}},
+		"standard init creates":  {values: map[string]any{"redisSecretInit": map[string]any{"enabled": true}}},
+		"redis ha default":       {values: map[string]any{"redis-ha": map[string]any{"enabled": true}}, want: []string{"argocd-redis"}},
+		"redis ha override":      {values: map[string]any{"redis-ha": map[string]any{"enabled": true, "existingSecret": "custom-ha"}}, want: []string{"custom-ha"}},
+		"redis ha creates":       {values: map[string]any{"redis-ha": map[string]any{"enabled": true, "existingSecret": ""}}},
+		"notifications default":  {values: map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": false}}}, want: []string{"argocd-notifications-secret"}},
+		"notifications override": {values: map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": false, "name": "custom-notifications"}}}, want: []string{"custom-notifications"}},
+		"notifications creates":  {values: map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": true}}}},
+		"notifications disabled": {values: map[string]any{"notifications": map[string]any{"enabled": false, "secret": map[string]any{"create": false}}}},
+		"configs external":       {values: map[string]any{"configs": map[string]any{"secret": map[string]any{"createSecret": false}}}, want: []string{"argocd-secret"}},
+		"configs creates":        {values: map[string]any{"configs": map[string]any{"secret": map[string]any{"createSecret": true}}}},
+		"external redis active":  {values: map[string]any{"externalRedis": map[string]any{"host": "redis.example", "existingSecret": "external-redis"}}, want: []string{"external-redis"}},
+		"external redis unused":  {values: map[string]any{"externalRedis": map[string]any{"existingSecret": "unused-redis"}}},
+		"argo disabled": {values: map[string]any{
+			"enabled":         false,
+			"redisSecretInit": map[string]any{"enabled": false},
+			"configs":         map[string]any{"secret": map[string]any{"createSecret": false}},
+			"notifications":   map[string]any{"secret": map[string]any{"create": false}},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := collectSelfManagedSecretReferences(map[string]any{"argo-cd": tc.values}, shape)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tc.want
+			if want == nil {
+				want = []string{}
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("conditional Secret inventory = %#v, want %#v", got, want)
+			}
+		})
+	}
+	wantConditionalPaths := map[string]struct{}{
+		"argo-cd.redis-ha.existingSecret":      {},
+		"argo-cd.externalRedis.existingSecret": {},
+		"argo-cd.notifications.secret.name":    {},
+	}
+	if !reflect.DeepEqual(embeddedArgoConditionalSecretReferencePaths, wantConditionalPaths) {
+		t.Fatalf("conditional reference paths = %#v, want %#v", embeddedArgoConditionalSecretReferencePaths, wantConditionalPaths)
+	}
+}
+
+func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t *testing.T) {
+	client, _, initial := selfManagedInitialSnapshotTestBuild(t)
+	canonical := initial.ValuesYAML
+	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	server.Spec.Template.Spec.Containers[0].Env = append(server.Spec.Template.Spec.Containers[0].Env,
+		corev1.EnvVar{Name: "SECRET_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "drifted-core"}, Key: "different"}}})
+	server.ResourceVersion = "live-drift"
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Create(context.Background(), selfManagedDexDeploymentFixture(false), metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	client.ClearActions()
+	client.Fake.PrependReactor("get", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("same-revision build attempted live discovery")
+	})
+	same, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "drifted/agent", AgentImageTag: "drift"}, client, "https://different.example", selfManagedValuesSource{ValuesYAML: canonical})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same.ValuesYAML != canonical || same.AdoptionSnapshot != nil {
+		t.Fatalf("same-revision values changed or carried evidence: build=%#v", same)
+	}
+	if len(client.Actions()) != 0 {
+		t.Fatalf("same-revision build performed Kubernetes discovery: %#v", client.Actions())
+	}
+	application := activeSelfManagedApplicationForRevision(t, "0.3.0", "https://kubernetes.default.svc")
+	_ = unstructured.SetNestedField(application.Object, canonical, "spec", "source", "helm", "values")
+	spec, _, _ := unstructured.NestedMap(application.Object, "spec")
+	hash, _ := selfManagedSpecHash(spec)
+	application.SetAnnotations(map[string]string{selfManagedPhaseAnnotation: selfManagedPhaseActive, selfManagedHashAnnotation: hash})
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), application)
+	if err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, same.ValuesYAML, same.AdoptionSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	assertSelfManagedApplicationWriteCount(t, dyn, 0)
+}
+
+func TestEmbeddedArgoInlineSecretsFailBeforeApplicationWrite(t *testing.T) {
+	unsafe := map[string]map[string]any{
+		"github webhook":     {"argo-cd": map[string]any{"configs": map[string]any{"secret": map[string]any{"githubSecret": "plaintext"}}}},
+		"admin password":     {"argo-cd": map[string]any{"configs": map[string]any{"secret": map[string]any{"argocdServerAdminPassword": "$2a$10$hash"}}}},
+		"cluster credential": {"argo-cd": map[string]any{"configs": map[string]any{"clusterCredentials": map[string]any{"production": map[string]any{"server": "https://cluster.example", "config": map[string]any{"generic": "credential"}}}}}},
+		"repository secret":  {"argo-cd": map[string]any{"configs": map[string]any{"repositories": map[string]any{"private": map[string]any{"url": "https://git.example/repo"}}}}},
+		"redis username":     {"argo-cd": map[string]any{"externalRedis": map[string]any{"username": "credential-user"}}},
+		"certificate key":    {"argo-cd": map[string]any{"server": map[string]any{"certificateSecret": map[string]any{"enabled": true, "key": "private-key"}}}},
+		"notification item":  {"argo-cd": map[string]any{"notifications": map[string]any{"secret": map[string]any{"create": true, "items": map[string]any{"slack-token": "plaintext"}}}}},
+	}
+	for name, values := range unsafe {
+		t.Run(name+"/application-write", func(t *testing.T) {
+			raw := string(yamlOrPanic(values))
+			dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+			err := ensureSelfManagedAstronomerApplication(context.Background(), fake.NewSimpleClientset(), dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, raw)
+			if err == nil || !strings.Contains(err.Error(), "inline") {
+				t.Fatalf("unsafe Application error = %v", err)
+			}
+			assertSelfManagedApplicationWriteCount(t, dyn, 0)
+		})
+		for _, mode := range []string{"same", "initial", "bounded"} {
+			t.Run(name+"/"+mode, func(t *testing.T) {
+				raw := string(yamlOrPanic(values))
+				if mode == "same" {
+					if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{}, fake.NewSimpleClientset(), "https://ignored.example", selfManagedValuesSource{ValuesYAML: raw}); err == nil || !strings.Contains(err.Error(), "inline") {
+						t.Fatalf("same-revision unsafe error = %v", err)
+					}
+					return
+				}
+				releaseValues := selfManagedBundledIntentReleaseValues()
+				deepMergeSelfManagedValues(releaseValues, values)
+				objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+				client := fake.NewSimpleClientset(objects...)
+				zero := int32(0)
+				_, _ = client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{})
+				var err error
+				if mode == "initial" {
+					_, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+				} else {
+					markServerDeploymentRolloutCompleteForTest(t, client)
+					_, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: string(yamlOrPanic(releaseValues)), AdoptLiveUpgrade: true})
+				}
+				if err == nil {
+					t.Fatalf("%s unsafe error = %v", mode, err)
+				}
+			})
+		}
+	}
+	safe := map[string]any{"argo-cd": map[string]any{"configs": map[string]any{"secret": map[string]any{"createSecret": false, "labels": map[string]any{}, "annotations": map[string]any{}, "argocdServerAdminPasswordMtime": "2026-01-01T00:00:00Z"}}, "notifications": map[string]any{"secret": map[string]any{"create": false, "name": "argocd-notifications-secret", "labels": map[string]any{}, "annotations": map[string]any{}}}}}
+	if err := validateReferenceOnlySelfManagedHelmValues(string(yamlOrPanic(safe))); err != nil {
+		t.Fatalf("safe embedded Argo metadata rejected: %v", err)
+	}
+}
+
+func TestCollectedSecretEvidenceBlocksInitialAndBoundedWrites(t *testing.T) {
+	for _, mode := range []string{"initial", "bounded"} {
+		for _, scenario := range []string{"explicit", "ha-default", "standard-default"} {
+			_, _, _, names := selfManagedSecretEvidenceTestBuild(t, mode == "bounded", scenario)
+			if scenario != "explicit" {
+				names = []string{"argocd-notifications-secret", "argocd-redis", "argocd-secret"}
+			}
+			for _, name := range names {
+				for _, mutation := range []string{"mutate", "delete", "replace"} {
+					t.Run(mode+"/"+scenario+"/"+name+"/"+mutation, func(t *testing.T) {
+						client, dyn, build, _ := selfManagedSecretEvidenceTestBuild(t, mode == "bounded", scenario)
+						ctx := context.Background()
+						secret, err := client.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+						if err != nil {
+							t.Fatal(err)
+						}
+						switch mutation {
+						case "mutate":
+							secret.ResourceVersion = "secret-mutated"
+							secret.Data["tls.crt"] = []byte("changed")
+							_, err = client.CoreV1().Secrets(localAstronomerNamespace).Update(ctx, secret, metav1.UpdateOptions{})
+						case "delete", "replace":
+							err = client.CoreV1().Secrets(localAstronomerNamespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+							if err == nil && mutation == "replace" {
+								secret.UID = "replacement-secret"
+								secret.ResourceVersion = "secret-replaced"
+								_, err = client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, secret, metav1.CreateOptions{})
+							}
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+					})
+				}
+			}
+		}
+	}
+}
+
+func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool, scenario string) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild, []string) {
+	t.Helper()
+	releaseValues := selfManagedBundledIntentReleaseValues()
+	extraNames := applyAllSelfManagedSecretReferenceValues(releaseValues)
+	if scenario != "explicit" {
+		argoValues := map[string]any{
+			"configs":       map[string]any{"secret": map[string]any{"createSecret": false}},
+			"notifications": map[string]any{"secret": map[string]any{"create": false}},
+		}
+		if scenario == "ha-default" {
+			argoValues["redis-ha"] = map[string]any{"enabled": true}
+		} else {
+			argoValues["redisSecretInit"] = map[string]any{"enabled": false}
+		}
+		releaseValues["argo-cd"] = argoValues
+		extraNames = append(selfManagedNonArgoSecretReferenceNames(), "argocd-redis", "argocd-secret", "argocd-notifications-secret")
+	}
+	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+	for _, name := range extraNames {
+		if name == "argocd-redis" {
+			// The base fixture models the Secret created by Helm's bootstrap hook.
+			continue
+		}
+		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: localAstronomerNamespace, UID: types.UID("input-" + name), ResourceVersion: "input-1"}, Data: map[string][]byte{"value": []byte("reference")}})
+	}
+	client := fake.NewSimpleClientset(objects...)
+	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	server.Spec.Template.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-auth"}}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	var build selfManagedValuesBuild
+	var err error
+	if bounded {
+		dyn = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), activeSelfManagedApplicationForRevision(t, "0.2.0", "https://kubernetes.default.svc"))
+		build, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: string(yamlOrPanic(releaseValues)), AdoptLiveUpgrade: true})
+	} else {
+		build, err = buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalValues := unmarshalSelfManagedValues(t, build.ValuesYAML)
+	shape, _ := chartdeploy.AstronomerDefaultValuesShape()
+	names, err := collectSelfManagedSecretReferences(finalValues, shape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	collected := map[string]struct{}{}
+	for _, name := range names {
+		collected[name] = struct{}{}
+	}
+	for _, name := range extraNames {
+		if _, ok := collected[name]; !ok {
+			t.Fatalf("expected Secret reference %q was not collected; got %#v", name, names)
+		}
+	}
+	return client, dyn, build, names
+}
+
+func applyAllSelfManagedSecretReferenceValues(values map[string]any) []string {
+	values["image"].(map[string]any)["pullSecrets"] = []any{map[string]any{"name": "registry-auth"}}
+	values["postgres"].(map[string]any)["passwordSecretRef"] = map[string]any{"name": "pg-password", "key": "password"}
+	values["redis"].(map[string]any)["external"].(map[string]any)["passwordSecretRef"] = map[string]any{"name": "redis-password", "key": "password"}
+	values["dex"].(map[string]any)["runtimeSecretName"] = "dex-client"
+	values["tls"] = map[string]any{"source": "secret", "secretName": "tls-listener", "additionalTrustedCAs": map[string]any{"enabled": true, "existingSecret": "additional-ca"}}
+	values["managementBackup"] = map[string]any{"s3": map[string]any{"credentialsSecretRef": map[string]any{"name": "backup-s3", "key": "credentials"}}, "encryptionKeyBackup": map[string]any{"secretName": "backup-bundle", "wrappingSecretRef": map[string]any{"name": "backup-wrap", "key": "passphrase"}}}
+	values["managementRestoreDrill"] = map[string]any{"decryptCheck": map[string]any{"wrappingSecretRef": map[string]any{"name": "restore-wrap", "key": "passphrase"}}}
+	values["managementLogging"] = map[string]any{"auth": map[string]any{"bearerSecretRef": map[string]any{"name": "logging-bearer", "key": "token"}}, "splunk": map[string]any{"hecTokenSecretRef": map[string]any{"name": "logging-hec", "key": "hec_token"}}}
+	values["argo-cd"] = map[string]any{
+		"global":        map[string]any{"imagePullSecrets": []any{map[string]any{"name": "argo-global-pull"}}},
+		"redis-ha":      map[string]any{"enabled": true, "existingSecret": "argo-redis-ha"},
+		"configs":       map[string]any{"secret": map[string]any{"createSecret": false}},
+		"notifications": map[string]any{"secret": map[string]any{"create": false, "name": "argo-notifications"}},
+	}
+	return append(selfManagedNonArgoSecretReferenceNames(), "argo-global-pull", "argo-redis-ha", "argocd-secret", "argo-notifications")
+}
+
+func selfManagedNonArgoSecretReferenceNames() []string {
+	return []string{"registry-auth", "pg-password", "redis-password", "dex-client", "tls-listener", "additional-ca", "backup-s3", "backup-bundle", "backup-wrap", "restore-wrap", "logging-bearer", "logging-hec"}
+}
+
+func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
+	t.Run("initial carries runtime evidence and same revision does not", func(t *testing.T) {
+		client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+		zero := int32(0)
+		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		cfg := &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}
+		initial, err := buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if initial.AdoptionSnapshot == nil || !initial.AdoptionSnapshot.RuntimeAdoption || initial.AdoptionSnapshot.BoundedAdoption {
+			t.Fatalf("initial takeover evidence = %#v", initial.AdoptionSnapshot)
+		}
+		sameRevision, err := buildSelfManagedAstronomerValues(context.Background(), cfg, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: initial.ValuesYAML})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sameRevision.AdoptionSnapshot != nil {
+			t.Fatal("same-revision build unexpectedly carried bounded-adoption evidence")
+		}
+	})
+
+	t.Run("initial unchanged evidence creates Application", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		dyn.ClearActions()
+		if err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, build.ValuesYAML, build.AdoptionSnapshot); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedApplicationWriteCount(t, dyn, 1)
+	})
+
+	t.Run("initial controller restart", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		controller, _ := client.AppsV1().StatefulSets(localArgoNamespace).Get(context.Background(), localArgoControllerWorkload, metav1.GetOptions{})
+		one := int32(1)
+		controller.Spec.Replicas = &one
+		controller.Status.Replicas = 1
+		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controller, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "controller is not quiesced")
+	})
+
+	t.Run("initial release drift", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		secret, _ := client.CoreV1().Secrets(localAstronomerNamespace).Get(context.Background(), "sh.helm.release.v1.astronomer.v12", metav1.GetOptions{})
+		secret.ResourceVersion = "initial-release-drift"
+		if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "Helm release identity/version changed")
+	})
+
+	t.Run("initial credential Secret drift", func(t *testing.T) {
+		client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+		secret, _ := client.CoreV1().Secrets(localAstronomerNamespace).Get(context.Background(), "astronomer-secrets", metav1.GetOptions{})
+		secret.ResourceVersion = "credential-drift"
+		if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+	})
+
+	for _, fallback := range []string{"runtime-config"} {
+		t.Run("initial "+fallback+" drift", func(t *testing.T) {
+			client, dyn, build, configMapName := selfManagedInitialFallbackSnapshotTestBuild(t, fallback == "dex-config")
+			configMap, _ := client.CoreV1().ConfigMaps(localAstronomerNamespace).Get(context.Background(), configMapName, metav1.GetOptions{})
+			configMap.ResourceVersion = "config-drift"
+			if _, err := client.CoreV1().ConfigMaps(localAstronomerNamespace).Update(context.Background(), configMap, metav1.UpdateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+		})
+	}
+
+	for _, component := range []string{"postgres", "redis", "dex", "frontend"} {
+		t.Run("initial optional "+component+" drift", func(t *testing.T) {
+			client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+			mutateSelfManagedSnapshotWorkload(t, client, component, "create")
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+		})
+	}
+	for _, component := range []string{"server", "worker"} {
+		t.Run("initial "+component+" drift", func(t *testing.T) {
+			client, dyn, build := selfManagedInitialSnapshotTestBuild(t)
+			mutateSelfManagedSnapshotWorkload(t, client, component, "mutate")
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "evidence changed")
+		})
+	}
+
+	t.Run("unchanged evidence restages", func(t *testing.T) {
+		client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+		dyn.ClearActions()
+		if err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, build.ValuesYAML, build.AdoptionSnapshot); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedApplicationWriteCount(t, dyn, 1)
+	})
+
+	t.Run("controller restarted", func(t *testing.T) {
+		client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+		controller, err := client.AppsV1().StatefulSets(localArgoNamespace).Get(context.Background(), localArgoControllerWorkload, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		one := int32(1)
+		controller.Spec.Replicas = &one
+		controller.Status.Replicas = 1
+		controller.Status.ReadyReplicas = 1
+		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Update(context.Background(), controller, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "controller is not quiesced")
+	})
+
+	for _, releaseMutation := range []string{"mutate", "replace", "newer"} {
+		t.Run("release "+releaseMutation, func(t *testing.T) {
+			client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+			ctx := context.Background()
+			name := "sh.helm.release.v1.astronomer.v12"
+			switch releaseMutation {
+			case "mutate":
+				secret, err := client.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				mutatedValues := selfManagedBundledIntentReleaseValues()
+				mutatedValues["config"].(map[string]any)["logLevel"] = "warn"
+				mutated := helmReleaseSecretFixture(t, 12, "deployed", mutatedValues)
+				secret.Data = mutated.Data
+				secret.ResourceVersion = "1201"
+				if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			case "replace":
+				if err := client.CoreV1().Secrets(localAstronomerNamespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+					t.Fatal(err)
+				}
+				replacement := helmReleaseSecretFixture(t, 12, "deployed", selfManagedBundledIntentReleaseValues())
+				replacement.UID = "replacement-release"
+				replacement.ResourceVersion = "1202"
+				if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, replacement, metav1.CreateOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			case "newer":
+				if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(ctx, helmReleaseSecretFixture(t, 13, "deployed", selfManagedBundledIntentReleaseValues()), metav1.CreateOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "Helm release identity/version changed")
+		})
+	}
+
+	for _, component := range []string{"postgres", "redis", "dex", "frontend"} {
+		for _, mutation := range []string{"create", "mutate", "delete", "replace"} {
+			t.Run(component+" "+mutation, func(t *testing.T) {
+				presentAtBuild := mutation != "create"
+				client, dyn, build := selfManagedSnapshotTestBuild(t, component, presentAtBuild)
+				mutateSelfManagedSnapshotWorkload(t, client, component, mutation)
+				assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, "adoption evidence changed")
+			})
+		}
+	}
+	for _, component := range []string{"server", "worker"} {
+		for _, mutation := range []string{"mutate", "replace"} {
+			t.Run(component+" "+mutation, func(t *testing.T) {
+				client, dyn, build := selfManagedSnapshotTestBuild(t, "", false)
+				mutateSelfManagedSnapshotWorkload(t, client, component, mutation)
+				wantError := "evidence changed"
+				if component == "server" && mutation == "replace" {
+					wantError = "complete server rollout"
+				}
+				assertSelfManagedSnapshotRefusesWrite(t, client, dyn, build, wantError)
+			})
+		}
+	}
+}
+
+func selfManagedInitialSnapshotTestBuild(t *testing.T) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild) {
+	t.Helper()
+	client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	controller := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), controller, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	build, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if build.AdoptionSnapshot == nil || !build.AdoptionSnapshot.RuntimeAdoption || build.AdoptionSnapshot.BoundedAdoption {
+		t.Fatalf("initial adoption evidence = %#v", build.AdoptionSnapshot)
+	}
+	return client, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), build
+}
+
+func selfManagedInitialFallbackSnapshotTestBuild(t *testing.T, dexFallback bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild, string) {
+	t.Helper()
+	releaseValues := selfManagedBundledIntentReleaseValues()
+	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+	client := fake.NewSimpleClientset(objects...)
+	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	filtered := server.Spec.Template.Spec.Containers[0].Env[:0]
+	for _, env := range server.Spec.Template.Spec.Containers[0].Env {
+		if env.Name != "DATABASE_URL" && env.Name != "REDIS_URL" {
+			filtered = append(filtered, env)
+		}
+	}
+	server.Spec.Template.Spec.Containers[0].Env = filtered
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	runtimeConfig := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-config", Namespace: localAstronomerNamespace, UID: "runtime-config", ResourceVersion: "config-1"}, Data: map[string]string{"DATABASE_URL": "postgres://runtime.example/astronomer", "REDIS_URL": "redis://runtime.example:6379/0"}}
+	if _, err := client.CoreV1().ConfigMaps(localAstronomerNamespace).Create(context.Background(), runtimeConfig, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	configMapName := runtimeConfig.Name
+	if dexFallback {
+		releaseValues["dex"].(map[string]any)["enabled"] = true
+		// Replace the already encoded release so the selected Helm evidence carries
+		// the enabled Dex intent.
+		if err := client.CoreV1().Secrets(localAstronomerNamespace).Delete(context.Background(), "sh.helm.release.v1.astronomer.v12", metav1.DeleteOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.CoreV1().Secrets(localAstronomerNamespace).Create(context.Background(), helmReleaseSecretFixture(t, 12, "deployed", releaseValues), metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		dex := selfManagedDexDeploymentFixture(false)
+		dex.Spec.Template.Spec.Containers[0].Env = nil
+		if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Create(context.Background(), dex, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		dexConfig := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex-config", Namespace: localAstronomerNamespace, UID: "dex-config", ResourceVersion: "dex-config-1"}, Data: map[string]string{"config.yaml": "staticClients:\n- id: astronomer\n  secret: fallback-secret\n"}}
+		if _, err := client.CoreV1().ConfigMaps(localAstronomerNamespace).Create(context.Background(), dexConfig, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		configMapName = dexConfig.Name
+	}
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	build, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), build, configMapName
+}
+
+func selfManagedSnapshotTestBuild(t *testing.T, component string, present bool) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild) {
+	t.Helper()
+	releaseValues := selfManagedBundledIntentReleaseValues()
+	var workload runtime.Object
+	switch component {
+	case "postgres":
+		releaseValues["postgres"].(map[string]any)["bundled"] = map[string]any{"enabled": present}
+		if present {
+			workload = selfManagedPostgresStatefulSetFixture(false)
+		}
+	case "redis":
+		releaseValues["redis"].(map[string]any)["bundled"] = map[string]any{"enabled": present}
+		if present {
+			workload = selfManagedRedisStatefulSetFixture(false)
+		}
+	case "dex":
+		releaseValues["dex"].(map[string]any)["enabled"] = present
+		if present {
+			workload = selfManagedDexDeploymentFixture(false)
+		}
+	case "frontend":
+		releaseValues["frontend"].(map[string]any)["enabled"] = present
+		if present {
+			workload = selfManagedFrontendDeploymentFixture()
+		}
+	}
+	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
+	if workload != nil {
+		metadata := workload.(metav1.Object)
+		metadata.SetUID(types.UID("snapshot-" + component))
+		metadata.SetResourceVersion("100")
+		objects = append(objects, workload)
+	}
+	client := fake.NewSimpleClientset(objects...)
+	markServerDeploymentRolloutCompleteForTest(t, client)
+	zero := int32(0)
+	controller := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace, UID: "snapshot-controller", ResourceVersion: "1"}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}
+	if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), controller, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), activeSelfManagedApplicationForRevision(t, "0.2.0", "https://kubernetes.default.svc"))
+	build, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "runtime.example/team/agent", AgentImageTag: "v12"}, client, "https://astronomer.example", selfManagedValuesSource{ValuesYAML: selfManagedBundledUpgradeSource, AdoptLiveUpgrade: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if build.AdoptionSnapshot == nil || !build.AdoptionSnapshot.BoundedAdoption {
+		t.Fatal("bounded build did not return adoption evidence")
+	}
+	return client, dyn, build
+}
+
+func mutateSelfManagedSnapshotWorkload(t *testing.T, client *fake.Clientset, component, mutation string) {
+	t.Helper()
+	ctx := context.Background()
+	resourceName := localAstronomerReleaseName + "-" + component
+	newObject := func() runtime.Object {
+		var object runtime.Object
+		switch component {
+		case "postgres":
+			object = selfManagedPostgresStatefulSetFixture(false)
+		case "redis":
+			object = selfManagedRedisStatefulSetFixture(false)
+		case "dex":
+			object = selfManagedDexDeploymentFixture(false)
+		case "frontend":
+			object = selfManagedFrontendDeploymentFixture()
+		case "server", "worker":
+			replicas := int32(1)
+			object = &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas}}
+		}
+		metadata := object.(metav1.Object)
+		metadata.SetUID(types.UID("new-" + component))
+		metadata.SetResourceVersion("200")
+		return object
+	}
+	isStatefulSet := component == "postgres" || component == "redis"
+	if mutation == "create" {
+		object := newObject()
+		if isStatefulSet {
+			if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(ctx, object.(*appsv1.StatefulSet), metav1.CreateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := client.AppsV1().Deployments(localArgoNamespace).Create(ctx, object.(*appsv1.Deployment), metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if isStatefulSet {
+		current, err := client.AppsV1().StatefulSets(localArgoNamespace).Get(ctx, resourceName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch mutation {
+		case "mutate":
+			current.Spec.Template.Spec.Containers[0].Image += "-mutated"
+			current.ResourceVersion = "101"
+			_, err = client.AppsV1().StatefulSets(localArgoNamespace).Update(ctx, current, metav1.UpdateOptions{})
+		case "delete", "replace":
+			err = client.AppsV1().StatefulSets(localArgoNamespace).Delete(ctx, resourceName, metav1.DeleteOptions{})
+			if err == nil && mutation == "replace" {
+				_, err = client.AppsV1().StatefulSets(localArgoNamespace).Create(ctx, newObject().(*appsv1.StatefulSet), metav1.CreateOptions{})
+			}
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	current, err := client.AppsV1().Deployments(localArgoNamespace).Get(ctx, resourceName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	switch mutation {
+	case "mutate":
+		if current.Annotations == nil {
+			current.Annotations = map[string]string{}
+		}
+		current.Annotations["test.astronomer.io/mutated"] = "true"
+		current.ResourceVersion = "101"
+		_, err = client.AppsV1().Deployments(localArgoNamespace).Update(ctx, current, metav1.UpdateOptions{})
+	case "delete", "replace":
+		err = client.AppsV1().Deployments(localArgoNamespace).Delete(ctx, resourceName, metav1.DeleteOptions{})
+		if err == nil && mutation == "replace" {
+			_, err = client.AppsV1().Deployments(localArgoNamespace).Create(ctx, newObject().(*appsv1.Deployment), metav1.CreateOptions{})
+		}
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertSelfManagedSnapshotRefusesWrite(t *testing.T, client *fake.Clientset, dyn *dynamicfake.FakeDynamicClient, build selfManagedValuesBuild, wantError string) {
+	t.Helper()
+	dyn.ClearActions()
+	err := ensureSelfManagedAstronomerApplication(context.Background(), client, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, build.ValuesYAML, build.AdoptionSnapshot)
+	if err == nil || !strings.Contains(err.Error(), wantError) {
+		t.Fatalf("restage error = %v, want substring %q", err, wantError)
+	}
+	assertSelfManagedApplicationWriteCount(t, dyn, 0)
+}
+
+func assertSelfManagedApplicationWriteCount(t *testing.T, dyn *dynamicfake.FakeDynamicClient, want int) {
+	t.Helper()
+	writes := 0
+	for _, action := range dyn.Actions() {
+		if action.GetResource().Resource == argocdApplicationGVR.Resource && (action.GetVerb() == "create" || action.GetVerb() == "update" || action.GetVerb() == "patch") {
+			writes++
+		}
+	}
+	if writes != want {
+		t.Fatalf("Application writes = %d, want %d; actions=%#v", writes, want, dyn.Actions())
+	}
+}
+
+const selfManagedBundledUpgradeSource = `
+image:
+  registry: ""
+frontend:
+  enabled: false
+secrets:
+  existingSecret: astronomer-secrets
+  secretKeyKey: SECRET_KEY
+  encryptionKeyKey: ASTRONOMER_ENCRYPTION_KEY
+bootstrap:
+  existingSecret: astronomer-bootstrap
+  existingSecretKey: password
+postgres:
+  bundled: {enabled: false}
+  external:
+    dsnSecretRef: {name: astronomer-secrets, key: DATABASE_URL}
+redis:
+  bundled: {enabled: false}
+  external:
+    urlSecretRef: {name: astronomer-secrets, key: REDIS_URL}
+dex:
+  enabled: false
+`
+
+func selfManagedBundledIntentReleaseValues() map[string]any {
+	return map[string]any{
+		"image":     map[string]any{"registry": ""},
+		"frontend":  map[string]any{"enabled": false},
+		"config":    map[string]any{"agentImageRepository": "stale/agent", "agentImageTag": "stale"},
+		"bootstrap": map[string]any{"existingSecret": "astronomer-bootstrap", "existingSecretKey": "password"},
+		"secrets":   map[string]any{"existingSecret": "astronomer-secrets", "secretKeyKey": "SECRET_KEY", "encryptionKeyKey": "ASTRONOMER_ENCRYPTION_KEY"},
+		"postgres":  map[string]any{"bundled": map[string]any{"enabled": false}, "external": map[string]any{"dsnSecretRef": map[string]any{"name": "astronomer-secrets", "key": "DATABASE_URL"}}},
+		"redis":     map[string]any{"bundled": map[string]any{"enabled": false}, "external": map[string]any{"urlSecretRef": map[string]any{"name": "astronomer-secrets", "key": "REDIS_URL"}}},
+		"dex":       map[string]any{"enabled": false},
+	}
+}
+
+func selfManagedBundledIntentBaseObjects(t *testing.T, releaseValues map[string]any) []runtime.Object {
+	t.Helper()
+	one := int32(1)
+	coreSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "astronomer-secrets", Namespace: localAstronomerNamespace},
+		Data: map[string][]byte{
+			"SECRET_KEY": []byte("runtime-secret-key"), "ASTRONOMER_ENCRYPTION_KEY": []byte("runtime-encryption-key"), "POSTGRES_PASSWORD": []byte("runtime-postgres-password"),
+			"DATABASE_URL": []byte("postgres://runtime-reference"), "REDIS_URL": []byte("redis://runtime-reference"),
+		},
+	}
+	server := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-server", Namespace: localAstronomerNamespace, UID: "runtime-server", ResourceVersion: "server-1"},
+		Spec: appsv1.DeploymentSpec{Replicas: &one, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			InitContainers: []corev1.Container{{Name: "migrate", Image: "runtime.example/team/migrate:v12"}},
+			Containers: []corev1.Container{{
+				Name: "server", Image: "runtime.example/team/server:v12",
+				EnvFrom: []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: coreSecret.Name}}}},
+				Env: []corev1.EnvVar{
+					{Name: "ASTRONOMER_BOOTSTRAP_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "astronomer-bootstrap"}, Key: "password"}}},
+					{Name: "DATABASE_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: coreSecret.Name}, Key: "DATABASE_URL"}}},
+					{Name: "REDIS_URL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: coreSecret.Name}, Key: "REDIS_URL"}}},
+				},
+			}},
+		}}},
+	}
+	worker := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-worker", Namespace: localAstronomerNamespace, UID: "runtime-worker", ResourceVersion: "worker-1"},
+		Spec:       appsv1.DeploymentSpec{Replicas: &one, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "runtime.example/team/worker:v12"}}}}},
+	}
+	return []runtime.Object{
+		coreSecret,
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-bootstrap", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"password": []byte("runtime-bootstrap")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "argocd-redis", Namespace: localAstronomerNamespace, UID: "runtime-argocd-redis", ResourceVersion: "redis-secret-1"}, Data: map[string][]byte{"auth": []byte("runtime-redis-password")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "runtime-postgres", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"runtime-password": []byte("postgres")}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "runtime-dex", Namespace: localAstronomerNamespace}, Data: map[string][]byte{"client-secret": []byte("dex")}},
+		server, worker, helmReleaseSecretFixture(t, 12, "deployed", releaseValues),
+	}
+}
+
+func selfManagedPostgresStatefulSetFixture(terminating bool) *appsv1.StatefulSet {
+	one := int32(1)
+	storageClass := "runtime-fast"
+	statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-postgres", Namespace: localAstronomerNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one,
+		Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "postgres", Image: "pg.runtime/team/postgres:17.4", Env: []corev1.EnvVar{
+			{Name: "POSTGRES_USER", Value: "runtime-user"}, {Name: "POSTGRES_DB", Value: "runtime-database"},
+			{Name: "POSTGRES_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "runtime-postgres"}, Key: "runtime-password"}}},
+		}}}}},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data"}, Spec: corev1.PersistentVolumeClaimSpec{StorageClassName: &storageClass, Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("12Gi")}}}}},
+	}}
+	setSelfManagedFixtureTerminating(&statefulSet.ObjectMeta, terminating)
+	return statefulSet
+}
+
+func selfManagedRedisStatefulSetFixture(terminating bool) *appsv1.StatefulSet {
+	one := int32(1)
+	storageClass := "runtime-cache"
+	statefulSet := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-redis", Namespace: localAstronomerNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one,
+		Template:             corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "redis", Image: "redis.runtime/team/valkey:8.1"}}}},
+		VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data"}, Spec: corev1.PersistentVolumeClaimSpec{StorageClassName: &storageClass, Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("6Gi")}}}}},
+	}}
+	setSelfManagedFixtureTerminating(&statefulSet.ObjectMeta, terminating)
+	return statefulSet
+}
+
+func selfManagedDexDeploymentFixture(terminating bool) *appsv1.Deployment {
+	replicas := int32(3)
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-dex", Namespace: localAstronomerNamespace}, Spec: appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "dex", Image: "dex.runtime/team/dex:v2.99.0", VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/etc/dex", ReadOnly: true}}}}, Volumes: []corev1.Volume{{Name: "config", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "runtime-dex"}}}}}}}}
+	setSelfManagedFixtureTerminating(&deployment.ObjectMeta, terminating)
+	return deployment
+}
+
+func selfManagedFrontendDeploymentFixture() *appsv1.Deployment {
+	replicas := int32(2)
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: localAstronomerReleaseName + "-frontend", Namespace: localAstronomerNamespace},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "frontend", Image: "frontend.runtime/team/frontend:v12"}}}}},
+	}
+}
+
+func setSelfManagedFixtureTerminating(metadata *metav1.ObjectMeta, terminating bool) {
+	if !terminating {
+		return
+	}
+	now := metav1.Now()
+	metadata.DeletionTimestamp = &now
+	metadata.Finalizers = []string{"test.astronomer.io/hold"}
+}
+
+func assertSelfManagedComponentDisabled(t *testing.T, component string, values map[string]any) {
+	t.Helper()
+	switch component {
+	case "postgres":
+		postgres := values["postgres"].(map[string]any)
+		if enabled, _, _ := unstructured.NestedBool(values, "postgres", "bundled", "enabled"); enabled {
+			t.Fatalf("Postgres was not explicitly disabled: %#v", postgres)
+		}
+		if ref, _, _ := unstructured.NestedString(values, "postgres", "external", "dsnSecretRef", "name"); ref != "astronomer-secrets" {
+			t.Fatalf("external Postgres ref = %q", ref)
+		}
+	case "redis":
+		if enabled, _, _ := unstructured.NestedBool(values, "redis", "bundled", "enabled"); enabled {
+			t.Fatalf("Redis was not explicitly disabled: %#v", values["redis"])
+		}
+		if ref, _, _ := unstructured.NestedString(values, "redis", "external", "urlSecretRef", "name"); ref != "astronomer-secrets" {
+			t.Fatalf("external Redis ref = %q", ref)
+		}
+	case "dex":
+		if enabled, _, _ := unstructured.NestedBool(values, "dex", "enabled"); enabled {
+			t.Fatalf("Dex was not explicitly disabled: %#v", values["dex"])
+		}
+	}
+}
+
+func markServerDeploymentRolloutCompleteForTest(t *testing.T, client *fake.Clientset) {
+	t.Helper()
+	ctx := context.Background()
+	deployment, err := client.AppsV1().Deployments(localAstronomerNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	labels := map[string]string{"app.kubernetes.io/name": "astronomer", "app.kubernetes.io/instance": "astronomer", "app.kubernetes.io/component": "server"}
+	deployment.UID = "build-test-deployment"
+	deployment.ResourceVersion = "build-test-server-11"
+	deployment.Generation = 11
+	deployment.Annotations = map[string]string{"deployment.kubernetes.io/revision": "11"}
+	deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
+	deployment.Spec.Template.Labels = labels
+	desired := int32(1)
+	deployment.Spec.Replicas = &desired
+	deployment.Status = appsv1.DeploymentStatus{ObservedGeneration: 11, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	controller := true
+	template := *deployment.Spec.Template.DeepCopy()
+	template.Labels["pod-template-hash"] = "buildhash"
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-buildhash", Namespace: localAstronomerNamespace, UID: "build-test-rs", Annotations: map[string]string{"deployment.kubernetes.io/revision": "11"}, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID, Controller: &controller}}}, Spec: appsv1.ReplicaSetSpec{Replicas: &desired, Template: template}}
+	if _, err := client.AppsV1().ReplicaSets(localAstronomerNamespace).Create(ctx, replicaSet, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-buildhash-pod", Namespace: localAstronomerNamespace, Labels: template.Labels, OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID, Controller: &controller}}}}
+	if _, err := client.CoreV1().Pods(localAstronomerNamespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setDeploymentImagesForTest(t *testing.T, client *fake.Clientset, name, primary, migrate string) {
+	t.Helper()
+	deployment, err := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name == "server" || deployment.Spec.Template.Spec.Containers[i].Name == "worker" || deployment.Spec.Template.Spec.Containers[i].Name == "frontend" {
+			deployment.Spec.Template.Spec.Containers[i].Image = primary
+		}
+	}
+	if migrate != "" {
+		for i := range deployment.Spec.Template.Spec.InitContainers {
+			if deployment.Spec.Template.Spec.InitContainers[i].Name == "migrate" {
+				deployment.Spec.Template.Spec.InitContainers[i].Image = migrate
+			}
+		}
+	}
+	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), deployment, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -47,8 +47,7 @@ func TestCreateApplication(t *testing.T) {
 			Path:           "manifests",
 			TargetRevision: "main",
 			Helm: &HelmSource{
-				ValueFiles: []string{"values-prod.yaml"},
-				Parameters: []HelmParameter{{Name: "image.tag", Value: "v1.0"}},
+				ReleaseName: "myapp",
 			},
 		},
 		Destination: &ApplicationDestination{
@@ -258,6 +257,46 @@ func TestCreateApplicationSetWithClusterGenerator(t *testing.T) {
 	}
 }
 
+func TestCreateApplicationSetWithRecursiveMergeGenerator(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"merged"},"spec":{}}`))
+	})
+	list := ApplicationSetGenerator{List: &ListGenerator{Elements: []json.RawMessage{json.RawMessage(`{"cluster":"prod"}`)}}}
+	git := ApplicationSetGenerator{Git: &GitGenerator{RepoURL: "ssh://git@git.example/team/repo.git", Revision: "main", Directories: []GitGeneratorDirectory{{Path: "apps/*"}}, Values: map[string]string{"region": "east"}}}
+	matrix := ApplicationSetGenerator{Matrix: &MatrixGenerator{Generators: []ApplicationSetGenerator{git, list}}}
+	clusters := ApplicationSetGenerator{Cluster: &ClusterGenerator{Values: map[string]string{"tier": "critical"}}}
+	spec := ApplicationSetSpec{
+		Generators: []ApplicationSetGenerator{{Merge: &MergeGenerator{Generators: []ApplicationSetGenerator{clusters, matrix}, MergeKeys: []string{"cluster"}}}},
+		Template: ApplicationSetTemplate{Metadata: ApplicationMetadata{Name: "{{cluster}}-app"}, Spec: ApplicationSpec{
+			Project: "default", Source: &ApplicationSource{RepoURL: "https://git.example/repo"}, Destination: &ApplicationDestination{Server: "{{server}}", Namespace: "prod"},
+		}},
+	}
+	if _, err := c.CreateApplicationSet(context.Background(), "merged", spec); err != nil {
+		t.Fatalf("safe recursive merge generator rejected: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("upstream calls=%d", calls)
+	}
+}
+
+func TestCreateApplicationSetRejectsDuplicateTypedBranchesBeforeUpstream(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(http.ResponseWriter, *http.Request) { calls++ })
+	spec := ApplicationSetSpec{Generators: []ApplicationSetGenerator{{
+		List: &ListGenerator{Elements: []json.RawMessage{json.RawMessage(`{"name":"prod"}`)}},
+		Git:  &GitGenerator{RepoURL: "https://git.example/repo"},
+	}}}
+	if _, err := c.CreateApplicationSet(context.Background(), "unsafe", spec); err == nil {
+		t.Fatal("duplicate typed generator branches accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("unsafe generator made %d upstream calls", calls)
+	}
+}
+
 func TestRegisterCluster(t *testing.T) {
 	var seenPath string
 	var seenQuery string
@@ -380,6 +419,95 @@ func TestPatchProjectUsesPUTAfterMerge(t *testing.T) {
 	repos, ok := spec["sourceRepos"].([]any)
 	if !ok || len(repos) != 1 || repos[0] != "*" {
 		t.Errorf("merged sourceRepos = %v (must preserve original)", spec["sourceRepos"])
+	}
+}
+
+func TestPatchProjectRejectsUnsafeMergedSourceReposBeforePUT(t *testing.T) {
+	putCalls := 0
+	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"metadata":{"name":"myproj","resourceVersion":"42"},"spec":{"description":"old","sourceRepos":["https://user:pass@git.example/repo"]}}`))
+		case http.MethodPut:
+			putCalls++
+		}
+	})
+	if _, err := c.PatchProject(context.Background(), "myproj", json.RawMessage(`{"description":"new"}`)); err == nil {
+		t.Fatal("unsafe merged sourceRepos accepted")
+	}
+	if putCalls != 0 {
+		t.Fatalf("unsafe merged project issued %d PUT calls", putCalls)
+	}
+}
+
+func TestTypedWriteClientsRejectCredentialURLsBeforeUpstream(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(http.ResponseWriter, *http.Request) { calls++ })
+	unsafe := "https://user:pass@example.test/path?sig=secret#fragment"
+	if _, err := c.CreateRepository(context.Background(), RepositoryCreate{Repo: unsafe}); err == nil {
+		t.Fatal("unsafe repository URL accepted")
+	}
+	if _, err := c.TestRepository(context.Background(), RepositoryCreate{Repo: unsafe}); err == nil {
+		t.Fatal("unsafe repository test URL accepted")
+	}
+	if err := c.DeleteRepository(context.Background(), unsafe); err == nil {
+		t.Fatal("unsafe repository delete URL accepted")
+	}
+	if _, err := c.RegisterCluster(context.Background(), ClusterRegistration{Server: unsafe}); err == nil {
+		t.Fatal("unsafe cluster server accepted")
+	}
+	if _, err := c.CreateProject(context.Background(), "demo", AppProjectSpec{SourceRepos: []string{unsafe}}); err == nil {
+		t.Fatal("unsafe project sourceRepos accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("unsafe writes made %d upstream calls", calls)
+	}
+}
+
+func TestTypedClientsAllowSafeGitTransportAndMultiSourceValueRepository(t *testing.T) {
+	var calls []string
+	c, _ := newLifecycleClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "repositories"):
+			_, _ = w.Write([]byte(`{"repo":"git@github.com:team/repo.git"}`))
+		default:
+			_, _ = w.Write([]byte(`{"metadata":{"name":"multi"}}`))
+		}
+	})
+	if _, err := c.CreateRepository(context.Background(), RepositoryCreate{Repo: "git@github.com:team/repo.git"}); err != nil {
+		t.Fatalf("safe SCP repository rejected: %v", err)
+	}
+	if _, err := c.CreateApplication(context.Background(), "multi", ApplicationSpec{
+		Project: "default",
+		Sources: []ApplicationSource{
+			{RepoURL: "https://charts.example/repo", Chart: "platform", Helm: &HelmSource{ValueFiles: []string{"$values/prod.yaml", "defaults.yaml"}}},
+			{RepoURL: "ssh://git@git.example/team/values.git", TargetRevision: "main", Ref: "values"},
+		},
+		Destination: &ApplicationDestination{Server: "https://kube.example:6443", Namespace: "prod"},
+	}); err != nil {
+		t.Fatalf("safe multi-source value repository rejected: %v", err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("upstream calls=%v", calls)
+	}
+}
+
+func TestTypedApplicationRejectsUnsafeMultiSourceValueRepositoryBeforeUpstream(t *testing.T) {
+	calls := 0
+	c, _ := newLifecycleClient(t, func(http.ResponseWriter, *http.Request) { calls++ })
+	if _, err := c.CreateApplication(context.Background(), "multi", ApplicationSpec{
+		Project: "default",
+		Sources: []ApplicationSource{
+			{RepoURL: "https://charts.example/repo", Chart: "platform", Helm: &HelmSource{ValueFiles: []string{"$values/../secret.yaml"}}},
+			{RepoURL: "https://git.example/values", Ref: "values"},
+		},
+	}); err == nil {
+		t.Fatal("unsafe typed multi-source value repository accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("unsafe typed application made %d upstream calls", calls)
 	}
 }
 

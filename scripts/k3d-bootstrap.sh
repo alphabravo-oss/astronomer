@@ -20,12 +20,14 @@
 # Env vars:
 #   CLUSTER       k3d cluster name                           (default: astronomer-mgmt)
 #   IMG_TAG       Image tag to build / deploy                (default: dev)
+#   IMG_REGISTRY  First-party image registry                 (default: ghcr.io/alphabravo-oss)
 #   NAMESPACE     Astronomer release namespace               (default: astronomer)
 #   HOST          External hostname for the dashboard        (default: astronomer.localtest.me)
 #   HTTP_PORT     Host port mapped to the gateway :80        (default: 8080)
 #   SERVER_URL    Override the externally-reachable URL      (default: http://${HOST}:${HTTP_PORT})
-#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.3.0)
+#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.4.1)
 #   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
+#                  The supported pair is NGF 2.6.0 + Gateway API v1.4.1.
 #   SKIP_BUILD    Skip docker build step                     (default: 0)
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
 
@@ -33,16 +35,18 @@ set -euo pipefail
 
 CLUSTER="${CLUSTER:-astronomer-mgmt}"
 IMG_TAG="${IMG_TAG:-dev}"
+IMG_REGISTRY="${IMG_REGISTRY:-ghcr.io/alphabravo-oss}"
 NAMESPACE="${NAMESPACE:-astronomer}"
 HOST="${HOST:-astronomer.localtest.me}"
 HTTP_PORT="${HTTP_PORT:-8080}"
 SERVER_URL="${SERVER_URL:-http://${HOST}:${HTTP_PORT}}"
-GW_API_VER="${GW_API_VER:-v1.3.0}"
+GW_API_VER="${GW_API_VER:-v1.4.1}"
 NGF_VERSION="${NGF_VERSION:-2.6.0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PREREQS="${SKIP_PREREQS:-0}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/lib/gatewayclass-readiness.sh"
 cd "$ROOT_DIR"
 
 step()    { printf "\n\033[1;36m==> %s\033[0m\n" "$*"; }
@@ -56,12 +60,20 @@ require kubectl
 require docker
 require helm
 
-IMG_SERVER="astronomer-go-server:${IMG_TAG}"
-IMG_AGENT="astronomer-go-agent:${IMG_TAG}"
-IMG_WORKER="astronomer-go-worker:${IMG_TAG}"
-IMG_MIGRATE="astronomer-go-migrate:${IMG_TAG}"
+# This is a tested compatibility unit, not two independent latest-version
+# knobs. Add a new explicit pair here only after the bootstrap behavioral gate
+# and chart prerequisite contract have been validated together.
+if [[ "${NGF_VERSION}:${GW_API_VER}" != "2.6.0:v1.4.1" ]]; then
+  fail "unsupported Gateway stack ${NGF_VERSION}:${GW_API_VER}; supported pair is NGF 2.6.0 + Gateway API v1.4.1"
+fi
+
+IMG_SERVER="${IMG_REGISTRY}/astronomer-go-server:${IMG_TAG}"
+IMG_AGENT="${IMG_REGISTRY}/astronomer-go-agent:${IMG_TAG}"
+IMG_WORKER="${IMG_REGISTRY}/astronomer-go-worker:${IMG_TAG}"
+IMG_MIGRATE="${IMG_REGISTRY}/astronomer-go-migrate:${IMG_TAG}"
 # Frontend image name kept as astronomer-frontend to match deploy/chart/values.yaml.
-IMG_FRONTEND="astronomer-frontend:${IMG_TAG}"
+IMG_FRONTEND="${IMG_REGISTRY}/astronomer-frontend:${IMG_TAG}"
+IMG_SHELL="${IMG_REGISTRY}/astronomer-shell:${IMG_TAG}"
 
 # ── 1. Create cluster (if missing) ───────────────────────────────────────────
 step "Ensuring k3d cluster '${CLUSTER}' exists"
@@ -94,23 +106,18 @@ if [[ "${SKIP_PREREQS}" != "1" ]]; then
     --create-namespace --namespace nginx-gateway \
     --wait --timeout 5m
 
-  step "Waiting for the 'nginx' GatewayClass to be Accepted"
-  for _ in $(seq 1 30); do
-    state=$(kubectl get gatewayclass nginx -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null || true)
-    if [[ "$state" == "True" ]]; then
-      info "GatewayClass nginx is Accepted"
-      break
-    fi
-    sleep 2
-  done
 else
   info "SKIP_PREREQS=1, skipping Gateway API CRDs + NGF install"
 fi
 
+step "Validating the 'nginx' GatewayClass compatibility contract"
+wait_for_gatewayclass nginx 30 2 \
+  || fail "GatewayClass nginx did not satisfy the supported, generation-current readiness contract"
+
 # ── 3. Build images ──────────────────────────────────────────────────────────
 if [[ "${SKIP_BUILD}" != "1" ]]; then
   step "Building Docker images (tag=${IMG_TAG})"
-  make IMG_TAG="${IMG_TAG}" docker-build-all
+  make IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all
 else
   info "SKIP_BUILD=1, skipping docker build"
 fi
@@ -118,35 +125,27 @@ fi
 # ── 4. Import images into k3d ────────────────────────────────────────────────
 step "Importing images into k3d cluster"
 k3d image import \
-  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" \
+  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" "${IMG_SHELL}" \
   -c "${CLUSTER}"
-
-# Sprint 074 — preload the kubectl image used by the kubectl-shell debug
-# pods + preflight checks. k3d nodes have no egress by default on
-# air-gapped dev laptops, and pulling at debug-pod-start-time causes a
-# 60s ImagePullBackOff that masks every real cluster bug under
-# investigation. The pull is best-effort: if Docker Hub is unreachable
-# we warn and continue (the operator can `docker pull` + `k3d image
-# import` manually).
-KUBECTL_IMG="bitnami/kubectl:1.31.4"
-step "Preloading kubectl image (${KUBECTL_IMG}) into k3d for debug pods"
-if docker image inspect "${KUBECTL_IMG}" >/dev/null 2>&1 \
-  || docker pull "${KUBECTL_IMG}" >/dev/null 2>&1; then
-  k3d image import "${KUBECTL_IMG}" -c "${CLUSTER}" || warn "k3d image import of ${KUBECTL_IMG} failed; debug pods may ImagePullBackOff"
-else
-  warn "could not pull ${KUBECTL_IMG}; debug pods will hit ImagePullBackOff until you 'docker pull' + 'k3d image import' it manually"
-fi
 
 # ── 5. Deploy astronomer ─────────────────────────────────────────────────────
 step "Installing Helm chart into namespace '${NAMESPACE}'"
 helm upgrade --install astronomer deploy/chart \
   --namespace "${NAMESPACE}" --create-namespace \
   -f deploy/chart/values.yaml \
+  --set image.server.registry="${IMG_REGISTRY}" \
+  --set image.worker.registry="${IMG_REGISTRY}" \
+  --set image.agent.registry="${IMG_REGISTRY}" \
+  --set image.migrate.registry="${IMG_REGISTRY}" \
+  --set frontend.image.registry="${IMG_REGISTRY}" \
+  --set preflight.image.registry="${IMG_REGISTRY}" \
   --set image.server.tag="${IMG_TAG}" \
   --set image.worker.tag="${IMG_TAG}" \
   --set image.agent.tag="${IMG_TAG}" \
   --set image.migrate.tag="${IMG_TAG}" \
   --set frontend.image.tag="${IMG_TAG}" \
+  --set preflight.image.tag="${IMG_TAG}" \
+  --set-string kubectlShell.image="${IMG_SHELL}" \
   --set config.serverURL="${SERVER_URL}" \
   --set config.corsAllowedOrigins="${SERVER_URL}" \
   --set ingress.enabled=false \

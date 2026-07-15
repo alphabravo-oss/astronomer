@@ -16,7 +16,7 @@ below:
 |---------------------------------------|------------------------------------------|------------------|--------------------|
 | `secrets.encryptionKey` (Fernet)      | At-rest column secrets (SSO client secret, ArgoCD auth token, backup creds, Dex connector secrets) | **yes**, with `keyrotate` | no |
 | `secrets.secretKey` (JWT HMAC)        | Every issued access + refresh JWT        | **yes**, two-key window for one refresh-token lifetime (7d) | no |
-| Agent registration tokens             | Per-cluster, used to pair an agent to a cluster row | per-cluster rotation | **yes — re-pair the agent in question** |
+| Durable agent tokens                  | Per-cluster adopted-agent identity       | **yes**, ACK-delivered rotation with grace | no |
 | Admin bootstrap password              | First-login admin account                | n/a — change via the normal password-change UI | n/a |
 
 What survives `pg_restore` from the nightly dump (cross-reference with
@@ -30,9 +30,9 @@ What survives `pg_restore` from the nightly dump (cross-reference with
 - **JWT signing key**: not stored in the DB, only in the Helm secret.
   After a `pg_restore` you don't need to do anything special; the
   server reads whatever is in its Helm secret.
-- **Agent registration tokens**: stored in `cluster_registration_tokens`
-  and restored with the rest of the schema. The agent's side of the
-  pairing (the Secret in its cluster) is **not** in the dump — see the
+- **Agent credentials**: token hashes and registration state are restored with
+  the database. The agent's durable plaintext exists only in its managed
+  cluster's `astronomer-agent-identity` Secret and is **not** in the dump — see the
   agent rotation section below.
 
 ---
@@ -103,6 +103,7 @@ The tool rewrites every row in every column-stored Fernet secret. As of this
 writing that is:
 
 - `sso_configurations.client_secret_encrypted`
+- `dex_settings.public_clients_encrypted`
 - `argocd_instances.auth_token_encrypted`
 - `backup_storage_configs.encrypted_credentials`
 - `vault_connections.auth_encrypted`
@@ -121,18 +122,25 @@ The authoritative list is `rewriteTargets` in `cmd/keyrotate/main.go`; a build
 test (`cmd/keyrotate/coverage_test.go`) fails if a migration adds an encrypted
 column that is not swept, so this list cannot silently drift.
 
-It also prints the count of `dex_connectors` rows: their encrypted
-fields live inside a JSONB blob (per-connector-type schema), so the
-tool does NOT auto-rewrite them. Re-save each Dex connector via the UI
-or:
+The same run CAS-rewrites every recognized encrypted field inside
+`dex_connectors.config`. Unknown connector types, invalid ciphertext, or a CAS
+conflict are reported as failures and keep the command non-zero; do not remove
+the fallback key until a clean rerun completes.
 
-```bash
-curl -sX PATCH -H "Authorization: Bearer $TOKEN" \
-  $URL/api/v1/dex/connectors/$ID -d '{}'    # zero-diff PATCH forces re-encrypt
-```
+Migration 134's plaintext `dex_settings.public_clients` compatibility copy is
+not scrubbed by a normal rotation. After every old server replica is quiesced
+and only the mixed-version-aware binary remains, perform the explicit durable
+cutover with `--dex-public-clients-cutover-confirmed`. This encrypts the final
+compatibility value, CAS-scrubs it, and stamps `public_clients_cutover_at`.
+Re-running is safe and processes only unstamped rows. The database constraint
+then rejects an old binary attempting to repopulate plaintext.
 
-When the `keyrotate` summary shows `failed=0`, every column secret is
-now under the new primary.
+After rewriting, `keyrotate` performs a second primary-only scan of every
+encrypted column, typed connector JSON credential, and static-client envelope.
+It also checks pre-cutover envelope/plaintext equality. Any CAS miss, fallback-
+only ciphertext, malformed JSON, or static-client drift increments `failed` and
+keeps the command non-zero. Only a final `failed=0` result authorizes removing
+the fallback key.
 
 ### Step 4 — drop the old key
 
@@ -209,53 +217,48 @@ out and must reauthenticate. No further action needed.
 
 ---
 
-## 3. Rotating an agent registration token
+## 3. Rotating an agent credential
 
-Each cluster row has a long-lived registration token in
-`cluster_registration_tokens` (default 30-day TTL for the embedded
-local agent; see `internal/server/localcluster.go:38`). The agent in
-the managed cluster uses this on every (re)connect.
+Adopted agents use two separate Secrets in `astronomer-system`:
 
-Rotation **forces re-pairing** because the token has to be replaced in
-both the management DB and the agent's own Secret in its cluster.
+- `astronomer-agent-registration-token` is installer-owned, short-lived
+  bootstrap material. Server-side manifest reapply may refresh it.
+- `astronomer-agent-identity` is the active durable identity. The installer owns
+  its empty labeled container; the agent owns only `data.token`, so every
+  bootstrap reapply preserves it.
+- `astronomer-agent-token` is legacy migration input and is ignored after an
+  accepted migration into the active identity.
 
-### Step 1 — issue a new token (UI)
-
-From `/dashboard/clusters/{id}`, click **Rotate registration token**.
-This calls `POST /api/v1/clusters/{id}/registration-tokens` which
-inserts a new row with a new TTL and returns the bearer string. The
-old token row stays valid until it expires or you delete it.
-
-### Step 2 — update the agent's Secret in its cluster
-
-Render and re-apply the agent manifest the UI emits (it includes the
-new token), or directly patch the Secret in the managed cluster's
-`astronomer` namespace:
+Do not patch either Secret with a token returned by an API or database query.
+Request durable rotation through the control plane:
 
 ```bash
-kubectl -n astronomer patch secret astronomer-agent \
-  --type merge -p '{"stringData":{"AGENT_TOKEN":"'"$NEW_TOKEN"'"}}'
-kubectl -n astronomer rollout restart deploy/astronomer-agent
+curl -fsSL -X POST \
+  -H "Authorization: Bearer $ASTRONOMER_API_TOKEN" \
+  "$ASTRONOMER_URL/api/v1/clusters/$CLUSTER_ID/agent-token/rotate/"
 ```
 
-The agent will reconnect, present the new token, and the existing WS
-tunnel stays up until the old connection drops.
+The next authenticated CONNECT delivers the replacement credential in its ACK.
+The agent patches only `data.token` on `astronomer-agent-identity`, reconnects
+with it, and the server retires the previous hash after adoption. Verify the
+cluster reconnects and `agent_last_seen_at` advances. If durable persistence
+fails, inspect the agent's `credential_source` diagnostic and its name-scoped
+Secret RBAC; never print either Secret's data while troubleshooting.
 
-### Step 3 — revoke the old token
-
-Once the agent is confirmed reconnecting under the new token (the
-cluster row's `agent_last_seen_at` advances within the heartbeat
-interval), revoke:
+Deleting the durable Secret is a recovery action, not normal rotation. On the
+next restart a current-layout agent fails closed because the required identity
+container is absent; it does not directly fall back. Reapply the current manifest
+to recreate the empty labeled identity container. Startup then prefers any valid
+legacy `astronomer-agent-token` material before bootstrap. If legacy is absent,
+the server still enforces bootstrap registration-token expiry and cluster
+binding. Generate a fresh manifest if bootstrap has expired, then apply it with:
 
 ```bash
-psql "$DATABASE_URL" -c "
-  DELETE FROM cluster_registration_tokens
-  WHERE cluster_id = '$CLUSTER_ID' AND token = '$OLD_TOKEN';
-"
+kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
 ```
 
-The cluster decommission reconciler (`internal/worker/tasks/cluster_decommission.go`)
-runs the same step automatically when a cluster is removed.
+See [agent-credential-ownership.md](agent-credential-ownership.md) for ownership,
+upgrade compatibility, and the exact-name RBAC contract.
 
 ---
 

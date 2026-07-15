@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,14 @@ func newToolQueryRecorder(clusterID uuid.UUID) *toolQueryRecorder {
 
 func installedRefKey(clusterID uuid.UUID, releaseName, namespace string) string {
 	return clusterID.String() + "|" + releaseName + "|" + namespace
+}
+
+func TestEnsureInstalledRejectsRemoteUpstreamDex(t *testing.T) {
+	q := newToolQueryRecorder(uuid.New())
+	h := NewToolHandler(q)
+	if _, err := h.EnsureInstalled(context.Background(), q.clusterID, DexToolSlug, "dex", "development", ""); err == nil || !strings.Contains(err.Error(), "bundled") {
+		t.Fatalf("remote upstream Dex install was not rejected: %v", err)
+	}
 }
 
 func (q *toolQueryRecorder) GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error) {

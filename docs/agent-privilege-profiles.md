@@ -21,6 +21,25 @@ Use the narrowest profile that supports the workflows the cluster needs.
 - Referenced `AgentProfile` resources can also project install metadata into the same registration manifest path: `install.image`, `install.serviceAccountName`, and `install.podLabels`.
 - The server normalizes an unspecified (missing or empty) value to `viewer` (least privilege), and an explicit unrecognized value (such as a typo) also fails closed to `viewer` — a no-annotation adoption never silently grants broad access.
 
+## Upgrade note: implicit admin removal
+
+The running agent, registration manifest, fleet heartbeat, self-test, and
+upgrade planner now use the same effective-profile rule: a missing, blank, or
+unrecognized profile resolves to `viewer`. Older agent deployments that omitted
+`ASTRONOMER_PRIVILEGE_PROFILE` may previously have run as implicit `admin`; the
+agent emits a startup warning when it detects that legacy omission.
+
+Before upgrading, operators who intentionally depend on full-management access
+must set `ASTRONOMER_PRIVILEGE_PROFILE=admin` explicitly (normally by
+re-rendering the registration manifest with the `admin` annotation). Review
+that choice as a risk acceptance. Do not set `admin` merely to make a denied
+feature work: select a compatible explicit profile or grant narrowly reviewed
+custom RBAC, then validate the required workflow.
+
+Viewer does not start the Secret informer. Secret watching is enabled only for
+an explicitly compatible normalized profile; unavailable capabilities are
+reported as denied instead of silently widening the effective profile.
+
 ## Install Metadata
 
 `AgentProfile.spec.install` controls install-time manifest details without making operators hand-edit generated YAML:
@@ -66,11 +85,13 @@ For least privilege, start with `operator` for clusters where baseline component
 ## Operational Guidance
 
 - Treat `admin` as an explicit risk acceptance and keep it visible in cluster review.
-- Prefer `operator` for managed workload clusters.
+- Prefer `operator` only for managed workload clusters whose required
+  operations justify its near-admin capability set.
 - Prefer `viewer` for audit-only or inventory-only clusters.
 - Prefer `namespace-operator` or `namespace-viewer` when Astronomer should only operate inside the agent namespace.
 - Use `custom` only when you manage the Role/ClusterRole bindings outside the generated manifest.
-- Re-render and re-apply the agent manifest after changing the profile.
+- Re-render and re-apply the agent manifest after changing the profile with
+  `kubectl apply --server-side --field-manager=astronomer-bootstrap -f -`.
 - Validate important workflows after profile changes: resource browsing, logs, shell/exec, tool install, ArgoCD sync, backup, scan, and decommission.
 
 ## Enforcement model (M8 — important)
@@ -90,7 +111,8 @@ profile check on each request. Consequences:
   the agent has no second gate that would catch it — the API server's RBAC is
   the single source of truth. Review the rendered ClusterRole, not just the
   ConfigMap label, when auditing a cluster's actual privilege.
-- Re-rendering and re-applying the manifest re-asserts the intended RBAC; do that
-  after any suspected drift.
+- Re-rendering and server-side-applying the manifest with field manager
+  `astronomer-bootstrap` re-asserts the intended RBAC without taking ownership
+  of the agent's durable credential; do that after any suspected drift.
 - (Optional hardening, not implemented: a startup `SelfSubjectRulesReview` that
   alerts/refuses if the agent's live permissions exceed its declared profile.)

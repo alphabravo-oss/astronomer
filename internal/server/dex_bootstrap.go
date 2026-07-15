@@ -2,9 +2,9 @@ package server
 
 // Migration 045 — auto-wire dex_settings when the chart ships Dex in-band.
 //
-// When the operator runs the chart with `dex.enabled=true` the configmap
-// template sets DEX_BUNDLED_ENABLED=true plus the namespace / release-name /
-// configmap-name / issuer-url that match the templated objects. The server's
+// When the operator runs the chart with `dex.enabled=true` the runtime config
+// sets DEX_BUNDLED_ENABLED=true plus the namespace / release-name /
+// runtime-secret-name / issuer-url that match the templated objects. The server's
 // boot path then seeds the singleton dex_settings row to point at those
 // objects so the operator's first connector + Apply works without any manual
 // settings step.
@@ -32,11 +32,15 @@ import (
 // effect — the DexHandler still serves /settings + /apply, but no auto-seed
 // happens.
 const (
-	dexBootstrapEnv              = "DEX_BUNDLED_ENABLED"
-	dexBootstrapNamespaceEnv     = "DEX_BUNDLED_NAMESPACE"
-	dexBootstrapReleaseNameEnv   = "DEX_BUNDLED_RELEASE_NAME"
-	dexBootstrapConfigmapNameEnv = "DEX_BUNDLED_CONFIGMAP_NAME"
-	dexBootstrapIssuerURLEnv     = "DEX_BUNDLED_ISSUER_URL"
+	dexBootstrapEnv                  = "DEX_BUNDLED_ENABLED"
+	dexBootstrapNamespaceEnv         = "DEX_BUNDLED_NAMESPACE"
+	dexBootstrapReleaseNameEnv       = "DEX_BUNDLED_RELEASE_NAME"
+	dexBootstrapDeploymentNameEnv    = "DEX_BUNDLED_DEPLOYMENT_NAME"
+	dexBootstrapServiceNameEnv       = "DEX_BUNDLED_SERVICE_NAME"
+	dexBootstrapRuntimeSecretNameEnv = "DEX_BUNDLED_RUNTIME_SECRET_NAME"
+	dexBootstrapMigrationPhaseEnv    = "DEX_BUNDLED_MIGRATION_PHASE"
+	dexBootstrapConfigmapNameEnv     = "DEX_BUNDLED_CONFIGMAP_NAME" // deprecated alias
+	dexBootstrapIssuerURLEnv         = "DEX_BUNDLED_ISSUER_URL"
 )
 
 // dexBootstrapSingletonID is the same UUID DexHandler uses for the singleton
@@ -48,7 +52,7 @@ var dexBootstrapSingletonID = uuid.MustParse("00000000-0000-0000-0000-0000000000
 // production *sqlc.Queries satisfies this naturally; tests inject a fake.
 type dexBootstrapQuerier interface {
 	GetDexSettings(ctx context.Context, id uuid.UUID) (sqlc.DexSetting, error)
-	UpsertDexSettings(ctx context.Context, arg sqlc.UpsertDexSettingsParams) (sqlc.DexSetting, error)
+	StageDexSettingsAndDisableSSO(ctx context.Context, arg sqlc.StageDexSettingsAndDisableSSOParams) (int64, error)
 }
 
 // dexBootstrapEnvLookup is os.LookupEnv-shaped so tests can substitute a
@@ -97,6 +101,28 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	// should be no-ops.
 	existing, err := queries.GetDexSettings(ctx, dexBootstrapSingletonID)
 	if err == nil && existing.ID == dexBootstrapSingletonID {
+		desiredNamespace := envOr(env, dexBootstrapNamespaceEnv, "astronomer")
+		desiredChartRelease := envOr(env, dexBootstrapReleaseNameEnv, "astronomer")
+		desiredDeployment := envOr(env, dexBootstrapDeploymentNameEnv, desiredChartRelease+"-dex")
+		desiredService := envOr(env, dexBootstrapServiceNameEnv, desiredDeployment)
+		desiredPhase := envOr(env, dexBootstrapMigrationPhaseEnv, "fresh")
+		desiredRuntimeName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
+			envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
+		// Bundled identity is chart-owned and immutable. Reconcile every identity
+		// field while preserving operator-owned issuer, cluster, clients, and
+		// extension settings.
+		if existing.Namespace != desiredNamespace || existing.ChartReleaseName != desiredChartRelease || existing.DeploymentName != desiredDeployment || existing.ServiceName != desiredService || existing.RuntimeSecretName != desiredRuntimeName || existing.RuntimePhase != desiredPhase {
+			_, updateErr := queries.StageDexSettingsAndDisableSSO(ctx, sqlc.StageDexSettingsAndDisableSSOParams{
+				ID: existing.ID, IssuerUrl: existing.IssuerUrl, ClusterID: existing.ClusterID,
+				Namespace: desiredNamespace, ReleaseName: desiredDeployment,
+				ConfigmapName: desiredRuntimeName, RuntimeSecretName: desiredRuntimeName,
+				PublicClients: existing.PublicClients, PublicClientsEncrypted: existing.PublicClientsEncrypted,
+				Expiry: existing.Expiry, Extra: existing.Extra,
+				ChartReleaseName: desiredChartRelease, DeploymentName: desiredDeployment, ServiceName: desiredService,
+				RuntimePhase: desiredPhase,
+			})
+			return updateErr == nil, updateErr
+		}
 		logger.Debug("dex bootstrap: settings already exist; skipping seed",
 			"existing_issuer", existing.IssuerUrl,
 		)
@@ -114,19 +140,29 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	}
 
 	namespace := envOr(env, dexBootstrapNamespaceEnv, "astronomer")
-	releaseName := envOr(env, dexBootstrapReleaseNameEnv, "astronomer-dex")
-	configmapName := envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-config")
+	chartReleaseName := envOr(env, dexBootstrapReleaseNameEnv, "astronomer")
+	deploymentName := envOr(env, dexBootstrapDeploymentNameEnv, chartReleaseName+"-dex")
+	serviceName := envOr(env, dexBootstrapServiceNameEnv, deploymentName)
+	runtimePhase := envOr(env, dexBootstrapMigrationPhaseEnv, "fresh")
+	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
+		envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
 
-	_, err = queries.UpsertDexSettings(ctx, sqlc.UpsertDexSettingsParams{
-		ID:            dexBootstrapSingletonID,
-		IssuerUrl:     issuer,
-		ClusterID:     pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
-		Namespace:     namespace,
-		ReleaseName:   releaseName,
-		ConfigmapName: configmapName,
-		PublicClients: []byte("[]"),
-		Expiry:        []byte("{}"),
-		Extra:         []byte("{}"),
+	_, err = queries.StageDexSettingsAndDisableSSO(ctx, sqlc.StageDexSettingsAndDisableSSOParams{
+		ID:                     dexBootstrapSingletonID,
+		IssuerUrl:              issuer,
+		ClusterID:              pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
+		Namespace:              namespace,
+		ReleaseName:            deploymentName,
+		ConfigmapName:          runtimeSecretName,
+		RuntimeSecretName:      runtimeSecretName,
+		PublicClientsEncrypted: "",
+		PublicClients:          []byte("[]"),
+		Expiry:                 []byte("{}"),
+		Extra:                  []byte("{}"),
+		ChartReleaseName:       chartReleaseName,
+		DeploymentName:         deploymentName,
+		ServiceName:            serviceName,
+		RuntimePhase:           runtimePhase,
 	})
 	if err != nil {
 		return false, err
@@ -135,8 +171,11 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		"event", "dex_settings_seeded",
 		"issuer_url", issuer,
 		"namespace", namespace,
-		"release_name", releaseName,
-		"configmap_name", configmapName,
+		"chart_release_name", chartReleaseName,
+		"deployment_name", deploymentName,
+		"service_name", serviceName,
+		"runtime_phase", runtimePhase,
+		"runtime_secret_name", runtimeSecretName,
 	)
 	return true, nil
 }

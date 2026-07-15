@@ -22,16 +22,15 @@ func pendingSyncOp(t *testing.T, rec *argoCDQueryRecorder, attemptCount int32) {
 	pending := sqlc.ArgocdOperation{
 		ID:            id,
 		OperationType: "sync",
-		Status:        "pending",
+		Status:        OpStatusPending,
 		TargetType:    "application",
 		TargetKey:     rec.app.ID.String(),
 		Payload:       payload,
+		// The recorder's MarkArgoCDOperationRunning mirrors the real claim
+		// query: it increments AttemptCount as it flips the row to running.
+		AttemptCount: attemptCount - 1,
 	}
-	running := pending
-	running.Status = "running"
-	running.AttemptCount = attemptCount
 	rec.pendingOps = []sqlc.ArgocdOperation{pending}
-	rec.markRunning = running
 }
 
 // A transient submission failure (instance not healthy → ErrUnreachable-kind

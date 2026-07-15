@@ -1,0 +1,52 @@
+{{- /*
+DEX-01 runtime writer authority.
+
+DexHandler.Apply reaches Kubernetes through the connected cluster agent, so
+this Role binds the agent ServiceAccount rather than the management server SA.
+Kubernetes RBAC supports resourceNames for existing-object verbs but cannot
+name-scope `create`, so create is intentionally absent. Helm/Argo creates the
+metadata-only retained Secret before the Deployment and handler are activated.
+*/ -}}
+{{- if and .Values.dex.enabled .Values.dex.runtimeWriterServiceAccount.name }}
+{{- $runtimeSecretName := default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex-runtime-writer
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $runtimeSecretName | quote }}]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ printf "%s-dex" (include "astronomer.fullname" .) | quote }}]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    # Kubernetes authorizes the service-proxy path against its full
+    # scheme:name:port resource name, not the bare Service metadata name.
+    resourceNames: [{{ printf "http:%s-dex:5556" (include "astronomer.fullname" .) | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex-runtime-writer
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "astronomer.fullname" . }}-dex-runtime-writer
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.dex.runtimeWriterServiceAccount.name | quote }}
+    namespace: {{ .Values.dex.runtimeWriterServiceAccount.namespace | quote }}
+{{- end }}
