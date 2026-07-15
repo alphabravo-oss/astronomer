@@ -24,6 +24,8 @@ import { useMemo, useState } from 'react';
 import { useParams } from '@/lib/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastError, toastInfo, toastSuccess, toastWarning } from '@/lib/toast';
+import { extractApiErrorMessage } from '@/lib/api/errors';
+import type { AxiosError } from 'axios';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -42,8 +44,6 @@ import {
   reconcileApiserverAllowlist,
   updateApiserverAllowlist,
   type ApiserverAllowlistMode,
-  type ApiserverAllowlistResponse,
-  type ApiserverAllowlistSnapshot,
 } from '@/lib/api/cluster-detail';
 import { queryKeys } from '@/lib/hooks';
 import { useClustersUpdate } from '@/lib/permission-hooks';
@@ -142,8 +142,8 @@ export default function ClusterNetworkAccessPage() {
       setRequireForce(false);
       queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId) });
     },
-    onError: (err: any) => {
-      const code = err?.response?.data?.error?.code;
+    onError: (err: AxiosError<{ error?: { code?: string } }>) => {
+      const code = err.response?.data?.error?.code;
       if (code === 'mode_change_requires_force') {
         setRequireForce(true);
         toastWarning(
@@ -151,7 +151,7 @@ export default function ClusterNetworkAccessPage() {
         );
       } else {
         toastError(
-          err?.response?.data?.error?.message ?? 'Failed to update allow-list',
+          extractApiErrorMessage(err) ?? 'Failed to update allow-list',
         );
       }
     },
@@ -167,9 +167,9 @@ export default function ClusterNetworkAccessPage() {
         2_000,
       );
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
       toastError(
-        err?.response?.data?.error?.message ?? 'Failed to queue reconcile',
+        extractApiErrorMessage(err) ?? 'Failed to queue reconcile',
       );
     },
   });

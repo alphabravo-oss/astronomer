@@ -12,7 +12,6 @@ import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
-  Loader2,
   Plus,
   Trash2,
   Webhook,

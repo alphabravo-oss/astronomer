@@ -55,7 +55,6 @@ export default function RestoreDetailPage() {
   }
 
   const inProgress = restore.phase === 'InProgress' || restore.status === 'in_progress';
-  const completed = restore.phase === 'Completed' || restore.status === 'completed';
   const partial = restore.phase === 'PartiallyFailed';
   const failed =
     restore.phase === 'Failed' ||

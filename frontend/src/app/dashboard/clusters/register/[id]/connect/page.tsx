@@ -21,7 +21,6 @@ import {
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live-events';
 
-type Tab = 'curl' | 'quick' | 'yaml' | 'airgapped';
 type CurlVariant = 'public_ca' | 'private_ca' | 'insecure';
 
 const TAB_KEYS = ['curl', 'quick', 'yaml', 'airgapped'] as const;

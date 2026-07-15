@@ -40,7 +40,6 @@ import {
   formatCPU,
   formatPercentage,
   formatRelativeTime,
-  providerDisplayName,
   distributionDisplayName,
 } from '@/lib/utils';
 import {

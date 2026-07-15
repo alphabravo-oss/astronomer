@@ -1,6 +1,6 @@
 'use client';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { useParams, useRouter } from '@/lib/navigation';
 import { useTabParam } from '@/lib/use-tab-param';
 import { useState } from 'react';

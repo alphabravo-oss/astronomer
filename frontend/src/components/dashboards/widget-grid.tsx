@@ -23,7 +23,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
-import type { RenderedWidget } from '@/lib/api/dashboards';
+import type { RenderedWidget, WidgetSpec } from '@/lib/api/dashboards';
 
 export type WidgetFetcher = () => Promise<RenderedWidget[]>;
 
@@ -196,7 +196,7 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
       );
     }
     case 'url_iframe': {
-      const url = (widget.specResolved as any)?.url ?? '';
+      const url = widget.specResolved?.url ?? '';
       if (!url) return <div className="text-xs text-muted-foreground">Missing url</div>;
       return (
         <iframe
@@ -221,7 +221,7 @@ function formatStat(value: number, format: string): string {
   return String(value);
 }
 
-function grafanaIframeURL(spec: any): string {
+function grafanaIframeURL(spec: WidgetSpec | undefined): string {
   if (!spec || !spec.base_url || !spec.dashboard_uid) return '';
   const base = String(spec.base_url).replace(/\/$/, '');
   const path = `/d-solo/${encodeURIComponent(spec.dashboard_uid)}`;

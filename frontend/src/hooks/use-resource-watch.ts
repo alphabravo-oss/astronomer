@@ -27,7 +27,7 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { createStreamTicket } from '@/lib/api';
 import { openProxyWatch, type WatchVerb } from '@/lib/api/k8s-watch';
@@ -92,7 +92,7 @@ export type WatchSource =
   | { kind: 'pods'; namespace?: string }
   | { kind: 'proxy'; path: string };
 
-export interface UseResourceWatchOptions<T extends K8sObject> {
+export interface UseResourceWatchOptions<_T extends K8sObject> {
   clusterId: string;
   /** React Query key of the `{ items: T[] }` list cache to fold frames into. */
   queryKey: QueryKey;

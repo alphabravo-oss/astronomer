@@ -101,7 +101,9 @@ async function newCtx(theme, state) {
     try {
       localStorage.setItem('astronomer-theme', t); // next-themes (plain)
       localStorage.setItem('theme', JSON.stringify(t)); // ArgoCD UI (JSON-encoded)
-    } catch {}
+    } catch {
+      /* best-effort */
+    }
   }, theme);
   return ctx;
 }

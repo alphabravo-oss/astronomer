@@ -276,7 +276,6 @@ function EnrollmentWizard({ onClose, onDone }: { onClose: () => void; onDone: ()
           ) : (
             <div className="flex flex-col items-center gap-3">
               <div className="rounded-lg bg-white p-2 border border-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`data:image/png;base64,${enrollment.qrPngBase64}`}
                   alt="TOTP QR code"

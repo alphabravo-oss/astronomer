@@ -8,7 +8,7 @@ import { CommandPalette } from '@/components/layout/command-palette';
 import { WindowManager } from '@/components/window-manager/window-manager';
 import { ExtensionProvider } from '@/components/extensions/ExtensionProvider';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useUIStore, useAuthStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/store';
 import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
@@ -20,7 +20,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { sidebarCollapsed } = useUIStore();
   const router = useRouter();
   const pathname = usePathname();
   const updateUser = useAuthStore((s) => s.updateUser);

@@ -1614,8 +1614,8 @@ export async function getMyChartRating(chartId: string) {
   try {
     const res = await api.get<APIResponse<ChartRating>>(`/charts/${chartId}/ratings/mine/`);
     return res.data.data;
-  } catch (e: any) {
-    if (e?.response?.status === 404) {
+  } catch (e) {
+    if ((e as AxiosError).response?.status === 404) {
       return null;
     }
     throw e;

@@ -1,33 +1,58 @@
-import nextVitals from 'eslint-config-next/core-web-vitals';
+import js from '@eslint/js';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import pluginQuery from '@tanstack/eslint-plugin-query';
 
 const config = [
   {
     ignores: [
       '.next/**',
+      'dist/**',
       'node_modules/**',
-      'next-env.d.ts',
       'public/**',
       'coverage/**',
     ],
   },
-  ...nextVitals,
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  reactHooks.configs['recommended-latest'],
+  jsxA11y.flatConfigs.recommended,
   ...pluginQuery.configs['flat/recommended'],
   {
+    // Node scripts and CommonJS/ESM config files at the frontend root.
+    // shoot.mjs also evaluates snippets in a browser page context, hence the
+    // browser globals.
+    files: ['scripts/**/*.mjs', '*.config.{js,cjs,mjs}'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.commonjs, ...globals.browser },
+    },
+  },
+  {
     rules: {
-      'import/no-anonymous-default-export': 'off',
-      'react-hooks/immutability': 'off',
-      'react-hooks/preserve-manual-memoization': 'off',
-      'react-hooks/purity': 'off',
-      'react-hooks/refs': 'off',
-      'react-hooks/set-state-in-render': 'off',
-      'react-hooks/set-state-in-effect': 'off',
-      // Headless TanStack libraries (react-table, react-virtual) return
-      // non-memoizable functions from their hooks by design; this React
-      // Compiler rule flags that pattern. Off alongside the rest of the
-      // experimental React Compiler rule family already disabled above.
-      'react-hooks/incompatible-library': 'off',
-      'react/no-unescaped-entities': 'off',
+      // Underscore-prefixed bindings are the deliberate-discard convention
+      // (e.g. `const { token: _legacyToken, ...rest }` in the auth-store
+      // migration).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      // jsx-a11y flat/recommended is stricter than the six aria/alt rules
+      // eslint-config-next enforced. The rules below fail on ~360 pre-existing
+      // sites across the tree; keep them visible as warnings (still more a11y
+      // coverage than before the migration) rather than blocking the gate.
+      // Tightening them back to errors is post-merge cleanup.
+      'jsx-a11y/label-has-associated-control': 'warn',
+      'jsx-a11y/no-autofocus': 'warn',
+      'jsx-a11y/click-events-have-key-events': 'warn',
+      'jsx-a11y/no-static-element-interactions': 'warn',
+      'jsx-a11y/no-noninteractive-element-interactions': 'warn',
+      'jsx-a11y/interactive-supports-focus': 'warn',
       // Two latent issues these rules surfaced (clusters.pods key omitted its
       // namespace param; the pod-logs hook spread its whole query result) have
       // been fixed, so both rules are enforced as errors.
@@ -45,22 +70,19 @@ const config = [
             'Do not inline queryKey arrays. Add/use a factory entry in src/lib/query-keys.ts instead.',
         },
       ],
-      // Ban direct imports of next/navigation and next/link. All navigation
-      // must go through the adapter layer so behavior stays centralized. The
-      // adapter files themselves are exempted via the override block below.
+      // Ban direct imports of @tanstack/react-router. All navigation must go
+      // through the adapter layer (@/lib/navigation, @/lib/link) so behavior
+      // stays centralized and test mocks keep working. The adapter files, the
+      // route tree, and the router itself are exempted via the override block
+      // below.
       'no-restricted-imports': [
         'error',
         {
           paths: [
             {
-              name: 'next/navigation',
+              name: '@tanstack/react-router',
               message:
-                'Do not import next/navigation directly. Use @/lib/navigation (client) or @/lib/navigation-server (server) instead.',
-            },
-            {
-              name: 'next/link',
-              message:
-                'Do not import next/link directly. Use @/lib/link instead.',
+                'Do not import @tanstack/react-router directly. Use @/lib/navigation or @/lib/link instead.',
             },
           ],
         },
@@ -68,12 +90,14 @@ const config = [
     },
   },
   {
-    // The adapter layer is the single place allowed to import next/navigation
-    // and next/link directly; everything else must go through these wrappers.
+    // The adapter layer, route files, and the router module are the only
+    // places allowed to import @tanstack/react-router directly; everything
+    // else must go through the wrappers.
     files: [
       'src/lib/navigation.ts',
-      'src/lib/navigation-server.ts',
       'src/lib/link.tsx',
+      'src/routes/**',
+      'src/router.tsx',
     ],
     rules: {
       'no-restricted-imports': 'off',

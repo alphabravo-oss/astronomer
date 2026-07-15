@@ -6,7 +6,7 @@ import { useClusters, useTools, useClusterToolsStatus } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 import { normalizeToolStatus } from '@/lib/tool-status';
 import type { Cluster, ClusterTool, ClusterToolStatus, ToolStatus } from '@/types';
-import { Wrench, Loader2, Server } from 'lucide-react';
+import { Loader2, Server } from 'lucide-react';
 
 const toolStatusDotColor: Record<ToolStatus, string> = {
   installed: 'bg-status-success',

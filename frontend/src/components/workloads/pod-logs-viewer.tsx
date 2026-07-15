@@ -51,7 +51,7 @@ export function PodLogsViewer({
     }
   }, [containers, selectedContainer]);
 
-  const { data: logs, isLoading, stopStreaming } = usePodLogs(
+  const { data: logs, isLoading } = usePodLogs(
     clusterId,
     namespace,
     podName,

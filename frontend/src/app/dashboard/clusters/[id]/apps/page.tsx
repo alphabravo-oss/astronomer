@@ -645,7 +645,6 @@ function InstalledRow({
       <TableCell className="px-3 py-2">
         <div className="flex items-center gap-2">
           {row.chartIconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={row.chartIconUrl} alt="" className="h-5 w-5 rounded" />
           ) : (
             <Box className="h-5 w-5 text-muted-foreground" />
@@ -812,7 +811,6 @@ function BrowseView({
               >
                 <div className="h-10 w-10 flex-shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
                   {c.iconUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={c.iconUrl} alt="" className="h-10 w-10 object-contain" />
                   ) : (
                     <Box className="h-5 w-5 text-muted-foreground" />

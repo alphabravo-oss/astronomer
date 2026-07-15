@@ -192,7 +192,7 @@ export default function ComplianceBaselinesPage() {
       }
       setBaselines(bs);
       setHistory(hist);
-    } catch (err) {
+    } catch {
       toastError('Failed to load compliance baselines');
     } finally {
       setLoading(false);

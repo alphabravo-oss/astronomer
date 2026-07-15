@@ -26,28 +26,6 @@ interface PolicyRuleInput {
 
 const VERBS = ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete'];
 
-const COMMON_RESOURCES = [
-  'pods',
-  'deployments',
-  'services',
-  'configmaps',
-  'secrets',
-  'namespaces',
-  'nodes',
-  'persistentvolumeclaims',
-  'ingresses',
-  'jobs',
-  'cronjobs',
-  'statefulsets',
-  'daemonsets',
-  'replicasets',
-  'serviceaccounts',
-  'roles',
-  'rolebindings',
-  'clusterroles',
-  'clusterrolebindings',
-];
-
 const emptyRule: PolicyRuleInput = {
   apiGroups: '',
   resources: '',

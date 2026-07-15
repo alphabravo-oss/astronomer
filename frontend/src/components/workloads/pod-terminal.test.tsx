@@ -5,6 +5,7 @@ import * as api from '@/lib/api';
 // mount, which is what gates PodTerminal's connect effect.
 jest.mock('@wterm/react/css', () => ({}), { virtual: true });
 jest.mock('@wterm/react', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories are hoisted; converted in the P1.5 vitest port
   const React = require('react');
   return {
     Terminal: ({ onReady }: { onReady?: () => void }) => {

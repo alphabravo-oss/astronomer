@@ -509,7 +509,6 @@ function SidebarGroup({
   pathname,
   collapsed,
   counts,
-  isClusterContext,
   isOpen,
   onToggle,
 }: {

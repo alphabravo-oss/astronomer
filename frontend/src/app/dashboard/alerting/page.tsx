@@ -35,7 +35,6 @@ import {
   Plus,
   AlertTriangle,
   AlertCircle,
-  Info,
   Shield,
   VolumeX,
   X,

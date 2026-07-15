@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { CodeBlock } from '@/components/ui/code-block';
 import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, formatDate, cn } from '@/lib/utils';
-import type { SSOProvider, APIToken, AuditLogEntry } from '@/types';
+import type { APIToken, AuditLogEntry } from '@/types';
 import {
   Settings,
   Shield,
@@ -21,7 +21,6 @@ import {
   Github,
   Chrome,
   KeyRound,
-  Lock,
   LifeBuoy,
   Download,
 } from 'lucide-react';

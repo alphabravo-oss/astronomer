@@ -11,7 +11,6 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import type { CISScanListItem } from '@/types';
 import {
-  ScanSearch,
   Plus,
   AlertTriangle,
   CheckCircle2,

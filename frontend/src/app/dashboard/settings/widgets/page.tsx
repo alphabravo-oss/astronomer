@@ -35,6 +35,7 @@ import {
   type Widget,
   type WidgetType,
   type WidgetScope,
+  type WidgetSpec,
   type WidgetWriteBody,
   type PrometheusDatasource,
 } from '@/lib/api/dashboards';
@@ -134,10 +135,10 @@ export default function WidgetsAdminPage() {
 
   const submit = async () => {
     if (!editing) return;
-    let spec: any = {};
+    let spec: WidgetSpec = {};
     try {
       spec = JSON.parse(specText);
-    } catch (e) {
+    } catch {
       setError('Spec is not valid JSON');
       return;
     }

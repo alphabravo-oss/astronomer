@@ -25,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { queryKeys } from '@/lib/hooks';
+import { extractApiErrorMessage } from '@/lib/api/errors';
 import {
   listVaultConnections,
   createVaultConnection,
@@ -77,7 +78,7 @@ function VaultConnectionsPage() {
       setDraft(blankBody('token'));
       setError(null);
     },
-    onError: (err: any) => setError(err?.response?.data?.error?.message ?? String(err)),
+    onError: (err: unknown) => setError(extractApiErrorMessage(err) ?? String(err)),
   });
   const delMu = useMutation({
     mutationFn: deleteVaultConnection,
