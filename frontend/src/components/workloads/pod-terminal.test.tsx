@@ -21,7 +21,7 @@ vi.mock('@wterm/react', async () => {
     }),
   };
 });
-vi.mock('next-themes', () => ({ useTheme: () => ({ theme: 'dark' }) }));
+vi.mock('@/lib/theme', () => ({ useTheme: () => ({ theme: 'dark' }) }));
 vi.mock('@/lib/api', () => ({ createStreamTicket: vi.fn() }));
 
 import { PodTerminal } from './pod-terminal';

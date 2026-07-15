@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { ThemeProvider } from 'next-themes';
+import { ThemeProvider } from '@/lib/theme';
 import { Toaster } from 'sonner';
 import { useState, type ReactNode } from 'react';
 import { IS_DEV } from '@/lib/env';
@@ -30,19 +30,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-        // Use a namespaced key so we don't collide with the upstream ArgoCD
-        // SPA, which is served on the same origin under /argocd/* and reads
-        // the bare `theme` localStorage key as JSON. next-themes writes the
-        // value as a literal string ("dark"), and ArgoCD's `JSON.parse` then
-        // throws "Unexpected token 'd', "dark" is not valid JSON" and the
-        // ArgoCD applications page renders blank.
-        storageKey="astronomer-theme"
-      >
+      {/* Native provider (D12): class strategy, system tracking, default dark.
+          The load-bearing `astronomer-theme` storage key (never bare `theme` —
+          the co-hosted ArgoCD SPA JSON-parses that key) lives in @/lib/theme. */}
+      <ThemeProvider>
         {children}
         <Toaster
           position="bottom-right"

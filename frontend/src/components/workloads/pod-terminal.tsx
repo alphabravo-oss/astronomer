@@ -7,7 +7,7 @@
 // 2026-05-12.
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/lib/theme';
 import { Terminal as TerminalIcon, RefreshCw, X, ChevronDown } from 'lucide-react';
 import { Terminal, useTerminal } from '@wterm/react';
 import '@wterm/react/css';

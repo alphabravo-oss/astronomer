@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from '@/lib/navigation';
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/lib/theme';
 import {
   Bell,
   ChevronDown,
