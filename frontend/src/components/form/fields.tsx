@@ -8,8 +8,8 @@
  * generated `id` + `htmlFor`, `aria-invalid` when errored, and the error
  * `<p>` wired via `aria-describedby`.
  */
-import { useId } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useId, useState } from 'react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFieldContext, useFormContext } from '@/lib/form';
 
@@ -28,6 +28,9 @@ interface CommonFieldProps {
   required?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  /** Extra input classes merged over the shared base (twMerge — later wins),
+   *  for forms whose inputs deviate from the default sizing (e.g. h-9/rounded-md). */
+  className?: string;
 }
 
 function firstError(meta: { errors: unknown[] }): string | undefined {
@@ -88,9 +91,16 @@ export function TextField({
   required,
   disabled,
   placeholder,
+  className,
   type = 'text',
   autoComplete,
-}: CommonFieldProps & { type?: 'text' | 'email' | 'url'; autoComplete?: string }) {
+  transform,
+}: CommonFieldProps & {
+  type?: 'text' | 'email' | 'url';
+  autoComplete?: string;
+  /** Normalize keystrokes before they hit form state (e.g. slug-casing a name). */
+  transform?: (value: string) => string;
+}) {
   const field = useFieldContext<string>();
   const id = useId();
   const error = firstError(field.state.meta);
@@ -100,12 +110,12 @@ export function TextField({
         id={id}
         type={type}
         value={field.state.value ?? ''}
-        onChange={(e) => field.handleChange(e.target.value)}
+        onChange={(e) => field.handleChange(transform ? transform(e.target.value) : e.target.value)}
         onBlur={field.handleBlur}
         placeholder={placeholder}
         disabled={disabled}
         autoComplete={autoComplete}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed')}
+        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -118,6 +128,7 @@ export function NumberField({
   required,
   disabled,
   placeholder,
+  className,
   min,
   max,
   step,
@@ -138,7 +149,7 @@ export function NumberField({
         min={min}
         max={max}
         step={step}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed')}
+        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -151,6 +162,7 @@ export function PasswordField({
   required,
   disabled,
   placeholder,
+  className,
   autoComplete,
 }: CommonFieldProps & { autoComplete?: string }) {
   const field = useFieldContext<string>();
@@ -167,7 +179,7 @@ export function PasswordField({
         placeholder={placeholder}
         disabled={disabled}
         autoComplete={autoComplete}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed')}
+        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -187,14 +199,41 @@ export function SecretField({
   required,
   disabled,
   placeholder,
+  className,
   stored,
+  revealable,
   autoComplete = 'new-password',
-}: CommonFieldProps & { stored: boolean; autoComplete?: string }) {
+}: CommonFieldProps & {
+  stored: boolean;
+  /** Adds the eye toggle that flips the input to plain text (credential-form pattern). */
+  revealable?: boolean;
+  autoComplete?: string;
+}) {
   const field = useFieldContext<string>();
   const id = useId();
+  const [reveal, setReveal] = useState(false);
   const error = firstError(field.state.meta);
   const pristine = !field.state.meta.isDirty;
   const showStored = stored && pristine;
+  const input = (
+    <input
+      id={id}
+      type={revealable && reveal ? 'text' : 'password'}
+      value={field.state.value ?? ''}
+      placeholder={showStored ? SECRET_PLACEHOLDER : placeholder}
+      onChange={(e) => field.handleChange(e.target.value)}
+      onBlur={field.handleBlur}
+      disabled={disabled}
+      autoComplete={autoComplete}
+      className={cn(
+        inputClassName,
+        disabled && 'opacity-60 cursor-not-allowed',
+        revealable && 'pr-9',
+        className,
+      )}
+      {...ariaProps(id, error)}
+    />
+  );
   return (
     <FieldShell
       id={id}
@@ -203,18 +242,21 @@ export function SecretField({
       required={required}
       error={error}
     >
-      <input
-        id={id}
-        type="password"
-        value={field.state.value ?? ''}
-        placeholder={showStored ? SECRET_PLACEHOLDER : placeholder}
-        onChange={(e) => field.handleChange(e.target.value)}
-        onBlur={field.handleBlur}
-        disabled={disabled}
-        autoComplete={autoComplete}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed')}
-        {...ariaProps(id, error)}
-      />
+      {revealable ? (
+        <div className="relative">
+          {input}
+          <button
+            type="button"
+            onClick={() => setReveal((prev) => !prev)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+            title={reveal ? 'Hide' : 'Show'}
+          >
+            {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      ) : (
+        input
+      )}
     </FieldShell>
   );
 }
@@ -225,6 +267,7 @@ export function TextareaField({
   required,
   disabled,
   placeholder,
+  className,
 }: CommonFieldProps) {
   const field = useFieldContext<string>();
   const id = useId();
@@ -238,7 +281,7 @@ export function TextareaField({
         onBlur={field.handleBlur}
         placeholder={placeholder}
         disabled={disabled}
-        className={cn(textareaClassName, disabled && 'opacity-60 cursor-not-allowed')}
+        className={cn(textareaClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
         {...ariaProps(id, error)}
       />
     </FieldShell>
@@ -251,6 +294,7 @@ export function SelectField({
   helper,
   required,
   disabled,
+  className,
   children,
 }: Omit<CommonFieldProps, 'placeholder'> & { children: React.ReactNode }) {
   const field = useFieldContext<string>();
@@ -264,7 +308,7 @@ export function SelectField({
         onChange={(e) => field.handleChange(e.target.value)}
         onBlur={field.handleBlur}
         disabled={disabled}
-        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed')}
+        className={cn(inputClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
         {...ariaProps(id, error)}
       >
         {children}

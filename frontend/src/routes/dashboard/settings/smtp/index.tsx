@@ -12,7 +12,8 @@ import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
 import { ArrowLeft, Loader2, Mail, Save, Send } from 'lucide-react';
 import { toastError } from '@/lib/toast';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
+import { useAppForm } from '@/lib/form';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
@@ -22,13 +23,7 @@ import {
   useTestSmtp,
   useUpdateSmtpConfig,
 } from '@/components/settings/hooks';
-import {
-  SMTP_REDACTED_SENTINEL,
-  type SentEmail,
-  type SmtpAuth,
-  type SmtpConfig,
-  type SmtpEncryption,
-} from '@/lib/api/settings';
+import { SMTP_REDACTED_SENTINEL, type SentEmail, type SmtpConfig } from '@/lib/api/settings';
 
 const DEFAULT_CONFIG: SmtpConfig = {
   host: '',
@@ -44,24 +39,27 @@ const DEFAULT_CONFIG: SmtpConfig = {
 };
 
 function SmtpForm({ initial }: { initial: SmtpConfig }) {
-  const [form, setForm] = useState<SmtpConfig>(initial);
   const [testTo, setTestTo] = useState('');
   const update = useUpdateSmtpConfig();
   const testSend = useTestSmtp();
 
+  const form = useAppForm({
+    defaultValues: initial,
+    onSubmit: async ({ value }) => {
+      try {
+        // The sentinel stays in the value; updateSmtpConfig strips it before
+        // the PUT (strip-in-mutation, unchanged).
+        await update.mutateAsync(value);
+      } catch {
+        // Mutation toasts on error.
+      }
+    },
+  });
+
+  // Post-save invalidation refetches the config — rebase the form on it.
   useEffect(() => {
-    setForm(initial);
-  }, [initial]);
-
-  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
-
-  const handleSave = async () => {
-    try {
-      await update.mutateAsync(form);
-    } catch {
-      // Mutation toasts on error.
-    }
-  };
+    form.reset(initial);
+  }, [form, initial]);
 
   const handleTest = async () => {
     if (!testTo) {
@@ -83,135 +81,72 @@ function SmtpForm({ initial }: { initial: SmtpConfig }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="sm:col-span-2 space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Host</label>
-          <input
-            type="text"
-            value={form.host}
-            onChange={(e) => setForm({ ...form, host: e.target.value })}
-            placeholder="smtp.example.com"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+        <div className="sm:col-span-2">
+          <form.AppField name="host">
+            {(field) => <field.TextField label="Host" placeholder="smtp.example.com" />}
+          </form.AppField>
         </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Port</label>
-          <input
-            type="number"
-            value={form.port}
-            onChange={(e) => setForm({ ...form, port: Number(e.target.value) })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        <form.AppField name="port">{(field) => <field.NumberField label="Port" />}</form.AppField>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Username</label>
-          <input
-            type="text"
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Password</label>
-          <input
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          {form.password === SMTP_REDACTED_SENTINEL && (
-            <p className="text-xs text-muted-foreground">
-              Stored password preserved — type a new value to rotate.
-            </p>
+        <form.AppField name="username">
+          {(field) => <field.TextField label="Username" />}
+        </form.AppField>
+        <form.AppField name="password">
+          {(field) => (
+            <field.SecretField
+              label="Password"
+              stored={field.state.value === SMTP_REDACTED_SENTINEL}
+            />
           )}
-        </div>
+        </form.AppField>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">From address</label>
-          <input
-            type="email"
-            value={form.fromAddress}
-            onChange={(e) => setForm({ ...form, fromAddress: e.target.value })}
-            placeholder="no-reply@example.com"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">From name</label>
-          <input
-            type="text"
-            value={form.fromName}
-            onChange={(e) => setForm({ ...form, fromName: e.target.value })}
-            placeholder="Astronomer"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        <form.AppField name="fromAddress">
+          {(field) => (
+            <field.TextField label="From address" type="email" placeholder="no-reply@example.com" />
+          )}
+        </form.AppField>
+        <form.AppField name="fromName">
+          {(field) => <field.TextField label="From name" placeholder="Astronomer" />}
+        </form.AppField>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Auth mechanism</label>
-          <select
-            value={form.authMechanism}
-            onChange={(e) => setForm({ ...form, authMechanism: e.target.value as SmtpAuth })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="plain">PLAIN</option>
-            <option value="login">LOGIN</option>
-            <option value="cram-md5">CRAM-MD5</option>
-            <option value="none">None</option>
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Encryption</label>
-          <select
-            value={form.encryption}
-            onChange={(e) => setForm({ ...form, encryption: e.target.value as SmtpEncryption })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="starttls">STARTTLS</option>
-            <option value="tls">TLS</option>
-            <option value="none">None</option>
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Timeout (s)</label>
-          <input
-            type="number"
-            value={form.timeoutSeconds}
-            min={1}
-            onChange={(e) => setForm({ ...form, timeoutSeconds: Number(e.target.value) })}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        <form.AppField name="authMechanism">
+          {(field) => (
+            <field.SelectField label="Auth mechanism">
+              <option value="plain">PLAIN</option>
+              <option value="login">LOGIN</option>
+              <option value="cram-md5">CRAM-MD5</option>
+              <option value="none">None</option>
+            </field.SelectField>
+          )}
+        </form.AppField>
+        <form.AppField name="encryption">
+          {(field) => (
+            <field.SelectField label="Encryption">
+              <option value="starttls">STARTTLS</option>
+              <option value="tls">TLS</option>
+              <option value="none">None</option>
+            </field.SelectField>
+          )}
+        </form.AppField>
+        <form.AppField name="timeoutSeconds">
+          {(field) => <field.NumberField label="Timeout (s)" min={1} />}
+        </form.AppField>
       </div>
 
-      <div className="flex items-center justify-between p-3 rounded-lg border border-border">
-        <div>
-          <p className="text-sm font-medium text-foreground">Require TLS</p>
-          <p className="text-xs text-muted-foreground">Reject connections that don&apos;t negotiate TLS.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setForm({ ...form, requireTls: !form.requireTls })}
-          className={cn(
-            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-            form.requireTls ? 'bg-status-success' : 'bg-muted',
-          )}
-        >
-          <span
-            className={cn(
-              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-              form.requireTls ? 'translate-x-6' : 'translate-x-1',
-            )}
+      <form.AppField name="requireTls">
+        {(field) => (
+          <field.SwitchField
+            label="Require TLS"
+            helper="Reject connections that don't negotiate TLS."
           />
-        </button>
-      </div>
+        )}
+      </form.AppField>
 
       <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-border">
         <div className="flex-1 flex items-center gap-2">
@@ -232,15 +167,26 @@ function SmtpForm({ initial }: { initial: SmtpConfig }) {
             Send test email
           </button>
         </div>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty || update.isPending}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+        <form.Subscribe
+          selector={(state) =>
+            [
+              JSON.stringify(state.values) !== JSON.stringify(initial),
+              state.isSubmitting,
+            ] as const
+          }
         >
-          {update.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          Save changes
-        </button>
+          {([dirty, saving]) => (
+            <button
+              type="button"
+              onClick={() => void form.handleSubmit()}
+              disabled={!dirty || saving}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save changes
+            </button>
+          )}
+        </form.Subscribe>
       </div>
     </div>
   );

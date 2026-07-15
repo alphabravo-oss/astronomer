@@ -1,18 +1,21 @@
 'use client';
 
 /**
- * Schema-driven cloud-credential form. Mirrors the Dex connector-form
- * pattern: fields render from the provider's spec in
+ * Schema-driven cloud-credential form (TanStack Form). Mirrors the Dex
+ * connector-form pattern: fields render from the provider's spec in
  * `/cloud-credentials/providers/`, with secret fields rendered as
  * `<set>`-aware password inputs that only ship a new value when the user
- * actually types into them.
+ * actually types into them (per-field `meta.isDirty` +
+ * `stripUntouchedSecrets`, replacing the hand-rolled `touchedSecrets` map).
  *
  * The form is intentionally generic over the provider — adding a new
  * provider only requires a backend registry entry.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAppForm } from '@/lib/form';
+import { stripUntouchedSecrets } from '@/components/form/secrets';
 import type {
   CloudCredentialProviderSpec,
   CloudCredentialTargetRef,
@@ -21,7 +24,9 @@ import type {
 } from '@/lib/api/project-detail';
 import { TargetRefsEditor } from './target-refs-editor';
 
-const SECRET_PLACEHOLDER = '••••••••';
+// This form's inputs are one notch tighter than the kit default — merged
+// over the kit's base input class (twMerge, later wins).
+const credInputClassName = 'h-9 rounded-md focus:ring-1';
 
 export interface CredentialFormState {
   name: string;
@@ -55,108 +60,87 @@ export function CredentialForm({
   onSubmit,
   onCancel,
 }: CredentialFormProps) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [config, setConfig] = useState<Record<string, unknown>>(initial?.config ?? {});
-  const [targetRefs, setTargetRefs] = useState<CloudCredentialTargetRef[]>(
-    initial?.targetRefs ?? [],
-  );
-  // Whether the user has actually typed into a secret field this session.
-  // Untouched secrets get stripped on submit so the backend preserves the
-  // existing ciphertext.
-  const [touchedSecrets, setTouchedSecrets] = useState<Record<string, boolean>>({});
-  // Per-field "show password" toggle, keyed by field name.
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-  const [clientErrors, setClientErrors] = useState<string[]>([]);
-
-  // Switching providers in the wizard wipes the per-provider config but
-  // preserves name / description / targets (those are provider-agnostic).
-  useEffect(() => {
-    if (!isEdit) {
-      setConfig(initial?.config ?? {});
-      setTouchedSecrets({});
-    }
-  }, [provider, isEdit, initial?.config]);
-
-  const setField = (key: string, value: unknown) =>
-    setConfig((prev) => ({ ...prev, [key]: value }));
-
   const secretIsSet = (key: string): boolean => Boolean(initial?.secretsSet?.has(key));
 
-  const handleSubmit = () => {
-    const errors: string[] = [];
-    if (!name.trim()) errors.push('Name is required');
-    if (!isEdit && !/^[a-z0-9-]+$/.test(name.trim())) {
-      errors.push('Name must be lowercase letters, digits, and dashes');
-    }
-    for (const field of spec.fields) {
-      if (!field.required) continue;
-      if (field.secret) {
-        if (!touchedSecrets[field.name] && !secretIsSet(field.name)) {
-          errors.push(`${field.label || field.name} is required`);
+  const form = useAppForm({
+    defaultValues: {
+      name: initial?.name ?? '',
+      description: initial?.description ?? '',
+      config: (initial?.config ?? {}) as Record<string, unknown>,
+      targetRefs: initial?.targetRefs ?? [],
+    },
+    onSubmit: ({ value }) => {
+      // Drop untouched secrets so the backend keeps the existing ciphertext,
+      // then keep only the provider's declared, non-null fields.
+      const stripped = stripUntouchedSecrets(
+        value.config,
+        form,
+        spec.fields.filter((f) => f.secret).map((f) => f.name),
+        'config.',
+      );
+      const cleaned: Record<string, unknown> = {};
+      for (const field of spec.fields) {
+        if (field.name in stripped && stripped[field.name] != null) {
+          cleaned[field.name] = stripped[field.name];
         }
-        continue;
       }
-      const v = config[field.name];
-      if (v == null || (typeof v === 'string' && v.trim() === '')) {
-        errors.push(`${field.label || field.name} is required`);
-      }
-    }
-    if (errors.length) {
-      setClientErrors(errors);
-      return;
-    }
-    setClientErrors([]);
+      onSubmit({
+        name: value.name.trim(),
+        provider,
+        description: value.description.trim() || undefined,
+        config: cleaned,
+        targetRefs: value.targetRefs,
+      });
+    },
+  });
 
-    // Drop untouched secrets so the backend keeps the existing ciphertext.
-    const cleaned: Record<string, unknown> = {};
-    for (const field of spec.fields) {
-      if (field.secret && !touchedSecrets[field.name]) continue;
-      if (config[field.name] != null) cleaned[field.name] = config[field.name];
+  // Switching providers in the wizard wipes the per-provider config (values
+  // AND dirty meta, so secrets go back to pristine) but preserves
+  // name / description / targets (those are provider-agnostic).
+  useEffect(() => {
+    if (!isEdit) {
+      form.reset({
+        ...form.state.values,
+        config: (initial?.config ?? {}) as Record<string, unknown>,
+      });
     }
-
-    onSubmit({
-      name: name.trim(),
-      provider,
-      description: description.trim() || undefined,
-      config: cleaned,
-      targetRefs,
-    });
-  };
-
-  const allErrors = useMemo(() => {
-    const out = [...clientErrors];
-    if (serverError) out.unshift(serverError);
-    return out;
-  }, [clientErrors, serverError]);
+  }, [form, provider, isEdit, initial?.config]);
 
   return (
     <div className="space-y-5">
       {/* Identity */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Name</label>
-          <input
-            type="text"
-            value={name}
-            disabled={isEdit}
-            placeholder="my-aws-keys"
-            onChange={(e) =>
-              setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))
-            }
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Description</label>
-          <input
-            type="text"
-            value={description}
-            placeholder="What this credential is used for"
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
+        <form.AppField
+          name="name"
+          validators={{
+            onSubmit: ({ value }) => {
+              if (!value.trim()) return 'Name is required';
+              if (!isEdit && !/^[a-z0-9-]+$/.test(value.trim())) {
+                return 'Name must be lowercase letters, digits, and dashes';
+              }
+              return undefined;
+            },
+          }}
+        >
+          {(field) => (
+            <field.TextField
+              label="Name"
+              disabled={isEdit}
+              placeholder="my-aws-keys"
+              transform={(v) => v.toLowerCase().replace(/[^a-z0-9-]/g, '-')}
+              className={credInputClassName}
+            />
+          )}
+        </form.AppField>
+        <form.AppField name="description">
+          {(field) => (
+            <field.TextField
+              label="Description"
+              placeholder="What this credential is used for"
+              className={credInputClassName}
+            />
+          )}
+        </form.AppField>
       </div>
 
       {/* Provider fields */}
@@ -165,68 +149,61 @@ export function CredentialForm({
         {spec.fields.length === 0 ? (
           <p className="text-xs text-muted-foreground">This provider has no fields.</p>
         ) : (
-          spec.fields.map((field) => {
-            const value = (config[field.name] as string | undefined) ?? '';
-            const touched = touchedSecrets[field.name];
-            const reveal = revealed[field.name];
-
-            if (field.secret) {
-              return (
-                <div key={field.name} className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    {field.label || field.name}
-                    {field.required && <span className="text-status-error"> *</span>}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={reveal ? 'text' : 'password'}
-                      value={value}
-                      placeholder={
-                        secretIsSet(field.name) && !touched
-                          ? `<set> · ${SECRET_PLACEHOLDER}`
-                          : field.placeholder
+          spec.fields.map((fieldSpec) =>
+            fieldSpec.secret ? (
+              <form.AppField
+                key={fieldSpec.name}
+                name={`config.${fieldSpec.name}`}
+                validators={
+                  fieldSpec.required
+                    ? {
+                        onSubmit: ({ fieldApi }) =>
+                          !fieldApi.state.meta.isDirty && !secretIsSet(fieldSpec.name)
+                            ? `${fieldSpec.label || fieldSpec.name} is required`
+                            : undefined,
                       }
-                      onChange={(e) => {
-                        setField(field.name, e.target.value);
-                        setTouchedSecrets((prev) => ({ ...prev, [field.name]: true }));
-                      }}
-                      className="w-full h-9 px-3 pr-9 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setRevealed((prev) => ({ ...prev, [field.name]: !prev[field.name] }))
+                    : undefined
+                }
+              >
+                {(field) => (
+                  <field.SecretField
+                    label={fieldSpec.label || fieldSpec.name}
+                    required={fieldSpec.required}
+                    helper={fieldSpec.helper}
+                    placeholder={fieldSpec.placeholder}
+                    stored={secretIsSet(fieldSpec.name)}
+                    revealable
+                    className={cn(credInputClassName, 'font-mono')}
+                  />
+                )}
+              </form.AppField>
+            ) : (
+              <form.AppField
+                key={fieldSpec.name}
+                name={`config.${fieldSpec.name}`}
+                validators={
+                  fieldSpec.required
+                    ? {
+                        onSubmit: ({ value }) =>
+                          value == null || (typeof value === 'string' && value.trim() === '')
+                            ? `${fieldSpec.label || fieldSpec.name} is required`
+                            : undefined,
                       }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                      title={reveal ? 'Hide' : 'Show'}
-                    >
-                      {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                  {field.helper && (
-                    <p className="text-xs text-muted-foreground">{field.helper}</p>
-                  )}
-                </div>
-              );
-            }
-
-            return (
-              <div key={field.name} className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">
-                  {field.label || field.name}
-                  {field.required && <span className="text-status-error"> *</span>}
-                </label>
-                <input
-                  type="text"
-                  value={value}
-                  placeholder={field.placeholder}
-                  onChange={(e) => setField(field.name, e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-                {field.helper && <p className="text-xs text-muted-foreground">{field.helper}</p>}
-              </div>
-            );
-          })
+                    : undefined
+                }
+              >
+                {(field) => (
+                  <field.TextField
+                    label={fieldSpec.label || fieldSpec.name}
+                    required={fieldSpec.required}
+                    helper={fieldSpec.helper}
+                    placeholder={fieldSpec.placeholder}
+                    className={credInputClassName}
+                  />
+                )}
+              </form.AppField>
+            ),
+          )
         )}
       </div>
 
@@ -238,16 +215,14 @@ export function CredentialForm({
             Pick the clusters and namespaces where this credential should be created as a Secret.
           </p>
         </div>
-        <TargetRefsEditor value={targetRefs} onChange={setTargetRefs} />
+        <form.AppField name="targetRefs">
+          {(field) => <TargetRefsEditor value={field.state.value} onChange={field.handleChange} />}
+        </form.AppField>
       </div>
 
-      {allErrors.length > 0 && (
+      {serverError && (
         <div className="rounded-lg border border-status-error/40 bg-status-error/10 p-3 space-y-1">
-          {allErrors.map((err, i) => (
-            <p key={i} className="text-xs text-status-error">
-              {err}
-            </p>
-          ))}
+          <p className="text-xs text-status-error">{serverError}</p>
         </div>
       )}
 
@@ -263,7 +238,7 @@ export function CredentialForm({
         )}
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => void form.handleSubmit()}
           disabled={submitting}
           className={cn(
             'inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity',
