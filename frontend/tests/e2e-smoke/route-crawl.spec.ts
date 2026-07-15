@@ -20,6 +20,21 @@ const manifest = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'route-manifest.generated.json'), 'utf8'),
 ) as ManifestEntry[];
 
+// P7.3 screenshot gallery (non-blocking): with SMOKE_GALLERY=1 the crawl also
+// writes one full-page screenshot per route to frontend/gallery/ for the
+// one-time reviewer eyeball on the migration PR. No pixel-diff gate, and a
+// capture failure never fails the smoke tier.
+const galleryDir = path.join(__dirname, '..', '..', 'gallery');
+const galleryEnabled = process.env.SMOKE_GALLERY === '1';
+if (galleryEnabled) {
+  fs.mkdirSync(galleryDir, { recursive: true });
+}
+
+function galleryPath(entry: ManifestEntry): string {
+  const name = entry.url.replace(/^\//, '').replace(/[^a-zA-Z0-9._-]+/g, '_') || 'root';
+  return path.join(galleryDir, `${name}.png`);
+}
+
 for (const entry of manifest) {
   test(`renders ${entry.url}`, async ({ page, context }) => {
     const errors = collectErrors(page);
@@ -37,6 +52,13 @@ for (const entry of manifest) {
     }
     await expect(page.getByTestId('route-error-boundary')).toHaveCount(0);
     await expect(page.getByTestId('route-not-found')).toHaveCount(0);
+    if (galleryEnabled) {
+      try {
+        await page.screenshot({ path: galleryPath(entry), fullPage: true });
+      } catch {
+        // Gallery is a review aid, never a gate.
+      }
+    }
     expect(filterAllowed(errors)).toEqual([]);
   });
 }

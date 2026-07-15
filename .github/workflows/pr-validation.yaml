@@ -89,6 +89,18 @@ jobs:
 
       - name: Route-smoke crawl
         run: npm run test:e2e:smoke
+        env:
+          # P7.3: the crawl also writes one full-page screenshot per route to
+          # frontend/gallery/ for the reviewer eyeball (non-blocking).
+          SMOKE_GALLERY: "1"
+
+      - name: Upload screenshot gallery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-gallery
+          path: frontend/gallery/
+          retention-days: 14
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}

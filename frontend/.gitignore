@@ -11,6 +11,7 @@
 # testing
 /coverage
 /tests/e2e-smoke/*.generated.json
+/gallery
 
 # next.js
 /.next/
