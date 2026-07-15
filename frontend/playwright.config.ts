@@ -14,10 +14,13 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
+    // Preview (not dev) deliberately: it serves the built dist/ with
+    // SPA-fallback semantics, so every deep-link page.goto implicitly
+    // tests fallback + the real bundle.
+    command: `npm run build && npx vite preview --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
   },
   projects: [
     {

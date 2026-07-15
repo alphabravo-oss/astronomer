@@ -136,20 +136,24 @@ async function mockApi(page: Page, user = adminUser) {
       return route.fulfill({ json: apiResponse([]) });
     }
     if (path === '/auth/login' && method === 'POST') {
+      // Set the session/CSRF pair through the context, not a Set-Cookie
+      // header: route.fulfill sends the header dict as single entries, and a
+      // comma-joined Set-Cookie only stores the first cookie — the JS-readable
+      // CSRF cookie the /dashboard guard (hasSessionHint) checks never landed.
+      await page.context().addCookies([
+        { name: SESSION_COOKIE, value: 'e2e-session', domain: '127.0.0.1', path: '/' },
+        { name: CSRF_COOKIE, value: 'e2e-csrf', domain: '127.0.0.1', path: '/' },
+      ]);
       return route.fulfill({
-        headers: {
-          'set-cookie': `${SESSION_COOKIE}=e2e-session; Path=/; SameSite=Lax, ${CSRF_COOKIE}=e2e-csrf; Path=/; SameSite=Lax`,
-        },
         json: apiResponse({ token: 'unused-cookie-auth-token', refresh: 'unused-refresh', user: adminUser }),
       });
     }
     if (path === '/auth/logout' && method === 'POST') {
-      return route.fulfill({
-        headers: {
-          'set-cookie': `${SESSION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`,
-        },
-        json: apiResponse({ ok: true }),
-      });
+      // Mirror the backend's clearBrowserSessionCookies: both cookies drop in
+      // lockstep so the guard sees the session as gone.
+      await page.context().clearCookies({ name: SESSION_COOKIE });
+      await page.context().clearCookies({ name: CSRF_COOKIE });
+      return route.fulfill({ json: apiResponse({ ok: true }) });
     }
     if (path === '/auth/me') {
       return route.fulfill({ json: apiResponse(user) });
