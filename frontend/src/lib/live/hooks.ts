@@ -1,14 +1,17 @@
 /**
  * React hook surface over the shared live-event stream.
  *
- * In P4.3 these hooks wrap the raw stream EventTarget directly; P4.4
- * re-points them at the dispatcher (`lib/live/dispatch.ts`) with no
- * signature change.
+ * Events arrive via the dispatcher (`lib/live/dispatch.ts`): the stream
+ * hands every frame to it, and it fans out on the shared EventTarget these
+ * hooks listen on — after routing the event through the central paced
+ * invalidator. Per-page invalidations requested here flow through the same
+ * pacer so ALL live invalidations are throttled in one place.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type { LiveEvent, LiveEventType, Unsubscribe } from './envelope';
+import { pacedInvalidate } from './paced-invalidate';
 import { liveEventsStatus, type LiveStatus } from './status-store';
 import {
   acquireLiveStream,
@@ -158,7 +161,8 @@ export function useLiveQueryInvalidation(
       for (const key of allKeys) {
         // Prefix-match invalidation: passing ['clusters'] also nukes
         // ['clusters', 'list', ...] so callers don't need every variant.
-        queryClient.invalidateQueries({ queryKey: key });
+        // Routed through the central pacer so event bursts coalesce.
+        pacedInvalidate(queryClient, key);
       }
     };
     const wrap = () => handler();

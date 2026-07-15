@@ -34,15 +34,3 @@ export function setLiveStatus(next: LiveStatus): void {
 export function liveFallback(baseMs: number): () => number | false {
   return () => (liveStatus.state === 'open' ? false : baseMs);
 }
-
-/**
- * UX-04 legacy: lengthen (not eliminate) polls while the bus is open.
- * Still used by the pre-conversion `lib/hooks.ts` sites; deleted in P4.4
- * when every k8s-domain site converts to `liveFallback`.
- */
-export function liveAwareRefetchInterval(baseMs: number): number {
-  if (liveStatus.state === 'open') {
-    return Math.max(baseMs * 4, 60_000);
-  }
-  return baseMs;
-}

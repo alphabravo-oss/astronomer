@@ -38,7 +38,7 @@ beforeEach(() => {
   (globalThis as unknown as { EventSource: unknown }).EventSource = FakeEventSource;
 });
 
-describe('live hooks over the raw stream target', () => {
+describe('live hooks over the dispatcher-fed stream target', () => {
   it('subscribe() receives registration events dispatched via onmessage', async () => {
     // Port of the old KNOWN_EVENT_TYPES regression test: registration events
     // are NOT the default browser message type, but with envelope-type
@@ -91,7 +91,11 @@ describe('live hooks over the raw stream target', () => {
 
     spy.mockClear();
     es.emitFrame({ id: 4, type: 'cluster.metrics', time: 't', data: { cluster_id: 'c1' } });
-    expect(spy).not.toHaveBeenCalled();
+    // Non-subscribed type: the hook's own keys stay untouched. (The central
+    // dispatcher still routes the tick to its precise metrics prefix —
+    // that's EVENT_ROUTES' job, not this hook's.)
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: clustersKey });
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: agentsKey });
     unmount();
   });
 });

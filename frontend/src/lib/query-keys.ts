@@ -27,6 +27,9 @@ export const queryKeys = {
     // and 200 as the user navigates Overview ↔ Events.
     events: (id: string, params?: Record<string, unknown>) =>
       ['clusters', id, 'events', params] as const,
+    // Prefix matching every `events(id, params)` variant — used by the live
+    // routing table to invalidate all limits/filters at once.
+    eventsAll: (id: string) => ['clusters', id, 'events'] as const,
     // Params (namespace filter) is part of the key so different namespaces
     // don't collide on one cache entry. Use `podsAll` to invalidate every
     // variant at once (3-element prefix), since `pods(id)` now resolves to a
@@ -35,6 +38,9 @@ export const queryKeys = {
     podsAll: (id: string) => ['clusters', id, 'pods'] as const,
     metrics: (id: string, range?: string) => ['clusters', id, 'metrics', range] as const,
     metricsSummary: (id: string) => ['clusters', id, 'metrics', 'summary'] as const,
+    // Prefix matching every metrics variant (all ranges + the summary) —
+    // used by the live routing table on `cluster.metrics` ticks.
+    metricsAll: (id: string) => ['clusters', id, 'metrics'] as const,
     // Two-element prefix that matches every `list(params)` variant at once —
     // used by live-events to patch/invalidate all cached list pages. Do NOT use
     // `list()` for invalidation: that produces ['clusters','list',undefined] and
@@ -82,6 +88,10 @@ export const queryKeys = {
   },
   workloads: {
     all: ['workloads'] as const,
+    // Per-cluster prefix matching list/detail/pods/metrics at once — the live
+    // routing table uses it for Pod churn (pod payloads don't carry the owner
+    // workload's kind/ns/name, so a precise per-workload key can't be built).
+    byCluster: (clusterId: string) => ['workloads', clusterId] as const,
     list: (clusterId: string, params?: Record<string, unknown>) =>
       ['workloads', clusterId, 'list', params] as const,
     detail: (clusterId: string, kind: string, ns: string, name: string) =>
@@ -161,6 +171,9 @@ export const queryKeys = {
     registrationTls: ['settings', 'registration-tls'] as const,
   },
   activity: (limit?: number) => ['activity', limit] as const,
+  // Prefix matching every `activity(limit)` variant — used by the live
+  // routing table for `audit.*` events.
+  activityAll: ['activity'] as const,
   alerting: {
     all: ['alerting'] as const,
     rules: ['alerting', 'rules'] as const,

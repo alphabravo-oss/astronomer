@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { createAgentUpgradeOperation, createAgentUpgradePlan, downloadAgentDiagnosticsBundle, getAgentDiagnostics, getAgentFleet, getAgentOperations, runAgentSelfTest } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import type { AgentDiagnosticsResponse, AgentFleetItem, AgentLifecycleOperation, AgentSelfTestResponse, AgentUpgradeOperationResponse, AgentUpgradePlanResponse } from '@/types';
 
@@ -18,7 +19,7 @@ function AgentFleetPage() {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.agents.fleet,
     queryFn: () => getAgentFleet({ limit: 250 }),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   useLiveQueryInvalidation(
@@ -40,7 +41,7 @@ function AgentFleetPage() {
     queryKey: queryKeys.agents.operations(selectedClusterId),
     queryFn: () => getAgentOperations(selectedClusterId!, { limit: 10 }),
     enabled: !!selectedClusterId,
-    refetchInterval: selectedClusterId ? 15000 : false,
+    refetchInterval: selectedClusterId ? liveFallback(15000) : false,
   });
 
   const columns: Column<AgentFleetItem>[] = [

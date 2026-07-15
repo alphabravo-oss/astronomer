@@ -23,7 +23,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { createStreamTicket } from '@/lib/api';
 import { API_BASE } from '@/lib/env';
-import { parseFrame } from './envelope';
+import { dispatchLiveFrame } from './dispatch';
+import { clearPacedInvalidations } from './paced-invalidate';
 import { setLiveStatus, type LiveStatus } from './status-store';
 
 /** 3 missed 25s sys.ping heartbeats = half-open connection. */
@@ -99,6 +100,11 @@ function setStatus(state: ConnectionState, next: LiveStatus): void {
   if (prev === next) return;
   state.status = next;
   setLiveStatus(next);
+  if (next === 'closed') {
+    // Pending trailing invalidations are pointless with the event source
+    // gone — the open→closed bulk invalidate below kicks every active query.
+    clearPacedInvalidations();
+  }
   if (next === 'open') {
     if (state.everOpened) {
       liveQueryClient?.invalidateQueries({ refetchType: 'active' });
@@ -183,15 +189,12 @@ function openSource(state: ConnectionState): void {
 
       // Default-message dispatch: the envelope's `type` field is the routing
       // key. There is no addEventListener-per-type registration (the old
-      // KNOWN_EVENT_TYPES footgun) — new backend types just work.
+      // KNOWN_EVENT_TYPES footgun) — new backend types just work. The
+      // dispatcher fans the frame out on `state.target` and routes it into
+      // the paced query invalidator (see lib/live/dispatch.ts).
       es.onmessage = (ev) => {
         armWatchdog(state);
-        const detail = parseFrame(ev.data);
-        if (!detail) return;
-        state.target.dispatchEvent(new CustomEvent(detail.type, { detail }));
-        // Wildcard so "subscribe to everything" consumers don't have to
-        // enumerate every event type.
-        state.target.dispatchEvent(new CustomEvent('*', { detail }));
+        dispatchLiveFrame(ev.data, state.target, liveQueryClient);
       };
 
       es.onerror = () => {

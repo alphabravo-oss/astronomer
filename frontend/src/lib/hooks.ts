@@ -18,7 +18,7 @@ import type {
 } from '@/types';
 import type { AuditLogQueryParams, GeneralSettings } from './api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
-import { liveAwareRefetchInterval } from '@/lib/live/status-store';
+import { liveFallback } from '@/lib/live/status-store';
 
 // Query key factory lives in ./query-keys.ts (single source of truth).
 // Imported here and re-exported so existing `import { queryKeys } from '@/lib/hooks'`
@@ -49,8 +49,8 @@ export function useClusters(params?: {
   return useQuery({
     queryKey: queryKeys.clusters.list(params),
     queryFn: () => apiClient.getClusters(params),
-    // UX-04: lengthen poll when live SSE bus is open (fallback only).
-    refetchInterval: () => liveAwareRefetchInterval(30000),
+    // Poll only while the live bus is down; events drive freshness when open.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -59,7 +59,7 @@ export function useCluster(id: string) {
     queryKey: queryKeys.clusters.detail(id),
     queryFn: () => apiClient.getCluster(id),
     enabled: !!id,
-    refetchInterval: () => liveAwareRefetchInterval(15000),
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -68,7 +68,7 @@ export function useClusterNodes(clusterId: string) {
     queryKey: queryKeys.clusters.nodes(clusterId),
     queryFn: () => apiClient.getClusterNodes(clusterId),
     enabled: !!clusterId,
-    refetchInterval: () => liveAwareRefetchInterval(30000),
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -101,7 +101,7 @@ export function useNodeDetail(clusterId: string, nodeName: string) {
     queryKey: queryKeys.clusters.nodeDetail(clusterId, nodeName),
     queryFn: () => apiClient.getNodeDetail(clusterId, nodeName),
     enabled: !!clusterId && !!nodeName,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -118,7 +118,7 @@ export function useClusterEvents(clusterId: string, params?: { type?: string; li
     queryKey: queryKeys.clusters.events(clusterId, params as Record<string, unknown> | undefined),
     queryFn: () => apiClient.getClusterEvents(clusterId, params),
     enabled: !!clusterId,
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -127,7 +127,7 @@ export function useClusterPods(clusterId: string, params?: { namespace?: string 
     queryKey: queryKeys.clusters.pods(clusterId, params),
     queryFn: () => apiClient.getClusterPods(clusterId, params),
     enabled: !!clusterId,
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -233,7 +233,7 @@ export function useWorkloads(
     queryKey: queryKeys.workloads.list(clusterId, params),
     queryFn: () => apiClient.getWorkloads(clusterId, params),
     enabled: !!clusterId,
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -242,7 +242,7 @@ export function useWorkload(clusterId: string, kind: string, namespace: string, 
     queryKey: queryKeys.workloads.detail(clusterId, kind, namespace, name),
     queryFn: () => apiClient.getWorkload(clusterId, kind, namespace, name),
     enabled: !!clusterId && !!kind && !!namespace && !!name,
-    refetchInterval: 10000,
+    refetchInterval: liveFallback(10000),
   });
 }
 
@@ -251,7 +251,7 @@ export function useWorkloadPods(clusterId: string, kind: string, namespace: stri
     queryKey: queryKeys.workloads.pods(clusterId, kind, namespace, name),
     queryFn: () => apiClient.getWorkloadPods(clusterId, kind, namespace, name),
     enabled: !!clusterId && !!kind && !!namespace && !!name,
-    refetchInterval: 10000,
+    refetchInterval: liveFallback(10000),
   });
 }
 
@@ -488,7 +488,9 @@ export function useClusterMetrics(clusterId: string, range?: string) {
     queryKey: queryKeys.clusters.metrics(clusterId, range),
     queryFn: () => apiClient.getClusterMetrics(clusterId, { range }),
     enabled: !!clusterId,
-    refetchInterval: 60000,
+    // While the stream is open, `cluster.metrics` ticks invalidate the
+    // per-cluster metrics prefix (see lib/live/routes.ts).
+    refetchInterval: liveFallback(60000),
   });
 }
 
@@ -497,7 +499,7 @@ export function useClusterMetricsSummary(clusterId: string) {
     queryKey: queryKeys.clusters.metricsSummary(clusterId),
     queryFn: () => apiClient.getClusterMetricsSummary(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -512,7 +514,11 @@ export function useWorkloadMetrics(
     queryKey: queryKeys.workloads.metrics(clusterId, kind, namespace, name, range),
     queryFn: () => apiClient.getWorkloadMetrics(clusterId, kind, namespace, name, { range }),
     enabled: !!clusterId && !!kind && !!namespace && !!name,
-    refetchInterval: 60000,
+    // No per-workload metrics event exists; while the stream is open this
+    // refreshes on the cluster's Pod/workload `cluster.k8s_changed` churn
+    // (routed through the per-cluster workloads prefix) and on stream
+    // transitions.
+    refetchInterval: liveFallback(60000),
   });
 }
 
@@ -809,7 +815,10 @@ export function useActivityFeed(limit: number = 20) {
   return useQuery({
     queryKey: queryKeys.activity(limit),
     queryFn: () => apiClient.getActivityFeed({ limit }),
-    refetchInterval: 30000,
+    // `audit.*` events refresh this while the stream is open. Restricted
+    // users never receive them (no cluster_id → SEC-R07 fail-closed drop);
+    // they heal via this fallback poll + the reconnect bulk invalidation.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -1984,7 +1993,7 @@ export function useGenericResources(clusterId: string, resourceType: string) {
     queryKey: queryKeys.generic.resources(clusterId, resourceType),
     queryFn: () => apiClient.getGenericResources(clusterId, resourceType),
     enabled: !!clusterId && !!resourceType,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 }
 
