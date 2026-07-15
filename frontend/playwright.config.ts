@@ -55,5 +55,29 @@ export default defineConfig({
           : undefined,
       },
     },
+    {
+      // P7.2 live tier: exactly 4 specs against a REAL Go backend, reached
+      // through the preview server's `/api` proxy (BACKEND_URL, see
+      // vite.config.ts preview.proxy). retries: 1 for this project only —
+      // the sanctioned flake budget for real-network specs (R5); a spec
+      // flaking >2×/week post-merge moves to nightly, never deleted.
+      name: 'live',
+      testDir: './tests/e2e-live',
+      retries: 1,
+      // Headroom for the login helper waiting out the backend's fixed-window
+      // login rate limiter (up to ~60s) on top of real-network latencies.
+      timeout: 120_000,
+      // All 4 specs authenticate as the same bootstrap admin, and backend
+      // logout bumps the per-user token cutoff (InvalidateAllTokens in
+      // internal/handler/auth.go) — a parallel worker's session dies the
+      // moment the login spec signs out. Serial is correct, not a workaround.
+      workers: 1,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: chromiumExecutable
+          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
+          : undefined,
+      },
+    },
   ],
 });

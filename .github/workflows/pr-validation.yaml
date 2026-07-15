@@ -101,6 +101,115 @@ jobs:
       - name: Dependency vulnerability scan
         run: npm audit --audit-level=moderate
 
+  # P7.2 live e2e tier: the 4 live specs run against a REAL Go backend
+  # (postgres + redis services, bootstrap admin, SSE bus) through the vite
+  # preview proxy. Parallel with the frontend job; runtime budget ≤6 min.
+  frontend-e2e-live:
+    name: frontend live e2e
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: astronomer
+          POSTGRES_PASSWORD: astronomer
+          POSTGRES_DB: astronomer
+        # 5433 matches the Makefile's DATABASE_URL default (compose port
+        # offset convention), so `make migrate-up` needs no override.
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U astronomer"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install golang-migrate CLI
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1
+
+      - name: Run migrations
+        run: make migrate-up
+
+      - name: Start Go server
+        # Backgrounded; the process outlives the step. Env mirrors the
+        # docker-compose dev values plus the bootstrap admin the live specs
+        # log in as (EnsureBootstrapAdmin creates an immediately usable
+        # admin@astronomer.local — no forced password reset).
+        run: |
+          go run ./cmd/server >server.log 2>&1 &
+        env:
+          DATABASE_URL: postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
+          REDIS_URL: redis://localhost:6380/0
+          SECRET_KEY: local-dev-secret-key-change-in-production
+          ASTRONOMER_ENCRYPTION_KEY: RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=
+          ENV: development
+          DEBUG: "true"
+          ALLOWED_HOSTS: "*"
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          LOG_LEVEL: debug
+          ASTRONOMER_BOOTSTRAP_PASSWORD: e2e-live-password
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health/ >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend never became healthy" >&2
+          tail -n 100 server.log
+          exit 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Live end-to-end tests
+        working-directory: frontend
+        run: npx playwright test --project=live
+        env:
+          BACKEND_URL: http://localhost:8000
+
+      - name: Upload live Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-live
+          path: frontend/playwright-report
+          retention-days: 14
+
+      - name: Server log on failure
+        if: failure()
+        run: tail -n 200 server.log
+
   helm:
     name: helm validation
     runs-on: ubuntu-24.04
