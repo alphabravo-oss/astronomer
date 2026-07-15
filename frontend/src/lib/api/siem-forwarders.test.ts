@@ -1,3 +1,4 @@
+import type { Mocked } from 'vitest';
 import api from '@/lib/api';
 import {
   listSIEMForwarders,
@@ -9,20 +10,20 @@ import {
   getSIEMForwarderStatus,
 } from './siem-forwarders';
 
-jest.mock('@/lib/api', () => ({
+vi.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
-const mockedApi = api as jest.Mocked<typeof api>;
+const mockedApi = api as Mocked<typeof api>;
 
 describe('SIEM forwarders API client', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it('unwraps the { data: { items } } list envelope into an array', async () => {
     mockedApi.get.mockResolvedValueOnce({

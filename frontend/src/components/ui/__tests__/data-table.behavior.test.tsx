@@ -107,7 +107,7 @@ describe('DataTable behavior (TanStack Table engine)', () => {
   });
 
   it('server-side mode uses rowCount for paging and reports page changes without client slicing', () => {
-    const onPaginationChange = jest.fn();
+    const onPaginationChange = vi.fn();
     const pageRows: Row[] = [
       { id: '1', name: 'A', size: 1 },
       { id: '2', name: 'B', size: 2 },

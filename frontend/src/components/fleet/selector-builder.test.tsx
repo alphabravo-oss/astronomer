@@ -49,7 +49,7 @@ describe('buildSelector — emits the exact wire shape', () => {
 
 describe('SelectorBuilder — onChange wiring', () => {
   it('emits an empty selector on mount and a populated one after typing', () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     const { getByLabelText } = render(<SelectorBuilder onChange={onChange} />);
 
     // Initial emit is the empty selector (single blank label row).
@@ -62,7 +62,7 @@ describe('SelectorBuilder — onChange wiring', () => {
   });
 
   it('renders a group multi-select when groups are provided', () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     const { getByRole } = render(
       <SelectorBuilder onChange={onChange} groups={[{ id: 'g1', name: 'Prod fleet' }]} />,
     );

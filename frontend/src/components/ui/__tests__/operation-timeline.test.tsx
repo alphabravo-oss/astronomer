@@ -3,7 +3,7 @@ import { OperationTimeline } from '@/components/ui/operation-timeline';
 
 describe('OperationTimeline', () => {
   it('renders header, steps, progress, errors, and actions', () => {
-    const onRetry = jest.fn();
+    const onRetry = vi.fn();
 
     render(
       <OperationTimeline

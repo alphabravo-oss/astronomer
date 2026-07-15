@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { TextEncoder, TextDecoder } from 'util';
@@ -9,8 +10,8 @@ const g = globalThis as unknown as { TextEncoder?: unknown; TextDecoder?: unknow
 if (!g.TextEncoder) g.TextEncoder = TextEncoder;
 if (!g.TextDecoder) g.TextDecoder = TextDecoder;
 
-jest.mock('@/lib/api', () => ({
-  createStreamTicket: jest.fn().mockResolvedValue({ ticket: 'tkt' }),
+vi.mock('@/lib/api', () => ({
+  createStreamTicket: vi.fn().mockResolvedValue({ ticket: 'tkt' }),
 }));
 
 import {
@@ -170,7 +171,7 @@ describe('useResourceWatch — proxy fetch-stream transport', () => {
 
   it('folds NDJSON watch frames from the /k8s/ proxy into the cache', async () => {
     const { client, wrapper } = makeWrapper();
-    global.fetch = jest.fn().mockResolvedValue(
+    global.fetch = vi.fn().mockResolvedValue(
       streamResponse([
         JSON.stringify({ type: 'ADDED', object: { metadata: { uid: 'd1', name: 'd1', namespace: 'ns' } } }),
         JSON.stringify({ type: 'ADDED', object: { metadata: { uid: 'd2', name: 'd2', namespace: 'ns' } } }),
@@ -191,13 +192,13 @@ describe('useResourceWatch — proxy fetch-stream transport', () => {
     await waitFor(() =>
       expect(client.getQueryData<K8sList>(key)?.items?.map((i) => i.metadata?.uid)).toEqual(['d2']),
     );
-    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    const calledUrl = (global.fetch as Mock).mock.calls[0][0] as string;
     expect(calledUrl).toContain('/clusters/c1/k8s/apis/apps/v1/deployments?watch=true');
   });
 
   it('reports fallback when the proxy watch cannot open', async () => {
     const { wrapper } = makeWrapper();
-    global.fetch = jest.fn().mockResolvedValue({ ok: false, body: null } as unknown as Response) as unknown as typeof fetch;
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, body: null } as unknown as Response) as unknown as typeof fetch;
     const { result } = renderHook(
       () =>
         useResourceWatch({
@@ -237,9 +238,9 @@ describe('useResourceWatch — proxy fetch-stream transport', () => {
     const invPrefix = ['generic', 'c1'];
     // Seed a cached list so there is something to invalidate.
     client.setQueryData(listKey, [{ name: 'cm1' }]);
-    const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
 
-    global.fetch = jest.fn().mockResolvedValue(
+    global.fetch = vi.fn().mockResolvedValue(
       streamResponseLocal([
         JSON.stringify({ type: 'MODIFIED', object: { metadata: { uid: 'cm1', name: 'cm1', namespace: 'ns' } } }),
       ]),
@@ -257,7 +258,7 @@ describe('useResourceWatch — proxy fetch-stream transport', () => {
     );
 
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: invPrefix }));
-    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    const calledUrl = (global.fetch as Mock).mock.calls[0][0] as string;
     expect(calledUrl).toContain('/clusters/c1/k8s/api/v1/configmaps?watch=true');
   });
 });

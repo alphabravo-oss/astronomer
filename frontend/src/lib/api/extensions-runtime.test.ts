@@ -1,3 +1,4 @@
+import type { Mocked } from 'vitest';
 import api from '@/lib/api';
 import {
   getExtensionMounts,
@@ -5,20 +6,20 @@ import {
   requestExtensionBridgeToken,
 } from './extensions';
 
-jest.mock('@/lib/api', () => ({
+vi.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
-const mockedApi = api as jest.Mocked<typeof api>;
+const mockedApi = api as Mocked<typeof api>;
 
 describe('extensions host-runtime API client', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   describe('getExtensionMounts', () => {
     it('hits the viewer-readable /extensions/mounts/ endpoint (no /api/v1 prefix)', async () => {

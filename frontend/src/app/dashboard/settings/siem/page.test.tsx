@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 import { ReactNode } from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -5,18 +6,18 @@ import { useAuthStore } from '@/lib/store';
 import SIEMForwardersPage from './page';
 import type { SIEMForwarder } from '@/types';
 
-jest.mock('./hooks', () => ({
-  useSIEMForwarders: jest.fn(),
-  useCreateSIEMForwarder: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useUpdateSIEMForwarder: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useDeleteSIEMForwarder: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useTestSIEMForwarder: () => ({ mutate: jest.fn(), isPending: false }),
+vi.mock('./hooks', () => ({
+  useSIEMForwarders: vi.fn(),
+  useCreateSIEMForwarder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateSIEMForwarder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteSIEMForwarder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useTestSIEMForwarder: () => ({ mutate: vi.fn(), isPending: false }),
   useSIEMForwarderStatus: () => ({ data: undefined, isLoading: false }),
 }));
 
 import { useSIEMForwarders } from './hooks';
 
-const mockedList = useSIEMForwarders as jest.Mock;
+const mockedList = useSIEMForwarders as Mock;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -59,14 +60,14 @@ const forwarder: SIEMForwarder = {
 };
 
 describe('SIEMForwardersPage', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null, isAuthenticated: false }));
   });
 
   it('gates non-superusers behind the settings auth gate', () => {
     act(() => useAuthStore.setState({ user: null, isAuthenticated: false }));
-    mockedList.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedList.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() });
     render(<SIEMForwardersPage />, { wrapper });
     // Not a superuser -> the list heading never renders.
     expect(screen.queryByText('SIEM Forwarders')).not.toBeInTheDocument();
@@ -74,7 +75,7 @@ describe('SIEMForwardersPage', () => {
 
   it('renders forwarders and opens the create modal for a superuser', () => {
     setSuperuser();
-    mockedList.mockReturnValue({ data: [forwarder], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedList.mockReturnValue({ data: [forwarder], isLoading: false, isError: false, refetch: vi.fn() });
     render(<SIEMForwardersPage />, { wrapper });
 
     expect(screen.getByText('corp-splunk')).toBeInTheDocument();

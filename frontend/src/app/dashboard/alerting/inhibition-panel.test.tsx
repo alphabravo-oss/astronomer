@@ -1,19 +1,20 @@
+import type { Mock } from 'vitest';
 import { ReactNode } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { InhibitionPanel } from './inhibition-panel';
 import type { AlertInhibition } from '@/types';
 
-jest.mock('./inhibition-hooks', () => ({
-  useInhibitions: jest.fn(),
-  useCreateInhibition: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useUpdateInhibition: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useDeleteInhibition: () => ({ mutateAsync: jest.fn(), isPending: false }),
+vi.mock('./inhibition-hooks', () => ({
+  useInhibitions: vi.fn(),
+  useCreateInhibition: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateInhibition: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteInhibition: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { useInhibitions } from './inhibition-hooks';
 
-const mockedUseInhibitions = useInhibitions as jest.Mock;
+const mockedUseInhibitions = useInhibitions as Mock;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,10 +33,10 @@ const sample: AlertInhibition = {
 };
 
 describe('InhibitionPanel', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it('renders inhibition rows with regex-aware matcher chips', () => {
-    mockedUseInhibitions.mockReturnValue({ data: [sample], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedUseInhibitions.mockReturnValue({ data: [sample], isLoading: false, isError: false, refetch: vi.fn() });
     render(<InhibitionPanel />, { wrapper });
 
     expect(screen.getByText('Suppress node alerts')).toBeInTheDocument();
@@ -45,7 +46,7 @@ describe('InhibitionPanel', () => {
   });
 
   it('opens the create modal when the create button is clicked', () => {
-    mockedUseInhibitions.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedUseInhibitions.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() });
     render(<InhibitionPanel />, { wrapper });
 
     expect(screen.queryByText('Create Inhibition Rule')).not.toBeInTheDocument();

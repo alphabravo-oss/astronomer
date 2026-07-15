@@ -1,20 +1,21 @@
+import type { Mocked } from 'vitest';
 import api from '../api';
 import { listDLQ, listQueues } from './admin-operations';
 
-jest.mock('../api', () => ({
+vi.mock('../api', () => ({
   __esModule: true,
   default: {
-    get: jest.fn(),
-    post: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
-const mockedApi = api as jest.Mocked<typeof api>;
+const mockedApi = api as Mocked<typeof api>;
 
 describe('admin operations API client', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('unwraps standard API envelopes for queue lists', async () => {

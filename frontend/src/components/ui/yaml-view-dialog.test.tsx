@@ -1,16 +1,17 @@
+import type { MockedFunction } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { YamlPanel } from './yaml-view-dialog';
 import * as hooks from '@/lib/hooks';
 
 // Mock the data hooks so we can drive `useK8sGetYaml`'s returned value.
-jest.mock('@/lib/hooks', () => ({
-  useK8sGetYaml: jest.fn(),
-  useK8sApplyYaml: jest.fn(() => ({ mutate: jest.fn(), isPending: false })),
-  useK8sDryRunYaml: jest.fn(() => ({ mutateAsync: jest.fn(), isPending: false })),
+vi.mock('@/lib/hooks', () => ({
+  useK8sGetYaml: vi.fn(),
+  useK8sApplyYaml: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useK8sDryRunYaml: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
 // Replace the heavy editor with a plain textarea that surfaces value/onChange.
-jest.mock('@/components/ui/yaml-editor', () => ({
+vi.mock('@/components/ui/yaml-editor', () => ({
   YamlEditor: ({ value, onChange }: { value: string; onChange?: (v: string) => void }) => (
     <textarea
       data-testid="yaml-editor"
@@ -21,16 +22,16 @@ jest.mock('@/components/ui/yaml-editor', () => ({
   ),
 }));
 
-const mockedGetYaml = hooks.useK8sGetYaml as jest.MockedFunction<typeof hooks.useK8sGetYaml>;
+const mockedGetYaml = hooks.useK8sGetYaml as MockedFunction<typeof hooks.useK8sGetYaml>;
 
 // Regression: a background refetch (window-focus refetch or a k8s.all cache
 // invalidation from any mutation) must NOT overwrite the operator's in-progress
 // edits while the editor is in edit mode.
 describe('YamlPanel — edit-mode preservation', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('keeps in-progress edits when the server YAML refetches during editing', () => {
-    const refetch = jest.fn();
+    const refetch = vi.fn();
     mockedGetYaml.mockReturnValue({
       data: 'name: v1',
       isLoading: false,
@@ -62,7 +63,7 @@ describe('YamlPanel — edit-mode preservation', () => {
   });
 
   it('does seed the editor from the server copy while in view mode', () => {
-    const refetch = jest.fn();
+    const refetch = vi.fn();
     mockedGetYaml.mockReturnValue({
       data: 'name: v1',
       isLoading: false,

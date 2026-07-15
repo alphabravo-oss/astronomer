@@ -4,7 +4,7 @@ import { ModalShell } from '@/components/ui/modal-shell';
 describe('ModalShell', () => {
   it('renders title and body content', () => {
     render(
-      <ModalShell title="Security action" onClose={jest.fn()}>
+      <ModalShell title="Security action" onClose={vi.fn()}>
         <p>Confirm the sensitive action.</p>
       </ModalShell>,
     );
@@ -15,7 +15,7 @@ describe('ModalShell', () => {
   });
 
   it('closes on Escape', () => {
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     render(
       <ModalShell title="Security action" onClose={onClose}>
         <p>Confirm the sensitive action.</p>
@@ -33,7 +33,7 @@ describe('ModalShell', () => {
     opener.focus();
 
     const { unmount } = render(
-      <ModalShell title="Security action" onClose={jest.fn()}>
+      <ModalShell title="Security action" onClose={vi.fn()}>
         <button type="button">Confirm action</button>
       </ModalShell>,
     );
@@ -49,7 +49,7 @@ describe('ModalShell', () => {
     render(
       <ModalShell
         title="Security action"
-        onClose={jest.fn()}
+        onClose={vi.fn()}
         footer={
           <>
             <button type="button">Cancel</button>

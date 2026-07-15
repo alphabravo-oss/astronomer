@@ -1,15 +1,16 @@
+import type { MockedFunction } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ExtensionNavItems, extensionSidebarHref } from './ExtensionNavItems';
 import type { ExtensionMount } from '@/lib/api/extensions';
 
-jest.mock('./ExtensionProvider', () => ({
+vi.mock('./ExtensionProvider', () => ({
   __esModule: true,
-  useExtensionMounts: jest.fn(),
+  useExtensionMounts: vi.fn(),
 }));
 
 import { useExtensionMounts } from './ExtensionProvider';
 
-const mockedMounts = useExtensionMounts as jest.MockedFunction<typeof useExtensionMounts>;
+const mockedMounts = useExtensionMounts as MockedFunction<typeof useExtensionMounts>;
 
 function sidebarMount(over: Partial<ExtensionMount> = {}): ExtensionMount {
   return {
@@ -35,7 +36,7 @@ describe('extensionSidebarHref', () => {
 });
 
 describe('ExtensionNavItems', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('renders nothing (header included) when no sidebar mount exists', () => {
     mockedMounts.mockReturnValue([]);

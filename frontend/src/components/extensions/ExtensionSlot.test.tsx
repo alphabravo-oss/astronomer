@@ -1,3 +1,4 @@
+import type { MockedFunction } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -6,16 +7,16 @@ import type { ExtensionMount, ExtensionPointKind } from '@/lib/api/extensions';
 
 // Drive the slot off mocked runtime hooks so these tests cover the slot's own
 // logic (tier derivation, empty-collapse, error isolation) without React Query.
-jest.mock('./ExtensionProvider', () => ({
+vi.mock('./ExtensionProvider', () => ({
   __esModule: true,
-  useExtensionRuntime: jest.fn(),
-  useExtensionMounts: jest.fn(),
+  useExtensionRuntime: vi.fn(),
+  useExtensionMounts: vi.fn(),
 }));
 
 // The default Tier-1 path renders a DeclarativeWidget (which fetches via React
 // Query). Mock it to a marker so the slot's own logic stays under test here; the
 // renderers have their own tests.
-jest.mock('./DeclarativeWidget', () => ({
+vi.mock('./DeclarativeWidget', () => ({
   __esModule: true,
   DeclarativeWidget: ({ extensionName }: { extensionName: string }) => (
     <div data-testid="declarative-widget">{extensionName}</div>
@@ -25,7 +26,7 @@ jest.mock('./DeclarativeWidget', () => ({
 // Tier-2 selects SandboxedExtension (the sandboxed iframe + bridge). Mock it to a
 // marker so the slot's tier-derivation logic stays under test here; the bridge
 // component has its own tests (SandboxedExtension.test.tsx).
-jest.mock('./SandboxedExtension', () => ({
+vi.mock('./SandboxedExtension', () => ({
   __esModule: true,
   SandboxedExtension: ({ mount }: { mount: ExtensionMount }) => (
     <div data-testid="sandboxed-extension">{mount.extension}</div>
@@ -39,8 +40,8 @@ function withClient(ui: ReactNode) {
   return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
 }
 
-const mockedRuntime = useExtensionRuntime as jest.MockedFunction<typeof useExtensionRuntime>;
-const mockedMounts = useExtensionMounts as jest.MockedFunction<typeof useExtensionMounts>;
+const mockedRuntime = useExtensionRuntime as MockedFunction<typeof useExtensionRuntime>;
+const mockedMounts = useExtensionMounts as MockedFunction<typeof useExtensionMounts>;
 
 function mount(over: Partial<ExtensionMount> = {}): ExtensionMount {
   return {
@@ -66,7 +67,7 @@ function setup(mounts: ExtensionMount[], isLoading = false) {
 const POINT: ExtensionPointKind = 'dashboardWidget';
 
 describe('ExtensionSlot', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('renders nothing when no extension is mounted at the point', () => {
     setup([]);
@@ -110,7 +111,7 @@ describe('ExtensionSlot', () => {
   it('passes each mount + context to a custom renderer', () => {
     const m = mount();
     setup([m]);
-    const renderer = jest.fn(() => <div>rendered</div>);
+    const renderer = vi.fn(() => <div>rendered</div>);
     render(<ExtensionSlot point={POINT} context={{ clusterId: 'c1' }} render={renderer} />);
     expect(screen.getByText('rendered')).toBeInTheDocument();
     expect(renderer).toHaveBeenCalledWith(m, { clusterId: 'c1' });
@@ -126,7 +127,7 @@ describe('ExtensionSlot', () => {
       return <div>good-content</div>;
     };
     // Silence the expected React error-boundary console noise.
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<ExtensionSlot point={POINT} render={renderer} />);
     spy.mockRestore();
 

@@ -9,7 +9,7 @@ import type { RenderedWidget } from '@/lib/api/dashboards';
 // every tick — a request storm far exceeding each widget's refreshSeconds.
 describe('WidgetGrid — stable fetch scheduling', () => {
   it('does not re-run the fetch when the parent passes a new fetcher identity', async () => {
-    const firstFetcher = jest.fn<Promise<RenderedWidget[]>, []>().mockResolvedValue([]);
+    const firstFetcher = vi.fn<() => Promise<RenderedWidget[]>>().mockResolvedValue([]);
 
     const { rerender } = render(<WidgetGrid fetcher={firstFetcher} />);
     await waitFor(() => expect(firstFetcher).toHaveBeenCalledTimes(1));
@@ -17,7 +17,7 @@ describe('WidgetGrid — stable fetch scheduling', () => {
     // Parent re-renders three times, each time creating a brand-new fetcher
     // function (as happens with an inline `() => renderForCluster(id)`).
     for (let i = 0; i < 3; i++) {
-      const nextFetcher = jest.fn<Promise<RenderedWidget[]>, []>().mockResolvedValue([]);
+      const nextFetcher = vi.fn<() => Promise<RenderedWidget[]>>().mockResolvedValue([]);
       rerender(<WidgetGrid fetcher={nextFetcher} />);
       // Give any (incorrectly re-triggered) effect a chance to fire.
       await Promise.resolve();

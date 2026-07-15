@@ -10,10 +10,10 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 
-// resource-detail statically imports PodTerminal, which pulls in the @wterm/react
-// ESM bundle that jest can't transform. We never render the terminal here, so
-// stub the module out. (e2e covers the real terminal path.)
-jest.mock('@/components/workloads/pod-terminal', () => ({ PodTerminal: () => null }));
+// resource-detail statically imports PodTerminal, which pulls in the WASM-backed
+// @wterm/react bundle. We never render the terminal here, so stub the module
+// out. (e2e covers the real terminal path.)
+vi.mock('@/components/workloads/pod-terminal', () => ({ PodTerminal: () => null }));
 
 import { ResourceOverview } from '@/components/resources/resource-detail';
 

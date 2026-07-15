@@ -3,13 +3,14 @@ import { RestoreModal } from './restore-modal';
 import type { BackupRun } from '@/types';
 
 // Router is only used for the post-success redirect; a no-op push is enough.
-jest.mock('@/lib/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+vi.mock('@/lib/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 // Capture the restore-creation call so we can assert on the request body.
-const mockMutateAsync = jest.fn().mockResolvedValue({ id: 'r1' });
-jest.mock('./hooks', () => ({
+// vi.mock factories are hoisted above this const, so hoist it alongside them.
+const mockMutateAsync = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'r1' }));
+vi.mock('./hooks', () => ({
   useB2CreateRestore: () => ({ mutateAsync: mockMutateAsync, isPending: false }),
 }));
 
@@ -27,7 +28,7 @@ beforeEach(() => {
 
 describe('RestoreModal namespace selection', () => {
   it('blocks submit when every namespace is deselected (never widens to restore-all)', () => {
-    render(<RestoreModal backup={makeBackup()} onClose={jest.fn()} />);
+    render(<RestoreModal backup={makeBackup()} onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'prod' }));
     fireEvent.click(screen.getByRole('button', { name: 'staging' }));
@@ -42,7 +43,7 @@ describe('RestoreModal namespace selection', () => {
   });
 
   it('sends the explicit subset when a strict subset is selected', async () => {
-    render(<RestoreModal backup={makeBackup()} onClose={jest.fn()} />);
+    render(<RestoreModal backup={makeBackup()} onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'staging' })); // deselect staging
     fireEvent.change(screen.getByPlaceholderText('daily'), { target: { value: 'daily' } });
@@ -55,7 +56,7 @@ describe('RestoreModal namespace selection', () => {
   });
 
   it('omits the filter (restore everything) only when the full set is selected', async () => {
-    render(<RestoreModal backup={makeBackup()} onClose={jest.fn()} />);
+    render(<RestoreModal backup={makeBackup()} onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText('daily'), { target: { value: 'daily' } });
     fireEvent.click(screen.getByRole('button', { name: 'Start Restore' }));

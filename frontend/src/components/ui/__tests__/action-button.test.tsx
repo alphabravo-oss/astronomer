@@ -4,7 +4,7 @@ import { ActionButton } from '@/components/ui/action-button';
 
 describe('ActionButton', () => {
   it('renders an enabled action and invokes clicks', () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
 
     render(<ActionButton onClick={onClick}>Run action</ActionButton>);
     fireEvent.click(screen.getByRole('button', { name: 'Run action' }));
@@ -13,7 +13,7 @@ describe('ActionButton', () => {
   });
 
   it('blocks clicks while loading and shows loading copy', () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
 
     render(
       <ActionButton loading loadingLabel="Deleting" onClick={onClick}>

@@ -1,19 +1,20 @@
+import type { Mocked } from 'vitest';
 import api from '@/lib/api';
 import { listSCIMTokens, createSCIMToken, deleteSCIMToken } from './scim-tokens';
 
-jest.mock('@/lib/api', () => ({
+vi.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
-    get: jest.fn(),
-    post: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
-const mockedApi = api as jest.Mocked<typeof api>;
+const mockedApi = api as Mocked<typeof api>;
 
 describe('SCIM tokens API client', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it('unwraps the { data: { tokens } } list envelope', async () => {
     mockedApi.get.mockResolvedValueOnce({

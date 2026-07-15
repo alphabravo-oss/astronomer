@@ -1,3 +1,4 @@
+import type { MockedFunction } from 'vitest';
 import { ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,12 +12,12 @@ import {
 } from './ExtensionProvider';
 import type { ExtensionMount, ExtensionMountsResponse } from '@/lib/api/extensions';
 
-jest.mock('@/lib/api/extensions', () => ({
+vi.mock('@/lib/api/extensions', () => ({
   __esModule: true,
-  getExtensionMounts: jest.fn(),
+  getExtensionMounts: vi.fn(),
 }));
 
-const mockedMounts = extensionsApi.getExtensionMounts as jest.MockedFunction<
+const mockedMounts = extensionsApi.getExtensionMounts as MockedFunction<
   typeof extensionsApi.getExtensionMounts
 >;
 
@@ -47,7 +48,7 @@ function makeWrapper(theme?: ExtensionTheme) {
 }
 
 describe('ExtensionProvider runtime', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('exposes the indexed registry to useExtensionMounts(point)', async () => {
     mockedMounts.mockResolvedValue(response({ clusterTabs: [tab('a'), tab('b')] }));

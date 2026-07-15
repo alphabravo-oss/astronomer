@@ -1,12 +1,11 @@
+import type { MockedFunction } from 'vitest';
 import { render, waitFor, act } from '@testing-library/react';
 import * as api from '@/lib/api';
 
 // The wterm terminal is WASM-backed; stub it. Its <Terminal> fires onReady on
 // mount, which is what gates PodTerminal's connect effect.
-jest.mock('@wterm/react/css', () => ({}), { virtual: true });
-jest.mock('@wterm/react', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories are hoisted; converted in the P1.5 vitest port
-  const React = require('react');
+vi.mock('@wterm/react', async () => {
+  const React = await import('react');
   return {
     Terminal: ({ onReady }: { onReady?: () => void }) => {
       React.useEffect(() => {
@@ -16,18 +15,18 @@ jest.mock('@wterm/react', () => {
     },
     useTerminal: () => ({
       ref: { current: null },
-      write: jest.fn(),
-      resize: jest.fn(),
-      focus: jest.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      focus: vi.fn(),
     }),
   };
 });
-jest.mock('next-themes', () => ({ useTheme: () => ({ theme: 'dark' }) }));
-jest.mock('@/lib/api', () => ({ createStreamTicket: jest.fn() }));
+vi.mock('next-themes', () => ({ useTheme: () => ({ theme: 'dark' }) }));
+vi.mock('@/lib/api', () => ({ createStreamTicket: vi.fn() }));
 
 import { PodTerminal } from './pod-terminal';
 
-const mockedCreateStreamTicket = api.createStreamTicket as jest.MockedFunction<
+const mockedCreateStreamTicket = api.createStreamTicket as MockedFunction<
   typeof api.createStreamTicket
 >;
 
@@ -40,7 +39,7 @@ describe('PodTerminal — cancel pending connect on unmount', () => {
 
   afterEach(() => {
     (global as { WebSocket?: unknown }).WebSocket = OriginalWebSocket;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('does not construct a WebSocket if unmounted while the ticket is in flight', async () => {
@@ -49,7 +48,7 @@ describe('PodTerminal — cancel pending connect on unmount', () => {
       () => new Promise<{ ticket: string; expiresAt: string }>((res) => { resolveTicket = res; }),
     );
 
-    const wsCtor = jest.fn();
+    const wsCtor = vi.fn();
     (global as { WebSocket?: unknown }).WebSocket = wsCtor;
 
     const { unmount } = render(

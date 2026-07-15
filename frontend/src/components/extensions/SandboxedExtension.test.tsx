@@ -9,25 +9,26 @@
 //   - ext/data.request for a dataSource outside the handshake allowlist is denied
 //     without ever calling the proxy.
 
+import type { Mock, MockedFunction } from 'vitest';
 import { render, act, waitFor } from '@testing-library/react';
 import { SandboxedExtension, cspToString } from './SandboxedExtension';
 import * as extensionsApi from '@/lib/api/extensions';
 import type { ExtensionMount, ExtensionDataResponse } from '@/lib/api/extensions';
 
-jest.mock('@/lib/navigation', () => ({
+vi.mock('@/lib/navigation', () => ({
   __esModule: true,
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
-jest.mock('@/lib/api/extensions', () => ({
+vi.mock('@/lib/api/extensions', () => ({
   __esModule: true,
-  fetchExtensionData: jest.fn(),
-  requestExtensionBridgeToken: jest.fn(),
+  fetchExtensionData: vi.fn(),
+  requestExtensionBridgeToken: vi.fn(),
 }));
 
 // ExtensionProvider's useExtensionTheme is consumed by the component; the real
 // provider degrades to "no theme" outside a provider, which is fine here.
-const mockedFetch = extensionsApi.fetchExtensionData as jest.MockedFunction<
+const mockedFetch = extensionsApi.fetchExtensionData as MockedFunction<
   typeof extensionsApi.fetchExtensionData
 >;
 
@@ -60,8 +61,8 @@ function mount(): ExtensionMount {
 
 // Replace the iframe's contentWindow with a stub we can both spy on (host->iframe
 // posts) and use as the trusted event.source for inbound messages.
-function stubIframeWindow(): { post: jest.Mock; win: unknown } {
-  const post = jest.fn();
+function stubIframeWindow(): { post: Mock; win: unknown } {
+  const post = vi.fn();
   const iframe = document.querySelector('iframe') as HTMLIFrameElement;
   const win = { postMessage: post };
   Object.defineProperty(iframe, 'contentWindow', { value: win, configurable: true });
@@ -89,7 +90,7 @@ function bridge(type: string, extra: Record<string, unknown> = {}) {
   return { astronomerBridge: true, v: 1, ext: EXT, mount: POINT_ID, type, ...extra };
 }
 
-afterEach(() => jest.clearAllMocks());
+afterEach(() => vi.clearAllMocks());
 
 describe('SandboxedExtension — iframe + handshake', () => {
   it('renders a sandboxed iframe with the right sandbox/referrer attrs and origin src', () => {

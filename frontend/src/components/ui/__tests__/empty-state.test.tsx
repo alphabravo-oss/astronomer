@@ -17,7 +17,7 @@ describe('EmptyState', () => {
   });
 
   it('renders an action button and invokes the handler', async () => {
-    const onAction = jest.fn();
+    const onAction = vi.fn();
 
     render(
       <EmptyState
@@ -36,7 +36,7 @@ describe('EmptyState', () => {
   });
 
   it('disables action buttons', () => {
-    const onAction = jest.fn();
+    const onAction = vi.fn();
 
     render(
       <EmptyState
@@ -75,7 +75,7 @@ describe('EmptyState', () => {
   });
 
   it('renders retryable shared errors', () => {
-    const onRetry = jest.fn();
+    const onRetry = vi.fn();
 
     render(<ErrorState title="Load failed" description="The API returned an error." onRetry={onRetry} />);
 

@@ -1,33 +1,35 @@
+import type { Mock } from 'vitest';
 import { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ClusterGatekeeperPage from './page';
 import type { GatekeeperConstraint } from '@/types';
 
-jest.mock('@/lib/navigation', () => ({
+vi.mock('@/lib/navigation', () => ({
   useParams: () => ({ id: 'cl1' }),
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
-jest.mock('@/lib/hooks', () => ({
+vi.mock('@/lib/hooks', () => ({
   useCluster: () => ({ data: { id: 'cl1', displayName: 'prod-east' }, isLoading: false }),
 }));
 
-const mockUseClustersUpdate = jest.fn();
-jest.mock('@/lib/permission-hooks', () => ({
+// vi.mock factories are hoisted above this const, so hoist it alongside them.
+const mockUseClustersUpdate = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/permission-hooks', () => ({
   useClustersUpdate: () => mockUseClustersUpdate(),
 }));
 
-jest.mock('./hooks', () => ({
-  useGatekeeperConstraints: jest.fn(),
-  useValidateConstraint: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useApplyConstraint: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useDeleteConstraint: () => ({ mutateAsync: jest.fn(), isPending: false }),
+vi.mock('./hooks', () => ({
+  useGatekeeperConstraints: vi.fn(),
+  useValidateConstraint: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useApplyConstraint: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteConstraint: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { useGatekeeperConstraints } from './hooks';
 
-const mockedList = useGatekeeperConstraints as jest.Mock;
+const mockedList = useGatekeeperConstraints as Mock;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -44,11 +46,11 @@ const bundleConstraint: GatekeeperConstraint = {
 };
 
 describe('ClusterGatekeeperPage', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it('renders constraint rows with violation counts', () => {
     mockUseClustersUpdate.mockReturnValue({ canWrite: true, reason: '' });
-    mockedList.mockReturnValue({ data: [bundleConstraint], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedList.mockReturnValue({ data: [bundleConstraint], isLoading: false, isError: false, refetch: vi.fn() });
     render(<ClusterGatekeeperPage />, { wrapper });
 
     expect(screen.getByText('require-team-label')).toBeInTheDocument();
@@ -59,7 +61,7 @@ describe('ClusterGatekeeperPage', () => {
 
   it('disables Apply when the user lacks cluster write permission', () => {
     mockUseClustersUpdate.mockReturnValue({ canWrite: false, reason: 'You need clusters:update' });
-    mockedList.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedList.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() });
     render(<ClusterGatekeeperPage />, { wrapper });
 
     expect(screen.getByRole('button', { name: /Apply/i })).toBeDisabled();

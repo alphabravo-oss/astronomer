@@ -1,3 +1,4 @@
+import type { MockedFunction } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -5,12 +6,12 @@ import { DeclarativeWidget } from './DeclarativeWidget';
 import * as extensionsApi from '@/lib/api/extensions';
 import type { DeclarativeWidget as Spec, ExtensionDataResponse } from '@/lib/api/extensions';
 
-jest.mock('@/lib/api/extensions', () => ({
+vi.mock('@/lib/api/extensions', () => ({
   __esModule: true,
-  fetchExtensionData: jest.fn(),
+  fetchExtensionData: vi.fn(),
 }));
 
-const mockedFetch = extensionsApi.fetchExtensionData as jest.MockedFunction<
+const mockedFetch = extensionsApi.fetchExtensionData as MockedFunction<
   typeof extensionsApi.fetchExtensionData
 >;
 
@@ -34,7 +35,7 @@ const tableSpec: Spec = {
 };
 
 describe('DeclarativeWidget — table', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('fetches via the data proxy and renders projected, formatted rows', async () => {
     mockedFetch.mockResolvedValue(ok([{ namespace: 'team-a', usd: 12.5 }]));
@@ -63,7 +64,7 @@ describe('DeclarativeWidget — table', () => {
 });
 
 describe('DeclarativeWidget — stat', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   const statSpec: Spec = {
     kind: 'stat',
@@ -91,7 +92,7 @@ describe('DeclarativeWidget — stat', () => {
 });
 
 describe('DeclarativeWidget — chart', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('renders an SVG chart from series rows', async () => {
     mockedFetch.mockResolvedValue(
@@ -108,7 +109,7 @@ describe('DeclarativeWidget — chart', () => {
 });
 
 describe('DeclarativeWidget — form', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('renders a form without fetching read data', () => {
     const spec: Spec = {

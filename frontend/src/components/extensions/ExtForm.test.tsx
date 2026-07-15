@@ -1,14 +1,15 @@
+import type { MockedFunction } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ExtForm, buildSubmitBody, missingRequired } from './ExtForm';
 import * as extensionsApi from '@/lib/api/extensions';
 import type { FormInput, FormSpec } from '@/lib/api/extensions';
 
-jest.mock('@/lib/api/extensions', () => ({
+vi.mock('@/lib/api/extensions', () => ({
   __esModule: true,
-  fetchExtensionData: jest.fn(),
+  fetchExtensionData: vi.fn(),
 }));
 
-const mockedFetch = extensionsApi.fetchExtensionData as jest.MockedFunction<
+const mockedFetch = extensionsApi.fetchExtensionData as MockedFunction<
   typeof extensionsApi.fetchExtensionData
 >;
 
@@ -49,7 +50,7 @@ describe('missingRequired', () => {
 });
 
 describe('ExtForm submit', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   const spec: FormSpec = {
     submit: 'createThing',

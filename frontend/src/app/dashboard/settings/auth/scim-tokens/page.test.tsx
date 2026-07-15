@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 import { ReactNode } from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -5,21 +6,21 @@ import { useAuthStore } from '@/lib/store';
 import SCIMTokensPage from './page';
 import type { SCIMToken } from '@/types';
 
-jest.mock('@/lib/toast', () => ({
-  toastSuccess: jest.fn(),
-  toastError: jest.fn(),
-  toastApiError: jest.fn(),
+vi.mock('@/lib/toast', () => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  toastApiError: vi.fn(),
 }));
 
-jest.mock('./hooks', () => ({
-  useSCIMTokens: jest.fn(),
-  useCreateSCIMToken: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useRevokeSCIMToken: () => ({ mutateAsync: jest.fn(), isPending: false }),
+vi.mock('./hooks', () => ({
+  useSCIMTokens: vi.fn(),
+  useCreateSCIMToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRevokeSCIMToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { useSCIMTokens } from './hooks';
 
-const mockedList = useSCIMTokens as jest.Mock;
+const mockedList = useSCIMTokens as Mock;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -51,14 +52,14 @@ const token: SCIMToken = {
 };
 
 describe('SCIMTokensPage', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null, isAuthenticated: false }));
   });
 
   it('renders token metadata and opens the mint modal for a superuser', () => {
     setSuperuser();
-    mockedList.mockReturnValue({ data: [token], isLoading: false, isError: false, refetch: jest.fn() });
+    mockedList.mockReturnValue({ data: [token], isLoading: false, isError: false, refetch: vi.fn() });
     render(<SCIMTokensPage />, { wrapper });
 
     expect(screen.getByText('okta-provisioning')).toBeInTheDocument();

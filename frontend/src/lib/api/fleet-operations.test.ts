@@ -1,3 +1,4 @@
+import type { Mocked } from 'vitest';
 import api from '@/lib/api';
 import {
   getFleetOperations,
@@ -16,18 +17,18 @@ import {
   type SelectorCandidate,
 } from './fleet-operations';
 
-jest.mock('@/lib/api', () => ({
+vi.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
-    get: jest.fn(),
-    post: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
-const mockedApi = api as jest.Mocked<typeof api>;
+const mockedApi = api as Mocked<typeof api>;
 
 describe('fleet-operations API client', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it('GET list hits the trailing-slash route and passes pagination/status params', async () => {
     mockedApi.get.mockResolvedValueOnce({ data: { data: [], count: 0, next: null, previous: null } });

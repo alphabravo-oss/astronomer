@@ -25,7 +25,7 @@ function editInitial() {
 describe('ConnectorForm secret marker handling (camelized by axios interceptor)', () => {
   it('renders the stored-secret placeholder/helper from the camelized marker', () => {
     render(
-      <ConnectorForm spec={spec} initial={editInitial()} submitLabel="Save" onSubmit={jest.fn()} isEdit />,
+      <ConnectorForm spec={spec} initial={editInitial()} submitLabel="Save" onSubmit={vi.fn()} isEdit />,
     );
     // Placeholder only renders when the stored-secret marker is recognised.
     expect(screen.getByPlaceholderText('••••••••')).toBeInTheDocument();
@@ -33,7 +33,7 @@ describe('ConnectorForm secret marker handling (camelized by axios interceptor)'
   });
 
   it('submits without re-entering the secret and strips the marker from config', () => {
-    const onSubmit = jest.fn();
+    const onSubmit = vi.fn();
     render(
       <ConnectorForm spec={spec} initial={editInitial()} submitLabel="Save" onSubmit={onSubmit} isEdit />,
     );

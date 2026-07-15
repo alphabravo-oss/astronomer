@@ -1,12 +1,13 @@
+import type { MockedFunction } from 'vitest';
 import { ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClusterMetricsSummary } from '@/lib/hooks';
 import * as api from '@/lib/api';
 
-jest.mock('@/lib/api');
+vi.mock('@/lib/api');
 
-const mockedGet = api.getClusterMetricsSummary as jest.MockedFunction<
+const mockedGet = api.getClusterMetricsSummary as MockedFunction<
   typeof api.getClusterMetricsSummary
 >;
 
@@ -18,7 +19,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('useClusterMetricsSummary', () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => vi.clearAllMocks());
 
   it('always attempts the metrics query (not feature-gated) for a cluster id', async () => {
     mockedGet.mockResolvedValue({ cpuPercentage: 12 } as never);

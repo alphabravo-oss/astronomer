@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 
-jest.mock('@/lib/api', () => ({
-  createStreamTicket: jest.fn().mockResolvedValue({ ticket: 'tkt' }),
+vi.mock('@/lib/api', () => ({
+  createStreamTicket: vi.fn().mockResolvedValue({ ticket: 'tkt' }),
 }));
 
 import { useLiveEvents } from '@/lib/live-events';
