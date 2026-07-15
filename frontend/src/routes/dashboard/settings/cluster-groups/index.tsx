@@ -22,6 +22,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 import { Plus, Loader2, Trash2, Pencil, AlertCircle, Folder } from 'lucide-react';
 import * as api from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
@@ -248,19 +249,38 @@ interface FormProps {
 }
 
 function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps) {
-  const [name, setName] = useState(existing?.name ?? '');
-  const [slug, setSlug] = useState(existing?.slug ?? '');
   const [slugTouched, setSlugTouched] = useState(!!existing);
-  const [description, setDescription] = useState(existing?.description ?? '');
-  const [parentId, setParentId] = useState(existing?.parentId ?? '');
-  const [color, setColor] = useState(existing?.color ?? CLUSTER_GROUP_COLORS[0]);
-  const [icon, setIcon] = useState(existing?.icon ?? CLUSTER_GROUP_ICONS[0]);
+
+  const form = useAppForm({
+    defaultValues: {
+      name: existing?.name ?? '',
+      slug: existing?.slug ?? '',
+      description: existing?.description ?? '',
+      parentId: existing?.parentId ?? '',
+      color: existing?.color ?? CLUSTER_GROUP_COLORS[0],
+      icon: existing?.icon ?? CLUSTER_GROUP_ICONS[0],
+    },
+    onSubmit: ({ value }) => {
+      onSubmit({
+        name: value.name,
+        slug: value.slug,
+        description: value.description,
+        parent_id: value.parentId || undefined,
+        color: value.color,
+        icon: value.icon,
+      });
+    },
+  });
+  // Old disabled gate (`!name || !slug`), recomputed from form state.
+  const name = useStore(form.store, (s) => s.values.name);
+  const slug = useStore(form.store, (s) => s.values.slug);
 
   // Auto-derive slug from name unless the user typed one explicitly.
   const handleName = (v: string) => {
-    setName(v);
+    form.setFieldValue('name', v);
     if (!slugTouched) {
-      setSlug(
+      form.setFieldValue(
+        'slug',
         v
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
@@ -302,86 +322,115 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
         <div className="space-y-3">
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">Name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => handleName(e.target.value)}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
-              autoFocus
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => handleName(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                  autoFocus
+                />
+              )}
+            </form.Field>
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">
               Slug <span className="text-muted-foreground/60">(URL-safe identifier)</span>
             </span>
-            <input
-              type="text"
-              value={slug}
-              onChange={(e) => {
-                setSlug(e.target.value);
-                setSlugTouched(true);
-              }}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
-            />
+            <form.Field name="slug">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value);
+                    setSlugTouched(true);
+                  }}
+                  onBlur={field.handleBlur}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                />
+              )}
+            </form.Field>
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">Description</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background text-sm"
-            />
+            <form.Field name="description">
+              {(field) => (
+                <textarea
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  rows={2}
+                  className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background text-sm"
+                />
+              )}
+            </form.Field>
           </label>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">Parent</span>
-            <select
-              value={parentId}
-              onChange={(e) => setParentId(e.target.value)}
-              className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
-            >
-              <option value="">— Top-level —</option>
-              {parentOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {'— '.repeat(p.depth)}
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <form.Field name="parentId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                >
+                  <option value="">— Top-level —</option>
+                  {parentOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {'— '.repeat(p.depth)}
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs font-medium text-muted-foreground">Color</span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {CLUSTER_GROUP_COLORS.map((c) => (
-                  <button
-                    type="button"
-                    key={c}
-                    onClick={() => setColor(c)}
-                    className="h-7 w-7 rounded border-2"
-                    style={{
-                      background: c,
-                      borderColor: color === c ? '#fff' : 'transparent',
-                      outline: color === c ? `2px solid ${c}` : 'none',
-                    }}
-                    aria-label={`Color ${c}`}
-                  />
-                ))}
-              </div>
+              <form.Field name="color">
+                {(field) => (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {CLUSTER_GROUP_COLORS.map((c) => (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => field.handleChange(c)}
+                        className="h-7 w-7 rounded border-2"
+                        style={{
+                          background: c,
+                          borderColor: field.state.value === c ? '#fff' : 'transparent',
+                          outline: field.state.value === c ? `2px solid ${c}` : 'none',
+                        }}
+                        aria-label={`Color ${c}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </form.Field>
             </label>
             <label className="block">
               <span className="text-xs font-medium text-muted-foreground">Icon</span>
-              <select
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
-              >
-                {CLUSTER_GROUP_ICONS.map((i) => (
-                  <option key={i} value={i}>
-                    {i}
-                  </option>
-                ))}
-              </select>
+              <form.Field name="icon">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                  >
+                    {CLUSTER_GROUP_ICONS.map((i) => (
+                      <option key={i} value={i}>
+                        {i}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </form.Field>
             </label>
           </div>
         </div>
@@ -396,16 +445,7 @@ function ClusterGroupForm({ existing, allGroups, onSubmit, onClose }: FormProps)
           </button>
           <button
             type="button"
-            onClick={() =>
-              onSubmit({
-                name,
-                slug,
-                description,
-                parent_id: parentId || undefined,
-                color,
-                icon,
-              })
-            }
+            onClick={() => void form.handleSubmit()}
             disabled={!name || !slug}
             className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
           >

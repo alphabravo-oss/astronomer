@@ -12,8 +12,9 @@ import { createFileRoute } from '@tanstack/react-router';
  *      block. We store the raw map verbatim so any future Dex fields land
  *      without a code change here.
  */
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link } from '@/lib/link';
+import { useAppForm, useStore } from '@/lib/form';
 import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useClusters } from '@/lib/hooks';
 import { useDexSettings, useUpdateDexSettings, useApplyDexConfig } from '@/components/auth/hooks';
@@ -29,56 +30,69 @@ function DexSettingsPage() {
   const applyMutation = useApplyDexConfig();
 
   // Track form state separately from the query so unsaved edits don't snap
-  // back when the cache refetches.
-  const [issuer, setIssuer] = useState('');
-  const [clusterId, setClusterId] = useState('');
-  const [namespace, setNamespace] = useState('dex');
-  const [releaseName, setReleaseName] = useState('dex');
-  const [configmapName, setConfigmapName] = useState('astronomer-dex-config');
-  const [publicClients, setPublicClients] = useState<DexPublicClient[]>([]);
-  const [idTokenExpiry, setIdTokenExpiry] = useState<string>('24h');
-  const [refreshTokenExpiry, setRefreshTokenExpiry] = useState<string>('2160h');
-  const [refreshIdle, setRefreshIdle] = useState<string>('');
+  // back when the cache refetches (we only rebase when the snapshot lands).
+  const form = useAppForm({
+    defaultValues: {
+      issuer: '',
+      clusterId: '',
+      namespace: 'dex',
+      releaseName: 'dex',
+      configmapName: 'astronomer-dex-config',
+      publicClients: [] as DexPublicClient[],
+      idTokenExpiry: '24h',
+      refreshTokenExpiry: '2160h',
+      refreshIdle: '',
+    },
+    onSubmit: async ({ value }) => {
+      const expiry: Record<string, unknown> = {};
+      if (value.idTokenExpiry) expiry.idTokens = value.idTokenExpiry;
+      if (value.refreshTokenExpiry || value.refreshIdle) {
+        const rt: Record<string, unknown> = {};
+        if (value.refreshTokenExpiry) rt.absoluteLifetime = value.refreshTokenExpiry;
+        if (value.refreshIdle) rt.validIfNotUsedFor = value.refreshIdle;
+        expiry.refreshTokens = rt;
+      }
+      await updateMutation.mutateAsync({
+        issuer_url: value.issuer.trim(),
+        cluster_id: value.clusterId || undefined,
+        namespace: value.namespace,
+        release_name: value.releaseName,
+        configmap_name: value.configmapName,
+        public_clients: value.publicClients,
+        expiry,
+        extra: (settings?.extra as Record<string, unknown>) ?? {},
+      });
+    },
+  });
+  // Old disabled gate (`!issuer.trim()`), recomputed from form state.
+  const issuer = useStore(form.store, (s) => s.values.issuer);
 
   useEffect(() => {
     if (!settings) return;
-    setIssuer(settings.issuerUrl);
-    setClusterId(settings.clusterId || '');
-    setNamespace(settings.namespace || 'dex');
-    setReleaseName(settings.releaseName || 'dex');
-    setConfigmapName(settings.configmapName || 'astronomer-dex-config');
-    setPublicClients(Array.isArray(settings.publicClients) ? settings.publicClients : []);
     const expiry = (settings.expiry || {}) as Record<string, unknown>;
-    if (typeof expiry.idTokens === 'string') setIdTokenExpiry(expiry.idTokens);
+    let idTokenExpiry = '24h';
+    let refreshTokenExpiry = '2160h';
+    let refreshIdle = '';
+    if (typeof expiry.idTokens === 'string') idTokenExpiry = expiry.idTokens;
     if (typeof expiry.refreshTokens === 'object' && expiry.refreshTokens !== null) {
       const rt = expiry.refreshTokens as Record<string, unknown>;
-      if (typeof rt.absoluteLifetime === 'string') setRefreshTokenExpiry(rt.absoluteLifetime);
-      if (typeof rt.validIfNotUsedFor === 'string') setRefreshIdle(rt.validIfNotUsedFor);
+      if (typeof rt.absoluteLifetime === 'string') refreshTokenExpiry = rt.absoluteLifetime;
+      if (typeof rt.validIfNotUsedFor === 'string') refreshIdle = rt.validIfNotUsedFor;
     } else if (typeof expiry.refreshTokens === 'string') {
-      setRefreshTokenExpiry(expiry.refreshTokens);
+      refreshTokenExpiry = expiry.refreshTokens;
     }
-  }, [settings]);
-
-  const handleSave = async () => {
-    const expiry: Record<string, unknown> = {};
-    if (idTokenExpiry) expiry.idTokens = idTokenExpiry;
-    if (refreshTokenExpiry || refreshIdle) {
-      const rt: Record<string, unknown> = {};
-      if (refreshTokenExpiry) rt.absoluteLifetime = refreshTokenExpiry;
-      if (refreshIdle) rt.validIfNotUsedFor = refreshIdle;
-      expiry.refreshTokens = rt;
-    }
-    await updateMutation.mutateAsync({
-      issuer_url: issuer.trim(),
-      cluster_id: clusterId || undefined,
-      namespace,
-      release_name: releaseName,
-      configmap_name: configmapName,
-      public_clients: publicClients,
-      expiry,
-      extra: (settings?.extra as Record<string, unknown>) ?? {},
+    form.reset({
+      issuer: settings.issuerUrl,
+      clusterId: settings.clusterId || '',
+      namespace: settings.namespace || 'dex',
+      releaseName: settings.releaseName || 'dex',
+      configmapName: settings.configmapName || 'astronomer-dex-config',
+      publicClients: Array.isArray(settings.publicClients) ? settings.publicClients : [],
+      idTokenExpiry,
+      refreshTokenExpiry,
+      refreshIdle,
     });
-  };
+  }, [form, settings]);
 
   if (isLoading) {
     return (
@@ -125,54 +139,38 @@ function DexSettingsPage() {
 
       {/* Section: Identity */}
       <Section title="Identity" description="Where Dex lives and what it calls itself.">
-        <FieldRow label="Issuer URL" required helper="Must match the URL the OIDC RP redirects to.">
-          <input
-            type="text"
-            value={issuer}
-            onChange={(e) => setIssuer(e.target.value)}
-            placeholder="https://dex.example.com"
-            className={inputCls}
-          />
-        </FieldRow>
-        <FieldRow label="Target cluster" helper="Where the ConfigMap is written on Apply.">
-          <select
-            value={clusterId}
-            onChange={(e) => setClusterId(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">— None —</option>
-            {clusters.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.displayName || c.name}
-              </option>
-            ))}
-          </select>
-        </FieldRow>
+        <form.AppField name="issuer">
+          {(field) => (
+            <field.TextField
+              label="Issuer URL"
+              required
+              helper="Must match the URL the OIDC RP redirects to."
+              placeholder="https://dex.example.com"
+            />
+          )}
+        </form.AppField>
+        <form.AppField name="clusterId">
+          {(field) => (
+            <field.SelectField label="Target cluster" helper="Where the ConfigMap is written on Apply.">
+              <option value="">— None —</option>
+              {clusters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName || c.name}
+                </option>
+              ))}
+            </field.SelectField>
+          )}
+        </form.AppField>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FieldRow label="Namespace">
-            <input
-              type="text"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              className={inputCls}
-            />
-          </FieldRow>
-          <FieldRow label="Release name">
-            <input
-              type="text"
-              value={releaseName}
-              onChange={(e) => setReleaseName(e.target.value)}
-              className={inputCls}
-            />
-          </FieldRow>
-          <FieldRow label="ConfigMap name">
-            <input
-              type="text"
-              value={configmapName}
-              onChange={(e) => setConfigmapName(e.target.value)}
-              className={inputCls}
-            />
-          </FieldRow>
+          <form.AppField name="namespace">
+            {(field) => <field.TextField label="Namespace" />}
+          </form.AppField>
+          <form.AppField name="releaseName">
+            {(field) => <field.TextField label="Release name" />}
+          </form.AppField>
+          <form.AppField name="configmapName">
+            {(field) => <field.TextField label="ConfigMap name" />}
+          </form.AppField>
         </div>
       </Section>
 
@@ -181,80 +179,70 @@ function DexSettingsPage() {
         title="Static / public clients"
         description="OIDC clients Dex will accept. The `astronomer` row is added automatically when you register Dex as SSO."
       >
-        <div className="space-y-3">
-          {publicClients.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No clients configured. Add one to allow OIDC RPs (Astronomer, Argo CD, etc.) to
-              authenticate.
-            </p>
-          ) : (
-            publicClients.map((client, i) => (
-              <PublicClientEditor
-                key={i}
-                value={client}
-                onChange={(next) => {
-                  setPublicClients((prev) => prev.map((c, idx) => (idx === i ? next : c)));
-                }}
-                onRemove={() =>
-                  setPublicClients((prev) => prev.filter((_, idx) => idx !== i))
+        <form.Field name="publicClients">
+          {(field) => (
+            <div className="space-y-3">
+              {field.state.value.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No clients configured. Add one to allow OIDC RPs (Astronomer, Argo CD, etc.) to
+                  authenticate.
+                </p>
+              ) : (
+                field.state.value.map((client, i) => (
+                  <PublicClientEditor
+                    key={i}
+                    value={client}
+                    onChange={(next) => {
+                      field.handleChange(field.state.value.map((c, idx) => (idx === i ? next : c)));
+                    }}
+                    onRemove={() =>
+                      field.handleChange(field.state.value.filter((_, idx) => idx !== i))
+                    }
+                  />
+                ))
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  field.handleChange([
+                    ...field.state.value,
+                    { id: '', name: '', redirectURIs: [], public: false },
+                  ])
                 }
-              />
-            ))
+                className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-dashed border-border text-sm
+                  text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add client
+              </button>
+            </div>
           )}
-          <button
-            type="button"
-            onClick={() =>
-              setPublicClients((prev) => [
-                ...prev,
-                { id: '', name: '', redirectURIs: [], public: false },
-              ])
-            }
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-dashed border-border text-sm
-              text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add client
-          </button>
-        </div>
+        </form.Field>
       </Section>
 
       {/* Section: Token expiry */}
       <Section title="Token expiry" description="Forwarded into Dex's `expiry` block as-is.">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FieldRow label="ID token" helper="e.g. 24h">
-            <input
-              type="text"
-              value={idTokenExpiry}
-              onChange={(e) => setIdTokenExpiry(e.target.value)}
-              placeholder="24h"
-              className={inputCls}
-            />
-          </FieldRow>
-          <FieldRow label="Refresh token (absolute)" helper="e.g. 2160h">
-            <input
-              type="text"
-              value={refreshTokenExpiry}
-              onChange={(e) => setRefreshTokenExpiry(e.target.value)}
-              placeholder="2160h"
-              className={inputCls}
-            />
-          </FieldRow>
-          <FieldRow label="Refresh idle timeout" helper="Optional; e.g. 168h">
-            <input
-              type="text"
-              value={refreshIdle}
-              onChange={(e) => setRefreshIdle(e.target.value)}
-              placeholder="168h"
-              className={inputCls}
-            />
-          </FieldRow>
+          <form.AppField name="idTokenExpiry">
+            {(field) => <field.TextField label="ID token" helper="e.g. 24h" placeholder="24h" />}
+          </form.AppField>
+          <form.AppField name="refreshTokenExpiry">
+            {(field) => (
+              <field.TextField label="Refresh token (absolute)" helper="e.g. 2160h" placeholder="2160h" />
+            )}
+          </form.AppField>
+          <form.AppField name="refreshIdle">
+            {(field) => (
+              <field.TextField label="Refresh idle timeout" helper="Optional; e.g. 168h" placeholder="168h" />
+            )}
+          </form.AppField>
         </div>
       </Section>
 
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => void form.handleSubmit()}
           disabled={updateMutation.isPending || !issuer.trim()}
           className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
             text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"

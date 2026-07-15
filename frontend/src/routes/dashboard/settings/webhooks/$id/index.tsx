@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useAppForm } from '@/lib/form';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -55,18 +56,42 @@ const AVAILABLE_EVENTS = [
 ];
 
 function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
-  const [form, setForm] = useState({
-    name: webhook.name,
-    url: webhook.url,
-    secret: webhook.secret,
-    enabled: webhook.enabled,
-    events: webhook.filters.events,
-    minSeverity: webhook.filters.minSeverity ?? ('' as 'info' | 'warning' | 'critical' | ''),
-  });
   const update = useUpdateWebhook();
 
+  const form = useAppForm({
+    defaultValues: {
+      name: webhook.name,
+      url: webhook.url,
+      secret: webhook.secret,
+      enabled: webhook.enabled,
+      events: webhook.filters.events,
+      minSeverity: webhook.filters.minSeverity ?? ('' as 'info' | 'warning' | 'critical' | ''),
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await update.mutateAsync({
+          id: webhook.id,
+          body: {
+            name: value.name,
+            url: value.url,
+            // Secret only sent if it differs from the redacted snapshot.
+            ...(value.secret && value.secret !== webhook.secret ? { secret: value.secret } : {}),
+            enabled: value.enabled,
+            filters: {
+              events: value.events,
+              ...(value.minSeverity ? { minSeverity: value.minSeverity } : {}),
+            },
+          },
+        });
+      } catch {
+        // toast on error
+      }
+    },
+  });
+
+  // Post-save invalidation refetches the webhook — rebase the form on it.
   useEffect(() => {
-    setForm({
+    form.reset({
       name: webhook.name,
       url: webhook.url,
       secret: webhook.secret,
@@ -74,125 +99,134 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscription }) {
       events: webhook.filters.events,
       minSeverity: webhook.filters.minSeverity ?? '',
     });
-  }, [webhook]);
-
-  const handleSave = async () => {
-    try {
-      await update.mutateAsync({
-        id: webhook.id,
-        body: {
-          name: form.name,
-          url: form.url,
-          // Secret only sent if it differs from the redacted snapshot.
-          ...(form.secret && form.secret !== webhook.secret ? { secret: form.secret } : {}),
-          enabled: form.enabled,
-          filters: {
-            events: form.events,
-            ...(form.minSeverity ? { minSeverity: form.minSeverity } : {}),
-          },
-        },
-      });
-    } catch {
-      // toast on error
-    }
-  };
+  }, [form, webhook]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Name</label>
-        <input
-          type="text"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="name">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">URL</label>
-        <input
-          type="url"
-          value={form.url}
-          onChange={(e) => setForm({ ...form, url: e.target.value })}
-          className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="url">
+          {(field) => (
+            <input
+              type="url"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Signing secret</label>
-        <input
-          type="password"
-          value={form.secret}
-          onChange={(e) => setForm({ ...form, secret: e.target.value })}
-          className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="secret">
+          {(field) => (
+            <input
+              type="password"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
         <p className="text-xs text-muted-foreground">Stored value preserved — type a new secret to rotate.</p>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Events</label>
-        <div className="flex flex-wrap gap-1.5">
-          {AVAILABLE_EVENTS.map((ev) => {
-            const checked = form.events.includes(ev);
-            return (
-              <button
-                key={ev}
-                type="button"
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    events: f.events.includes(ev) ? f.events.filter((e) => e !== ev) : [...f.events, ev],
-                  }))
-                }
-                className={cn(
-                  'text-2xs px-2 py-1 rounded-full border font-mono transition-colors',
-                  checked
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/50',
-                )}
-              >
-                {ev}
-              </button>
-            );
-          })}
-        </div>
+        <form.Field name="events">
+          {(field) => (
+            <div className="flex flex-wrap gap-1.5">
+              {AVAILABLE_EVENTS.map((ev) => {
+                const checked = field.state.value.includes(ev);
+                return (
+                  <button
+                    key={ev}
+                    type="button"
+                    onClick={() =>
+                      field.handleChange(
+                        field.state.value.includes(ev)
+                          ? field.state.value.filter((e) => e !== ev)
+                          : [...field.state.value, ev],
+                      )
+                    }
+                    className={cn(
+                      'text-2xs px-2 py-1 rounded-full border font-mono transition-colors',
+                      checked
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/50',
+                    )}
+                  >
+                    {ev}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </form.Field>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Minimum severity</label>
-        <select
-          value={form.minSeverity}
-          onChange={(e) => setForm({ ...form, minSeverity: e.target.value as typeof form.minSeverity })}
-          className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">No threshold</option>
-          <option value="info">Info or higher</option>
-          <option value="warning">Warning or higher</option>
-          <option value="critical">Critical only</option>
-        </select>
+        <form.Field name="minSeverity">
+          {(field) => (
+            <select
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value as 'info' | 'warning' | 'critical' | '')}
+              onBlur={field.handleBlur}
+              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">No threshold</option>
+              <option value="info">Info or higher</option>
+              <option value="warning">Warning or higher</option>
+              <option value="critical">Critical only</option>
+            </select>
+          )}
+        </form.Field>
       </div>
       <div className="flex items-center justify-between p-3 rounded-lg border border-border">
         <div>
           <p className="text-sm font-medium text-foreground">Enabled</p>
           <p className="text-xs text-muted-foreground">Disabling drops new deliveries silently.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setForm({ ...form, enabled: !form.enabled })}
-          className={cn(
-            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-            form.enabled ? 'bg-status-success' : 'bg-muted',
+        <form.Field name="enabled">
+          {(field) => (
+            <button
+              type="button"
+              onClick={() => field.handleChange(!field.state.value)}
+              onBlur={field.handleBlur}
+              className={cn(
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                field.state.value ? 'bg-status-success' : 'bg-muted',
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  field.state.value ? 'translate-x-6' : 'translate-x-1',
+                )}
+              />
+            </button>
           )}
-        >
-          <span
-            className={cn(
-              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-              form.enabled ? 'translate-x-6' : 'translate-x-1',
-            )}
-          />
-        </button>
+        </form.Field>
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => void form.handleSubmit()}
           disabled={update.isPending}
           className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
         >

@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { toastError } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OverlayShell } from '@/components/ui/overlay-shell';
@@ -154,46 +155,52 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
   const { data: clustersData } = useClusters();
   const { data: projectsData } = useProjects();
 
-  const [connector, setConnector] = useState('');
-  const [groupName, setGroupName] = useState('');
-  const [scope, setScope] = useState<GroupScope>('global');
-  const [role, setRole] = useState('');
-  const [target, setTarget] = useState('');
+  const form = useAppForm({
+    defaultValues: {
+      connector: '',
+      groupName: '',
+      scope: 'global' as GroupScope,
+      role: '',
+      target: '',
+    },
+    validators: {
+      // Old checks (imperative, pre-submit): group name required, role
+      // required, target required for scoped mappings → ported 1:1 as a
+      // form-level onSubmit validator; same messages, same order.
+      onSubmit: ({ value }) =>
+        !value.groupName
+          ? 'Group name is required'
+          : !value.role
+            ? 'Role is required'
+            : value.scope !== 'global' && !value.target
+              ? 'Target is required for scoped mappings'
+              : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await create.mutateAsync({
+          ...(value.connector ? { connector_id: value.connector } : {}),
+          group_name: value.groupName,
+          scope: value.scope,
+          role_id: value.role,
+          ...(value.scope === 'cluster' ? { cluster_id: value.target } : {}),
+          ...(value.scope === 'project' ? { project_id: value.target } : {}),
+        });
+        onClose();
+        form.reset();
+      } catch {
+        // toast handled
+      }
+    },
+  });
+  const scope = useStore(form.store, (s) => s.values.scope);
 
   if (!open) return null;
-
-  const handleSubmit = async () => {
-    if (!groupName) {
-      toastError('Group name is required');
-      return;
-    }
-    if (!role) {
-      toastError('Role is required');
-      return;
-    }
-    if (scope !== 'global' && !target) {
-      toastError('Target is required for scoped mappings');
-      return;
-    }
-    try {
-      await create.mutateAsync({
-        ...(connector ? { connector_id: connector } : {}),
-        group_name: groupName,
-        scope,
-        role_id: role,
-        ...(scope === 'cluster' ? { cluster_id: target } : {}),
-        ...(scope === 'project' ? { project_id: target } : {}),
-      });
-      onClose();
-      setConnector('');
-      setGroupName('');
-      setScope('global');
-      setRole('');
-      setTarget('');
-    } catch {
-      // toast handled
-    }
-  };
 
   return (
     <OverlayShell onClose={onClose}>
@@ -211,91 +218,115 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Connector</label>
-          <select
-            value={connector}
-            onChange={(e) => setConnector(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">Any connector</option>
-            {(connectors ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.displayName} ({c.type})
-              </option>
-            ))}
-          </select>
+          <form.Field name="connector">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Any connector</option>
+                {(connectors ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.displayName} ({c.type})
+                  </option>
+                ))}
+              </select>
+            )}
+          </form.Field>
         </div>
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Group name</label>
-          <input
-            type="text"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            placeholder="platform-admins"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            autoFocus
-          />
+          <form.Field name="groupName">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="platform-admins"
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                autoFocus
+              />
+            )}
+          </form.Field>
         </div>
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Scope</label>
-          <select
-            value={scope}
-            onChange={(e) => {
-              const s = e.target.value as GroupScope;
-              setScope(s);
-              setTarget('');
-            }}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="global">Global</option>
-            <option value="cluster">Cluster</option>
-            <option value="project">Project</option>
-          </select>
+          <form.Field name="scope">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => {
+                  field.handleChange(e.target.value as GroupScope);
+                  form.setFieldValue('target', '');
+                }}
+                onBlur={field.handleBlur}
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="global">Global</option>
+                <option value="cluster">Cluster</option>
+                <option value="project">Project</option>
+              </select>
+            )}
+          </form.Field>
         </div>
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Role</label>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="" disabled>
-              Pick a role…
-            </option>
-            {(roles ?? []).map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.displayName} ({r.name})
-              </option>
-            ))}
-          </select>
+          <form.Field name="role">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="" disabled>
+                  Pick a role…
+                </option>
+                {(roles ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.displayName} ({r.name})
+                  </option>
+                ))}
+              </select>
+            )}
+          </form.Field>
         </div>
 
         {scope !== 'global' && (
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground capitalize">{scope} target</label>
-            <select
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="" disabled>
-                Pick a {scope}…
-              </option>
-              {scope === 'cluster' &&
-                (clustersData?.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+            <form.Field name="target">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="" disabled>
+                    Pick a {scope}…
                   </option>
-                ))}
-              {scope === 'project' &&
-                (projectsData?.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.displayName} ({p.name})
-                  </option>
-                ))}
-            </select>
+                  {scope === 'cluster' &&
+                    (clustersData?.data ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  {scope === 'project' &&
+                    (projectsData?.data ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.displayName} ({p.name})
+                      </option>
+                    ))}
+                </select>
+              )}
+            </form.Field>
           </div>
         )}
 
@@ -309,7 +340,7 @@ function CreateGroupMappingModal({ open, onClose }: { open: boolean; onClose: ()
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => void form.handleSubmit()}
             disabled={create.isPending}
             className={cn(
               'inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50',

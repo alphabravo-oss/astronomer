@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
 import { ArrowLeft, Plus, Trash2, Save, Copy, Loader2, ShieldCheck } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   listNetworkPolicyTemplates,
@@ -111,7 +112,15 @@ function NetworkPoliciesPanel() {
   const [templates, setTemplates] = useState<NetworkPolicyTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<DraftForm | null>(null);
-  const [saving, setSaving] = useState(false);
+  // Remount key for the draft editor: each Clone/Edit/New replaces the whole
+  // draft, so the form below re-seeds from scratch exactly like the old
+  // setDraft(...) did.
+  const [draftNonce, setDraftNonce] = useState(0);
+
+  const openDraft = (next: DraftForm) => {
+    setDraft(next);
+    setDraftNonce((n) => n + 1);
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -130,7 +139,7 @@ function NetworkPoliciesPanel() {
   }, []);
 
   const handleClone = (tmpl: NetworkPolicyTemplate) => {
-    setDraft({
+    openDraft({
       clone_from: tmpl.slug,
       slug: `${tmpl.slug}_copy`,
       name: `${tmpl.name} (copy)`,
@@ -141,7 +150,7 @@ function NetworkPoliciesPanel() {
   };
 
   const handleEdit = (tmpl: NetworkPolicyTemplate) => {
-    setDraft({
+    openDraft({
       id: tmpl.id,
       slug: tmpl.slug,
       name: tmpl.name,
@@ -162,31 +171,6 @@ function NetworkPoliciesPanel() {
     }
   };
 
-  const handleSave = async () => {
-    if (!draft) return;
-    setSaving(true);
-    try {
-      if (draft.id) {
-        await updateNetworkPolicyTemplate(draft.id, {
-          name: draft.name,
-          description: draft.description,
-          spec_template: draft.spec_template,
-          enabled: draft.enabled,
-        });
-        toastSuccess('Template updated');
-      } else {
-        await createNetworkPolicyTemplate(draft);
-        toastSuccess('Template created');
-      }
-      setDraft(null);
-      await refresh();
-    } catch (err: unknown) {
-      toastApiError('Save failed', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -196,7 +180,7 @@ function NetworkPoliciesPanel() {
         <button
           type="button"
           onClick={() =>
-            setDraft({
+            openDraft({
               slug: '',
               name: '',
               description: '',
@@ -261,79 +245,163 @@ function NetworkPoliciesPanel() {
       )}
 
       {draft && (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">{draft.id ? 'Edit template' : 'New template'}</h2>
-            <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDraft(null)}>
-              Cancel
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label className="text-sm space-y-1">
-              <span className="text-muted-foreground">Slug</span>
+        <TemplateDraftForm
+          key={draftNonce}
+          draft={draft}
+          onCancel={() => setDraft(null)}
+          onSaved={async () => {
+            setDraft(null);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TemplateDraftForm({
+  draft,
+  onCancel,
+  onSaved,
+}: {
+  draft: DraftForm;
+  onCancel: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const form = useAppForm({
+    defaultValues: {
+      slug: draft.slug ?? '',
+      name: draft.name,
+      description: draft.description ?? '',
+      spec_template: draft.spec_template,
+      enabled: draft.enabled ?? true,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        if (draft.id) {
+          await updateNetworkPolicyTemplate(draft.id, {
+            name: value.name,
+            description: value.description,
+            spec_template: value.spec_template,
+            enabled: value.enabled,
+          });
+          toastSuccess('Template updated');
+        } else {
+          await createNetworkPolicyTemplate({
+            ...draft,
+            slug: value.slug,
+            name: value.name,
+            description: value.description,
+            spec_template: value.spec_template,
+            enabled: value.enabled,
+          });
+          toastSuccess('Template created');
+        }
+        await onSaved();
+      } catch (err: unknown) {
+        toastApiError('Save failed', err);
+      }
+    },
+  });
+  const saving = useStore(form.store, (s) => s.isSubmitting);
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">{draft.id ? 'Edit template' : 'New template'}</h2>
+        <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label className="text-sm space-y-1">
+          <span className="text-muted-foreground">Slug</span>
+          <form.Field name="slug">
+            {(field) => (
               <input
                 type="text"
                 className="w-full px-2 py-1 rounded border border-border bg-background font-mono text-sm"
-                value={draft.slug ?? ''}
+                value={field.state.value}
                 disabled={!!draft.id}
-                onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
                 placeholder="my_custom_policy"
               />
-            </label>
-            <label className="text-sm space-y-1">
-              <span className="text-muted-foreground">Name</span>
+            )}
+          </form.Field>
+        </label>
+        <label className="text-sm space-y-1">
+          <span className="text-muted-foreground">Name</span>
+          <form.Field name="name">
+            {(field) => (
               <input
                 type="text"
                 className="w-full px-2 py-1 rounded border border-border bg-background text-sm"
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
               />
-            </label>
-          </div>
-          <label className="text-sm space-y-1 block">
-            <span className="text-muted-foreground">Description</span>
+            )}
+          </form.Field>
+        </label>
+      </div>
+      <label className="text-sm space-y-1 block">
+        <span className="text-muted-foreground">Description</span>
+        <form.Field name="description">
+          {(field) => (
             <textarea
               className="w-full px-2 py-1 rounded border border-border bg-background text-sm"
               rows={2}
-              value={draft.description ?? ''}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
             />
-          </label>
-          <label className="text-sm space-y-1 block">
-            <span className="text-muted-foreground">Spec template (Go text/template + YAML)</span>
+          )}
+        </form.Field>
+      </label>
+      <label className="text-sm space-y-1 block">
+        <span className="text-muted-foreground">Spec template (Go text/template + YAML)</span>
+        <form.Field name="spec_template">
+          {(field) => (
             <textarea
               className="w-full px-2 py-1 rounded border border-border bg-background text-xs font-mono"
               rows={14}
-              value={draft.spec_template}
-              onChange={(e) => setDraft({ ...draft, spec_template: e.target.value })}
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
             />
-            <span className="text-xs text-muted-foreground">
-              Variables: <code className="font-mono">{'{{.Namespace}}'}</code>,{' '}
-              <code className="font-mono">{'{{.Project}}'}</code>,{' '}
-              <code className="font-mono">{'{{.PolicyName}}'}</code>
-            </span>
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm">
+          )}
+        </form.Field>
+        <span className="text-xs text-muted-foreground">
+          Variables: <code className="font-mono">{'{{.Namespace}}'}</code>,{' '}
+          <code className="font-mono">{'{{.Project}}'}</code>,{' '}
+          <code className="font-mono">{'{{.PolicyName}}'}</code>
+        </span>
+      </label>
+      <label className="inline-flex items-center gap-2 text-sm">
+        <form.Field name="enabled">
+          {(field) => (
             <input
               type="checkbox"
-              checked={draft.enabled ?? true}
-              onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
             />
-            Enabled
-          </label>
-          <div>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save
-            </button>
-          </div>
-        </div>
-      )}
+          )}
+        </form.Field>
+        Enabled
+      </label>
+      <div>
+        <button
+          type="button"
+          onClick={() => void form.handleSubmit()}
+          disabled={saving}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save
+        </button>
+      </div>
     </div>
   );
 }

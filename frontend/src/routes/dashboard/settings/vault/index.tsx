@@ -23,6 +23,7 @@ import { ArrowLeft, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useAppForm, useStore } from '@/lib/form';
 import { queryKeys } from '@/lib/hooks';
 import { extractApiErrorMessage } from '@/lib/api/errors';
 import {
@@ -66,19 +67,31 @@ function VaultConnectionsPage() {
   });
 
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState<VaultConnectionWriteRequest>(blankBody('token'));
   const [error, setError] = useState<string | null>(null);
 
   const createMu = useMutation({
     mutationFn: createVaultConnection,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.vault.connections });
-      setCreating(false);
-      setDraft(blankBody('token'));
-      setError(null);
     },
     onError: (err: unknown) => setError(extractApiErrorMessage(err) ?? String(err)),
   });
+
+  const form = useAppForm({
+    defaultValues: blankBody('token'),
+    onSubmit: async ({ value }) => {
+      try {
+        await createMu.mutateAsync(value);
+        setCreating(false);
+        form.reset(blankBody('token'));
+        setError(null);
+      } catch {
+        // onError above surfaces the message inline.
+      }
+    },
+  });
+  // The auth-blob inputs switch shape on the selected method.
+  const authMethod = useStore(form.store, (s) => s.values.auth_method);
   const delMu = useMutation({
     mutationFn: deleteVaultConnection,
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.vault.connections }),
@@ -180,37 +193,49 @@ function VaultConnectionsPage() {
           className="space-y-3 max-w-xl border border-border rounded p-4"
           onSubmit={(e) => {
             e.preventDefault();
-            createMu.mutate(draft);
+            void form.handleSubmit();
           }}
         >
           <h2 className="font-medium">New connection</h2>
           {error && <div className="text-status-error text-sm">{error}</div>}
           <label className="block text-sm">
             Name
-            <input
-              required
-              className="block w-full bg-background border border-border rounded p-1.5 mt-1"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  required
+                  className="block w-full bg-background border border-border rounded p-1.5 mt-1"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+              )}
+            </form.Field>
           </label>
           <label className="block text-sm">
             Vault URL
-            <input
-              required
-              className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-              value={draft.addr}
-              onChange={(e) => setDraft({ ...draft, addr: e.target.value })}
-            />
+            <form.Field name="addr">
+              {(field) => (
+                <input
+                  required
+                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+              )}
+            </form.Field>
           </label>
           <label className="block text-sm">
             Auth method
             <select
               className="block w-full bg-background border border-border rounded p-1.5 mt-1"
-              value={draft.auth_method}
+              value={authMethod}
               onChange={(e) => {
                 const method = e.target.value as VaultAuthMethod;
-                setDraft(blankBody(method));
+                // Switching methods resets the draft to that method's blank
+                // shape, exactly like the old setDraft(blankBody(method)).
+                form.reset(blankBody(method));
               }}
             >
               <option value="token">Token</option>
@@ -218,77 +243,93 @@ function VaultConnectionsPage() {
               <option value="kubernetes">Kubernetes</option>
             </select>
           </label>
-          {draft.auth_method === 'token' && (
-            <label className="block text-sm">
-              Token
-              <input
-                type="password"
-                required
-                className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-                value={draft.auth.token ?? ''}
-                onChange={(e) => setDraft({ ...draft, auth: { token: e.target.value } })}
-              />
-            </label>
-          )}
-          {draft.auth_method === 'approle' && (
-            <>
-              <label className="block text-sm">
-                Role ID
-                <input
-                  required
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-                  value={draft.auth.role_id ?? ''}
-                  onChange={(e) =>
-                    setDraft({ ...draft, auth: { ...draft.auth, role_id: e.target.value } })
-                  }
-                />
-              </label>
-              <label className="block text-sm">
-                Secret ID
-                <input
-                  type="password"
-                  required
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-                  value={draft.auth.secret_id ?? ''}
-                  onChange={(e) =>
-                    setDraft({ ...draft, auth: { ...draft.auth, secret_id: e.target.value } })
-                  }
-                />
-              </label>
-            </>
-          )}
-          {draft.auth_method === 'kubernetes' && (
-            <>
-              <label className="block text-sm">
-                Role
-                <input
-                  required
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-                  value={draft.auth.role ?? ''}
-                  onChange={(e) =>
-                    setDraft({ ...draft, auth: { ...draft.auth, role: e.target.value } })
-                  }
-                />
-              </label>
-              <label className="block text-sm">
-                JWT path (in pod)
-                <input
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-                  value={draft.auth.jwt_path ?? ''}
-                  onChange={(e) =>
-                    setDraft({ ...draft, auth: { ...draft.auth, jwt_path: e.target.value } })
-                  }
-                />
-              </label>
-            </>
-          )}
+          <form.Field name="auth">
+            {(field) => (
+              <>
+                {authMethod === 'token' && (
+                  <label className="block text-sm">
+                    Token
+                    <input
+                      type="password"
+                      required
+                      className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                      value={field.state.value.token ?? ''}
+                      onChange={(e) => field.handleChange({ token: e.target.value })}
+                      onBlur={field.handleBlur}
+                    />
+                  </label>
+                )}
+                {authMethod === 'approle' && (
+                  <>
+                    <label className="block text-sm">
+                      Role ID
+                      <input
+                        required
+                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        value={field.state.value.role_id ?? ''}
+                        onChange={(e) =>
+                          field.handleChange({ ...field.state.value, role_id: e.target.value })
+                        }
+                        onBlur={field.handleBlur}
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      Secret ID
+                      <input
+                        type="password"
+                        required
+                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        value={field.state.value.secret_id ?? ''}
+                        onChange={(e) =>
+                          field.handleChange({ ...field.state.value, secret_id: e.target.value })
+                        }
+                        onBlur={field.handleBlur}
+                      />
+                    </label>
+                  </>
+                )}
+                {authMethod === 'kubernetes' && (
+                  <>
+                    <label className="block text-sm">
+                      Role
+                      <input
+                        required
+                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        value={field.state.value.role ?? ''}
+                        onChange={(e) =>
+                          field.handleChange({ ...field.state.value, role: e.target.value })
+                        }
+                        onBlur={field.handleBlur}
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      JWT path (in pod)
+                      <input
+                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        value={field.state.value.jwt_path ?? ''}
+                        onChange={(e) =>
+                          field.handleChange({ ...field.state.value, jwt_path: e.target.value })
+                        }
+                        onBlur={field.handleBlur}
+                      />
+                    </label>
+                  </>
+                )}
+              </>
+            )}
+          </form.Field>
           <label className="block text-sm">
             Default mount
-            <input
-              className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
-              value={draft.default_mount ?? 'secret'}
-              onChange={(e) => setDraft({ ...draft, default_mount: e.target.value })}
-            />
+            <form.Field name="default_mount">
+              {(field) => (
+                <input
+                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                  value={field.state.value ?? 'secret'}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+              )}
+            </form.Field>
           </label>
           <div className="flex gap-2">
             <button

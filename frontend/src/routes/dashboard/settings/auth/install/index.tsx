@@ -18,6 +18,7 @@ import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import { ArrowLeft, ArrowRight, Check, Loader2, Server, Wrench, Globe } from 'lucide-react';
 import { useClusters, useInstallTool, useTools } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import { useUpdateDexSettings } from '@/components/auth/hooks';
 import { cn } from '@/lib/utils';
 import type { Cluster } from '@/types';
@@ -34,8 +35,45 @@ function InstallDexPage() {
   const settingsMutation = useUpdateDexSettings();
 
   const [step, setStep] = useState<Step>(1);
-  const [clusterId, setClusterId] = useState<string>('');
-  const [issuerUrl, setIssuerUrl] = useState<string>('');
+
+  // Wizard state (cluster pick + issuer URL) lives on a TanStack form; the
+  // step counter stays local UI state.
+  const form = useAppForm({
+    defaultValues: { clusterId: '', issuerUrl: '' },
+    onSubmit: async ({ value }) => {
+      const cluster = clusters.find((c) => c.id === value.clusterId);
+      if (!cluster) return;
+      try {
+        // 1. Trigger the tool install. Preset selection mirrors the cluster
+        //    environment heuristic the tools-tab page uses.
+        const preset = ['production', 'staging', 'development'].includes(cluster.environment)
+          ? cluster.environment
+          : 'development';
+        await installMutation.mutateAsync({
+          slug: 'dex',
+          cluster_id: cluster.id,
+          preset,
+        });
+        // 2. Persist the issuer + cluster_id so the rest of the auth UI can
+        //    drive /apply without an extra round-trip later.
+        await settingsMutation.mutateAsync({
+          issuer_url: value.issuerUrl,
+          cluster_id: cluster.id,
+          namespace: 'dex',
+          release_name: 'dex',
+          configmap_name: 'astronomer-dex-config',
+          public_clients: [],
+          expiry: {},
+          extra: {},
+        });
+        router.push('/dashboard/settings/auth/');
+      } catch {
+        /* mutation toasts on error */
+      }
+    },
+  });
+  const clusterId = useStore(form.store, (s) => s.values.clusterId);
+  const issuerUrl = useStore(form.store, (s) => s.values.issuerUrl);
 
   const dexTool = useMemo(() => tools?.find((t) => t.slug === 'dex'), [tools]);
   const cluster = clusters.find((c) => c.id === clusterId);
@@ -43,49 +81,19 @@ function InstallDexPage() {
   // Default cluster + issuer suggestion as soon as data lands.
   useEffect(() => {
     if (!clusterId && clusters.length > 0) {
-      setClusterId(clusters[0].id);
+      form.setFieldValue('clusterId', clusters[0].id);
     }
-  }, [clusters, clusterId]);
+  }, [form, clusters, clusterId]);
 
   useEffect(() => {
     if (cluster && !issuerUrl) {
-      setIssuerUrl(suggestIssuerUrl(cluster));
+      form.setFieldValue('issuerUrl', suggestIssuerUrl(cluster));
     }
-  }, [cluster, issuerUrl]);
+  }, [form, cluster, issuerUrl]);
 
+  // Old per-step advance gate, ported 1:1 (cluster picked; issuer URL valid).
   const canAdvance =
     step === 1 ? !!clusterId : step === 2 ? isValidIssuerUrl(issuerUrl) : true;
-
-  const handleInstall = async () => {
-    if (!cluster) return;
-    try {
-      // 1. Trigger the tool install. Preset selection mirrors the cluster
-      //    environment heuristic the tools-tab page uses.
-      const preset = ['production', 'staging', 'development'].includes(cluster.environment)
-        ? cluster.environment
-        : 'development';
-      await installMutation.mutateAsync({
-        slug: 'dex',
-        cluster_id: cluster.id,
-        preset,
-      });
-      // 2. Persist the issuer + cluster_id so the rest of the auth UI can
-      //    drive /apply without an extra round-trip later.
-      await settingsMutation.mutateAsync({
-        issuer_url: issuerUrl,
-        cluster_id: cluster.id,
-        namespace: 'dex',
-        release_name: 'dex',
-        configmap_name: 'astronomer-dex-config',
-        public_clients: [],
-        expiry: {},
-        extra: {},
-      });
-      router.push('/dashboard/settings/auth/');
-    } catch {
-      /* mutation toasts on error */
-    }
-  };
 
   const installing = installMutation.isPending || settingsMutation.isPending;
 
@@ -108,19 +116,27 @@ function InstallDexPage() {
 
       <div className="rounded-xl border border-border bg-card p-6 space-y-5">
         {step === 1 && (
-          <ClusterPicker
-            clusters={clusters}
-            loading={clustersLoading}
-            value={clusterId}
-            onChange={setClusterId}
-          />
+          <form.Field name="clusterId">
+            {(field) => (
+              <ClusterPicker
+                clusters={clusters}
+                loading={clustersLoading}
+                value={field.state.value}
+                onChange={field.handleChange}
+              />
+            )}
+          </form.Field>
         )}
         {step === 2 && (
-          <IssuerStep
-            cluster={cluster}
-            value={issuerUrl}
-            onChange={setIssuerUrl}
-          />
+          <form.Field name="issuerUrl">
+            {(field) => (
+              <IssuerStep
+                cluster={cluster}
+                value={field.state.value}
+                onChange={field.handleChange}
+              />
+            )}
+          </form.Field>
         )}
         {step === 3 && cluster && (
           <ReviewStep cluster={cluster} issuerUrl={issuerUrl} dexAvailable={!!dexTool} />
@@ -153,7 +169,7 @@ function InstallDexPage() {
           ) : (
             <button
               type="button"
-              onClick={handleInstall}
+              onClick={() => void form.handleSubmit()}
               disabled={installing || !dexTool}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
                 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"

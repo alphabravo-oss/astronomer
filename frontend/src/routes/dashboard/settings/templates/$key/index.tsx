@@ -17,6 +17,7 @@ import { useParams } from '@/lib/navigation';
 import { Link } from '@/lib/link';
 import { ArrowLeft, Eye, FileText, Loader2, RotateCcw, Save } from 'lucide-react';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { useAppForm } from '@/lib/form';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -40,16 +41,36 @@ function NotificationTemplateEditor() {
   const params = useParams();
   const key = decodeURIComponent(String(params?.key ?? ''));
   const [detail, setDetail] = useState<NotificationTemplateDetail | null>(null);
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-  const [enabled, setEnabled] = useState(true);
-  const [samples, setSamples] = useState('{}');
   const [preview, setPreview] = useState<NotificationTemplatePreviewResult | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [previewMissing, setPreviewMissing] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+
+  // Override subject/body/enabled + the sample-variables JSON live on one
+  // form; save uses the first three, Preview reads all of them.
+  const form = useAppForm({
+    defaultValues: { subject: '', body: '', enabled: true, samples: '{}' },
+    onSubmit: async ({ value }) => {
+      if (!detail) return;
+      setSaving(true);
+      try {
+        const updated = await updateNotificationTemplate(key, {
+          subject: value.subject,
+          body: value.body,
+          body_format: detail.bodyFormat,
+          enabled: value.enabled,
+        });
+        setDetail(updated);
+        toastSuccess('Template override saved');
+      } catch (err) {
+        toastApiError('', err, 'Save failed');
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
 
   useEffect(() => {
     if (!key) return;
@@ -59,10 +80,12 @@ function NotificationTemplateEditor() {
         const d = await getNotificationTemplate(key);
         if (cancelled) return;
         setDetail(d);
-        setSubject(d.subject);
-        setBody(d.body);
-        setEnabled(d.enabled);
-        setSamples(seedSamples(d));
+        form.reset({
+          subject: d.subject,
+          body: d.body,
+          enabled: d.enabled,
+          samples: seedSamples(d),
+        });
       } catch (err) {
         toastApiError('', err, 'Failed to load template');
       } finally {
@@ -72,26 +95,7 @@ function NotificationTemplateEditor() {
     return () => {
       cancelled = true;
     };
-  }, [key]);
-
-  const handleSave = async () => {
-    if (!detail) return;
-    setSaving(true);
-    try {
-      const updated = await updateNotificationTemplate(key, {
-        subject,
-        body,
-        body_format: detail.bodyFormat,
-        enabled,
-      });
-      setDetail(updated);
-      toastSuccess('Template override saved');
-    } catch (err) {
-      toastApiError('', err, 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
+  }, [form, key]);
 
   const handleReset = async () => {
     if (!detail) return;
@@ -104,9 +108,12 @@ function NotificationTemplateEditor() {
       // Re-fetch so the page shows the default again.
       const d = await getNotificationTemplate(key);
       setDetail(d);
-      setSubject(d.subject);
-      setBody(d.body);
-      setEnabled(true);
+      form.reset({
+        subject: d.subject,
+        body: d.body,
+        enabled: true,
+        samples: form.state.values.samples,
+      });
       toastSuccess('Reverted to default');
     } catch (err) {
       toastApiError('', err, 'Reset failed');
@@ -120,6 +127,7 @@ function NotificationTemplateEditor() {
     setPreviewErr(null);
     setPreviewMissing(null);
     try {
+      const { subject, body, samples } = form.state.values;
       const variables = JSON.parse(samples || '{}');
       const result = await previewNotificationTemplate(key, {
         subject,
@@ -211,29 +219,44 @@ function NotificationTemplateEditor() {
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
             Override subject
           </label>
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
-            placeholder="(leave empty to inherit the default)"
-          />
+          <form.Field name="subject">
+            {(field) => (
+              <input
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+                placeholder="(leave empty to inherit the default)"
+              />
+            )}
+          </form.Field>
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
             Override body
           </label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={16}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono"
-            spellCheck={false}
-          />
+          <form.Field name="body">
+            {(field) => (
+              <textarea
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                rows={16}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono"
+                spellCheck={false}
+              />
+            )}
+          </form.Field>
           <div className="flex items-center gap-2 text-sm">
-            <input
-              id="enabled"
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
+            <form.Field name="enabled">
+              {(field) => (
+                <input
+                  id="enabled"
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                />
+              )}
+            </form.Field>
             <label htmlFor="enabled" className="text-foreground">
               Enabled (uncheck to keep the override on file but use the default at delivery)
             </label>
@@ -241,7 +264,7 @@ function NotificationTemplateEditor() {
           <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
-              onClick={handleSave}
+              onClick={() => void form.handleSubmit()}
               disabled={saving}
               className="inline-flex items-center gap-1 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
             >
@@ -298,13 +321,18 @@ function NotificationTemplateEditor() {
           <label className="text-xs uppercase tracking-wide text-muted-foreground">
             Sample variables (JSON)
           </label>
-          <textarea
-            value={samples}
-            onChange={(e) => setSamples(e.target.value)}
-            rows={8}
-            spellCheck={false}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono"
-          />
+          <form.Field name="samples">
+            {(field) => (
+              <textarea
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                rows={8}
+                spellCheck={false}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono"
+              />
+            )}
+          </form.Field>
           <button
             type="button"
             onClick={handlePreview}

@@ -7,6 +7,7 @@
  */
 import { useState } from 'react';
 import { Link } from '@/lib/link';
+import { useAppForm, useStore } from '@/lib/form';
 import {
   ArrowLeft,
   Plus,
@@ -149,16 +150,20 @@ function CreateSCIMTokenModal({
   onCreated: (t: SCIMTokenCreated) => void;
 }) {
   const create = useCreateSCIMToken();
-  const [name, setName] = useState('');
 
-  const handleSave = async () => {
-    try {
-      const t = await create.mutateAsync(name.trim());
-      onCreated(t);
-    } catch {
-      /* mutation toasts on error */
-    }
-  };
+  const form = useAppForm({
+    defaultValues: { name: '' },
+    onSubmit: async ({ value }) => {
+      try {
+        const t = await create.mutateAsync(value.name.trim());
+        onCreated(t);
+      } catch {
+        /* mutation toasts on error */
+      }
+    },
+  });
+  // Old disabled gate (`!name.trim()`), recomputed from form state.
+  const name = useStore(form.store, (s) => s.values.name);
 
   return (
     <OverlayShell onClose={onClose}>
@@ -172,14 +177,19 @@ function CreateSCIMTokenModal({
         <div className="p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="okta-provisioning"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              autoFocus
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="okta-provisioning"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  autoFocus
+                />
+              )}
+            </form.Field>
             <p className="text-2xs text-muted-foreground">
               A label to recognize this token. The secret is shown once on the next screen.
             </p>
@@ -193,7 +203,7 @@ function CreateSCIMTokenModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void form.handleSubmit()}
             disabled={create.isPending || !name.trim()}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

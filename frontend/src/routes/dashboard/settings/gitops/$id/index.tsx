@@ -6,9 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * Shows the source config, the managed-clusters table, and exposes
  * "Sync now" + "Dry-run preview" + "Save changes" actions.
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from '@/lib/navigation';
 import { Link } from '@/lib/link';
+import { useAppForm, useStore } from '@/lib/form';
 import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -26,28 +27,21 @@ import type {
 import { GITOPS_AUTH_SENTINEL } from '@/lib/api/settings';
 import { formatRelativeTime } from '@/lib/utils';
 
-function DetailInner({ id }: { id: string }) {
-  const { data: source, isLoading } = useGitOpsSource(id);
-  const { data: clusters } = useGitOpsSourceClusters(id);
-  const update = useUpdateGitOpsSource();
-  const sync = useSyncGitOpsSource();
-  const preview = usePreviewGitOpsSource();
-  const [previewResult, setPreviewResult] = useState<GitOpsPreviewResult | null>(
-    null,
-  );
-  const [form, setForm] = useState<Partial<GitOpsSourceWriteRequest> | null>(
-    null,
-  );
-
-  if (isLoading || !source) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const merged: GitOpsSourceWriteRequest = {
+// Snapshot of the source row in write-request shape — the form's baseline;
+// the auth column round-trips as the sentinel when a blob is stored.
+function toWriteRequest(source: {
+  name: string;
+  repo_url: string;
+  branch?: string;
+  path_prefix?: string;
+  auth_mode: GitOpsSourceWriteRequest['auth_mode'];
+  auth_configured?: boolean;
+  sync_mode: GitOpsSourceWriteRequest['sync_mode'];
+  sync_interval_seconds?: number;
+  on_delete: GitOpsSourceWriteRequest['on_delete'];
+  enabled?: boolean;
+}): GitOpsSourceWriteRequest {
+  return {
     name: source.name,
     repo_url: source.repo_url,
     branch: source.branch,
@@ -58,13 +52,58 @@ function DetailInner({ id }: { id: string }) {
     sync_interval_seconds: source.sync_interval_seconds,
     on_delete: source.on_delete,
     enabled: source.enabled,
-    ...form,
   };
+}
 
-  const set = <K extends keyof GitOpsSourceWriteRequest>(
-    k: K,
-    v: GitOpsSourceWriteRequest[K],
-  ) => setForm((f) => ({ ...(f ?? {}), [k]: v }));
+function DetailInner({ id }: { id: string }) {
+  const { data: source, isLoading } = useGitOpsSource(id);
+  const { data: clusters } = useGitOpsSourceClusters(id);
+  const update = useUpdateGitOpsSource();
+  const sync = useSyncGitOpsSource();
+  const preview = usePreviewGitOpsSource();
+  const [previewResult, setPreviewResult] = useState<GitOpsPreviewResult | null>(
+    null,
+  );
+
+  const initial = useMemo(() => (source ? toWriteRequest(source) : null), [source]);
+
+  const form = useAppForm({
+    defaultValues: (initial ?? toWriteRequest({
+      name: '',
+      repo_url: '',
+      auth_mode: 'none',
+      sync_mode: 'interval',
+      on_delete: 'log',
+    })) as GitOpsSourceWriteRequest,
+    onSubmit: ({ value }) => {
+      if (!source || !initial) return;
+      // Old behavior: the PUT body carries only the keys the operator
+      // actually changed (a Partial), never the whole snapshot.
+      const body: Partial<GitOpsSourceWriteRequest> = {};
+      for (const k of Object.keys(value) as (keyof GitOpsSourceWriteRequest)[]) {
+        if (value[k] !== initial[k]) {
+          (body as Record<string, unknown>)[k] = value[k];
+        }
+      }
+      if (Object.keys(body).length === 0) return;
+      update.mutate({ id: source.id, body });
+    },
+  });
+  const authMode = useStore(form.store, (s) => s.values.auth_mode);
+  const syncMode = useStore(form.store, (s) => s.values.sync_mode);
+
+  // Rebase the form whenever the source snapshot (re)loads.
+  useEffect(() => {
+    if (initial) form.reset(initial);
+  }, [form, initial]);
+
+  if (isLoading || !source) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -149,8 +188,7 @@ function DetailInner({ id }: { id: string }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!form) return;
-          update.mutate({ id: source.id, body: form });
+          void form.handleSubmit();
         }}
         className="space-y-5 max-w-2xl"
       >
@@ -158,44 +196,64 @@ function DetailInner({ id }: { id: string }) {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Branch</label>
-            <input
-              value={merged.branch ?? ''}
-              onChange={(e) => set('branch', e.target.value)}
-              className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
-            />
+            <form.Field name="branch">
+              {(field) => (
+                <input
+                  value={field.state.value ?? ''}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+                />
+              )}
+            </form.Field>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Path prefix</label>
-            <input
-              value={merged.path_prefix ?? ''}
-              onChange={(e) => set('path_prefix', e.target.value)}
-              className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
-            />
+            <form.Field name="path_prefix">
+              {(field) => (
+                <input
+                  value={field.state.value ?? ''}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+                />
+              )}
+            </form.Field>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth mode</label>
-            <select
-              value={merged.auth_mode}
-              onChange={(e) => set('auth_mode', e.target.value as 'none' | 'https_token' | 'ssh_key')}
-              className="w-full h-9 px-3 rounded border bg-background text-sm"
-            >
-              <option value="none">None</option>
-              <option value="https_token">HTTPS token</option>
-              <option value="ssh_key">SSH key</option>
-            </select>
+            <form.Field name="auth_mode">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value as 'none' | 'https_token' | 'ssh_key')}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm"
+                >
+                  <option value="none">None</option>
+                  <option value="https_token">HTTPS token</option>
+                  <option value="ssh_key">SSH key</option>
+                </select>
+              )}
+            </form.Field>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth blob</label>
-            <input
-              type="password"
-              value={merged.auth ?? ''}
-              onChange={(e) => set('auth', e.target.value)}
-              disabled={merged.auth_mode === 'none'}
-              className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
-              placeholder={merged.auth_mode === 'none' ? '(not required)' : ''}
-            />
+            <form.Field name="auth">
+              {(field) => (
+                <input
+                  type="password"
+                  value={field.state.value ?? ''}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  disabled={authMode === 'none'}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                  placeholder={authMode === 'none' ? '(not required)' : ''}
+                />
+              )}
+            </form.Field>
             <p className="text-2xs text-muted-foreground">
               The sentinel <code>{GITOPS_AUTH_SENTINEL}</code> means "keep
               existing". Replace it with a new value to rotate.
@@ -205,56 +263,82 @@ function DetailInner({ id }: { id: string }) {
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Sync mode</label>
-            <select
-              value={merged.sync_mode}
-              onChange={(e) => set('sync_mode', e.target.value as 'manual' | 'interval')}
-              className="w-full h-9 px-3 rounded border bg-background text-sm"
-            >
-              <option value="interval">Interval</option>
-              <option value="manual">Manual only</option>
-            </select>
+            <form.Field name="sync_mode">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value as 'manual' | 'interval')}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm"
+                >
+                  <option value="interval">Interval</option>
+                  <option value="manual">Manual only</option>
+                </select>
+              )}
+            </form.Field>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Interval (sec)</label>
-            <input
-              type="number"
-              min={30}
-              value={merged.sync_interval_seconds ?? 60}
-              onChange={(e) => set('sync_interval_seconds', Number(e.target.value))}
-              disabled={merged.sync_mode === 'manual'}
-              className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
-            />
+            <form.Field name="sync_interval_seconds">
+              {(field) => (
+                <input
+                  type="number"
+                  min={30}
+                  value={field.state.value ?? 60}
+                  onChange={(e) => field.handleChange(Number(e.target.value))}
+                  onBlur={field.handleBlur}
+                  disabled={syncMode === 'manual'}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                />
+              )}
+            </form.Field>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On delete</label>
-            <select
-              value={merged.on_delete}
-              onChange={(e) => set('on_delete', e.target.value as 'log' | 'tombstone' | 'decommission')}
-              className="w-full h-9 px-3 rounded border bg-background text-sm"
-            >
-              <option value="log">Log only</option>
-              <option value="tombstone">Tombstone</option>
-              <option value="decommission">Decommission</option>
-            </select>
+            <form.Field name="on_delete">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value as 'log' | 'tombstone' | 'decommission')}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded border bg-background text-sm"
+                >
+                  <option value="log">Log only</option>
+                  <option value="tombstone">Tombstone</option>
+                  <option value="decommission">Decommission</option>
+                </select>
+              )}
+            </form.Field>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            id="enabled"
-            type="checkbox"
-            checked={merged.enabled ?? true}
-            onChange={(e) => set('enabled', e.target.checked)}
-          />
+          <form.Field name="enabled">
+            {(field) => (
+              <input
+                id="enabled"
+                type="checkbox"
+                checked={field.state.value ?? true}
+                onChange={(e) => field.handleChange(e.target.checked)}
+                onBlur={field.handleBlur}
+              />
+            )}
+          </form.Field>
           <label htmlFor="enabled" className="text-sm text-foreground">Enabled</label>
         </div>
         <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            disabled={!form || update.isPending}
-            className="inline-flex items-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+          <form.Subscribe
+            selector={(s) => initial != null && JSON.stringify(s.values) !== JSON.stringify(initial)}
           >
-            {update.isPending ? 'Saving…' : 'Save changes'}
-          </button>
+            {(dirty) => (
+              <button
+                type="submit"
+                disabled={!dirty || update.isPending}
+                className="inline-flex items-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {update.isPending ? 'Saving…' : 'Save changes'}
+              </button>
+            )}
+          </form.Subscribe>
         </div>
       </form>
 

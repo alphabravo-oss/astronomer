@@ -24,6 +24,7 @@ import {
   Download,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 
 type TabKey = 'sso' | 'general' | 'tokens' | 'audit' | 'support';
 
@@ -43,30 +44,86 @@ function SettingsPage() {
   const [newTokenForm, setNewTokenForm] = useState({ name: '', description: '', expiresInDays: 30 });
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [showAddSSO, setShowAddSSO] = useState(false);
-  const [ssoForm, setSSOForm] = useState({
-    type: 'github' as 'github' | 'google' | 'oidc',
-    name: '',
-    clientId: '',
-    clientSecret: '',
-    metadataUrl: '',
-    allowedOrganizations: '',
-    autoCreateUsers: true,
-  });
-  const [generalForm, setGeneralForm] = useState({
-    platformName: 'Astronomer',
-    agentHeartbeatInterval: 30,
-    defaultSessionTimeout: 60,
-    enableAuditLogging: true,
-    metricsCollection: true,
-  });
 
   const { data: generalSettings, isLoading: generalLoading } = useGeneralSettings();
   const saveGeneralSettings = useSaveGeneralSettings();
   const createSSOProvider = useCreateSSOProvider();
 
+  const ssoForm = useAppForm({
+    defaultValues: {
+      type: 'github' as 'github' | 'google' | 'oidc',
+      name: '',
+      clientId: '',
+      clientSecret: '',
+      metadataUrl: '',
+      allowedOrganizations: '',
+      autoCreateUsers: true,
+    },
+    validators: {
+      // Old checks (imperative, pre-submit): `if (!ssoForm.name)` then
+      // `if (!ssoForm.clientId)` → ported 1:1 as a form-level onSubmit
+      // validator; same messages, same order.
+      onSubmit: ({ value }) =>
+        !value.name
+          ? 'Provider name is required'
+          : !value.clientId
+            ? 'Client ID is required'
+            : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createSSOProvider.mutateAsync({
+          type: value.type,
+          name: value.name,
+          enabled: true,
+          config: {
+            clientId: value.clientId,
+            clientSecret: value.clientSecret || undefined,
+            metadataUrl: value.metadataUrl || undefined,
+            allowedOrganizations: value.allowedOrganizations || undefined,
+            autoCreateUsers: value.autoCreateUsers,
+          },
+        });
+        setShowAddSSO(false);
+        ssoForm.reset();
+      } catch {
+        // Error is handled by the mutation's onError callback
+      }
+    },
+  });
+  // Old disabled gate (`!ssoForm.name || !ssoForm.clientId`), recomputed from
+  // form state; the OIDC discovery field is conditional on the type value.
+  const ssoType = useStore(ssoForm.store, (s) => s.values.type);
+  const ssoName = useStore(ssoForm.store, (s) => s.values.name);
+  const ssoClientId = useStore(ssoForm.store, (s) => s.values.clientId);
+
+  const generalForm = useAppForm({
+    defaultValues: {
+      platformName: 'Astronomer',
+      agentHeartbeatInterval: 30,
+      defaultSessionTimeout: 60,
+      enableAuditLogging: true,
+      metricsCollection: true,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await saveGeneralSettings.mutateAsync(value);
+      } catch {
+        // Error is handled by the mutation's onError callback
+      }
+    },
+  });
+
+  // Rebase the form whenever the settings snapshot lands (initial load and
+  // post-save invalidation), exactly like the old setGeneralForm effect.
   useEffect(() => {
     if (generalSettings) {
-      setGeneralForm({
+      generalForm.reset({
         platformName: generalSettings.platformName ?? 'Astronomer',
         agentHeartbeatInterval: generalSettings.agentHeartbeatInterval ?? 30,
         defaultSessionTimeout: generalSettings.defaultSessionTimeout ?? 60,
@@ -74,7 +131,7 @@ function SettingsPage() {
         metricsCollection: generalSettings.metricsCollection ?? true,
       });
     }
-  }, [generalSettings]);
+  }, [generalForm, generalSettings]);
 
   const { data: ssoProviders, isLoading: ssoLoading } = useSSOProviders();
   const { data: tokens, isLoading: tokensLoading } = useAPITokens();
@@ -105,51 +162,6 @@ function SettingsPage() {
       setCreatedToken(result.token);
     } catch {
       // Error handled by mutation
-    }
-  };
-
-  const handleSaveGeneralSettings = async () => {
-    try {
-      await saveGeneralSettings.mutateAsync(generalForm);
-    } catch {
-      // Error is handled by the mutation's onError callback
-    }
-  };
-
-  const handleCreateSSOProvider = async () => {
-    if (!ssoForm.name) {
-      toastError('Provider name is required');
-      return;
-    }
-    if (!ssoForm.clientId) {
-      toastError('Client ID is required');
-      return;
-    }
-    try {
-      await createSSOProvider.mutateAsync({
-        type: ssoForm.type,
-        name: ssoForm.name,
-        enabled: true,
-        config: {
-          clientId: ssoForm.clientId,
-          clientSecret: ssoForm.clientSecret || undefined,
-          metadataUrl: ssoForm.metadataUrl || undefined,
-          allowedOrganizations: ssoForm.allowedOrganizations || undefined,
-          autoCreateUsers: ssoForm.autoCreateUsers,
-        },
-      });
-      setShowAddSSO(false);
-      setSSOForm({
-        type: 'github',
-        name: '',
-        clientId: '',
-        clientSecret: '',
-        metadataUrl: '',
-        allowedOrganizations: '',
-        autoCreateUsers: true,
-      });
-    } catch {
-      // Error is handled by the mutation's onError callback
     }
   };
 
@@ -358,45 +370,60 @@ function SettingsPage() {
 
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Platform Name</label>
-                  <input
-                    aria-label="Platform Name"
-                    type="text"
-                    value={generalForm.platformName}
-                    onChange={(e) => setGeneralForm((f) => ({ ...f, platformName: e.target.value }))}
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                      focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <generalForm.Field name="platformName">
+                    {(field) => (
+                      <input
+                        aria-label="Platform Name"
+                        type="text"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                          focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    )}
+                  </generalForm.Field>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Agent Heartbeat Interval</label>
-                  <select
-                    aria-label="Agent Heartbeat Interval"
-                    value={generalForm.agentHeartbeatInterval}
-                    onChange={(e) => setGeneralForm((f) => ({ ...f, agentHeartbeatInterval: Number(e.target.value) }))}
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                      focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value={15}>15 seconds</option>
-                    <option value={30}>30 seconds</option>
-                    <option value={60}>60 seconds</option>
-                  </select>
+                  <generalForm.Field name="agentHeartbeatInterval">
+                    {(field) => (
+                      <select
+                        aria-label="Agent Heartbeat Interval"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(Number(e.target.value))}
+                        onBlur={field.handleBlur}
+                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                          focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value={15}>15 seconds</option>
+                        <option value={30}>30 seconds</option>
+                        <option value={60}>60 seconds</option>
+                      </select>
+                    )}
+                  </generalForm.Field>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Default Session Timeout</label>
-                  <select
-                    aria-label="Default Session Timeout"
-                    value={generalForm.defaultSessionTimeout}
-                    onChange={(e) => setGeneralForm((f) => ({ ...f, defaultSessionTimeout: Number(e.target.value) }))}
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                      focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value={30}>30 minutes</option>
-                    <option value={60}>1 hour</option>
-                    <option value={480}>8 hours</option>
-                    <option value={1440}>24 hours</option>
-                  </select>
+                  <generalForm.Field name="defaultSessionTimeout">
+                    {(field) => (
+                      <select
+                        aria-label="Default Session Timeout"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(Number(e.target.value))}
+                        onBlur={field.handleBlur}
+                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                          focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value={30}>30 minutes</option>
+                        <option value={60}>1 hour</option>
+                        <option value={480}>8 hours</option>
+                        <option value={1440}>24 hours</option>
+                      </select>
+                    )}
+                  </generalForm.Field>
                 </div>
 
                 <div className="flex items-center justify-between p-4 rounded-lg border border-border">
@@ -404,19 +431,24 @@ function SettingsPage() {
                     <p className="text-sm font-medium text-foreground">Enable Audit Logging</p>
                     <p className="text-xs text-muted-foreground">Log all API actions for compliance</p>
                   </div>
-                  <button
-                    aria-label="Enable Audit Logging"
-                    onClick={() => setGeneralForm((f) => ({ ...f, enableAuditLogging: !f.enableAuditLogging }))}
-                    className={cn(
-                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                      generalForm.enableAuditLogging ? 'bg-status-success' : 'bg-muted'
+                  <generalForm.Field name="enableAuditLogging">
+                    {(field) => (
+                      <button
+                        aria-label="Enable Audit Logging"
+                        onClick={() => field.handleChange(!field.state.value)}
+                        onBlur={field.handleBlur}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                          field.state.value ? 'bg-status-success' : 'bg-muted'
+                        )}
+                      >
+                        <span className={cn(
+                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                          field.state.value ? 'translate-x-6' : 'translate-x-1'
+                        )} />
+                      </button>
                     )}
-                  >
-                    <span className={cn(
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      generalForm.enableAuditLogging ? 'translate-x-6' : 'translate-x-1'
-                    )} />
-                  </button>
+                  </generalForm.Field>
                 </div>
 
                 <div className="flex items-center justify-between p-4 rounded-lg border border-border">
@@ -424,25 +456,30 @@ function SettingsPage() {
                     <p className="text-sm font-medium text-foreground">Metrics Collection</p>
                     <p className="text-xs text-muted-foreground">Collect and aggregate cluster metrics</p>
                   </div>
-                  <button
-                    aria-label="Metrics Collection"
-                    onClick={() => setGeneralForm((f) => ({ ...f, metricsCollection: !f.metricsCollection }))}
-                    className={cn(
-                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                      generalForm.metricsCollection ? 'bg-status-success' : 'bg-muted'
+                  <generalForm.Field name="metricsCollection">
+                    {(field) => (
+                      <button
+                        aria-label="Metrics Collection"
+                        onClick={() => field.handleChange(!field.state.value)}
+                        onBlur={field.handleBlur}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                          field.state.value ? 'bg-status-success' : 'bg-muted'
+                        )}
+                      >
+                        <span className={cn(
+                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                          field.state.value ? 'translate-x-6' : 'translate-x-1'
+                        )} />
+                      </button>
                     )}
-                  >
-                    <span className={cn(
-                      'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                      generalForm.metricsCollection ? 'translate-x-6' : 'translate-x-1'
-                    )} />
-                  </button>
+                  </generalForm.Field>
                 </div>
               </div>
             )}
 
             <button
-              onClick={handleSaveGeneralSettings}
+              onClick={() => void generalForm.handleSubmit()}
               disabled={saveGeneralSettings.isPending}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
@@ -539,81 +576,111 @@ function SettingsPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Provider Type</label>
-                <select
-                  value={ssoForm.type}
-                  onChange={(e) => setSSOForm((f) => ({ ...f, type: e.target.value as 'github' | 'google' | 'oidc' }))}
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                    focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="github">GitHub</option>
-                  <option value="google">Google</option>
-                  <option value="oidc">OIDC</option>
-                </select>
+                <ssoForm.Field name="type">
+                  {(field) => (
+                    <select
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value as 'github' | 'google' | 'oidc')}
+                      onBlur={field.handleBlur}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="github">GitHub</option>
+                      <option value="google">Google</option>
+                      <option value="oidc">OIDC</option>
+                    </select>
+                  )}
+                </ssoForm.Field>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Provider Name</label>
-                <input
-                  type="text"
-                  value={ssoForm.name}
-                  onChange={(e) => setSSOForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g., Corporate GitHub"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  autoFocus
-                />
+                <ssoForm.Field name="name">
+                  {(field) => (
+                    <input
+                      type="text"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="e.g., Corporate GitHub"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      autoFocus
+                    />
+                  )}
+                </ssoForm.Field>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Client ID</label>
-                <input
-                  type="text"
-                  value={ssoForm.clientId}
-                  onChange={(e) => setSSOForm((f) => ({ ...f, clientId: e.target.value }))}
-                  placeholder="OAuth client ID"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <ssoForm.Field name="clientId">
+                  {(field) => (
+                    <input
+                      type="text"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="OAuth client ID"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
+                </ssoForm.Field>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Client Secret</label>
-                <input
-                  type="password"
-                  value={ssoForm.clientSecret}
-                  onChange={(e) => setSSOForm((f) => ({ ...f, clientSecret: e.target.value }))}
-                  placeholder="OAuth client secret"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <ssoForm.Field name="clientSecret">
+                  {(field) => (
+                    <input
+                      type="password"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="OAuth client secret"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
+                </ssoForm.Field>
               </div>
 
-              {ssoForm.type === 'oidc' && (
+              {ssoType === 'oidc' && (
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">
                     Discovery URL
                   </label>
-                  <input
-                    type="text"
-                    value={ssoForm.metadataUrl}
-                    onChange={(e) => setSSOForm((f) => ({ ...f, metadataUrl: e.target.value }))}
-                    placeholder="https://idp.example.com/.well-known/openid-configuration"
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <ssoForm.Field name="metadataUrl">
+                    {(field) => (
+                      <input
+                        type="text"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="https://idp.example.com/.well-known/openid-configuration"
+                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                          placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    )}
+                  </ssoForm.Field>
                 </div>
               )}
 
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Allowed Organizations</label>
-                <input
-                  type="text"
-                  value={ssoForm.allowedOrganizations}
-                  onChange={(e) => setSSOForm((f) => ({ ...f, allowedOrganizations: e.target.value }))}
-                  placeholder="Comma-separated list (optional)"
-                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <ssoForm.Field name="allowedOrganizations">
+                  {(field) => (
+                    <input
+                      type="text"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Comma-separated list (optional)"
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
+                </ssoForm.Field>
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg border border-border">
@@ -621,18 +688,23 @@ function SettingsPage() {
                   <p className="text-sm font-medium text-foreground">Auto-create Users</p>
                   <p className="text-xs text-muted-foreground">Automatically create accounts on first login</p>
                 </div>
-                <button
-                  onClick={() => setSSOForm((f) => ({ ...f, autoCreateUsers: !f.autoCreateUsers }))}
-                  className={cn(
-                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    ssoForm.autoCreateUsers ? 'bg-status-success' : 'bg-muted'
+                <ssoForm.Field name="autoCreateUsers">
+                  {(field) => (
+                    <button
+                      onClick={() => field.handleChange(!field.state.value)}
+                      onBlur={field.handleBlur}
+                      className={cn(
+                        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                        field.state.value ? 'bg-status-success' : 'bg-muted'
+                      )}
+                    >
+                      <span className={cn(
+                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                        field.state.value ? 'translate-x-6' : 'translate-x-1'
+                      )} />
+                    </button>
                   )}
-                >
-                  <span className={cn(
-                    'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                    ssoForm.autoCreateUsers ? 'translate-x-6' : 'translate-x-1'
-                  )} />
-                </button>
+                </ssoForm.Field>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -644,8 +716,8 @@ function SettingsPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleCreateSSOProvider}
-                  disabled={!ssoForm.name || !ssoForm.clientId || createSSOProvider.isPending}
+                  onClick={() => void ssoForm.handleSubmit()}
+                  disabled={!ssoName || !ssoClientId || createSSOProvider.isPending}
                   className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
                     text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
                 >

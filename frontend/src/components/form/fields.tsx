@@ -268,7 +268,12 @@ export function TextareaField({
   disabled,
   placeholder,
   className,
-}: CommonFieldProps) {
+  rows,
+}: CommonFieldProps & {
+  /** Row-based sizing for forms that size textareas via `rows` instead of the
+   *  kit's min-height default (pair with a `min-h-0` className override). */
+  rows?: number;
+}) {
   const field = useFieldContext<string>();
   const id = useId();
   const error = firstError(field.state.meta);
@@ -281,6 +286,7 @@ export function TextareaField({
         onBlur={field.handleBlur}
         placeholder={placeholder}
         disabled={disabled}
+        rows={rows}
         className={cn(textareaClassName, disabled && 'opacity-60 cursor-not-allowed', className)}
         {...ariaProps(id, error)}
       />

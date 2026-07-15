@@ -21,6 +21,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { queryKeys, useClusters, useUsers } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { formatRelativeTime } from '@/lib/utils';
 import {
@@ -212,34 +213,15 @@ function NewRuleModal({ onClose }: { onClose: () => void }) {
   const users = usersPage?.data ?? [];
   const clusters = clustersPage?.data ?? [];
 
-  const [form, setForm] = useState({
-    userId: '',
-    clusterId: '',
-    namespace: '',
-    apiGroup: '',
-    resource: '',
-  });
-  const [verbs, setVerbs] = useState<Set<NativeRuleVerb>>(new Set());
-
-  const toggleVerb = (v: NativeRuleVerb) => {
-    setVerbs((prev) => {
-      const next = new Set(prev);
-      if (next.has(v)) next.delete(v);
-      else next.add(v);
-      return next;
-    });
-  };
-
   const create = useMutation({
-    mutationFn: () =>
-      createNativeRule({
-        userId: form.userId,
-        clusterId: form.clusterId || undefined,
-        namespace: form.namespace.trim() || undefined,
-        apiGroup: form.apiGroup.trim() || undefined,
-        resource: form.resource.trim(),
-        verbs: Array.from(verbs),
-      }),
+    mutationFn: (body: {
+      userId: string;
+      clusterId?: string;
+      namespace?: string;
+      apiGroup?: string;
+      resource: string;
+      verbs: NativeRuleVerb[];
+    }) => createNativeRule(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.nativeRbac.all });
       toastSuccess('Native RBAC rule created');
@@ -248,7 +230,32 @@ function NewRuleModal({ onClose }: { onClose: () => void }) {
     onError: (error: Error) => toastApiError('Failed to create rule', error),
   });
 
-  const canSubmit = form.userId && form.resource.trim() && verbs.size > 0;
+  const form = useAppForm({
+    defaultValues: {
+      userId: '',
+      clusterId: '',
+      namespace: '',
+      apiGroup: '',
+      resource: '',
+      verbs: [] as NativeRuleVerb[],
+    },
+    onSubmit: ({ value }) => {
+      create.mutate({
+        userId: value.userId,
+        clusterId: value.clusterId || undefined,
+        namespace: value.namespace.trim() || undefined,
+        apiGroup: value.apiGroup.trim() || undefined,
+        resource: value.resource.trim(),
+        verbs: value.verbs,
+      });
+    },
+  });
+  // Old submit gate (`userId && resource.trim() && verbs.size > 0`),
+  // recomputed from form state.
+  const canSubmit = useStore(
+    form.store,
+    (s) => Boolean(s.values.userId) && s.values.resource.trim() !== '' && s.values.verbs.length > 0,
+  );
 
   return (
     <ModalShell
@@ -272,7 +279,7 @@ function NewRuleModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button
-            onClick={() => create.mutate()}
+            onClick={() => void form.handleSubmit()}
             disabled={!canSubmit || create.isPending}
             className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
@@ -293,73 +300,98 @@ function NewRuleModal({ onClose }: { onClose: () => void }) {
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">User</label>
-        <select
-          value={form.userId}
-          onChange={(e) => setForm({ ...form, userId: e.target.value })}
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-            focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          <option value="">Select a user…</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.displayName || u.email || u.username}
-            </option>
-          ))}
-        </select>
+        <form.Field name="userId">
+          {(field) => (
+            <select
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">Select a user…</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName || u.email || u.username}
+                </option>
+              ))}
+            </select>
+          )}
+        </form.Field>
       </div>
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Cluster</label>
-        <select
-          value={form.clusterId}
-          onChange={(e) => setForm({ ...form, clusterId: e.target.value })}
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-            focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          <option value="">All clusters</option>
-          {clusters.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.displayName} ({c.name})
-            </option>
-          ))}
-        </select>
+        <form.Field name="clusterId">
+          {(field) => (
+            <select
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All clusters</option>
+              {clusters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName} ({c.name})
+                </option>
+              ))}
+            </select>
+          )}
+        </form.Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Namespace</label>
-          <input
-            type="text"
-            value={form.namespace}
-            onChange={(e) => setForm({ ...form, namespace: e.target.value })}
-            placeholder="All namespaces"
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <form.Field name="namespace">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="All namespaces"
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">API Group</label>
-          <input
-            type="text"
-            value={form.apiGroup}
-            onChange={(e) => setForm({ ...form, apiGroup: e.target.value })}
-            placeholder="core (empty)"
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <form.Field name="apiGroup">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="core (empty)"
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
       </div>
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Resource</label>
-        <input
-          type="text"
-          value={form.resource}
-          onChange={(e) => setForm({ ...form, resource: e.target.value })}
-          placeholder="certificates (or *)"
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-            focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+        <form.Field name="resource">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="certificates (or *)"
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          )}
+        </form.Field>
         <p className="text-xs text-muted-foreground">
           Plural resource name (e.g. <span className="font-mono">certificates</span>)
           or <span className="font-mono">*</span> for all resources in the group.
@@ -368,19 +400,30 @@ function NewRuleModal({ onClose }: { onClose: () => void }) {
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Verbs</label>
-        <div className="flex flex-wrap gap-3">
-          {VERB_OPTIONS.map((v) => (
-            <label key={v} className="flex items-center gap-1.5 text-sm">
-              <input
-                type="checkbox"
-                checked={verbs.has(v)}
-                onChange={() => toggleVerb(v)}
-                className="h-4 w-4 rounded border-border"
-              />
-              <span className="text-foreground font-mono">{v === '*' ? '* (all)' : v}</span>
-            </label>
-          ))}
-        </div>
+        <form.Field name="verbs">
+          {(field) => (
+            <div className="flex flex-wrap gap-3">
+              {VERB_OPTIONS.map((v) => (
+                <label key={v} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={field.state.value.includes(v)}
+                    onChange={() =>
+                      field.handleChange(
+                        field.state.value.includes(v)
+                          ? field.state.value.filter((x) => x !== v)
+                          : [...field.state.value, v],
+                      )
+                    }
+                    onBlur={field.handleBlur}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  <span className="text-foreground font-mono">{v === '*' ? '* (all)' : v}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </form.Field>
       </div>
     </ModalShell>
   );

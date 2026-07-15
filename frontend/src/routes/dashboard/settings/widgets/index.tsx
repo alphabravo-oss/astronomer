@@ -22,6 +22,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@/lib/link';
 import { ArrowLeft, Plus, Trash2, Save, Loader2, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useAppForm } from '@/lib/form';
 import {
   listWidgets,
   createWidget,
@@ -67,8 +68,9 @@ const DEFAULT_SPEC_BY_TYPE: Record<WidgetType, string> = {
 function WidgetsAdminPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Partial<Widget> | null>(null);
-  const [specText, setSpecText] = useState('');
+  // Non-null while the editor is open; carries the row id in edit mode. The
+  // field values themselves live on the TanStack form below.
+  const [editing, setEditing] = useState<{ id?: string } | null>(null);
   const [dsError, setDsError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [deleteWidgetTarget, setDeleteWidgetTarget] = useState<Widget | null>(null);
@@ -107,63 +109,78 @@ function WidgetsAdminPage() {
 
   const saving = createWidgetMutation.isPending || updateWidgetMutation.isPending;
 
+  const widgetDefaults = () => ({
+    name: '',
+    description: '',
+    widgetType: 'prom_sparkline' as WidgetType,
+    scope: 'global' as WidgetScope,
+    scopeIds: [] as string[],
+    grid: { x: 0, y: 0, w: 4, h: 2 },
+    refreshSeconds: 60,
+    enabled: true,
+    specText: DEFAULT_SPEC_BY_TYPE.prom_sparkline,
+  });
+
+  const form = useAppForm({
+    defaultValues: widgetDefaults(),
+    onSubmit: async ({ value }) => {
+      if (!editing) return;
+      let spec: WidgetSpec = {};
+      try {
+        spec = JSON.parse(value.specText);
+      } catch {
+        setError('Spec is not valid JSON');
+        return;
+      }
+      const body: WidgetWriteBody = {
+        name: value.name,
+        description: value.description,
+        widget_type: value.widgetType,
+        spec,
+        scope: value.scope,
+        scope_ids: value.scopeIds,
+        grid: value.grid,
+        refresh_seconds: value.refreshSeconds,
+        enabled: value.enabled,
+      };
+      try {
+        if (editing.id) {
+          await updateWidgetMutation.mutateAsync({ id: editing.id, body });
+        } else {
+          await createWidgetMutation.mutateAsync(body);
+        }
+        setEditing(null);
+        form.reset(widgetDefaults());
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+  });
+
   const startCreate = () => {
-    const t: WidgetType = 'prom_sparkline';
-    setEditing({
-      name: '',
-      description: '',
-      widgetType: t,
-      scope: 'global',
-      scopeIds: [],
-      grid: { x: 0, y: 0, w: 4, h: 2 },
-      refreshSeconds: 60,
-      enabled: true,
-    });
-    setSpecText(DEFAULT_SPEC_BY_TYPE[t]);
+    setEditing({});
+    form.reset(widgetDefaults());
   };
 
   const startEdit = (w: Widget) => {
-    setEditing({ ...w });
-    setSpecText(JSON.stringify(w.spec, null, 2));
+    setEditing({ id: w.id });
+    form.reset({
+      name: w.name,
+      description: w.description ?? '',
+      widgetType: w.widgetType,
+      scope: w.scope,
+      scopeIds: w.scopeIds ?? [],
+      grid: w.grid ?? { x: 0, y: 0, w: 4, h: 2 },
+      refreshSeconds: w.refreshSeconds ?? 60,
+      enabled: w.enabled ?? true,
+      specText: JSON.stringify(w.spec, null, 2),
+    });
   };
 
   const cancel = () => {
     setEditing(null);
-    setSpecText('');
-  };
-
-  const submit = async () => {
-    if (!editing) return;
-    let spec: WidgetSpec = {};
-    try {
-      spec = JSON.parse(specText);
-    } catch {
-      setError('Spec is not valid JSON');
-      return;
-    }
-    const body: WidgetWriteBody = {
-      name: editing.name ?? '',
-      description: editing.description ?? '',
-      widget_type: (editing.widgetType ?? 'prom_sparkline') as WidgetType,
-      spec,
-      scope: (editing.scope ?? 'global') as WidgetScope,
-      scope_ids: editing.scopeIds ?? [],
-      grid: editing.grid ?? { x: 0, y: 0, w: 4, h: 2 },
-      refresh_seconds: editing.refreshSeconds ?? 60,
-      enabled: editing.enabled ?? true,
-    };
-    try {
-      if (editing.id) {
-        await updateWidgetMutation.mutateAsync({ id: editing.id, body });
-      } else {
-        await createWidgetMutation.mutateAsync(body);
-      }
-      setEditing(null);
-      setSpecText('');
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    form.reset(widgetDefaults());
   };
 
   const confirmDeleteWidget = async () => {
@@ -247,81 +264,113 @@ function WidgetsAdminPage() {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm">
                 <div className="text-muted-foreground mb-1">Name</div>
-                <input
-                  className="w-full bg-background border border-border rounded px-2 py-1"
-                  value={editing.name ?? ''}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                />
+                <form.Field name="name">
+                  {(field) => (
+                    <input
+                      className="w-full bg-background border border-border rounded px-2 py-1"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                  )}
+                </form.Field>
               </label>
               <label className="text-sm">
                 <div className="text-muted-foreground mb-1">Widget type</div>
-                <select
-                  className="w-full bg-background border border-border rounded px-2 py-1"
-                  value={editing.widgetType ?? 'prom_sparkline'}
-                  onChange={(e) => {
-                    const t = e.target.value as WidgetType;
-                    setEditing({ ...editing, widgetType: t });
-                    setSpecText(DEFAULT_SPEC_BY_TYPE[t]);
-                  }}
-                >
-                  <option value="prom_sparkline">Prometheus sparkline</option>
-                  <option value="prom_stat">Prometheus stat</option>
-                  <option value="grafana_panel">Grafana panel</option>
-                  <option value="url_iframe">URL iframe</option>
-                </select>
+                <form.Field name="widgetType">
+                  {(field) => (
+                    <select
+                      className="w-full bg-background border border-border rounded px-2 py-1"
+                      value={field.state.value}
+                      onChange={(e) => {
+                        const t = e.target.value as WidgetType;
+                        field.handleChange(t);
+                        // Switching types re-seeds the spec text, exactly like
+                        // the old setSpecText(DEFAULT_SPEC_BY_TYPE[t]).
+                        form.setFieldValue('specText', DEFAULT_SPEC_BY_TYPE[t]);
+                      }}
+                      onBlur={field.handleBlur}
+                    >
+                      <option value="prom_sparkline">Prometheus sparkline</option>
+                      <option value="prom_stat">Prometheus stat</option>
+                      <option value="grafana_panel">Grafana panel</option>
+                      <option value="url_iframe">URL iframe</option>
+                    </select>
+                  )}
+                </form.Field>
               </label>
               <label className="text-sm">
                 <div className="text-muted-foreground mb-1">Scope</div>
-                <select
-                  className="w-full bg-background border border-border rounded px-2 py-1"
-                  value={editing.scope ?? 'global'}
-                  onChange={(e) => setEditing({ ...editing, scope: e.target.value as WidgetScope })}
-                >
-                  <option value="global">Global</option>
-                  <option value="cluster">Cluster</option>
-                  <option value="project">Project</option>
-                </select>
+                <form.Field name="scope">
+                  {(field) => (
+                    <select
+                      className="w-full bg-background border border-border rounded px-2 py-1"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value as WidgetScope)}
+                      onBlur={field.handleBlur}
+                    >
+                      <option value="global">Global</option>
+                      <option value="cluster">Cluster</option>
+                      <option value="project">Project</option>
+                    </select>
+                  )}
+                </form.Field>
               </label>
               <label className="text-sm">
                 <div className="text-muted-foreground mb-1">Refresh seconds</div>
-                <input
-                  type="number"
-                  className="w-full bg-background border border-border rounded px-2 py-1"
-                  value={editing.refreshSeconds ?? 60}
-                  onChange={(e) => setEditing({ ...editing, refreshSeconds: parseInt(e.target.value, 10) || 60 })}
-                />
+                <form.Field name="refreshSeconds">
+                  {(field) => (
+                    <input
+                      type="number"
+                      className="w-full bg-background border border-border rounded px-2 py-1"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 60)}
+                      onBlur={field.handleBlur}
+                    />
+                  )}
+                </form.Field>
               </label>
               <label className="text-sm col-span-2">
                 <div className="text-muted-foreground mb-1">Grid (x, y, w, h)</div>
-                <div className="flex gap-2">
-                  {(['x', 'y', 'w', 'h'] as const).map((k) => (
-                    <input
-                      key={k}
-                      type="number"
-                      className="w-20 bg-background border border-border rounded px-2 py-1"
-                      value={editing.grid?.[k] ?? 0}
-                      onChange={(e) =>
-                        setEditing({
-                          ...editing,
-                          grid: { ...(editing.grid ?? { x: 0, y: 0, w: 4, h: 2 }), [k]: parseInt(e.target.value, 10) || 0 },
-                        })
-                      }
-                    />
-                  ))}
-                </div>
+                <form.Field name="grid">
+                  {(field) => (
+                    <div className="flex gap-2">
+                      {(['x', 'y', 'w', 'h'] as const).map((k) => (
+                        <input
+                          key={k}
+                          type="number"
+                          className="w-20 bg-background border border-border rounded px-2 py-1"
+                          value={field.state.value[k] ?? 0}
+                          onChange={(e) =>
+                            field.handleChange({
+                              ...field.state.value,
+                              [k]: parseInt(e.target.value, 10) || 0,
+                            })
+                          }
+                          onBlur={field.handleBlur}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </form.Field>
               </label>
             </div>
             <label className="text-sm block">
               <div className="text-muted-foreground mb-1">Spec (JSON)</div>
-              <textarea
-                rows={10}
-                className="w-full font-mono text-xs bg-background border border-border rounded p-2"
-                value={specText}
-                onChange={(e) => setSpecText(e.target.value)}
-              />
+              <form.Field name="specText">
+                {(field) => (
+                  <textarea
+                    rows={10}
+                    className="w-full font-mono text-xs bg-background border border-border rounded p-2"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                )}
+              </form.Field>
             </label>
             <div className="flex gap-2">
-              <button onClick={submit} disabled={saving} className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded">
+              <button onClick={() => void form.handleSubmit()} disabled={saving} className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save
               </button>

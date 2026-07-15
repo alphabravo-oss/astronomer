@@ -8,8 +8,9 @@ import { createFileRoute } from '@tanstack/react-router';
  *      to wire up. Confirming creates the subscription and pushes them to
  *      the detail page.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from '@/lib/link';
+import { useAppForm, useStore } from '@/lib/form';
 import { useRouter } from '@/lib/navigation';
 import {
   ArrowLeft,
@@ -102,40 +103,48 @@ function NewWebhookWizard() {
 
   const [step, setStep] = useState<Step>('pick');
   const [selected, setSelected] = useState<TemplateMeta | null>(null);
-  const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
-  const [secret, setSecret] = useState('');
-  const [events, setEvents] = useState<string[]>([]);
-  const [minSeverity, setMinSeverity] = useState<'info' | 'warning' | 'critical' | ''>('');
 
-  const filters: WebhookFilter = useMemo(
-    () => ({
-      events,
-      ...(minSeverity ? { minSeverity } : {}),
-    }),
-    [events, minSeverity],
-  );
-
-  const handleCreate = async () => {
-    if (!selected) return;
-    if (!name || !url) {
-      toastError('Name and URL required');
-      return;
-    }
-    try {
-      const created = await createMutation.mutateAsync({
-        name,
-        url,
-        template: selected.template,
-        secret: secret || undefined,
-        enabled: true,
-        filters,
-      });
-      router.push(`/dashboard/settings/webhooks/${created.id}`);
-    } catch {
-      // mutation toasts on error
-    }
-  };
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      url: '',
+      secret: '',
+      events: [] as string[],
+      minSeverity: '' as 'info' | 'warning' | 'critical' | '',
+    },
+    validators: {
+      // Old check (imperative, pre-submit): `if (!name || !url)` → ported 1:1
+      // as a form-level onSubmit validator.
+      onSubmit: ({ value }) => (!value.name || !value.url ? 'Name and URL required' : undefined),
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: () => toastError('Name and URL required'),
+    onSubmit: async ({ value }) => {
+      if (!selected) return;
+      const filters: WebhookFilter = {
+        events: value.events,
+        ...(value.minSeverity ? { minSeverity: value.minSeverity } : {}),
+      };
+      try {
+        const created = await createMutation.mutateAsync({
+          name: value.name,
+          url: value.url,
+          template: selected.template,
+          secret: value.secret || undefined,
+          enabled: true,
+          filters,
+        });
+        router.push(`/dashboard/settings/webhooks/${created.id}`);
+      } catch {
+        // mutation toasts on error
+      }
+    },
+  });
+  // The preview step + the step-advance gate read live form values.
+  const name = useStore(form.store, (s) => s.values.name);
+  const url = useStore(form.store, (s) => s.values.url);
+  const events = useStore(form.store, (s) => s.values.events);
+  const minSeverity = useStore(form.store, (s) => s.values.minSeverity);
 
   const title =
     step === 'pick'
@@ -210,64 +219,87 @@ function NewWebhookWizard() {
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="On-call alerts"
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              autoFocus
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="On-call alerts"
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  autoFocus
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">URL</label>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder={selected.urlPlaceholder}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            <form.Field name="url">
+              {(field) => (
+                <input
+                  type="url"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder={selected.urlPlaceholder}
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">
               Signing secret <span className="text-muted-foreground font-normal">(optional)</span>
             </label>
-            <input
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder="HMAC secret used to sign the X-Astronomer-Signature header"
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            <form.Field name="secret">
+              {(field) => (
+                <input
+                  type="password"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="HMAC secret used to sign the X-Astronomer-Signature header"
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Events</label>
-            <div className="flex flex-wrap gap-1.5">
-              {AVAILABLE_EVENTS.map((ev) => {
-                const checked = events.includes(ev);
-                return (
-                  <button
-                    key={ev}
-                    type="button"
-                    onClick={() =>
-                      setEvents((prev) => (prev.includes(ev) ? prev.filter((e) => e !== ev) : [...prev, ev]))
-                    }
-                    className={cn(
-                      'text-2xs px-2 py-1 rounded-full border font-mono transition-colors',
-                      checked
-                        ? 'border-foreground bg-foreground text-background'
-                        : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/50',
-                    )}
-                  >
-                    {ev}
-                  </button>
-                );
-              })}
-            </div>
+            <form.Field name="events">
+              {(field) => (
+                <div className="flex flex-wrap gap-1.5">
+                  {AVAILABLE_EVENTS.map((ev) => {
+                    const checked = field.state.value.includes(ev);
+                    return (
+                      <button
+                        key={ev}
+                        type="button"
+                        onClick={() =>
+                          field.handleChange(
+                            field.state.value.includes(ev)
+                              ? field.state.value.filter((e) => e !== ev)
+                              : [...field.state.value, ev],
+                          )
+                        }
+                        className={cn(
+                          'text-2xs px-2 py-1 rounded-full border font-mono transition-colors',
+                          checked
+                            ? 'border-foreground bg-foreground text-background'
+                            : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/50',
+                        )}
+                      >
+                        {ev}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </form.Field>
             <p className="text-xs text-muted-foreground">
               {events.length === 0 ? 'Empty = subscribe to every event' : `${events.length} event(s) selected`}
             </p>
@@ -275,16 +307,21 @@ function NewWebhookWizard() {
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Minimum severity</label>
-            <select
-              value={minSeverity}
-              onChange={(e) => setMinSeverity(e.target.value as typeof minSeverity)}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">No threshold</option>
-              <option value="info">Info or higher</option>
-              <option value="warning">Warning or higher</option>
-              <option value="critical">Critical only</option>
-            </select>
+            <form.Field name="minSeverity">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value as typeof minSeverity)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">No threshold</option>
+                  <option value="info">Info or higher</option>
+                  <option value="warning">Warning or higher</option>
+                  <option value="critical">Critical only</option>
+                </select>
+              )}
+            </form.Field>
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
@@ -347,7 +384,7 @@ function NewWebhookWizard() {
             </button>
             <button
               type="button"
-              onClick={handleCreate}
+              onClick={() => void form.handleSubmit()}
               disabled={createMutation.isPending}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >

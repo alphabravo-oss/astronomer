@@ -3,144 +3,196 @@ import { createFileRoute } from '@tanstack/react-router';
  * /dashboard/settings/gitops/new — create a new GitOps source.
  * Reused for edit via the [id] page; this is the create-only entrypoint.
  */
-import { useState } from 'react';
 import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { useAppForm, useStore } from '@/lib/form';
 import { useCreateGitOpsSource } from '@/components/settings/hooks';
 import type { GitOpsSourceWriteRequest } from '@/lib/api/settings';
 
 function GitOpsForm() {
   const router = useRouter();
   const create = useCreateGitOpsSource();
-  const [form, setForm] = useState<GitOpsSourceWriteRequest>({
-    name: '',
-    repo_url: '',
-    branch: 'main',
-    path_prefix: 'clusters',
-    auth_mode: 'none',
-    auth: '',
-    sync_mode: 'interval',
-    sync_interval_seconds: 60,
-    on_delete: 'log',
-    enabled: true,
-  });
 
-  const update = <K extends keyof GitOpsSourceWriteRequest>(
-    key: K,
-    value: GitOpsSourceWriteRequest[K],
-  ) => setForm((f) => ({ ...f, [key]: value }));
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      repo_url: '',
+      branch: 'main',
+      path_prefix: 'clusters',
+      auth_mode: 'none',
+      auth: '',
+      sync_mode: 'interval',
+      sync_interval_seconds: 60,
+      on_delete: 'log',
+      enabled: true,
+    } as GitOpsSourceWriteRequest,
+    onSubmit: async ({ value }) => {
+      const row = await create.mutateAsync(value);
+      router.push(`/dashboard/settings/gitops/${row.id}`);
+    },
+  });
+  // Cross-field UI state: auth input disables on mode none, interval input on
+  // manual sync, and the decommission warning reads on_delete + path_prefix.
+  const authMode = useStore(form.store, (s) => s.values.auth_mode);
+  const syncMode = useStore(form.store, (s) => s.values.sync_mode);
+  const onDelete = useStore(form.store, (s) => s.values.on_delete);
+  const pathPrefix = useStore(form.store, (s) => s.values.path_prefix);
 
   return (
     <form
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
-        const row = await create.mutateAsync(form);
-        router.push(`/dashboard/settings/gitops/${row.id}`);
+        void form.handleSubmit();
       }}
       className="space-y-5 max-w-2xl"
     >
       <div className="space-y-1">
         <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Name</label>
-        <input
-          required
-          value={form.name}
-          onChange={(e) => update('name', e.target.value)}
-          className="w-full h-9 px-3 rounded border bg-background text-sm"
-          placeholder="platform-clusters"
-        />
+        <form.Field name="name">
+          {(field) => (
+            <input
+              required
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded border bg-background text-sm"
+              placeholder="platform-clusters"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="space-y-1">
         <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Repo URL</label>
-        <input
-          required
-          value={form.repo_url}
-          onChange={(e) => update('repo_url', e.target.value)}
-          className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
-          placeholder="https://github.com/example/clusters.git"
-        />
+        <form.Field name="repo_url">
+          {(field) => (
+            <input
+              required
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+              placeholder="https://github.com/example/clusters.git"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Branch</label>
-          <input
-            value={form.branch ?? ''}
-            onChange={(e) => update('branch', e.target.value)}
-            className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
-          />
+          <form.Field name="branch">
+            {(field) => (
+              <input
+                value={field.state.value ?? ''}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+              />
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Path prefix</label>
-          <input
-            value={form.path_prefix ?? ''}
-            onChange={(e) => update('path_prefix', e.target.value)}
-            className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
-          />
+          <form.Field name="path_prefix">
+            {(field) => (
+              <input
+                value={field.state.value ?? ''}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+              />
+            )}
+          </form.Field>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth mode</label>
-          <select
-            value={form.auth_mode}
-            onChange={(e) => update('auth_mode', e.target.value as 'none' | 'https_token' | 'ssh_key')}
-            className="w-full h-9 px-3 rounded border bg-background text-sm"
-          >
-            <option value="none">None (public repo)</option>
-            <option value="https_token">HTTPS token</option>
-            <option value="ssh_key">SSH key</option>
-          </select>
+          <form.Field name="auth_mode">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value as 'none' | 'https_token' | 'ssh_key')}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded border bg-background text-sm"
+              >
+                <option value="none">None (public repo)</option>
+                <option value="https_token">HTTPS token</option>
+                <option value="ssh_key">SSH key</option>
+              </select>
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Auth token / key</label>
-          <input
-            type="password"
-            value={form.auth ?? ''}
-            onChange={(e) => update('auth', e.target.value)}
-            disabled={form.auth_mode === 'none'}
-            className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
-            placeholder={form.auth_mode === 'none' ? '(not required)' : 'paste secret'}
-          />
+          <form.Field name="auth">
+            {(field) => (
+              <input
+                type="password"
+                value={field.state.value ?? ''}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                disabled={authMode === 'none'}
+                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                placeholder={authMode === 'none' ? '(not required)' : 'paste secret'}
+              />
+            )}
+          </form.Field>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Sync mode</label>
-          <select
-            value={form.sync_mode}
-            onChange={(e) => update('sync_mode', e.target.value as 'manual' | 'interval')}
-            className="w-full h-9 px-3 rounded border bg-background text-sm"
-          >
-            <option value="interval">Interval</option>
-            <option value="manual">Manual only</option>
-          </select>
+          <form.Field name="sync_mode">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value as 'manual' | 'interval')}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded border bg-background text-sm"
+              >
+                <option value="interval">Interval</option>
+                <option value="manual">Manual only</option>
+              </select>
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Interval (sec)</label>
-          <input
-            type="number"
-            min={30}
-            value={form.sync_interval_seconds ?? 60}
-            onChange={(e) => update('sync_interval_seconds', Number(e.target.value))}
-            disabled={form.sync_mode === 'manual'}
-            className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
-          />
+          <form.Field name="sync_interval_seconds">
+            {(field) => (
+              <input
+                type="number"
+                min={30}
+                value={field.state.value ?? 60}
+                onChange={(e) => field.handleChange(Number(e.target.value))}
+                onBlur={field.handleBlur}
+                disabled={syncMode === 'manual'}
+                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+              />
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On delete</label>
-          <select
-            value={form.on_delete}
-            onChange={(e) => update('on_delete', e.target.value as 'log' | 'tombstone' | 'decommission')}
-            className="w-full h-9 px-3 rounded border bg-background text-sm"
-          >
-            <option value="log">Log only (safe)</option>
-            <option value="tombstone">Tombstone (24h grace)</option>
-            <option value="decommission">Immediate decommission</option>
-          </select>
+          <form.Field name="on_delete">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value as 'log' | 'tombstone' | 'decommission')}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded border bg-background text-sm"
+              >
+                <option value="log">Log only (safe)</option>
+                <option value="tombstone">Tombstone (24h grace)</option>
+                <option value="decommission">Immediate decommission</option>
+              </select>
+            )}
+          </form.Field>
         </div>
       </div>
-      {form.on_delete === 'decommission' && !form.path_prefix ? (
+      {onDelete === 'decommission' && !pathPrefix ? (
         <p className="text-xs text-status-warning">
           Warning: on_delete=decommission with an empty path_prefix monitors the
           entire repository. A single accidental rm anywhere in the tree will
