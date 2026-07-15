@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 import { useState, type ReactNode } from 'react';
+import { IS_DEV } from '@/lib/env';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -54,7 +55,7 @@ export function Providers({ children }: { children: ReactNode }) {
           }}
         />
       </ThemeProvider>
-      {process.env.NODE_ENV !== 'production' && (
+      {IS_DEV && (
         <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
       )}
     </QueryClientProvider>

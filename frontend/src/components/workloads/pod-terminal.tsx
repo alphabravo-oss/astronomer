@@ -13,6 +13,7 @@ import { Terminal, useTerminal } from '@wterm/react';
 import '@wterm/react/css';
 import { cn } from '@/lib/utils';
 import { createStreamTicket } from '@/lib/api';
+import { wsBase } from '@/lib/env';
 
 export type TerminalConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -79,8 +80,7 @@ export function PodTerminal({
   }, [status, onStatusChange]);
 
   const connectWebSocket = useCallback(() => {
-    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = process.env.NEXT_PUBLIC_WS_URL || `${wsProtocol}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`;
+    const wsHost = wsBase();
 
     const attempt = { cancelled: false };
     connectAttemptRef.current = attempt;

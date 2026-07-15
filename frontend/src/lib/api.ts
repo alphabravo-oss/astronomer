@@ -3,11 +3,12 @@ import type { APIResponse, PaginatedResponse } from '@/types';
 import type { OpenAPIComponents } from '@/types/openapi.generated';
 import { clearLegacyTokenStorage } from '@/lib/auth/session';
 import { camelizeKeys } from '@/lib/camelize';
+import { API_BASE, wsBase } from '@/lib/env';
 
 // TEST-03: product code imports OpenAPI-generated schemas (not test-only).
 export type AgentFleetItemOpenAPI = OpenAPIComponents['schemas']['AgentFleetItem'];
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const API_BASE_URL = API_BASE;
 const CSRF_COOKIE = 'astronomer_csrf';
 const CSRF_HEADER = 'X-CSRF-Token';
 
@@ -683,9 +684,7 @@ export function streamPodLogs(
   onError?: (error: { code?: string; message: string }) => void,
   opts?: { follow?: boolean; tailLines?: number; sinceSeconds?: number }
 ): () => void {
-  const base =
-    process.env.NEXT_PUBLIC_WS_URL ||
-    `${typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${typeof window !== 'undefined' ? window.location.host : 'localhost:3000'}/api/v1/ws`;
+  const base = wsBase();
 
   const params = new URLSearchParams();
   if (opts?.follow) params.set('follow', 'true');

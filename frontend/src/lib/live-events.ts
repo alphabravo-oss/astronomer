@@ -19,6 +19,7 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { createStreamTicket } from '@/lib/api';
+import { API_BASE } from '@/lib/env';
 // Aliased to `qk` because `useLiveQueryInvalidation` below has a parameter
 // named `queryKeys` that would otherwise shadow the factory import.
 import { queryKeys as qk } from '@/lib/query-keys';
@@ -146,9 +147,8 @@ export function liveAwareRefetchInterval(baseMs: number): number {
 
 /** Build the stream URL with a one-use stream ticket. */
 function streamURL(ticket: string): string {
-  const base = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
   // Trailing slash matches the backend route registration.
-  const url = `${base}/events/stream/`;
+  const url = `${API_BASE}/events/stream/`;
   return `${url}?ticket=${encodeURIComponent(ticket)}`;
 }
 

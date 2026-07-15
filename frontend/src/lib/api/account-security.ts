@@ -13,8 +13,9 @@
 import axios, { AxiosError } from 'axios';
 import api from '../api';
 import type { APIResponse, User } from '@/types';
+import { API_BASE } from '@/lib/env';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+const API_BASE_URL = API_BASE;
 
 // Local camelization for the rare bypass-the-interceptor calls in this file
 // (login challenge handling, password-reset endpoints). Mirrors the helper

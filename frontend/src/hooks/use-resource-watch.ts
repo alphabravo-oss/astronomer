@@ -31,8 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { createStreamTicket } from '@/lib/api';
 import { openProxyWatch, type WatchVerb } from '@/lib/api/k8s-watch';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+import { API_BASE } from '@/lib/env';
 
 export type { WatchVerb } from '@/lib/api/k8s-watch';
 

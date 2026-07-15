@@ -54,6 +54,7 @@ import {
   Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { APP_VERSION } from '@/lib/env';
 import { ExtensionNavItems } from '@/components/extensions/ExtensionNavItems';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { can, isSuperuser, type PermissionVerb } from '@/lib/permissions';
@@ -78,10 +79,8 @@ import {
   useFeatureFlags,
 } from '@/lib/hooks';
 
-// Baked at build time by the Dockerfile (ARG VERSION → NEXT_PUBLIC_APP_VERSION),
-// which the release workflow stamps from the git tag. Falls back to the current
-// dev version for local/un-stamped builds — keep in sync with pkg/version.
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '0.2.0-dev';
+// APP_VERSION is baked at build time via the vite `define` (VERSION env →
+// __APP_VERSION__); see src/lib/env.ts. Keep in sync with pkg/version.
 
 type NavItem = {
   label: string;

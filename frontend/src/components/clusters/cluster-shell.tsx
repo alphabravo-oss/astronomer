@@ -26,6 +26,7 @@ import {
   type RecordedCommand,
 } from '@/lib/api/kubectl-shell';
 import { createStreamTicket } from '@/lib/api';
+import { wsBase } from '@/lib/env';
 import { cn } from '@/lib/utils';
 import { StatusBadge as UiStatusBadge } from '@/components/ui/status-badge';
 
@@ -132,15 +133,10 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   }, [clusterId]);
 
   const connectWS = useCallback((info: ShellSession) => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL || '/api/v1').replace(/\/$/, '');
-    const wsHost = apiBase.startsWith('/') ? `${proto}//${window.location.host}${apiBase}` : apiBase.replace(/^https?:/, proto);
-    const wsHostNoTrail = wsHost.replace(/\/$/, '');
-
     createStreamTicket('shell', info.clusterId)
       .then(({ ticket }) => {
         const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
-        const wsUrl = `${wsHostNoTrail}/ws/clusters/${info.clusterId}/shell/sessions/${info.id}/${ticketQuery}`;
+        const wsUrl = `${wsBase()}/clusters/${info.clusterId}/shell/sessions/${info.id}/${ticketQuery}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
         ws.onopen = () => {

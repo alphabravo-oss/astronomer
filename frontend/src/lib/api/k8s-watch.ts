@@ -10,7 +10,7 @@
 // lib/api/ so the raw streaming fetch stays inside the fetch-containment
 // boundary.
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+import { API_BASE } from '@/lib/env';
 
 /** The Kubernetes watch verbs the reducer folds. BOOKMARK/ERROR are ignored. */
 export type WatchVerb = 'ADDED' | 'MODIFIED' | 'DELETED';
