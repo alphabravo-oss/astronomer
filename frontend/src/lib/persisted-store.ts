@@ -3,7 +3,7 @@ import { Store } from '@tanstack/store';
 export interface PersistedStoreOptions<T> {
   /** localStorage key. */
   name: string;
-  /** Envelope version; defaults to 0 (zustand-persist default). */
+  /** Envelope version; defaults to 0 (legacy persist-middleware default). */
   version?: number;
   /** Runs when the persisted envelope version differs from `version`. */
   migrate?: (persistedState: unknown, version: number) => unknown;
@@ -12,10 +12,11 @@ export interface PersistedStoreOptions<T> {
 }
 
 /**
- * TanStack Store wrapped with zustand-persist envelope semantics (D21):
+ * TanStack Store wrapped with legacy persist-middleware envelope semantics (D21):
  * hydrates from `{"state":…,"version":N}`, runs `migrate` on version
  * mismatch, spreads persisted state over the initial state, and writes the
- * `partialize`d state back on every update. Byte-compatible with zustand.
+ * `partialize`d state back on every update. Byte-compatible with the
+ * pre-migration persisted envelopes.
  */
 export function persistedStore<T extends Record<string, unknown>>(
   initial: T,

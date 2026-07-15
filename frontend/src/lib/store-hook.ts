@@ -2,9 +2,9 @@ import { useStore } from '@tanstack/react-store';
 import type { Store } from '@tanstack/store';
 
 /**
- * Wraps a TanStack Store in a zustand-shaped hook: callable bare or with a
+ * Wraps a TanStack Store in a legacy-shaped hook: callable bare or with a
  * selector, plus `getState()` and shallow-merging `setState(partial | fn)`
- * (zustand semantics — imperative test/call sites rely on partial setState).
+ * (imperative test/call sites rely on partial setState).
  */
 export function createStoreHook<T extends Record<string, unknown>>(store: Store<T>) {
   function useBoundStore(): T;

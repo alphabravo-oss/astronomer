@@ -1,7 +1,7 @@
 import type { BrowserContext, Page } from '@playwright/test';
 
 // Shared e2e auth seed: the session/CSRF cookies the middleware checks plus
-// the persisted `astronomer-auth` zustand envelope the auth store hydrates
+// the persisted `astronomer-auth` envelope the auth store hydrates
 // from. The localStorage shape is load-bearing (see D21): keep it
 // byte-compatible with the store's persist config.
 

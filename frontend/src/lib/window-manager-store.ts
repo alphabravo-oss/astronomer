@@ -1,7 +1,5 @@
-'use client';
-
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persistedStore } from '@/lib/persisted-store';
+import { createStoreHook } from '@/lib/store-hook';
 
 // ============================================================
 // Window Manager Store (Rancher-style bottom drawer)
@@ -34,7 +32,7 @@ export type WindowTab =
 
 type AddTabInput = Omit<WindowTab, 'id'> & { id?: string };
 
-interface WindowManagerState {
+interface WindowManagerState extends Record<string, unknown> {
   tabs: WindowTab[];
   activeTabId: string | null;
   open: boolean;
@@ -71,9 +69,9 @@ function clampHeight(px: number): number {
   return Math.max(MIN_HEIGHT, Math.min(max, px));
 }
 
-export const useWindowManagerStore = create<WindowManagerState>()(
-  persist(
-    (set, get) => ({
+export const useWindowManagerStore = createStoreHook(
+  persistedStore<WindowManagerState>(
+    {
       tabs: [],
       activeTabId: null,
       open: false,
@@ -83,14 +81,16 @@ export const useWindowManagerStore = create<WindowManagerState>()(
 
       addTab: (input) => {
         const id = input.id || tabIdFor(input);
-        const existing = get().tabs.find((t) => t.id === id);
+        const existing = useWindowManagerStore
+          .getState()
+          .tabs.find((t) => t.id === id);
         if (existing) {
-          set({ activeTabId: id, open: true, minimized: false });
+          useWindowManagerStore.setState({ activeTabId: id, open: true, minimized: false });
           return id;
         }
 
         const tab = { ...(input as Omit<WindowTab, 'id'>), id } as WindowTab;
-        set((state) => {
+        useWindowManagerStore.setState((state) => {
           // Enforce hard cap by dropping the oldest tab. We avoid silently
           // failing because the user just clicked an action — show them
           // *something*, even if it means evicting the least-recently
@@ -110,7 +110,7 @@ export const useWindowManagerStore = create<WindowManagerState>()(
       },
 
       closeTab: (id) => {
-        set((state) => {
+        useWindowManagerStore.setState((state) => {
           const idx = state.tabs.findIndex((t) => t.id === id);
           if (idx < 0) return state;
           const tabs = state.tabs.filter((t) => t.id !== id);
@@ -129,31 +129,31 @@ export const useWindowManagerStore = create<WindowManagerState>()(
       },
 
       closeAll: () => {
-        set({ tabs: [], activeTabId: null, open: false });
+        useWindowManagerStore.setState({ tabs: [], activeTabId: null, open: false });
       },
 
       setActive: (id) => {
-        set((state) =>
+        useWindowManagerStore.setState((state) =>
           state.tabs.find((t) => t.id === id)
             ? { activeTabId: id, open: true, minimized: false }
             : state
         );
       },
 
-      toggleMinimize: () => set((s) => ({ minimized: !s.minimized })),
-      setMinimized: (m) => set({ minimized: m }),
-      setOpen: (open) => set({ open }),
-      setHeight: (px) => set({ height: clampHeight(px) }),
-    }),
+      toggleMinimize: () =>
+        useWindowManagerStore.setState((s) => ({ minimized: !s.minimized })),
+      setMinimized: (m) => useWindowManagerStore.setState({ minimized: m }),
+      setOpen: (open) => useWindowManagerStore.setState({ open }),
+      setHeight: (px) => useWindowManagerStore.setState({ height: clampHeight(px) }),
+    },
     {
       name: 'astronomer-window-manager',
-      storage: createJSONStorage(() => localStorage),
       // Only chrome is persisted; live tabs are intentionally dropped on
       // reload because their WS connections can't survive a page load.
       partialize: (state) => ({
         height: state.height,
         minimized: state.minimized,
       }),
-    }
-  )
+    },
+  ),
 );

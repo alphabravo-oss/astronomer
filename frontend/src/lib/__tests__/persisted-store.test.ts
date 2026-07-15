@@ -21,7 +21,7 @@ describe('persistedStore', () => {
   });
 
   describe('envelope byte-compat', () => {
-    it('writes the exact zustand envelope {"state":…,"version":N}', () => {
+    it('writes the exact legacy persist envelope {"state":…,"version":N}', () => {
       const store = persistedStore(makeInitial(), {
         name: 'astronomer-test',
         version: 2,
@@ -35,7 +35,7 @@ describe('persistedStore', () => {
       );
     });
 
-    it('defaults version to 0 like zustand persist', () => {
+    it('defaults version to 0 like the legacy persist middleware', () => {
       const store = persistedStore(makeInitial(), {
         name: 'astronomer-test',
         partialize: (s) => ({ isAuthenticated: s.isAuthenticated }),
@@ -106,7 +106,7 @@ describe('persistedStore', () => {
       expect(store.state.isAuthenticated).toBe(true);
     });
 
-    it('discards persisted state on version mismatch without migrate (zustand parity)', () => {
+    it('discards persisted state on version mismatch without migrate (legacy parity)', () => {
       localStorage.setItem(
         'astronomer-test',
         JSON.stringify({ state: { isAuthenticated: true }, version: 1 }),

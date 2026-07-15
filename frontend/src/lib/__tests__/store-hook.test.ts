@@ -36,7 +36,7 @@ describe('createStoreHook', () => {
     expect(useCounter.getState()).toEqual({ count: 3, label: 'a' });
   });
 
-  describe('setState shallow-merge (zustand semantics)', () => {
+  describe('setState shallow-merge (legacy persist semantics)', () => {
     it('merges an object partial over the existing state', () => {
       const useCounter = makeHook();
       useCounter.setState({ count: 7 });
