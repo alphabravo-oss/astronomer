@@ -15,6 +15,19 @@ export function hasSessionHint(): boolean {
   return document.cookie.split('; ').some((cookie) => cookie.startsWith(`${CSRF_COOKIE}=`));
 }
 
+/**
+ * Open-redirect guard for the login `?returnTo=` deep link (D3): only
+ * same-origin absolute paths are honored. Protocol-relative (`//evil`) and
+ * absolute (`https://evil`) URLs — and anything that isn't a string — fall
+ * back to the dashboard.
+ */
+export function sanitizeReturnTo(returnTo: unknown): string {
+  if (typeof returnTo === 'string' && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+    return returnTo;
+  }
+  return '/dashboard';
+}
+
 type TokenStorage = Pick<Storage, 'removeItem'>;
 
 function browserStorage(): TokenStorage | null {

@@ -1474,5 +1474,8 @@ function titleCase(s: string): string {
 }
 
 export const Route = createFileRoute('/dashboard/argocd/$instanceId/')({
+  // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { tab?: string; sync?: string; health?: string } & Record<string, unknown>,
   component: InstanceDetailPage,
 });

@@ -5,5 +5,13 @@ import { createFileRoute } from '@tanstack/react-router';
 import { SearchPage } from './-page';
 
 export const Route = createFileRoute('/dashboard/search/')({
+  // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as {
+      type?: string;
+      namespace?: string;
+      label?: string;
+      name?: string;
+    } & Record<string, unknown>,
   component: SearchPage,
 });

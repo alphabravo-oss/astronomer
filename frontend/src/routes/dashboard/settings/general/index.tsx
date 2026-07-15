@@ -827,5 +827,8 @@ function SupportTab() {
 }
 
 export const Route = createFileRoute('/dashboard/settings/general/')({
+  // ?tab= deep-link (P2.4): typed passthrough — useTabParam's allowlist stays the real validator.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { tab?: string } & Record<string, unknown>,
   component: SettingsPage,
 });

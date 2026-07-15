@@ -2,6 +2,7 @@ import {
   clearLegacyTokenStorage,
   LEGACY_ACCESS_TOKEN_KEY,
   LEGACY_REFRESH_TOKEN_KEY,
+  sanitizeReturnTo,
   SESSION_COOKIE,
 } from '@/lib/auth/session';
 
@@ -29,5 +30,29 @@ describe('auth session helpers', () => {
         },
       }),
     ).not.toThrow();
+  });
+});
+
+describe('sanitizeReturnTo (D3 open-redirect guard)', () => {
+  it('honors same-origin absolute paths, including query strings', () => {
+    expect(sanitizeReturnTo('/dashboard/clusters/c1?tab=nodes')).toBe(
+      '/dashboard/clusters/c1?tab=nodes',
+    );
+  });
+
+  it('rejects protocol-relative URLs', () => {
+    expect(sanitizeReturnTo('//evil.example.com/dashboard')).toBe('/dashboard');
+  });
+
+  it('rejects absolute URLs', () => {
+    expect(sanitizeReturnTo('https://evil.example.com')).toBe('/dashboard');
+    expect(sanitizeReturnTo('javascript:alert(1)')).toBe('/dashboard');
+  });
+
+  it('falls back for missing or non-string values', () => {
+    expect(sanitizeReturnTo(undefined)).toBe('/dashboard');
+    expect(sanitizeReturnTo(null)).toBe('/dashboard');
+    expect(sanitizeReturnTo(123)).toBe('/dashboard');
+    expect(sanitizeReturnTo('')).toBe('/dashboard');
   });
 });

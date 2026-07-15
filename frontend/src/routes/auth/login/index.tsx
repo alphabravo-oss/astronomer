@@ -1,7 +1,9 @@
 // Route files are the eslint-exempted surface for direct router imports.
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Link } from '@/lib/link';
+import { useRouter } from '@/lib/navigation';
+import { sanitizeReturnTo } from '@/lib/auth/session';
 import { Orbit, Github, Chrome, KeyRound, Eye, EyeOff, Loader2, ArrowRight, Shield, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useSSOProviders } from '@/lib/hooks';
@@ -14,11 +16,17 @@ import type { SSOProvider, User } from '@/types';
 import { toastApiError, toastError } from '@/lib/toast';
 
 export const Route = createFileRoute('/auth/login/')({
+  // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { returnTo?: string } & Record<string, unknown>,
   component: LoginPage,
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
+  const router = useRouter();
+  // returnTo round-trips the deep link the auth guard (or the api.ts 401
+  // handler) captured; sanitizeReturnTo guards against open redirects (D3).
+  const { returnTo } = Route.useSearch();
   const { login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,7 +58,7 @@ function LoginPage() {
         return;
       }
       login(result.user);
-      navigate({ to: '/dashboard' as never });
+      router.push(sanitizeReturnTo(returnTo));
     } catch (error) {
       toastApiError('', error, 'Login failed');
     } finally {
@@ -60,7 +68,7 @@ function LoginPage() {
 
   const completeTotp = (_token: string, _refresh: string | undefined, user: User) => {
     login(user);
-    navigate({ to: '/dashboard' as never });
+    router.push(sanitizeReturnTo(returnTo));
   };
 
   const handleSSO = async (provider: string) => {

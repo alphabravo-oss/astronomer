@@ -21,7 +21,7 @@ function ClusterError({ error, reset }: ErrorComponentProps) {
   const digest = 'digest' in error ? String((error as { digest?: string }).digest ?? '') : '';
 
   return (
-    <div className="flex flex-col items-center">
+    <div data-testid="route-error-boundary" className="flex flex-col items-center">
       <StatePanel
         icon={AlertTriangle}
         tone="danger"

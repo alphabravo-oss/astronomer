@@ -135,7 +135,11 @@ api.interceptors.response.use(
         processQueue(refreshError, false);
         clearLegacyTokenStorage();
         if (!window.location.pathname.startsWith('/auth')) {
-          window.location.href = '/auth/login';
+          // Preserve the deep link across the forced re-login (P2.4). Full-page
+          // nav is deliberate here — api.ts must not import the router.
+          window.location.href =
+            '/auth/login?returnTo=' +
+            encodeURIComponent(window.location.pathname + window.location.search);
         }
         return Promise.reject(refreshError);
       } finally {

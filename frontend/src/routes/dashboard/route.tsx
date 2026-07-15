@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react';
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  type ErrorComponentProps,
+} from '@tanstack/react-router';
+import { Link } from '@/lib/link';
 import { usePathname, useRouter } from '@/lib/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { WindowManager } from '@/components/window-manager/window-manager';
 import { ExtensionProvider } from '@/components/extensions/ExtensionProvider';
-import { EmptyState } from '@/components/ui/empty-state';
+import { EmptyState, StatePanel } from '@/components/ui/empty-state';
 import { useAuthStore } from '@/lib/store';
 import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
 import { hasSessionHint } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
-import { Lock, WifiOff } from 'lucide-react';
+import { AlertTriangle, Compass, LayoutDashboard, Lock, RotateCcw, WifiOff } from 'lucide-react';
 
 export const Route = createFileRoute('/dashboard')({
   // Synchronous cookie-presence guard with exact fidelity to the old Next
@@ -27,7 +33,76 @@ export const Route = createFileRoute('/dashboard')({
     }
   },
   component: DashboardLayout,
+  // Boundaries (F-04, P2.4): both render in the <Outlet/> position, so the
+  // dashboard chrome (sidebar/topbar) stays mounted around them.
+  notFoundComponent: DashboardNotFound,
+  errorComponent: DashboardError,
 });
+
+/**
+ * Dashboard 404 boundary (F-04). Keeps the dashboard chrome mounted while
+ * telling the user the sub-route doesn't exist.
+ */
+function DashboardNotFound() {
+  return (
+    <div data-testid="route-not-found">
+      <StatePanel
+        icon={Compass}
+        tone="info"
+        title="Page not found"
+        description="This dashboard route doesn't exist. It may have moved or been removed."
+        actionLabel="Back to dashboard"
+        actionHref="/dashboard"
+      />
+    </div>
+  );
+}
+
+/**
+ * Route-level error boundary for the dashboard segment (F-04). A render error
+ * in any dashboard page is caught here instead of white-screening the whole
+ * console — the sidebar/topbar stay mounted because the boundary only
+ * replaces the segment's children.
+ */
+function DashboardError({ error, reset }: ErrorComponentProps) {
+  useEffect(() => {
+    // Surface to the console so it still reaches any error-reporting hook.
+    console.error('Dashboard render error:', error);
+  }, [error]);
+
+  // Next.js attached a `digest` ref to server-thrown errors; keep reading it
+  // defensively for anything that still tags one on.
+  const digest = 'digest' in error ? String((error as { digest?: string }).digest ?? '') : '';
+
+  return (
+    <div data-testid="route-error-boundary" className="flex flex-col items-center">
+      <StatePanel
+        icon={AlertTriangle}
+        tone="danger"
+        title="Something went wrong"
+        description={
+          <>
+            {error.message || 'An unexpected error occurred while rendering this page.'}
+            {digest && (
+              <span className="mt-1 block font-mono text-xs opacity-70">ref: {digest}</span>
+            )}
+          </>
+        }
+        role="alert"
+        actionLabel="Try again"
+        actionIcon={RotateCcw}
+        onAction={reset}
+      />
+      <Link
+        href="/dashboard"
+        className="-mt-6 inline-flex h-9 items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <LayoutDashboard className="h-4 w-4" />
+        Back to dashboard
+      </Link>
+    </div>
+  );
+}
 
 function DashboardLayout() {
   const router = useRouter();
@@ -80,7 +155,7 @@ function DashboardLayout() {
     // every <ExtensionSlot> (sidebar nav, dashboard widgets, cluster tabs,
     // settings pages). Render-agnostic, so a broken extension can't reach here.
     <ExtensionProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div data-testid="app-shell" className="flex h-screen overflow-hidden bg-background">
         <Sidebar />
         <div
           className={cn(

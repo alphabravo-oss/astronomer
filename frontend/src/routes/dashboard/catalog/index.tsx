@@ -1083,5 +1083,8 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
 }
 
 export const Route = createFileRoute('/dashboard/catalog/')({
+  // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { tab?: string; search?: string; cluster_id?: string } & Record<string, unknown>,
   component: CatalogPage,
 });

@@ -230,5 +230,8 @@ function PasswordField({
 }
 
 export const Route = createFileRoute('/auth/login/reset-password/')({
+  // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { token?: string } & Record<string, unknown>,
   component: ResetPasswordPage,
 });

@@ -354,5 +354,8 @@ function ClustersPage() {
 }
 
 export const Route = createFileRoute('/dashboard/clusters/')({
+  // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { register?: string } & Record<string, unknown>,
   component: ClustersPage,
 });
