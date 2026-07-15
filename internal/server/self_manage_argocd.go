@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -63,6 +64,8 @@ const (
 )
 
 var argocdApplicationGVR = kubeutil.ArgoApplicationGVR
+
+var containerImageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
 func startLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, toolHandler *handler.ToolHandler, encryptor *auth.Encryptor, localCluster *sqlc.Cluster) {
 	if logger == nil || cfg == nil || queries == nil || toolHandler == nil || localCluster == nil {
@@ -369,6 +372,10 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 	}
 	frontendImage, frontendReplicas, _, frontendErr := deploymentImages(ctx, k8s, localAstronomerNamespace, localAstronomerReleaseName+"-frontend")
 	frontendEnabled := frontendErr == nil
+	agentImage, err := parseImageRef(strings.TrimSpace(cfg.AgentImageRepository) + ":" + strings.TrimSpace(cfg.AgentImageTag))
+	if err != nil {
+		return "", fmt.Errorf("parse configured agent image: %w", err)
+	}
 
 	listenerValues, err := selfManagedPublicListenerValues(ctx, k8s, host)
 	if err != nil {
@@ -381,13 +388,15 @@ func buildSelfManagedAstronomerValues(ctx context.Context, cfg *config.Config, k
 			"agentImageTag":        cfg.AgentImageTag,
 		},
 		"image": map[string]any{
-			"server":  serverImage,
-			"worker":  workerImage,
-			"migrate": migrateImage,
-			"agent": map[string]any{
-				"repository": cfg.AgentImageRepository,
-				"tag":        cfg.AgentImageTag,
-			},
+			// Explicitly clear any chart-level mirror prefix inherited from the
+			// original Helm release. Every observed runtime image below is already
+			// decomposed into its own registry/repository/tag tuple; retaining a
+			// global prefix would apply the mirror a second time on every reconcile.
+			"registry": "",
+			"server":   serverImage,
+			"worker":   workerImage,
+			"migrate":  migrateImage,
+			"agent":    agentImage,
 		},
 		"server": map[string]any{
 			"replicaCount": serverReplicas,
@@ -496,13 +505,19 @@ func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, 
 	var migrateImage map[string]any
 	for _, c := range deploy.Spec.Template.Spec.Containers {
 		if c.Name == "server" || c.Name == "worker" || c.Name == "frontend" {
-			mainImage = parseImageRef(c.Image)
+			mainImage, err = parseImageRef(c.Image)
+			if err != nil {
+				return nil, 0, nil, fmt.Errorf("deployment %s primary image: %w", name, err)
+			}
 			break
 		}
 	}
 	for _, c := range deploy.Spec.Template.Spec.InitContainers {
 		if c.Name == "migrate" {
-			migrateImage = parseImageRef(c.Image)
+			migrateImage, err = parseImageRef(c.Image)
+			if err != nil {
+				return nil, 0, nil, fmt.Errorf("deployment %s migrate image: %w", name, err)
+			}
 			break
 		}
 	}
@@ -512,21 +527,44 @@ func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, 
 	return mainImage, replicas, migrateImage, nil
 }
 
-func parseImageRef(ref string) map[string]any {
+func parseImageRef(ref string) (map[string]any, error) {
 	ref = strings.TrimSpace(ref)
-	name := ref
-	tag := "latest"
-	if i := strings.LastIndex(ref, "@"); i >= 0 {
-		name = ref[:i]
+	if ref == "" {
+		return nil, fmt.Errorf("image reference is empty")
 	}
-	if i := strings.LastIndex(name, ":"); i >= 0 && i > strings.LastIndex(name, "/") {
-		tag = name[i+1:]
-		name = name[:i]
+	if strings.ContainsAny(ref, " \t\r\n") || strings.Contains(ref, "://") {
+		return nil, fmt.Errorf("image reference %q is malformed", ref)
+	}
+	if strings.Contains(ref, "@") {
+		return nil, fmt.Errorf("image reference %q uses a digest; self-management currently supports tag references only", ref)
+	}
+
+	lastSlash := strings.LastIndex(ref, "/")
+	lastColon := strings.LastIndex(ref, ":")
+	if lastColon <= lastSlash || lastColon == len(ref)-1 {
+		return nil, fmt.Errorf("image reference %q must include an explicit tag", ref)
+	}
+	name, tag := ref[:lastColon], ref[lastColon+1:]
+	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, "//") || strings.HasSuffix(name, "/") {
+		return nil, fmt.Errorf("image reference %q has an invalid repository path", ref)
+	}
+	if !containerImageTagPattern.MatchString(tag) {
+		return nil, fmt.Errorf("image reference %q has invalid tag %q", ref, tag)
+	}
+
+	registry := ""
+	repository := name
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		registry, repository = name[:i], name[i+1:]
+	}
+	if repository == "" {
+		return nil, fmt.Errorf("image reference %q has an invalid repository path", ref)
 	}
 	return map[string]any{
-		"repository": name,
+		"registry":   registry,
+		"repository": repository,
 		"tag":        tag,
-	}
+	}, nil
 }
 
 func ensureSelfManagedAstronomerApplication(ctx context.Context, dyn dynamic.Interface, cluster sqlc.Cluster, valuesYAML string) error {

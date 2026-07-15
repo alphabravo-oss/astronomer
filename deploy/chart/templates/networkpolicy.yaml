@@ -20,11 +20,21 @@ spec:
   # any allow-policy could be applied — so on upgrade a prior default-deny would
   # block them and stall the release. Stock ArgoCD ships no NetworkPolicies;
   # leaving its pods unselected here matches that and keeps installs hands-off.
+  # Also exclude the NGINX Gateway Fabric data plane. NGF provisions its
+  # per-Gateway nginx Deployment into the Gateway's namespace (ours) with its
+  # own labels (app.kubernetes.io/managed-by=ngf-nginx), AFTER install — so no
+  # chart-owned allow-policy can be written for it ahead of time, and selecting
+  # it here silently breaks DNS/egress for the whole edge (P6.3 k3d smoke:
+  # every request through the gateway times out). It is trusted edge infra;
+  # stock NGF ships no NetworkPolicies, matching the ArgoCD reasoning above.
   podSelector:
     matchExpressions:
       - key: app.kubernetes.io/part-of
         operator: NotIn
         values: ["argocd"]
+      - key: app.kubernetes.io/managed-by
+        operator: NotIn
+        values: ["ngf-nginx"]
   policyTypes:
     - Ingress
     - Egress

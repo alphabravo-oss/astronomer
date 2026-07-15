@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -16,6 +17,50 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+func TestParseImageRefForSelfManagedHelmValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		ref        string
+		registry   string
+		repository string
+		tag        string
+	}{
+		{name: "local registry name", ref: "localastro/server:v1", registry: "localastro", repository: "server", tag: "v1"},
+		{name: "host and namespace", ref: "ghcr.io/org/server:v2", registry: "ghcr.io/org", repository: "server", tag: "v2"},
+		{name: "registry port and nested path", ref: "registry.example:5000/team/platform/server:v3", registry: "registry.example:5000/team/platform", repository: "server", tag: "v3"},
+		{name: "bare repository", ref: "server:v4", registry: "", repository: "server", tag: "v4"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseImageRef(tc.ref)
+			if err != nil {
+				t.Fatalf("parseImageRef(%q): %v", tc.ref, err)
+			}
+			if got["registry"] != tc.registry || got["repository"] != tc.repository || got["tag"] != tc.tag {
+				t.Fatalf("parseImageRef(%q) = %#v, want registry=%q repository=%q tag=%q", tc.ref, got, tc.registry, tc.repository, tc.tag)
+			}
+		})
+	}
+}
+
+func TestParseImageRefRejectsLossyReferences(t *testing.T) {
+	for _, ref := range []string{
+		"ghcr.io/org/server@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"ghcr.io/org/server:v1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"ghcr.io/org/server",
+		"registry.example:5000/team/server:",
+		"/server:v1",
+		"ghcr.io//server:v1",
+		":v1",
+	} {
+		t.Run(ref, func(t *testing.T) {
+			if _, err := parseImageRef(ref); err == nil {
+				t.Fatalf("parseImageRef(%q) succeeded; want explicit error", ref)
+			}
+		})
+	}
+}
 
 func TestMergeSelfManagedValuesPreservesDesiredReplicas(t *testing.T) {
 	current := `
@@ -195,7 +240,7 @@ func TestSelfManagedPublicListenerValuesFallsBackToGateway(t *testing.T) {
 	}
 }
 
-func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testing.T) {
+func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *testing.T) {
 	className := "nginx"
 	replicas := int32(1)
 	client := fake.NewClientset(
@@ -233,8 +278,8 @@ func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testi
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
 				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{{Name: "migrate", Image: "astronomer-go-migrate:migrate-tag"}},
-					Containers:     []corev1.Container{{Name: "server", Image: "astronomer-go-server:server-tag"}},
+					InitContainers: []corev1.Container{{Name: "migrate", Image: "registry.example:5000/platform/migrate:migrate-tag"}},
+					Containers:     []corev1.Container{{Name: "server", Image: "localastro/astronomer-go-server:server-tag"}},
 				}},
 			},
 		},
@@ -243,7 +288,7 @@ func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testi
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
 				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "worker", Image: "astronomer-go-worker:worker-tag"}},
+					Containers: []corev1.Container{{Name: "worker", Image: "ghcr.io/acme/astronomer-go-worker:worker-tag"}},
 				}},
 			},
 		},
@@ -252,14 +297,14 @@ func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testi
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
 				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "frontend", Image: "astronomer-frontend:f03fcf5"}},
+					Containers: []corev1.Container{{Name: "frontend", Image: "frontend.registry:5443/nested/astronomer-frontend:f03fcf5"}},
 				}},
 			},
 		},
 	)
 
 	valuesYAML, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{
-		AgentImageRepository: "astronomer-go-agent",
+		AgentImageRepository: "agents.registry:5001/team/astronomer-go-agent",
 		AgentImageTag:        "agent-tag",
 	}, client, "https://astronomer.dev.alphabravo.io")
 	if err != nil {
@@ -272,6 +317,9 @@ func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testi
 	}
 	frontendValues := values["frontend"].(map[string]any)
 	frontendImage := frontendValues["image"].(map[string]any)
+	if got := frontendImage["registry"]; got != "frontend.registry:5443/nested" {
+		t.Fatalf("frontend.image.registry = %v, want frontend.registry:5443/nested", got)
+	}
 	if got := frontendImage["repository"]; got != "astronomer-frontend" {
 		t.Fatalf("frontend.image.repository = %v, want astronomer-frontend", got)
 	}
@@ -279,6 +327,13 @@ func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testi
 		t.Fatalf("frontend.image.tag = %v, want f03fcf5", got)
 	}
 	imageValues := values["image"].(map[string]any)
+	if got := imageValues["registry"]; got != "" {
+		t.Fatalf("image.registry = %v, want explicit empty global registry", got)
+	}
+	assertSelfManagedImageValues(t, imageValues["server"], "localastro", "astronomer-go-server", "server-tag")
+	assertSelfManagedImageValues(t, imageValues["worker"], "ghcr.io/acme", "astronomer-go-worker", "worker-tag")
+	assertSelfManagedImageValues(t, imageValues["migrate"], "registry.example:5000/platform", "migrate", "migrate-tag")
+	assertSelfManagedImageValues(t, imageValues["agent"], "agents.registry:5001/team", "astronomer-go-agent", "agent-tag")
 	if _, ok := imageValues["frontend"]; ok {
 		t.Fatalf("image.frontend should not be set; frontend chart reads frontend.image")
 	}
@@ -292,6 +347,147 @@ func TestBuildSelfManagedAstronomerValuesWritesFrontendImageToChartPath(t *testi
 	if got := bootstrapValues["email"]; got != "admin@astronomer.local" {
 		t.Fatalf("bootstrap.email = %v, want admin@astronomer.local", got)
 	}
+	configValues := values["config"].(map[string]any)
+	if got := configValues["agentImageRepository"]; got != "agents.registry:5001/team/astronomer-go-agent" {
+		t.Fatalf("config.agentImageRepository = %v", got)
+	}
+}
+
+func TestSelfManagedImageValuesAreAReconcileFixedPoint(t *testing.T) {
+	refs := map[string]string{
+		"server":  "localastro/astronomer-go-server:v1",
+		"worker":  "ghcr.io/acme/astronomer-go-worker:v2",
+		"migrate": "registry.example:5000/team/migrate:v3",
+		"agent":   "mirror.example/nested/team/agent:v4",
+	}
+	frontendRef := "frontend.registry:5443/org/astronomer-frontend:v5"
+	bootstrap := selfManagedImageBootstrapYAML(t, refs, frontendRef)
+	current := `
+image:
+  registry: stale.example/global
+  server:
+    repository: stale.example/global/localastro/astronomer-go-server
+    tag: v1
+frontend:
+  replicaCount: 3
+  image:
+    repository: stale.example/global/frontend.registry/org/astronomer-frontend
+    tag: v5
+server:
+  replicaCount: 3
+worker:
+  replicaCount: 2
+`
+
+	firstYAML, err := mergeSelfManagedValues(current, bootstrap)
+	if err != nil {
+		t.Fatalf("first merge: %v", err)
+	}
+	first := unmarshalSelfManagedValues(t, firstYAML)
+	assertRenderedSelfManagedImages(t, first, refs, frontendRef)
+
+	// Model the next reconcile: Kubernetes reports exactly the refs rendered by
+	// Helm, those refs are decomposed again, and bootstrap-owned values replace
+	// the prior cycle. The image value trees must be an exact fixed point.
+	firstImages := first["image"].(map[string]any)
+	nextRefs := make(map[string]string, len(refs))
+	for component := range refs {
+		nextRefs[component] = renderSelfManagedImageForTest(firstImages, firstImages[component])
+	}
+	firstFrontend := first["frontend"].(map[string]any)["image"]
+	nextFrontendRef := renderSelfManagedImageForTest(firstImages, firstFrontend)
+	secondBootstrap := selfManagedImageBootstrapYAML(t, nextRefs, nextFrontendRef)
+	secondYAML, err := mergeSelfManagedValues(firstYAML, secondBootstrap)
+	if err != nil {
+		t.Fatalf("second merge: %v", err)
+	}
+	second := unmarshalSelfManagedValues(t, secondYAML)
+	assertRenderedSelfManagedImages(t, second, refs, frontendRef)
+	if !reflect.DeepEqual(first["image"], second["image"]) {
+		t.Fatalf("image values changed across reconcile:\nfirst=%#v\nsecond=%#v", first["image"], second["image"])
+	}
+	secondFrontend := second["frontend"].(map[string]any)["image"]
+	if !reflect.DeepEqual(firstFrontend, secondFrontend) {
+		t.Fatalf("frontend image values changed across reconcile:\nfirst=%#v\nsecond=%#v", firstFrontend, secondFrontend)
+	}
+}
+
+func assertSelfManagedImageValues(t *testing.T, raw any, registry, repository, tag string) {
+	t.Helper()
+	image, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("image values = %#v, want map", raw)
+	}
+	if image["registry"] != registry || image["repository"] != repository || image["tag"] != tag {
+		t.Fatalf("image values = %#v, want registry=%q repository=%q tag=%q", image, registry, repository, tag)
+	}
+}
+
+func selfManagedImageBootstrapYAML(t *testing.T, refs map[string]string, frontendRef string) string {
+	t.Helper()
+	images := map[string]any{"registry": ""}
+	for component, ref := range refs {
+		parsed, err := parseImageRef(ref)
+		if err != nil {
+			t.Fatalf("parse %s image %q: %v", component, ref, err)
+		}
+		images[component] = parsed
+	}
+	frontend, err := parseImageRef(frontendRef)
+	if err != nil {
+		t.Fatalf("parse frontend image %q: %v", frontendRef, err)
+	}
+	raw, err := yaml.Marshal(map[string]any{
+		"image": images,
+		"frontend": map[string]any{
+			"enabled": true,
+			"image":   frontend,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal bootstrap values: %v", err)
+	}
+	return string(raw)
+}
+
+func unmarshalSelfManagedValues(t *testing.T, raw string) map[string]any {
+	t.Helper()
+	values := map[string]any{}
+	if err := yaml.Unmarshal([]byte(raw), &values); err != nil {
+		t.Fatalf("unmarshal values: %v", err)
+	}
+	return values
+}
+
+func assertRenderedSelfManagedImages(t *testing.T, values map[string]any, refs map[string]string, frontendRef string) {
+	t.Helper()
+	images := values["image"].(map[string]any)
+	if images["registry"] != "" {
+		t.Fatalf("global image registry = %v, want explicit empty", images["registry"])
+	}
+	for component, want := range refs {
+		if got := renderSelfManagedImageForTest(images, images[component]); got != want {
+			t.Fatalf("rendered %s image = %q, want %q", component, got, want)
+		}
+	}
+	frontend := values["frontend"].(map[string]any)["image"]
+	if got := renderSelfManagedImageForTest(images, frontend); got != frontendRef {
+		t.Fatalf("rendered frontend image = %q, want %q", got, frontendRef)
+	}
+}
+
+func renderSelfManagedImageForTest(global, raw any) string {
+	globalValues := global.(map[string]any)
+	image := raw.(map[string]any)
+	registry, _ := globalValues["registry"].(string)
+	if registry == "" {
+		registry, _ = image["registry"].(string)
+	}
+	prefix := ""
+	if registry != "" {
+		prefix = registry + "/"
+	}
+	return prefix + image["repository"].(string) + ":" + image["tag"].(string)
 }
 
 func TestLocalArgoManagedClusterLabelsIncludesStandardSelectors(t *testing.T) {

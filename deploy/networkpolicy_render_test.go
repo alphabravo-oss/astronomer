@@ -76,16 +76,31 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
 
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
-	// The default-deny selects every pod EXCEPT the bundled astro-argocd pods,
-	// which are carved out via a part-of NotIn argocd expression so their
-	// pre-install/upgrade hooks aren't blocked (see networkpolicy.yaml).
+	// The default-deny selects every pod EXCEPT the bundled astro-argocd pods
+	// (part-of NotIn argocd, so their pre-install/upgrade hooks aren't blocked)
+	// and the NGF-provisioned gateway data plane (managed-by NotIn ngf-nginx —
+	// NGF creates that Deployment in our namespace post-install; selecting it
+	// breaks DNS/egress for the whole edge). See networkpolicy.yaml.
 	exprs, _ := nestedMap(defaultDeny, "spec", "podSelector")["matchExpressions"].([]any)
-	if len(exprs) != 1 {
-		t.Fatalf("default-deny podSelector should carve out argocd via one matchExpression: %#v", nestedMap(defaultDeny, "spec", "podSelector"))
+	if len(exprs) != 2 {
+		t.Fatalf("default-deny podSelector should carve out argocd + ngf-nginx via two matchExpressions: %#v", nestedMap(defaultDeny, "spec", "podSelector"))
 	}
-	expr, _ := exprs[0].(map[string]any)
-	if stringValue(expr["key"]) != "app.kubernetes.io/part-of" || stringValue(expr["operator"]) != "NotIn" {
-		t.Fatalf("default-deny carve-out expression = %#v, want part-of NotIn", expr)
+	wantCarveOuts := map[string]string{
+		"app.kubernetes.io/part-of":    "argocd",
+		"app.kubernetes.io/managed-by": "ngf-nginx",
+	}
+	for _, raw := range exprs {
+		expr, _ := raw.(map[string]any)
+		key := stringValue(expr["key"])
+		want, ok := wantCarveOuts[key]
+		if !ok || stringValue(expr["operator"]) != "NotIn" {
+			t.Fatalf("default-deny carve-out expression = %#v, want NotIn on part-of/managed-by", expr)
+		}
+		values, _ := expr["values"].([]any)
+		if len(values) != 1 || stringValue(values[0]) != want {
+			t.Fatalf("default-deny carve-out %s values = %#v, want [%q]", key, values, want)
+		}
+		delete(wantCarveOuts, key)
 	}
 	assertPolicyTypes(t, defaultDeny, "Ingress", "Egress")
 
