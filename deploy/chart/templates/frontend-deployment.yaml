@@ -50,10 +50,6 @@ spec:
               containerPort: 3000
               protocol: TCP
           env:
-            - name: NEXT_PUBLIC_API_URL
-              value: {{ .Values.frontend.apiBaseUrl | quote }}
-            - name: NEXT_PUBLIC_WS_URL
-              value: {{ .Values.frontend.wsBaseUrl | quote }}
             - name: NEXT_TELEMETRY_DISABLED
               value: "1"
           readinessProbe:

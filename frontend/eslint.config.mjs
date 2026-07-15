@@ -75,6 +75,8 @@ const config = [
       // stays centralized and test mocks keep working. The adapter files, the
       // route tree, and the router itself are exempted via the override block
       // below.
+      // Next.js is gone (P2.6): the packages are uninstalled, so any surviving
+      // or reintroduced `next/*` import must fail lint, not resolution.
       'no-restricted-imports': [
         'error',
         {
@@ -83,6 +85,13 @@ const config = [
               name: '@tanstack/react-router',
               message:
                 'Do not import @tanstack/react-router directly. Use @/lib/navigation or @/lib/link instead.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['next', 'next/*', 'next-themes'],
+              message:
+                'Next.js was removed in the Vite/TanStack migration. Use the adapter layer (@/lib/navigation, @/lib/link) and native equivalents instead.',
             },
           ],
         },
