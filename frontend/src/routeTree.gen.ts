@@ -12,6 +12,33 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthLoginIndexRouteImport } from './routes/auth/login/index'
+import { Route as DashboardClustersIdRouteRouteImport } from './routes/dashboard/clusters/$id/route'
+import { Route as DashboardClustersRegisterIndexRouteImport } from './routes/dashboard/clusters/register/index'
+import { Route as DashboardClustersIdIndexRouteImport } from './routes/dashboard/clusters/$id/index'
+import { Route as DashboardClustersIdWorkloadsIndexRouteImport } from './routes/dashboard/clusters/$id/workloads/index'
+import { Route as DashboardClustersIdToolsIndexRouteImport } from './routes/dashboard/clusters/$id/tools/index'
+import { Route as DashboardClustersIdTemplateIndexRouteImport } from './routes/dashboard/clusters/$id/template/index'
+import { Route as DashboardClustersIdSnapshotsIndexRouteImport } from './routes/dashboard/clusters/$id/snapshots/index'
+import { Route as DashboardClustersIdShellIndexRouteImport } from './routes/dashboard/clusters/$id/shell/index'
+import { Route as DashboardClustersIdServiceMeshIndexRouteImport } from './routes/dashboard/clusters/$id/service-mesh/index'
+import { Route as DashboardClustersIdResourcesIndexRouteImport } from './routes/dashboard/clusters/$id/resources/index'
+import { Route as DashboardClustersIdRegistriesIndexRouteImport } from './routes/dashboard/clusters/$id/registries/index'
+import { Route as DashboardClustersIdNetworkPoliciesIndexRouteImport } from './routes/dashboard/clusters/$id/network-policies/index'
+import { Route as DashboardClustersIdNetworkAccessIndexRouteImport } from './routes/dashboard/clusters/$id/network-access/index'
+import { Route as DashboardClustersIdImageScansIndexRouteImport } from './routes/dashboard/clusters/$id/image-scans/index'
+import { Route as DashboardClustersIdGatekeeperIndexRouteImport } from './routes/dashboard/clusters/$id/gatekeeper/index'
+import { Route as DashboardClustersIdCustomResourcesIndexRouteImport } from './routes/dashboard/clusters/$id/custom-resources/index'
+import { Route as DashboardClustersIdControlPlaneSnapshotsIndexRouteImport } from './routes/dashboard/clusters/$id/control-plane-snapshots/index'
+import { Route as DashboardClustersIdAppsIndexRouteImport } from './routes/dashboard/clusters/$id/apps/index'
+import { Route as DashboardClustersIdAdoptionIndexRouteImport } from './routes/dashboard/clusters/$id/adoption/index'
+import { Route as DashboardClustersIdResourceIndexRouteImport } from './routes/dashboard/clusters/$id/$resource/index'
+import { Route as DashboardClustersIdCustomResourcesSplatRouteImport } from './routes/dashboard/clusters/$id/custom-resources/$'
+import { Route as DashboardClustersIdResourceSplatRouteImport } from './routes/dashboard/clusters/$id/$resource/$'
+import { Route as DashboardClustersRegisterIdProgressIndexRouteImport } from './routes/dashboard/clusters/register/$id/progress/index'
+import { Route as DashboardClustersRegisterIdConnectIndexRouteImport } from './routes/dashboard/clusters/register/$id/connect/index'
+import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './routes/dashboard/clusters/$id/service-mesh/mtls/index'
+import { Route as DashboardClustersIdNodesNodeNameIndexRouteImport } from './routes/dashboard/clusters/$id/nodes/$nodeName/index'
+import { Route as DashboardClustersIdWorkloadsKindNamespaceNameIndexRouteImport } from './routes/dashboard/clusters/$id/workloads/$kind/$namespace/$name/index'
 
 const DashboardRouteRoute = DashboardRouteRouteImport.update({
   id: '/dashboard',
@@ -28,34 +55,366 @@ const AuthLoginIndexRoute = AuthLoginIndexRouteImport.update({
   path: '/auth/login/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardClustersIdRouteRoute =
+  DashboardClustersIdRouteRouteImport.update({
+    id: '/clusters/$id',
+    path: '/clusters/$id',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardClustersRegisterIndexRoute =
+  DashboardClustersRegisterIndexRouteImport.update({
+    id: '/clusters/register/',
+    path: '/clusters/register/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardClustersIdIndexRoute =
+  DashboardClustersIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdWorkloadsIndexRoute =
+  DashboardClustersIdWorkloadsIndexRouteImport.update({
+    id: '/workloads/',
+    path: '/workloads/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdToolsIndexRoute =
+  DashboardClustersIdToolsIndexRouteImport.update({
+    id: '/tools/',
+    path: '/tools/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdTemplateIndexRoute =
+  DashboardClustersIdTemplateIndexRouteImport.update({
+    id: '/template/',
+    path: '/template/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdSnapshotsIndexRoute =
+  DashboardClustersIdSnapshotsIndexRouteImport.update({
+    id: '/snapshots/',
+    path: '/snapshots/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdShellIndexRoute =
+  DashboardClustersIdShellIndexRouteImport.update({
+    id: '/shell/',
+    path: '/shell/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdServiceMeshIndexRoute =
+  DashboardClustersIdServiceMeshIndexRouteImport.update({
+    id: '/service-mesh/',
+    path: '/service-mesh/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdResourcesIndexRoute =
+  DashboardClustersIdResourcesIndexRouteImport.update({
+    id: '/resources/',
+    path: '/resources/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdRegistriesIndexRoute =
+  DashboardClustersIdRegistriesIndexRouteImport.update({
+    id: '/registries/',
+    path: '/registries/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdNetworkPoliciesIndexRoute =
+  DashboardClustersIdNetworkPoliciesIndexRouteImport.update({
+    id: '/network-policies/',
+    path: '/network-policies/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdNetworkAccessIndexRoute =
+  DashboardClustersIdNetworkAccessIndexRouteImport.update({
+    id: '/network-access/',
+    path: '/network-access/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdImageScansIndexRoute =
+  DashboardClustersIdImageScansIndexRouteImport.update({
+    id: '/image-scans/',
+    path: '/image-scans/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdGatekeeperIndexRoute =
+  DashboardClustersIdGatekeeperIndexRouteImport.update({
+    id: '/gatekeeper/',
+    path: '/gatekeeper/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdCustomResourcesIndexRoute =
+  DashboardClustersIdCustomResourcesIndexRouteImport.update({
+    id: '/custom-resources/',
+    path: '/custom-resources/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdControlPlaneSnapshotsIndexRoute =
+  DashboardClustersIdControlPlaneSnapshotsIndexRouteImport.update({
+    id: '/control-plane-snapshots/',
+    path: '/control-plane-snapshots/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdAppsIndexRoute =
+  DashboardClustersIdAppsIndexRouteImport.update({
+    id: '/apps/',
+    path: '/apps/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdAdoptionIndexRoute =
+  DashboardClustersIdAdoptionIndexRouteImport.update({
+    id: '/adoption/',
+    path: '/adoption/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdResourceIndexRoute =
+  DashboardClustersIdResourceIndexRouteImport.update({
+    id: '/$resource/',
+    path: '/$resource/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdCustomResourcesSplatRoute =
+  DashboardClustersIdCustomResourcesSplatRouteImport.update({
+    id: '/custom-resources/$',
+    path: '/custom-resources/$',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdResourceSplatRoute =
+  DashboardClustersIdResourceSplatRouteImport.update({
+    id: '/$resource/$',
+    path: '/$resource/$',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersRegisterIdProgressIndexRoute =
+  DashboardClustersRegisterIdProgressIndexRouteImport.update({
+    id: '/clusters/register/$id/progress/',
+    path: '/clusters/register/$id/progress/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardClustersRegisterIdConnectIndexRoute =
+  DashboardClustersRegisterIdConnectIndexRouteImport.update({
+    id: '/clusters/register/$id/connect/',
+    path: '/clusters/register/$id/connect/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardClustersIdServiceMeshMtlsIndexRoute =
+  DashboardClustersIdServiceMeshMtlsIndexRouteImport.update({
+    id: '/service-mesh/mtls/',
+    path: '/service-mesh/mtls/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdNodesNodeNameIndexRoute =
+  DashboardClustersIdNodesNodeNameIndexRouteImport.update({
+    id: '/nodes/$nodeName/',
+    path: '/nodes/$nodeName/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute =
+  DashboardClustersIdWorkloadsKindNamespaceNameIndexRouteImport.update({
+    id: '/workloads/$kind/$namespace/$name/',
+    path: '/workloads/$kind/$namespace/$name/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
   '/auth/login/': typeof AuthLoginIndexRoute
+  '/dashboard/clusters/$id/': typeof DashboardClustersIdIndexRoute
+  '/dashboard/clusters/register/': typeof DashboardClustersRegisterIndexRoute
+  '/dashboard/clusters/$id/$resource/$': typeof DashboardClustersIdResourceSplatRoute
+  '/dashboard/clusters/$id/custom-resources/$': typeof DashboardClustersIdCustomResourcesSplatRoute
+  '/dashboard/clusters/$id/$resource/': typeof DashboardClustersIdResourceIndexRoute
+  '/dashboard/clusters/$id/adoption/': typeof DashboardClustersIdAdoptionIndexRoute
+  '/dashboard/clusters/$id/apps/': typeof DashboardClustersIdAppsIndexRoute
+  '/dashboard/clusters/$id/control-plane-snapshots/': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
+  '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
+  '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
+  '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/network-access/': typeof DashboardClustersIdNetworkAccessIndexRoute
+  '/dashboard/clusters/$id/network-policies/': typeof DashboardClustersIdNetworkPoliciesIndexRoute
+  '/dashboard/clusters/$id/registries/': typeof DashboardClustersIdRegistriesIndexRoute
+  '/dashboard/clusters/$id/resources/': typeof DashboardClustersIdResourcesIndexRoute
+  '/dashboard/clusters/$id/service-mesh/': typeof DashboardClustersIdServiceMeshIndexRoute
+  '/dashboard/clusters/$id/shell/': typeof DashboardClustersIdShellIndexRoute
+  '/dashboard/clusters/$id/snapshots/': typeof DashboardClustersIdSnapshotsIndexRoute
+  '/dashboard/clusters/$id/template/': typeof DashboardClustersIdTemplateIndexRoute
+  '/dashboard/clusters/$id/tools/': typeof DashboardClustersIdToolsIndexRoute
+  '/dashboard/clusters/$id/workloads/': typeof DashboardClustersIdWorkloadsIndexRoute
+  '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
+  '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  '/dashboard/clusters/register/$id/connect/': typeof DashboardClustersRegisterIdConnectIndexRoute
+  '/dashboard/clusters/register/$id/progress/': typeof DashboardClustersRegisterIdProgressIndexRoute
+  '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/': typeof DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
   '/auth/login': typeof AuthLoginIndexRoute
+  '/dashboard/clusters/$id': typeof DashboardClustersIdIndexRoute
+  '/dashboard/clusters/register': typeof DashboardClustersRegisterIndexRoute
+  '/dashboard/clusters/$id/$resource/$': typeof DashboardClustersIdResourceSplatRoute
+  '/dashboard/clusters/$id/custom-resources/$': typeof DashboardClustersIdCustomResourcesSplatRoute
+  '/dashboard/clusters/$id/$resource': typeof DashboardClustersIdResourceIndexRoute
+  '/dashboard/clusters/$id/adoption': typeof DashboardClustersIdAdoptionIndexRoute
+  '/dashboard/clusters/$id/apps': typeof DashboardClustersIdAppsIndexRoute
+  '/dashboard/clusters/$id/control-plane-snapshots': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
+  '/dashboard/clusters/$id/custom-resources': typeof DashboardClustersIdCustomResourcesIndexRoute
+  '/dashboard/clusters/$id/gatekeeper': typeof DashboardClustersIdGatekeeperIndexRoute
+  '/dashboard/clusters/$id/image-scans': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/network-access': typeof DashboardClustersIdNetworkAccessIndexRoute
+  '/dashboard/clusters/$id/network-policies': typeof DashboardClustersIdNetworkPoliciesIndexRoute
+  '/dashboard/clusters/$id/registries': typeof DashboardClustersIdRegistriesIndexRoute
+  '/dashboard/clusters/$id/resources': typeof DashboardClustersIdResourcesIndexRoute
+  '/dashboard/clusters/$id/service-mesh': typeof DashboardClustersIdServiceMeshIndexRoute
+  '/dashboard/clusters/$id/shell': typeof DashboardClustersIdShellIndexRoute
+  '/dashboard/clusters/$id/snapshots': typeof DashboardClustersIdSnapshotsIndexRoute
+  '/dashboard/clusters/$id/template': typeof DashboardClustersIdTemplateIndexRoute
+  '/dashboard/clusters/$id/tools': typeof DashboardClustersIdToolsIndexRoute
+  '/dashboard/clusters/$id/workloads': typeof DashboardClustersIdWorkloadsIndexRoute
+  '/dashboard/clusters/$id/nodes/$nodeName': typeof DashboardClustersIdNodesNodeNameIndexRoute
+  '/dashboard/clusters/$id/service-mesh/mtls': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  '/dashboard/clusters/register/$id/connect': typeof DashboardClustersRegisterIdConnectIndexRoute
+  '/dashboard/clusters/register/$id/progress': typeof DashboardClustersRegisterIdProgressIndexRoute
+  '/dashboard/clusters/$id/workloads/$kind/$namespace/$name': typeof DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
   '/auth/login/': typeof AuthLoginIndexRoute
+  '/dashboard/clusters/$id/': typeof DashboardClustersIdIndexRoute
+  '/dashboard/clusters/register/': typeof DashboardClustersRegisterIndexRoute
+  '/dashboard/clusters/$id/$resource/$': typeof DashboardClustersIdResourceSplatRoute
+  '/dashboard/clusters/$id/custom-resources/$': typeof DashboardClustersIdCustomResourcesSplatRoute
+  '/dashboard/clusters/$id/$resource/': typeof DashboardClustersIdResourceIndexRoute
+  '/dashboard/clusters/$id/adoption/': typeof DashboardClustersIdAdoptionIndexRoute
+  '/dashboard/clusters/$id/apps/': typeof DashboardClustersIdAppsIndexRoute
+  '/dashboard/clusters/$id/control-plane-snapshots/': typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
+  '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
+  '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
+  '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/network-access/': typeof DashboardClustersIdNetworkAccessIndexRoute
+  '/dashboard/clusters/$id/network-policies/': typeof DashboardClustersIdNetworkPoliciesIndexRoute
+  '/dashboard/clusters/$id/registries/': typeof DashboardClustersIdRegistriesIndexRoute
+  '/dashboard/clusters/$id/resources/': typeof DashboardClustersIdResourcesIndexRoute
+  '/dashboard/clusters/$id/service-mesh/': typeof DashboardClustersIdServiceMeshIndexRoute
+  '/dashboard/clusters/$id/shell/': typeof DashboardClustersIdShellIndexRoute
+  '/dashboard/clusters/$id/snapshots/': typeof DashboardClustersIdSnapshotsIndexRoute
+  '/dashboard/clusters/$id/template/': typeof DashboardClustersIdTemplateIndexRoute
+  '/dashboard/clusters/$id/tools/': typeof DashboardClustersIdToolsIndexRoute
+  '/dashboard/clusters/$id/workloads/': typeof DashboardClustersIdWorkloadsIndexRoute
+  '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
+  '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  '/dashboard/clusters/register/$id/connect/': typeof DashboardClustersRegisterIdConnectIndexRoute
+  '/dashboard/clusters/register/$id/progress/': typeof DashboardClustersRegisterIdProgressIndexRoute
+  '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/': typeof DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/auth/login/'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/clusters/$id'
+    | '/auth/login/'
+    | '/dashboard/clusters/$id/'
+    | '/dashboard/clusters/register/'
+    | '/dashboard/clusters/$id/$resource/$'
+    | '/dashboard/clusters/$id/custom-resources/$'
+    | '/dashboard/clusters/$id/$resource/'
+    | '/dashboard/clusters/$id/adoption/'
+    | '/dashboard/clusters/$id/apps/'
+    | '/dashboard/clusters/$id/control-plane-snapshots/'
+    | '/dashboard/clusters/$id/custom-resources/'
+    | '/dashboard/clusters/$id/gatekeeper/'
+    | '/dashboard/clusters/$id/image-scans/'
+    | '/dashboard/clusters/$id/network-access/'
+    | '/dashboard/clusters/$id/network-policies/'
+    | '/dashboard/clusters/$id/registries/'
+    | '/dashboard/clusters/$id/resources/'
+    | '/dashboard/clusters/$id/service-mesh/'
+    | '/dashboard/clusters/$id/shell/'
+    | '/dashboard/clusters/$id/snapshots/'
+    | '/dashboard/clusters/$id/template/'
+    | '/dashboard/clusters/$id/tools/'
+    | '/dashboard/clusters/$id/workloads/'
+    | '/dashboard/clusters/$id/nodes/$nodeName/'
+    | '/dashboard/clusters/$id/service-mesh/mtls/'
+    | '/dashboard/clusters/register/$id/connect/'
+    | '/dashboard/clusters/register/$id/progress/'
+    | '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/auth/login'
-  id: '__root__' | '/' | '/dashboard' | '/auth/login/'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/auth/login'
+    | '/dashboard/clusters/$id'
+    | '/dashboard/clusters/register'
+    | '/dashboard/clusters/$id/$resource/$'
+    | '/dashboard/clusters/$id/custom-resources/$'
+    | '/dashboard/clusters/$id/$resource'
+    | '/dashboard/clusters/$id/adoption'
+    | '/dashboard/clusters/$id/apps'
+    | '/dashboard/clusters/$id/control-plane-snapshots'
+    | '/dashboard/clusters/$id/custom-resources'
+    | '/dashboard/clusters/$id/gatekeeper'
+    | '/dashboard/clusters/$id/image-scans'
+    | '/dashboard/clusters/$id/network-access'
+    | '/dashboard/clusters/$id/network-policies'
+    | '/dashboard/clusters/$id/registries'
+    | '/dashboard/clusters/$id/resources'
+    | '/dashboard/clusters/$id/service-mesh'
+    | '/dashboard/clusters/$id/shell'
+    | '/dashboard/clusters/$id/snapshots'
+    | '/dashboard/clusters/$id/template'
+    | '/dashboard/clusters/$id/tools'
+    | '/dashboard/clusters/$id/workloads'
+    | '/dashboard/clusters/$id/nodes/$nodeName'
+    | '/dashboard/clusters/$id/service-mesh/mtls'
+    | '/dashboard/clusters/register/$id/connect'
+    | '/dashboard/clusters/register/$id/progress'
+    | '/dashboard/clusters/$id/workloads/$kind/$namespace/$name'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/dashboard/clusters/$id'
+    | '/auth/login/'
+    | '/dashboard/clusters/$id/'
+    | '/dashboard/clusters/register/'
+    | '/dashboard/clusters/$id/$resource/$'
+    | '/dashboard/clusters/$id/custom-resources/$'
+    | '/dashboard/clusters/$id/$resource/'
+    | '/dashboard/clusters/$id/adoption/'
+    | '/dashboard/clusters/$id/apps/'
+    | '/dashboard/clusters/$id/control-plane-snapshots/'
+    | '/dashboard/clusters/$id/custom-resources/'
+    | '/dashboard/clusters/$id/gatekeeper/'
+    | '/dashboard/clusters/$id/image-scans/'
+    | '/dashboard/clusters/$id/network-access/'
+    | '/dashboard/clusters/$id/network-policies/'
+    | '/dashboard/clusters/$id/registries/'
+    | '/dashboard/clusters/$id/resources/'
+    | '/dashboard/clusters/$id/service-mesh/'
+    | '/dashboard/clusters/$id/shell/'
+    | '/dashboard/clusters/$id/snapshots/'
+    | '/dashboard/clusters/$id/template/'
+    | '/dashboard/clusters/$id/tools/'
+    | '/dashboard/clusters/$id/workloads/'
+    | '/dashboard/clusters/$id/nodes/$nodeName/'
+    | '/dashboard/clusters/$id/service-mesh/mtls/'
+    | '/dashboard/clusters/register/$id/connect/'
+    | '/dashboard/clusters/register/$id/progress/'
+    | '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRouteRoute: typeof DashboardRouteRoute
+  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
   AuthLoginIndexRoute: typeof AuthLoginIndexRoute
 }
 
@@ -82,12 +441,298 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthLoginIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/clusters/$id': {
+      id: '/dashboard/clusters/$id'
+      path: '/clusters/$id'
+      fullPath: '/dashboard/clusters/$id'
+      preLoaderRoute: typeof DashboardClustersIdRouteRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/clusters/register/': {
+      id: '/dashboard/clusters/register/'
+      path: '/clusters/register'
+      fullPath: '/dashboard/clusters/register/'
+      preLoaderRoute: typeof DashboardClustersRegisterIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/clusters/$id/': {
+      id: '/dashboard/clusters/$id/'
+      path: '/'
+      fullPath: '/dashboard/clusters/$id/'
+      preLoaderRoute: typeof DashboardClustersIdIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/workloads/': {
+      id: '/dashboard/clusters/$id/workloads/'
+      path: '/workloads'
+      fullPath: '/dashboard/clusters/$id/workloads/'
+      preLoaderRoute: typeof DashboardClustersIdWorkloadsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/tools/': {
+      id: '/dashboard/clusters/$id/tools/'
+      path: '/tools'
+      fullPath: '/dashboard/clusters/$id/tools/'
+      preLoaderRoute: typeof DashboardClustersIdToolsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/template/': {
+      id: '/dashboard/clusters/$id/template/'
+      path: '/template'
+      fullPath: '/dashboard/clusters/$id/template/'
+      preLoaderRoute: typeof DashboardClustersIdTemplateIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/snapshots/': {
+      id: '/dashboard/clusters/$id/snapshots/'
+      path: '/snapshots'
+      fullPath: '/dashboard/clusters/$id/snapshots/'
+      preLoaderRoute: typeof DashboardClustersIdSnapshotsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/shell/': {
+      id: '/dashboard/clusters/$id/shell/'
+      path: '/shell'
+      fullPath: '/dashboard/clusters/$id/shell/'
+      preLoaderRoute: typeof DashboardClustersIdShellIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/service-mesh/': {
+      id: '/dashboard/clusters/$id/service-mesh/'
+      path: '/service-mesh'
+      fullPath: '/dashboard/clusters/$id/service-mesh/'
+      preLoaderRoute: typeof DashboardClustersIdServiceMeshIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/resources/': {
+      id: '/dashboard/clusters/$id/resources/'
+      path: '/resources'
+      fullPath: '/dashboard/clusters/$id/resources/'
+      preLoaderRoute: typeof DashboardClustersIdResourcesIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/registries/': {
+      id: '/dashboard/clusters/$id/registries/'
+      path: '/registries'
+      fullPath: '/dashboard/clusters/$id/registries/'
+      preLoaderRoute: typeof DashboardClustersIdRegistriesIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/network-policies/': {
+      id: '/dashboard/clusters/$id/network-policies/'
+      path: '/network-policies'
+      fullPath: '/dashboard/clusters/$id/network-policies/'
+      preLoaderRoute: typeof DashboardClustersIdNetworkPoliciesIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/network-access/': {
+      id: '/dashboard/clusters/$id/network-access/'
+      path: '/network-access'
+      fullPath: '/dashboard/clusters/$id/network-access/'
+      preLoaderRoute: typeof DashboardClustersIdNetworkAccessIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/image-scans/': {
+      id: '/dashboard/clusters/$id/image-scans/'
+      path: '/image-scans'
+      fullPath: '/dashboard/clusters/$id/image-scans/'
+      preLoaderRoute: typeof DashboardClustersIdImageScansIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/gatekeeper/': {
+      id: '/dashboard/clusters/$id/gatekeeper/'
+      path: '/gatekeeper'
+      fullPath: '/dashboard/clusters/$id/gatekeeper/'
+      preLoaderRoute: typeof DashboardClustersIdGatekeeperIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/custom-resources/': {
+      id: '/dashboard/clusters/$id/custom-resources/'
+      path: '/custom-resources'
+      fullPath: '/dashboard/clusters/$id/custom-resources/'
+      preLoaderRoute: typeof DashboardClustersIdCustomResourcesIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/control-plane-snapshots/': {
+      id: '/dashboard/clusters/$id/control-plane-snapshots/'
+      path: '/control-plane-snapshots'
+      fullPath: '/dashboard/clusters/$id/control-plane-snapshots/'
+      preLoaderRoute: typeof DashboardClustersIdControlPlaneSnapshotsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/apps/': {
+      id: '/dashboard/clusters/$id/apps/'
+      path: '/apps'
+      fullPath: '/dashboard/clusters/$id/apps/'
+      preLoaderRoute: typeof DashboardClustersIdAppsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/adoption/': {
+      id: '/dashboard/clusters/$id/adoption/'
+      path: '/adoption'
+      fullPath: '/dashboard/clusters/$id/adoption/'
+      preLoaderRoute: typeof DashboardClustersIdAdoptionIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/$resource/': {
+      id: '/dashboard/clusters/$id/$resource/'
+      path: '/$resource'
+      fullPath: '/dashboard/clusters/$id/$resource/'
+      preLoaderRoute: typeof DashboardClustersIdResourceIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/custom-resources/$': {
+      id: '/dashboard/clusters/$id/custom-resources/$'
+      path: '/custom-resources/$'
+      fullPath: '/dashboard/clusters/$id/custom-resources/$'
+      preLoaderRoute: typeof DashboardClustersIdCustomResourcesSplatRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/$resource/$': {
+      id: '/dashboard/clusters/$id/$resource/$'
+      path: '/$resource/$'
+      fullPath: '/dashboard/clusters/$id/$resource/$'
+      preLoaderRoute: typeof DashboardClustersIdResourceSplatRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/register/$id/progress/': {
+      id: '/dashboard/clusters/register/$id/progress/'
+      path: '/clusters/register/$id/progress'
+      fullPath: '/dashboard/clusters/register/$id/progress/'
+      preLoaderRoute: typeof DashboardClustersRegisterIdProgressIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/clusters/register/$id/connect/': {
+      id: '/dashboard/clusters/register/$id/connect/'
+      path: '/clusters/register/$id/connect'
+      fullPath: '/dashboard/clusters/register/$id/connect/'
+      preLoaderRoute: typeof DashboardClustersRegisterIdConnectIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/clusters/$id/service-mesh/mtls/': {
+      id: '/dashboard/clusters/$id/service-mesh/mtls/'
+      path: '/service-mesh/mtls'
+      fullPath: '/dashboard/clusters/$id/service-mesh/mtls/'
+      preLoaderRoute: typeof DashboardClustersIdServiceMeshMtlsIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/nodes/$nodeName/': {
+      id: '/dashboard/clusters/$id/nodes/$nodeName/'
+      path: '/nodes/$nodeName'
+      fullPath: '/dashboard/clusters/$id/nodes/$nodeName/'
+      preLoaderRoute: typeof DashboardClustersIdNodesNodeNameIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/': {
+      id: '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/'
+      path: '/workloads/$kind/$namespace/$name'
+      fullPath: '/dashboard/clusters/$id/workloads/$kind/$namespace/$name/'
+      preLoaderRoute: typeof DashboardClustersIdWorkloadsKindNamespaceNameIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
   }
 }
 
+interface DashboardClustersIdRouteRouteChildren {
+  DashboardClustersIdIndexRoute: typeof DashboardClustersIdIndexRoute
+  DashboardClustersIdResourceSplatRoute: typeof DashboardClustersIdResourceSplatRoute
+  DashboardClustersIdCustomResourcesSplatRoute: typeof DashboardClustersIdCustomResourcesSplatRoute
+  DashboardClustersIdResourceIndexRoute: typeof DashboardClustersIdResourceIndexRoute
+  DashboardClustersIdAdoptionIndexRoute: typeof DashboardClustersIdAdoptionIndexRoute
+  DashboardClustersIdAppsIndexRoute: typeof DashboardClustersIdAppsIndexRoute
+  DashboardClustersIdControlPlaneSnapshotsIndexRoute: typeof DashboardClustersIdControlPlaneSnapshotsIndexRoute
+  DashboardClustersIdCustomResourcesIndexRoute: typeof DashboardClustersIdCustomResourcesIndexRoute
+  DashboardClustersIdGatekeeperIndexRoute: typeof DashboardClustersIdGatekeeperIndexRoute
+  DashboardClustersIdImageScansIndexRoute: typeof DashboardClustersIdImageScansIndexRoute
+  DashboardClustersIdNetworkAccessIndexRoute: typeof DashboardClustersIdNetworkAccessIndexRoute
+  DashboardClustersIdNetworkPoliciesIndexRoute: typeof DashboardClustersIdNetworkPoliciesIndexRoute
+  DashboardClustersIdRegistriesIndexRoute: typeof DashboardClustersIdRegistriesIndexRoute
+  DashboardClustersIdResourcesIndexRoute: typeof DashboardClustersIdResourcesIndexRoute
+  DashboardClustersIdServiceMeshIndexRoute: typeof DashboardClustersIdServiceMeshIndexRoute
+  DashboardClustersIdShellIndexRoute: typeof DashboardClustersIdShellIndexRoute
+  DashboardClustersIdSnapshotsIndexRoute: typeof DashboardClustersIdSnapshotsIndexRoute
+  DashboardClustersIdTemplateIndexRoute: typeof DashboardClustersIdTemplateIndexRoute
+  DashboardClustersIdToolsIndexRoute: typeof DashboardClustersIdToolsIndexRoute
+  DashboardClustersIdWorkloadsIndexRoute: typeof DashboardClustersIdWorkloadsIndexRoute
+  DashboardClustersIdNodesNodeNameIndexRoute: typeof DashboardClustersIdNodesNodeNameIndexRoute
+  DashboardClustersIdServiceMeshMtlsIndexRoute: typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute: typeof DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute
+}
+
+const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildren =
+  {
+    DashboardClustersIdIndexRoute: DashboardClustersIdIndexRoute,
+    DashboardClustersIdResourceSplatRoute:
+      DashboardClustersIdResourceSplatRoute,
+    DashboardClustersIdCustomResourcesSplatRoute:
+      DashboardClustersIdCustomResourcesSplatRoute,
+    DashboardClustersIdResourceIndexRoute:
+      DashboardClustersIdResourceIndexRoute,
+    DashboardClustersIdAdoptionIndexRoute:
+      DashboardClustersIdAdoptionIndexRoute,
+    DashboardClustersIdAppsIndexRoute: DashboardClustersIdAppsIndexRoute,
+    DashboardClustersIdControlPlaneSnapshotsIndexRoute:
+      DashboardClustersIdControlPlaneSnapshotsIndexRoute,
+    DashboardClustersIdCustomResourcesIndexRoute:
+      DashboardClustersIdCustomResourcesIndexRoute,
+    DashboardClustersIdGatekeeperIndexRoute:
+      DashboardClustersIdGatekeeperIndexRoute,
+    DashboardClustersIdImageScansIndexRoute:
+      DashboardClustersIdImageScansIndexRoute,
+    DashboardClustersIdNetworkAccessIndexRoute:
+      DashboardClustersIdNetworkAccessIndexRoute,
+    DashboardClustersIdNetworkPoliciesIndexRoute:
+      DashboardClustersIdNetworkPoliciesIndexRoute,
+    DashboardClustersIdRegistriesIndexRoute:
+      DashboardClustersIdRegistriesIndexRoute,
+    DashboardClustersIdResourcesIndexRoute:
+      DashboardClustersIdResourcesIndexRoute,
+    DashboardClustersIdServiceMeshIndexRoute:
+      DashboardClustersIdServiceMeshIndexRoute,
+    DashboardClustersIdShellIndexRoute: DashboardClustersIdShellIndexRoute,
+    DashboardClustersIdSnapshotsIndexRoute:
+      DashboardClustersIdSnapshotsIndexRoute,
+    DashboardClustersIdTemplateIndexRoute:
+      DashboardClustersIdTemplateIndexRoute,
+    DashboardClustersIdToolsIndexRoute: DashboardClustersIdToolsIndexRoute,
+    DashboardClustersIdWorkloadsIndexRoute:
+      DashboardClustersIdWorkloadsIndexRoute,
+    DashboardClustersIdNodesNodeNameIndexRoute:
+      DashboardClustersIdNodesNodeNameIndexRoute,
+    DashboardClustersIdServiceMeshMtlsIndexRoute:
+      DashboardClustersIdServiceMeshMtlsIndexRoute,
+    DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute:
+      DashboardClustersIdWorkloadsKindNamespaceNameIndexRoute,
+  }
+
+const DashboardClustersIdRouteRouteWithChildren =
+  DashboardClustersIdRouteRoute._addFileChildren(
+    DashboardClustersIdRouteRouteChildren,
+  )
+
+interface DashboardRouteRouteChildren {
+  DashboardClustersIdRouteRoute: typeof DashboardClustersIdRouteRouteWithChildren
+  DashboardClustersRegisterIndexRoute: typeof DashboardClustersRegisterIndexRoute
+  DashboardClustersRegisterIdConnectIndexRoute: typeof DashboardClustersRegisterIdConnectIndexRoute
+  DashboardClustersRegisterIdProgressIndexRoute: typeof DashboardClustersRegisterIdProgressIndexRoute
+}
+
+const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
+  DashboardClustersIdRouteRoute: DashboardClustersIdRouteRouteWithChildren,
+  DashboardClustersRegisterIndexRoute: DashboardClustersRegisterIndexRoute,
+  DashboardClustersRegisterIdConnectIndexRoute:
+    DashboardClustersRegisterIdConnectIndexRoute,
+  DashboardClustersRegisterIdProgressIndexRoute:
+    DashboardClustersRegisterIdProgressIndexRoute,
+}
+
+const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
+  DashboardRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRouteRoute: DashboardRouteRoute,
+  DashboardRouteRoute: DashboardRouteRouteWithChildren,
   AuthLoginIndexRoute: AuthLoginIndexRoute,
 }
 export const routeTree = rootRouteImport
