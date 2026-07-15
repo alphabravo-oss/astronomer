@@ -305,10 +305,8 @@ function OverviewTab({
     queryFn: () => getArgoOrphanReport(instanceId),
     refetchInterval: 60000,
   });
-  // Distinct key from the Operations tab (which pulls limit:100) so the two
-  // caches don't clobber each other's page size.
   const { data: recentOps } = useQuery({
-    queryKey: ['argocd', 'operations', 'recent'] as const,
+    queryKey: queryKeys.argocd.recentOperations,
     queryFn: () => listArgoOperations({ limit: 5 }),
     refetchInterval: 15000,
   });

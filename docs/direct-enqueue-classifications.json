@@ -113,6 +113,46 @@
       "owner": "backend/security",
       "reason": "Security scan ingestion is anchored by a durable security_scan_results row. Re-enqueue failures return an error for asynq retry, and timeout updates the durable scan row as failed.",
       "validation": "security:ingest_scan_results has bounded retry/poll behavior through NewSecurityIngestTask and reschedule."
+    },
+    {
+      "file": "internal/handler/alerting.go",
+      "function": "TestChannel",
+      "classification": "best-effort",
+      "owner": "backend/notifications",
+      "reason": "User-initiated test notification for a channel; the HTTP handler surfaces enqueue failure directly to the caller (502) and the user simply retries. No durable state depends on delivery.",
+      "validation": "Enqueue errors return apierror.EnqueueError to the requester; a dropped test message affects nothing but the on-demand delivery check."
+    },
+    {
+      "file": "internal/handler/clusters.go",
+      "function": "enqueueArgoCDAutoRegister",
+      "classification": "best-effort",
+      "owner": "backend/argocd",
+      "reason": "Label-change convergence: the worker re-evaluates the auto-register selector against durable cluster labels, mirroring enqueueArgoCDLabelRefresh. Any later cluster update re-issues the task, and a stable asynq.TaskID dedupes re-enqueues.",
+      "validation": "Authoritative cluster labels and managed-cluster records remain in Postgres; a missed enqueue only delays selector-based registration until the next label update."
+    },
+    {
+      "file": "internal/handler/projects.go",
+      "function": "dispatchProjectReconcile",
+      "classification": "outbox-backed",
+      "owner": "backend/projects",
+      "reason": "Production server wiring sets taskOutbox on ProjectHandler (internal/server/server.go SetTaskOutbox(queries)); enqueueProjectTaskOutbox is attempted first with a dedupe key, and the direct enqueue only runs when the durable outbox is unavailable.",
+      "validation": "internal/server/server.go:473 wires projectHandler.SetTaskOutbox(queries); the outbox row carries dedupe key project_reconcile:{op}:{project}:{cluster}:{namespace} with MaxDeliveryAttempts 20."
+    },
+    {
+      "file": "internal/worker/tasks/alert_evaluation.go",
+      "function": "dispatchAlertNotifications",
+      "classification": "best-effort",
+      "owner": "backend/notifications",
+      "reason": "Notification fan-out is side-effect delivery for alert events already persisted by the evaluation pass, matching the control-plane enqueueNotifications posture. Failures are logged per channel and must not fail the evaluation task.",
+      "validation": "Alert events and rule state remain durable and queryable; a dropped enqueue only loses one outbound notification attempt, and the next evaluation cycle re-fires unresolved alerts."
+    },
+    {
+      "file": "internal/worker/tasks/gitops_sync.go",
+      "function": "enqueueDecommission",
+      "classification": "outbox-backed",
+      "owner": "backend/gitops",
+      "reason": "The durable cluster_decommission row is created first and the task goes through EnqueueTaskOutbox on the tunnel queue with a dedupe key; the direct enqueue is only the logged fallback when the outbox write fails, stamped onto the same tunnel queue.",
+      "validation": "cluster_decommission tracking row exists before any enqueue; outbox delivery uses DedupeKey cluster_decommission:{id} with MaxDeliveryAttempts 20 on ClusterTemplateApplyQueueName."
     }
   ]
 }

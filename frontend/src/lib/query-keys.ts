@@ -118,6 +118,9 @@ export const queryKeys = {
     appManifests: (appId: string) => ['argocd', 'app-manifests', appId] as const,
     appHistory: (appId: string) => ['argocd', 'app-history', appId] as const,
     operations: ['argocd', 'operations'] as const,
+    // Distinct key from the Operations tab (which pulls limit:100) so the two
+    // caches don't clobber each other's page size.
+    recentOperations: ['argocd', 'operations', 'recent'] as const,
     appOperations: (appId: string) => ['argocd', 'operations', 'for-app', appId] as const,
     projects: (instanceId: string) => ['argocd', 'projects', instanceId] as const,
     repos: (instanceId: string) => ['argocd', 'repos', instanceId] as const,
