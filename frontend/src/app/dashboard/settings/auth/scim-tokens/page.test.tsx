@@ -6,6 +6,16 @@ import { useAuthStore } from '@/lib/store';
 import SCIMTokensPage from './page';
 import type { SCIMToken } from '@/types';
 
+// Plain-anchor stand-in: these tests assert link text/href, not routing, and
+// the real Link needs a <RouterProvider>.
+vi.mock('@/lib/link', () => ({
+  Link: ({ href, children, ...rest }: React.ComponentProps<'a'>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock('@/lib/toast', () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),

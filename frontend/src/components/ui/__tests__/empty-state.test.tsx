@@ -1,6 +1,17 @@
+import type { ComponentProps } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Lock, Plus } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState, PermissionState } from '@/components/ui/empty-state';
+
+// Plain-anchor stand-in: these tests assert link text/href, not routing, and
+// the real Link needs a <RouterProvider>.
+vi.mock('@/lib/link', () => ({
+  Link: ({ href, children, ...rest }: ComponentProps<'a'>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 describe('EmptyState', () => {
   it('renders title and description', () => {

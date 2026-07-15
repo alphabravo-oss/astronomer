@@ -1,8 +1,4 @@
-// NOTE (P1.7): this route file uses @tanstack/react-router's useNavigate
-// directly instead of @/lib/navigation because the wrapper still re-exports
-// next/navigation until the P2.1 in-place rewrite (next's useRouter throws
-// outside a Next app). Route files are the eslint-exempted surface for direct
-// router imports.
+// Route files are the eslint-exempted surface for direct router imports.
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Link } from '@/lib/link';

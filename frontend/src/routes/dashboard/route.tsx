@@ -1,6 +1,5 @@
-'use client';
-
 import { useEffect, useState } from 'react';
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { usePathname, useRouter } from '@/lib/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -12,14 +11,25 @@ import { useAuthStore } from '@/lib/store';
 import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
 import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
+import { hasSessionHint } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
 import { Lock, WifiOff } from 'lucide-react';
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const Route = createFileRoute('/dashboard')({
+  // Synchronous cookie-presence guard with exact fidelity to the old Next
+  // middleware: the JS-readable CSRF cookie is set/cleared in lockstep with
+  // the HttpOnly session cookie. Async concerns (must_change_password,
+  // feature flags) stay in the layout component below — in beforeLoad they
+  // would block every navigation on query data.
+  beforeLoad: ({ location }) => {
+    if (!hasSessionHint()) {
+      throw redirect({ to: '/auth/login', search: { returnTo: location.href } });
+    }
+  },
+  component: DashboardLayout,
+});
+
+function DashboardLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const updateUser = useAuthStore((s) => s.updateUser);
@@ -89,7 +99,7 @@ export default function DashboardLayout({
           )}
           <main className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-6 max-w-[1600px] mx-auto animate-fade-in">
-              {disabledFeature ? <FeatureDisabledState /> : children}
+              {disabledFeature ? <FeatureDisabledState /> : <Outlet />}
             </div>
           </main>
         </div>

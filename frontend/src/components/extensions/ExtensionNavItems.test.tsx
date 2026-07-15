@@ -1,7 +1,18 @@
 import type { MockedFunction } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render, screen } from '@testing-library/react';
 import { ExtensionNavItems, extensionSidebarHref } from './ExtensionNavItems';
 import type { ExtensionMount } from '@/lib/api/extensions';
+
+// Plain-anchor stand-in: these tests assert link text/href, not routing, and
+// the real Link needs a <RouterProvider>.
+vi.mock('@/lib/link', () => ({
+  Link: ({ href, children, ...rest }: ComponentProps<'a'>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 vi.mock('./ExtensionProvider', () => ({
   __esModule: true,
