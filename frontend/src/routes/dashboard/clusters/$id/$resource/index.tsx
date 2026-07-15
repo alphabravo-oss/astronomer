@@ -35,7 +35,7 @@ import {
   useK8sPatch,
   queryKeys,
 } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { useResourceWatchInvalidation } from '@/hooks/use-resource-watch';
 import * as apiClient from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';

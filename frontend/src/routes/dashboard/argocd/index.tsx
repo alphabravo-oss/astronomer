@@ -13,7 +13,7 @@ import api from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader, PageSection, PageShell } from '@/components/ui/page';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { RegisterInstanceModal } from '@/components/argocd/register-instance-modal';
 import { formatRelativeTime } from '@/lib/utils';
 import { queryKeys } from '@/lib/hooks';

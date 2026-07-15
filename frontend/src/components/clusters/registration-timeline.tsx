@@ -18,7 +18,7 @@ import {
   type RegistrationStatus,
   type RegistrationStep,
 } from '@/lib/api';
-import { useLiveEvents } from '@/lib/live-events';
+import { useLiveEvents } from '@/lib/live/hooks';
 import { ActionButton } from '@/components/ui/action-button';
 import { OperationTimeline, type OperationTimelineStepStatus } from '@/components/ui/operation-timeline';
 
@@ -60,13 +60,14 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
 
   const live = useLiveEvents();
   useEffect(() => {
+    // Live envelopes are camelized centrally (lib/live/envelope.ts).
     const off1 = live.subscribe('cluster.registration.step', (payload) => {
-      const data = (payload as { data?: { cluster_id?: string } }).data;
-      if (data?.cluster_id === clusterId) refresh();
+      const data = (payload as { data?: { clusterId?: string } }).data;
+      if (data?.clusterId === clusterId) refresh();
     });
     const off2 = live.subscribe('cluster.registration.phase', (payload) => {
-      const data = (payload as { data?: { cluster_id?: string } }).data;
-      if (data?.cluster_id === clusterId) refresh();
+      const data = (payload as { data?: { clusterId?: string } }).data;
+      if (data?.clusterId === clusterId) refresh();
     });
     return () => {
       off1();

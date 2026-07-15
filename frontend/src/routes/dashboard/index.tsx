@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useClusters, useActivityFeed, useAlertEvents, useTools, queryKeys } from '@/lib/hooks';
 import { useLatestBackupDrill } from '@/components/settings/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';

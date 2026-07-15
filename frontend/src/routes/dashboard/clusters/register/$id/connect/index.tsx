@@ -18,7 +18,7 @@ import {
   getRegistrationTLS,
   type RegistrationTLSMode,
 } from '@/lib/api';
-import { useLiveEvents } from '@/lib/live-events';
+import { useLiveEvents } from '@/lib/live/hooks';
 
 type CurlVariant = 'public_ca' | 'private_ca' | 'insecure';
 
@@ -81,9 +81,10 @@ function ConnectStepPage() {
   const live = useLiveEvents();
   useEffect(() => {
     if (!autoDetect || advancedRef.current) return;
+    // Live envelopes are camelized centrally (lib/live/envelope.ts).
     const off1 = live.subscribe('cluster.connected', (payload) => {
-      const data = (payload as { data?: { cluster_id?: string } }).data;
-      if (data?.cluster_id === clusterId && !advancedRef.current) {
+      const data = (payload as { data?: { clusterId?: string } }).data;
+      if (data?.clusterId === clusterId && !advancedRef.current) {
         advancedRef.current = true;
         router.push(`/dashboard/clusters/register/${clusterId}/progress`);
       }

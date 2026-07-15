@@ -32,7 +32,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useClusters } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ActionMenu } from '@/components/ui/action-menu';

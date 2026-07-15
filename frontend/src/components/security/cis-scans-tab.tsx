@@ -5,7 +5,7 @@ import { Link } from '@/lib/link';
 import { useRouter } from '@/lib/navigation';
 import { useCISScans } from '@/lib/hooks';
 import { useClusters } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime, cn } from '@/lib/utils';

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link } from '@/lib/link';
 import { useParams, useRouter } from '@/lib/navigation';
 import { useCISScan, useClusters, useCreateCISScan } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { cisScanReportCSVUrl } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';

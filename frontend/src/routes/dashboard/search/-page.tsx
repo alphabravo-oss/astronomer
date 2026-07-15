@@ -16,7 +16,7 @@ import {
   type SearchResultRow,
 } from '@/lib/api';
 import { detailHref } from '@/lib/k8s-paths';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { cn } from '@/lib/utils';

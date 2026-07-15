@@ -8,7 +8,7 @@ import { DrawerShell } from '@/components/ui/drawer-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { createAgentUpgradeOperation, createAgentUpgradePlan, downloadAgentDiagnosticsBundle, getAgentDiagnostics, getAgentFleet, getAgentOperations, runAgentSelfTest } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import type { AgentDiagnosticsResponse, AgentFleetItem, AgentLifecycleOperation, AgentSelfTestResponse, AgentUpgradeOperationResponse, AgentUpgradePlanResponse } from '@/types';
 

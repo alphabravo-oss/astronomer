@@ -22,7 +22,7 @@ import {
   type RegistrationStatus,
 } from '@/lib/api';
 import { getImageVulnSummary } from '@/lib/api/cluster-detail';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { EmptyState } from '@/components/ui/empty-state';

@@ -17,7 +17,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useClusters } from '@/lib/hooks';
-import { useLiveQueryInvalidation } from '@/lib/live-events';
+import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { b2Keys, useB2Restore, useB2Run } from '@/components/backups/hooks';
 import { PhaseBadge } from '@/components/backups/phase-badge';
 import { cn, formatRelativeTime } from '@/lib/utils';

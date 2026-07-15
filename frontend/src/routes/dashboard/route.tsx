@@ -16,7 +16,8 @@ import { EmptyState, StatePanel } from '@/components/ui/empty-state';
 import { useAuthStore } from '@/lib/store';
 import { useCurrentUser, useFeatureFlags } from '@/lib/hooks';
 import type { FeatureFlags, FeatureFlagKey } from '@/lib/api';
-import { useLiveEvents, useLiveClusterMetricsMerger } from '@/lib/live-events';
+import { useLiveClusterMetricsMerger } from '@/lib/live/cluster-merger';
+import { useLiveEvents } from '@/lib/live/hooks';
 import { hasSessionHint } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Compass, LayoutDashboard, Lock, RotateCcw, WifiOff } from 'lucide-react';
@@ -143,7 +144,7 @@ function DashboardLayout() {
   }, [currentUserFetched, mustChangePassword, router]);
 
   // Hold a single SSE connection open for the whole dashboard; per-page
-  // hooks reuse this connection via refcount inside `lib/live-events.ts`.
+  // hooks reuse this connection via refcount inside `lib/live/stream.ts`.
   useLiveEvents();
   // Patch React Query caches in place when cluster.metrics / status events
   // arrive so cards / tables tick without paying a refetch on every event.

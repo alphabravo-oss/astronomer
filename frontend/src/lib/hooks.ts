@@ -18,7 +18,7 @@ import type {
 } from '@/types';
 import type { AuditLogQueryParams, GeneralSettings } from './api';
 import { toastApiError, toastSuccess } from '@/lib/toast';
-import { liveAwareRefetchInterval } from '@/lib/live-events';
+import { liveAwareRefetchInterval } from '@/lib/live/status-store';
 
 // Query key factory lives in ./query-keys.ts (single source of truth).
 // Imported here and re-exported so existing `import { queryKeys } from '@/lib/hooks'`

@@ -1872,7 +1872,7 @@ export interface ToolPreviewResponse {
 //
 // The backend pushes lifecycle events over `/api/v1/events/stream/`. Type
 // names mirror the server-side constants in `internal/events/bus.go`. Page
-// hooks should import the strongly-typed wrappers from `lib/live-events.ts`
+// hooks should import the strongly-typed wrappers from `lib/live/envelope.ts`
 // rather than handling raw frames here.
 
 export type LiveEventType =
