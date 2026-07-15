@@ -49,9 +49,9 @@ spec:
             - name: http
               containerPort: 3000
               protocol: TCP
-          env:
-            - name: NEXT_TELEMETRY_DISABLED
-              value: "1"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             tcpSocket:
               port: http
@@ -64,6 +64,10 @@ spec:
             periodSeconds: 30
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

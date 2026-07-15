@@ -50,39 +50,15 @@ spec:
         - protocol: TCP
           port: 3000
     {{- end }}
+  # The frontend is a static SPA container (nginx): the browser talks to the
+  # server through the gateway/ingress, never pod-to-pod, so no egress beyond
+  # DNS is needed.
   egress:
     - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.server.service.port }}
-    {{- range $cidr := $externalCIDRs }}
-    - to:
-        - ipBlock:
-            cidr: {{ $cidr | quote }}
-      ports:
-        - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
-    {{- end }}
-    {{- range $cidr := $externalHTTPSEgressCIDRs }}
-    - to:
-        - ipBlock:
-            cidr: {{ $cidr | quote }}
-      ports:
-        - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
-    {{- end }}
 ---
 {{- end }}
 apiVersion: networking.k8s.io/v1
@@ -101,15 +77,6 @@ spec:
   ingress:
     {{- if .Values.networkPolicy.allowPublicIngress }}
     - ports:
-        - protocol: TCP
-          port: {{ .Values.server.service.port }}
-    {{- end }}
-    {{- if .Values.frontend.enabled }}
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "frontend") | nindent 14 }}
-      ports:
         - protocol: TCP
           port: {{ .Values.server.service.port }}
     {{- end }}

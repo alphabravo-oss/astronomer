@@ -67,7 +67,7 @@ utilities:
     registry: ""
 
 # =============================================================================
-# Frontend (optional Next.js dashboard)
+# Frontend (SPA dashboard)
 # =============================================================================
 frontend:
   enabled: true
@@ -90,8 +90,6 @@ frontend:
     repository: astronomer-frontend
     tag: dev
     registry: ""    # T23 air-gapped override; falls back to image.registry
-  apiBaseUrl: "http://astronomer-server:8000"
-  wsBaseUrl: "ws://astronomer-server:8000/api/v1/ws"
   hostAliases: []
   podSecurityContext:
     runAsNonRoot: true
@@ -596,7 +594,12 @@ ingress:
   host: astronomer.localtest.me
   path: /
   pathType: Prefix
-  annotations: {}
+  # Idle terminals (WS) and hours-long SSE streams outlive ingress-nginx's
+  # 60s proxy defaults; disable buffering so SSE events flush immediately.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
 
 # =============================================================================
 # Service Account

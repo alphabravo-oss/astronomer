@@ -47,16 +47,6 @@ frontend:
   image:
     repository: astronomer-frontend
     tag: dev
-  # Runtime env reaches the in-cluster server service (used by SSR + middleware).
-  # Client-side Next.js uses the build-time baked default (relative /api/v1) so the browser still works.
-  apiBaseUrl: "http://astronomer-server:8000"
-  wsBaseUrl: "ws://astronomer-server:8000/api/v1/ws"
-  hostAliases:
-    - ip: "10.43.199.40"
-      hostnames:
-        - astronomer.178.156.239.231.nip.io
-        - 178.156.239.231.nip.io
-        - astronomer.localtest.me
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits:   { cpu: 1000m, memory: 1Gi }

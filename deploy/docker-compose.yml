@@ -117,8 +117,6 @@ services:
     image: astronomer-frontend:dev
     ports:
       - "3000:3000"
-    environment:
-      NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
       - server
     networks:
