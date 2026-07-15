@@ -18,6 +18,7 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation';
+import { useAppForm, useStore } from '@/lib/form';
 import { ArrowLeft, Calendar, Check, Loader2 } from 'lucide-react';
 import { useClusterNamespaces } from '@/lib/hooks';
 import {
@@ -48,20 +49,23 @@ function ScheduleWizardPage() {
   const create = useB2CreateSchedule();
 
   const [step, setStep] = useState<Step>(0);
-  const [form, setForm] = useState<FormState>({
-    name: '',
-    storageId: '',
-    cron: CRON_PRESETS[2].value,
-    cronMode: 'preset',
-    includedNamespaces: [],
-    excludedNamespaces: [],
-    ttlDays: 30,
-    retentionCount: 7,
-    enabled: true,
+  const wizardForm = useAppForm({
+    defaultValues: {
+      name: '',
+      storageId: '',
+      cron: CRON_PRESETS[2].value,
+      cronMode: 'preset',
+      includedNamespaces: [],
+      excludedNamespaces: [],
+      ttlDays: 30,
+      retentionCount: 7,
+      enabled: true,
+    } as FormState,
   });
 
-  const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  // The wizard renders step summaries and per-step gates from the whole value
+  // object — same re-render behavior as the previous useState form.
+  const form = useStore(wizardForm.store, (s) => s.values);
 
   const storage = useMemo(
     () => storageQ.data?.data.find((s) => s.id === form.storageId),
@@ -72,7 +76,7 @@ function ScheduleWizardPage() {
   useEffect(() => {
     if (form.storageId || !storageQ.data) return;
     const def = storageQ.data.data.find((s) => s.isDefault) ?? storageQ.data.data[0];
-    if (def) update('storageId', def.id);
+    if (def) wizardForm.setFieldValue('storageId', def.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageQ.data]);
 
@@ -187,14 +191,19 @@ function ScheduleWizardPage() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => update('name', e.target.value)}
-                placeholder="daily-platform-backup"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <wizardForm.Field name="name">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="daily-platform-backup"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Storage Location</label>
@@ -207,28 +216,38 @@ function ScheduleWizardPage() {
                   No storage locations exist yet. Add one before creating a schedule.
                 </p>
               ) : (
-                <select
-                  value={form.storageId}
-                  onChange={(e) => update('storageId', e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                    focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="">Select…</option>
-                  {(storageQ.data?.data ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.bucket})
-                    </option>
-                  ))}
-                </select>
+                <wizardForm.Field name="storageId">
+                  {(field) => (
+                    <select
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                        focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      <option value="">Select…</option>
+                      {(storageQ.data?.data ?? []).map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.bucket})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </wizardForm.Field>
               )}
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.enabled}
-                onChange={(e) => update('enabled', e.target.checked)}
-                className="rounded border-border text-primary focus:ring-ring"
-              />
+              <wizardForm.Field name="enabled">
+                {(field) => (
+                  <input
+                    type="checkbox"
+                    checked={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.checked)}
+                    onBlur={field.handleBlur}
+                    className="rounded border-border text-primary focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
               <span className="text-sm text-foreground">Enable schedule immediately</span>
             </label>
           </div>
@@ -239,7 +258,7 @@ function ScheduleWizardPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => update('cronMode', 'preset')}
+                onClick={() => wizardForm.setFieldValue('cronMode', 'preset')}
                 className={cn(
                   'h-7 px-3 rounded-md text-xs font-medium transition-colors',
                   form.cronMode === 'preset'
@@ -251,7 +270,7 @@ function ScheduleWizardPage() {
               </button>
               <button
                 type="button"
-                onClick={() => update('cronMode', 'custom')}
+                onClick={() => wizardForm.setFieldValue('cronMode', 'custom')}
                 className={cn(
                   'h-7 px-3 rounded-md text-xs font-medium transition-colors',
                   form.cronMode === 'custom'
@@ -264,28 +283,38 @@ function ScheduleWizardPage() {
             </div>
 
             {form.cronMode === 'preset' ? (
-              <select
-                value={form.cron}
-                onChange={(e) => update('cron', e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {CRON_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <wizardForm.Field name="cron">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {CRON_PRESETS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </wizardForm.Field>
             ) : (
-              <input
-                type="text"
-                value={form.cron}
-                onChange={(e) => update('cron', e.target.value)}
-                placeholder="0 2 * * *"
-                spellCheck={false}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <wizardForm.Field name="cron">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="0 2 * * *"
+                    spellCheck={false}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
             )}
 
             <div
@@ -323,7 +352,7 @@ function ScheduleWizardPage() {
               namespaces={namespaceList}
               selected={form.includedNamespaces}
               loading={namespacesQ.isLoading}
-              onChange={(v) => update('includedNamespaces', v)}
+              onChange={(v) => wizardForm.setFieldValue('includedNamespaces', v)}
               emptyText={
                 storage?.clusterId
                   ? 'No namespaces returned from the cluster.'
@@ -335,7 +364,7 @@ function ScheduleWizardPage() {
               namespaces={namespaceList}
               selected={form.excludedNamespaces}
               loading={namespacesQ.isLoading}
-              onChange={(v) => update('excludedNamespaces', v)}
+              onChange={(v) => wizardForm.setFieldValue('excludedNamespaces', v)}
               emptyText="Same as above."
             />
           </div>
@@ -345,30 +374,40 @@ function ScheduleWizardPage() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">TTL (days)</label>
-              <input
-                type="number"
-                min={0}
-                max={3650}
-                value={form.ttlDays}
-                onChange={(e) => update('ttlDays', parseInt(e.target.value, 10) || 0)}
-                className="w-32 h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <wizardForm.Field name="ttlDays">
+                {(field) => (
+                  <input
+                    type="number"
+                    min={0}
+                    max={3650}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 0)}
+                    onBlur={field.handleBlur}
+                    className="w-32 h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
               <p className="text-xs text-muted-foreground">
                 Velero deletes a backup once it exceeds this age. Set 0 to keep forever.
               </p>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Retention count</label>
-              <input
-                type="number"
-                min={1}
-                max={365}
-                value={form.retentionCount}
-                onChange={(e) => update('retentionCount', parseInt(e.target.value, 10) || 1)}
-                className="w-32 h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <wizardForm.Field name="retentionCount">
+                {(field) => (
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(parseInt(e.target.value, 10) || 1)}
+                    onBlur={field.handleBlur}
+                    className="w-32 h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
               <p className="text-xs text-muted-foreground">
                 Astronomer prunes older runs once this many newer successful backups exist.
               </p>

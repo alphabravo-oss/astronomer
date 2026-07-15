@@ -31,6 +31,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import { useAppForm, useStore } from '@/lib/form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import { Loader2, AlertTriangle, Info } from 'lucide-react';
@@ -97,18 +98,18 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
     ? permissionDeniedReason(submitDecision)
     : undefined;
 
-  const [selectedVersionId, setSelectedVersionId] = useState<string>(
-    mode.kind === 'upgrade' ? mode.currentVersionId : '',
-  );
-  const [releaseName, setReleaseName] = useState<string>(
-    mode.kind === 'upgrade' ? mode.releaseName : mode.chartName,
-  );
-  const [namespace, setNamespace] = useState<string>(
-    mode.kind === 'upgrade' ? mode.namespace : 'default',
-  );
-  const [valuesYaml, setValuesYaml] = useState<string>(
-    mode.kind === 'upgrade' ? mode.currentValues : '',
-  );
+  const form = useAppForm({
+    defaultValues: {
+      selectedVersionId: mode.kind === 'upgrade' ? mode.currentVersionId : '',
+      releaseName: mode.kind === 'upgrade' ? mode.releaseName : mode.chartName,
+      namespace: mode.kind === 'upgrade' ? mode.namespace : 'default',
+      valuesYaml: mode.kind === 'upgrade' ? mode.currentValues : '',
+    },
+    onSubmit: () => install.mutate(),
+  });
+  const selectedVersionId = useStore(form.store, (s) => s.values.selectedVersionId);
+  const releaseName = useStore(form.store, (s) => s.values.releaseName);
+  const namespace = useStore(form.store, (s) => s.values.namespace);
   // Tracks whether we've already pre-filled defaults for the chosen
   // version — used so that switching versions in install mode
   // refreshes the YAML, but typing into the editor doesn't get
@@ -127,7 +128,8 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
   useEffect(() => {
     if (!versions.data || versions.data.length === 0) return;
     if (selectedVersionId) return;
-    setSelectedVersionId(versions.data[0].id);
+    form.setFieldValue('selectedVersionId', versions.data[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versions.data, selectedVersionId]);
 
   const selectedVersion: ChartVersionRow | undefined = useMemo(
@@ -150,25 +152,27 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
     if (!defaultValues.data) return;
     const key = selectedVersionId;
     if (hydratedForVersion === key) return;
-    setValuesYaml(defaultValues.data.defaultValues);
+    form.setFieldValue('valuesYaml', defaultValues.data.defaultValues);
     setHydratedForVersion(key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultValues.data, hydratedForVersion, selectedVersionId, isUpgrade]);
 
   const install = useMutation({
     mutationFn: async () => {
+      const value = form.state.values;
       if (mode.kind === 'install') {
         return installChartOnCluster({
           clusterId,
-          chartVersionId: selectedVersionId,
-          releaseName: releaseName.trim(),
-          namespace: namespace.trim(),
-          valuesOverride: valuesYaml,
+          chartVersionId: value.selectedVersionId,
+          releaseName: value.releaseName.trim(),
+          namespace: value.namespace.trim(),
+          valuesOverride: value.valuesYaml,
         });
       }
       // Upgrade — uses the existing /catalog/installed/{id}/upgrade/ endpoint.
       return upgradeInstalledChart(mode.installedChartId, {
-        chart_version_id: selectedVersionId,
-        values_override: valuesYaml,
+        chart_version_id: value.selectedVersionId,
+        values_override: value.valuesYaml,
       });
     },
     onSuccess: () => {
@@ -197,7 +201,7 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
       toastWarning(submitBlockedReason);
       return;
     }
-    install.mutate();
+    void form.handleSubmit();
   };
 
   const slowInstall = SLOW_INSTALL_CHARTS.has(mode.chartName);
@@ -270,41 +274,56 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
                   Loading versions…
                 </div>
               ) : (
-                <select
-                  value={selectedVersionId}
-                  onChange={(e) => setSelectedVersionId(e.target.value)}
-                  className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {(versions.data ?? []).map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.version}
-                      {v.appVersion ? ` (app ${v.appVersion})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <form.Field name="selectedVersionId">
+                  {(field) => (
+                    <select
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      {(versions.data ?? []).map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.version}
+                          {v.appVersion ? ` (app ${v.appVersion})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </form.Field>
               )}
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Release name</label>
-              <input
-                type="text"
-                value={releaseName}
-                onChange={(e) => setReleaseName(e.target.value)}
-                disabled={isUpgrade}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="releaseName">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    disabled={isUpgrade}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Namespace</label>
-              <input
-                type="text"
-                value={namespace}
-                onChange={(e) => setNamespace(e.target.value)}
-                disabled={isUpgrade}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="namespace">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    disabled={isUpgrade}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
 
@@ -320,7 +339,7 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
               </label>
               {isUpgrade && defaultValues.data && (
                 <button
-                  onClick={() => setValuesYaml(defaultValues.data!.defaultValues)}
+                  onClick={() => form.setFieldValue('valuesYaml', defaultValues.data!.defaultValues)}
                   className="text-[11px] text-muted-foreground hover:text-foreground underline"
                   title="Replace with the upstream chart's default values for the selected version"
                 >
@@ -328,14 +347,19 @@ export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: Ap
                 </button>
               )}
             </div>
-            <textarea
-              value={valuesYaml}
-              onChange={(e) => setValuesYaml(e.target.value)}
-              rows={16}
-              spellCheck={false}
-              className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-y"
-              placeholder="# values.yaml — overrides applied on top of chart defaults"
-            />
+            <form.Field name="valuesYaml">
+              {(field) => (
+                <textarea
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  rows={16}
+                  spellCheck={false}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+                  placeholder="# values.yaml — overrides applied on top of chart defaults"
+                />
+              )}
+            </form.Field>
             <p className="text-[11px] text-muted-foreground">
               Vault references like <code className="font-mono">${`{vault://secret/path#key}`}</code> are resolved at install time. Sensitive values stay in Vault rather than this row.
             </p>

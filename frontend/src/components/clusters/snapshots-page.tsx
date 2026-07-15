@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  */
 
 import { useMemo, useState } from 'react';
+import { useAppForm, useStore } from '@/lib/form';
 import { Link } from '@/lib/link';
 import { useParams } from '@/lib/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -647,21 +648,28 @@ function NewSnapshotDialog({
 }) {
   const queryClient = useQueryClient();
   const { data: namespaces } = useClusterNamespaces(clusterId);
-  const [selectedNs, setSelectedNs] = useState<string[]>([]);
-  const [resources, setResources] = useState<string>('');
-  const [ttl, setTtl] = useState<string>('720h');
-  const [snapshotVolumes, setSnapshotVolumes] = useState<boolean>(true);
+  const form = useAppForm({
+    defaultValues: {
+      selectedNs: [] as string[],
+      resources: '',
+      ttl: '720h',
+      snapshotVolumes: true,
+    },
+    onSubmit: () => mutation.mutate(),
+  });
+  const selectedNs = useStore(form.store, (s) => s.values.selectedNs);
 
   const mutation = useMutation({
     mutationFn: () => {
+      const value = form.state.values;
       const spec: SnapshotSpec = {
-        includedNamespaces: selectedNs.length ? selectedNs : undefined,
-        includedResources: resources
+        includedNamespaces: value.selectedNs.length ? value.selectedNs : undefined,
+        includedResources: value.resources
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean) || undefined,
-        snapshotVolumes,
-        ttl: ttl || undefined,
+        snapshotVolumes: value.snapshotVolumes,
+        ttl: value.ttl || undefined,
         storageLocation: defaultStorageLocation,
       };
       return createSnapshot(clusterId, { spec });
@@ -679,46 +687,61 @@ function NewSnapshotDialog({
       <NamespaceMultiSelect
         namespaces={namespaces?.map((n) => n.name) || []}
         selected={selectedNs}
-        onChange={setSelectedNs}
+        onChange={(ns) => form.setFieldValue('selectedNs', ns)}
       />
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Resources (comma-separated)</label>
-        <input
-          type="text"
-          value={resources}
-          onChange={(e) => setResources(e.target.value)}
-          placeholder="e.g. deployments,configmaps,secrets — leave blank for all"
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm
-            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="resources">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="e.g. deployments,configmaps,secrets — leave blank for all"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm
+                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">TTL</label>
-        <input
-          type="text"
-          value={ttl}
-          onChange={(e) => setTtl(e.target.value)}
-          placeholder="e.g. 720h (30 days)"
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="ttl">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="e.g. 720h (30 days)"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={snapshotVolumes}
-          onChange={(e) => setSnapshotVolumes(e.target.checked)}
-          className="h-4 w-4"
-        />
+        <form.Field name="snapshotVolumes">
+          {(field) => (
+            <input
+              type="checkbox"
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
+              className="h-4 w-4"
+            />
+          )}
+        </form.Field>
         Include PVC snapshots
       </label>
 
       <ModalFooter
         onCancel={onClose}
-        onSubmit={() => mutation.mutate()}
+        onSubmit={() => void form.handleSubmit()}
         loading={mutation.isPending}
         submitLabel="Create snapshot"
       />
@@ -738,21 +761,28 @@ function RestoreSnapshotDialog({
 }) {
   const queryClient = useQueryClient();
   const { data: clustersPage } = useClusters();
-  const [targetClusterId, setTargetClusterId] = useState<string>(clusterId);
-  const [includedNs, setIncludedNs] = useState<string>('');
-  const [excludedNs, setExcludedNs] = useState<string>('');
-  const [restorePVs, setRestorePVs] = useState<boolean>(true);
+  const form = useAppForm({
+    defaultValues: {
+      targetClusterId: clusterId,
+      includedNs: '',
+      excludedNs: '',
+      restorePVs: true,
+    },
+    onSubmit: () => mutation.mutate(),
+  });
 
   const mutation = useMutation({
-    mutationFn: () =>
-      restoreSnapshot(clusterId, snapshot.id, {
-        target_cluster_id: targetClusterId,
+    mutationFn: () => {
+      const value = form.state.values;
+      return restoreSnapshot(clusterId, snapshot.id, {
+        target_cluster_id: value.targetClusterId,
         spec: {
-          includedNamespaces: parseCsv(includedNs),
-          excludedNamespaces: parseCsv(excludedNs),
-          restorePVs,
+          includedNamespaces: parseCsv(value.includedNs),
+          excludedNamespaces: parseCsv(value.excludedNs),
+          restorePVs: value.restorePVs,
         },
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshots(clusterId) });
       toastSuccess('Restore queued');
@@ -765,18 +795,23 @@ function RestoreSnapshotDialog({
     <Modal onClose={onClose} title={`Restore from ${snapshot.name}`} icon={<RotateCcw className="h-4 w-4" />}>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Target cluster</label>
-        <select
-          value={targetClusterId}
-          onChange={(e) => setTargetClusterId(e.target.value)}
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm
-            focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          {(clustersPage?.data || []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.displayName} {c.id === clusterId ? '(this cluster)' : ''}
-            </option>
-          ))}
-        </select>
+        <form.Field name="targetClusterId">
+          {(field) => (
+            <select
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm
+                focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {(clustersPage?.data || []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName} {c.id === clusterId ? '(this cluster)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </form.Field>
       </div>
       <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
         <summary className="text-sm font-medium text-foreground cursor-pointer">
@@ -785,38 +820,53 @@ function RestoreSnapshotDialog({
         <div className="pt-3 space-y-3">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground">Included namespaces (comma-separated)</label>
-            <input
-              type="text"
-              value={includedNs}
-              onChange={(e) => setIncludedNs(e.target.value)}
-              placeholder="leave blank for all"
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
-            />
+            <form.Field name="includedNs">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="leave blank for all"
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
+                />
+              )}
+            </form.Field>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground">Excluded namespaces (comma-separated)</label>
-            <input
-              type="text"
-              value={excludedNs}
-              onChange={(e) => setExcludedNs(e.target.value)}
-              placeholder="e.g. kube-system"
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
-            />
+            <form.Field name="excludedNs">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="e.g. kube-system"
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm"
+                />
+              )}
+            </form.Field>
           </div>
           <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={restorePVs}
-              onChange={(e) => setRestorePVs(e.target.checked)}
-              className="h-4 w-4"
-            />
+            <form.Field name="restorePVs">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="h-4 w-4"
+                />
+              )}
+            </form.Field>
             Restore PersistentVolumes
           </label>
         </div>
       </details>
       <ModalFooter
         onCancel={onClose}
-        onSubmit={() => mutation.mutate()}
+        onSubmit={() => void form.handleSubmit()}
         loading={mutation.isPending}
         submitLabel="Restore"
       />
@@ -838,26 +888,45 @@ function ScheduleDialog({
 }) {
   const queryClient = useQueryClient();
   const { data: namespaces } = useClusterNamespaces(clusterId);
-  const [name, setName] = useState(schedule?.name || '');
-  const [cron, setCron] = useState(schedule?.cron || '0 3 * * *');
-  const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
-  const [selectedNs, setSelectedNs] = useState<string[]>(schedule?.spec.includedNamespaces || []);
-  const [ttl, setTtl] = useState(schedule?.spec.ttl || '720h');
-  const [snapshotVolumes, setSnapshotVolumes] = useState(schedule?.spec.snapshotVolumes ?? true);
+  const form = useAppForm({
+    defaultValues: {
+      name: schedule?.name || '',
+      cron: schedule?.cron || '0 3 * * *',
+      enabled: schedule?.enabled ?? true,
+      selectedNs: (schedule?.spec.includedNamespaces || []) as string[],
+      ttl: schedule?.spec.ttl || '720h',
+      snapshotVolumes: schedule?.spec.snapshotVolumes ?? true,
+    },
+    onSubmit: () => mutation.mutate(),
+  });
+  const selectedNs = useStore(form.store, (s) => s.values.selectedNs);
+  const name = useStore(form.store, (s) => s.values.name);
+  const cron = useStore(form.store, (s) => s.values.cron);
 
   const isEdit = mode === 'edit' && !!schedule;
 
   const mutation = useMutation({
     mutationFn: () => {
+      const value = form.state.values;
       const spec: SnapshotSpec = {
-        includedNamespaces: selectedNs.length ? selectedNs : undefined,
-        snapshotVolumes,
-        ttl: ttl || undefined,
+        includedNamespaces: value.selectedNs.length ? value.selectedNs : undefined,
+        snapshotVolumes: value.snapshotVolumes,
+        ttl: value.ttl || undefined,
       };
       if (isEdit) {
-        return updateSnapshotSchedule(clusterId, schedule.id, { name, cron, enabled, spec });
+        return updateSnapshotSchedule(clusterId, schedule.id, {
+          name: value.name,
+          cron: value.cron,
+          enabled: value.enabled,
+          spec,
+        });
       }
-      return createSnapshotSchedule(clusterId, { name, cron, enabled, spec });
+      return createSnapshotSchedule(clusterId, {
+        name: value.name,
+        cron: value.cron,
+        enabled: value.enabled,
+        spec,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId) });
@@ -875,67 +944,92 @@ function ScheduleDialog({
     >
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. nightly-prod"
-          disabled={isEdit}
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm
-            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring
-            disabled:bg-muted/50 disabled:text-muted-foreground"
-        />
+        <form.Field name="name">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="e.g. nightly-prod"
+              disabled={isEdit}
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm
+                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring
+                disabled:bg-muted/50 disabled:text-muted-foreground"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Cron</label>
-        <input
-          type="text"
-          value={cron}
-          onChange={(e) => setCron(e.target.value)}
-          placeholder="0 3 * * *"
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="cron">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="0 3 * * *"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
 
       <NamespaceMultiSelect
         namespaces={namespaces?.map((n) => n.name) || []}
         selected={selectedNs}
-        onChange={setSelectedNs}
+        onChange={(ns) => form.setFieldValue('selectedNs', ns)}
       />
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">TTL</label>
-        <input
-          type="text"
-          value={ttl}
-          onChange={(e) => setTtl(e.target.value)}
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono"
-        />
+        <form.Field name="ttl">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono"
+            />
+          )}
+        </form.Field>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={snapshotVolumes}
-          onChange={(e) => setSnapshotVolumes(e.target.checked)}
-          className="h-4 w-4"
-        />
+        <form.Field name="snapshotVolumes">
+          {(field) => (
+            <input
+              type="checkbox"
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
+              className="h-4 w-4"
+            />
+          )}
+        </form.Field>
         Include PVC snapshots
       </label>
       <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-          className="h-4 w-4"
-        />
+        <form.Field name="enabled">
+          {(field) => (
+            <input
+              type="checkbox"
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
+              className="h-4 w-4"
+            />
+          )}
+        </form.Field>
         Enabled
       </label>
 
       <ModalFooter
         onCancel={onClose}
-        onSubmit={() => mutation.mutate()}
+        onSubmit={() => void form.handleSubmit()}
         loading={mutation.isPending}
         submitLabel={isEdit ? 'Save' : 'Create schedule'}
         disabled={!name || !cron}

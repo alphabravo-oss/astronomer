@@ -20,6 +20,7 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation';
+import { useAppForm, useStore } from '@/lib/form';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -93,27 +94,31 @@ function StorageWizardPage() {
   const test = useB2TestStorageLocation();
 
   const [step, setStep] = useState<Step>(0);
-  const [form, setForm] = useState<FormState>({
-    name: '',
-    clusterId: '',
-    backend: 's3',
-    bucket: '',
-    prefix: '',
-    region: '',
-    endpointUrl: '',
-    accessKey: '',
-    secretKey: '',
-    isDefault: false,
+  const wizardForm = useAppForm({
+    defaultValues: {
+      name: '',
+      clusterId: '',
+      backend: 's3',
+      bucket: '',
+      prefix: '',
+      region: '',
+      endpointUrl: '',
+      accessKey: '',
+      secretKey: '',
+      isDefault: false,
+    } as FormState,
   });
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestStorageResult | null>(null);
   const [testRan, setTestRan] = useState(false);
 
-  const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  // The wizard renders step summaries and per-step gates from the whole value
+  // object — same re-render behavior as the previous useState form.
+  const form = useStore(wizardForm.store, (s) => s.values);
 
   const clusters = clustersQ.data?.data ?? [];
 
+  // Old per-step gate, recomputed from form state 1:1.
   const stepValid = useMemo(() => {
     switch (step) {
       case 0:
@@ -236,45 +241,60 @@ function StorageWizardPage() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => update('name', e.target.value)}
-                placeholder="prod-s3-backups"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <wizardForm.Field name="name">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="prod-s3-backups"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
               <p className="text-xs text-muted-foreground">
                 A friendly identifier shown across the dashboard.
               </p>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Cluster</label>
-              <select
-                value={form.clusterId}
-                onChange={(e) => update('clusterId', e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="">Select a cluster…</option>
-                {clusters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.displayName || c.name}
-                  </option>
-                ))}
-              </select>
+              <wizardForm.Field name="clusterId">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="">Select a cluster…</option>
+                    {clusters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.displayName || c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </wizardForm.Field>
               <p className="text-xs text-muted-foreground">
                 Velero must already be installed on this cluster. Backups originate from
                 here.
               </p>
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isDefault}
-                onChange={(e) => update('isDefault', e.target.checked)}
-                className="rounded border-border text-primary focus:ring-ring"
-              />
+              <wizardForm.Field name="isDefault">
+                {(field) => (
+                  <input
+                    type="checkbox"
+                    checked={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.checked)}
+                    onBlur={field.handleBlur}
+                    className="rounded border-border text-primary focus:ring-ring"
+                  />
+                )}
+              </wizardForm.Field>
               <span className="text-sm text-foreground">Mark as default storage location</span>
             </label>
           </div>
@@ -294,7 +314,7 @@ function StorageWizardPage() {
                   <button
                     key={b.key}
                     type="button"
-                    onClick={() => update('backend', b.key)}
+                    onClick={() => wizardForm.setFieldValue('backend', b.key)}
                     className={cn(
                       'flex items-start gap-3 p-4 rounded-lg border text-left transition-colors',
                       selected
@@ -321,51 +341,75 @@ function StorageWizardPage() {
 
         {step === 2 && (
           <div className="space-y-4">
-            <Field
-              label="Bucket"
-              required
-              value={form.bucket}
-              onChange={(v) => update('bucket', v)}
-              placeholder="astronomer-velero-prod"
-            />
-            <Field
-              label="Prefix (optional)"
-              value={form.prefix}
-              onChange={(v) => update('prefix', v)}
-              placeholder="cluster-a/"
-            />
+            <wizardForm.Field name="bucket">
+              {(field) => (
+                <Field
+                  label="Bucket"
+                  required
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  placeholder="astronomer-velero-prod"
+                />
+              )}
+            </wizardForm.Field>
+            <wizardForm.Field name="prefix">
+              {(field) => (
+                <Field
+                  label="Prefix (optional)"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  placeholder="cluster-a/"
+                />
+              )}
+            </wizardForm.Field>
             {(form.backend === 's3' || form.backend === 's3-compatible') && (
-              <Field
-                label="Region"
-                required
-                value={form.region}
-                onChange={(v) => update('region', v)}
-                placeholder="us-east-1"
-              />
+              <wizardForm.Field name="region">
+                {(field) => (
+                  <Field
+                    label="Region"
+                    required
+                    value={field.state.value}
+                    onChange={field.handleChange}
+                    placeholder="us-east-1"
+                  />
+                )}
+              </wizardForm.Field>
             )}
             {form.backend === 's3-compatible' && (
-              <Field
-                label="Endpoint URL"
-                required
-                value={form.endpointUrl}
-                onChange={(v) => update('endpointUrl', v)}
-                placeholder="https://minio.example.com"
-              />
+              <wizardForm.Field name="endpointUrl">
+                {(field) => (
+                  <Field
+                    label="Endpoint URL"
+                    required
+                    value={field.state.value}
+                    onChange={field.handleChange}
+                    placeholder="https://minio.example.com"
+                  />
+                )}
+              </wizardForm.Field>
             )}
-            <Field
-              label="Access Key"
-              value={form.accessKey}
-              onChange={(v) => update('accessKey', v)}
-              placeholder={form.backend === 'gcs' ? 'HMAC access ID' : 'AKIAIOSFODNN7EXAMPLE'}
-              type="text"
-            />
-            <Field
-              label="Secret Key"
-              value={form.secretKey}
-              onChange={(v) => update('secretKey', v)}
-              placeholder="••••••••"
-              type="password"
-            />
+            <wizardForm.Field name="accessKey">
+              {(field) => (
+                <Field
+                  label="Access Key"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  placeholder={form.backend === 'gcs' ? 'HMAC access ID' : 'AKIAIOSFODNN7EXAMPLE'}
+                  type="text"
+                />
+              )}
+            </wizardForm.Field>
+            <wizardForm.Field name="secretKey">
+              {(field) => (
+                <Field
+                  label="Secret Key"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  placeholder="••••••••"
+                  type="password"
+                />
+              )}
+            </wizardForm.Field>
             <p className="text-xs text-muted-foreground">
               Credentials are encrypted at rest with the platform's Fernet key and never
               re-emitted by the API.

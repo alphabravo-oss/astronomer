@@ -10,59 +10,62 @@ import { createFileRoute } from '@tanstack/react-router';
 // explicitly opt in to installing tools).
 
 import { useRouter } from '@/lib/navigation';
-import { useState } from 'react';
 import { toastError } from '@/lib/toast';
 import { Server, Loader2, Info, AlertTriangle } from 'lucide-react';
 import { createCluster } from '@/lib/api';
 import { setRegistrationOptions } from '@/lib/api';
 import { useClusters } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import type { ClusterEnvironment } from '@/types';
 
 function RegisterClusterWizardPage() {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    displayName: '',
-    description: '',
-    environment: 'development' as ClusterEnvironment,
-    region: '',
-    installBaseline: false,
-    privilegeProfile: 'viewer',
-  });
 
   // Live name-availability check: cluster names are unique, so warn before
   // submit rather than letting the create POST come back 409.
   const { data: clustersData } = useClusters({ pageSize: 1000 });
   const existingNames = new Set((clustersData?.data ?? []).map((c) => c.name.toLowerCase()));
-  const nameTaken = form.name.length > 0 && existingNames.has(form.name);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || nameTaken) return;
-    setSubmitting(true);
-    try {
-      const cluster = await createCluster({
-        name: form.name,
-        displayName: form.displayName || form.name,
-        description: form.description || undefined,
-        environment: form.environment,
-        // distribution is auto-detected by the agent on connect (node labels /
-        // providerID) and persisted via heartbeat — no manual choice needed.
-        region: form.region || undefined,
-        annotations: { 'astronomer.io/agent-privilege-profile': form.privilegeProfile },
-      });
-      // Record the operator's choice. The backend keeps install_baseline
-      // NULL until this call so it can distinguish "hasn't decided" from
-      // "opted out".
-      await setRegistrationOptions(cluster.id, form.installBaseline);
-      router.push(`/dashboard/clusters/register/${cluster.id}/connect`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toastError(`Failed to register cluster: ${msg}`);
-      setSubmitting(false);
-    }
-  };
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      displayName: '',
+      description: '',
+      environment: 'development' as ClusterEnvironment,
+      region: '',
+      installBaseline: false,
+      privilegeProfile: 'viewer',
+    },
+    onSubmit: async ({ value }) => {
+      // Old guard (`if (!form.name || nameTaken) return`) — the submit button's
+      // disabled gate below is the same condition; re-checked here 1:1.
+      if (!value.name || existingNames.has(value.name)) return;
+      try {
+        const cluster = await createCluster({
+          name: value.name,
+          displayName: value.displayName || value.name,
+          description: value.description || undefined,
+          environment: value.environment,
+          // distribution is auto-detected by the agent on connect (node labels /
+          // providerID) and persisted via heartbeat — no manual choice needed.
+          region: value.region || undefined,
+          annotations: { 'astronomer.io/agent-privilege-profile': value.privilegeProfile },
+        });
+        // Record the operator's choice. The backend keeps install_baseline
+        // NULL until this call so it can distinguish "hasn't decided" from
+        // "opted out".
+        await setRegistrationOptions(cluster.id, value.installBaseline);
+        router.push(`/dashboard/clusters/register/${cluster.id}/connect`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        toastError(`Failed to register cluster: ${msg}`);
+      }
+    },
+  });
+
+  const name = useStore(form.store, (s) => s.values.name);
+  const submitting = useStore(form.store, (s) => s.isSubmitting);
+  const nameTaken = name.length > 0 && existingNames.has(name);
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -83,69 +86,100 @@ function RegisterClusterWizardPage() {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void form.handleSubmit();
+        }}
+        className="space-y-5"
+      >
         <Field label="Cluster name" required>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))
-            }
-            placeholder="my-cluster"
-            className={`w-full h-10 px-3 rounded-lg border bg-background text-sm ${
-              nameTaken ? 'border-status-danger' : 'border-border'
-            }`}
-            autoFocus
-          />
+          <form.Field name="name">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) =>
+                  field.handleChange(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))
+                }
+                onBlur={field.handleBlur}
+                placeholder="my-cluster"
+                className={`w-full h-10 px-3 rounded-lg border bg-background text-sm ${
+                  nameTaken ? 'border-status-danger' : 'border-border'
+                }`}
+                autoFocus
+              />
+            )}
+          </form.Field>
           {nameTaken && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-status-danger">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-              A cluster named &quot;{form.name}&quot; already exists. Choose a different name.
+              A cluster named &quot;{name}&quot; already exists. Choose a different name.
             </p>
           )}
         </Field>
 
         <Field label="Display name">
-          <input
-            type="text"
-            value={form.displayName}
-            onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-            placeholder="My Production Cluster"
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
-          />
+          <form.Field name="displayName">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="My Production Cluster"
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
+              />
+            )}
+          </form.Field>
         </Field>
 
         <Field label="Description">
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder="Brief description..."
-            rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none"
-          />
+          <form.Field name="description">
+            {(field) => (
+              <textarea
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                placeholder="Brief description..."
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none"
+              />
+            )}
+          </form.Field>
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Environment">
-            <select
-              value={form.environment}
-              onChange={(e) => setForm((f) => ({ ...f, environment: e.target.value as ClusterEnvironment }))}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
-            >
-              <option value="development">Development</option>
-              <option value="staging">Staging</option>
-              <option value="production">Production</option>
-              <option value="testing">Testing</option>
-            </select>
+            <form.Field name="environment">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value as ClusterEnvironment)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
+                >
+                  <option value="development">Development</option>
+                  <option value="staging">Staging</option>
+                  <option value="production">Production</option>
+                  <option value="testing">Testing</option>
+                </select>
+              )}
+            </form.Field>
           </Field>
           <Field label="Region">
-            <input
-              type="text"
-              value={form.region}
-              onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))}
-              placeholder="us-east-1"
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
-            />
+            <form.Field name="region">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="us-east-1"
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
+                />
+              )}
+            </form.Field>
           </Field>
         </div>
 
@@ -154,14 +188,19 @@ function RegisterClusterWizardPage() {
         </p>
 
         <Field label="Agent privilege profile">
-          <select
-            value={form.privilegeProfile}
-            onChange={(e) => setForm((f) => ({ ...f, privilegeProfile: e.target.value }))}
-            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
-          >
-            <option value="viewer">Viewer — Astronomer observes (read-only)</option>
-            <option value="admin">Admin — Astronomer operates (governed by user RBAC)</option>
-          </select>
+          <form.Field name="privilegeProfile">
+            {(field) => (
+              <select
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
+              >
+                <option value="viewer">Viewer — Astronomer observes (read-only)</option>
+                <option value="admin">Admin — Astronomer operates (governed by user RBAC)</option>
+              </select>
+            )}
+          </form.Field>
           <p className="mt-1 text-xs text-muted-foreground">
             Sets the ceiling for what Astronomer can do on this cluster.{' '}
             <span className="font-medium text-foreground">Viewer</span> is read-only — Astronomer can observe the cluster,
@@ -173,12 +212,17 @@ function RegisterClusterWizardPage() {
         </Field>
 
         <label className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors">
-          <input
-            type="checkbox"
-            checked={form.installBaseline}
-            onChange={(e) => setForm((f) => ({ ...f, installBaseline: e.target.checked }))}
-            className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-ring"
-          />
+          <form.Field name="installBaseline">
+            {(field) => (
+              <input
+                type="checkbox"
+                checked={field.state.value}
+                onChange={(e) => field.handleChange(e.target.checked)}
+                onBlur={field.handleBlur}
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-ring"
+              />
+            )}
+          </form.Field>
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">Quick Start: Install Platform Baseline after cluster connects</span>
@@ -202,7 +246,7 @@ function RegisterClusterWizardPage() {
           </button>
           <button
             type="submit"
-            disabled={!form.name || nameTaken || submitting}
+            disabled={!name || nameTaken || submitting}
             className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

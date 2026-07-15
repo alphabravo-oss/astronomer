@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
+import { useAppForm, useStore } from '@/lib/form';
 import { useTabParam } from '@/lib/use-tab-param';
 import {
   usePodSecurityTemplates,
@@ -628,52 +629,55 @@ function PSATemplateModal({
   const createTemplate = useCreatePodSecurityTemplate();
   const updateTemplate = useUpdatePodSecurityTemplate();
 
-  const [form, setForm] = useState({
-    name: template?.name || '',
-    description: template?.description || '',
-    enforceLevel: template?.enforceLevel || ('baseline' as PodSecurityLevel),
-    enforceVersion: template?.enforceVersion || 'latest',
-    auditLevel: template?.auditLevel || ('restricted' as PodSecurityLevel),
-    auditVersion: template?.auditVersion || 'latest',
-    warnLevel: template?.warnLevel || ('restricted' as PodSecurityLevel),
-    warnVersion: template?.warnVersion || 'latest',
-    exemptNamespaces: template?.exemptNamespaces?.join(', ') || '',
-    exemptRuntimeClasses: template?.exemptRuntimeClasses?.join(', ') || '',
-    exemptUsernames: template?.exemptUsernames?.join(', ') || '',
-  });
-
   const parseCSV = (val: string): string[] =>
     val
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
 
-  const handleSave = async () => {
-    const data = {
-      name: form.name,
-      description: form.description || undefined,
-      enforceLevel: form.enforceLevel,
-      enforceVersion: form.enforceVersion || undefined,
-      auditLevel: form.auditLevel,
-      auditVersion: form.auditVersion || undefined,
-      warnLevel: form.warnLevel,
-      warnVersion: form.warnVersion || undefined,
-      exemptNamespaces: parseCSV(form.exemptNamespaces),
-      exemptRuntimeClasses: parseCSV(form.exemptRuntimeClasses),
-      exemptUsernames: parseCSV(form.exemptUsernames),
-    };
+  const form = useAppForm({
+    defaultValues: {
+      name: template?.name || '',
+      description: template?.description || '',
+      enforceLevel: template?.enforceLevel || ('baseline' as PodSecurityLevel),
+      enforceVersion: template?.enforceVersion || 'latest',
+      auditLevel: template?.auditLevel || ('restricted' as PodSecurityLevel),
+      auditVersion: template?.auditVersion || 'latest',
+      warnLevel: template?.warnLevel || ('restricted' as PodSecurityLevel),
+      warnVersion: template?.warnVersion || 'latest',
+      exemptNamespaces: template?.exemptNamespaces?.join(', ') || '',
+      exemptRuntimeClasses: template?.exemptRuntimeClasses?.join(', ') || '',
+      exemptUsernames: template?.exemptUsernames?.join(', ') || '',
+    },
+    onSubmit: async ({ value }) => {
+      const data = {
+        name: value.name,
+        description: value.description || undefined,
+        enforceLevel: value.enforceLevel,
+        enforceVersion: value.enforceVersion || undefined,
+        auditLevel: value.auditLevel,
+        auditVersion: value.auditVersion || undefined,
+        warnLevel: value.warnLevel,
+        warnVersion: value.warnVersion || undefined,
+        exemptNamespaces: parseCSV(value.exemptNamespaces),
+        exemptRuntimeClasses: parseCSV(value.exemptRuntimeClasses),
+        exemptUsernames: parseCSV(value.exemptUsernames),
+      };
 
-    try {
-      if (template) {
-        await updateTemplate.mutateAsync({ id: template.id, data });
-      } else {
-        await createTemplate.mutateAsync(data);
+      try {
+        if (template) {
+          await updateTemplate.mutateAsync({ id: template.id, data });
+        } else {
+          await createTemplate.mutateAsync(data);
+        }
+        onClose();
+      } catch {
+        // Error surfaced by mutation toast.
       }
-      onClose();
-    } catch {
-      // Error surfaced by mutation toast.
-    }
-  };
+    },
+  });
+
+  const templateName = useStore(form.store, (s) => s.values.name);
 
   const isPending = createTemplate.isPending || updateTemplate.isPending;
 
@@ -692,115 +696,149 @@ function PSATemplateModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="restricted-production"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="restricted-production"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Restricted policy for production clusters"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="description">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Restricted policy for production clusters"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Enforce</label>
-              <select
-                value={form.enforceLevel}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, enforceLevel: e.target.value as PodSecurityLevel }))
-                }
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring capitalize"
-              >
-                {psaLevels.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
+              <form.Field name="enforceLevel">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring capitalize"
+                  >
+                    {psaLevels.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Audit</label>
-              <select
-                value={form.auditLevel}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, auditLevel: e.target.value as PodSecurityLevel }))
-                }
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring capitalize"
-              >
-                {psaLevels.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
+              <form.Field name="auditLevel">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring capitalize"
+                  >
+                    {psaLevels.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Warn</label>
-              <select
-                value={form.warnLevel}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, warnLevel: e.target.value as PodSecurityLevel }))
-                }
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring capitalize"
-              >
-                {psaLevels.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
+              <form.Field name="warnLevel">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value as PodSecurityLevel)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring capitalize"
+                  >
+                    {psaLevels.map((level) => (
+                      <option key={level} value={level}>
+                        {level}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </form.Field>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Enforce Version</label>
-              <input
-                type="text"
-                value={form.enforceVersion}
-                onChange={(e) => setForm((f) => ({ ...f, enforceVersion: e.target.value }))}
-                placeholder="latest"
-                className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="enforceVersion">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="latest"
+                    className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Audit Version</label>
-              <input
-                type="text"
-                value={form.auditVersion}
-                onChange={(e) => setForm((f) => ({ ...f, auditVersion: e.target.value }))}
-                placeholder="latest"
-                className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="auditVersion">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="latest"
+                    className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Warn Version</label>
-              <input
-                type="text"
-                value={form.warnVersion}
-                onChange={(e) => setForm((f) => ({ ...f, warnVersion: e.target.value }))}
-                placeholder="latest"
-                className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="warnVersion">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="latest"
+                    className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
 
@@ -809,38 +847,53 @@ function PSATemplateModal({
 
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Namespaces (comma-separated)</label>
-              <input
-                type="text"
-                value={form.exemptNamespaces}
-                onChange={(e) => setForm((f) => ({ ...f, exemptNamespaces: e.target.value }))}
-                placeholder="kube-system, kube-public, kube-node-lease"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="exemptNamespaces">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="kube-system, kube-public, kube-node-lease"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Runtime Classes (comma-separated)</label>
-              <input
-                type="text"
-                value={form.exemptRuntimeClasses}
-                onChange={(e) => setForm((f) => ({ ...f, exemptRuntimeClasses: e.target.value }))}
-                placeholder="gvisor, kata"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="exemptRuntimeClasses">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="gvisor, kata"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Usernames (comma-separated)</label>
-              <input
-                type="text"
-                value={form.exemptUsernames}
-                onChange={(e) => setForm((f) => ({ ...f, exemptUsernames: e.target.value }))}
-                placeholder="system:serviceaccount:kube-system:default"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="exemptUsernames">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="system:serviceaccount:kube-system:default"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
         </div>
@@ -854,8 +907,8 @@ function PSATemplateModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={isPending || !form.name}
+            onClick={() => void form.handleSubmit()}
+            disabled={isPending || !templateName}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { useState } from 'react';
 import { useTabParam } from '@/lib/use-tab-param';
+import { useAppForm, useStore } from '@/lib/form';
 import {
   useAlertRules,
   useCreateAlertRule,
@@ -535,65 +536,70 @@ function AlertingPage() {
 function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: () => void }) {
   const createRule = useCreateAlertRule();
   const updateRule = useUpdateAlertRule();
-  const [form, setForm] = useState({
-    name: rule?.name || '',
-    description: rule?.description || '',
-    type: rule?.type || 'threshold' as AlertRule['type'],
-    severity: rule?.severity || 'warning' as AlertSeverity,
-    query: rule?.query || '',
-    threshold: rule?.threshold?.toString() || '',
-    duration: rule?.duration || '5m',
-    enabled: rule?.enabled ?? true,
-    // Sprint 072 — anomaly knobs. The anomaly evaluator is driven off the
-    // single `type` field (type === 'anomaly'); there is no separate rule-kind
-    // toggle, so the Type select and the payload can never disagree.
-    metric: rule?.metric || 'cluster_cpu_percent',
-    anomalyStddev: rule?.anomalyStddev?.toString() || '3',
-    anomalyWindowSeconds: rule?.anomalyWindowSeconds?.toString() || '86400',
-    anomalyMinSamples: rule?.anomalyMinSamples?.toString() || '50',
-    anomalyDirection: (rule?.anomalyDirection || 'above') as 'above' | 'below' | 'either',
+  const form = useAppForm({
+    defaultValues: {
+      name: rule?.name || '',
+      description: rule?.description || '',
+      type: rule?.type || 'threshold' as AlertRule['type'],
+      severity: rule?.severity || 'warning' as AlertSeverity,
+      query: rule?.query || '',
+      threshold: rule?.threshold?.toString() || '',
+      duration: rule?.duration || '5m',
+      enabled: rule?.enabled ?? true,
+      // Sprint 072 — anomaly knobs. The anomaly evaluator is driven off the
+      // single `type` field (type === 'anomaly'); there is no separate rule-kind
+      // toggle, so the Type select and the payload can never disagree.
+      metric: rule?.metric || 'cluster_cpu_percent',
+      anomalyStddev: rule?.anomalyStddev?.toString() || '3',
+      anomalyWindowSeconds: rule?.anomalyWindowSeconds?.toString() || '86400',
+      anomalyMinSamples: rule?.anomalyMinSamples?.toString() || '50',
+      anomalyDirection: (rule?.anomalyDirection || 'above') as 'above' | 'below' | 'either',
+    },
+    onSubmit: async ({ value }) => {
+      const isAnomaly = value.type === 'anomaly';
+      const data: Partial<AlertRule> & {
+        rule_kind?: string;
+        anomaly_stddev?: number;
+        anomaly_window_seconds?: number;
+        anomaly_min_samples?: number;
+        anomaly_direction?: string;
+      } = {
+        name: value.name,
+        description: value.description || undefined,
+        type: value.type,
+        severity: value.severity,
+        query: value.query,
+        threshold: value.threshold ? parseFloat(value.threshold) : undefined,
+        duration: value.duration,
+        enabled: value.enabled,
+        // Send the new fields with the snake_case names the backend
+        // CreateAlertRuleRequest expects. The handler also reads camelCase
+        // via Type/RuleType aliases, but the snake_case path is
+        // canonical. rule_kind is derived from `type` so the two stay in sync.
+        rule_kind: isAnomaly ? 'anomaly' : 'threshold',
+        metric: isAnomaly ? value.metric : undefined,
+        anomaly_stddev: isAnomaly ? parseFloat(value.anomalyStddev) : undefined,
+        anomaly_window_seconds: isAnomaly ? parseInt(value.anomalyWindowSeconds, 10) : undefined,
+        anomaly_min_samples: isAnomaly ? parseInt(value.anomalyMinSamples, 10) : undefined,
+        anomaly_direction: isAnomaly ? value.anomalyDirection : undefined,
+      };
+
+      try {
+        if (rule) {
+          await updateRule.mutateAsync({ id: rule.id, data });
+        } else {
+          await createRule.mutateAsync(data);
+        }
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
 
-  const handleSave = async () => {
-    const isAnomaly = form.type === 'anomaly';
-    const data: Partial<AlertRule> & {
-      rule_kind?: string;
-      anomaly_stddev?: number;
-      anomaly_window_seconds?: number;
-      anomaly_min_samples?: number;
-      anomaly_direction?: string;
-    } = {
-      name: form.name,
-      description: form.description || undefined,
-      type: form.type,
-      severity: form.severity,
-      query: form.query,
-      threshold: form.threshold ? parseFloat(form.threshold) : undefined,
-      duration: form.duration,
-      enabled: form.enabled,
-      // Send the new fields with the snake_case names the backend
-      // CreateAlertRuleRequest expects. The handler also reads camelCase
-      // via Type/RuleType aliases, but the snake_case path is
-      // canonical. rule_kind is derived from `type` so the two stay in sync.
-      rule_kind: isAnomaly ? 'anomaly' : 'threshold',
-      metric: isAnomaly ? form.metric : undefined,
-      anomaly_stddev: isAnomaly ? parseFloat(form.anomalyStddev) : undefined,
-      anomaly_window_seconds: isAnomaly ? parseInt(form.anomalyWindowSeconds, 10) : undefined,
-      anomaly_min_samples: isAnomaly ? parseInt(form.anomalyMinSamples, 10) : undefined,
-      anomaly_direction: isAnomaly ? form.anomalyDirection : undefined,
-    };
-
-    try {
-      if (rule) {
-        await updateRule.mutateAsync({ id: rule.id, data });
-      } else {
-        await createRule.mutateAsync(data);
-      }
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
+  const ruleName = useStore(form.store, (s) => s.values.name);
+  const ruleType = useStore(form.store, (s) => s.values.type);
+  const severity = useStore(form.store, (s) => s.values.severity);
 
   const isPending = createRule.isPending || updateRule.isPending;
 
@@ -612,42 +618,57 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="High CPU Usage"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="High CPU Usage"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Triggers when CPU exceeds threshold"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="description">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Triggers when CPU exceeds threshold"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Type</label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as AlertRule['type'] }))}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="threshold">Threshold</option>
-                <option value="anomaly">Anomaly</option>
-                <option value="absence">Absence</option>
-                <option value="change">Change</option>
-              </select>
+              <form.Field name="type">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value as AlertRule['type'])}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="threshold">Threshold</option>
+                    <option value="anomaly">Anomaly</option>
+                    <option value="absence">Absence</option>
+                    <option value="change">Change</option>
+                  </select>
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Severity</label>
@@ -655,10 +676,10 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
                 {(['critical', 'warning', 'info'] as const).map((sev) => (
                   <button
                     key={sev}
-                    onClick={() => setForm((f) => ({ ...f, severity: sev }))}
+                    onClick={() => form.setFieldValue('severity', sev)}
                     className={cn(
                       'flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
-                      form.severity === sev
+                      severity === sev
                         ? severityColors[sev]
                         : 'bg-muted text-muted-foreground hover:text-foreground'
                     )}
@@ -672,17 +693,22 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">PromQL Query</label>
-            <textarea
-              value={form.query}
-              onChange={(e) => setForm((f) => ({ ...f, query: e.target.value }))}
-              placeholder='avg(rate(cpu_usage_seconds_total[5m])) > 0.8'
-              rows={3}
-              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-            />
+            <form.Field name="query">
+              {(field) => (
+                <textarea
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder='avg(rate(cpu_usage_seconds_total[5m])) > 0.8'
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                />
+              )}
+            </form.Field>
           </div>
 
-          {form.type === 'anomaly' && (
+          {ruleType === 'anomaly' && (
             <div className="space-y-3 p-3 rounded-md border border-border bg-muted/30">
               <div className="text-xs text-muted-foreground">
                 Anomaly rules fire when the current value of <b>metric</b> deviates from the
@@ -692,80 +718,98 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Metric</label>
-                <select
-                  value={form.metric}
-                  onChange={(e) => setForm((f) => ({ ...f, metric: e.target.value }))}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                    focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  <option value="cluster_cpu_percent">cluster_cpu_percent</option>
-                  <option value="cluster_memory_percent">cluster_memory_percent</option>
-                  <option value="pod_count">pod_count</option>
-                  <option value="node_count">node_count</option>
-                  <option value="pod_restart_rate">pod_restart_rate</option>
-                </select>
+                <form.Field name="metric">
+                  {(field) => (
+                    <select
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                        focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      <option value="cluster_cpu_percent">cluster_cpu_percent</option>
+                      <option value="cluster_memory_percent">cluster_memory_percent</option>
+                      <option value="pod_count">pod_count</option>
+                      <option value="node_count">node_count</option>
+                      <option value="pod_restart_rate">pod_restart_rate</option>
+                    </select>
+                  )}
+                </form.Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Stddev (σ)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={form.anomalyStddev}
-                    onChange={(e) => setForm((f) => ({ ...f, anomalyStddev: e.target.value }))}
-                    placeholder="3"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
+                  <form.Field name="anomalyStddev">
+                    {(field) => (
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="3"
+                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                          focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    )}
+                  </form.Field>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Window</label>
-                  <select
-                    value={form.anomalyWindowSeconds}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, anomalyWindowSeconds: e.target.value }))
-                    }
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    <option value="3600">1h</option>
-                    <option value="21600">6h</option>
-                    <option value="86400">24h</option>
-                    <option value="604800">7d</option>
-                  </select>
+                  <form.Field name="anomalyWindowSeconds">
+                    {(field) => (
+                      <select
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                          focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="3600">1h</option>
+                        <option value="21600">6h</option>
+                        <option value="86400">24h</option>
+                        <option value="604800">7d</option>
+                      </select>
+                    )}
+                  </form.Field>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Direction</label>
-                  <select
-                    value={form.anomalyDirection}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        anomalyDirection: e.target.value as 'above' | 'below' | 'either',
-                      }))
-                    }
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    <option value="above">Above baseline</option>
-                    <option value="below">Below baseline</option>
-                    <option value="either">Either direction</option>
-                  </select>
+                  <form.Field name="anomalyDirection">
+                    {(field) => (
+                      <select
+                        value={field.state.value}
+                        onChange={(e) =>
+                          field.handleChange(e.target.value as 'above' | 'below' | 'either')
+                        }
+                        onBlur={field.handleBlur}
+                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                          focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="above">Above baseline</option>
+                        <option value="below">Below baseline</option>
+                        <option value="either">Either direction</option>
+                      </select>
+                    )}
+                  </form.Field>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Min samples</label>
-                  <input
-                    type="number"
-                    value={form.anomalyMinSamples}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, anomalyMinSamples: e.target.value }))
-                    }
-                    placeholder="50"
-                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                      focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
+                  <form.Field name="anomalyMinSamples">
+                    {(field) => (
+                      <input
+                        type="number"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                        placeholder="50"
+                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                          focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    )}
+                  </form.Field>
                 </div>
               </div>
             </div>
@@ -774,35 +818,50 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Threshold</label>
-              <input
-                type="number"
-                value={form.threshold}
-                onChange={(e) => setForm((f) => ({ ...f, threshold: e.target.value }))}
-                placeholder="0.8"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="threshold">
+                {(field) => (
+                  <input
+                    type="number"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="0.8"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Duration</label>
-              <input
-                type="text"
-                value={form.duration}
-                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-                placeholder="5m"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="duration">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="5m"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-              className="rounded border-border text-primary focus:ring-ring"
-            />
+            <form.Field name="enabled">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="rounded border-border text-primary focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <span className="text-sm text-foreground">Enabled</span>
           </label>
         </div>
@@ -816,8 +875,8 @@ function AlertRuleModal({ rule, onClose }: { rule: AlertRule | null; onClose: ()
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={isPending || !form.name}
+            onClick={() => void form.handleSubmit()}
+            disabled={isPending || !ruleName}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
@@ -875,28 +934,33 @@ const channelTypeFields: Record<NotificationChannelType, { label: string; fields
 
 function NotificationChannelModal({ onClose }: { onClose: () => void }) {
   const createChannel = useCreateNotificationChannel();
-  const [form, setForm] = useState({
-    name: '',
-    type: 'slack' as NotificationChannelType,
-    enabled: true,
-    config: {} as Record<string, string>,
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      type: 'slack' as NotificationChannelType,
+      enabled: true,
+      config: {} as Record<string, string>,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createChannel.mutateAsync({
+          name: value.name,
+          type: value.type,
+          enabled: value.enabled,
+          config: value.config,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
 
-  const typeConfig = channelTypeFields[form.type];
+  const channelName = useStore(form.store, (s) => s.values.name);
+  const channelType = useStore(form.store, (s) => s.values.type);
+  const config = useStore(form.store, (s) => s.values.config);
 
-  const handleSave = async () => {
-    try {
-      await createChannel.mutateAsync({
-        name: form.name,
-        type: form.type,
-        enabled: form.enabled,
-        config: form.config,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
+  const typeConfig = channelTypeFields[channelType];
 
   return (
     <OverlayShell onClose={onClose}>
@@ -911,14 +975,19 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Production Alerts"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Production Alerts"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
@@ -927,10 +996,13 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
               {(Object.keys(channelTypeFields) as NotificationChannelType[]).map((type) => (
                 <button
                   key={type}
-                  onClick={() => setForm((f) => ({ ...f, type, config: {} }))}
+                  onClick={() => {
+                    form.setFieldValue('type', type);
+                    form.setFieldValue('config', {});
+                  }}
                   className={cn(
                     'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    form.type === type
+                    channelType === type
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground'
                   )}
@@ -947,12 +1019,9 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
               <label className="text-sm font-medium text-foreground">{field.label}</label>
               <input
                 type={field.type}
-                value={form.config[field.key] || ''}
+                value={config[field.key] || ''}
                 onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    config: { ...f.config, [field.key]: e.target.value },
-                  }))
+                  form.setFieldValue('config', { ...config, [field.key]: e.target.value })
                 }
                 placeholder={field.placeholder}
                 className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
@@ -962,12 +1031,17 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
           ))}
 
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-              className="rounded border-border text-primary focus:ring-ring"
-            />
+            <form.Field name="enabled">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="rounded border-border text-primary focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <span className="text-sm text-foreground">Enabled</span>
           </label>
         </div>
@@ -981,8 +1055,8 @@ function NotificationChannelModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={createChannel.isPending || !form.name}
+            onClick={() => void form.handleSubmit()}
+            disabled={createChannel.isPending || !channelName}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

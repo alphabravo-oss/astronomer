@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { useMemo, useState } from 'react';
 import { useParams } from '@/lib/navigation';
+import { useAppForm, useStore } from '@/lib/form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastError, toastSuccess } from '@/lib/toast';
 import {
@@ -325,14 +326,7 @@ function RegistryDialog({
   const isEdit = !!existing;
   const { data: namespaces } = useClusterNamespaces(clusterId);
 
-  const [registryUrl, setRegistryUrl] = useState(existing?.registryUrl || '');
-  const [username, setUsername] = useState(existing?.username || '');
-  const [password, setPassword] = useState(isEdit ? PASSWORD_SENTINEL : '');
-  const [passwordTouched, setPasswordTouched] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedNs, setSelectedNs] = useState<string[]>(existing?.namespaces || []);
-  const [secretName, setSecretName] = useState(existing?.secretName || '');
-  const [injectDefaultSa, setInjectDefaultSa] = useState(existing?.injectDefaultSa ?? false);
 
   const create = useMutation({
     mutationFn: (body: CreateRegistryRequest) => createClusterRegistry(clusterId, body),
@@ -356,38 +350,60 @@ function RegistryDialog({
 
   const loading = create.isPending || update.isPending;
 
-  function handleSubmit() {
-    if (!registryUrl || !username) {
-      toastError('Registry URL and username are required');
-      return;
-    }
-    if (isEdit) {
-      const body: UpdateRegistryRequest = {
-        registry_url: registryUrl,
-        username,
-        namespaces: selectedNs,
-        secret_name: secretName || undefined,
-        inject_default_sa: injectDefaultSa,
-      };
-      if (passwordTouched && password !== PASSWORD_SENTINEL) {
-        body.password = password;
-      }
-      update.mutate(body);
-    } else {
-      if (!password) {
-        toastError('Password is required');
+  const form = useAppForm({
+    defaultValues: {
+      registryUrl: existing?.registryUrl || '',
+      username: existing?.username || '',
+      // Edit seeds the sentinel — the password is only sent when the user
+      // actually types a new one (round-trip variant, unchanged).
+      password: isEdit ? PASSWORD_SENTINEL : '',
+      selectedNs: (existing?.namespaces || []) as string[],
+      secretName: existing?.secretName || '',
+      injectDefaultSa: existing?.injectDefaultSa ?? false,
+    },
+    onSubmit: ({ value }) => {
+      // Old imperative checks, ported 1:1 (same messages, same order).
+      if (!value.registryUrl || !value.username) {
+        toastError('Registry URL and username are required');
         return;
       }
-      create.mutate({
-        registry_url: registryUrl,
-        username,
-        password,
-        namespaces: selectedNs,
-        secret_name: secretName || undefined,
-        inject_default_sa: injectDefaultSa,
-      });
-    }
-  }
+      // The old `passwordTouched` flag maps onto the field's isDirty meta
+      // (D14: survives across renders; this form never resets mid-session).
+      const passwordTouched = form.getFieldMeta('password')?.isDirty ?? false;
+      if (isEdit) {
+        const body: UpdateRegistryRequest = {
+          registry_url: value.registryUrl,
+          username: value.username,
+          namespaces: value.selectedNs,
+          secret_name: value.secretName || undefined,
+          inject_default_sa: value.injectDefaultSa,
+        };
+        if (passwordTouched && value.password !== PASSWORD_SENTINEL) {
+          body.password = value.password;
+        }
+        update.mutate(body);
+      } else {
+        if (!value.password) {
+          toastError('Password is required');
+          return;
+        }
+        create.mutate({
+          registry_url: value.registryUrl,
+          username: value.username,
+          password: value.password,
+          namespaces: value.selectedNs,
+          secret_name: value.secretName || undefined,
+          inject_default_sa: value.injectDefaultSa,
+        });
+      }
+    },
+  });
+
+  const selectedNs = useStore(form.store, (s) => s.values.selectedNs);
+  const passwordTouched = useStore(
+    form.store,
+    (s) => s.fieldMeta.password?.isDirty ?? false,
+  );
 
   return (
     <Modal
@@ -397,45 +413,56 @@ function RegistryDialog({
     >
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Registry URL</label>
-        <input
-          type="text"
-          value={registryUrl}
-          onChange={(e) => setRegistryUrl(e.target.value)}
-          placeholder="e.g. registry.example.com or 123.dkr.ecr.us-east-1.amazonaws.com"
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="registryUrl">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="e.g. registry.example.com or 123.dkr.ecr.us-east-1.amazonaws.com"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+          <form.Field name="username">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Password</label>
           <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setPasswordTouched(true);
-              }}
-              onFocus={() => {
-                if (isEdit && !passwordTouched && password === PASSWORD_SENTINEL) {
-                  setPassword('');
-                  setPasswordTouched(true);
-                }
-              }}
-              className="w-full h-9 pl-3 pr-9 rounded-lg border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            <form.Field name="password">
+              {(field) => (
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onFocus={() => {
+                    if (isEdit && !field.state.meta.isDirty && field.state.value === PASSWORD_SENTINEL) {
+                      field.handleChange('');
+                    }
+                  }}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 pl-3 pr-9 rounded-lg border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
@@ -456,37 +483,47 @@ function RegistryDialog({
       <NamespaceMultiSelect
         namespaces={namespaces?.map((n) => n.name) || []}
         selected={selectedNs}
-        onChange={setSelectedNs}
+        onChange={(ns) => form.setFieldValue('selectedNs', ns)}
       />
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Secret name</label>
-        <input
-          type="text"
-          value={secretName}
-          onChange={(e) => setSecretName(e.target.value)}
-          placeholder="auto"
-          className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <form.Field name="secretName">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="auto"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          )}
+        </form.Field>
         <p className="text-xs text-muted-foreground">
           Leave blank to auto-generate a secret name from the registry URL.
         </p>
       </div>
 
       <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={injectDefaultSa}
-          onChange={(e) => setInjectDefaultSa(e.target.checked)}
-          className="h-4 w-4"
-        />
+        <form.Field name="injectDefaultSa">
+          {(field) => (
+            <input
+              type="checkbox"
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
+              className="h-4 w-4"
+            />
+          )}
+        </form.Field>
         Attach to <code className="font-mono text-xs">default</code> ServiceAccount in each namespace
       </label>
 
       <ModalFooter
         onCancel={onClose}
-        onSubmit={handleSubmit}
+        onSubmit={() => void form.handleSubmit()}
         loading={loading}
         submitLabel={isEdit ? 'Save' : 'Add registry'}
       />

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { listArgoManagedClusters, createArgoApplicationSet } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import type {
   ArgoApplicationSetGenerator,
   ArgoCreateApplicationSetRequest,
@@ -82,6 +83,17 @@ const DEFAULT_STATE: WizardState = {
   tmplAutoSync: false,
 };
 
+/** The wizard form instance — steps receive it and wire fields through
+ *  `form.Field`; list rows (match labels / elements) are array values
+ *  updated via `setFieldValue`, exactly like the other list editors. */
+function useWizardForm(onSubmit: (value: WizardState) => void) {
+  return useAppForm({
+    defaultValues: DEFAULT_STATE,
+    onSubmit: ({ value }) => onSubmit(value),
+  });
+}
+type WizardForm = ReturnType<typeof useWizardForm>;
+
 function ApplicationSetWizardPage() {
   const params = useParams();
   const router = useRouter();
@@ -89,7 +101,9 @@ function ApplicationSetWizardPage() {
   const instanceId = params.instanceId as string;
 
   const [step, setStep] = useState(1);
-  const [state, setState] = useState<WizardState>(DEFAULT_STATE);
+
+  const form = useWizardForm((value) => create.mutate(buildBody(value)));
+  const state = useStore(form.store, (s) => s.values);
 
   const { data: managed = [] } = useQuery({
     queryKey: queryKeys.argocd.managedClusters(instanceId),
@@ -110,8 +124,6 @@ function ApplicationSetWizardPage() {
     },
     onError: (err: Error) => toastApiError('Create failed', err),
   });
-
-  const submit = () => create.mutate(buildBody(state));
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -140,9 +152,9 @@ function ApplicationSetWizardPage() {
       <Stepper step={step} />
 
       <div className="rounded-lg border border-border bg-card p-6">
-        {step === 1 && <Step1 state={state} setState={setState} />}
-        {step === 2 && <Step2 state={state} setState={setState} labelOptions={labelOptions} />}
-        {step === 3 && <Step3 state={state} setState={setState} />}
+        {step === 1 && <Step1 form={form} />}
+        {step === 2 && <Step2 form={form} state={state} labelOptions={labelOptions} />}
+        {step === 3 && <Step3 form={form} />}
         {step === 4 && <Step4 state={state} />}
       </div>
 
@@ -169,7 +181,7 @@ function ApplicationSetWizardPage() {
           </button>
         ) : (
           <button
-            onClick={submit}
+            onClick={() => void form.handleSubmit()}
             disabled={create.isPending}
             className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
@@ -223,34 +235,39 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-interface StepProps {
-  state: WizardState;
-  setState: (s: WizardState) => void;
-}
-
-function Step1({ state, setState }: StepProps) {
+function Step1({ form }: { form: WizardForm }) {
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Name</label>
-        <input
-          type="text"
-          value={state.name}
-          onChange={(e) => setState({ ...state, name: e.target.value })}
-          placeholder="prod-platform-stack"
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-            focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+        <form.Field name="name">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="prod-platform-stack"
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">AppProject</label>
-        <input
-          type="text"
-          value={state.project}
-          onChange={(e) => setState({ ...state, project: e.target.value })}
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-            focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+        <form.Field name="project">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          )}
+        </form.Field>
         <p className="text-xs text-muted-foreground">
           Generated Applications inherit this project.
         </p>
@@ -260,10 +277,14 @@ function Step1({ state, setState }: StepProps) {
 }
 
 function Step2({
+  form,
   state,
-  setState,
   labelOptions,
-}: StepProps & { labelOptions: { key: string; values: Set<string> }[] }) {
+}: {
+  form: WizardForm;
+  state: WizardState;
+  labelOptions: { key: string; values: Set<string> }[];
+}) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
@@ -271,7 +292,7 @@ function Step2({
           <button
             key={k}
             type="button"
-            onClick={() => setState({ ...state, generatorKind: k })}
+            onClick={() => form.setFieldValue('generatorKind', k)}
             className={`px-3 py-2 rounded-md text-sm font-medium transition-colors text-left ${
               state.generatorKind === k
                 ? 'bg-primary text-primary-foreground'
@@ -300,13 +321,10 @@ function Step2({
               <button
                 key={preset}
                 type="button"
-                onClick={() =>
-                  setState({
-                    ...state,
-                    clusterSelectorPreset: preset,
-                    clusterMatchLabels: clusterPresetLabels(preset, labelOptions),
-                  })
-                }
+                onClick={() => {
+                  form.setFieldValue('clusterSelectorPreset', preset);
+                  form.setFieldValue('clusterMatchLabels', clusterPresetLabels(preset, labelOptions));
+                }}
                 className={`h-8 rounded border px-3 text-xs font-medium transition-colors ${
                   state.clusterSelectorPreset === preset
                     ? 'border-primary bg-primary text-primary-foreground'
@@ -329,7 +347,8 @@ function Step2({
                   onChange={(e) => {
                     const next = [...state.clusterMatchLabels];
                     next[i] = { ...next[i], key: e.target.value };
-                    setState({ ...state, clusterSelectorPreset: 'custom', clusterMatchLabels: next });
+                    form.setFieldValue('clusterSelectorPreset', 'custom');
+                    form.setFieldValue('clusterMatchLabels', next);
                   }}
                   placeholder="astronomer.io/environment"
                   className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
@@ -340,7 +359,8 @@ function Step2({
                   onChange={(e) => {
                     const next = [...state.clusterMatchLabels];
                     next[i] = { ...next[i], value: e.target.value };
-                    setState({ ...state, clusterSelectorPreset: 'custom', clusterMatchLabels: next });
+                    form.setFieldValue('clusterSelectorPreset', 'custom');
+                    form.setFieldValue('clusterMatchLabels', next);
                   }}
                   className="h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
                     focus:outline-none focus:ring-1 focus:ring-ring min-w-[140px]"
@@ -354,13 +374,13 @@ function Step2({
                     ))}
                 </select>
                 <button
-                  onClick={() =>
-                    setState({
-                      ...state,
-                      clusterSelectorPreset: 'custom',
-                      clusterMatchLabels: state.clusterMatchLabels.filter((_, j) => j !== i),
-                    })
-                  }
+                  onClick={() => {
+                    form.setFieldValue('clusterSelectorPreset', 'custom');
+                    form.setFieldValue(
+                      'clusterMatchLabels',
+                      state.clusterMatchLabels.filter((_, j) => j !== i),
+                    );
+                  }}
                   className="p-2 text-muted-foreground hover:text-status-error transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -374,13 +394,13 @@ function Step2({
             ))}
           </datalist>
           <button
-            onClick={() =>
-              setState({
-                ...state,
-                clusterSelectorPreset: 'custom',
-                clusterMatchLabels: [...state.clusterMatchLabels, { key: '', value: '' }],
-              })
-            }
+            onClick={() => {
+              form.setFieldValue('clusterSelectorPreset', 'custom');
+              form.setFieldValue('clusterMatchLabels', [
+                ...state.clusterMatchLabels,
+                { key: '', value: '' },
+              ]);
+            }}
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <Plus className="h-3 w-3" /> Add label
@@ -396,51 +416,69 @@ function Step2({
         <div className="space-y-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Repository URL</label>
-            <input
-              type="text"
-              value={state.gitRepoURL}
-              onChange={(e) => setState({ ...state, gitRepoURL: e.target.value })}
-              placeholder="https://github.com/org/manifests"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="gitRepoURL">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="https://github.com/org/manifests"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Revision</label>
-              <input
-                type="text"
-                value={state.gitRevision}
-                onChange={(e) => setState({ ...state, gitRevision: e.target.value })}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="gitRevision">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Match</label>
-              <select
-                value={state.gitMode}
-                onChange={(e) =>
-                  setState({ ...state, gitMode: e.target.value as 'directories' | 'files' })
-                }
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="directories">directories</option>
-                <option value="files">files</option>
-              </select>
+              <form.Field name="gitMode">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value as 'directories' | 'files')}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="directories">directories</option>
+                    <option value="files">files</option>
+                  </select>
+                )}
+              </form.Field>
             </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Path Glob</label>
-            <input
-              type="text"
-              value={state.gitPath}
-              onChange={(e) => setState({ ...state, gitPath: e.target.value })}
-              placeholder={state.gitMode === 'directories' ? 'apps/*' : 'config/**/values.yaml'}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="gitPath">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder={state.gitMode === 'directories' ? 'apps/*' : 'config/**/values.yaml'}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
         </div>
       )}
@@ -456,7 +494,7 @@ function Step2({
                 onChange={(e) => {
                   const next = [...state.listElements];
                   next[i] = { name: e.target.value };
-                  setState({ ...state, listElements: next });
+                  form.setFieldValue('listElements', next);
                 }}
                 placeholder="name"
                 className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
@@ -464,10 +502,10 @@ function Step2({
               />
               <button
                 onClick={() =>
-                  setState({
-                    ...state,
-                    listElements: state.listElements.filter((_, j) => j !== i),
-                  })
+                  form.setFieldValue(
+                    'listElements',
+                    state.listElements.filter((_, j) => j !== i),
+                  )
                 }
                 className="p-2 text-muted-foreground hover:text-status-error transition-colors"
               >
@@ -477,7 +515,7 @@ function Step2({
           ))}
           <button
             onClick={() =>
-              setState({ ...state, listElements: [...state.listElements, { name: '' }] })
+              form.setFieldValue('listElements', [...state.listElements, { name: '' }])
             }
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
@@ -489,7 +527,7 @@ function Step2({
   );
 }
 
-function Step3({ state, setState }: StepProps) {
+function Step3({ form }: { form: WizardForm }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
@@ -500,69 +538,99 @@ function Step3({ state, setState }: StepProps) {
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">Source Repo URL</label>
-        <input
-          type="text"
-          value={state.tmplRepoURL}
-          onChange={(e) => setState({ ...state, tmplRepoURL: e.target.value })}
-          placeholder="https://github.com/org/charts"
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-            focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+        <form.Field name="tmplRepoURL">
+          {(field) => (
+            <input
+              type="text"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+              placeholder="https://github.com/org/charts"
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          )}
+        </form.Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Path</label>
-          <input
-            type="text"
-            value={state.tmplPath}
-            onChange={(e) => setState({ ...state, tmplPath: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <form.Field name="tmplPath">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Target Revision</label>
-          <input
-            type="text"
-            value={state.tmplTargetRevision}
-            onChange={(e) => setState({ ...state, tmplTargetRevision: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <form.Field name="tmplTargetRevision">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Destination Server</label>
-          <input
-            type="text"
-            value={state.tmplDestServer}
-            onChange={(e) => setState({ ...state, tmplDestServer: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <form.Field name="tmplDestServer">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Namespace Pattern</label>
-          <input
-            type="text"
-            value={state.tmplDestNamespacePattern}
-            onChange={(e) => setState({ ...state, tmplDestNamespacePattern: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-              focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+          <form.Field name="tmplDestNamespacePattern">
+            {(field) => (
+              <input
+                type="text"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                  focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </form.Field>
         </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={state.tmplAutoSync}
-          onChange={(e) => setState({ ...state, tmplAutoSync: e.target.checked })}
-          className="h-4 w-4 rounded border-border"
-        />
+        <form.Field name="tmplAutoSync">
+          {(field) => (
+            <input
+              type="checkbox"
+              checked={field.state.value}
+              onChange={(e) => field.handleChange(e.target.checked)}
+              onBlur={field.handleBlur}
+              className="h-4 w-4 rounded border-border"
+            />
+          )}
+        </form.Field>
         <span className="text-foreground">Enable automated sync on generated Applications</span>
       </label>
     </div>

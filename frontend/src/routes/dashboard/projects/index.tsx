@@ -22,6 +22,7 @@ import {
   Users,
 } from 'lucide-react';
 import { toastError } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 
 function ProjectsPage() {
   const router = useRouter();
@@ -269,44 +270,56 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const clusters = clustersData?.data || [];
 
-  const [form, setForm] = useState({
-    name: '',
-    displayName: '',
-    description: '',
-    clusterId: '',
-    namespaces: [] as string[],
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      displayName: '',
+      description: '',
+      clusterId: '',
+      namespaces: [] as string[],
+    },
+    validators: {
+      // Old check (imperative, pre-submit): name + display name required →
+      // ported 1:1 as a form-level onSubmit validator; same message.
+      onSubmit: ({ value }) =>
+        !value.name || !value.displayName ? 'Name and display name are required' : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createProject.mutateAsync({
+          name: value.name,
+          displayName: value.displayName,
+          description: value.description || undefined,
+          clusterIds: value.clusterId ? [value.clusterId] : [],
+          namespaces: value.namespaces,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
 
-  const { data: namespacesData } = useClusterNamespaces(form.clusterId);
+  const clusterId = useStore(form.store, (s) => s.values.clusterId);
+  const selectedNamespaces = useStore(form.store, (s) => s.values.namespaces);
+  const name = useStore(form.store, (s) => s.values.name);
+  const displayName = useStore(form.store, (s) => s.values.displayName);
+
+  const { data: namespacesData } = useClusterNamespaces(clusterId);
   const namespaces = namespacesData || [];
 
   const toggleNamespace = (ns: string) => {
-    setForm((f) => ({
-      ...f,
-      namespaces: f.namespaces.includes(ns)
-        ? f.namespaces.filter((n) => n !== ns)
-        : [...f.namespaces, ns],
-    }));
-  };
-
-  const handleSave = async () => {
-    if (!form.name || !form.displayName) {
-      toastError('Name and display name are required');
-      return;
-    }
-
-    try {
-      await createProject.mutateAsync({
-        name: form.name,
-        displayName: form.displayName,
-        description: form.description || undefined,
-        clusterIds: form.clusterId ? [form.clusterId] : [],
-        namespaces: form.namespaces,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
+    form.setFieldValue(
+      'namespaces',
+      selectedNamespaces.includes(ns)
+        ? selectedNamespaces.filter((n) => n !== ns)
+        : [...selectedNamespaces, ns],
+    );
   };
 
   return (
@@ -323,59 +336,84 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
-                placeholder="project-name"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="name">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) =>
+                      field.handleChange(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))
+                    }
+                    onBlur={field.handleBlur}
+                    placeholder="project-name"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Display Name</label>
-              <input
-                type="text"
-                value={form.displayName}
-                onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                placeholder="My Project"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="displayName">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="My Project"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Describe this project's purpose"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="description">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Describe this project's purpose"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster</label>
-            <select
-              value={form.clusterId}
-              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value, namespaces: [] }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Select a cluster</option>
-              {clusters.map((cluster) => (
-                <option key={cluster.id} value={cluster.id}>
-                  {cluster.displayName}
-                </option>
-              ))}
-            </select>
+            <form.Field name="clusterId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value);
+                    form.setFieldValue('namespaces', []);
+                  }}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a cluster</option>
+                  {clusters.map((cluster) => (
+                    <option key={cluster.id} value={cluster.id}>
+                      {cluster.displayName}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </div>
 
           {/* Namespaces */}
-          {form.clusterId && (
+          {clusterId && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Namespaces</label>
               <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-2 rounded-md border border-border bg-background">
@@ -388,7 +426,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
                       onClick={() => toggleNamespace(ns.name)}
                       className={cn(
                         'px-2.5 py-1 rounded text-xs font-medium transition-colors',
-                        form.namespaces.includes(ns.name)
+                        selectedNamespaces.includes(ns.name)
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted text-muted-foreground hover:text-foreground'
                       )}
@@ -399,7 +437,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {form.namespaces.length} namespace{form.namespaces.length !== 1 ? 's' : ''} selected
+                {selectedNamespaces.length} namespace{selectedNamespaces.length !== 1 ? 's' : ''} selected
               </p>
             </div>
           )}
@@ -414,8 +452,8 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={createProject.isPending || !form.name || !form.displayName}
+            onClick={() => void form.handleSubmit()}
+            disabled={createProject.isPending || !name || !displayName}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

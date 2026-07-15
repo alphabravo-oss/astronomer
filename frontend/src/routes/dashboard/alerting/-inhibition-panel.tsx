@@ -9,6 +9,7 @@
  * P-03 contract.
  */
 import { useState } from 'react';
+import { useAppForm, useStore } from '@/lib/form';
 import { Plus, X, Loader2, Trash2, Pencil } from 'lucide-react';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -290,41 +291,45 @@ function InhibitionModal({
   const update = useUpdateInhibition();
   const isEdit = !!inhibition;
 
-  const [name, setName] = useState(inhibition?.name ?? '');
-  const [enabled, setEnabled] = useState(inhibition?.enabled ?? true);
-  const [sourceMatchers, setSourceMatchers] = useState<DraftMatcher[]>(
-    inhibition?.sourceMatchers ?? [],
-  );
-  const [targetMatchers, setTargetMatchers] = useState<DraftMatcher[]>(
-    inhibition?.targetMatchers ?? [],
-  );
-  const [equalInput, setEqualInput] = useState((inhibition?.equalLabels ?? []).join(', '));
-
-  const handleSave = async () => {
-    const equalLabels = equalInput
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const body = toInhibitionWriteRequest({
-      name,
-      enabled,
-      sourceMatchers,
-      targetMatchers,
-      equalLabels,
-    });
-    try {
-      if (inhibition) {
-        await update.mutateAsync({ id: inhibition.id, body });
-      } else {
-        await create.mutateAsync(body);
+  const form = useAppForm({
+    defaultValues: {
+      name: inhibition?.name ?? '',
+      enabled: inhibition?.enabled ?? true,
+      sourceMatchers: (inhibition?.sourceMatchers ?? []) as DraftMatcher[],
+      targetMatchers: (inhibition?.targetMatchers ?? []) as DraftMatcher[],
+      equalInput: (inhibition?.equalLabels ?? []).join(', '),
+    },
+    onSubmit: async ({ value }) => {
+      const equalLabels = value.equalInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const body = toInhibitionWriteRequest({
+        name: value.name,
+        enabled: value.enabled,
+        sourceMatchers: value.sourceMatchers,
+        targetMatchers: value.targetMatchers,
+        equalLabels,
+      });
+      try {
+        if (inhibition) {
+          await update.mutateAsync({ id: inhibition.id, body });
+        } else {
+          await create.mutateAsync(body);
+        }
+        onClose();
+      } catch {
+        /* mutation toasts on error */
       }
-      onClose();
-    } catch {
-      /* mutation toasts on error */
-    }
-  };
+    },
+  });
+
+  const name = useStore(form.store, (s) => s.values.name);
+  const sourceMatchers = useStore(form.store, (s) => s.values.sourceMatchers);
+  const targetMatchers = useStore(form.store, (s) => s.values.targetMatchers);
 
   const isPending = create.isPending || update.isPending;
+  // Old disabled gate, recomputed from form state 1:1.
   const canSave = !!name && sourceMatchers.length > 0 && targetMatchers.length > 0;
 
   return (
@@ -342,52 +347,67 @@ function InhibitionModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Suppress node alerts when cluster is down"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Suppress node alerts when cluster is down"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <MatcherEditor
             title="Source matchers"
             hint="A firing alert matching these is the SOURCE that suppresses targets."
             matchers={sourceMatchers}
-            onChange={setSourceMatchers}
+            onChange={(next) => form.setFieldValue('sourceMatchers', next)}
           />
 
           <MatcherEditor
             title="Target matchers"
             hint="Firing alerts matching these are SUPPRESSED while a source fires."
             matchers={targetMatchers}
-            onChange={setTargetMatchers}
+            onChange={(next) => form.setFieldValue('targetMatchers', next)}
           />
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">
               Equal labels <span className="text-2xs text-muted-foreground font-normal">(comma-separated)</span>
             </label>
-            <input
-              type="text"
-              value={equalInput}
-              onChange={(e) => setEqualInput(e.target.value)}
-              placeholder="cluster, namespace"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="equalInput">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="cluster, namespace"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <p className="text-2xs text-muted-foreground">
               Source and target must share the same value on every label listed here for suppression to apply.
             </p>
           </div>
 
           <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
+            <form.Field name="enabled">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="h-4 w-4 rounded border-border"
+                />
+              )}
+            </form.Field>
             Enabled
           </label>
         </div>
@@ -400,7 +420,7 @@ function InhibitionModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void form.handleSubmit()}
             disabled={isPending || !canSave}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

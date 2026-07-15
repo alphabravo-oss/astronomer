@@ -15,8 +15,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * user lacks the role we render the same form in read-only mode (inputs
  * disabled, Save hidden) so non-admins can still inspect policy.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useParams } from '@/lib/navigation';
+import { useAppForm, useStore } from '@/lib/form';
 import { Loader2, Save, AlertCircle, ExternalLink } from 'lucide-react';
 import { useCurrentUser } from '@/lib/hooks';
 import {
@@ -85,20 +86,45 @@ function PolicyPage() {
   // Local controlled form state. We keep the inputs as strings so we can
   // distinguish "" (unlimited) from a real numeric value without juggling
   // null/undefined in every onChange.
-  const [psa, setPsa] = useState<PodSecurityProfile>('baseline');
-  const [cpu, setCpu] = useState('');
-  const [memory, setMemory] = useState('');
-  const [pods, setPods] = useState('');
-  const [netpol, setNetpol] = useState<NetworkPolicyMode>('isolated');
+  const form = useAppForm({
+    defaultValues: {
+      psa: 'baseline' as PodSecurityProfile,
+      cpu: '',
+      memory: '',
+      pods: '',
+      netpol: 'isolated' as NetworkPolicyMode,
+    },
+    onSubmit: ({ value }) => {
+      if (!canEdit) return;
+      // Build the patch body. Empty quota inputs are sent as null so the
+      // backend can drop the cap rather than leave it untouched.
+      const patch: ProjectPolicyPatch = {
+        podSecurityProfile: value.psa,
+        networkPolicyMode: value.netpol,
+        resourceQuotaCpu: value.cpu.trim() === '' ? null : value.cpu.trim(),
+        resourceQuotaMemory: value.memory.trim() === '' ? null : value.memory.trim(),
+        resourceQuotaPods: value.pods.trim() === '' ? null : Number(value.pods.trim()),
+      };
+      updateMutation.mutate(patch);
+    },
+  });
 
+  // Re-seed from the fetched policy exactly as the old setState effect did
+  // (a refetch clobbers in-progress edits — unchanged behavior).
   useEffect(() => {
     if (!policy) return;
-    setPsa(policy.podSecurityProfile);
-    setCpu(policy.resourceQuotaCpu ?? '');
-    setMemory(policy.resourceQuotaMemory ?? '');
-    setPods(policy.resourceQuotaPods != null ? String(policy.resourceQuotaPods) : '');
-    setNetpol(policy.networkPolicyMode);
+    form.reset({
+      psa: policy.podSecurityProfile,
+      cpu: policy.resourceQuotaCpu ?? '',
+      memory: policy.resourceQuotaMemory ?? '',
+      pods: policy.resourceQuotaPods != null ? String(policy.resourceQuotaPods) : '',
+      netpol: policy.networkPolicyMode,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policy]);
+
+  const psa = useStore(form.store, (s) => s.values.psa);
+  const netpol = useStore(form.store, (s) => s.values.netpol);
 
   // Aggregate cluster-level usage to render in the resource-quota section
   // preview. One project may span multiple namespaces; we sum and present a
@@ -115,20 +141,6 @@ function PolicyPage() {
       podsLimit: rows.reduce((a, r) => a + (r.podsLimit || 0), 0),
     };
   }, [usage]);
-
-  const handleSave = () => {
-    if (!canEdit) return;
-    // Build the patch body. Empty quota inputs are sent as null so the
-    // backend can drop the cap rather than leave it untouched.
-    const patch: ProjectPolicyPatch = {
-      podSecurityProfile: psa,
-      networkPolicyMode: netpol,
-      resourceQuotaCpu: cpu.trim() === '' ? null : cpu.trim(),
-      resourceQuotaMemory: memory.trim() === '' ? null : memory.trim(),
-      resourceQuotaPods: pods.trim() === '' ? null : Number(pods.trim()),
-    };
-    updateMutation.mutate(patch);
-  };
 
   if (isLoading) {
     return (
@@ -173,7 +185,7 @@ function PolicyPage() {
               type="button"
               key={opt.value}
               disabled={!canEdit}
-              onClick={() => setPsa(opt.value)}
+              onClick={() => form.setFieldValue('psa', opt.value)}
               className={cn(
                 'text-left p-3 rounded-lg border transition-colors',
                 psa === opt.value
@@ -207,42 +219,54 @@ function PolicyPage() {
           </p>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <QuotaInput
-            label="CPU limit"
-            placeholder="e.g. 4 or 2000m"
-            hint={
-              usageSummary && usageSummary.cpuLimit > 0
-                ? `In use: ${usageSummary.cpuUsed.toFixed(2)} / ${usageSummary.cpuLimit.toFixed(2)} cores`
-                : undefined
-            }
-            value={cpu}
-            disabled={!canEdit}
-            onChange={setCpu}
-          />
-          <QuotaInput
-            label="Memory limit"
-            placeholder="e.g. 8Gi"
-            hint={
-              usageSummary && usageSummary.memoryLimit > 0
-                ? `In use: ${formatMiB(usageSummary.memoryUsed)} / ${formatMiB(usageSummary.memoryLimit)}`
-                : undefined
-            }
-            value={memory}
-            disabled={!canEdit}
-            onChange={setMemory}
-          />
-          <QuotaInput
-            label="Pod count"
-            placeholder="e.g. 50"
-            hint={
-              usageSummary && usageSummary.podsLimit > 0
-                ? `In use: ${usageSummary.podsUsed} / ${usageSummary.podsLimit} pods`
-                : undefined
-            }
-            value={pods}
-            disabled={!canEdit}
-            onChange={setPods}
-          />
+          <form.Field name="cpu">
+            {(field) => (
+              <QuotaInput
+                label="CPU limit"
+                placeholder="e.g. 4 or 2000m"
+                hint={
+                  usageSummary && usageSummary.cpuLimit > 0
+                    ? `In use: ${usageSummary.cpuUsed.toFixed(2)} / ${usageSummary.cpuLimit.toFixed(2)} cores`
+                    : undefined
+                }
+                value={field.state.value}
+                disabled={!canEdit}
+                onChange={field.handleChange}
+              />
+            )}
+          </form.Field>
+          <form.Field name="memory">
+            {(field) => (
+              <QuotaInput
+                label="Memory limit"
+                placeholder="e.g. 8Gi"
+                hint={
+                  usageSummary && usageSummary.memoryLimit > 0
+                    ? `In use: ${formatMiB(usageSummary.memoryUsed)} / ${formatMiB(usageSummary.memoryLimit)}`
+                    : undefined
+                }
+                value={field.state.value}
+                disabled={!canEdit}
+                onChange={field.handleChange}
+              />
+            )}
+          </form.Field>
+          <form.Field name="pods">
+            {(field) => (
+              <QuotaInput
+                label="Pod count"
+                placeholder="e.g. 50"
+                hint={
+                  usageSummary && usageSummary.podsLimit > 0
+                    ? `In use: ${usageSummary.podsUsed} / ${usageSummary.podsLimit} pods`
+                    : undefined
+                }
+                value={field.state.value}
+                disabled={!canEdit}
+                onChange={field.handleChange}
+              />
+            )}
+          </form.Field>
         </div>
       </section>
 
@@ -272,7 +296,7 @@ function PolicyPage() {
                 value={opt.value}
                 checked={netpol === opt.value}
                 disabled={!canEdit}
-                onChange={() => setNetpol(opt.value)}
+                onChange={() => form.setFieldValue('netpol', opt.value)}
                 className="mt-0.5"
               />
               <div>
@@ -288,7 +312,7 @@ function PolicyPage() {
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => void form.handleSubmit()}
             disabled={updateMutation.isPending}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

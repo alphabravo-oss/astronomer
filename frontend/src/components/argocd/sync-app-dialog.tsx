@@ -4,13 +4,13 @@
 // revision / prune / dry-run fields. The backend enqueues an Operation row
 // and returns it; the parent page polls operations to convergence.
 
-import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { syncArgoApplicationById } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import type { ArgoOperation } from '@/types';
 
 interface SyncAppDialogProps {
@@ -29,22 +29,18 @@ export function SyncAppDialog({
   onSubmitted,
 }: SyncAppDialogProps) {
   const queryClient = useQueryClient();
-  const [revision, setRevision] = useState(defaultRevision ?? '');
-  const [prune, setPrune] = useState(false);
-  const [dryRun, setDryRun] = useState(false);
-  const [syncWindowOverride, setSyncWindowOverride] = useState(false);
-  const [reason, setReason] = useState('');
-  const reasonRequired = syncWindowOverride && !reason.trim();
 
   const sync = useMutation({
-    mutationFn: () =>
-      syncArgoApplicationById(appId, {
-        revision: revision || undefined,
-        prune,
-        dryRun,
-        syncWindowOverride,
-        reason: reason.trim() || undefined,
-      }),
+    mutationFn: () => {
+      const value = form.state.values;
+      return syncArgoApplicationById(appId, {
+        revision: value.revision || undefined,
+        prune: value.prune,
+        dryRun: value.dryRun,
+        syncWindowOverride: value.syncWindowOverride,
+        reason: value.reason.trim() || undefined,
+      });
+    },
     onSuccess: (op) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.argocd.operations });
       toastSuccess(`Sync queued for ${appName}`);
@@ -55,6 +51,26 @@ export function SyncAppDialog({
       toastApiError('Sync failed', error);
     },
   });
+
+  const form = useAppForm({
+    defaultValues: {
+      revision: defaultRevision ?? '',
+      prune: false,
+      dryRun: false,
+      syncWindowOverride: false,
+      reason: '',
+    },
+    onSubmit: () => sync.mutate(),
+  });
+
+  // Old gate (`syncWindowOverride && !reason.trim()`), recomputed from form state.
+  const reasonRequired = useStore(
+    form.store,
+    (s) => s.values.syncWindowOverride && !s.values.reason.trim(),
+  );
+  const dryRun = useStore(form.store, (s) => s.values.dryRun);
+  const syncWindowOverride = useStore(form.store, (s) => s.values.syncWindowOverride);
+  const reasonLength = useStore(form.store, (s) => s.values.reason.trim().length);
 
   return (
     <ModalShell
@@ -79,7 +95,7 @@ export function SyncAppDialog({
             Cancel
           </button>
           <button
-            onClick={() => sync.mutate()}
+            onClick={() => void form.handleSubmit()}
             disabled={sync.isPending || reasonRequired}
             className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
@@ -99,23 +115,33 @@ export function SyncAppDialog({
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Revision (optional)</label>
-            <input
-              type="text"
-              value={revision}
-              onChange={(e) => setRevision(e.target.value)}
-              placeholder="HEAD or 7c9f2a1"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="revision">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="HEAD or 7c9f2a1"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={prune}
-              onChange={(e) => setPrune(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border"
-            />
+            <form.Field name="prune">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="mt-0.5 h-4 w-4 rounded border-border"
+                />
+              )}
+            </form.Field>
             <div>
               <div className="text-foreground font-medium">Prune resources</div>
               <div className="text-xs text-muted-foreground">
@@ -125,12 +151,17 @@ export function SyncAppDialog({
           </label>
 
           <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={dryRun}
-              onChange={(e) => setDryRun(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border"
-            />
+            <form.Field name="dryRun">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="mt-0.5 h-4 w-4 rounded border-border"
+                />
+              )}
+            </form.Field>
             <div>
               <div className="text-foreground font-medium">Dry run</div>
               <div className="text-xs text-muted-foreground">
@@ -140,12 +171,17 @@ export function SyncAppDialog({
           </label>
 
           <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={syncWindowOverride}
-              onChange={(e) => setSyncWindowOverride(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border"
-            />
+            <form.Field name="syncWindowOverride">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="mt-0.5 h-4 w-4 rounded border-border"
+                />
+              )}
+            </form.Field>
             <div>
               <div className="text-foreground font-medium">Sync-window override</div>
               <div className="text-xs text-muted-foreground">
@@ -157,17 +193,22 @@ export function SyncAppDialog({
           {syncWindowOverride && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Override reason</label>
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={3}
-                maxLength={500}
-                placeholder="Change ticket or incident reason"
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="reason">
+                {(field) => (
+                  <textarea
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    rows={3}
+                    maxLength={500}
+                    placeholder="Change ticket or incident reason"
+                    className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
               <div className="flex justify-end text-xs text-muted-foreground tabular-nums">
-                {reason.trim().length}/500
+                {reasonLength}/500
               </div>
             </div>
           )}

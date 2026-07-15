@@ -5,13 +5,13 @@
 // (server / namespace pairs, one per line). The backend takes the rest of
 // AppProjectSpec from defaults.
 
-import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { Loader2, FolderTree } from 'lucide-react';
 import { createArgoProject } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 import type { ArgoProjectSyncWindow } from '@/types';
 
 interface CreateProjectDialogProps {
@@ -87,46 +87,60 @@ function buildSyncWindows(options: {
 
 export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialogProps) {
   const queryClient = useQueryClient();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [sourceRepos, setSourceRepos] = useState('*');
-  const [destinations, setDestinations] = useState('* | *');
-  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
-  const [maintenanceSchedule, setMaintenanceSchedule] = useState('0 9 * * 1-5');
-  const [maintenanceDuration, setMaintenanceDuration] = useState('8h');
-  const [blackoutEnabled, setBlackoutEnabled] = useState(false);
-  const [blackoutSchedule, setBlackoutSchedule] = useState('0 22 * * 1-5');
-  const [blackoutDuration, setBlackoutDuration] = useState('10h');
-  const [syncWindowTimeZone, setSyncWindowTimeZone] = useState('UTC');
 
   const create = useMutation({
-    mutationFn: () =>
-      createArgoProject(instanceId, {
-        name: name.trim(),
+    mutationFn: () => {
+      const value = form.state.values;
+      return createArgoProject(instanceId, {
+        name: value.name.trim(),
         spec: {
-          description: description.trim() || undefined,
-          sourceRepos: parseLines(sourceRepos),
-          destinations: parseDestinations(destinations),
+          description: value.description.trim() || undefined,
+          sourceRepos: parseLines(value.sourceRepos),
+          destinations: parseDestinations(value.destinations),
           syncWindows: buildSyncWindows({
-            maintenanceEnabled,
-            maintenanceSchedule,
-            maintenanceDuration,
-            blackoutEnabled,
-            blackoutSchedule,
-            blackoutDuration,
-            syncWindowTimeZone,
+            maintenanceEnabled: value.maintenanceEnabled,
+            maintenanceSchedule: value.maintenanceSchedule,
+            maintenanceDuration: value.maintenanceDuration,
+            blackoutEnabled: value.blackoutEnabled,
+            blackoutSchedule: value.blackoutSchedule,
+            blackoutDuration: value.blackoutDuration,
+            syncWindowTimeZone: value.syncWindowTimeZone,
           }),
         },
-    }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.argocd.projects(instanceId) });
-      toastSuccess(`AppProject ${name} created`);
+      toastSuccess(`AppProject ${form.state.values.name} created`);
       onClose();
     },
     onError: (error: Error) => {
       toastApiError('Create failed', error);
     },
   });
+
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      description: '',
+      sourceRepos: '*',
+      destinations: '* | *',
+      maintenanceEnabled: false,
+      maintenanceSchedule: '0 9 * * 1-5',
+      maintenanceDuration: '8h',
+      blackoutEnabled: false,
+      blackoutSchedule: '0 22 * * 1-5',
+      blackoutDuration: '10h',
+      syncWindowTimeZone: 'UTC',
+    },
+    onSubmit: () => create.mutate(),
+  });
+
+  // Old disabled gate (`!name.trim()`) + window-section visibility,
+  // recomputed from form state.
+  const nameEmpty = useStore(form.store, (s) => !s.values.name.trim());
+  const maintenanceEnabled = useStore(form.store, (s) => s.values.maintenanceEnabled);
+  const blackoutEnabled = useStore(form.store, (s) => s.values.blackoutEnabled);
 
   return (
     <ModalShell
@@ -152,8 +166,8 @@ export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialog
             Cancel
           </button>
           <button
-            onClick={() => create.mutate()}
-            disabled={!name.trim() || create.isPending}
+            onClick={() => void form.handleSubmit()}
+            disabled={nameEmpty || create.isPending}
             className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
               disabled:opacity-50"
@@ -166,38 +180,53 @@ export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialog
     >
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="platform-team"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="platform-team"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Owner: Platform Team"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="description">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Owner: Platform Team"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Source Repos (one per line)</label>
-            <textarea
-              value={sourceRepos}
-              onChange={(e) => setSourceRepos(e.target.value)}
-              rows={3}
-              placeholder="*&#10;https://github.com/org/*"
-              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="sourceRepos">
+              {(field) => (
+                <textarea
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  rows={3}
+                  placeholder="*&#10;https://github.com/org/*"
+                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <p className="text-xs text-muted-foreground">
               Glob patterns. <code>*</code> allows any.
             </p>
@@ -205,14 +234,19 @@ export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialog
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Destinations (one per line)</label>
-            <textarea
-              value={destinations}
-              onChange={(e) => setDestinations(e.target.value)}
-              rows={3}
-              placeholder="* | *&#10;https://kubernetes.default.svc | production"
-              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="destinations">
+              {(field) => (
+                <textarea
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  rows={3}
+                  placeholder="* | *&#10;https://kubernetes.default.svc | production"
+                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <p className="text-xs text-muted-foreground">
               Format: <code>&lt;server&gt; | &lt;namespace&gt;</code>. Use <code>*</code> for any.
             </p>
@@ -221,21 +255,31 @@ export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialog
           <div className="rounded-lg border border-border bg-background p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-                <input
-                  type="checkbox"
-                  checked={maintenanceEnabled}
-                  onChange={(e) => setMaintenanceEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-border"
-                />
+                <form.Field name="maintenanceEnabled">
+                  {(field) => (
+                    <input
+                      type="checkbox"
+                      checked={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.checked)}
+                      onBlur={field.handleBlur}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                  )}
+                </form.Field>
                 Maintenance window
               </label>
               <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-                <input
-                  type="checkbox"
-                  checked={blackoutEnabled}
-                  onChange={(e) => setBlackoutEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-border"
-                />
+                <form.Field name="blackoutEnabled">
+                  {(field) => (
+                    <input
+                      type="checkbox"
+                      checked={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.checked)}
+                      onBlur={field.handleBlur}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                  )}
+                </form.Field>
                 Blackout window
               </label>
             </div>
@@ -244,29 +288,44 @@ export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialog
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <label className="space-y-1.5">
                     <span className="text-xs font-medium text-muted-foreground">Timezone</span>
-                    <input
-                      value={syncWindowTimeZone}
-                      onChange={(e) => setSyncWindowTimeZone(e.target.value)}
-                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
-                    />
+                    <form.Field name="syncWindowTimeZone">
+                      {(field) => (
+                        <input
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                        />
+                      )}
+                    </form.Field>
                   </label>
                   {maintenanceEnabled && (
                     <>
                       <label className="space-y-1.5">
                         <span className="text-xs font-medium text-muted-foreground">Maintenance schedule</span>
-                        <input
-                          value={maintenanceSchedule}
-                          onChange={(e) => setMaintenanceSchedule(e.target.value)}
-                          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
-                        />
+                        <form.Field name="maintenanceSchedule">
+                          {(field) => (
+                            <input
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                            />
+                          )}
+                        </form.Field>
                       </label>
                       <label className="space-y-1.5">
                         <span className="text-xs font-medium text-muted-foreground">Maintenance duration</span>
-                        <input
-                          value={maintenanceDuration}
-                          onChange={(e) => setMaintenanceDuration(e.target.value)}
-                          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
-                        />
+                        <form.Field name="maintenanceDuration">
+                          {(field) => (
+                            <input
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                            />
+                          )}
+                        </form.Field>
                       </label>
                     </>
                   )}
@@ -275,19 +334,29 @@ export function CreateProjectDialog({ instanceId, onClose }: CreateProjectDialog
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <label className="space-y-1.5">
                       <span className="text-xs font-medium text-muted-foreground">Blackout schedule</span>
-                      <input
-                        value={blackoutSchedule}
-                        onChange={(e) => setBlackoutSchedule(e.target.value)}
-                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
-                      />
+                      <form.Field name="blackoutSchedule">
+                        {(field) => (
+                          <input
+                            value={field.state.value}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            onBlur={field.handleBlur}
+                            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                          />
+                        )}
+                      </form.Field>
                     </label>
                     <label className="space-y-1.5">
                       <span className="text-xs font-medium text-muted-foreground">Blackout duration</span>
-                      <input
-                        value={blackoutDuration}
-                        onChange={(e) => setBlackoutDuration(e.target.value)}
-                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
-                      />
+                      <form.Field name="blackoutDuration">
+                        {(field) => (
+                          <input
+                            value={field.state.value}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            onBlur={field.handleBlur}
+                            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono"
+                          />
+                        )}
+                      </form.Field>
                     </label>
                   </div>
                 )}

@@ -12,13 +12,13 @@
 // Posts to /argocd/instances/. The auth_token is sent in plaintext; the
 // backend Fernet-encrypts it before persisting.
 
-import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { Loader2, GitBranch } from 'lucide-react';
 import api from '@/lib/api';
 import { queryKeys, useClusters } from '@/lib/hooks';
+import { useAppForm, useStore } from '@/lib/form';
 
 interface RegisterInstanceModalProps {
   onClose: () => void;
@@ -29,22 +29,20 @@ export function RegisterInstanceModal({ onClose }: RegisterInstanceModalProps) {
   const { data: clustersPage } = useClusters({ pageSize: 100 });
   const clusters = clustersPage?.data ?? [];
 
-  const [form, setForm] = useState({
-    name: '',
-    clusterId: '',
-    apiUrl: '',
-    authToken: '',
-    verifySsl: true,
-  });
-
   const create = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (value: {
+      name: string;
+      clusterId: string;
+      apiUrl: string;
+      authToken: string;
+      verifySsl: boolean;
+    }) => {
       const res = await api.post('/argocd/instances', {
-        name: form.name,
-        cluster_id: form.clusterId,
-        api_url: form.apiUrl,
-        auth_token: form.authToken,
-        verify_ssl: form.verifySsl,
+        name: value.name,
+        cluster_id: value.clusterId,
+        api_url: value.apiUrl,
+        auth_token: value.authToken,
+        verify_ssl: value.verifySsl,
       });
       return res.data;
     },
@@ -58,8 +56,23 @@ export function RegisterInstanceModal({ onClose }: RegisterInstanceModalProps) {
     },
   });
 
-  const canSubmit =
-    form.name.trim() && form.clusterId && form.apiUrl.trim() && form.authToken.trim();
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      clusterId: '',
+      apiUrl: '',
+      authToken: '',
+      verifySsl: true,
+    },
+    onSubmit: ({ value }) => create.mutate(value),
+  });
+
+  // Old disabled gate, recomputed from form state 1:1.
+  const canSubmit = useStore(
+    form.store,
+    (s) =>
+      s.values.name.trim() && s.values.clusterId && s.values.apiUrl.trim() && s.values.authToken.trim(),
+  );
 
   return (
     <ModalShell
@@ -83,7 +96,7 @@ export function RegisterInstanceModal({ onClose }: RegisterInstanceModalProps) {
             Cancel
           </button>
           <button
-            onClick={() => create.mutate()}
+            onClick={() => void form.handleSubmit()}
             disabled={!canSubmit || create.isPending}
             className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
@@ -97,31 +110,41 @@ export function RegisterInstanceModal({ onClose }: RegisterInstanceModalProps) {
     >
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Display Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="prod-argocd"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="prod-argocd"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster</label>
-            <select
-              value={form.clusterId}
-              onChange={(e) => setForm({ ...form, clusterId: e.target.value })}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Select a cluster…</option>
-              {clusters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.displayName} ({c.name})
-                </option>
-              ))}
-            </select>
+            <form.Field name="clusterId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a cluster…</option>
+                  {clusters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName} ({c.name})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
             <p className="text-xs text-muted-foreground">
               The cluster the ArgoCD control plane runs on.
             </p>
@@ -129,39 +152,54 @@ export function RegisterInstanceModal({ onClose }: RegisterInstanceModalProps) {
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">API URL</label>
-            <input
-              type="url"
-              value={form.apiUrl}
-              onChange={(e) => setForm({ ...form, apiUrl: e.target.value })}
-              placeholder="https://argocd.example.com"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="apiUrl">
+              {(field) => (
+                <input
+                  type="url"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="https://argocd.example.com"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Auth Token</label>
-            <input
-              type="password"
-              value={form.authToken}
-              onChange={(e) => setForm({ ...form, authToken: e.target.value })}
-              autoComplete="new-password"
-              placeholder="••••••••••••"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="authToken">
+              {(field) => (
+                <input
+                  type="password"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  autoComplete="new-password"
+                  placeholder="••••••••••••"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <p className="text-xs text-muted-foreground">
               ArgoCD project token (created in ArgoCD UI). Stored encrypted at rest.
             </p>
           </div>
 
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.verifySsl}
-              onChange={(e) => setForm({ ...form, verifySsl: e.target.checked })}
-              className="h-4 w-4 rounded border-border"
-            />
+            <form.Field name="verifySsl">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="h-4 w-4 rounded border-border"
+                />
+              )}
+            </form.Field>
             <span className="text-foreground">Verify SSL certificate</span>
           </label>
     </ModalShell>

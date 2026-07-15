@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
+import { useAppForm, useStore } from '@/lib/form';
 import { useTabParam } from '@/lib/use-tab-param';
 import {
   useLoggingOutputs,
@@ -717,35 +718,44 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const clusters = clustersData?.data || [];
 
-  const [form, setForm] = useState({
-    name: '',
-    type: 'elasticsearch' as LoggingOutputType,
-    clusterId: '',
-    enabled: true,
-    config: {} as Record<string, string>,
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      type: 'elasticsearch' as LoggingOutputType,
+      clusterId: '',
+      enabled: true,
+      config: {} as Record<string, string>,
+    },
+    validators: {
+      // Old pre-submit check, ported 1:1.
+      onSubmit: ({ value }) => (!value.name ? 'Name is required' : undefined),
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createOutput.mutateAsync({
+          name: value.name,
+          type: value.type,
+          clusterId: value.clusterId || undefined,
+          enabled: value.enabled,
+          config: value.config,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
 
-  const typeConfig = outputTypeFields[form.type];
+  const outputName = useStore(form.store, (s) => s.values.name);
+  const outputType = useStore(form.store, (s) => s.values.type);
+  const outputConfig = useStore(form.store, (s) => s.values.config);
 
-  const handleSave = async () => {
-    if (!form.name) {
-      toastError('Name is required');
-      return;
-    }
-
-    try {
-      await createOutput.mutateAsync({
-        name: form.name,
-        type: form.type,
-        clusterId: form.clusterId || undefined,
-        enabled: form.enabled,
-        config: form.config,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
+  const typeConfig = outputTypeFields[outputType];
 
   return (
     <OverlayShell onClose={onClose}>
@@ -760,14 +770,19 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Production Elasticsearch"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Production Elasticsearch"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
@@ -776,10 +791,13 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
               {(Object.keys(outputTypeFields) as LoggingOutputType[]).map((type) => (
                 <button
                   key={type}
-                  onClick={() => setForm((f) => ({ ...f, type, config: {} }))}
+                  onClick={() => {
+                    form.setFieldValue('type', type);
+                    form.setFieldValue('config', {});
+                  }}
                   className={cn(
                     'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    form.type === type
+                    outputType === type
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground'
                   )}
@@ -792,19 +810,24 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster (optional)</label>
-            <select
-              value={form.clusterId}
-              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">All Clusters</option>
-              {clusters.map((cluster) => (
-                <option key={cluster.id} value={cluster.id}>
-                  {cluster.displayName}
-                </option>
-              ))}
-            </select>
+            <form.Field name="clusterId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">All Clusters</option>
+                  {clusters.map((cluster) => (
+                    <option key={cluster.id} value={cluster.id}>
+                      {cluster.displayName}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </div>
 
           {/* Type-specific fields */}
@@ -813,12 +836,9 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
               <label className="text-sm font-medium text-foreground">{field.label}</label>
               <input
                 type={field.type}
-                value={form.config[field.key] || ''}
+                value={outputConfig[field.key] || ''}
                 onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    config: { ...f.config, [field.key]: e.target.value },
-                  }))
+                  form.setFieldValue('config', { ...outputConfig, [field.key]: e.target.value })
                 }
                 placeholder={field.placeholder}
                 className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
@@ -828,12 +848,17 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
           ))}
 
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-              className="rounded border-border text-primary focus:ring-ring"
-            />
+            <form.Field name="enabled">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="rounded border-border text-primary focus:ring-ring"
+                />
+              )}
+            </form.Field>
             <span className="text-sm text-foreground">Enabled</span>
           </label>
         </div>
@@ -847,8 +872,8 @@ function CreateOutputModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={createOutput.isPending || !form.name}
+            onClick={() => void form.handleSubmit()}
+            disabled={createOutput.isPending || !outputName}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
@@ -876,88 +901,93 @@ function CreatePipelineModal({
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const clusters = clustersData?.data || [];
 
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    clusterId: '',
-    namespaces: [] as string[],
-    outputIds: [] as string[],
-    labelKey: '',
-    labelValue: '',
-    labels: {} as Record<string, string>,
-    enabled: true,
+  const pipelineForm = useAppForm({
+    defaultValues: {
+      name: '',
+      description: '',
+      clusterId: '',
+      namespaces: [] as string[],
+      outputIds: [] as string[],
+      labelKey: '',
+      labelValue: '',
+      labels: {} as Record<string, string>,
+      enabled: true,
+    },
+    validators: {
+      // Old pre-submit checks, ported 1:1 (same messages, same order).
+      onSubmit: ({ value }) =>
+        !value.name
+          ? 'Name is required'
+          : value.outputIds.length === 0
+            ? 'Select at least one output'
+            : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      const filters = Object.entries(value.labels).map(([field, pattern]) => ({
+        type: 'include' as const,
+        field,
+        pattern,
+      }));
+
+      try {
+        await createPipeline.mutateAsync({
+          name: value.name,
+          description: value.description || undefined,
+          clusterId: value.clusterId || undefined,
+          namespaces: value.namespaces,
+          outputIds: value.outputIds,
+          filters,
+          enabled: value.enabled,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
+
+  // Chips / KV rows render off the whole value object — same re-render
+  // behavior as the previous useState form.
+  const form = useStore(pipelineForm.store, (s) => s.values);
 
   const { data: namespacesData } = useClusterNamespaces(form.clusterId);
   const namespaces = namespacesData || [];
 
   const toggleNamespace = (ns: string) => {
-    setForm((f) => ({
-      ...f,
-      namespaces: f.namespaces.includes(ns)
-        ? f.namespaces.filter((n) => n !== ns)
-        : [...f.namespaces, ns],
-    }));
+    pipelineForm.setFieldValue(
+      'namespaces',
+      form.namespaces.includes(ns)
+        ? form.namespaces.filter((n) => n !== ns)
+        : [...form.namespaces, ns],
+    );
   };
 
   const toggleOutput = (id: string) => {
-    setForm((f) => ({
-      ...f,
-      outputIds: f.outputIds.includes(id)
-        ? f.outputIds.filter((o) => o !== id)
-        : [...f.outputIds, id],
-    }));
+    pipelineForm.setFieldValue(
+      'outputIds',
+      form.outputIds.includes(id)
+        ? form.outputIds.filter((o) => o !== id)
+        : [...form.outputIds, id],
+    );
   };
 
   const addLabel = () => {
     if (form.labelKey && form.labelValue) {
-      setForm((f) => ({
-        ...f,
-        labels: { ...f.labels, [f.labelKey]: f.labelValue },
-        labelKey: '',
-        labelValue: '',
-      }));
+      pipelineForm.setFieldValue('labels', { ...form.labels, [form.labelKey]: form.labelValue });
+      pipelineForm.setFieldValue('labelKey', '');
+      pipelineForm.setFieldValue('labelValue', '');
     }
   };
 
   const removeLabel = (key: string) => {
-    setForm((f) => {
-      const labels = { ...f.labels };
-      delete labels[key];
-      return { ...f, labels };
-    });
-  };
-
-  const handleSave = async () => {
-    if (!form.name) {
-      toastError('Name is required');
-      return;
-    }
-    if (form.outputIds.length === 0) {
-      toastError('Select at least one output');
-      return;
-    }
-
-    const filters = Object.entries(form.labels).map(([field, pattern]) => ({
-      type: 'include' as const,
-      field,
-      pattern,
-    }));
-
-    try {
-      await createPipeline.mutateAsync({
-        name: form.name,
-        description: form.description || undefined,
-        clusterId: form.clusterId || undefined,
-        namespaces: form.namespaces,
-        outputIds: form.outputIds,
-        filters,
-        enabled: form.enabled,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
+    const labels = { ...form.labels };
+    delete labels[key];
+    pipelineForm.setFieldValue('labels', labels);
   };
 
   return (
@@ -974,43 +1004,61 @@ function CreatePipelineModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Production Log Pipeline"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <pipelineForm.Field name="name">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="Production Log Pipeline"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </pipelineForm.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Cluster</label>
-              <select
-                value={form.clusterId}
-                onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value, namespaces: [] }))}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="">All Clusters</option>
-                {clusters.map((cluster) => (
-                  <option key={cluster.id} value={cluster.id}>
-                    {cluster.displayName}
-                  </option>
-                ))}
-              </select>
+              <pipelineForm.Field name="clusterId">
+                {(field) => (
+                  <select
+                    value={field.state.value}
+                    onChange={(e) => {
+                      field.handleChange(e.target.value);
+                      pipelineForm.setFieldValue('namespaces', []);
+                    }}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="">All Clusters</option>
+                    {clusters.map((cluster) => (
+                      <option key={cluster.id} value={cluster.id}>
+                        {cluster.displayName}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </pipelineForm.Field>
             </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Describe this pipeline's purpose"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <pipelineForm.Field name="description">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Describe this pipeline's purpose"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </pipelineForm.Field>
           </div>
 
           {/* Namespaces */}
@@ -1050,7 +1098,7 @@ function CreatePipelineModal({
               <input
                 type="text"
                 value={form.labelKey}
-                onChange={(e) => setForm((f) => ({ ...f, labelKey: e.target.value }))}
+                onChange={(e) => pipelineForm.setFieldValue('labelKey', e.target.value)}
                 placeholder="Label key"
                 className="flex-1 h-8 px-2.5 rounded border border-border bg-background text-xs font-mono
                   placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -1058,7 +1106,7 @@ function CreatePipelineModal({
               <input
                 type="text"
                 value={form.labelValue}
-                onChange={(e) => setForm((f) => ({ ...f, labelValue: e.target.value }))}
+                onChange={(e) => pipelineForm.setFieldValue('labelValue', e.target.value)}
                 placeholder="Value"
                 className="flex-1 h-8 px-2.5 rounded border border-border bg-background text-xs font-mono
                   placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -1116,12 +1164,17 @@ function CreatePipelineModal({
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-              className="rounded border-border text-primary focus:ring-ring"
-            />
+            <pipelineForm.Field name="enabled">
+              {(field) => (
+                <input
+                  type="checkbox"
+                  checked={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.checked)}
+                  onBlur={field.handleBlur}
+                  className="rounded border-border text-primary focus:ring-ring"
+                />
+              )}
+            </pipelineForm.Field>
             <span className="text-sm text-foreground">Enabled</span>
           </label>
         </div>
@@ -1135,7 +1188,7 @@ function CreatePipelineModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void pipelineForm.handleSubmit()}
             disabled={createPipeline.isPending || !form.name || form.outputIds.length === 0}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"

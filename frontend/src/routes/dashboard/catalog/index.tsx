@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from '@/lib/navigation';
+import { useAppForm, useStore } from '@/lib/form';
 import { useTabParam } from '@/lib/use-tab-param';
 import {
   useHelmRepositories,
@@ -719,11 +720,27 @@ function InstallChartModal({
   const searchParams = useSearchParams();
   const presetClusterId = searchParams?.get('cluster_id') ?? '';
 
-  const [form, setForm] = useState({
-    clusterId: presetClusterId,
-    releaseName: chart.name,
-    namespace: 'default',
-    valuesOverride: version.defaultValues || '',
+  const form = useAppForm({
+    defaultValues: {
+      clusterId: presetClusterId,
+      releaseName: chart.name,
+      namespace: 'default',
+      valuesOverride: version.defaultValues || '',
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await installChart.mutateAsync({
+          cluster_id: value.clusterId,
+          chart_version_id: version.id,
+          release_name: value.releaseName,
+          namespace: value.namespace,
+          values_override: value.valuesOverride || undefined,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
   const [editorMode, setEditorMode] = useState<'form' | 'yaml'>(schema ? 'form' : 'yaml');
   const [yamlError, setYamlError] = useState<string | null>(null);
@@ -732,43 +749,27 @@ function InstallChartModal({
     return (schema ? mergeSchemaDefaults(schema, parsed) : parsed) as HelmValuesObject;
   });
 
+  const clusterId = useStore(form.store, (s) => s.values.clusterId);
+  const releaseName = useStore(form.store, (s) => s.values.releaseName);
+  const namespace = useStore(form.store, (s) => s.values.namespace);
+
   useEffect(() => {
     const parsed = parseHelmValuesYAML(version.defaultValues || '') || {};
-    setForm((current) => ({
-      ...current,
-      valuesOverride: version.defaultValues || '',
-    }));
+    form.setFieldValue('valuesOverride', version.defaultValues || '');
     setSchemaValues((schema ? mergeSchemaDefaults(schema, parsed) : parsed) as HelmValuesObject);
     setEditorMode(schema ? 'form' : 'yaml');
     setYamlError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schema, version.defaultValues]);
-
-  const handleInstall = async () => {
-    try {
-      await installChart.mutateAsync({
-        cluster_id: form.clusterId,
-        chart_version_id: version.id,
-        release_name: form.releaseName,
-        namespace: form.namespace,
-        values_override: form.valuesOverride || undefined,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
 
   const handleSchemaValuesChange = (next: HelmValuesObject) => {
     setSchemaValues(next);
-    setForm((current) => ({
-      ...current,
-      valuesOverride: dumpHelmValuesYAML(next),
-    }));
+    form.setFieldValue('valuesOverride', dumpHelmValuesYAML(next));
     setYamlError(null);
   };
 
   const handleYAMLChange = (nextYAML: string) => {
-    setForm((current) => ({ ...current, valuesOverride: nextYAML }));
+    form.setFieldValue('valuesOverride', nextYAML);
     if (!schema) return;
     const parsed = parseHelmValuesYAML(nextYAML);
     if (parsed == null) {
@@ -797,46 +798,61 @@ function InstallChartModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Target Cluster</label>
-            <select
-              aria-label="Target Cluster"
-              value={form.clusterId}
-              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Select a cluster...</option>
-              {clusters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.displayName} ({c.name})
-                </option>
-              ))}
-            </select>
+            <form.Field name="clusterId">
+              {(field) => (
+                <select
+                  aria-label="Target Cluster"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a cluster...</option>
+                  {clusters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName} ({c.name})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Release Name</label>
-            <input
-              aria-label="Release Name"
-              type="text"
-              value={form.releaseName}
-              onChange={(e) => setForm((f) => ({ ...f, releaseName: e.target.value }))}
-              placeholder="my-release"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="releaseName">
+              {(field) => (
+                <input
+                  aria-label="Release Name"
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="my-release"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Namespace</label>
-            <input
-              aria-label="Namespace"
-              type="text"
-              value={form.namespace}
-              onChange={(e) => setForm((f) => ({ ...f, namespace: e.target.value }))}
-              placeholder="default"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="namespace">
+              {(field) => (
+                <input
+                  aria-label="Namespace"
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="default"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-3">
@@ -881,15 +897,20 @@ function InstallChartModal({
               </div>
             ) : (
               <div className="space-y-2">
-                <textarea
-                  aria-label="Values Override"
-                  value={form.valuesOverride}
-                  onChange={(e) => handleYAMLChange(e.target.value)}
-                  placeholder="# Override default values here..."
-                  rows={12}
-                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                />
+                <form.Field name="valuesOverride">
+                  {(field) => (
+                    <textarea
+                      aria-label="Values Override"
+                      value={field.state.value}
+                      onChange={(e) => handleYAMLChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="# Override default values here..."
+                      rows={12}
+                      className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                    />
+                  )}
+                </form.Field>
                 {yamlError && (
                   <div className="inline-flex items-center gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
                     <AlertTriangle className="h-3.5 w-3.5" />
@@ -910,8 +931,8 @@ function InstallChartModal({
             Cancel
           </button>
           <button
-            onClick={handleInstall}
-            disabled={installChart.isPending || !form.clusterId || !form.releaseName || !form.namespace}
+            onClick={() => void form.handleSubmit()}
+            disabled={installChart.isPending || !clusterId || !releaseName || !namespace}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
@@ -930,31 +951,36 @@ function InstallChartModal({
 
 function AddRepositoryModal({ onClose }: { onClose: () => void }) {
   const createRepo = useCreateHelmRepository();
-  const [form, setForm] = useState({
-    name: '',
-    url: '',
-    repoType: 'helm' as HelmRepoType,
-    description: '',
-    username: '',
-    password: '',
+  const form = useAppForm({
+    defaultValues: {
+      name: '',
+      url: '',
+      repoType: 'helm' as HelmRepoType,
+      description: '',
+      username: '',
+      password: '',
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createRepo.mutateAsync({
+          name: value.name,
+          url: value.url,
+          repoType: value.repoType,
+          description: value.description || undefined,
+          username: value.username || undefined,
+          password: value.password || undefined,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
   const [showAuth, setShowAuth] = useState(false);
 
-  const handleSave = async () => {
-    try {
-      await createRepo.mutateAsync({
-        name: form.name,
-        url: form.url,
-        repoType: form.repoType,
-        description: form.description || undefined,
-        username: form.username || undefined,
-        password: form.password || undefined,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
+  const repoName = useStore(form.store, (s) => s.values.name);
+  const repoUrl = useStore(form.store, (s) => s.values.url);
+  const repoType = useStore(form.store, (s) => s.values.repoType);
 
   return (
     <OverlayShell onClose={onClose}>
@@ -969,26 +995,36 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="prometheus-community"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="prometheus-community"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">URL</label>
-            <input
-              type="text"
-              value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://prometheus-community.github.io/helm-charts"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="url">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="https://prometheus-community.github.io/helm-charts"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
@@ -997,10 +1033,10 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
               {(['helm', 'oci'] as const).map((type) => (
                 <button
                   key={type}
-                  onClick={() => setForm((f) => ({ ...f, repoType: type }))}
+                  onClick={() => form.setFieldValue('repoType', type)}
                   className={cn(
                     'px-4 py-1.5 rounded-md text-xs font-medium transition-colors uppercase',
-                    form.repoType === type
+                    repoType === type
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground'
                   )}
@@ -1013,14 +1049,19 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Optional description"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="description">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="Optional description"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <button
@@ -1035,25 +1076,35 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-4 pl-4 border-l-2 border-border">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Username</label>
-                <input
-                  type="text"
-                  value={form.username}
-                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                  placeholder="Username"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+                <form.Field name="username">
+                  {(field) => (
+                    <input
+                      type="text"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Username"
+                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  )}
+                </form.Field>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-foreground">Password</label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="Password or token"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+                <form.Field name="password">
+                  {(field) => (
+                    <input
+                      type="password"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      placeholder="Password or token"
+                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                        placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  )}
+                </form.Field>
               </div>
             </div>
           )}
@@ -1068,8 +1119,8 @@ function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={createRepo.isPending || !form.name || !form.url}
+            onClick={() => void form.handleSubmit()}
+            disabled={createRepo.isPending || !repoName || !repoUrl}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >

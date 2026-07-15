@@ -49,6 +49,7 @@ import {
   ListChecks,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useAppForm, useStore } from '@/lib/form';
 import { copyToClipboard } from '@/lib/utils';
 
 type TabKey = 'global-roles' | 'cluster-roles' | 'project-roles' | 'users' | 'bindings' | 'effective';
@@ -665,28 +666,45 @@ function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
   const clusters = clustersData?.data || [];
   const roles = clusterRoles || [];
 
-  const [form, setForm] = useState({ userId: '', roleId: '', clusterId: '', namespace: '' });
+  const form = useAppForm({
+    defaultValues: { userId: '', roleId: '', clusterId: '', namespace: '' },
+    validators: {
+      // Old pre-submit check, ported 1:1 as a form-level onSubmit validator.
+      onSubmit: ({ value }) =>
+        !value.userId || !value.roleId || !value.clusterId || !isValidNamespace(value.namespace.trim())
+          ? 'Select a user, cluster role, and cluster; namespace must be a valid label'
+          : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createBinding.mutateAsync({
+          user_id: value.userId,
+          role_id: value.roleId,
+          cluster_id: value.clusterId,
+          namespace: value.namespace.trim() || undefined,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
+  });
 
-  const namespaceValid = isValidNamespace(form.namespace.trim());
-  const canSubmit = !!form.userId && !!form.roleId && !!form.clusterId && namespaceValid;
-
-  const handleSave = async () => {
-    if (!canSubmit) {
-      toastError('Select a user, cluster role, and cluster; namespace must be a valid label');
-      return;
-    }
-    try {
-      await createBinding.mutateAsync({
-        user_id: form.userId,
-        role_id: form.roleId,
-        cluster_id: form.clusterId,
-        namespace: form.namespace.trim() || undefined,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
+  const namespaceValid = useStore(form.store, (s) => isValidNamespace(s.values.namespace.trim()));
+  // Old disabled gate, recomputed from form state 1:1.
+  const canSubmit = useStore(
+    form.store,
+    (s) =>
+      !!s.values.userId &&
+      !!s.values.roleId &&
+      !!s.values.clusterId &&
+      isValidNamespace(s.values.namespace.trim()),
+  );
 
   return (
     <OverlayShell onClose={onClose}>
@@ -701,64 +719,84 @@ function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">User</label>
-            <select
-              value={form.userId}
-              onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Select a user…</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.displayName || u.username}
-                </option>
-              ))}
-            </select>
+            <form.Field name="userId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a user…</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.displayName || u.username}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster Role</label>
-            <select
-              value={form.roleId}
-              onChange={(e) => setForm((f) => ({ ...f, roleId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Select a cluster role…</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.displayName || r.name}
-                </option>
-              ))}
-            </select>
+            <form.Field name="roleId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a cluster role…</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.displayName || r.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Cluster</label>
-            <select
-              value={form.clusterId}
-              onChange={(e) => setForm((f) => ({ ...f, clusterId: e.target.value }))}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">Select a cluster…</option>
-              {clusters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <form.Field name="clusterId">
+              {(field) => (
+                <select
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a cluster…</option>
+                  {clusters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Namespace</label>
-            <input
-              type="text"
-              value={form.namespace}
-              onChange={(e) => setForm((f) => ({ ...f, namespace: e.target.value }))}
-              placeholder="leave blank for cluster-wide"
-              className={cn(
-                'w-full h-9 px-3 rounded-md border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
-                namespaceValid ? 'border-border' : 'border-status-error'
+            <form.Field name="namespace">
+              {(field) => (
+                <input
+                  type="text"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="leave blank for cluster-wide"
+                  className={cn(
+                    'w-full h-9 px-3 rounded-md border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+                    namespaceValid ? 'border-border' : 'border-status-error'
+                  )}
+                />
               )}
-            />
+            </form.Field>
             {!namespaceValid && (
               <p className="text-xs text-status-error">
                 Must be a valid Kubernetes namespace (lowercase alphanumeric and dashes, ≤63 chars).
@@ -776,7 +814,7 @@ function CreateClusterBindingModal({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void form.handleSubmit()}
             disabled={createBinding.isPending || !canSubmit}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
@@ -1021,45 +1059,57 @@ function CreateUserModal({
 }) {
   const createUser = useCreateUser();
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({
-    username: '',
-    email: '',
-    displayName: '',
-    password: '',
-    globalRoles: [] as string[],
+  const form = useAppForm({
+    defaultValues: {
+      username: '',
+      email: '',
+      displayName: '',
+      password: '',
+      globalRoles: [] as string[],
+    },
+    validators: {
+      // Old pre-submit checks, ported 1:1 (same messages, same order).
+      onSubmit: ({ value }) =>
+        !value.username || !value.email || !value.password
+          ? 'Username, email, and password are required'
+          : value.password.length < 8
+            ? 'Password must be at least 8 characters'
+            : undefined,
+    },
+    // Same UX as before: the failed check surfaces as a toast, not inline.
+    onSubmitInvalid: ({ formApi }) => {
+      const err = formApi.state.errors.find((e) => typeof e === 'string');
+      if (err) toastError(err);
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await createUser.mutateAsync({
+          username: value.username,
+          email: value.email,
+          displayName: value.displayName || value.username,
+          password: value.password,
+          globalRoles: value.globalRoles,
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
 
+  const selectedRoles = useStore(form.store, (s) => s.values.globalRoles);
+  const gate = useStore(
+    form.store,
+    (s) => !s.values.username || !s.values.email || !s.values.password,
+  );
+
   const toggleRole = (roleName: string) => {
-    setForm((f) => ({
-      ...f,
-      globalRoles: f.globalRoles.includes(roleName)
-        ? f.globalRoles.filter((r) => r !== roleName)
-        : [...f.globalRoles, roleName],
-    }));
-  };
-
-  const handleSave = async () => {
-    if (!form.username || !form.email || !form.password) {
-      toastError('Username, email, and password are required');
-      return;
-    }
-    if (form.password.length < 8) {
-      toastError('Password must be at least 8 characters');
-      return;
-    }
-
-    try {
-      await createUser.mutateAsync({
-        username: form.username,
-        email: form.email,
-        displayName: form.displayName || form.username,
-        password: form.password,
-        globalRoles: form.globalRoles,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
+    form.setFieldValue(
+      'globalRoles',
+      selectedRoles.includes(roleName)
+        ? selectedRoles.filter((r) => r !== roleName)
+        : [...selectedRoles, roleName],
+    );
   };
 
   return (
@@ -1076,52 +1126,74 @@ function CreateUserModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Username</label>
-              <input
-                type="text"
-                value={form.username}
-                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '') }))}
-                placeholder="johndoe"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                autoFocus
-              />
+              <form.Field name="username">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) =>
+                      field.handleChange(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))
+                    }
+                    onBlur={field.handleBlur}
+                    placeholder="johndoe"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    autoFocus
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Display Name</label>
-              <input
-                type="text"
-                value={form.displayName}
-                onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                placeholder="John Doe"
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="displayName">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="John Doe"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              placeholder="john@example.com"
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            />
+            <form.Field name="email">
+              {(field) => (
+                <input
+                  type="email"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="john@example.com"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              )}
+            </form.Field>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Password</label>
             <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="Minimum 8 characters"
-                className="w-full h-9 px-3 pr-10 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="password">
+                {(field) => (
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    placeholder="Minimum 8 characters"
+                    className="w-full h-9 px-3 pr-10 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
@@ -1141,7 +1213,7 @@ function CreateUserModal({
                   onClick={() => toggleRole(role.name)}
                   className={cn(
                     'px-2.5 py-1 rounded text-xs font-medium transition-colors',
-                    form.globalRoles.includes(role.name)
+                    selectedRoles.includes(role.name)
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground'
                   )}
@@ -1165,8 +1237,8 @@ function CreateUserModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={createUser.isPending || !form.username || !form.email || !form.password}
+            onClick={() => void form.handleSubmit()}
+            disabled={createUser.isPending || gate}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
@@ -1193,37 +1265,41 @@ function EditUserModal({
   onClose: () => void;
 }) {
   const updateUser = useUpdateUser();
-  const [form, setForm] = useState({
-    displayName: user.displayName,
-    email: user.email,
-    enabled: user.enabled,
-    globalRoles: [...user.globalRoles],
+  const form = useAppForm({
+    defaultValues: {
+      displayName: user.displayName,
+      email: user.email,
+      enabled: user.enabled,
+      globalRoles: [...user.globalRoles],
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await updateUser.mutateAsync({
+          id: user.id,
+          data: {
+            displayName: value.displayName,
+            email: value.email,
+            enabled: value.enabled,
+            globalRoles: value.globalRoles,
+          },
+        });
+        onClose();
+      } catch {
+        // Error handled by mutation
+      }
+    },
   });
 
-  const toggleRole = (roleName: string) => {
-    setForm((f) => ({
-      ...f,
-      globalRoles: f.globalRoles.includes(roleName)
-        ? f.globalRoles.filter((r) => r !== roleName)
-        : [...f.globalRoles, roleName],
-    }));
-  };
+  const selectedRoles = useStore(form.store, (s) => s.values.globalRoles);
+  const enabled = useStore(form.store, (s) => s.values.enabled);
 
-  const handleSave = async () => {
-    try {
-      await updateUser.mutateAsync({
-        id: user.id,
-        data: {
-          displayName: form.displayName,
-          email: form.email,
-          enabled: form.enabled,
-          globalRoles: form.globalRoles,
-        },
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
+  const toggleRole = (roleName: string) => {
+    form.setFieldValue(
+      'globalRoles',
+      selectedRoles.includes(roleName)
+        ? selectedRoles.filter((r) => r !== roleName)
+        : [...selectedRoles, roleName],
+    );
   };
 
   return (
@@ -1253,23 +1329,33 @@ function EditUserModal({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Display Name</label>
-              <input
-                type="text"
-                value={form.displayName}
-                onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="displayName">
+                {(field) => (
+                  <input
+                    type="text"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
-                  placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <form.Field name="email">
+                {(field) => (
+                  <input
+                    type="email"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm
+                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                )}
+              </form.Field>
             </div>
           </div>
 
@@ -1282,7 +1368,7 @@ function EditUserModal({
                   onClick={() => toggleRole(role.name)}
                   className={cn(
                     'px-2.5 py-1 rounded text-xs font-medium transition-colors',
-                    form.globalRoles.includes(role.name)
+                    selectedRoles.includes(role.name)
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground'
                   )}
@@ -1299,25 +1385,25 @@ function EditUserModal({
           <div className="rounded-lg border border-border p-4">
             <label className="flex items-center gap-3 cursor-pointer">
               <button
-                onClick={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
+                onClick={() => form.setFieldValue('enabled', !enabled)}
                 className={cn(
                   'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                  form.enabled ? 'bg-primary' : 'bg-muted'
+                  enabled ? 'bg-primary' : 'bg-muted'
                 )}
               >
                 <span
                   className={cn(
                     'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform',
-                    form.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
                   )}
                 />
               </button>
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  Account {form.enabled ? 'Active' : 'Inactive'}
+                  Account {enabled ? 'Active' : 'Inactive'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {form.enabled
+                  {enabled
                     ? 'User can log in and access the platform'
                     : 'User is blocked from logging in'}
                 </p>
@@ -1335,7 +1421,7 @@ function EditUserModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => void form.handleSubmit()}
             disabled={updateUser.isPending}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
               text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
