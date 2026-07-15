@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 346
-- Frontend source lines: 96124
+- Frontend source files: 347
+- Frontend source lines: 96233
 - Go source files under `internal/` excluding generated sqlc and tests: 419
 - Go source files scanned for sqlc query references excluding generated sqlc: 2017
 - sqlc query declarations: 878
-- Component files scanned: 107
+- Component files scanned: 108
 - Helm top-level values scanned: 33
 
 ## Hard Gates
@@ -114,6 +114,7 @@ Owner: frontend/platform. Classification rule: verify relative imports and dynam
 - `@/components/extensions/ExtForm.test` (frontend/src/components/extensions/ExtForm.test.tsx) has no absolute `@/components/...` import
 - `@/components/extensions/SandboxedExtension.test` (frontend/src/components/extensions/SandboxedExtension.test.tsx) has no absolute `@/components/...` import
 - `@/components/fleet/selector-builder.test` (frontend/src/components/fleet/selector-builder.test.tsx) has no absolute `@/components/...` import
+- `@/components/projects/cluster-templates/template-form.test` (frontend/src/components/projects/cluster-templates/template-form.test.tsx) has no absolute `@/components/...` import
 - `@/components/resources/key-value-editor` (frontend/src/components/resources/key-value-editor.tsx) has no absolute `@/components/...` import
 - `@/components/ui/yaml-view-dialog.test` (frontend/src/components/ui/yaml-view-dialog.test.tsx) has no absolute `@/components/...` import
 - `@/components/workloads/pod-terminal.test` (frontend/src/components/workloads/pod-terminal.test.tsx) has no absolute `@/components/...` import
@@ -126,7 +127,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 
 - Hard failures: 0
 - Duplicate-code candidates: 5
-- Dead-code candidates: 15
+- Dead-code candidates: 16
 
 ## Definition Of Done For Each Candidate
 

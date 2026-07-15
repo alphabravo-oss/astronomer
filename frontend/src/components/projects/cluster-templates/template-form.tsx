@@ -10,14 +10,17 @@
  *   • Default project (PSS, quotas, netpol, name)
  *   • Registration policy (token rotation days, approval gate)
  *
- * Inputs are plain controlled `useState` per the project's no-react-hook-form
- * constraint. The same component handles edit by accepting an `initial`
- * snapshot and a `submitLabel`.
+ * Inputs are TanStack Form fields from the shared kit (`useAppForm`);
+ * sections hide (not unmount) when collapsed so field validators keep
+ * running. The Labels/Tools list editors stay plain controlled components
+ * wired in as fields. The same component handles edit by accepting an
+ * `initial` snapshot.
  */
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTools } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { useAppForm } from '@/lib/form';
 import type {
   ClusterTemplateWriteRequest,
   ClusterTemplateSpec,
@@ -50,23 +53,9 @@ const envOptions: ClusterTemplateSpec['environment'][] = [
   'other',
 ];
 
-const defaultSpec: ClusterTemplateSpec = {
-  environment: 'development',
-  labels: [],
-  tools: [],
-  defaultProject: {
-    name: '',
-    podSecurityProfile: 'baseline',
-    resourceQuotaCpu: null,
-    resourceQuotaMemory: null,
-    resourceQuotaPods: null,
-    networkPolicyMode: 'isolated',
-  },
-  registrationPolicy: {
-    tokenRotationDays: 90,
-    requireApproval: false,
-  },
-};
+// This form's inputs are one notch tighter than the kit default — merged
+// over the kit's base input class (twMerge, later wins).
+const tplInputClassName = 'h-9 rounded-md focus:ring-1';
 
 export function TemplateForm({
   initial,
@@ -76,237 +65,234 @@ export function TemplateForm({
   onSubmit,
   onCancel,
 }: TemplateFormProps) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [displayName, setDisplayName] = useState(initial?.displayName ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [spec, setSpec] = useState<ClusterTemplateSpec>(initial?.spec ?? defaultSpec);
-  const [clientErrors, setClientErrors] = useState<string[]>([]);
-
-  const update = <K extends keyof ClusterTemplateSpec>(key: K, value: ClusterTemplateSpec[K]) =>
-    setSpec((prev) => ({ ...prev, [key]: value }));
-
-  const updateDefaultProject = <K extends keyof ClusterTemplateSpec['defaultProject']>(
-    key: K,
-    value: ClusterTemplateSpec['defaultProject'][K],
-  ) => setSpec((prev) => ({ ...prev, defaultProject: { ...prev.defaultProject, [key]: value } }));
-
-  const updateRegistration = <K extends keyof ClusterTemplateSpec['registrationPolicy']>(
-    key: K,
-    value: ClusterTemplateSpec['registrationPolicy'][K],
-  ) =>
-    setSpec((prev) => ({
-      ...prev,
-      registrationPolicy: { ...prev.registrationPolicy, [key]: value },
-    }));
-
-  const handleSubmit = () => {
-    const errors: string[] = [];
-    if (!name.trim()) errors.push('Name is required');
-    if (!displayName.trim()) errors.push('Display name is required');
-    if (!isEdit && !/^[a-z0-9-]+$/.test(name.trim())) {
-      errors.push('Name must be lowercase letters, digits, and dashes');
-    }
-    if (spec.registrationPolicy.tokenRotationDays <= 0) {
-      errors.push('Token rotation days must be > 0');
-    }
-    if (errors.length) {
-      setClientErrors(errors);
-      return;
-    }
-    setClientErrors([]);
-    onSubmit({
-      name: name.trim(),
-      displayName: displayName.trim(),
-      description: description.trim() || undefined,
-      spec,
-    });
-  };
-
-  const allErrors = useMemo(() => {
-    const out = [...clientErrors];
-    if (serverError) out.unshift(serverError);
-    return out;
-  }, [clientErrors, serverError]);
+  const form = useAppForm({
+    defaultValues: {
+      name: initial?.name ?? '',
+      displayName: initial?.displayName ?? '',
+      description: initial?.description ?? '',
+      environment: initial?.spec.environment ?? ('development' as const),
+      labels: initial?.spec.labels ?? ([] as ClusterTemplateLabel[]),
+      tools: initial?.spec.tools ?? ([] as ClusterTemplateToolBinding[]),
+      projectName: initial?.spec.defaultProject.name ?? '',
+      podSecurityProfile: initial?.spec.defaultProject.podSecurityProfile ?? ('baseline' as const),
+      // Quotas are kept as strings in form state and converted at submit
+      // (empty = unlimited = null on the wire, exactly as before).
+      resourceQuotaCpu: initial?.spec.defaultProject.resourceQuotaCpu ?? '',
+      resourceQuotaMemory: initial?.spec.defaultProject.resourceQuotaMemory ?? '',
+      resourceQuotaPods:
+        initial?.spec.defaultProject.resourceQuotaPods != null
+          ? String(initial.spec.defaultProject.resourceQuotaPods)
+          : '',
+      networkPolicyMode: initial?.spec.defaultProject.networkPolicyMode ?? ('isolated' as const),
+      tokenRotationDays: initial?.spec.registrationPolicy.tokenRotationDays ?? 90,
+      requireApproval: initial?.spec.registrationPolicy.requireApproval ?? false,
+    },
+    onSubmit: ({ value }) => {
+      onSubmit({
+        name: value.name.trim(),
+        displayName: value.displayName.trim(),
+        description: value.description.trim() || undefined,
+        spec: {
+          environment: value.environment,
+          labels: value.labels,
+          tools: value.tools,
+          defaultProject: {
+            name: value.projectName,
+            podSecurityProfile: value.podSecurityProfile,
+            resourceQuotaCpu: value.resourceQuotaCpu.trim() || null,
+            resourceQuotaMemory: value.resourceQuotaMemory.trim() || null,
+            resourceQuotaPods: value.resourceQuotaPods.trim()
+              ? Number(value.resourceQuotaPods.trim())
+              : null,
+            networkPolicyMode: value.networkPolicyMode,
+          },
+          registrationPolicy: {
+            tokenRotationDays: value.tokenRotationDays,
+            requireApproval: value.requireApproval,
+          },
+        },
+      });
+    },
+  });
 
   return (
     <div className="space-y-4">
       <Section title="Identity" defaultOpen>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Name" required>
-            <input
-              type="text"
-              value={name}
-              disabled={isEdit}
-              placeholder="prod-template"
-              onChange={(e) =>
-                setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))
-              }
-              className="text-input"
-            />
-          </Field>
-          <Field label="Display name" required>
-            <input
-              type="text"
-              value={displayName}
-              placeholder="Production Template"
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="text-input"
-            />
-          </Field>
+          <form.AppField
+            name="name"
+            validators={{
+              onSubmit: ({ value }) => {
+                if (!value.trim()) return 'Name is required';
+                if (!isEdit && !/^[a-z0-9-]+$/.test(value.trim())) {
+                  return 'Name must be lowercase letters, digits, and dashes';
+                }
+                return undefined;
+              },
+            }}
+          >
+            {(field) => (
+              <field.TextField
+                label="Name"
+                required
+                disabled={isEdit}
+                placeholder="prod-template"
+                transform={(v) => v.toLowerCase().replace(/[^a-z0-9-]/g, '-')}
+                className={tplInputClassName}
+              />
+            )}
+          </form.AppField>
+          <form.AppField
+            name="displayName"
+            validators={{
+              onSubmit: ({ value }) => (!value.trim() ? 'Display name is required' : undefined),
+            }}
+          >
+            {(field) => (
+              <field.TextField
+                label="Display name"
+                required
+                placeholder="Production Template"
+                className={tplInputClassName}
+              />
+            )}
+          </form.AppField>
         </div>
-        <Field label="Description">
-          <input
-            type="text"
-            value={description}
-            placeholder="What does this template represent?"
-            onChange={(e) => setDescription(e.target.value)}
-            className="text-input"
-          />
-        </Field>
-        <Field label="Environment">
-          <select
-            value={spec.environment}
-            onChange={(e) => update('environment', e.target.value as ClusterTemplateSpec['environment'])}
-            className="text-input"
-          >
-            {envOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </Section>
-
-      <Section title="Labels">
-        <LabelsEditor value={spec.labels} onChange={(labels) => update('labels', labels)} />
-      </Section>
-
-      <Section title="Tools">
-        <ToolsEditor value={spec.tools} onChange={(tools) => update('tools', tools)} />
-      </Section>
-
-      <Section title="Default project">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field
-            label="Project name template"
-            hint="Use {cluster} for substitution. Leave empty for auto-generation."
-          >
-            <input
-              type="text"
-              value={spec.defaultProject.name ?? ''}
-              placeholder="default-{cluster}"
-              onChange={(e) => updateDefaultProject('name', e.target.value)}
-              className="text-input"
+        <form.AppField name="description">
+          {(field) => (
+            <field.TextField
+              label="Description"
+              placeholder="What does this template represent?"
+              className={tplInputClassName}
             />
-          </Field>
-          <Field label="Pod Security profile">
-            <select
-              value={spec.defaultProject.podSecurityProfile}
-              onChange={(e) =>
-                updateDefaultProject('podSecurityProfile', e.target.value as PodSecurityProfile)
-              }
-              className="text-input"
-            >
-              {psaOptions.map((opt) => (
+          )}
+        </form.AppField>
+        <form.AppField name="environment">
+          {(field) => (
+            <field.SelectField label="Environment" className={tplInputClassName}>
+              {envOptions.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt}
                 </option>
               ))}
-            </select>
-          </Field>
+            </field.SelectField>
+          )}
+        </form.AppField>
+      </Section>
+
+      <Section title="Labels">
+        <form.AppField name="labels">
+          {(field) => <LabelsEditor value={field.state.value} onChange={field.handleChange} />}
+        </form.AppField>
+      </Section>
+
+      <Section title="Tools">
+        <form.AppField name="tools">
+          {(field) => <ToolsEditor value={field.state.value} onChange={field.handleChange} />}
+        </form.AppField>
+      </Section>
+
+      <Section title="Default project">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form.AppField name="projectName">
+            {(field) => (
+              <field.TextField
+                label="Project name template"
+                helper="Use {cluster} for substitution. Leave empty for auto-generation."
+                placeholder="default-{cluster}"
+                className={tplInputClassName}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="podSecurityProfile">
+            {(field) => (
+              <field.SelectField label="Pod Security profile" className={tplInputClassName}>
+                {psaOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </field.SelectField>
+            )}
+          </form.AppField>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Field label="CPU quota" hint="Empty = unlimited">
-            <input
-              type="text"
-              value={spec.defaultProject.resourceQuotaCpu ?? ''}
-              placeholder="e.g. 4"
-              onChange={(e) =>
-                updateDefaultProject('resourceQuotaCpu', e.target.value.trim() || null)
-              }
-              className="text-input"
-            />
-          </Field>
-          <Field label="Memory quota" hint="Empty = unlimited">
-            <input
-              type="text"
-              value={spec.defaultProject.resourceQuotaMemory ?? ''}
-              placeholder="e.g. 8Gi"
-              onChange={(e) =>
-                updateDefaultProject('resourceQuotaMemory', e.target.value.trim() || null)
-              }
-              className="text-input"
-            />
-          </Field>
-          <Field label="Pod quota" hint="Empty = unlimited">
-            <input
-              type="text"
-              value={spec.defaultProject.resourceQuotaPods != null
-                ? String(spec.defaultProject.resourceQuotaPods)
-                : ''}
-              placeholder="e.g. 50"
-              onChange={(e) =>
-                updateDefaultProject(
-                  'resourceQuotaPods',
-                  e.target.value.trim() ? Number(e.target.value.trim()) : null,
-                )
-              }
-              className="text-input"
-            />
-          </Field>
+          <form.AppField name="resourceQuotaCpu">
+            {(field) => (
+              <field.TextField
+                label="CPU quota"
+                helper="Empty = unlimited"
+                placeholder="e.g. 4"
+                className={tplInputClassName}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="resourceQuotaMemory">
+            {(field) => (
+              <field.TextField
+                label="Memory quota"
+                helper="Empty = unlimited"
+                placeholder="e.g. 8Gi"
+                className={tplInputClassName}
+              />
+            )}
+          </form.AppField>
+          <form.AppField name="resourceQuotaPods">
+            {(field) => (
+              <field.TextField
+                label="Pod quota"
+                helper="Empty = unlimited"
+                placeholder="e.g. 50"
+                className={tplInputClassName}
+              />
+            )}
+          </form.AppField>
         </div>
-        <Field label="Network Policy mode">
-          <select
-            value={spec.defaultProject.networkPolicyMode}
-            onChange={(e) =>
-              updateDefaultProject('networkPolicyMode', e.target.value as NetworkPolicyMode)
-            }
-            className="text-input"
-          >
-            {netpolOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <form.AppField name="networkPolicyMode">
+          {(field) => (
+            <field.SelectField label="Network Policy mode" className={tplInputClassName}>
+              {netpolOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </field.SelectField>
+          )}
+        </form.AppField>
       </Section>
 
       <Section title="Registration policy">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Token rotation (days)" required>
-            <input
-              type="number"
-              min={1}
-              value={spec.registrationPolicy.tokenRotationDays}
-              onChange={(e) =>
-                updateRegistration('tokenRotationDays', Math.max(1, Number(e.target.value || 1)))
-              }
-              className="text-input"
-            />
-          </Field>
-          <Field label="Require approval" hint="Enable to gate auto-registration on operator review.">
-            <label className="inline-flex items-center gap-2 mt-1.5 text-sm">
-              <input
-                type="checkbox"
-                checked={!!spec.registrationPolicy.requireApproval}
-                onChange={(e) => updateRegistration('requireApproval', e.target.checked)}
-                className="rounded border-border"
+          <form.AppField
+            name="tokenRotationDays"
+            validators={{
+              onSubmit: ({ value }) =>
+                !(value > 0) ? 'Token rotation days must be > 0' : undefined,
+            }}
+          >
+            {(field) => (
+              <field.NumberField
+                label="Token rotation (days)"
+                required
+                min={1}
+                className={tplInputClassName}
               />
-              <span className="text-muted-foreground">Manual approval required</span>
-            </label>
-          </Field>
+            )}
+          </form.AppField>
+          <form.AppField name="requireApproval">
+            {(field) => (
+              <field.CheckboxField
+                label="Require approval"
+                helper="Enable to gate auto-registration on operator review."
+              />
+            )}
+          </form.AppField>
         </div>
       </Section>
 
-      {allErrors.length > 0 && (
+      {serverError && (
         <div className="rounded-lg border border-status-error/40 bg-status-error/10 p-3 space-y-1">
-          {allErrors.map((err, i) => (
-            <p key={i} className="text-xs text-status-error">
-              {err}
-            </p>
-          ))}
+          <p className="text-xs text-status-error">{serverError}</p>
         </div>
       )}
 
@@ -322,7 +308,7 @@ export function TemplateForm({
         )}
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => void form.handleSubmit()}
           disabled={submitting}
           className={cn(
             'inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity',
@@ -338,7 +324,7 @@ export function TemplateForm({
 }
 
 // ============================================================
-// Helpers — Section / Field shell + sub-editors
+// Helpers — Section shell + sub-editors
 // ============================================================
 
 function Section({
@@ -365,36 +351,8 @@ function Section({
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         )}
       </button>
-      {open && <div className="px-5 pb-5 pt-2 space-y-4">{children}</div>}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  required,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">
-        {label}
-        {required && <span className="text-status-error"> *</span>}
-      </label>
-      {/* Tailwind utility passthrough: child input components reference the
-          shared `text-input` class declared in globals.css OR fall back to
-          locally-scoped classes. We re-apply the canonical input styling
-          here so children stay simple. */}
-      <div className="[&_.text-input]:w-full [&_.text-input]:h-9 [&_.text-input]:px-3 [&_.text-input]:rounded-md [&_.text-input]:border [&_.text-input]:border-border [&_.text-input]:bg-background [&_.text-input]:text-sm [&_.text-input]:placeholder:text-muted-foreground [&_.text-input]:focus:outline-none [&_.text-input]:focus:ring-1 [&_.text-input]:focus:ring-ring [&_.text-input]:disabled:opacity-60">
-        {children}
-      </div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {/* Hidden (not unmounted) when collapsed so field validators keep running. */}
+      <div className={cn('px-5 pb-5 pt-2 space-y-4', !open && 'hidden')}>{children}</div>
     </div>
   );
 }
