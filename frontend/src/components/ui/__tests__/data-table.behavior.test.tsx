@@ -34,12 +34,13 @@ describe('DataTable behavior (TanStack Table engine)', () => {
     expect(bodyRowText()[0]).toContain('Banana');
   });
 
-  it('filters rows with the global search box across visible columns', () => {
+  it('filters rows with the global search box across visible columns (200ms debounce)', async () => {
     render(<DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />);
     fireEvent.change(screen.getByPlaceholderText('Search...'), { target: { value: 'Apple' } });
-    const body = bodyRowText();
-    expect(body).toHaveLength(1);
-    expect(body[0]).toContain('Apple');
+    // Filter application is debounced (200ms): nothing filtered immediately.
+    expect(bodyRowText()).toHaveLength(3);
+    await waitFor(() => expect(bodyRowText()).toHaveLength(1));
+    expect(bodyRowText()[0]).toContain('Apple');
   });
 
   it('paginates and navigates between pages', () => {

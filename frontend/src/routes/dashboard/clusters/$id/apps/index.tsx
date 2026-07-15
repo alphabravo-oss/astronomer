@@ -29,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from '@/lib/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebouncedValue } from '@tanstack/react-pacer';
 import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
 import {
   Package,
@@ -197,12 +198,13 @@ function ClusterAppsPage() {
   });
   const [showDeleteFailed, setShowDeleteFailed] = useState(false);
 
-  // Browse is fetched on mount but the query string updates the key so
-  // typing in the search box re-fetches. 200ms debounce would be nicer
-  // but a single useState read is fine for this scale.
+  // Browse is fetched on mount but the (200ms-debounced) query string
+  // updates the key so typing in the search box re-fetches without
+  // hammering the catalog endpoint on every keystroke.
+  const [debouncedSearchQ] = useDebouncedValue(searchQ, { wait: 200 });
   const browse = useQuery({
-    queryKey: queryKeys.clusterPages.appCatalogBrowse(searchQ),
-    queryFn: () => listCatalogCharts({ limit: 60, search: searchQ || undefined }),
+    queryKey: queryKeys.clusterPages.appCatalogBrowse(debouncedSearchQ),
+    queryFn: () => listCatalogCharts({ limit: 60, search: debouncedSearchQ || undefined }),
     enabled: section === 'browse',
   });
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from '@/lib/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { useDebouncedValue } from '@tanstack/react-pacer';
 import {
   Search,
   Server,
@@ -77,17 +78,6 @@ export function searchResultHref(
   }
 }
 
-// useDebouncedValue returns a value that only updates after `delay`ms of
-// stillness. Avoids hammering the search endpoint on every keystroke.
-function useDebouncedValue<T>(value: T, delay = 250): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
-}
-
 export function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -104,9 +94,11 @@ export function SearchPage() {
   const [nameFilter, setNameFilter] = useState(searchParams.get('name') || '');
   const [errorsExpanded, setErrorsExpanded] = useState(false);
 
-  const debouncedName = useDebouncedValue(nameFilter, 250);
-  const debouncedLabel = useDebouncedValue(labelSelector, 250);
-  const debouncedNamespace = useDebouncedValue(namespace, 250);
+  // Debounced (250ms) copies of the free-text inputs — avoids hammering
+  // the search endpoint on every keystroke (Pacer's useDebouncedValue).
+  const [debouncedName] = useDebouncedValue(nameFilter, { wait: 250 });
+  const [debouncedLabel] = useDebouncedValue(labelSelector, { wait: 250 });
+  const [debouncedNamespace] = useDebouncedValue(namespace, { wait: 250 });
 
   // Sync URL with debounced inputs so the URL reflects the in-flight
   // query. Using replaceState prevents history pollution on every key.

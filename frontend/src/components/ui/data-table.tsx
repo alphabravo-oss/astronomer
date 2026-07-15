@@ -25,6 +25,7 @@ import {
   type Row as RtRow,
 } from '@tanstack/react-table';
 import type { Virtualizer } from '@tanstack/react-virtual';
+import { useDebouncedValue } from '@tanstack/react-pacer';
 import {
   ChevronDown,
   ChevronUp,
@@ -195,7 +196,12 @@ export function DataTable<T>({
   // serverSide pagination is incompatible with virtualization (the virtualizer
   // windows a fully-loaded row model), so it is ignored when virtualized.
   const effectiveServerSide = virtualized ? undefined : serverSide;
-  const [globalFilter, setGlobalFilter] = useState('');
+  // The search input is controlled by `searchInput` (instant) while the
+  // filter the table actually applies is the 200ms-debounced copy — typing
+  // doesn't re-filter the row model on every keystroke. One hook here
+  // covers every search-enabled DataTable in the app.
+  const [searchInput, setSearchInput] = useState('');
+  const [globalFilter] = useDebouncedValue(searchInput, { wait: 200 });
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -321,7 +327,9 @@ export function DataTable<T>({
         return val != null && String(val).toLowerCase().includes(q);
       });
     },
-    onGlobalFilterChange: setGlobalFilter,
+    // Programmatic setGlobalFilter routes through the same debounce as typing.
+    onGlobalFilterChange: (updater: Updater<string>) =>
+      setSearchInput((prev) => (typeof updater === 'function' ? updater(prev) : updater)),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: (updater: Updater<VisibilityState>) =>
@@ -357,6 +365,13 @@ export function DataTable<T>({
     getFacetedUniqueValues: getFacetedUniqueValues(),
     initialState: { pagination: { pageSize } },
   });
+
+  // Snap back to page 1 when the debounced search takes effect — the old
+  // input handler reset the page on every keystroke; now the reset rides
+  // along with the (debounced) filter application instead.
+  useEffect(() => {
+    if (table.getState().pagination.pageIndex !== 0) table.setPageIndex(0);
+  }, [table, globalFilter]);
 
   // A column is visible unless explicitly toggled off. Derived from the
   // columnVisibility state (which we own) rather than querying the table, so the
@@ -426,20 +441,14 @@ export function DataTable<T>({
               <input
                 type="text"
                 placeholder={searchPlaceholder}
-                value={globalFilter}
-                onChange={(e) => {
-                  table.setGlobalFilter(e.target.value);
-                  table.setPageIndex(0);
-                }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full h-9 pl-9 pr-8 rounded-md border border-border bg-background text-sm
                   placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
-              {globalFilter && (
+              {searchInput && (
                 <button
-                  onClick={() => {
-                    table.setGlobalFilter('');
-                    table.setPageIndex(0);
-                  }}
+                  onClick={() => setSearchInput('')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3.5 w-3.5" />
