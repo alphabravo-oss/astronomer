@@ -120,6 +120,13 @@ async function mockApi(page: Page) {
     if (path === `/clusters/${CLUSTER_ID}/pods` && method === 'GET') {
       return route.fulfill({ json: apiResponse([podRow]) });
     }
+    // Raw pod list via the k8s proxy — seeds the pods TanStack DB collection
+    // behind the Pods table (P4.7). The SSE watch that follows is allowed to
+    // fail (the ticket mint below returns no ticket); the table renders from
+    // this seed alone.
+    if (path === `/clusters/${CLUSTER_ID}/k8s/api/v1/pods` && method === 'GET') {
+      return route.fulfill({ json: { items: [podObject] } });
+    }
     // Pod logs initial fetch.
     if (path === `/workloads/pods/${CLUSTER_ID}/${POD_NS}/${POD_NAME}/logs`) {
       return route.fulfill({ json: apiResponse(podLogs) });

@@ -11,11 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
  * scaled below desired." Rancher's Cluster Explorer collapses all
  * workload kinds into one searchable list for the same reason.
  *
- * Data path: k8s passthrough proxy. Five parallel GETs (one per kind),
- * each fetching across all namespaces; the management plane proxies
- * via the agent's tunnel. We do five GETs not one because k8s doesn't
- * expose a multi-kind list endpoint — but the proxy handles all of
- * them concurrently so the wall-time is bounded by the slowest one.
+ * Data path: TanStack DB collections over the k8s passthrough proxy —
+ * one collection per kind, seeded by a REST list and kept live by the
+ * proxy's `?watch=true` NDJSON stream (lib/db/collections.ts). We use
+ * five collections not one because k8s doesn't expose a multi-kind
+ * list endpoint. Search/namespace/kind filtering runs inside the live
+ * query so frame folding stays incremental.
  *
  * Statuses are normalised so the table column is a single readable
  * label per row regardless of source kind: "5/5 ready" for healthy,
@@ -25,7 +26,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useMemo, useState } from 'react';
 import { Link } from '@/lib/link';
 import { useParams, useRouter } from '@/lib/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { eq, ilike, useLiveQuery } from '@tanstack/react-db';
+import { useStore } from '@tanstack/react-store';
 import {
   Boxes,
   Database,
@@ -38,17 +40,8 @@ import {
   Search,
 } from 'lucide-react';
 
-import { k8sGet } from '@/lib/api';
-import { queryKeys } from '@/lib/hooks';
+import { k8sCollection, type K8sWatchStatus } from '@/lib/db/collections';
 import { formatRelativeTime } from '@/lib/utils';
-import { useResourceWatch } from '@/hooks/use-resource-watch';
-
-// Fallback poll cadence when a live watch is open (safety net) vs. not.
-// A live watch streams add/update/delete frames, so we lengthen the poll to a
-// slow reconcile instead of dropping it entirely; if the watch drops the hook
-// reports `live: false` and the shorter interval resumes.
-const WATCH_LIVE_POLL_MS = 5 * 60 * 1000;
-const POLL_MS = 30 * 1000;
 
 // ---------------------------------------------------------------------
 // Types — narrow shapes over k8s objects, only fields we render.
@@ -109,16 +102,68 @@ interface CronJobLike {
   };
 }
 
-interface K8sList<T> {
-  items: T[];
-}
-
 type Workload =
   | { kind: 'Deployment'; item: DeploymentLike }
   | { kind: 'StatefulSet'; item: DeploymentLike }
   | { kind: 'DaemonSet'; item: DaemonSetLike }
   | { kind: 'Job'; item: JobLike }
   | { kind: 'CronJob'; item: CronJobLike };
+
+interface KindFilters {
+  search: string;
+  namespace: string;
+  kind: Workload['kind'] | '';
+}
+
+// Skip k8s controller-owned Jobs (they're CronJob children). The CronJob row
+// already represents them; showing the Jobs here too doubles the row count
+// without adding signal.
+function unownedJob(i: JobLike): boolean {
+  return !i.metadata.ownerReferences?.some((o) => o.controller);
+}
+
+/** Concrete row shape for the live queries — ref proxies need a non-generic type. */
+interface WorkloadObj {
+  metadata: K8sMeta;
+}
+
+/**
+ * One workload kind as a live collection: `all` rows feed the namespace
+ * dropdown and the total count; `filtered` applies the page filters inside
+ * the collection query (kind gating disables the query outright).
+ */
+function useWorkloadKind<T extends WorkloadObj>(
+  clusterId: string,
+  path: string,
+  kind: Workload['kind'],
+  filters: KindFilters,
+): { all: T[]; filtered: T[]; isLoading: boolean; status: K8sWatchStatus } {
+  const handle = k8sCollection<WorkloadObj>({ clusterId, source: { kind: 'proxy', path } });
+  const status = useStore(handle.status);
+  const needle = filters.search.trim();
+
+  const all = useLiveQuery(
+    (q) => (clusterId ? q.from({ w: handle.collection }) : null),
+    [handle.collection, clusterId],
+  );
+  const filtered = useLiveQuery(
+    (q) => {
+      if (!clusterId || (filters.kind && filters.kind !== kind)) return null;
+      let qb = q.from({ w: handle.collection });
+      if (filters.namespace) qb = qb.where(({ w }) => eq(w.metadata.namespace, filters.namespace));
+      if (needle) qb = qb.where(({ w }) => ilike(w.metadata.name, `%${needle}%`));
+      return qb;
+    },
+    [handle.collection, clusterId, kind, filters.kind, filters.namespace, needle],
+  );
+
+  return {
+    all: (all.data ?? []) as unknown as T[],
+    filtered: (filtered.data ?? []) as unknown as T[],
+    isLoading: !!clusterId && !all.isReady,
+    status,
+  };
+}
 
 // ---------------------------------------------------------------------
 // Page
@@ -132,104 +177,31 @@ function WorkloadsPage() {
   const [namespace, setNamespace] = useState<string>('');
   const [kindFilter, setKindFilter] = useState<Workload['kind'] | ''>('');
 
-  // One live watch per kind, folded into the same React Query cache the table
-  // reads. Each returns `live` once its `?watch=true` stream is open; while
-  // live we lengthen the query's poll to a slow reconcile (WATCH_LIVE_POLL_MS)
-  // and let the stream drive add/update/delete. A watch that can't open reports
-  // live: false, and the shorter POLL_MS keeps the row fresh — graceful
-  // degradation with no code path difference for the table itself.
-  const deployKey = queryKeys.clusterPages.workloadKind(clusterId, 'deployments');
-  const stsKey = queryKeys.clusterPages.workloadKind(clusterId, 'statefulsets');
-  const dsKey = queryKeys.clusterPages.workloadKind(clusterId, 'daemonsets');
-  const jobsKey = queryKeys.clusterPages.workloadKind(clusterId, 'jobs');
-  const cronKey = queryKeys.clusterPages.workloadKind(clusterId, 'cronjobs');
+  // One live collection per kind (seed list + `?watch=true` stream folded by
+  // lib/db/collections.ts). Each kind has its own collection and status; a
+  // missing apiVersion (e.g. batch/v1 disabled) doesn't take the others down
+  // with it, and a stream that can't open self-heals with backoff re-seeds.
+  const filters: KindFilters = { search, namespace, kind: kindFilter };
+  const deployments = useWorkloadKind<DeploymentLike>(clusterId, 'apis/apps/v1/deployments', 'Deployment', filters);
+  const statefulsets = useWorkloadKind<DeploymentLike>(clusterId, 'apis/apps/v1/statefulsets', 'StatefulSet', filters);
+  const daemonsets = useWorkloadKind<DaemonSetLike>(clusterId, 'apis/apps/v1/daemonsets', 'DaemonSet', filters);
+  const jobs = useWorkloadKind<JobLike>(clusterId, 'apis/batch/v1/jobs', 'Job', filters);
+  const cronjobs = useWorkloadKind<CronJobLike>(clusterId, 'apis/batch/v1/cronjobs', 'CronJob', filters);
 
-  const deployWatch = useResourceWatch<DeploymentLike>({
-    clusterId,
-    queryKey: deployKey,
-    source: { kind: 'proxy', path: 'apis/apps/v1/deployments' },
-    enabled: !!clusterId,
-  });
-  const stsWatch = useResourceWatch<DeploymentLike>({
-    clusterId,
-    queryKey: stsKey,
-    source: { kind: 'proxy', path: 'apis/apps/v1/statefulsets' },
-    enabled: !!clusterId,
-  });
-  const dsWatch = useResourceWatch<DaemonSetLike>({
-    clusterId,
-    queryKey: dsKey,
-    source: { kind: 'proxy', path: 'apis/apps/v1/daemonsets' },
-    enabled: !!clusterId,
-  });
-  const jobsWatch = useResourceWatch<JobLike>({
-    clusterId,
-    queryKey: jobsKey,
-    source: { kind: 'proxy', path: 'apis/batch/v1/jobs' },
-    enabled: !!clusterId,
-  });
-  const cronWatch = useResourceWatch<CronJobLike>({
-    clusterId,
-    queryKey: cronKey,
-    source: { kind: 'proxy', path: 'apis/batch/v1/cronjobs' },
-    enabled: !!clusterId,
-  });
+  const anyLive = [deployments, statefulsets, daemonsets, jobs, cronjobs].some(
+    (k) => k.status === 'live',
+  );
 
-  // Five parallel queries. Each kind has its own retry/cache budget;
-  // a missing apiVersion (e.g. batch/v1 disabled) doesn't take the
-  // others down with it. enabled: !!clusterId guards against null
-  // before the page params resolve.
-  const deployments = useQuery({
-    queryKey: deployKey,
-    queryFn: () => k8sGet(clusterId, 'apis/apps/v1/deployments') as Promise<K8sList<DeploymentLike>>,
-    enabled: !!clusterId,
-    refetchInterval: deployWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
-  });
-  const statefulsets = useQuery({
-    queryKey: stsKey,
-    queryFn: () => k8sGet(clusterId, 'apis/apps/v1/statefulsets') as Promise<K8sList<DeploymentLike>>,
-    enabled: !!clusterId,
-    refetchInterval: stsWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
-  });
-  const daemonsets = useQuery({
-    queryKey: dsKey,
-    queryFn: () => k8sGet(clusterId, 'apis/apps/v1/daemonsets') as Promise<K8sList<DaemonSetLike>>,
-    enabled: !!clusterId,
-    refetchInterval: dsWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
-  });
-  const jobs = useQuery({
-    queryKey: jobsKey,
-    queryFn: () => k8sGet(clusterId, 'apis/batch/v1/jobs') as Promise<K8sList<JobLike>>,
-    enabled: !!clusterId,
-    refetchInterval: jobsWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
-  });
-  const cronjobs = useQuery({
-    queryKey: cronKey,
-    queryFn: () => k8sGet(clusterId, 'apis/batch/v1/cronjobs') as Promise<K8sList<CronJobLike>>,
-    enabled: !!clusterId,
-    refetchInterval: cronWatch.live ? WATCH_LIVE_POLL_MS : POLL_MS,
-  });
-
-  const anyLive =
-    deployWatch.live || stsWatch.live || dsWatch.live || jobsWatch.live || cronWatch.live;
-
-  // Merge + filter. Memoise so re-renders triggered by other state
-  // changes (search box typing) don't re-walk every row.
+  // Unfiltered merge — drives the namespace dropdown and the total count.
   const rows = useMemo<Workload[]>(() => {
     const out: Workload[] = [];
-    deployments.data?.items?.forEach((i) => out.push({ kind: 'Deployment', item: i }));
-    statefulsets.data?.items?.forEach((i) => out.push({ kind: 'StatefulSet', item: i }));
-    daemonsets.data?.items?.forEach((i) => out.push({ kind: 'DaemonSet', item: i }));
-    jobs.data?.items?.forEach((i) => {
-      // Skip k8s controller-owned Jobs (they're CronJob children). The
-      // CronJob row already represents them; showing the Jobs here too
-      // doubles the row count without adding signal.
-      const owned = i.metadata.ownerReferences?.some((o) => o.controller);
-      if (!owned) out.push({ kind: 'Job', item: i });
-    });
-    cronjobs.data?.items?.forEach((i) => out.push({ kind: 'CronJob', item: i }));
+    deployments.all.forEach((i) => out.push({ kind: 'Deployment', item: i }));
+    statefulsets.all.forEach((i) => out.push({ kind: 'StatefulSet', item: i }));
+    daemonsets.all.forEach((i) => out.push({ kind: 'DaemonSet', item: i }));
+    jobs.all.filter(unownedJob).forEach((i) => out.push({ kind: 'Job', item: i }));
+    cronjobs.all.forEach((i) => out.push({ kind: 'CronJob', item: i }));
     return out;
-  }, [deployments.data, statefulsets.data, daemonsets.data, jobs.data, cronjobs.data]);
+  }, [deployments.all, statefulsets.all, daemonsets.all, jobs.all, cronjobs.all]);
 
   const namespaces = useMemo(() => {
     const set = new Set<string>();
@@ -237,15 +209,18 @@ function WorkloadsPage() {
     return Array.from(set).sort();
   }, [rows]);
 
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (namespace && r.item.metadata.namespace !== namespace) return false;
-      if (kindFilter && r.kind !== kindFilter) return false;
-      if (needle && !r.item.metadata.name.toLowerCase().includes(needle)) return false;
-      return true;
-    });
-  }, [rows, namespace, kindFilter, search]);
+  // Filtered merge — the search/namespace/kind filters already ran inside
+  // each collection's live query; only the Job-ownership rule stays here
+  // (ownerReferences shape isn't expressible as a query predicate).
+  const filtered = useMemo<Workload[]>(() => {
+    const out: Workload[] = [];
+    deployments.filtered.forEach((i) => out.push({ kind: 'Deployment', item: i }));
+    statefulsets.filtered.forEach((i) => out.push({ kind: 'StatefulSet', item: i }));
+    daemonsets.filtered.forEach((i) => out.push({ kind: 'DaemonSet', item: i }));
+    jobs.filtered.filter(unownedJob).forEach((i) => out.push({ kind: 'Job', item: i }));
+    cronjobs.filtered.forEach((i) => out.push({ kind: 'CronJob', item: i }));
+    return out;
+  }, [deployments.filtered, statefulsets.filtered, daemonsets.filtered, jobs.filtered, cronjobs.filtered]);
 
   const isLoading =
     deployments.isLoading ||
@@ -255,11 +230,11 @@ function WorkloadsPage() {
     cronjobs.isLoading;
 
   const failed = [
-    deployments.error && 'Deployments',
-    statefulsets.error && 'StatefulSets',
-    daemonsets.error && 'DaemonSets',
-    jobs.error && 'Jobs',
-    cronjobs.error && 'CronJobs',
+    deployments.status === 'error' && 'Deployments',
+    statefulsets.status === 'error' && 'StatefulSets',
+    daemonsets.status === 'error' && 'DaemonSets',
+    jobs.status === 'error' && 'Jobs',
+    cronjobs.status === 'error' && 'CronJobs',
   ].filter(Boolean) as string[];
 
   return (

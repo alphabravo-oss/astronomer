@@ -6,7 +6,6 @@ import {
   useClusterNodes,
   useClusterNamespaces,
   useClusterEvents,
-  useClusterPods,
   useWorkloads,
   useDeletePod,
   useScaleWorkload,
@@ -35,6 +34,8 @@ import {
   useK8sPatch,
 } from '@/lib/hooks';
 import * as apiClient from '@/lib/api';
+import { useLiveQuery } from '@tanstack/react-db';
+import { k8sCollection, podRowFromRaw, type RawPod } from '@/lib/db/collections';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
@@ -1127,7 +1128,16 @@ function EventsTable({ clusterId }: { clusterId: string }) {
 
 function PodsTable({ clusterId }: { clusterId: string }) {
   const router = useRouter();
-  const { data, isLoading } = useClusterPods(clusterId);
+  // Live pods collection (P4.7): raw pod objects seeded by a list and folded
+  // from the pods SSE watch, shaped into display rows client-side. Deletes and
+  // restarts land as watch frames, so no invalidation plumbing is needed.
+  const pods = k8sCollection<RawPod>({ clusterId, source: { kind: 'pods' } });
+  const live = useLiveQuery((q) => q.from({ p: pods.collection }), [pods.collection]);
+  const data = useMemo(
+    () => (live.data ?? []).map((p) => podRowFromRaw(clusterId, p)),
+    [live.data, clusterId],
+  );
+  const isLoading = !live.isReady;
   const deletePod = useDeletePod();
   const permissions = useClusterResourcePermissions(clusterId, 'pods');
 
@@ -1220,7 +1230,7 @@ function PodsTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <DataTable data={data || []} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
+      <DataTable data={data} columns={columns} keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search pods..." loading={isLoading} emptyMessage="No pods found"
         onRowClick={makeRowClick(router, clusterId, 'pods', permissions.read)} />
 

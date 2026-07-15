@@ -1,15 +1,24 @@
-// Kubernetes proxy watch transport (P-02).
+// Kubernetes watch transports (P-02 / P4.7).
 //
-// Streams any curated list kind through the generic k8s passthrough
-//   GET /api/v1/clusters/{id}/k8s/{path}?watch=true
-// which the management plane chunk-forwards from the API server as
-// newline-delimited JSON `{ "type": <verb>, "object": {...} }` frames.
-// Auth is the session cookie (`credentials: 'include'`), so no ticket.
+// Two streams, one frame shape:
 //
-// This is the transport half of hooks/use-resource-watch.ts; it lives under
+//  1. `openProxyWatch` — any curated list kind through the generic k8s
+//     passthrough `GET /api/v1/clusters/{id}/k8s/{path}?watch=true`, which the
+//     management plane chunk-forwards from the API server as newline-delimited
+//     JSON `{ "type": <verb>, "object": {...} }` frames. Auth is the session
+//     cookie (`credentials: 'include'`), so no ticket.
+//
+//  2. `openPodsWatch` — the dedicated pods Server-Sent Events endpoint
+//     `GET /api/v1/clusters/{id}/pods/watch/?namespace=<ns>&ticket=<t>`. Each
+//     frame is one SSE event whose `event:` is the watch verb and whose
+//     `data:` is the raw pod object JSON (internal/handler/pods_watch.go).
+//     Auth is a one-use stream ticket because EventSource cannot send headers.
+//
+// These are the transport half of lib/db/collections.ts; they live under
 // lib/api/ so the raw streaming fetch stays inside the fetch-containment
 // boundary.
 
+import { createStreamTicket } from '../api';
 import { API_BASE } from '@/lib/env';
 
 /** The Kubernetes watch verbs the reducer folds. BOOKMARK/ERROR are ignored. */
@@ -92,5 +101,75 @@ export function openProxyWatch(
   return () => {
     cancelled = true;
     controller.abort();
+  };
+}
+
+/**
+ * Open the dedicated pods SSE watch (`GET /clusters/{id}/pods/watch/`) and
+ * invoke `onFrame` for every ADDED/MODIFIED/DELETED event, reporting connection
+ * state via `onStatus`. Returns a cleanup that closes the stream. On any open
+ * failure (ticket mint, EventSource error) it reports `fallback` and stops —
+ * reconnect policy belongs to the caller.
+ */
+export function openPodsWatch(
+  clusterId: string,
+  namespace: string | undefined,
+  onFrame: (verb: WatchVerb, obj: unknown) => void,
+  onStatus: (s: 'live' | 'fallback') => void,
+): () => void {
+  let cancelled = false;
+  let es: EventSource | null = null;
+
+  createStreamTicket('logs', clusterId)
+    .then(({ ticket }) => {
+      if (cancelled) return;
+      const nsQ = namespace ? `namespace=${encodeURIComponent(namespace)}&` : '';
+      const url = `${API_BASE}/clusters/${clusterId}/pods/watch/?${nsQ}ticket=${encodeURIComponent(ticket)}`;
+      try {
+        es = new EventSource(url, { withCredentials: false });
+      } catch {
+        if (!cancelled) onStatus('fallback');
+        return;
+      }
+      es.onopen = () => {
+        if (!cancelled) onStatus('live');
+      };
+      const onEvent = (verb: WatchVerb) => (ev: MessageEvent) => {
+        if (cancelled) return;
+        let obj: unknown;
+        try {
+          obj = ev.data ? JSON.parse(ev.data as string) : undefined;
+        } catch {
+          return;
+        }
+        if (obj) onFrame(verb, obj);
+      };
+      es.addEventListener('ADDED', onEvent('ADDED') as EventListener);
+      es.addEventListener('MODIFIED', onEvent('MODIFIED') as EventListener);
+      es.addEventListener('DELETED', onEvent('DELETED') as EventListener);
+      es.onerror = () => {
+        // The stream dropped (or never opened). Close rather than hammering
+        // EventSource auto-reconnects — the ticket is one-use anyway.
+        try {
+          es?.close();
+        } catch {
+          /* ignore */
+        }
+        es = null;
+        if (!cancelled) onStatus('fallback');
+      };
+    })
+    .catch(() => {
+      if (!cancelled) onStatus('fallback');
+    });
+
+  return () => {
+    cancelled = true;
+    try {
+      es?.close();
+    } catch {
+      /* ignore */
+    }
+    es = null;
   };
 }
