@@ -63,6 +63,10 @@ export const queryKeys = {
     imageVulnDiff: (id: string, hours: number) =>
       ['clusters', id, 'image-vulns', 'diff', hours] as const,
     imageVulnProgress: (id: string) => ['clusters', id, 'image-vulns', 'progress'] as const,
+    // Prefix matching every image-vulns variant (summary/images/report/
+    // history/diff/progress) at once — used by the live routing table on
+    // `image_scan.changed` events.
+    imageVulnsAll: (id: string) => ['clusters', id, 'image-vulns'] as const,
     apiserverAllowlist: (id: string) => ['clusters', id, 'apiserver-allowlist'] as const,
     apiserverAllowlistSnapshots: (id: string) =>
       ['clusters', id, 'apiserver-allowlist-snapshots'] as const,
@@ -291,6 +295,10 @@ export const queryKeys = {
     list: ['backups', 'list'] as const,
     storage: ['backups', 'storage'] as const,
     schedules: ['backups', 'schedules'] as const,
+    // Prefix for the B2 backup engine keys (`b2Keys` in
+    // components/backups/hooks.ts extends this root) — used by the live
+    // routing table on `backup.changed` events.
+    b2All: ['b2-backups'] as const,
   },
   security: {
     all: ['security'] as const,

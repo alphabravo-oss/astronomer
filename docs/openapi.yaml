@@ -5728,28 +5728,6 @@ paths:
           description: Updated status
         '409':
           description: Step is not in failed state
-  /api/v1/clusters/{id}/registration/events/:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Registration
-      summary: Server-Sent Events stream
-      description: |
-        text/event-stream of `cluster.registration.*` events filtered
-        to this cluster. The wizard's page-3 timeline subscribes here.
-      responses:
-        '200':
-          description: SSE stream
-          content:
-            text/event-stream:
-              schema:
-                type: string
   /api/v1/clusters/{id}/vulnerabilities/summary/:
     parameters:
       - name: id

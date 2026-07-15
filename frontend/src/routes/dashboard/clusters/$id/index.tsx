@@ -15,6 +15,7 @@ import {
   useAnomalyBaselines,
   queryKeys,
 } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import {
   getArgoClusterOwnership,
   getRegistrationStatus,
@@ -85,7 +86,8 @@ function ClusterDetailPage() {
     queryKey: queryKeys.clusterPages.vulnerabilitySummary(clusterId),
     queryFn: () => getImageVulnSummary(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 5 * 60 * 1000,
+    // `image_scan.changed` refreshes this while the stream is open.
+    refetchInterval: liveFallback(5 * 60 * 1000),
     refetchIntervalInBackground: false,
   });
   const generateKubeconfig = useGenerateKubeconfig();
@@ -628,7 +630,9 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
     queryKey: queryKeys.argocd.clusterOwnership(cluster.id),
     queryFn: () => getArgoClusterOwnership(cluster.id),
     enabled: !!cluster.id,
-    refetchInterval: 60_000,
+    // `argocd.changed` (scope: ownership/health) refreshes this while the
+    // stream is open.
+    refetchInterval: liveFallback(60_000),
   });
   const decisionMutation = useMutation({
     mutationFn: ({ slug, decision, reason }: { slug: string; decision: 'adopt' | 'leave_local' | 'replace'; reason: string }) =>
@@ -1011,7 +1015,9 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
         return null;
       }
     },
-    refetchInterval: 5000,
+    // `cluster.registration.step`/`.phase` events refresh this while the
+    // stream is open.
+    refetchInterval: liveFallback(5000),
   });
   const phase = data?.phase;
   if (!phase || phase === 'ready') return null; // collapse when done

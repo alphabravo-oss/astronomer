@@ -18,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -47,6 +48,25 @@ type AgentFleetHandler struct {
 	agentImageTag              string
 	agentUpgradeDefaultProfile string
 	requester                  K8sRequester
+	bus                        *events.Bus
+}
+
+// SetEventBus wires the SSE bus for agent_fleet.changed liveness events
+// (P4.5). Optional: fire-and-forget and nil-safe.
+func (h *AgentFleetHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishAgentFleetChanged emits the metadata-only agent_fleet.changed event
+// after a successful agent-lifecycle write.
+func (h *AgentFleetHandler) publishAgentFleetChanged(clusterID uuid.UUID, opID string) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "agent_fleet", clusterID.String(), opID, map[string]any{"kind": "lifecycle_operation"})
 }
 
 func NewAgentFleetHandler(queries AgentFleetQuerier) *AgentFleetHandler {
@@ -817,6 +837,7 @@ func (h *AgentFleetHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to queue agent upgrade operation")
 		return
 	}
+	h.publishAgentFleetChanged(cluster.ID, op.ID.String())
 	recordAudit(r, h.queries, "agent.upgrade.queued", "agent_lifecycle_operation", op.ID.String(), firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name), map[string]any{
 		"cluster_id":      cluster.ID.String(),
 		"current_version": plan.CurrentVersion,

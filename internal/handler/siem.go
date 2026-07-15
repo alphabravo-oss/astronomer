@@ -27,6 +27,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 )
@@ -86,6 +87,17 @@ type SIEMHandler struct {
 	log       *slog.Logger
 	audit     AuthAuditWriter
 	tap       SIEMTapInvalidator
+	bus       *events.Bus
+}
+
+// SetEventBus wires the SSE bus for siem_forwarder.changed liveness events
+// (P4.5). Deliberately unscoped (no cluster_id): the SEC-R07 fail-closed
+// drop makes it superuser-only, matching the endpoints (D9).
+func (h *SIEMHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
 }
 
 // NewSIEMHandler builds a usable handler.
@@ -242,6 +254,7 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("siem forwarder created with tls_skip_verify=true",
 			"forwarder", saved.Name, "endpoint", saved.Endpoint)
 	}
+	events.PublishChanged(h.bus, "siem_forwarder", "", saved.ID.String(), nil)
 	recordAudit(r, h.audit, "admin.siem_forwarder.created", "siem_forwarder", saved.ID.String(), saved.Name, map[string]any{
 		"transport":     saved.Transport,
 		"endpoint":      saved.Endpoint,
@@ -352,6 +365,7 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("siem forwarder enabled tls_skip_verify=true",
 			"forwarder", saved.Name, "endpoint", saved.Endpoint)
 	}
+	events.PublishChanged(h.bus, "siem_forwarder", "", saved.ID.String(), nil)
 	recordAudit(r, h.audit, "admin.siem_forwarder.updated", "siem_forwarder", saved.ID.String(), saved.Name, map[string]any{
 		"transport":     saved.Transport,
 		"endpoint":      saved.Endpoint,
@@ -390,6 +404,7 @@ func (h *SIEMHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if h.tap != nil {
 		h.tap.Invalidate()
 	}
+	events.PublishChanged(h.bus, "siem_forwarder", "", id.String(), nil)
 	recordAudit(r, h.audit, "admin.siem_forwarder.deleted", "siem_forwarder", id.String(), existing.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

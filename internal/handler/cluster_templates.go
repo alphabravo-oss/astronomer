@@ -38,6 +38,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -83,6 +84,7 @@ type ClusterTemplateEnqueuer interface {
 // cluster /api/v1/clusters/{cluster_id}/template/* endpoints.
 type ClusterTemplateHandler struct {
 	queries ClusterTemplateQuerier
+	bus     *events.Bus
 	// queue is the asynq client used to schedule apply tasks. Optional —
 	// nil-safe so tests can drive the handler without a Redis-backed
 	// asynq.Client. When nil, the handler still upserts the application
@@ -116,6 +118,28 @@ func NewClusterTemplateHandler(queries ClusterTemplateQuerier) *ClusterTemplateH
 // SetQueue wires the asynq client used to enqueue apply tasks. Optional;
 // when not wired, applies still write the pending row but rely on the
 // periodic worker sweep to converge.
+// SetEventBus wires the SSE bus for template_binding.changed liveness
+// events (P4.5). Optional: fire-and-forget and nil-safe.
+func (h *ClusterTemplateHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishTemplateBindingChanged emits the metadata-only
+// template_binding.changed event after a successful application-row write.
+func (h *ClusterTemplateHandler) publishTemplateBindingChanged(clusterID uuid.UUID, status string) {
+	if h == nil {
+		return
+	}
+	extra := map[string]any{}
+	if status != "" {
+		extra["status"] = status
+	}
+	events.PublishChanged(h.bus, "template_binding", clusterID.String(), clusterID.String(), extra)
+}
+
 func (h *ClusterTemplateHandler) SetQueue(q ClusterTemplateEnqueuer) {
 	if h == nil {
 		return
@@ -601,6 +625,7 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishTemplateBindingChanged(clusterID, app.Status)
 	recordAudit(r, h.queries, "cluster.template_applied", "cluster", clusterID.String(), cluster.Name, map[string]any{
 		"template_id":   tmpl.ID.String(),
 		"template_name": tmpl.Name,
@@ -670,6 +695,7 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ApplyError, "Failed to reset template application")
 		return
 	}
+	h.publishTemplateBindingChanged(clusterID, app.Status)
 	recordAudit(r, h.queries, "cluster.template_reapplied", "cluster", clusterID.String(), cluster.Name, map[string]any{
 		"template_id":   tmpl.ID.String(),
 		"template_name": tmpl.Name,
@@ -702,6 +728,7 @@ func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) 
 	// the binding is already gone; the worst case is a stale policy row
 	// that the next apply (to any template) will overwrite.
 	_ = h.queries.DeleteClusterRegistrationPolicy(r.Context(), clusterID)
+	h.publishTemplateBindingChanged(clusterID, "detached")
 	recordAudit(r, h.queries, "cluster.template_detached", "cluster", clusterID.String(), cluster.Name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

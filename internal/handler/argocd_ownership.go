@@ -122,6 +122,7 @@ func (h *ArgoCDHandler) SetClusterOwnershipDecision(w http.ResponseWriter, r *ht
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecisionError, "Failed to record ownership decision")
 		return
 	}
+	h.publishArgoCDChanged(clusterID, row.ID.String(), "ownership")
 	recordAudit(r, h.queries, "argocd.baseline_ownership.decision", "cluster", clusterID.String(), componentSlug, map[string]any{
 		"component":  componentSlug,
 		"decision":   decision,

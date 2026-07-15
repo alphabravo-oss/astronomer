@@ -128,29 +128,31 @@ func (h *BackupHandler) reconcilePendingBackup(ctx context.Context, row sqlc.Bac
 	}
 	storage, err := h.queries.GetBackupStorageConfigByID(ctx, row.StorageID)
 	if err != nil {
-		h.failBackup(ctx, row.ID, fmt.Sprintf("loading storage config: %v", err))
+		h.failBackup(ctx, row.ClusterID, row.ID, fmt.Sprintf("loading storage config: %v", err))
 		return
 	}
 	if !row.ClusterID.Valid && !storage.ClusterID.Valid {
-		h.failBackup(ctx, row.ID, "backup has no target cluster")
+		h.failBackup(ctx, row.ClusterID, row.ID, "backup has no target cluster")
 		return
 	}
 	if err := h.applyVeleroBackupForRow(ctx, row, storage); err != nil {
-		h.failBackup(ctx, row.ID, fmt.Sprintf("apply velero backup: %v", err))
+		h.failBackup(ctx, row.ClusterID, row.ID, fmt.Sprintf("apply velero backup: %v", err))
 		return
 	}
+	// Claim succeeded: pending → running.
+	h.publishBackupChanged(row.ClusterID, row.ID, "backup")
 }
 
 func (h *BackupHandler) pollRunningBackup(ctx context.Context, row sqlc.Backup) {
 	_ = h.queries.TouchBackupPolling(ctx, row.ID)
 	storage, err := h.queries.GetBackupStorageConfigByID(ctx, row.StorageID)
 	if err != nil {
-		h.failBackup(ctx, row.ID, fmt.Sprintf("loading storage config: %v", err))
+		h.failBackup(ctx, row.ClusterID, row.ID, fmt.Sprintf("loading storage config: %v", err))
 		return
 	}
 	clusterID, ok := effectiveClusterID(row.ClusterID, storage.ClusterID)
 	if !ok {
-		h.failBackup(ctx, row.ID, "backup has no target cluster")
+		h.failBackup(ctx, row.ClusterID, row.ID, "backup has no target cluster")
 		return
 	}
 	backupName := strings.TrimSpace(row.VeleroBackupName)
@@ -190,9 +192,11 @@ func (h *BackupHandler) pollRunningBackup(ctx context.Context, row sqlc.Backup) 
 		})
 		if err != nil {
 			h.logReconcileError("mark backup completed", err, "backup_id", row.ID.String())
+		} else {
+			h.publishBackupChanged(row.ClusterID, row.ID, "backup")
 		}
 	case "failed", "failedvalidation", "partiallyfailed":
-		h.failBackup(ctx, row.ID, veleroFailureMessage(doc.Status.Phase, doc.Status.FailureReason, doc.Status.Errors, doc.Status.Warnings))
+		h.failBackup(ctx, row.ClusterID, row.ID, veleroFailureMessage(doc.Status.Phase, doc.Status.FailureReason, doc.Status.Errors, doc.Status.Warnings))
 	default:
 		h.logReconcileDebug("backup phase still non-terminal", "backup_id", row.ID.String(), "phase", doc.Status.Phase)
 	}
@@ -210,29 +214,31 @@ func (h *BackupHandler) reconcilePendingRestore(ctx context.Context, row sqlc.Re
 	}
 	backup, err := h.queries.GetBackupByID(ctx, row.BackupID)
 	if err != nil {
-		h.failRestore(ctx, row.ID, fmt.Sprintf("loading source backup: %v", err))
+		h.failRestore(ctx, row.ClusterID, row.ID, fmt.Sprintf("loading source backup: %v", err))
 		return
 	}
 	if backup.Status != "completed" {
-		h.failRestore(ctx, row.ID, fmt.Sprintf("source backup %s is not completed (status=%s)", backup.ID, backup.Status))
+		h.failRestore(ctx, row.ClusterID, row.ID, fmt.Sprintf("source backup %s is not completed (status=%s)", backup.ID, backup.Status))
 		return
 	}
 	if err := h.applyVeleroRestoreForRow(ctx, row, backup); err != nil {
-		h.failRestore(ctx, row.ID, fmt.Sprintf("apply velero restore: %v", err))
+		h.failRestore(ctx, row.ClusterID, row.ID, fmt.Sprintf("apply velero restore: %v", err))
 		return
 	}
+	// Claim succeeded: pending → running.
+	h.publishBackupChanged(row.ClusterID, row.ID, "restore")
 }
 
 func (h *BackupHandler) pollRunningRestore(ctx context.Context, row sqlc.RestoreOperation) {
 	_ = h.queries.TouchRestorePolling(ctx, row.ID)
 	backup, err := h.queries.GetBackupByID(ctx, row.BackupID)
 	if err != nil {
-		h.failRestore(ctx, row.ID, fmt.Sprintf("loading source backup: %v", err))
+		h.failRestore(ctx, row.ClusterID, row.ID, fmt.Sprintf("loading source backup: %v", err))
 		return
 	}
 	clusterID, ok := effectiveClusterID(row.ClusterID, backup.ClusterID)
 	if !ok {
-		h.failRestore(ctx, row.ID, "restore has no target cluster")
+		h.failRestore(ctx, row.ClusterID, row.ID, "restore has no target cluster")
 		return
 	}
 	restoreName := strings.TrimSpace(row.VeleroRestoreName)
@@ -267,9 +273,11 @@ func (h *BackupHandler) pollRunningRestore(ctx context.Context, row sqlc.Restore
 	case "completed":
 		if err := h.queries.UpdateRestoreOperationCompleted(ctx, row.ID); err != nil {
 			h.logReconcileError("mark restore completed", err, "restore_id", row.ID.String())
+		} else {
+			h.publishBackupChanged(row.ClusterID, row.ID, "restore")
 		}
 	case "failed", "failedvalidation", "partiallyfailed":
-		h.failRestore(ctx, row.ID, veleroFailureMessage(doc.Status.Phase, doc.Status.FailureReason, doc.Status.Errors, doc.Status.Warnings))
+		h.failRestore(ctx, row.ClusterID, row.ID, veleroFailureMessage(doc.Status.Phase, doc.Status.FailureReason, doc.Status.Errors, doc.Status.Warnings))
 	default:
 		h.logReconcileDebug("restore phase still non-terminal", "restore_id", row.ID.String(), "phase", doc.Status.Phase)
 	}
@@ -339,22 +347,26 @@ func veleroFailureMessage(phase, failureReason string, errors, warnings int32) s
 	return fmt.Sprintf("velero phase %s", phase)
 }
 
-func (h *BackupHandler) failBackup(ctx context.Context, id uuid.UUID, msg string) {
+func (h *BackupHandler) failBackup(ctx context.Context, clusterID pgtype.UUID, id uuid.UUID, msg string) {
 	if err := h.queries.UpdateBackupFailed(ctx, sqlc.UpdateBackupFailedParams{
 		ID:           id,
 		ErrorMessage: msg,
 	}); err != nil {
 		h.logReconcileError("mark backup failed", err, "backup_id", id.String(), "reason", msg)
+		return
 	}
+	h.publishBackupChanged(clusterID, id, "backup")
 }
 
-func (h *BackupHandler) failRestore(ctx context.Context, id uuid.UUID, msg string) {
+func (h *BackupHandler) failRestore(ctx context.Context, clusterID pgtype.UUID, id uuid.UUID, msg string) {
 	if err := h.queries.UpdateRestoreOperationFailed(ctx, sqlc.UpdateRestoreOperationFailedParams{
 		ID:           id,
 		ErrorMessage: msg,
 	}); err != nil {
 		h.logReconcileError("mark restore failed", err, "restore_id", id.String(), "reason", msg)
+		return
 	}
+	h.publishBackupChanged(clusterID, id, "restore")
 }
 
 func (h *BackupHandler) logReconcileError(msg string, err error, args ...any) {

@@ -61,6 +61,7 @@ import {
   unregisterArgoManagedCluster,
 } from '@/lib/api';
 import { queryKeys, useClusters } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -158,7 +159,7 @@ function InstanceDetailPage() {
     queryKey: queryKeys.argocd.instance(instanceId),
     queryFn: () => getArgoInstanceB1(instanceId),
     enabled: !!instanceId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   if (instanceLoading) {
@@ -278,7 +279,7 @@ function OverviewTab({
   const { data: health } = useQuery({
     queryKey: queryKeys.argocd.instanceHealth(instanceId),
     queryFn: () => getArgoInstanceHealth(instanceId),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
   const { data: apps } = useQuery({
     queryKey: queryKeys.argocd.liveApps(instanceId),
@@ -288,32 +289,34 @@ function OverviewTab({
   const { data: projects } = useQuery({
     queryKey: queryKeys.argocd.projects(instanceId),
     queryFn: () => listArgoProjects(instanceId),
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60000),
   });
   const { data: repos } = useQuery({
     queryKey: queryKeys.argocd.repos(instanceId),
     queryFn: () => listArgoRepos(instanceId),
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60000),
   });
   const { data: clusters } = useQuery({
     queryKey: queryKeys.argocd.managedClusters(instanceId),
     queryFn: () => listArgoManagedClusters(instanceId),
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60000),
   });
   const { data: orphanReport } = useQuery({
     queryKey: queryKeys.argocd.orphanReport(instanceId),
     queryFn: () => getArgoOrphanReport(instanceId),
+    // KEEP (D8): Argo-side truth with no event source at content
+    // granularity — deliberately NOT converted to liveFallback.
     refetchInterval: 60000,
   });
   const { data: recentOps } = useQuery({
     queryKey: queryKeys.argocd.recentOperations,
     queryFn: () => listArgoOperations({ limit: 5 }),
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
   });
   const { data: appsets } = useQuery({
     queryKey: queryKeys.argocd.appsets(instanceId),
     queryFn: () => listArgoApplicationSets(instanceId),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   // Client-side rollups over the same live apps the table renders.
@@ -607,7 +610,7 @@ function ApplicationsTab({ instanceId }: { instanceId: string }) {
   const { data: dbApps } = useQuery({
     queryKey: queryKeys.argocd.dbApps(instanceId),
     queryFn: () => listArgoCachedApplications({ instanceId, limit: 200 }),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   // Live re-render on upstream changes — using cluster.k8s_changed as the
@@ -790,7 +793,7 @@ function ProjectsTab({ instanceId }: { instanceId: string }) {
   const { data: projects = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.projects(instanceId),
     queryFn: () => listArgoProjects(instanceId),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   const del = useMutation({
@@ -949,7 +952,7 @@ function ApplicationSetsTab({ instanceId }: { instanceId: string }) {
   const { data: sets = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.appsets(instanceId),
     queryFn: () => listArgoApplicationSets(instanceId),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   const del = useMutation({
@@ -1063,7 +1066,7 @@ function ClustersTab({ instanceId }: { instanceId: string }) {
   const { data: managed = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.managedClusters(instanceId),
     queryFn: () => listArgoManagedClusters(instanceId),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
   const { data: allClusters } = useClusters({ pageSize: 200 });
 
@@ -1257,7 +1260,7 @@ function ReposTab({ instanceId }: { instanceId: string }) {
   const { data: repos = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.repos(instanceId),
     queryFn: () => listArgoRepos(instanceId),
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60000),
   });
   const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ArgoRepository | null>(null);
@@ -1384,7 +1387,7 @@ function OperationsTab({ instanceId: _instanceId }: { instanceId: string }) {
   const { data: ops = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.operations,
     queryFn: () => listArgoOperations({ limit: 100 }),
-    refetchInterval: 10000,
+    refetchInterval: liveFallback(10000),
   });
 
   useLiveQueryInvalidation(['cluster.k8s_changed'], [queryKeys.argocd.operations]);

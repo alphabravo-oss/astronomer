@@ -43,6 +43,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -73,6 +74,7 @@ type FleetOperationTrigger interface {
 type FleetOperationHandler struct {
 	queries FleetOperationQuerier
 	trigger FleetOperationTrigger
+	bus     *events.Bus
 }
 
 // NewFleetOperationHandler constructs the handler.
@@ -86,6 +88,44 @@ func (h *FleetOperationHandler) SetTrigger(t FleetOperationTrigger) {
 		return
 	}
 	h.trigger = t
+}
+
+// SetEventBus wires the SSE bus for fleet_operation.changed liveness events
+// (P4.5). Optional: publishers are fire-and-forget and nil-safe.
+func (h *FleetOperationHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishFleetOperationChanged emits fleet_operation.changed per distinct
+// target cluster so restricted principals with access to a target cluster get
+// liveness (SEC-R07 drops unscoped events for them). Operations without
+// targets yet (freshly created, orchestrator hasn't launched) publish one
+// unscoped event — superusers see it instantly, everyone else heals via
+// liveFallback polling.
+func (h *FleetOperationHandler) publishFleetOperationChanged(ctx context.Context, opID uuid.UUID) {
+	if h == nil || h.bus == nil {
+		return
+	}
+	targets, err := h.queries.ListFleetOperationTargets(ctx, sqlc.ListFleetOperationTargetsParams{
+		OperationID: opID,
+		QueryLimit:  1000,
+		QueryOffset: 0,
+	})
+	if err != nil || len(targets) == 0 {
+		events.PublishChanged(h.bus, "fleet_operation", "", opID.String(), nil)
+		return
+	}
+	seen := make(map[uuid.UUID]struct{}, len(targets))
+	for _, t := range targets {
+		if _, dup := seen[t.ClusterID]; dup {
+			continue
+		}
+		seen[t.ClusterID] = struct{}{}
+		events.PublishChanged(h.bus, "fleet_operation", t.ClusterID.String(), opID.String(), nil)
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -413,6 +453,7 @@ func (h *FleetOperationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create fleet operation")
 		return
 	}
+	h.publishFleetOperationChanged(r.Context(), op.ID)
 	recordAudit(r, h.queries, "fleet.operation.created", "fleet_operation", op.ID.String(), op.Name, map[string]any{
 		"operation_type": op.OperationType,
 		"strategy":       op.Strategy,
@@ -539,6 +580,7 @@ func (h *FleetOperationHandler) RetryFailed(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
+	h.publishFleetOperationChanged(r.Context(), id)
 	recordAudit(r, h.queries, "fleet.operation.retry_failed", "fleet_operation", id.String(), op.Name, nil)
 	h.kickOrchestrator(r.Context())
 	op, _ = h.queries.GetFleetOperation(r.Context(), id)
@@ -578,6 +620,7 @@ func (h *FleetOperationHandler) transitionStatus(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to transition status")
 		return
 	}
+	h.publishFleetOperationChanged(r.Context(), id)
 	recordAudit(r, h.queries, auditAction, "fleet_operation", id.String(), op.Name, map[string]any{
 		"from": op.Status,
 		"to":   to,

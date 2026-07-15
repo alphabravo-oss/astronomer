@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -62,6 +63,7 @@ type ToolHandler struct {
 	helm    HelmRequester
 	log     *slog.Logger
 	authz   authorizationSupport
+	bus     *events.Bus
 	mu      sync.Mutex
 	trigger chan struct{}
 	// helmConcurrency caps the number of executeOperation goroutines
@@ -807,6 +809,7 @@ func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry tool operation")
 		return
 	}
+	h.publishToolOperationChanged(requeued)
 	h.TriggerReconcile()
 	recordAudit(r, h.queries, "tool.operation.retry", "tool_operation", id.String(), op.TargetKey, map[string]any{
 		"target_type":     op.TargetType,
@@ -1148,6 +1151,28 @@ type toolInstallPersister interface {
 	AdoptInstalledChartByRelease(ctx context.Context, arg sqlc.AdoptInstalledChartByReleaseParams) (sqlc.InstalledChart, error)
 }
 
+// SetEventBus wires the SSE bus for tool_operation.changed liveness events
+// (P4.5). Optional: publishers are fire-and-forget and nil-safe.
+func (h *ToolHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishToolOperationChanged emits the metadata-only tool_operation.changed
+// event after a successful operation-row write. The cluster id comes from
+// the persisted payload envelope (best-effort: rows without one publish
+// unscoped and are superuser-only via the SEC-R07 fail-closed drop).
+func (h *ToolHandler) publishToolOperationChanged(op sqlc.ToolOperation) {
+	if h == nil {
+		return
+	}
+	var env toolOperationEnvelope
+	_ = json.Unmarshal(op.Payload, &env)
+	events.PublishChanged(h.bus, "tool_operation", env.ClusterID, op.ID.String(), map[string]any{"status": op.Status})
+}
+
 func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env toolOperationEnvelope, userID pgtype.UUID) (sqlc.ToolOperation, error) {
 	payload, err := json.Marshal(env)
 	if err != nil {
@@ -1182,6 +1207,7 @@ func (h *ToolHandler) enqueueOperation(ctx context.Context, targetType, targetKe
 		op, err = h.queries.CreateToolOperation(ctx, params)
 	}
 	if err == nil {
+		h.publishToolOperationChanged(op)
 		h.TriggerReconcile()
 	}
 	return op, err
@@ -1263,16 +1289,19 @@ func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []claimedO
 				"targetType": op.TargetType,
 				"targetKey":  op.TargetKey,
 			})
-			_, _ = h.queries.MarkToolOperationSuperseded(ctx, sqlc.MarkToolOperationSupersededParams{
+			if superseded, serr := h.queries.MarkToolOperationSuperseded(ctx, sqlc.MarkToolOperationSupersededParams{
 				ID:           op.ID,
 				ErrorMessage: operationSupersededMessage,
-			})
+			}); serr == nil {
+				h.publishToolOperationChanged(superseded)
+			}
 		},
 		MarkRunning: func(ctx context.Context, op sqlc.ToolOperation) (sqlc.ToolOperation, error) {
 			running, err := h.queries.MarkToolOperationRunning(ctx, op.ID)
 			if err != nil {
 				return sqlc.ToolOperation{}, err
 			}
+			h.publishToolOperationChanged(running)
 			h.recordToolOperationEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{
 				"operationType": running.OperationType,
 				"targetType":    running.TargetType,
@@ -1289,14 +1318,18 @@ func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []claimedO
 				},
 				OnComplete: func(ctx context.Context) {
 					h.recordToolOperationEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-					_, _ = h.queries.MarkToolOperationCompleted(ctx, running.ID)
+					if completed, cerr := h.queries.MarkToolOperationCompleted(ctx, running.ID); cerr == nil {
+						h.publishToolOperationChanged(completed)
+					}
 				},
 				OnFailure: func(ctx context.Context, err error) {
 					h.recordToolOperationEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-					_, _ = h.queries.MarkToolOperationFailed(ctx, sqlc.MarkToolOperationFailedParams{
+					if failed, ferr := h.queries.MarkToolOperationFailed(ctx, sqlc.MarkToolOperationFailedParams{
 						ID:           running.ID,
 						ErrorMessage: err.Error(),
-					})
+					}); ferr == nil {
+						h.publishToolOperationChanged(failed)
+					}
 					if h.log != nil {
 						h.log.Warn("tool operation failed", "id", running.ID.String(), "error", err)
 					}

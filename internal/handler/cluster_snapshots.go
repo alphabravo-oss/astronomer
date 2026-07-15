@@ -49,6 +49,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -80,6 +81,25 @@ type ClusterSnapshotQuerier interface {
 type ClusterSnapshotsHandler struct {
 	queries   ClusterSnapshotQuerier
 	requester K8sRequester
+	bus       *events.Bus
+}
+
+// SetEventBus wires the SSE bus for snapshot.changed liveness events (P4.5).
+// Optional: fire-and-forget and nil-safe.
+func (h *ClusterSnapshotsHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishSnapshotChanged emits the metadata-only snapshot.changed event
+// after a successful DB write. kind discriminates snapshot|restore|schedule.
+func (h *ClusterSnapshotsHandler) publishSnapshotChanged(clusterID, id uuid.UUID, kind string) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "snapshot", clusterID.String(), id.String(), map[string]any{"kind": kind})
 }
 
 // NewClusterSnapshotsHandler wires the handler against the provided
@@ -493,7 +513,9 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		// Velero failed.
 		out := snapshotToResponse(row)
 		out.LastPollError = err.Error()
-		recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
+		h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
+		h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
+	recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
 			"cluster_id":  clusterID.String(),
 			"velero_name": row.VeleroName,
 			"crd_error":   err.Error(),
@@ -546,6 +568,7 @@ func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.
 	if crdErr != nil {
 		detail["crd_error"] = crdErr.Error()
 	}
+	h.publishSnapshotChanged(clusterID, snapshotID, "snapshot")
 	recordAudit(r, h.queries, "cluster.snapshot.deleted", "cluster_snapshot", snapshotID.String(), "", detail)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -664,7 +687,9 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	if err := h.postRestoreCRD(r.Context(), targetID.String(), row, req.Spec, snapshot.VeleroName); err != nil {
 		out := restoreToResponse(row)
 		out.LastPollError = err.Error()
-		recordAudit(r, h.queries, "cluster.snapshot.restore_requested", "cluster_restore", row.ID.String(), target.Name, map[string]any{
+		h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
+		h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
+	recordAudit(r, h.queries, "cluster.snapshot.restore_requested", "cluster_restore", row.ID.String(), target.Name, map[string]any{
 			"cluster_id":       targetID.String(),
 			"snapshot_id":      snapshotID.String(),
 			"snapshot_cluster": clusterID.String(),
@@ -771,6 +796,7 @@ func (h *ClusterSnapshotsHandler) CreateSchedule(w http.ResponseWriter, r *http.
 		return
 	}
 
+	h.publishSnapshotChanged(clusterID, row.ID, "schedule")
 	recordAudit(r, h.queries, "cluster.snapshot.schedule_created", "cluster_snapshot_schedule", row.ID.String(), cluster.Name, map[string]any{
 		"cluster_id":    clusterID.String(),
 		"name":          row.Name,
@@ -833,6 +859,7 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
 		return
 	}
+	h.publishSnapshotChanged(clusterID, row.ID, "schedule")
 	recordAudit(r, h.queries, "cluster.snapshot.schedule_updated", "cluster_snapshot_schedule", row.ID.String(), cluster.Name, map[string]any{
 		"cluster_id":    clusterID.String(),
 		"name":          row.Name,
@@ -856,6 +883,7 @@ func (h *ClusterSnapshotsHandler) DeleteSchedule(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
 		return
 	}
+	h.publishSnapshotChanged(clusterID, scheduleID, "schedule")
 	recordAudit(r, h.queries, "cluster.snapshot.schedule_deleted", "cluster_snapshot_schedule", scheduleID.String(), "", map[string]any{
 		"cluster_id": clusterID.String(),
 		"name":       existing.Name,

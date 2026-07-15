@@ -24,6 +24,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
@@ -38,6 +39,17 @@ type AdminQueuesQuerier interface {
 type AdminQueuesHandler struct {
 	inspector SupportBundleAsynqInspector
 	queries   AdminQueuesQuerier
+	bus       *events.Bus
+}
+
+// SetEventBus wires the SSE bus for admin_queue.changed liveness events
+// (P4.5). Deliberately unscoped (no cluster_id): the SEC-R07 fail-closed
+// drop makes it superuser-only, matching the endpoints (D9).
+func (h *AdminQueuesHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
 }
 
 // NewAdminQueuesHandler builds a handler. inspector + queries are
@@ -170,6 +182,7 @@ func (h *AdminQueuesHandler) RetryDLQ(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.AsynqError, err.Error())
 		return
 	}
+	events.PublishChanged(h.bus, "admin_queue", "", queue, map[string]any{"action": "dlq_retried"})
 	recordAudit(r, h.queries, "admin.queue.dlq_retried", "queue", queue, id, map[string]any{
 		"task_id": id,
 	})
@@ -199,6 +212,7 @@ func (h *AdminQueuesHandler) DiscardDLQ(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadGateway, apierror.AsynqError, err.Error())
 		return
 	}
+	events.PublishChanged(h.bus, "admin_queue", "", queue, map[string]any{"action": "dlq_discarded"})
 	recordAudit(r, h.queries, "admin.queue.dlq_discarded", "queue", queue, id, map[string]any{
 		"task_id": id,
 	})

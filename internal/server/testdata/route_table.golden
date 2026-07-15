@@ -161,7 +161,6 @@ GET /api/v1/clusters/{id}/kubeconfig-preview
 GET /api/v1/clusters/{id}/manifest
 GET /api/v1/clusters/{id}/metrics
 GET /api/v1/clusters/{id}/metrics/summary
-GET /api/v1/clusters/{id}/registration/events
 GET /api/v1/clusters/{id}/registration/status
 GET /api/v1/clusters/{id}/registry
 GET /api/v1/clusters/{id}/v2/pods

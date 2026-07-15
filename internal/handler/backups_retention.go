@@ -49,6 +49,7 @@ func (h *BackupHandler) enforceScheduleRetention(ctx context.Context) {
 			h.logReconcileError("retention: db delete", derr, "backup_id", b.ID.String())
 			continue
 		}
+		h.publishBackupChanged(b.ClusterID, b.ID, "backup")
 		if h.log != nil {
 			h.log.Info("retention: pruned backup beyond retention_count",
 				"backup", b.VeleroBackupName, "backup_id", b.ID.String())

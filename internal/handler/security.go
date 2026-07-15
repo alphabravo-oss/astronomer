@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/go-chi/chi/v5"
@@ -78,6 +79,25 @@ type SecurityHandler struct {
 	k8s       K8sRequester
 	queue     SecurityIngestEnqueuer
 	log       *slog.Logger
+	bus       *events.Bus
+}
+
+// SetEventBus wires the SSE bus for cis_scan.changed liveness events (P4.5).
+// Optional: publishers are fire-and-forget and nil-safe.
+func (h *SecurityHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishCISScanChanged emits the metadata-only cis_scan.changed event after
+// a successful scan-row write.
+func (h *SecurityHandler) publishCISScanChanged(clusterID, scanID uuid.UUID) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "cis_scan", clusterID.String(), scanID.String(), nil)
 }
 
 // NewSecurityHandler creates a new security handler.
@@ -651,6 +671,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		go h.pollScanReport(scan.ID, req.ClusterID, scanName)
 	}
 
+	h.publishCISScanChanged(req.ClusterID, scan.ID)
 	recordAudit(r, h.queries, "security.scan.create", "security_scan", scan.ID.String(), scanName, map[string]any{
 		"cluster_id": req.ClusterID.String(),
 		"profile":    profile,
@@ -677,7 +698,7 @@ func (h *SecurityHandler) pollScanReport(scanID, clusterID uuid.UUID, scanName s
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		select {
 		case <-ctx.Done():
-			h.markScanFailed(context.Background(), scanID, "ingest context cancelled")
+			h.markScanFailed(context.Background(), clusterID, scanID, "ingest context cancelled")
 			return
 		case <-ticker.C:
 		}
@@ -703,20 +724,21 @@ func (h *SecurityHandler) pollScanReport(scanID, clusterID uuid.UUID, scanName s
 		}); err != nil {
 			h.log.Error("persist CIS scan report failed",
 				"scan_id", scanID.String(), "error", err)
-			h.markScanFailed(context.Background(), scanID, "persist failed: "+err.Error())
+			h.markScanFailed(context.Background(), clusterID, scanID, "persist failed: "+err.Error())
 			return
 		}
+		h.publishCISScanChanged(clusterID, scanID)
 		h.log.Info("CIS scan ingested",
 			"scan_id", scanID.String(),
 			"pass", counts.Pass, "fail", counts.Fail,
 			"warn", counts.Warn, "skip", counts.Skip)
 		return
 	}
-	h.markScanFailed(context.Background(), scanID,
+	h.markScanFailed(context.Background(), clusterID, scanID,
 		fmt.Sprintf("ClusterScanReport not available after %d attempts", maxAttempts))
 }
 
-func (h *SecurityHandler) markScanFailed(ctx context.Context, scanID uuid.UUID, reason string) {
+func (h *SecurityHandler) markScanFailed(ctx context.Context, clusterID, scanID uuid.UUID, reason string) {
 	if h.persister == nil {
 		return
 	}
@@ -726,7 +748,9 @@ func (h *SecurityHandler) markScanFailed(ctx context.Context, scanID uuid.UUID, 
 	}); err != nil {
 		h.log.Error("mark CIS scan failed failed",
 			"scan_id", scanID.String(), "error", err)
+		return
 	}
+	h.publishCISScanChanged(clusterID, scanID)
 }
 
 // fetchClusterScanReport returns (report, true, nil) when the report exists

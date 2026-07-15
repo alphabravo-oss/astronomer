@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -188,5 +189,67 @@ func TestEventStream_RestrictedUserGetsPingNotUnscopedEvents(t *testing.T) {
 	}
 	if !strings.Contains(body, `"type":"cluster.metrics"`) {
 		t.Fatalf("scoped event for allowed cluster must be delivered: %q", body)
+	}
+}
+
+// mutableStreamRBACQuerier lets a test swap the binding snapshot mid-stream.
+type mutableStreamRBACQuerier struct {
+	mu       sync.Mutex
+	bindings []rbac.RoleBinding
+}
+
+func (s *mutableStreamRBACQuerier) GetUserBindings(context.Context, string) ([]rbac.RoleBinding, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bindings, nil
+}
+
+func (s *mutableStreamRBACQuerier) set(b []rbac.RoleBinding) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bindings = b
+}
+
+// T5 (D10): the stream re-snapshots RBAC bindings on a ticker, so a grant
+// revoked mid-stream stops delivering that cluster's events within one
+// refresh interval.
+func TestEventStream_BindingRefreshPicksUpRevocation(t *testing.T) {
+	bus := events.NewBus()
+	h := NewEventStreamHandler(bus)
+	jwtMgr := auth.NewJWTManager("test-secret-key-for-stream", 15)
+	h.SetAuth(jwtMgr, nil)
+	userID := uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatalf("token: %v", err)
+	}
+	clusterID := uuid.New()
+	allow := []rbac.RoleBinding{{
+		ClusterID: clusterID.String(),
+		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceClusters), Verbs: []string{string(rbac.VerbRead)}}},
+	}}
+	querier := &mutableStreamRBACQuerier{bindings: allow}
+	h.SetAuthorization(rbac.NewEngine(), querier)
+	h.bindingRefreshInterval = 30 * time.Millisecond
+
+	rec, wait := runStream(t, h, 400*time.Millisecond, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+	})
+	time.Sleep(50 * time.Millisecond) // let Stream subscribe
+	bus.Publish(events.TypeClusterMetrics, map[string]any{"cluster_id": clusterID.String(), "seq": "before-revoke"})
+	time.Sleep(20 * time.Millisecond) // deliver before the snapshot flips
+
+	// Revoke the grant and wait past a refresh tick.
+	querier.set([]rbac.RoleBinding{})
+	time.Sleep(100 * time.Millisecond)
+	bus.Publish(events.TypeClusterMetrics, map[string]any{"cluster_id": clusterID.String(), "seq": "after-revoke"})
+	wait()
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"seq":"before-revoke"`) {
+		t.Fatalf("pre-revocation event must be delivered: %q", body)
+	}
+	if strings.Contains(body, `"seq":"after-revoke"`) {
+		t.Fatalf("post-revocation event must be dropped after the binding refresh: %q", body)
 	}
 }

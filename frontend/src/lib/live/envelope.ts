@@ -31,7 +31,21 @@ export type LiveEventType =
   | 'agent.failed'
   | 'cluster.registration.step'
   | 'cluster.registration.phase'
-  | 'sys.ping';
+  | 'sys.ping'
+  // P4.5 domain publishers — metadata-only `<resource>.changed` events.
+  | 'backup.changed'
+  | 'fleet_operation.changed'
+  | 'logging_operation.changed'
+  | 'tool_operation.changed'
+  | 'cis_scan.changed'
+  | 'image_scan.changed'
+  | 'argocd.changed'
+  | 'admin_queue.changed'
+  | 'siem_forwarder.changed'
+  | 'agent_fleet.changed'
+  | 'template_binding.changed'
+  | 'registry.changed'
+  | 'snapshot.changed';
 
 /** Parsed live event delivered to subscribers (data already camelCase). */
 export interface LiveEvent<T = unknown> {

@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 
 import { queryKeys, useCluster, useClusterNamespaces, useClusters } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { useClustersUpdate } from '@/lib/permission-hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -155,7 +156,7 @@ function ClusterVeleroSnapshotsPage() {
     queryKey: queryKeys.clusterPages.veleroStatus(clusterId),
     queryFn: () => getVeleroStatus(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
     refetchIntervalInBackground: false,
   });
 
@@ -165,14 +166,14 @@ function ClusterVeleroSnapshotsPage() {
     queryKey: queryKeys.clusterPages.snapshots(clusterId),
     queryFn: () => listSnapshots(clusterId),
     enabled: !!clusterId && veleroReady,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
     refetchIntervalInBackground: false,
   });
   const { data: schedules, isLoading: schedLoading } = useQuery({
     queryKey: queryKeys.clusterPages.snapshotSchedules(clusterId),
     queryFn: () => listSnapshotSchedules(clusterId),
     enabled: !!clusterId && veleroReady,
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60000),
     refetchIntervalInBackground: false,
   });
 
@@ -1169,7 +1170,7 @@ export function ClusterControlPlaneSnapshotsPage() {
     queryKey: cpSnapshotsKey(clusterId),
     queryFn: () => listControlPlaneSnapshots(clusterId),
     enabled: !!clusterId && !!cluster && !managed,
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
     refetchIntervalInBackground: false,
   });
 

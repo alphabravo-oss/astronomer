@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
@@ -259,6 +260,10 @@ func TestArgoCDAutoRegisterSweepSkippedOnNonLeader(t *testing.T) {
 }
 
 func TestArgoCDAutoRegisterSweepUpsertsClusterWithStandardLabels(t *testing.T) {
+	// The argocd client dials the loopback httptest upstream; the SSRF dial
+	// guard blocks loopback unless disabled (same switch every other test in
+	// this package that dials httptest uses).
+	defer httpclient.DisableGuardForTest()()
 	ResetArgoCDAutoRegister()
 	t.Cleanup(ResetArgoCDAutoRegister)
 	clusterID := uuid.New()

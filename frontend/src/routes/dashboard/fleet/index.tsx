@@ -18,6 +18,7 @@ import { useCurrentUser } from '@/lib/hooks';
 import { can } from '@/lib/permissions';
 import { getFleetOperations, type FleetOperationStatus } from '@/lib/api/fleet-operations';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 
 const STATUS_FILTERS: { value: '' | FleetOperationStatus; label: string }[] = [
   { value: '', label: 'All statuses' },
@@ -42,8 +43,9 @@ function FleetOperationsPage() {
     queryKey: queryKeys.fleetOperations.list(params),
     queryFn: () => getFleetOperations({ ...(params ?? {}), limit: 100 }),
     enabled: canList,
-    // Poll the list so in-flight operations' counters/status stay fresh.
-    refetchInterval: 15000,
+    // `fleet_operation.changed` keeps in-flight counters/status fresh while
+    // the stream is open; poll only as the stream-down fallback.
+    refetchInterval: liveFallback(15000),
   });
 
   if (!canList) {

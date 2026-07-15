@@ -189,16 +189,11 @@ export function useDeleteCluster() {
       // up to the grace window if it waits for an agent to reconnect). The row
       // STAYS in the list, flagged `decommissioning`, so the dashboard shows a
       // stable "Decommissioning" badge — no optimistic hide/re-show flicker. It
-      // drops out on its own once tombstoned. Just refresh so the badge appears,
-      // with a few spaced refreshes to catch the tombstone transition.
+      // drops out on its own once tombstoned: `cluster.deleted` +
+      // `fleet_operation.changed` events cover the tombstone window (P4.5),
+      // so a single refresh here just makes the badge appear immediately.
       toastSuccess('Cluster decommissioning started');
-      const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
-      refresh();
-      let ticks = 0;
-      const timer = setInterval(() => {
-        refresh();
-        if (++ticks >= 6) clearInterval(timer); // ~30s of follow-up polls
-      }, 5000);
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
     },
     onError: (error: Error) => {
       toastApiError('Failed to delete cluster', error);
@@ -537,7 +532,7 @@ export function useArgoApplications(params?: { clusterId?: string; project?: str
   return useQuery({
     queryKey: queryKeys.argocd.applications(params),
     queryFn: () => apiClient.getArgoApplications(params),
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -1068,9 +1063,10 @@ export function useLoggingOperations(params?: {
   return useQuery<LoggingOperation[]>({
     queryKey: queryKeys.logging.operations(params),
     queryFn: () => apiClient.getLoggingOperations(params),
-    // Poll so pending -> running -> completed transitions appear without a
-    // manual refresh. Matches the argocd Operations tab cadence.
-    refetchInterval: 5000,
+    // `logging_operation.changed` drives freshness while the stream is open;
+    // poll so pending -> running -> completed transitions still appear when
+    // it is down.
+    refetchInterval: liveFallback(5000),
   });
 }
 
@@ -1079,7 +1075,7 @@ export function useLoggingOperation(id: string) {
     queryKey: queryKeys.logging.operation(id),
     queryFn: () => apiClient.getLoggingOperation(id),
     enabled: !!id,
-    refetchInterval: 5000,
+    refetchInterval: liveFallback(5000),
   });
 }
 
@@ -1660,7 +1656,7 @@ export function useBackups() {
   return useQuery({
     queryKey: queryKeys.backups.list,
     queryFn: () => apiClient.getBackups(),
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -1919,7 +1915,7 @@ export function useClusterToolsStatus(clusterId: string) {
     queryKey: queryKeys.tools.clusterStatus(clusterId),
     queryFn: () => apiClient.getClusterToolsStatus(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -1932,9 +1928,12 @@ export function useToolOperation(operationId: string | null) {
     queryKey: queryKeys.tools.operation(operationId || ''),
     queryFn: () => apiClient.getToolOperation(operationId as string),
     enabled: !!operationId,
+    // Terminal-wrap (P4.5): stop entirely once terminal; while in-flight,
+    // `tool_operation.changed` drives freshness and the 2s poll is only the
+    // stream-down fallback (belt-and-braces for ops in flight during a drop).
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status && TOOL_OP_TERMINAL.includes(status) ? false : 2000;
+      return status && TOOL_OP_TERMINAL.includes(status) ? false : liveFallback(2000)();
     },
   });
 }
@@ -2167,7 +2166,7 @@ export function useCISScans(params?: { page?: number; pageSize?: number; limit?:
   return useQuery({
     queryKey: cisQueryKeys.scans(params),
     queryFn: () => apiClient.getCISScans(params),
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
   });
 }
 
@@ -2183,10 +2182,11 @@ export function useCISScan(id: string | undefined) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       // Backend writes 'running' on insert and flips to 'completed' / 'failed'
-      // when the report ingester finishes. Anything not in that terminal set
-      // means we should keep polling.
+      // when the report ingester finishes. Terminal-wrap (P4.5): stop once
+      // terminal; in-flight rows rely on `cis_scan.changed` while the stream
+      // is open and this poll only as the stream-down fallback.
       if (status === 'completed' || status === 'failed') return false;
-      return 10_000;
+      return liveFallback(10_000)();
     },
   });
 }

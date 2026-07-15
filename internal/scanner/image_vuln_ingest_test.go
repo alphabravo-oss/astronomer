@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 )
 
 // fakeQuerier is an in-memory Querier that records upsert calls and CVE
@@ -420,5 +422,39 @@ func TestParseRFC3339OrNow_ReturnsNowOnInvalid(t *testing.T) {
 	got := parseRFC3339OrNow("not-a-date")
 	if time.Since(got) > time.Second {
 		t.Fatalf("expected near-now timestamp, got %v", got)
+	}
+}
+
+// P4.5: a successful ingest publishes image_scan.changed with the cluster_id
+// (SEC-R07 drops events without it fail-closed for restricted users).
+func TestIngest_PublishesImageScanChanged(t *testing.T) {
+	q := newFakeQuerier()
+	ing := NewIngester(q, nil, nil, nil)
+	bus := events.NewBus()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := bus.Subscribe(ctx)
+	ing.SetEventBus(bus)
+
+	clusterID := uuid.New()
+	if err := ing.Ingest(context.Background(), clusterID, sampleReport("api-server-deployment-abc", 2)); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+
+	select {
+	case e := <-ch:
+		if e.Type != events.TypeImageScanChanged {
+			t.Fatalf("event type = %q, want %q", e.Type, events.TypeImageScanChanged)
+		}
+		raw, _ := json.Marshal(e.Data)
+		var payload map[string]any
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		if payload["cluster_id"] != clusterID.String() {
+			t.Fatalf("cluster_id = %v, want %q", payload["cluster_id"], clusterID.String())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for image_scan.changed")
 	}
 }

@@ -18,6 +18,7 @@ import { FleetTargetTable } from '@/components/fleet/fleet-target-table';
 import { useCurrentUser } from '@/lib/hooks';
 import { can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import {
   fleetOpTypeLabel,
   getFleetOperation,
@@ -36,9 +37,12 @@ function FleetOperationDetailPage() {
     queryKey: queryKeys.fleetOperations.detail(id),
     queryFn: () => getFleetOperation(id),
     enabled: canRead,
+    // Terminal-wrap (P4.5): stop once terminal; while in-flight the
+    // `fleet_operation.changed` events drive freshness and this 5s poll is
+    // only the stream-down fallback.
     refetchInterval: (q) => {
       const s = q.state.data?.status;
-      return s && isTerminalFleetStatus(s) ? false : 5000;
+      return s && isTerminalFleetStatus(s) ? false : liveFallback(5000)();
     },
   });
 

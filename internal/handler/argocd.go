@@ -27,6 +27,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	argocdclient "github.com/alphabravocompany/astronomer-go/internal/handler/argocd"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -118,6 +119,7 @@ type ArgoCDHandler struct {
 	encryptor           *auth.Encryptor
 	k8s                 kubernetes.Interface
 	clusterProxyBaseURL string
+	bus                 *events.Bus
 	mu                  sync.Mutex
 	trigger             chan struct{}
 	// helmConcurrency caps the parallel dispatch fan-out for
@@ -300,6 +302,29 @@ func (h *ArgoCDHandler) SetAuthorization(engine *rbac.Engine, querier middleware
 	h.authz.SetAuthorization(engine, querier)
 }
 
+// SetEventBus wires the SSE bus for argocd.changed liveness events (P4.5).
+// Optional: publishers are fire-and-forget and nil-safe.
+func (h *ArgoCDHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishArgoCDChanged emits the metadata-only argocd.changed event. scope
+// discriminates instance|operation|health|ownership so subscribers can route
+// the invalidation; clusterID is the owning cluster (SEC-R07 scoping).
+func (h *ArgoCDHandler) publishArgoCDChanged(clusterID uuid.UUID, entityID, scope string) {
+	if h == nil {
+		return
+	}
+	cid := ""
+	if clusterID != uuid.Nil {
+		cid = clusterID.String()
+	}
+	events.PublishChanged(h.bus, "argocd", cid, entityID, map[string]any{"scope": scope})
+}
+
 func (h *ArgoCDHandler) StartReconciler(ctx context.Context) {
 	if h == nil || h.queries == nil {
 		return
@@ -434,6 +459,7 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishArgoCDChanged(instance.ClusterID, instance.ID.String(), "instance")
 	recordAudit(r, h.queries, "argocd.instance.create", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
 		"api_url":    instance.ApiUrl,
@@ -485,6 +511,7 @@ func (h *ArgoCDHandler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishArgoCDChanged(instance.ClusterID, instance.ID.String(), "instance")
 	recordAudit(r, h.queries, "argocd.instance.delete", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
 	})
@@ -537,6 +564,7 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishArgoCDChanged(instance.ClusterID, instance.ID.String(), "instance")
 	recordAudit(r, h.queries, "argocd.instance.update", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
 		"api_url":    instance.ApiUrl,
@@ -1029,6 +1057,7 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry ArgoCD operation")
 		return
 	}
+	h.publishArgoCDChanged(clusterID, requeued.ID.String(), "operation")
 	h.TriggerReconcile()
 	recordAudit(r, h.queries, "argocd.operation.retry", "argocd_operation", id.String(), op.TargetKey, map[string]any{
 		"target_type":     op.TargetType,
@@ -1169,6 +1198,9 @@ func (h *ArgoCDHandler) enqueueSyncOperation(ctx context.Context, app sqlc.Argoc
 		op, err = h.queries.CreateArgoCDOperation(ctx, params)
 	}
 	if err == nil {
+		if instance, ierr := h.queries.GetArgoCDInstanceByID(ctx, app.ArgocdInstanceID); ierr == nil {
+			h.publishArgoCDChanged(instance.ClusterID, op.ID.String(), "operation")
+		}
 		h.TriggerReconcile()
 	}
 	return op, err
@@ -1643,6 +1675,7 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 			// errors are terminal.
 			if argocdclient.IsKind(err, argocdclient.ErrUnauthorized) || argocdclient.IsKind(err, argocdclient.ErrNotFound) {
 				h.failOperationWithMessage(ctx, op, "Failed", err.Error())
+				h.publishArgoCDChanged(instance.ClusterID, op.ID.String(), "operation")
 				return
 			}
 			_, _ = h.queries.UpdateArgoCDOperationProgress(ctx, sqlc.UpdateArgoCDOperationProgressParams{
@@ -1702,6 +1735,7 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 				Revision:    res.revision,
 				Message:     res.message,
 			})
+			h.publishArgoCDChanged(instance.ClusterID, op.ID.String(), "operation")
 			return
 		}
 		// Failed / Error.
@@ -1717,6 +1751,7 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 			Message:      res.message,
 			ErrorMessage: firstNonEmptyString(res.message, res.phase),
 		})
+		h.publishArgoCDChanged(instance.ClusterID, op.ID.String(), "operation")
 	}
 }
 
@@ -1837,6 +1872,9 @@ func (h *ArgoCDHandler) claimInstanceHealthProbes(ctx context.Context) []claimed
 					ID:        instance.ID,
 					IsHealthy: healthy,
 				})
+				// End-of-reconcile-pass signal (P4.5/D8): Argo-side drift
+				// surfaces at the 45s health-probe cadence.
+				h.publishArgoCDChanged(instance.ClusterID, instance.ID.String(), "health")
 				return nil
 			},
 		})

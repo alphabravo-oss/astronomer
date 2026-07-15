@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import {
   getImageVulnReport,
   getImageVulnReportHistory,
@@ -90,7 +91,7 @@ function ClusterImageScansPage() {
     queryKey: queryKeys.clusterPages.imageVulnSummary(clusterId),
     queryFn: () => getImageVulnSummary(clusterId),
     enabled: scansEnabled,
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
 
@@ -98,7 +99,7 @@ function ClusterImageScansPage() {
     queryKey: queryKeys.clusterPages.imageVulnImages(clusterId, namespace),
     queryFn: () => listVulnerableImages(clusterId, { namespace: namespace || undefined, limit: 20 }),
     enabled: scansEnabled,
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
 
@@ -128,7 +129,7 @@ function ClusterImageScansPage() {
         ? getImageVulnReportHistory(clusterId, openReport.id, { limit: 50 })
         : Promise.resolve(null),
     enabled: scansEnabled && !!openReport,
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
 
@@ -160,14 +161,14 @@ function ClusterImageScansPage() {
     queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30),
     queryFn: () => getImageVulnHistory(clusterId, { sinceHours: 24 * 30, limit: 200 }),
     enabled: scansEnabled,
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
   const diff = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnDiff(clusterId, 24),
     queryFn: () => getImageVulnDiff(clusterId, 24),
     enabled: scansEnabled,
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
 
@@ -182,7 +183,9 @@ function ClusterImageScansPage() {
     refetchInterval: (query) => {
       if (query.state.data?.scanning) return 3_000;
       if (lastRescanAt && Date.now() - lastRescanAt < 60_000) return 1_500;
-      return 30_000;
+      // Idle: `image_scan.changed` events refresh the aggregates while the
+      // stream is open; poll only as the stream-down fallback.
+      return liveFallback(30_000)();
     },
     refetchIntervalInBackground: false,
   });

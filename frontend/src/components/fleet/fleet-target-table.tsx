@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { getClusters } from '@/lib/api';
 import { getFleetTargets, isTerminalFleetStatus } from '@/lib/api/fleet-operations';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { formatRelativeTime } from '@/lib/utils';
 import { FleetStatusBadge } from './fleet-status-badge';
 
@@ -21,7 +22,9 @@ export function FleetTargetTable({ operationId, status }: FleetTargetTableProps)
   const targetsQuery = useQuery({
     queryKey: queryKeys.fleetOperations.targets(operationId),
     queryFn: () => getFleetTargets(operationId, { limit: 200 }),
-    refetchInterval: terminal ? false : 5000,
+    // Terminal-wrap (P4.5): `fleet_operation.changed` drives freshness
+    // while the stream is open; the 5s poll is the stream-down fallback.
+    refetchInterval: () => (terminal ? false : liveFallback(5000)()),
   });
 
   const clustersQuery = useQuery({

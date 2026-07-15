@@ -16,6 +16,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
+import { liveFallback } from '@/lib/live/status-store';
 import * as api from '@/lib/api';
 import type {
   BackupRestore,
@@ -151,7 +152,7 @@ export function useB2Runs(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.runs(params),
     queryFn: () => api.b2ListRuns({ ...params, page_size: 100 }),
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -160,7 +161,7 @@ export function useB2Run(id: string) {
     queryKey: b2Keys.runDetail(id),
     queryFn: () => api.b2GetRun(id),
     enabled: !!id,
-    refetchInterval: 10000,
+    refetchInterval: liveFallback(10000),
   });
 }
 
@@ -171,7 +172,7 @@ export function useB2Restore(id: string) {
     queryKey: b2Keys.restoreDetail(id),
     queryFn: () => api.b2GetRestore(id),
     enabled: !!id,
-    refetchInterval: 10000,
+    refetchInterval: liveFallback(10000),
   });
 }
 

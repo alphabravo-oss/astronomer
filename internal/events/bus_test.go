@@ -28,7 +28,7 @@ func TestPublishCountsDroppedEventForSlowSubscriber(t *testing.T) {
 	defer cancel()
 	_ = bus.Subscribe(ctx)
 
-	for i := 0; i < 65; i++ {
+	for i := 0; i < 257; i++ {
 		bus.Publish(TypeClusterConnected, map[string]any{"n": i})
 	}
 

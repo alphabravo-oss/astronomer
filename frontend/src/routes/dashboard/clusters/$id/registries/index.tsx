@@ -43,6 +43,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { OverlayShell } from '@/components/ui/overlay-shell';
+import { liveFallback } from '@/lib/live/status-store';
 
 const PASSWORD_SENTINEL = '<set>';
 
@@ -66,7 +67,7 @@ function ClusterRegistriesPage() {
     queryKey: queryKeys.clusterPages.registries(clusterId),
     queryFn: () => listClusterRegistries(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
     refetchIntervalInBackground: false,
   });
 

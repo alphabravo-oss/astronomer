@@ -19,6 +19,8 @@ import {
   type RegistrationStep,
 } from '@/lib/api';
 import { useLiveEvents } from '@/lib/live/hooks';
+import { useStore } from '@tanstack/react-store';
+import { liveStatus } from '@/lib/live/status-store';
 import { ActionButton } from '@/components/ui/action-button';
 import { OperationTimeline, type OperationTimelineStepStatus } from '@/components/ui/operation-timeline';
 
@@ -75,14 +77,17 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
     };
   }, [live, clusterId, refresh]);
 
-  // Low-frequency polling fallback: SSE is the primary channel, but if the
-  // event stream is dropped (proxy timeout, tab throttling) we still want the
-  // timeline to advance. Stop polling once we reach a terminal phase.
+  // Stream-status-conditional polling fallback (P4.5): SSE is the primary
+  // channel — while the stream is open the registration.step/phase events
+  // drive refresh and the poll stays off. It only runs when the stream is
+  // down (proxy timeout, tab throttling) and stops at a terminal phase.
+  const streamStatus = useStore(liveStatus);
   useEffect(() => {
     if (notFound || status?.phase === 'ready' || status?.phase === 'failed') return;
+    if (streamStatus === 'open') return;
     const interval = setInterval(refresh, 5000);
     return () => clearInterval(interval);
-  }, [refresh, notFound, status?.phase]);
+  }, [refresh, notFound, status?.phase, streamStatus]);
 
   // Fire onReady once when we transition into ready phase.
   useEffect(() => {

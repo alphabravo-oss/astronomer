@@ -41,6 +41,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -84,6 +85,16 @@ type ClusterRegistriesHandler struct {
 	taskOutbox   tasks.TaskOutboxWriter
 	requester    K8sRequester
 	encryptor    *auth.Encryptor
+	bus          *events.Bus
+}
+
+// SetEventBus wires the SSE bus for registry.changed liveness events (P4.5).
+// Optional: fire-and-forget and nil-safe.
+func (h *ClusterRegistriesHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
 }
 
 // NewClusterRegistriesHandler wires the handler against the provided
@@ -360,6 +371,7 @@ func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	events.PublishChanged(h.bus, "registry", clusterID.String(), row.ID.String(), nil)
 	recordAudit(r, h.queries, "cluster.registry.created", "cluster_registry_config", row.ID.String(), cluster.Name, map[string]any{
 		"cluster_id":           clusterID.String(),
 		"private_registry_url": row.PrivateRegistryUrl,
@@ -444,6 +456,7 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	events.PublishChanged(h.bus, "registry", clusterID.String(), row.ID.String(), nil)
 	recordAudit(r, h.queries, "cluster.registry.updated", "cluster_registry_config", row.ID.String(), cluster.Name, map[string]any{
 		"cluster_id":           clusterID.String(),
 		"private_registry_url": row.PrivateRegistryUrl,
@@ -499,6 +512,7 @@ func (h *ClusterRegistriesHandler) Delete(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	events.PublishChanged(h.bus, "registry", clusterID.String(), registryID.String(), nil)
 	recordAudit(r, h.queries, "cluster.registry.deleted", "cluster_registry_config", registryID.String(), "", map[string]any{
 		"cluster_id":           clusterID.String(),
 		"private_registry_url": existing.PrivateRegistryUrl,

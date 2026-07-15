@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { useClustersUpdate } from '@/lib/permission-hooks';
 import {
   bindClusterTemplate,
@@ -124,9 +125,12 @@ function ClusterTemplatePage() {
     queryKey: queryKeys.clusterPages.templateBinding(clusterId),
     queryFn: () => getClusterTemplateBinding(clusterId),
     enabled: !!clusterId,
+    // While-pending wrap (P4.5): `template_binding.changed` drives freshness
+    // when the stream is open; the 5s poll only runs for in-flight applies
+    // during a stream drop, and stops entirely once settled.
     refetchInterval: (q) => {
       const status = q.state.data?.status;
-      return status === 'pending' || status === 'applying' ? 5000 : false;
+      return status === 'pending' || status === 'applying' ? liveFallback(5000)() : false;
     },
     refetchIntervalInBackground: false,
   });

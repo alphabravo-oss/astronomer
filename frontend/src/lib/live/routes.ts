@@ -108,6 +108,11 @@ function registrationRoute(d: LiveEventData): QueryKey[] {
   return cid ? [qk.clusterPages.registrationStatus(cid)] : [];
 }
 
+function entityIdOf(d: LiveEventData): string | null {
+  const v = d.id;
+  return typeof v === 'string' && v !== '' ? v : null;
+}
+
 /**
  * Event type → query keys. Every type the backend publishes today has a row
  * (exhaustiveness locked by `routes.test.ts`); P4.5/P4.6/P4.9 grow the table
@@ -141,6 +146,72 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   'cluster.registration.phase': registrationRoute,
   // Heartbeat only — nothing to refresh.
   'sys.ping': () => [],
+  // ── P4.5 domain publishers — metadata-only `<resource>.changed` events ──
+  // Velero backups/restores/schedules (payload kind: backup|restore|schedule).
+  // Both key families cover the legacy backups hooks and the B2 engine hooks.
+  'backup.changed': () => [qk.backups.all, qk.backups.b2All],
+  // Published per distinct target cluster; the deleted-cluster tombstone
+  // window also heals through the clusters list here (see useDeleteCluster).
+  'fleet_operation.changed': () => [qk.fleetOperations.all, qk.clusters.listAll],
+  // Prefix covers every list variant + the detail rows.
+  'logging_operation.changed': () => [qk.logging.operationsAll],
+  'tool_operation.changed': (d) => {
+    const keys: QueryKey[] = [];
+    const id = entityIdOf(d);
+    if (id) keys.push(qk.tools.operation(id));
+    const cid = clusterIdOf(d);
+    if (cid) keys.push(qk.tools.clusterStatus(cid));
+    return keys;
+  },
+  // Prefix covers the paginated scan list variants + the detail rows.
+  'cis_scan.changed': () => [qk.cis.scansAll],
+  'image_scan.changed': (d) => {
+    const cid = clusterIdOf(d);
+    return cid
+      ? [qk.clusterPages.imageVulnsAll(cid), qk.clusterPages.vulnerabilitySummary(cid)]
+      : [];
+  },
+  // Coarse by design: the payload's scope (instance|operation|health|
+  // ownership) doesn't map to per-instance keys without a lookup, and the
+  // paced invalidator only refetches mounted argocd queries. The D8 trio
+  // (manifests/history/orphan report) keeps its plain polls regardless.
+  'argocd.changed': () => [qk.argocd.all],
+  // Unscoped (superuser-only via the SEC-R07 fail-closed drop, D9);
+  // payload id is the queue name.
+  'admin_queue.changed': (d) => {
+    const keys: QueryKey[] = [qk.adminOperations.queues];
+    const queue = entityIdOf(d);
+    if (queue) keys.push(qk.adminOperations.dlq(queue));
+    return keys;
+  },
+  // Unscoped (superuser-only, D9); prefix covers list/detail/status.
+  'siem_forwarder.changed': () => [qk.siemForwarders.all],
+  'agent_fleet.changed': (d) => {
+    const cid = clusterIdOf(d);
+    const keys: QueryKey[] = [qk.agents.fleet];
+    if (cid) keys.push(qk.agents.operations(cid));
+    return keys;
+  },
+  'template_binding.changed': (d) => {
+    const cid = clusterIdOf(d);
+    return cid ? [qk.clusterPages.templateBinding(cid)] : [];
+  },
+  'registry.changed': (d) => {
+    const cid = clusterIdOf(d);
+    return cid ? [qk.clusterPages.registries(cid)] : [];
+  },
+  // Cluster snapshots/restores/schedules (payload kind discriminates; all
+  // three views live on one page so they refresh together).
+  'snapshot.changed': (d) => {
+    const cid = clusterIdOf(d);
+    return cid
+      ? [
+          qk.clusterPages.snapshots(cid),
+          qk.clusterPages.snapshotSchedules(cid),
+          qk.clusterPages.veleroStatus(cid),
+        ]
+      : [];
+  },
   // Prefix route (see module doc): any audit.<action> refreshes the
   // activity feed for principals allowed to receive audit events.
   [AUDIT_PREFIX]: () => [qk.activityAll],

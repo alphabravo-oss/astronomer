@@ -11,6 +11,7 @@ import { toastApiError, toastSuccess } from '@/lib/toast';
 import * as api from '@/lib/api';
 import type { SIEMForwarderWriteRequest } from '@/lib/api/siem-forwarders';
 import { queryKeys } from '@/lib/query-keys';
+import { liveFallback } from '@/lib/live/status-store';
 
 export function useSIEMForwarders() {
   return useQuery({
@@ -24,9 +25,10 @@ export function useSIEMForwarderStatus(id: string | undefined, enabled = true) {
     queryKey: queryKeys.siemForwarders.status(id ?? ''),
     queryFn: () => api.getSIEMForwarderStatus(id as string),
     enabled: !!id && enabled,
-    // Status (queue depth / dropped counts) is live-ish; refresh periodically
-    // while the drawer is open.
-    refetchInterval: 10_000,
+    // Status (queue depth / dropped counts) is live-ish; refresh while the
+    // drawer is open — `siem_forwarder.changed` covers config changes but not
+    // queue-depth drift, so this stays a poll gated on the stream being down.
+    refetchInterval: liveFallback(10_000),
   });
 }
 

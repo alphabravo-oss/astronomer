@@ -385,10 +385,6 @@ func TestLongLivedClusterRoutesRequireAuth(t *testing.T) {
 		path string
 	}{
 		{
-			name: "registration event stream",
-			path: "/api/v1/clusters/" + clusterID.String() + "/registration/events/",
-		},
-		{
 			name: "remotedialer pod demo",
 			path: "/api/v1/clusters/" + clusterID.String() + "/v2/pods/",
 		},
@@ -873,30 +869,6 @@ func TestAdminRouteRegistrationsAreAuthProtected(t *testing.T) {
 	}
 }
 
-func TestRegistrationEventsRejectQueryJWT(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
-	userID := uuid.New()
-	token, err := jwtMgr.GenerateAccessToken(userID)
-	if err != nil {
-		t.Fatalf("generate token: %v", err)
-	}
-	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:                 jwtMgr,
-		AuthQueries:         routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}},
-		RBACEngine:          rbac.NewEngine(),
-		RBACQueries:         routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ClusterRegistration: handler.NewClusterRegistrationHandler(nil, events.NewBus()),
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/registration/events/?token="+token, nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
-	}
-}
-
 func TestExecAndLogsRejectQueryJWT(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
@@ -985,66 +957,6 @@ func TestDirectExecAndLogsStreamsAuditOpen(t *testing.T) {
 	rows := waitForAuditRows(t, audit, 2)
 	assertStreamAuditRow(t, findAuditRow(t, rows, "pod.exec.opened"), "pod.exec.opened", userID, clusterID, "default/example/shell", "exec")
 	assertStreamAuditRow(t, findAuditRow(t, rows, "pod.logs.opened"), "pod.logs.opened", userID, clusterID, "default/example/app", "logs")
-}
-
-func TestRegistrationEventsAuthAndRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
-	userID := uuid.New()
-	token, err := jwtMgr.GenerateAccessToken(userID)
-	if err != nil {
-		t.Fatalf("generate token: %v", err)
-	}
-	clusterID := uuid.New()
-
-	tests := []struct {
-		name       string
-		authHeader string
-		bindings   []rbac.RoleBinding
-		want       int
-	}{
-		{
-			name:       "invalid token",
-			authHeader: "Bearer not-a-valid-jwt",
-			bindings:   routeSecurityAdminBindings(),
-			want:       http.StatusUnauthorized,
-		},
-		{
-			name:       "no cluster access",
-			authHeader: "Bearer " + token,
-			bindings:   nil,
-			want:       http.StatusForbidden,
-		},
-		{
-			name:       "authorized cluster read",
-			authHeader: "Bearer " + token,
-			bindings:   routeSecurityReadOnlyBindings(),
-			want:       http.StatusOK,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:                 jwtMgr,
-				AuthQueries:         routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}},
-				RBACEngine:          rbac.NewEngine(),
-				RBACQueries:         routeSecurityRBACQuerier{bindings: tt.bindings},
-				ClusterRegistration: handler.NewClusterRegistrationHandler(nil, events.NewBus()),
-			})
-			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-			defer cancel()
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/registration/events/", nil).WithContext(ctx)
-			req.Header.Set("Authorization", tt.authHeader)
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			if rec.Code != tt.want {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tt.want, rec.Body.String())
-			}
-			if tt.want == http.StatusOK && rec.Header().Get("Content-Type") != "text/event-stream" {
-				t.Fatalf("Content-Type = %q, want text/event-stream", rec.Header().Get("Content-Type"))
-			}
-		})
-	}
 }
 
 func TestRemotedialerPodDemoRouteDisabledInProduction(t *testing.T) {

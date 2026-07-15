@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 )
 
 // Trivy label keys we extract workload identity from. trivy-operator
@@ -158,6 +159,16 @@ type Ingester struct {
 	tx      TxBeginner
 	metrics MetricRecorder
 	audit   AuditHook
+	bus     *events.Bus
+}
+
+// SetEventBus wires the SSE bus for image_scan.changed liveness events
+// (P4.5). Optional: fire-and-forget and nil-safe.
+func (i *Ingester) SetEventBus(bus *events.Bus) {
+	if i == nil {
+		return
+	}
+	i.bus = bus
 }
 
 // NewIngester wires the receiver. tx may be nil — in that case Ingest
@@ -328,6 +339,7 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 
 	i.refreshGauges(clusterID, upsertArgs)
 	i.recordOutcome("ingested")
+	events.PublishChanged(i.bus, "image_scan", clusterID.String(), report.ID.String(), nil)
 	if i.audit != nil {
 		i.audit(ctx, clusterID, report.ReportName, "ingested")
 	}

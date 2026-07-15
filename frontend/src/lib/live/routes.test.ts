@@ -18,6 +18,7 @@ import {
 } from './routes';
 
 const CID = 'c-1';
+const EID = 'e-1';
 
 /**
  * Wire types published today — mirrors the Type constants in
@@ -39,6 +40,20 @@ const WIRE_TYPES = [
   'cluster.registration.step',
   'cluster.registration.phase',
   'sys.ping',
+  // P4.5 domain publishers (internal/events/bus.go `.changed` constants).
+  'backup.changed',
+  'fleet_operation.changed',
+  'logging_operation.changed',
+  'tool_operation.changed',
+  'cis_scan.changed',
+  'image_scan.changed',
+  'argocd.changed',
+  'admin_queue.changed',
+  'siem_forwarder.changed',
+  'agent_fleet.changed',
+  'template_binding.changed',
+  'registry.changed',
+  'snapshot.changed',
 ] as const;
 
 const livenessKeys = [qk.clusters.listAll, qk.agents.fleet, qk.clusters.detail(CID)];
@@ -62,6 +77,24 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   'cluster.registration.phase': [qk.clusterPages.registrationStatus(CID)],
   'sys.ping': [],
   [AUDIT_PREFIX]: [qk.activityAll],
+  // P4.5 domain publishers — fixture carries clusterId + id.
+  'backup.changed': [qk.backups.all, qk.backups.b2All],
+  'fleet_operation.changed': [qk.fleetOperations.all, qk.clusters.listAll],
+  'logging_operation.changed': [qk.logging.operationsAll],
+  'tool_operation.changed': [qk.tools.operation(EID), qk.tools.clusterStatus(CID)],
+  'cis_scan.changed': [qk.cis.scansAll],
+  'image_scan.changed': [qk.clusterPages.imageVulnsAll(CID), qk.clusterPages.vulnerabilitySummary(CID)],
+  'argocd.changed': [qk.argocd.all],
+  'admin_queue.changed': [qk.adminOperations.queues, qk.adminOperations.dlq(EID)],
+  'siem_forwarder.changed': [qk.siemForwarders.all],
+  'agent_fleet.changed': [qk.agents.fleet, qk.agents.operations(CID)],
+  'template_binding.changed': [qk.clusterPages.templateBinding(CID)],
+  'registry.changed': [qk.clusterPages.registries(CID)],
+  'snapshot.changed': [
+    qk.clusterPages.snapshots(CID),
+    qk.clusterPages.snapshotSchedules(CID),
+    qk.clusterPages.veleroStatus(CID),
+  ],
 };
 
 /** Expected keys per `cluster.k8s_changed` kind, factory-built. */
@@ -78,7 +111,7 @@ const KIND_CASES: Record<string, QueryKey[]> = {
   Secret: [qk.generic.resources(CID, 'secrets')],
 };
 
-const fixture = (kind?: string) => ({ clusterId: CID, kind, namespace: 'ns', name: 'x' });
+const fixture = (kind?: string) => ({ clusterId: CID, id: EID, kind, namespace: 'ns', name: 'x' });
 
 describe('EVENT_ROUTES', () => {
   it('covers every published wire type (exhaustiveness)', () => {

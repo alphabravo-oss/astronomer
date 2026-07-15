@@ -1002,17 +1002,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// outside the /api/v1 Timeout middleware group.
 		r.Get("/api/v1/events/stream/", deps.EventStream.Stream)
 	}
-	if deps.ClusterRegistration != nil {
-		// Per-cluster wizard SSE stream — same long-lived contract as
-		// the global stream above, registered outside the timeout group
-		// for the same reason. It still carries the same auth/RBAC
-		// protection as the registration status route mounted inside
-		// /api/v1 above.
-		r.With(
-			requireStreamTicketOrAuth(deps.JWT, deps.AuthQueries, deps.StreamTicketStore, iauth.StreamKindRegistration, "id"),
-			requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
-		).Get("/api/v1/clusters/{id}/registration/events/", deps.ClusterRegistration.StreamEvents)
-	}
 	if deps.Workloads != nil {
 		// Live pod watch SSE stream — streams ADDED/MODIFIED/DELETED events
 		// through the agent tunnel instead of the UI polling the pod list.

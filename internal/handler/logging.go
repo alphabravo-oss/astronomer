@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -84,6 +85,7 @@ type LoggingHandler struct {
 	requester K8sRequester
 	log       *slog.Logger
 	authz     authorizationSupport
+	bus       *events.Bus
 	mu        sync.Mutex
 	trigger   chan struct{}
 	// helmConcurrency caps the parallel dispatch fan-out for
@@ -1036,6 +1038,7 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RetryError, "Failed to retry logging operation")
 		return
 	}
+	h.publishLoggingOperationChanged(requeued)
 	h.TriggerReconcile()
 	recordAudit(r, h.queries, "logging.operation.retry", "logging_operation", id.String(), op.TargetKey, map[string]any{
 		"target_type":     op.TargetType,
@@ -1118,6 +1121,29 @@ func (h *LoggingHandler) enqueuePipelineDelete(ctx context.Context, pipeline sql
 	return h.enqueueOperation(ctx, "pipeline", pipeline.ID.String(), "delete", env, userID)
 }
 
+// SetEventBus wires the SSE bus for logging_operation.changed liveness
+// events (P4.5). Optional: publishers are fire-and-forget and nil-safe.
+func (h *LoggingHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishLoggingOperationChanged emits the metadata-only
+// logging_operation.changed event after a successful operation-row write.
+// The cluster id comes from the persisted payload envelope (best-effort:
+// legacy rows without one publish unscoped and are superuser-only via the
+// SEC-R07 fail-closed drop).
+func (h *LoggingHandler) publishLoggingOperationChanged(op sqlc.LoggingOperation) {
+	if h == nil {
+		return
+	}
+	var env loggingOperationEnvelope
+	_ = json.Unmarshal(op.Payload, &env)
+	events.PublishChanged(h.bus, "logging_operation", env.ClusterID, op.ID.String(), map[string]any{"status": op.Status})
+}
+
 func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targetKey, operationType string, env loggingOperationEnvelope, userID pgtype.UUID) (sqlc.LoggingOperation, error) {
 	payload, err := json.Marshal(env)
 	if err != nil {
@@ -1152,6 +1178,7 @@ func (h *LoggingHandler) enqueueOperation(ctx context.Context, targetType, targe
 		op, err = h.queries.CreateLoggingOperation(ctx, params)
 	}
 	if err == nil {
+		h.publishLoggingOperationChanged(op)
 		h.TriggerReconcile()
 	}
 	return op, err
@@ -1194,16 +1221,19 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []cl
 				"targetType": op.TargetType,
 				"targetKey":  op.TargetKey,
 			})
-			_, _ = h.queries.MarkLoggingOperationSuperseded(ctx, sqlc.MarkLoggingOperationSupersededParams{
+			if superseded, serr := h.queries.MarkLoggingOperationSuperseded(ctx, sqlc.MarkLoggingOperationSupersededParams{
 				ID:           op.ID,
 				ErrorMessage: operationSupersededMessage,
-			})
+			}); serr == nil {
+				h.publishLoggingOperationChanged(superseded)
+			}
 		},
 		MarkRunning: func(ctx context.Context, op sqlc.LoggingOperation) (sqlc.LoggingOperation, error) {
 			running, err := h.queries.MarkLoggingOperationRunning(ctx, op.ID)
 			if err != nil {
 				return sqlc.LoggingOperation{}, err
 			}
+			h.publishLoggingOperationChanged(running)
 			h.recordEvent(ctx, running.ID, "info", "queue", "operation execution started", map[string]any{
 				"operationType": running.OperationType,
 				"targetType":    running.TargetType,
@@ -1220,14 +1250,18 @@ func (h *LoggingHandler) claimPendingLoggingOperations(ctx context.Context) []cl
 				},
 				OnComplete: func(ctx context.Context) {
 					h.recordEvent(ctx, running.ID, "info", "complete", "operation completed", map[string]any{})
-					_, _ = h.queries.MarkLoggingOperationCompleted(ctx, running.ID)
+					if completed, cerr := h.queries.MarkLoggingOperationCompleted(ctx, running.ID); cerr == nil {
+						h.publishLoggingOperationChanged(completed)
+					}
 				},
 				OnFailure: func(ctx context.Context, err error) {
 					h.recordEvent(ctx, running.ID, "error", "complete", "operation failed", map[string]any{"error": err.Error()})
-					_, _ = h.queries.MarkLoggingOperationFailed(ctx, sqlc.MarkLoggingOperationFailedParams{
+					if failed, ferr := h.queries.MarkLoggingOperationFailed(ctx, sqlc.MarkLoggingOperationFailedParams{
 						ID:           running.ID,
 						ErrorMessage: err.Error(),
-					})
+					}); ferr == nil {
+						h.publishLoggingOperationChanged(failed)
+					}
 					if h.log != nil {
 						h.log.Warn("logging operation failed", "id", running.ID.String(), "error", err)
 					}

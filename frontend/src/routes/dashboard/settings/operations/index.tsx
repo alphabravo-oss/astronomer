@@ -30,6 +30,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import {
   listQueues,
   listDLQ,
@@ -49,7 +50,7 @@ function OperationsBody() {
   const queues = useQuery({
     queryKey: queryKeys.adminOperations.queues,
     queryFn: listQueues,
-    refetchInterval: 5_000,
+    refetchInterval: liveFallback(5_000),
     refetchIntervalInBackground: false,
   });
 
@@ -69,13 +70,13 @@ function OperationsBody() {
     queryKey: queryKeys.adminOperations.dlq(activeQueue),
     queryFn: () => listDLQ(activeQueue),
     enabled: !!activeQueue,
-    refetchInterval: 10_000,
+    refetchInterval: liveFallback(10_000),
   });
 
   const outbox = useQuery({
     queryKey: queryKeys.adminOperations.outbox(outboxStatus),
     queryFn: () => listTaskOutbox(outboxStatus),
-    refetchInterval: 10_000,
+    refetchInterval: liveFallback(10_000),
   });
 
   const retry = useMutation({

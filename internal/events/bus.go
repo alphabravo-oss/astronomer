@@ -347,9 +347,12 @@ func (b *Bus) publishRedis(e Event) {
 }
 
 // Subscribe returns a channel that receives events until ctx is cancelled.
-// Buffer is sized to absorb modest bursts; further bursts are dropped.
+// Buffer is sized to absorb informer/publisher bursts (T6: 64→256 for the
+// P4.5 domain-publisher expansion); further bursts are dropped and counted
+// via RecordDroppedEvent (alertable; D7 threshold 0.1%/24h drives the
+// post-merge coalescing follow-up).
 func (b *Bus) Subscribe(ctx context.Context) <-chan Event {
-	s := &subscription{ch: make(chan Event, 64)}
+	s := &subscription{ch: make(chan Event, 256)}
 	b.mu.Lock()
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()

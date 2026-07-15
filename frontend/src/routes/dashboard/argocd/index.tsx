@@ -17,6 +17,7 @@ import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { RegisterInstanceModal } from '@/components/argocd/register-instance-modal';
 import { formatRelativeTime } from '@/lib/utils';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import type { PaginatedResponse, ArgoInstanceB1 } from '@/types';
 
 interface InstanceRow extends ArgoInstanceB1 {
@@ -36,7 +37,7 @@ function ArgoCDInstancesPage() {
       const res = await api.get<PaginatedResponse<ArgoInstanceB1>>('/argocd/instances');
       return res.data;
     },
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   // The k8s_changed event is the closest thing we have today to an

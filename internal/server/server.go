@@ -401,10 +401,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	monitoringHandler.SetLogger(logger)
 	argocdHandler := handler.NewArgoCDHandler(queries)
 	argocdHandler.SetLogger(logger)
+	argocdHandler.SetEventBus(bus)
 	argocdHandler.SetEncryptor(encryptor)
 	argocdHandler.SetClusterProxyBaseURL(cfg.ArgoCDClusterProxyBaseURL)
 	toolHandler := handler.NewToolHandlerWithHelm(queries, helmRequester)
 	toolHandler.SetLogger(logger)
+	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
 	catalogHandler.SetLogger(logger)
 	backupHandler := handler.NewBackupHandler(queries)
@@ -414,18 +416,21 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	backupHandler.SetEncryptor(encryptor)
 	backupHandler.SetK8sRequester(requester)
 	backupHandler.SetLogger(logger)
+	backupHandler.SetEventBus(bus)
 	loggingHandler := handler.NewLoggingHandler(queries)
 	// Logging controller — DB-backed operations table + background reconciler
 	// applies rendered ConfigMaps into the managed cluster's astronomer-logging
 	// namespace via the tunnel K8s requester. Comparison.md §7/§10/§11.
 	loggingHandler.SetK8sRequester(requester)
 	loggingHandler.SetLogger(logger)
+	loggingHandler.SetEventBus(bus)
 	securityHandler := handler.NewSecurityHandler(queries)
 	// Phase B5 — CIS scans wiring (handler creates ClusterScan CRs through the
 	// tunnel and runs an in-process poller until the report lands).
 	securityHandler.SetK8sRequester(requester)
 	securityHandler.SetClusterQuerier(queries)
 	securityHandler.SetLogger(logger)
+	securityHandler.SetEventBus(bus)
 	workloadHandler := handler.NewWorkloadHandlerWithDeps(queries, requester)
 	workloadHandler.SetLogger(logger)
 	// The tunnel requester also implements the live pod watch used by the
@@ -492,6 +497,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// asynq client is shared with the rest of the platform so apply
 	// tasks land in the same queue as decommission/argocd-refresh.
 	clusterTemplateHandler := handler.NewClusterTemplateHandler(queries)
+	clusterTemplateHandler.SetEventBus(bus)
 	clusterTemplateHandler.SetQueue(queue)
 	clusterTemplateHandler.SetTaskOutbox(queries)
 	// Cluster registries (migration 050). Multi-registry-per-cluster admin
@@ -499,6 +505,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// shared with project enforcement so the /test/ endpoint can dial the
 	// member cluster's network from the management plane.
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
+	clusterRegistriesHandler.SetEventBus(bus)
 	clusterRegistriesHandler.SetApplyEnqueue(queue)
 	clusterRegistriesHandler.SetTaskOutbox(queries)
 	clusterRegistriesHandler.SetRequester(requester)
@@ -565,6 +572,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Metric registration is idempotent — see RegisterClusterSnapshotsMetrics.
 	clusterSnapshotsHandler := handler.NewClusterSnapshotsHandler(queries)
 	clusterSnapshotsHandler.SetRequester(requester)
+	clusterSnapshotsHandler.SetEventBus(bus)
 	// Control-plane (etcd) DR snapshots — OFF unless an operator opts in via
 	// config (control_plane_snapshots_enabled). Left nil, the etcd routes below
 	// never register, so the privileged snapshot Job path is unreachable.
@@ -603,7 +611,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Handler owns CRUD + state-transition endpoints; orchestrator worker
 	// drives every pending/running row toward a terminal status.
 	fleetOperationsHandler := handler.NewFleetOperationHandler(queries)
+	fleetOperationsHandler.SetEventBus(bus)
 	fleetDispatcher := handler.NewFleetDispatcher(toolHandler, clusterTemplateHandler, queries)
+	fleetDispatcher.SetEventBus(bus)
 	tasks.ConfigureFleetOrchestrate(tasks.FleetOrchestrateDeps{
 		Queries:    queries,
 		Dispatcher: fleetDispatcher,
@@ -663,6 +673,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		})
 	})
 	trivyIngester := scanner.NewIngester(queries, database.Pool(), nil, trivyAuditHook)
+	trivyIngester.SetEventBus(bus)
 	mirrorRouter.SetVulnIngester(crd.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
 	hub.SetMirrorIngester(mirrorRouter)
 	apiserverAuditHandler := handler.NewApiserverAuditHandler(handler.NewApiserverAuditStoreAdapter(queries))
@@ -1048,6 +1059,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if encryptor != nil {
 		siemHandler = handler.NewSIEMHandler(queries, encryptor, logger)
 		siemHandler.SetAuditWriter(queries)
+		siemHandler.SetEventBus(bus)
 		tasks.ConfigureSIEM(tasks.SIEMDeps{
 			Queries:   queries,
 			Encryptor: encryptor,
@@ -1154,6 +1166,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			h := handler.NewAgentFleetHandler(queries)
 			h.SetAgentUpgradeTarget(cfg.AgentImageRepository, cfg.AgentImageTag)
 			h.SetK8sRequester(requester)
+			h.SetEventBus(bus)
 			return h
 		}(),
 		Readyz:    newReadinessHandler(database, queue, hub).withLocatorError(locatorReadinessErr),
@@ -1223,7 +1236,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			return h
 		}(),
 		// Admin queue inspector.
-		AdminQueues:     handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries),
+		AdminQueues: func() *handler.AdminQueuesHandler {
+			h := handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries)
+			h.SetEventBus(bus)
+			return h
+		}(),
 		AdminTaskOutbox: handler.NewAdminTaskOutboxHandler(queries),
 		// Admin backup-restore drill viewer — reads rows that the
 		// management-plane-restore-drill CronJob writes to

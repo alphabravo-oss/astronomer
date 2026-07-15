@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -81,6 +82,7 @@ type BackupHandler struct {
 	httpClient *http.Client
 	log        *slog.Logger
 	authz      authorizationSupport
+	bus        *events.Bus
 }
 
 // NewBackupHandler creates a new backup handler.
@@ -92,6 +94,24 @@ func NewBackupHandler(queries BackupQuerier) *BackupHandler {
 		// SafeClient enforces public-IP at dial time (not GuardPublicHost alone).
 		httpClient: httpclient.SafeClient(15 * time.Second),
 	}
+}
+
+// SetEventBus wires the SSE bus for backup.changed liveness events (P4.5).
+// Optional: publishers are fire-and-forget and nil-safe.
+func (h *BackupHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishBackupChanged emits the metadata-only backup.changed event after a
+// successful DB write. kind discriminates backup|restore|schedule.
+func (h *BackupHandler) publishBackupChanged(clusterID pgtype.UUID, id uuid.UUID, kind string) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "backup", nullableUUIDString(clusterID), id.String(), map[string]any{"kind": kind})
 }
 
 // SetAuthorization wires the RBAC engine + binding querier used to enforce
@@ -665,6 +685,7 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("failed to apply velero backup CR", "backup_id", backup.ID.String(), "error", err)
 	}
 
+	h.publishBackupChanged(backup.ClusterID, backup.ID, "backup")
 	recordAudit(r, h.queries, "backup.create", "backup", backup.ID.String(), backup.Name, map[string]any{
 		"storage_id":  storage.ID.String(),
 		"backup_type": backup.BackupType,
@@ -715,6 +736,7 @@ func (h *BackupHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete backup")
 		return
 	}
+	h.publishBackupChanged(existing.ClusterID, id, "backup")
 	recordAudit(r, h.queries, "backup.delete", "backup", id.String(), backupName, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -839,6 +861,7 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("failed to apply velero Schedule CR", "schedule_id", schedule.ID.String(), "error", err)
 	}
 
+	h.publishBackupChanged(schedule.ClusterID, schedule.ID, "schedule")
 	recordAudit(r, h.queries, "backup.schedule.create", "backup_schedule", schedule.ID.String(), schedule.Name, map[string]any{
 		"storage_id":      storage.ID.String(),
 		"cron_expression": schedule.CronExpression,
@@ -891,6 +914,7 @@ func (h *BackupHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishBackupChanged(existing.ClusterID, id, "schedule")
 	recordAudit(r, h.queries, "backup.schedule.delete", "backup_schedule", id.String(), scheduleName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -980,6 +1004,7 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("failed to apply velero Schedule CR", "schedule_id", schedule.ID.String(), "error", err)
 	}
 
+	h.publishBackupChanged(schedule.ClusterID, schedule.ID, "schedule")
 	recordAudit(r, h.queries, "backup.schedule.update", "backup_schedule", schedule.ID.String(), schedule.Name, map[string]any{
 		"storage_id":      storage.ID.String(),
 		"cron_expression": schedule.CronExpression,
@@ -1051,6 +1076,7 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 		h.log.Warn("failed to apply manual velero Backup CR", "backup_id", backup.ID.String(), "error", err)
 	}
 
+	h.publishBackupChanged(backup.ClusterID, backup.ID, "backup")
 	recordAudit(r, h.queries, "backup.schedule.trigger", "backup_schedule", schedule.ID.String(), schedule.Name, map[string]any{
 		"backup_id":   backup.ID.String(),
 		"backup_name": backup.Name,
@@ -1125,6 +1151,7 @@ func (h *BackupHandler) CreateRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.publishBackupChanged(restore.ClusterID, restore.ID, "restore")
 	recordAudit(r, h.queries, "backup.restore.create", "restore_operation", restore.ID.String(), backup.Name, map[string]any{
 		"backup_id":           backup.ID.String(),
 		"velero_restore_name": veleroRestoreName,

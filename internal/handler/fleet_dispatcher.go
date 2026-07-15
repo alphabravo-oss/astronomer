@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -44,6 +45,17 @@ type FleetDispatcher struct {
 	Tools     *ToolHandler
 	Templates *ClusterTemplateHandler
 	Queries   FleetDispatcherQuerier
+	bus       *events.Bus
+}
+
+// SetEventBus wires the SSE bus so per-target dispatches publish
+// fleet_operation.changed with the target's cluster_id (P4.5).
+// Optional: fire-and-forget and nil-safe.
+func (d *FleetDispatcher) SetEventBus(bus *events.Bus) {
+	if d == nil {
+		return
+	}
+	d.bus = bus
 }
 
 // FleetDispatcherQuerier is the slice of *sqlc.Queries the dispatcher
@@ -73,6 +85,7 @@ func (d *FleetDispatcher) DispatchToolOperation(ctx context.Context, kind string
 	if err != nil {
 		return uuid.Nil, "", err
 	}
+	events.PublishChanged(d.bus, "fleet_operation", clusterID.String(), "", map[string]any{"target_status": "dispatched"})
 	return op.ID, kind, nil
 }
 
@@ -97,7 +110,9 @@ func (d *FleetDispatcher) DispatchApplyTemplate(ctx context.Context, clusterID, 
 	}
 	if d.Templates != nil {
 		d.Templates.enqueueApplyForCluster(ctx, clusterID)
+		d.Templates.publishTemplateBindingChanged(clusterID, "pending")
 	}
+	events.PublishChanged(d.bus, "fleet_operation", clusterID.String(), "", map[string]any{"target_status": "dispatched"})
 	return clusterID, tasks.FleetOpTypeApplyTemplate, nil
 }
 

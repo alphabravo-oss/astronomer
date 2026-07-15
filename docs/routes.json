@@ -436,6 +436,10 @@
     "pattern": "/api/v1/catalog/installed/{id}"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/installed/{id}/revisions"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/catalog/installed/{id}/rollback"
   },
@@ -998,10 +1002,6 @@
   {
     "method": "POST",
     "pattern": "/api/v1/clusters/{id}/registration/confirm"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/clusters/{id}/registration/events"
   },
   {
     "method": "PUT",

@@ -36,6 +36,7 @@ import api, {
   syncArgoApplicationById,
 } from '@/lib/api';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -76,7 +77,7 @@ function ApplicationDetailPage() {
       return res.data;
     },
     enabled: !!appId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 
   // Live application from upstream — pull the full list, find by name.
@@ -97,10 +98,12 @@ function ApplicationDetailPage() {
   const opsForApp = useQuery({
     queryKey: queryKeys.argocd.appOperations(appId),
     queryFn: () => listArgoOperations({ targetType: 'application', targetKey: appId, limit: 25 }),
+    // `argocd.changed` (scope: operation) drives freshness while the stream
+    // is open; both cadences are the stream-down fallback (P4.5).
     refetchInterval: (q) => {
       const ops = (q.state.data as ArgoOperation[] | undefined) ?? [];
       const inFlight = ops.some((o) => o.status === 'pending' || o.status === 'running');
-      return inFlight ? 5000 : 20000;
+      return inFlight ? liveFallback(5000)() : liveFallback(20000)();
     },
   });
 
@@ -251,6 +254,8 @@ function ResourcesTab({ appId }: { appId: string }) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.argocd.appManifests(appId),
     queryFn: () => getArgoAppManifests(appId),
+    // KEEP (D8): Argo-side truth with no event source at content
+    // granularity — deliberately NOT converted to liveFallback.
     refetchInterval: 30000,
   });
 
@@ -292,6 +297,8 @@ function HistoryTab({ appId }: { appId: string }) {
   const { data: history = [], isLoading } = useQuery({
     queryKey: queryKeys.argocd.appHistory(appId),
     queryFn: () => getArgoAppHistory(appId),
+    // KEEP (D8): Argo-side truth with no event source at content
+    // granularity — deliberately NOT converted to liveFallback.
     refetchInterval: 60000,
   });
 

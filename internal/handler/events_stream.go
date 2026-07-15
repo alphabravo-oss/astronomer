@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,6 +38,9 @@ type EventStreamHandler struct {
 	authz   authorizationSupport
 	// keepaliveInterval overrides the 25s heartbeat cadence (tests only).
 	keepaliveInterval time.Duration
+	// bindingRefreshInterval overrides the 5-minute RBAC binding
+	// re-snapshot cadence (tests only).
+	bindingRefreshInterval time.Duration
 }
 
 // NewEventStreamHandler wraps a bus.
@@ -94,25 +98,10 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load bindings once for the stream lifetime (SEC-R07). Superusers /
-	// unrestricted principals get restricted=false.
-	var (
-		bindings   []rbac.RoleBinding
-		restricted bool
-	)
-	if h.authz.engine != nil && h.authz.querier != nil && userID != uuid.Nil {
-		b, err := h.authz.querier.GetUserBindings(r.Context(), userID.String())
-		if err == nil {
-			bindings = b
-			restricted = true
-			// Superuser shortcut: empty global * binding treated via engine.
-			if h.authz.engine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbList, uuid.Nil, uuid.Nil) {
-				// Global list without cluster constraint → unrestricted stream.
-				// CheckPermission with Nil cluster may not mean global; keep restricted
-				// and filter unless allowsCluster succeeds for each event.
-			}
-		}
-	}
+	// Load bindings for the stream (SEC-R07), re-snapshotted every 5
+	// minutes below (T5/D10) so mid-stream revocations stop leaking events
+	// after at most one interval instead of the entire stream lifetime.
+	bindings, restricted := h.snapshotStreamBindings(r.Context(), userID)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -136,11 +125,25 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	keepalive := time.NewTicker(interval)
 	defer keepalive.Stop()
 
+	// T5 (D10): re-snapshot the caller's RBAC bindings every 5 minutes so a
+	// revocation mid-stream takes effect within one interval. On a refresh
+	// error the previous snapshot stays in force until the next tick.
+	refreshInterval := h.bindingRefreshInterval
+	if refreshInterval <= 0 {
+		refreshInterval = 5 * time.Minute
+	}
+	bindingRefresh := time.NewTicker(refreshInterval)
+	defer bindingRefresh.Stop()
+
 	ch := h.bus.Subscribe(r.Context())
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-bindingRefresh.C:
+			if b, r2 := h.snapshotStreamBindings(r.Context(), userID); r2 || !restricted {
+				bindings, restricted = b, r2
+			}
 		case <-keepalive.C:
 			ping, err := json.Marshal(struct {
 				Type string    `json:"type"`
@@ -176,6 +179,22 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// snapshotStreamBindings loads the caller's RBAC bindings for SEC-R07
+// per-event filtering. Returns restricted=false for superusers/unrestricted
+// principals (authz not wired, dev connections) or when the binding load
+// fails — callers on the refresh path must then keep the previous snapshot
+// rather than fail open.
+func (h *EventStreamHandler) snapshotStreamBindings(ctx context.Context, userID uuid.UUID) ([]rbac.RoleBinding, bool) {
+	if h.authz.engine == nil || h.authz.querier == nil || userID == uuid.Nil {
+		return nil, false
+	}
+	b, err := h.authz.querier.GetUserBindings(ctx, userID.String())
+	if err != nil {
+		return nil, false
+	}
+	return b, true
 }
 
 // isSysEvent reports whether the event type is a sys.* control frame,

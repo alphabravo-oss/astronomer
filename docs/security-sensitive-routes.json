@@ -1,22 +1,5 @@
 [
   {
-    "id": "registration-events",
-    "route": "/api/v1/clusters/{id}/registration/events/",
-    "sample_path": "/api/v1/clusters/{cluster_id}/registration/events/",
-    "method": "GET",
-    "expected_unauthenticated_status": 401,
-    "surface": "cluster registration server-sent events",
-    "auth": "stream ticket or bearer/session auth",
-    "rbac": "clusters:read",
-    "csrf": "not applicable: GET stream",
-    "audit": "read-side audit middleware when configured",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestRegistrationEventsRejectQueryJWT",
-      "TestRegistrationEventsAuthAndRBAC"
-    ]
-  },
-  {
     "id": "remotedialer-pods-demo",
     "route": "/api/v1/clusters/{id}/v2/pods/",
     "sample_path": "/api/v1/clusters/{cluster_id}/v2/pods/",
