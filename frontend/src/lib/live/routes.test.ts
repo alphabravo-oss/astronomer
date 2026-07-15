@@ -54,18 +54,26 @@ const WIRE_TYPES = [
   'template_binding.changed',
   'registry.changed',
   'snapshot.changed',
+  // P4.9 coverage-completion publishers.
+  'alerting.changed',
+  'security_policy.changed',
+  'security_scan.changed',
+  'network_access.changed',
+  'catalog_release.changed',
 ] as const;
 
 const livenessKeys = [qk.clusters.listAll, qk.agents.fleet, qk.clusters.detail(CID)];
+const conditionsKeys = [qk.clusters.conditions(CID), qk.clusters.conditionRemediation(CID)];
 
 /** Expected keys per event type, built exclusively from the factory. */
 const EVENT_CASES: Record<string, QueryKey[]> = {
   'cluster.connected': livenessKeys,
   'cluster.disconnected': livenessKeys,
-  'cluster.heartbeat': livenessKeys,
-  // Merger-owned tick types: status is patched in place, metrics patches
-  // rows and only invalidates the per-cluster metrics prefix.
-  'cluster.status_changed': [],
+  // Heartbeat also refreshes the conditions surface (P4.9).
+  'cluster.heartbeat': [...livenessKeys, ...conditionsKeys],
+  // Merger-owned for list/detail rows (patched in place); conditions +
+  // remediation history invalidate on transitions (P4.9).
+  'cluster.status_changed': conditionsKeys,
   'cluster.metrics': [qk.clusters.metricsAll(CID)],
   'cluster.created': [qk.clusters.listAll],
   'cluster.updated': [qk.clusters.listAll, qk.clusters.detail(CID)],
@@ -95,6 +103,16 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
     qk.clusterPages.snapshotSchedules(CID),
     qk.clusterPages.veleroStatus(CID),
   ],
+  // P4.9 — the shared fixture carries no `kind`, so alerting.changed hits
+  // its whole-domain fallback here; per-kind rows are asserted separately.
+  'alerting.changed': [qk.alerting.all, qk.anomalyBaselines.all],
+  'security_policy.changed': [qk.security.policies],
+  'security_scan.changed': [qk.security.scansAll],
+  'network_access.changed': [
+    qk.clusterPages.apiserverAllowlist(CID),
+    qk.clusterPages.apiserverAllowlistSnapshots(CID),
+  ],
+  'catalog_release.changed': [qk.catalog.installedAll, qk.clusterPages.appsInstalled(CID)],
 };
 
 /** Velero CRD kinds share one expected-key set (Backup/Restore/Schedule). */
@@ -117,7 +135,12 @@ const KIND_CASES: Record<string, QueryKey[]> = {
   Node: [qk.clusters.nodes(CID)],
   Event: [qk.clusters.eventsAll(CID)],
   ConfigMap: [qk.generic.resources(CID, 'configmaps')],
-  Secret: [qk.generic.resources(CID, 'secrets')],
+  // P4.9 — agent-side Helm filter makes every Secret frame a release change.
+  Secret: [
+    qk.generic.resources(CID, 'secrets'),
+    qk.catalog.installedAll,
+    qk.clusterPages.appsInstalled(CID),
+  ],
   // P4.6 informer expansion (agent metadata informers).
   Namespace: [qk.clusters.namespaces(CID)],
   Job: [
@@ -173,6 +196,18 @@ describe('EVENT_ROUTES', () => {
       const got = EVENT_ROUTES[type](fixture(type === 'cluster.k8s_changed' ? 'Pod' : undefined));
       expect(got, `keys for ${type}`).toEqual(expected);
     }
+  });
+
+  it('routes alerting.changed per payload kind (P4.9)', () => {
+    const route = EVENT_ROUTES['alerting.changed'];
+    expect(route({ ...fixture(), kind: 'rule' })).toEqual([qk.alerting.rules]);
+    expect(route({ ...fixture(), kind: 'event' })).toEqual([qk.alerting.eventsAll]);
+    expect(route({ ...fixture(), kind: 'silence' })).toEqual([qk.alerting.silences]);
+    expect(route({ ...fixture(), kind: 'baseline' })).toEqual([qk.anomalyBaselines.all]);
+  });
+
+  it('drops network_access.changed frames without a cluster id', () => {
+    expect(EVENT_ROUTES['network_access.changed']({})).toEqual([]);
   });
 
   it('routes audit.<action> types through the prefix row', () => {

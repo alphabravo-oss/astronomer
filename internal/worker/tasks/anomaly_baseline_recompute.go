@@ -31,6 +31,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/anomaly"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 )
 
 // AnomalyBaselineRecomputeType is the periodic-task identifier.
@@ -157,6 +158,7 @@ func RunAnomalyBaselineRecompute(ctx context.Context, q baselineRecomputeQuerier
 	//    aggregate. We page in batches of 200 to keep the heap
 	//    bounded under a large fleet.
 	const pageSize = int32(200)
+	recomputedClusters := map[uuid.UUID]bool{}
 	for offset := int32(0); ; offset += pageSize {
 		page, err := q.ListAnomalyBaselines(ctx, sqlc.ListAnomalyBaselinesParams{
 			Limit:  pageSize,
@@ -180,10 +182,18 @@ func RunAnomalyBaselineRecompute(ctx context.Context, q baselineRecomputeQuerier
 				// shouldn't kill the whole recompute pass.
 				continue
 			}
+			recomputedClusters[baseline.ClusterID] = true
 		}
 		if int32(len(page)) < pageSize {
 			break
 		}
+	}
+	// P4.9 — one alerting.changed (kind: baseline) per distinct cluster per
+	// pass (a pass rewrites every row, so per-row events would be spam). In
+	// the dedicated worker process the runtime bus is Redis-attached and
+	// fans out to the server pods' SSE relays. Nil-safe when unwired.
+	for clusterID := range recomputedClusters {
+		events.PublishChanged(runtimeDeps.Bus, "alerting", clusterID.String(), "", map[string]any{"kind": "baseline"})
 	}
 	return nil
 }

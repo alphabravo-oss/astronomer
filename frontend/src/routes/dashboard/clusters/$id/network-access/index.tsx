@@ -45,6 +45,7 @@ import {
   type ApiserverAllowlistMode,
 } from '@/lib/api/cluster-detail';
 import { queryKeys } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { useClustersUpdate } from '@/lib/permission-hooks';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
@@ -112,7 +113,9 @@ function ClusterNetworkAccessPage() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId),
     queryFn: () => getApiserverAllowlist(clusterId),
-    refetchInterval: 30_000,
+    // `network_access.changed` covers allow-list writes while the stream is
+    // open; reconcile-side sync-status changes heal via this fallback poll.
+    refetchInterval: liveFallback(30_000),
   });
 
   // Editor state — initialised from the server snapshot on first load.

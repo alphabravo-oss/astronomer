@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -92,6 +93,7 @@ type AlertingHandler struct {
 	enqueuer tasks.Enqueuer
 	// settingsCache resolves DIR-08 Alertmanager timing knobs at render time.
 	settingsCache *SettingsCache
+	bus           *events.Bus
 }
 
 // NewAlertingHandler creates a new alerting handler.
@@ -112,6 +114,29 @@ func (h *AlertingHandler) SetSettingsCache(c *SettingsCache) {
 		return
 	}
 	h.settingsCache = c
+}
+
+// SetEventBus wires the SSE bus for alerting.changed liveness events (P4.9).
+// Optional: publishers are fire-and-forget and nil-safe.
+func (h *AlertingHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishAlertingChanged emits the metadata-only alerting.changed event after
+// a successful alerting-row write. kind is rule|event|silence; clusterID is
+// the entity's cluster when it has one ("" for global entities — those
+// publish unscoped and reach superusers only, per the SEC-R07 fail-closed
+// drop). The worker-side halves of this domain (alert-event ingestion/
+// resolution, anomaly-baseline recompute) publish through the worker
+// runtime's Redis-attached bus instead — see internal/worker/tasks.
+func (h *AlertingHandler) publishAlertingChanged(kind, clusterID string, entityID uuid.UUID) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "alerting", clusterID, entityID.String(), map[string]any{"kind": kind})
 }
 
 func (h *AlertingHandler) alertmanagerTiming(ctx context.Context) (groupWait, groupInterval, repeatInterval string) {
@@ -489,6 +514,7 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
+	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
 	recordAudit(r, h.queries, "alert.rule.create", "alert_rule", rule.ID.String(), rule.Name, map[string]any{
 		"rule_type": rule.RuleType,
 		"severity":  rule.Severity,
@@ -573,6 +599,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
+	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
 	recordAudit(r, h.queries, "alert.rule.update", "alert_rule", rule.ID.String(), rule.Name, map[string]any{
 		"severity": rule.Severity,
 		"enabled":  rule.Enabled,
@@ -590,8 +617,10 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ruleName := ""
+	ruleCluster := ""
 	if existing, lookupErr := h.queries.GetAlertRuleByID(r.Context(), id); lookupErr == nil {
 		ruleName = existing.Name
+		ruleCluster = nullableUUIDString(existing.ClusterID)
 	}
 	if err := h.queries.DeleteAlertRule(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
@@ -599,6 +628,7 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
+	h.publishAlertingChanged("rule", ruleCluster, id)
 	recordAudit(r, h.queries, "alert.rule.delete", "alert_rule", id.String(), ruleName, nil)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -692,6 +722,7 @@ func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
+	h.publishAlertingChanged("event", nullableUUIDString(event.ClusterID), id)
 	recordAudit(r, h.queries, "alert.event.acknowledge", "alert_event", id.String(), "", nil)
 	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
 }
@@ -715,6 +746,7 @@ func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event, _ := h.queries.GetAlertEventByID(r.Context(), id)
+	h.publishAlertingChanged("event", nullableUUIDString(event.ClusterID), id)
 	recordAudit(r, h.queries, "alert.event.resolve", "alert_event", id.String(), "", nil)
 	RespondJSON(w, http.StatusOK, h.alertEventResponse(r.Context(), event))
 }
@@ -801,6 +833,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
+	h.publishAlertingChanged("silence", nullableUUIDString(silence.ClusterID), silence.ID)
 	recordAudit(r, h.queries, "alert.silence.create", "alert_silence", silence.ID.String(), req.Reason, map[string]any{
 		"starts_at": startsAt.UTC().Format(time.RFC3339),
 		"ends_at":   endsAt.UTC().Format(time.RFC3339),
@@ -845,6 +878,7 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
+	h.publishAlertingChanged("rule", nullableUUIDString(rule.ClusterID), rule.ID)
 	action := "alert.rule.disable"
 	if enabled {
 		action = "alert.rule.enable"
@@ -878,6 +912,7 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
+	h.publishAlertingChanged("silence", nullableUUIDString(match.ClusterID), id)
 	expired := match
 	expired.EndsAt = time.Now()
 	recordAudit(r, h.queries, "alert.silence.expire", "alert_silence", id.String(), match.Reason, nil)
@@ -903,6 +938,7 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
 
+	h.publishAlertingChanged("silence", nullableUUIDString(match.ClusterID), id)
 	recordAudit(r, h.queries, "alert.silence.delete", "alert_silence", id.String(), match.Reason, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -129,6 +130,28 @@ type CatalogHandler struct {
 	// proceeds unchanged; when refs appear and the resolver is nil
 	// the install fails with a clear error.
 	vaultResolver *avault.Resolver
+	bus           *events.Bus
+}
+
+// SetEventBus wires the SSE bus for catalog_release.changed liveness events
+// (P4.9). Optional: publishers are fire-and-forget and nil-safe.
+func (h *CatalogHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishCatalogReleaseChanged emits the metadata-only catalog_release.changed
+// event after an installed-chart row write (pending_* staging in the HTTP
+// handlers and the reconciler's terminal status writes). Server-initiated
+// release changes therefore surface even when the agent's Helm-Secret
+// informer stream lags.
+func (h *CatalogHandler) publishCatalogReleaseChanged(clusterID, installationID string) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "catalog_release", clusterID, installationID, nil)
 }
 
 // SetMaintenanceGate wires the migration-057 gate that refuses or
@@ -1029,6 +1052,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue installation")
 		return
 	}
+	h.publishCatalogReleaseChanged(clusterID.String(), installation.ID.String())
 	recordAudit(r, h.queries, "catalog.installation.create", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
 		"cluster_id":       installation.ClusterID.String(),
 		"namespace":        installation.Namespace,
@@ -1081,6 +1105,7 @@ func (h *CatalogHandler) DeleteInstallation(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue uninstall")
 		return
 	}
+	h.publishCatalogReleaseChanged(installation.ClusterID.String(), installation.ID.String())
 	recordAudit(r, h.queries, "catalog.installation.delete", "installed_chart", installation.ID.String(), installation.ReleaseName, map[string]any{
 		"cluster_id":   installation.ClusterID.String(),
 		"namespace":    installation.Namespace,
@@ -1222,6 +1247,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue installed chart upgrade")
 		return
 	}
+	h.publishCatalogReleaseChanged(installed.ClusterID.String(), installed.ID.String())
 	recordAudit(r, h.queries, "catalog.installation.upgrade", "installed_chart", installed.ID.String(), installed.ReleaseName, map[string]any{
 		"cluster_id":   installed.ClusterID.String(),
 		"namespace":    installed.Namespace,
@@ -1284,6 +1310,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue rollback")
 		return
 	}
+	h.publishCatalogReleaseChanged(current.ClusterID.String(), current.ID.String())
 	recordAudit(r, h.queries, "catalog.installation.rollback", "installed_chart", current.ID.String(), current.ReleaseName, map[string]any{
 		"cluster_id":        current.ClusterID.String(),
 		"namespace":         current.Namespace,
@@ -1969,6 +1996,9 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		return err
 	}
 	clusterID := installation.ClusterID.String()
+	// Every path below writes a terminal installed-chart status (success or
+	// failed_*), so one deferred publish covers them all (P4.9).
+	defer h.publishCatalogReleaseChanged(clusterID, installation.ID.String())
 	switch op.OperationType {
 	case "install":
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "install", "installing catalog release", map[string]any{

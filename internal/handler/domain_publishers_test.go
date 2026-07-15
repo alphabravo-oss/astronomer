@@ -321,6 +321,146 @@ func TestPublisher_NilBusIsNoOp(t *testing.T) {
 	(&BackupHandler{}).publishBackupChanged(pgtype.UUID{}, uuid.New(), "backup")
 	(&ClusterSnapshotsHandler{}).publishSnapshotChanged(uuid.New(), uuid.New(), "snapshot")
 	(&ClusterTemplateHandler{}).publishTemplateBindingChanged(uuid.New(), "pending")
+	// P4.9 publishers.
+	(&AlertingHandler{}).publishAlertingChanged("rule", uuid.New().String(), uuid.New())
+	(&SecurityHandler{}).publishSecurityPolicyChanged(uuid.New(), uuid.New())
+	(&ApiserverAllowlistHandler{}).publishNetworkAccessChanged(uuid.New())
+	(&CatalogHandler{}).publishCatalogReleaseChanged(uuid.New().String(), uuid.New().String())
+}
+
+// ── P4.9 coverage-completion publishers ─────────────────────────────────────
+
+func TestPublisher_AlertingChangedCarriesKindAndCluster(t *testing.T) {
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := &AlertingHandler{}
+	h.SetEventBus(bus)
+
+	clusterID := uuid.New()
+	ruleID := uuid.New()
+	h.publishAlertingChanged("rule", clusterID.String(), ruleID)
+
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeAlertingChanged))
+	pubAssertCluster(t, payload, clusterID.String())
+	if payload["kind"] != "rule" {
+		t.Fatalf("kind = %v, want rule", payload["kind"])
+	}
+	if payload["id"] != ruleID.String() {
+		t.Fatalf("id = %v, want %q", payload["id"], ruleID.String())
+	}
+}
+
+func TestPublisher_AlertingChangedGlobalEntityIsUnscoped(t *testing.T) {
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := &AlertingHandler{}
+	h.SetEventBus(bus)
+
+	// A global rule has no cluster: the event publishes unscoped and is
+	// superuser-only via the SEC-R07 fail-closed drop.
+	h.publishAlertingChanged("silence", "", uuid.New())
+
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeAlertingChanged))
+	if _, ok := payload["cluster_id"]; ok {
+		t.Fatalf("global alerting entity must publish unscoped, got cluster_id %v", payload["cluster_id"])
+	}
+	if payload["kind"] != "silence" {
+		t.Fatalf("kind = %v, want silence", payload["kind"])
+	}
+}
+
+func TestPublisher_SecurityPolicyChangedCarriesCluster(t *testing.T) {
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := &SecurityHandler{}
+	h.SetEventBus(bus)
+
+	clusterID := uuid.New()
+	policyID := uuid.New()
+	h.publishSecurityPolicyChanged(clusterID, policyID)
+
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeSecurityPolicyChanged))
+	pubAssertCluster(t, payload, clusterID.String())
+	if payload["id"] != policyID.String() {
+		t.Fatalf("id = %v, want %q", payload["id"], policyID.String())
+	}
+}
+
+func TestPublisher_SecurityPolicyChangedNilClusterIsUnscoped(t *testing.T) {
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := &SecurityHandler{}
+	h.SetEventBus(bus)
+
+	h.publishSecurityPolicyChanged(uuid.Nil, uuid.New())
+
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeSecurityPolicyChanged))
+	if _, ok := payload["cluster_id"]; ok {
+		t.Fatalf("Nil cluster must publish unscoped, not a zero UUID, got %v", payload["cluster_id"])
+	}
+}
+
+// Every security_scan_results write must emit BOTH cis_scan.changed (CIS
+// pages) and security_scan.changed (generic scans list) — same table, two
+// read surfaces.
+func TestPublisher_ScanWriteEmitsCISAndGenericTypes(t *testing.T) {
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := &SecurityHandler{}
+	h.SetEventBus(bus)
+
+	clusterID := uuid.New()
+	scanID := uuid.New()
+	h.publishCISScanChanged(clusterID, scanID)
+
+	for _, want := range []events.Type{events.TypeCISScanChanged, events.TypeSecurityScanChanged} {
+		payload := pubPayload(t, pubReceive(t, ch, want))
+		pubAssertCluster(t, payload, clusterID.String())
+		if payload["id"] != scanID.String() {
+			t.Fatalf("%s id = %v, want %q", want, payload["id"], scanID.String())
+		}
+	}
+}
+
+func TestPublisher_NetworkAccessChangedOnAllowlistPut(t *testing.T) {
+	clusterID := uuid.New()
+	q := &fakeAllowlistQuerier{}
+
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := NewApiserverAllowlistHandler(q)
+	h.SetEventBus(bus)
+
+	body, _ := json.Marshal(AllowlistUpdateRequest{
+		CIDRs: []string{"10.0.0.0/24"},
+		Mode:  "monitor",
+	})
+	req := requestWithChiParams(t, http.MethodPut, "/api/v1/clusters/"+clusterID.String()+"/apiserver-allowlist/", body, map[string]string{"cluster_id": clusterID.String()})
+	rec := httptest.NewRecorder()
+	h.Update(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeNetworkAccessChanged))
+	pubAssertCluster(t, payload, clusterID.String())
+}
+
+func TestPublisher_CatalogReleaseChangedCarriesCluster(t *testing.T) {
+	bus := events.NewBus()
+	ch := pubSubscribe(t, bus)
+	h := &CatalogHandler{}
+	h.SetEventBus(bus)
+
+	clusterID := uuid.New()
+	installationID := uuid.New()
+	h.publishCatalogReleaseChanged(clusterID.String(), installationID.String())
+
+	payload := pubPayload(t, pubReceive(t, ch, events.TypeCatalogReleaseChanged))
+	pubAssertCluster(t, payload, clusterID.String())
+	if payload["id"] != installationID.String() {
+		t.Fatalf("id = %v, want %q", payload["id"], installationID.String())
+	}
 }
 
 func TestPublisher_RegistryCreateEmitsChanged(t *testing.T) {

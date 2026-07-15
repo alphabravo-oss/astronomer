@@ -32,6 +32,14 @@ var changedTypeContract = []struct {
 	{"template_binding", TypeTemplateBindingChanged, true},
 	{"registry", TypeRegistryChanged, true},
 	{"snapshot", TypeSnapshotChanged, true},
+	// P4.9 coverage completion. `alerting` is clusterScoped=false because the
+	// domain cannot guarantee a cluster_id (global rules/silences exist);
+	// publishers still pass the entity's cluster_id through when it has one.
+	{"alerting", TypeAlertingChanged, false},
+	{"security_policy", TypeSecurityPolicyChanged, true},
+	{"security_scan", TypeSecurityScanChanged, true},
+	{"network_access", TypeNetworkAccessChanged, true},
+	{"catalog_release", TypeCatalogReleaseChanged, true},
 }
 
 func TestPublishChangedEnvelopeContract(t *testing.T) {
@@ -92,6 +100,11 @@ func TestChangedTypeConstantsAllInContractTable(t *testing.T) {
 		TypeTemplateBindingChanged,
 		TypeRegistryChanged,
 		TypeSnapshotChanged,
+		TypeAlertingChanged,
+		TypeSecurityPolicyChanged,
+		TypeSecurityScanChanged,
+		TypeNetworkAccessChanged,
+		TypeCatalogReleaseChanged,
 	}
 	inTable := make(map[Type]bool, len(changedTypeContract))
 	for _, tc := range changedTypeContract {

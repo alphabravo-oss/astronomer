@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
@@ -329,6 +330,19 @@ type ruleClusterEval struct {
 	clusterID pgtype.UUID
 }
 
+// publishAlertEventChanged emits alerting.changed (kind: event) on the
+// runtime bus after an alert_events row write — the ingestion/resolution
+// half of the P4.9 alerting publisher (the API-side CRUD half lives in
+// internal/handler/alerting.go). In the dedicated worker process the bus is
+// Redis-attached and fans out to the server pods' SSE relays. Nil-safe.
+func publishAlertEventChanged(clusterID pgtype.UUID, eventID uuid.UUID) {
+	cid := ""
+	if clusterID.Valid {
+		cid = uuid.UUID(clusterID.Bytes).String()
+	}
+	events.PublishChanged(runtimeDeps.Bus, "alerting", cid, eventID.String(), map[string]any{"kind": "event"})
+}
+
 // processRuleEvaluation applies a single (rule, cluster) evaluation: it
 // resolves the cluster's active events when no longer triggering, silences
 // them under an active silence, dedups against an already-active event, and
@@ -351,6 +365,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 			}); err != nil {
 				return err
 			}
+			publishAlertEventChanged(event.ClusterID, event.ID)
 			// Only "firing"/"acknowledged" events represent an
 			// alert that actually paged someone; "silenced" ones
 			// never notified on trigger, so we don't notify on
@@ -373,6 +388,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 			}); err != nil {
 				return err
 			}
+			publishAlertEventChanged(event.ClusterID, event.ID)
 		}
 		return nil
 	}
@@ -414,6 +430,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	if err != nil {
 		return err
 	}
+	publishAlertEventChanged(event.ClusterID, event.ID)
 	if silence != nil {
 		runtimeLogger().InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
 		return nil

@@ -86,9 +86,14 @@ export const K8S_KIND_ROUTES: Record<
   Node: (cid) => [qk.clusters.nodes(cid)],
   Event: (cid) => [qk.clusters.eventsAll(cid)],
   ConfigMap: (cid) => [qk.generic.resources(cid, 'configmaps')],
-  // Helm release storage churn also refreshes the installed-apps views
-  // (P4.6 agent-side Helm filter; P4.9 converts the installed-charts polls).
-  Secret: (cid) => [qk.generic.resources(cid, 'secrets')],
+  // Helm release storage churn also refreshes the installed-apps views —
+  // the agent only forwards `helm.sh/release.v1` Secrets (P4.6 filter), so
+  // every Secret frame IS a release change (P4.9).
+  Secret: (cid) => [
+    qk.generic.resources(cid, 'secrets'),
+    qk.catalog.installedAll,
+    qk.clusterPages.appsInstalled(cid),
+  ],
   // ── P4.6 informer expansion (agent metadata informers) ──
   Namespace: (cid) => [qk.clusters.namespaces(cid)],
   Job: (cid) => [
@@ -173,10 +178,23 @@ function entityIdOf(d: LiveEventData): string | null {
 export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   'cluster.connected': clusterLivenessRoute,
   'cluster.disconnected': clusterLivenessRoute,
-  'cluster.heartbeat': clusterLivenessRoute,
-  // Merger-owned: list/detail status is patched in place, deliberately
-  // without an invalidate (see cluster-merger.ts).
-  'cluster.status_changed': () => [],
+  // Heartbeats also refresh the conditions surface (P4.9): the health-check
+  // worker reconciles cluster conditions on the same signal that bumps
+  // last_heartbeat, and there is no dedicated conditions event.
+  'cluster.heartbeat': (d) => {
+    const keys = clusterLivenessRoute(d);
+    const cid = clusterIdOf(d);
+    if (cid) keys.push(qk.clusters.conditions(cid), qk.clusters.conditionRemediation(cid));
+    return keys;
+  },
+  // Merger-owned for list/detail rows: status is patched in place,
+  // deliberately without an invalidate (see cluster-merger.ts). Conditions +
+  // remediation history are separate queries written by the same status
+  // reconciler, so transitions refresh them here (P4.9).
+  'cluster.status_changed': (d) => {
+    const cid = clusterIdOf(d);
+    return cid ? [qk.clusters.conditions(cid), qk.clusters.conditionRemediation(cid)] : [];
+  },
   // Merger patches list/detail percentages; only the metrics history +
   // summary for the ticking cluster refetch (paced).
   'cluster.metrics': (d) => {
@@ -263,6 +281,43 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
           qk.clusterPages.veleroStatus(cid),
         ]
       : [];
+  },
+  // ── P4.9 coverage completion ──
+  // Payload kind discriminates rule|event|silence|baseline; unknown kinds
+  // refresh the whole domain.
+  'alerting.changed': (d) => {
+    switch (d.kind) {
+      case 'rule':
+        return [qk.alerting.rules];
+      case 'event':
+        return [qk.alerting.eventsAll];
+      case 'silence':
+        return [qk.alerting.silences];
+      case 'baseline':
+        return [qk.anomalyBaselines.all];
+      default:
+        return [qk.alerting.all, qk.anomalyBaselines.all];
+    }
+  },
+  'security_policy.changed': () => [qk.security.policies],
+  // Prefix covers every params variant of the generic scans list.
+  'security_scan.changed': () => [qk.security.scansAll],
+  'network_access.changed': (d) => {
+    const cid = clusterIdOf(d);
+    return cid
+      ? [
+          qk.clusterPages.apiserverAllowlist(cid),
+          qk.clusterPages.apiserverAllowlistSnapshots(cid),
+        ]
+      : [];
+  },
+  // Server-initiated Helm release changes; the agent's Helm-Secret informer
+  // covers cluster-side churn via the Secret kind route above.
+  'catalog_release.changed': (d) => {
+    const keys: QueryKey[] = [qk.catalog.installedAll];
+    const cid = clusterIdOf(d);
+    if (cid) keys.push(qk.clusterPages.appsInstalled(cid));
+    return keys;
   },
   // Prefix route (see module doc): any audit.<action> refreshes the
   // activity feed for principals allowed to receive audit events.

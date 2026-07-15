@@ -83,6 +83,8 @@ export function useProjectQuotaUsage(projectId: string) {
     enabled: !!projectId,
     // Quota.status.used ticks with workload pressure; tighten the stale time
     // so the policy page stays approximately live without a manual refresh.
+    // KEEP (P4.9): usage is a computed aggregate over cluster state with no
+    // discrete write event — deliberately NOT converted to liveFallback.
     refetchInterval: 30 * 1000,
     staleTime: 15 * 1000,
   });

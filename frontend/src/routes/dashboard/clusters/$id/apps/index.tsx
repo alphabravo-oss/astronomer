@@ -46,6 +46,7 @@ import {
 import { Link } from '@/lib/link';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
+import { liveFallback } from '@/lib/live/status-store';
 import { usePermissionDecision } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
 import { OverlayShell } from '@/components/ui/overlay-shell';
@@ -173,7 +174,9 @@ function ClusterAppsPage() {
   const installed = useQuery({
     queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
     queryFn: () => listClusterApps(clusterId, { limit: 100 }),
-    refetchInterval: 30_000,
+    // `catalog_release.changed` (server writes) + the Helm-Secret k8s route
+    // (cluster-side churn) refresh this while the stream is open.
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
 

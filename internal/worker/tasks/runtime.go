@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -153,6 +154,11 @@ type RuntimeDependencies struct {
 	// Optional — when nil, tasks that would fan out a follow-up log and skip
 	// it rather than crash. *asynq.Client satisfies it.
 	Enqueuer Enqueuer
+	// Bus is the SSE events bus (P4.9). In the dedicated worker process it
+	// is a Redis-attached bus with no local subscribers — publishes fan out
+	// to the server pods' relays; in the server process it is the shared
+	// in-memory bus. Optional and nil-safe: publishers are fire-and-forget.
+	Bus *events.Bus
 }
 
 // Enqueuer is the narrow asynq surface a task uses to enqueue a follow-up

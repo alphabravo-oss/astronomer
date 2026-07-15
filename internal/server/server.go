@@ -409,6 +409,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
 	catalogHandler.SetLogger(logger)
+	// P4.9 — catalog_release.changed liveness events on installed-chart writes.
+	catalogHandler.SetEventBus(bus)
 	backupHandler := handler.NewBackupHandler(queries)
 	// Phase B2 — Velero backup engine wiring. Handler degrades cleanly when
 	// these aren't set; we set them here so the running stack uses real Velero
@@ -431,6 +433,14 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	securityHandler.SetClusterQuerier(queries)
 	securityHandler.SetLogger(logger)
 	securityHandler.SetEventBus(bus)
+	// P4.9 — apiserver allow-list surface (migration 070). Previously the
+	// handler was constructed only in test routers, leaving the documented
+	// /clusters/{id}/apiserver-allowlist/* routes unrouted in production;
+	// wired here so the network-access page works against a real server and
+	// its network_access.changed publisher has a bus.
+	apiserverAllowlistHandler := handler.NewApiserverAllowlistHandler(queries)
+	apiserverAllowlistHandler.SetAuditor(queries)
+	apiserverAllowlistHandler.SetEventBus(bus)
 	workloadHandler := handler.NewWorkloadHandlerWithDeps(queries, requester)
 	workloadHandler.SetLogger(logger)
 	// The tunnel requester also implements the live pod watch used by the
@@ -1195,6 +1205,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		NamespaceScopedRBAC: cfg.NamespaceScopedRBACEnabled,
 		Security:            securityHandler,
 		ApiserverAudit:      apiserverAuditHandler,
+		ApiserverAllowlist:  apiserverAllowlistHandler,
 		ImageVulns: func() *handler.ImageVulnHandler {
 			h := handler.NewImageVulnHandler(queries)
 			h.SetK8sRequester(requester)
@@ -1421,6 +1432,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Wire the asynq client into the alerting handler so the "Test Channel"
 	// endpoint can dispatch a real notification:send task.
 	deps.Alerting.SetEnqueuer(queue)
+	// P4.9 — alerting.changed liveness events on rule/event/silence writes.
+	deps.Alerting.SetEventBus(bus)
+	// On-demand allow-list reconcile rides the same asynq client; the
+	// 15m sweep remains the safety net when enqueueing fails.
+	apiserverAllowlistHandler.SetEnqueuer(queue)
+	apiserverAllowlistHandler.SetTaskBuilder(tasks.NewApiserverAllowlistReconcileTask)
 	if deps.SettingsCache != nil {
 		deps.Alerting.SetSettingsCache(deps.SettingsCache)
 		// AUTH-R01: live password.min_length / complexity for create/change/reset.
@@ -1683,6 +1700,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Leader:         leader.New(database.Pool(), logger),
 		K8s:            requester,
 		Enqueuer:       queue,
+		Bus:            bus,
 	})
 	// Migration 092: durable task outbox dispatcher. Handlers can commit a
 	// task_outbox row in the same transaction as product state, and this

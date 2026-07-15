@@ -135,6 +135,34 @@ const (
 
 	// TypeSnapshotChanged fires when a snapshot row is written.
 	TypeSnapshotChanged Type = "snapshot.changed"
+
+	// TypeAlertingChanged fires when an alerting row is written (payload
+	// `kind` field: rule|event|silence|baseline). Rule/silence CRUD and
+	// event ack/resolve publish from the API handler; alert-event
+	// ingestion/resolution and the anomaly-baseline recompute publish from
+	// the worker runtime's Redis-attached bus. Cluster-bound entities carry
+	// their cluster_id; global rules/silences publish unscoped and are
+	// therefore superuser-only via the fail-closed drop.
+	TypeAlertingChanged Type = "alerting.changed"
+
+	// TypeSecurityPolicyChanged fires when a cluster security policy row is
+	// written (assign/apply/delete).
+	TypeSecurityPolicyChanged Type = "security_policy.changed"
+
+	// TypeSecurityScanChanged fires alongside cis_scan.changed on every
+	// security_scan_results write — the same rows feed both the CIS pages
+	// and the generic security scans list.
+	TypeSecurityScanChanged Type = "security_scan.changed"
+
+	// TypeNetworkAccessChanged fires when a cluster's apiserver allow-list
+	// row is written (create/update/enforce via PUT).
+	TypeNetworkAccessChanged Type = "network_access.changed"
+
+	// TypeCatalogReleaseChanged fires when an installed-chart row is written
+	// (install/upgrade/rollback/uninstall staging and the reconciler's
+	// terminal status writes), so server-initiated changes surface even when
+	// the agent's Helm-Secret informer stream lags.
+	TypeCatalogReleaseChanged Type = "catalog_release.changed"
 )
 
 // DefaultRedisChannel is the pub/sub channel for cross-pod event fan-out.

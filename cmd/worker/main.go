@@ -16,12 +16,14 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -131,6 +133,14 @@ func main() {
 	}
 	runtimeEnqueuer := asynq.NewClient(runtimeRedisOpt)
 	defer runtimeEnqueuer.Close()
+	// P4.9 — Redis-attached events bus so worker-side writes (alert-event
+	// ingestion/resolution, anomaly-baseline recompute) surface on the
+	// server pods' SSE streams. Publish-only: the worker runs no relay and
+	// has no local subscribers.
+	eventBus := events.NewBus()
+	if client, ok := runtimeRedisOpt.MakeRedisClient().(*redis.Client); ok && client != nil {
+		eventBus.AttachRedis(client, events.DefaultRedisChannel, log)
+	}
 	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
 		Queries:                   sqlc.New(database.Pool()),
 		Log:                       log,
@@ -141,6 +151,7 @@ func main() {
 		RegistrationTokenTTLHours: cfg.RegistrationTokenTTLHours,
 		Leader:                    leader.New(database.Pool(), log),
 		Enqueuer:                  runtimeEnqueuer,
+		Bus:                       eventBus,
 	})
 	var controlPlaneK8s kubernetes.Interface
 	var controlPlaneDyn dynamic.Interface

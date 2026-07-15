@@ -371,6 +371,9 @@ function ClusterServiceMeshPage() {
     queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
     enabled: !!clusterId,
+    // KEEP (P4.9): mesh state is cluster-side truth read through the agent
+    // at request time (no server write to publish on) — same shape as the
+    // D8 argocd trio, deliberately NOT converted to liveFallback.
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
   });
@@ -378,6 +381,7 @@ function ClusterServiceMeshPage() {
     queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId),
     queryFn: () => getServiceMeshInventory(clusterId),
     enabled: !!clusterId,
+    // KEEP (P4.9): cluster-side truth, see detection query above.
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
   });

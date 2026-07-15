@@ -182,6 +182,9 @@ export const queryKeys = {
     all: ['alerting'] as const,
     rules: ['alerting', 'rules'] as const,
     events: (params?: Record<string, unknown>) => ['alerting', 'events', params] as const,
+    // Prefix matching every `events(params)` variant — used by the live
+    // routing table on `alerting.changed` (kind: event).
+    eventsAll: ['alerting', 'events'] as const,
     channels: ['alerting', 'channels'] as const,
     silences: ['alerting', 'silences'] as const,
     // P-03 — Alertmanager-style inhibition rules.
@@ -201,6 +204,9 @@ export const queryKeys = {
   gatekeeperConstraints: (clusterId: string) => ['gatekeeper-constraints', clusterId] as const,
   // Sprint 072 — read-only anomaly baselines for tuning.
   anomalyBaselines: {
+    // Prefix matching list + detail — used by the live routing table on
+    // `alerting.changed` (kind: baseline).
+    all: ['anomaly-baselines'] as const,
     list: (params?: Record<string, unknown>) => ['anomaly-baselines', 'list', params] as const,
     detail: (id: string) => ['anomaly-baselines', 'detail', id] as const,
   },
@@ -284,6 +290,9 @@ export const queryKeys = {
     charts: (params?: Record<string, unknown>) => ['catalog', 'charts', params] as const,
     chartVersions: (chartId: string) => ['catalog', 'charts', chartId, 'versions'] as const,
     installed: (params?: Record<string, unknown>) => ['catalog', 'installed', params] as const,
+    // Prefix matching every `installed(params)` variant — used by the live
+    // routing table on `catalog_release.changed` + Helm-Secret k8s events.
+    installedAll: ['catalog', 'installed'] as const,
     // App-install/upgrade modal — distinct endpoints from `chartVersions` above
     // (note the different array shapes), kept verbatim to preserve cache identity.
     installChartVersions: (chartId: string) => ['catalog', 'chart-versions', chartId] as const,
@@ -305,6 +314,9 @@ export const queryKeys = {
     templates: ['security', 'templates'] as const,
     policies: ['security', 'policies'] as const,
     scans: (params?: Record<string, unknown>) => ['security', 'scans', params] as const,
+    // Prefix matching every `scans(params)` variant — used by the live
+    // routing table on `security_scan.changed` events.
+    scansAll: ['security', 'scans'] as const,
   },
   tools: {
     all: ['tools'] as const,

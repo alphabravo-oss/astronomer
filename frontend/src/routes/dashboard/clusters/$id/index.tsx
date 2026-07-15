@@ -100,6 +100,9 @@ function ClusterDetailPage() {
     queryKey: queryKeys.clusterPages.serviceMeshHeader(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
     enabled: !!clusterId,
+    // KEEP (P4.9): mesh state is cluster-side truth read through the agent
+    // at request time (no server write to publish on) — deliberately NOT
+    // converted to liveFallback.
     refetchInterval: 5 * 60 * 1000,
     refetchIntervalInBackground: false,
   });

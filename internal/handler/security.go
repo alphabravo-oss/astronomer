@@ -92,12 +92,30 @@ func (h *SecurityHandler) SetEventBus(bus *events.Bus) {
 }
 
 // publishCISScanChanged emits the metadata-only cis_scan.changed event after
-// a successful scan-row write.
+// a successful scan-row write. P4.9: the same security_scan_results row also
+// feeds the generic scans list (GET /security/scans/), so every write emits
+// security_scan.changed alongside the CIS-specific type.
 func (h *SecurityHandler) publishCISScanChanged(clusterID, scanID uuid.UUID) {
 	if h == nil {
 		return
 	}
 	events.PublishChanged(h.bus, "cis_scan", clusterID.String(), scanID.String(), nil)
+	events.PublishChanged(h.bus, "security_scan", clusterID.String(), scanID.String(), nil)
+}
+
+// publishSecurityPolicyChanged emits the metadata-only security_policy.changed
+// event after a successful cluster-security-policy write (P4.9). A Nil
+// cluster (delete raced the pre-delete lookup) publishes unscoped rather
+// than with a bogus zero-UUID cluster_id.
+func (h *SecurityHandler) publishSecurityPolicyChanged(clusterID, policyID uuid.UUID) {
+	if h == nil {
+		return
+	}
+	cid := ""
+	if clusterID != uuid.Nil {
+		cid = clusterID.String()
+	}
+	events.PublishChanged(h.bus, "security_policy", cid, policyID.String(), nil)
 }
 
 // NewSecurityHandler creates a new security handler.
@@ -509,6 +527,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create security policy")
 		return
 	}
+	h.publishSecurityPolicyChanged(req.ClusterID, policy.ID)
 	recordAudit(r, h.queries, "security.policy.create", "cluster_security_policy", policy.ID.String(), "", map[string]any{
 		"cluster_id":  req.ClusterID.String(),
 		"template_id": req.TemplateID.String(),
@@ -533,6 +552,7 @@ func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	policy, _ := h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
+	h.publishSecurityPolicyChanged(policy.ClusterID, id)
 	recordAudit(r, h.queries, "security.policy.update", "cluster_security_policy", id.String(), "", map[string]any{
 		"action":     "apply",
 		"cluster_id": policy.ClusterID.String(),
@@ -548,13 +568,16 @@ func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clusterID := ""
+	var clusterUUID uuid.UUID
 	if existing, lookupErr := h.queries.GetClusterSecurityPolicyByID(r.Context(), id); lookupErr == nil {
 		clusterID = existing.ClusterID.String()
+		clusterUUID = existing.ClusterID
 	}
 	if err := h.queries.DeleteClusterSecurityPolicy(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete security policy")
 		return
 	}
+	h.publishSecurityPolicyChanged(clusterUUID, id)
 	recordAudit(r, h.queries, "security.policy.delete", "cluster_security_policy", id.String(), "", map[string]any{
 		"cluster_id": clusterID,
 	})

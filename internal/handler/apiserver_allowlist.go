@@ -47,6 +47,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
@@ -84,6 +85,7 @@ type ApiserverAllowlistHandler struct {
 	auditor     any // auditWriterV1 surface — recordAudit type-asserts internally
 	reconciler  ApiserverAllowlistReconcileFunc
 	taskBuilder ApiserverAllowlistTaskBuilder
+	bus         *events.Bus
 	// AstronomerEgress is the runtime-known tunnel egress CIDR list,
 	// used by the /preview/ endpoint. Defaults to empty (the renderer
 	// falls back to AstronomerEgressFromEnv on render).
@@ -115,6 +117,27 @@ func (h *ApiserverAllowlistHandler) SetReconciler(f ApiserverAllowlistReconcileF
 // SetTaskBuilder wires the asynq task factory.
 func (h *ApiserverAllowlistHandler) SetTaskBuilder(b ApiserverAllowlistTaskBuilder) {
 	h.taskBuilder = b
+}
+
+// SetEventBus wires the SSE bus for network_access.changed liveness events
+// (P4.9). Optional: publishers are fire-and-forget and nil-safe.
+func (h *ApiserverAllowlistHandler) SetEventBus(bus *events.Bus) {
+	if h == nil {
+		return
+	}
+	h.bus = bus
+}
+
+// publishNetworkAccessChanged emits the metadata-only network_access.changed
+// event after a successful allow-list row write (create/update/enforce all
+// land through the PUT upsert). The reconciler's snapshot/sync-status writes
+// happen in the worker process (no bus) — the page heals those via its
+// liveFallback poll and the cluster-conditions route.
+func (h *ApiserverAllowlistHandler) publishNetworkAccessChanged(clusterID uuid.UUID) {
+	if h == nil {
+		return
+	}
+	events.PublishChanged(h.bus, "network_access", clusterID.String(), "", nil)
 }
 
 // SetAstronomerEgress sets the egress CIDR list used by the /preview/
@@ -331,6 +354,7 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update apiserver allow-list")
 		return
 	}
+	h.publishNetworkAccessChanged(clusterID)
 	h.audit(r, "cluster.apiserver_allowlist.updated", clusterID, map[string]any{
 		"mode":        req.Mode,
 		"cidrs_hash":  hashCIDRs(canonical),

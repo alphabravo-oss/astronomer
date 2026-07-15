@@ -72,27 +72,27 @@ export function useClusterNodes(clusterId: string) {
   });
 }
 
-// The health-check worker reconciles conditions every 60s; polling at the
-// same cadence keeps the UI fresh without piling on. Cluster page also
-// gets invalidated on cluster.heartbeat events via useLiveQueryInvalidation.
+// The health-check worker reconciles conditions every 60s; while the stream
+// is open the `cluster.status_changed` + heartbeat routes refresh this
+// (P4.9) and the poll only backstops a dropped stream.
 export function useClusterConditions(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.conditions(clusterId),
     queryFn: () => apiClient.getClusterConditions(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60000),
   });
 }
 
 // Sprint 086 — remediation history feeds the "Last action" footer
-// under the condition pills. 30s cadence matches the reconciler so a
-// fresh attempt shows up the next tick instead of one minute later.
+// under the condition pills. Routed from the same status/heartbeat
+// events as conditions (P4.9); the poll backstops a dropped stream.
 export function useClusterConditionRemediation(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.conditionRemediation(clusterId),
     queryFn: () => apiClient.getClusterConditionRemediation(clusterId),
     enabled: !!clusterId,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -825,7 +825,8 @@ export function useAlertRules() {
   return useQuery({
     queryKey: queryKeys.alerting.rules,
     queryFn: () => apiClient.getAlertRules(),
-    refetchInterval: 30000,
+    // `alerting.changed` (kind: rule) refreshes this while the stream is open.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -876,7 +877,9 @@ export function useAlertEvents(params?: Record<string, string>) {
   return useQuery({
     queryKey: queryKeys.alerting.events(params),
     queryFn: () => apiClient.getAlertEvents(params),
-    refetchInterval: 15000,
+    // `alerting.changed` (kind: event) covers API-side ack/resolve AND the
+    // worker evaluator's fire/resolve writes (Redis-attached runtime bus).
+    refetchInterval: liveFallback(15000),
   });
 }
 
@@ -949,7 +952,8 @@ export function useAlertSilences() {
   return useQuery({
     queryKey: queryKeys.alerting.silences,
     queryFn: () => apiClient.getAlertSilences(),
-    refetchInterval: 30000,
+    // `alerting.changed` (kind: silence) refreshes this while the stream is open.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -975,10 +979,9 @@ export function useAnomalyBaselines(params?: { clusterId?: string; limit?: numbe
   return useQuery({
     queryKey: queryKeys.anomalyBaselines.list(params),
     queryFn: () => apiClient.getAnomalyBaselines(params),
-    // The recompute worker runs every 5m; the UI refresh cadence
-    // doesn't need to be tighter than that. 30s keeps the page
-    // responsive without hammering the API.
-    refetchInterval: 30000,
+    // The recompute worker publishes `alerting.changed` (kind: baseline)
+    // once per cluster per 5m pass; the poll backstops a dropped stream.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -1518,7 +1521,9 @@ export function useInstalledCharts(params?: { cluster?: string }) {
   return useQuery({
     queryKey: queryKeys.catalog.installed(params),
     queryFn: () => apiClient.getInstalledCharts(params),
-    refetchInterval: 30000,
+    // `catalog_release.changed` (server writes) + the Helm-Secret k8s route
+    // (cluster-side churn) refresh this while the stream is open.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -1828,7 +1833,8 @@ export function useClusterSecurityPolicies() {
   return useQuery({
     queryKey: queryKeys.security.policies,
     queryFn: () => apiClient.getClusterSecurityPolicies(),
-    refetchInterval: 30000,
+    // `security_policy.changed` refreshes this while the stream is open.
+    refetchInterval: liveFallback(30000),
   });
 }
 
@@ -1879,7 +1885,9 @@ export function useSecurityScans(params?: { cluster?: string; scan_type?: string
   return useQuery({
     queryKey: queryKeys.security.scans(params),
     queryFn: () => apiClient.getSecurityScans(params),
-    refetchInterval: 15000,
+    // `security_scan.changed` fires on every scan write (trigger, ingest,
+    // failure) alongside `cis_scan.changed` — same table, two read surfaces.
+    refetchInterval: liveFallback(15000),
   });
 }
 
