@@ -5,7 +5,6 @@
  * wave. Validate is a plain mutation (no cache); apply + delete invalidate the
  * per-cluster constraint list.
  */
-'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastApiError, toastSuccess } from '@/lib/toast';
