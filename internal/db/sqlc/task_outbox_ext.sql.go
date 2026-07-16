@@ -14,6 +14,22 @@ const taskOutboxSelectColumns = `
     attempt_count, next_attempt_at, locked_until, delivered_at,
     last_error, created_at, updated_at`
 
+// taskOutboxSelectColumnsT is taskOutboxSelectColumns qualified with the `t`
+// alias, in the identical order scanTaskOutboxRow expects.
+//
+// Required by claimDueTaskOutbox: its `UPDATE task_outbox AS t ... FROM picked`
+// puts BOTH t and the picked CTE in scope, and both expose `id`, so an
+// unqualified RETURNING list makes `id` ambiguous (SQLSTATE 42702). That error
+// fired on every claim, before any row was touched — so the outbox never
+// delivered a single task and attempt_count never even incremented. Only the
+// multi-table RETURNING needs this; the single-table SELECT/RETURNING uses
+// stay on the unqualified const.
+const taskOutboxSelectColumnsT = `
+    t.id, t.dedupe_key, t.task_type, t.payload, t.queue_name, t.max_retry,
+    t.timeout_seconds, t.unique_seconds, t.max_delivery_attempts, t.status,
+    t.attempt_count, t.next_attempt_at, t.locked_until, t.delivered_at,
+    t.last_error, t.created_at, t.updated_at`
+
 func scanTaskOutboxRow(row interface {
 	Scan(dest ...any) error
 }) (TaskOutbox, error) {
@@ -165,7 +181,7 @@ SET status        = 'delivering',
     updated_at    = now()
 FROM picked
 WHERE t.id = picked.id
-RETURNING ` + taskOutboxSelectColumns
+RETURNING ` + taskOutboxSelectColumnsT
 
 type ClaimDueTaskOutboxParams struct {
 	Now         pgtype.Timestamptz `json:"now"`
