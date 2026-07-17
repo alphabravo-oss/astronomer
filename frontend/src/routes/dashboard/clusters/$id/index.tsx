@@ -994,10 +994,23 @@ function relativeAge(iso: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
+// Capability conditions report what the cluster *can* do, not whether it is
+// healthy. Absence is the normal case — most clusters have never installed the
+// Gateway API CRDs — so a False here is not a finding and must not render as a
+// red failure next to genuine ones like Connected=False. Drop them; the detail
+// stays available on the conditions list.
+const CAPABILITY_CONDITIONS = new Set(['GatewayAPISupported']);
+
+export function isNoisyCapabilityCondition(c: ClusterCondition): boolean {
+  return CAPABILITY_CONDITIONS.has(c.type) && c.status !== 'True';
+}
+
 function ClusterConditionsBar({ conditions }: { conditions: ClusterCondition[] }) {
+  const visible = conditions.filter((c) => !isNoisyCapabilityCondition(c));
+  if (visible.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5 pt-1">
-      {conditions.map((c) => {
+      {visible.map((c) => {
         const label = CONDITION_LABELS[c.type] || c.type;
         let tone = '';
         let Icon = CircleHelp;
@@ -1059,22 +1072,24 @@ function ClusterRemediationFooter({ clusterId }: { clusterId: string }) {
   );
 }
 
-// MeshHeaderBadge — compact "Istio" / "Linkerd" / "—" pill rendered next
-// to the cluster status badge. Links to the per-cluster service-mesh
-// tab so a single click drills into the full tile. When the detector
-// reports "unknown" / "none" the badge collapses to "—" so it never
-// claims a mesh we don't have signal for.
+// MeshHeaderBadge — compact "Istio" / "Linkerd" pill rendered next to the
+// cluster status badge. Links to the per-cluster service-mesh tab so a single
+// click drills into the full tile.
+//
+// Most clusters run no mesh, and the detector returns an "unknown" stub before
+// it has ever run. Both used to render as `mesh: —`: a permanent header chip
+// whose entire content was "we looked and found nothing". Render nothing
+// instead — the mesh tab is still there for anyone who wants to check.
+const MESH_LABELS: Partial<Record<ServiceMeshKind, string>> = {
+  istio: 'Istio',
+  linkerd: 'Linkerd',
+  kuma: 'Kuma',
+  cilium: 'Cilium',
+};
+
 function MeshHeaderBadge({ clusterId, mesh }: { clusterId: string; mesh: ServiceMeshKind }) {
-  const label =
-    mesh === 'istio'
-      ? 'Istio'
-      : mesh === 'linkerd'
-        ? 'Linkerd'
-        : mesh === 'kuma'
-          ? 'Kuma'
-          : mesh === 'cilium'
-            ? 'Cilium'
-            : '—';
+  const label = MESH_LABELS[mesh];
+  if (!label) return null;
   const tone =
     mesh === 'istio'
       ? 'border-blue-500/30 text-blue-500 bg-blue-500/10'
