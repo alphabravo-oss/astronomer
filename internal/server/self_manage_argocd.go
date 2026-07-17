@@ -146,20 +146,36 @@ func reconcileLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, 
 	if err := waitForDeploymentReady(ctx, k8s, localArgoNamespace, localArgoServerDeployment); err != nil {
 		return fmt.Errorf("argocd-server not ready: %w", err)
 	}
-	// A legacy Application may contain plaintext in spec/status/history. Gate
-	// the entire reconcile before any Secret or Application mutation; the same
-	// check is repeated at the full-object scrub write boundary.
-	if err := preflightSelfManagedApplicationCredentialMigration(ctx, k8s, dyn); err != nil {
-		return err
-	}
-
+	// Refresh the ArgoCD session token BEFORE the legacy-plaintext gate below.
+	//
+	// This is deliberately ordered ahead of the preflight: minting a session is
+	// an HTTP login against argocd-server plus a write to our own
+	// argocd_instances row — it is NOT a cluster Secret or Application mutation,
+	// so it is outside everything that gate exists to protect.
+	//
+	// It used to sit *after* the gate, which coupled the credential lifecycle to
+	// an unrelated self-management concern: whenever the preflight failed (it
+	// fails closed and demands a quiesced Argo controller), the token was never
+	// minted or renewed, and ensureLocalArgoInstanceRow then preserved the
+	// existing — by then expired — token forever. Everything that authenticates
+	// to ArgoCD with it died with it, most visibly cluster auto-registration,
+	// which failed 100% of attempts (401 "token is expired") until an operator
+	// hand-blanked the column in Postgres. Adoption must not depend on the
+	// self-management write barrier being satisfied.
 	token, tokenErr := loginToArgoCDWithInitialAdminSecret(ctx, k8s, localArgoAPIURL)
 	instance, err := ensureLocalArgoInstanceRow(ctx, queries, encryptor, localCluster.ID, token)
 	if err != nil {
 		return fmt.Errorf("ensure argocd instance row: %w", err)
 	}
 	if tokenErr != nil && logger != nil {
-		logger.Warn("argocd instance row created without upstream session token", "error", tokenErr)
+		logger.Warn("argocd session token refresh failed; existing token retained (auto-registration will fail once it expires)", "error", tokenErr)
+	}
+
+	// A legacy Application may contain plaintext in spec/status/history. Gate
+	// every Secret or Application mutation below; the same check is repeated at
+	// the full-object scrub write boundary.
+	if err := preflightSelfManagedApplicationCredentialMigration(ctx, k8s, dyn); err != nil {
+		return err
 	}
 
 	projects, err := localArgoProjectsForCluster(ctx, queries, localCluster.ID)

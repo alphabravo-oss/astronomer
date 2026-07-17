@@ -270,7 +270,7 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
     resources: ["configmaps", "endpoints", "events", "limitranges", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "replicationcontrollers", "resourcequotas", "services", "serviceaccounts"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
+    resources: ["controllerrevisions", "daemonsets", "deployments", "replicasets", "statefulsets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["batch"]
     resources: ["cronjobs", "jobs"]
@@ -313,7 +313,7 @@ const namespaceViewerRBACRulesYAML = `  # Namespace-scoped read-only inventory a
     resources: ["configmaps", "endpoints", "events", "persistentvolumeclaims", "pods", "pods/log", "replicationcontrollers", "services", "serviceaccounts"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
+    resources: ["controllerrevisions", "daemonsets", "deployments", "replicasets", "statefulsets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["batch"]
     resources: ["cronjobs", "jobs"]
@@ -338,6 +338,34 @@ const operatorRBACRulesYAML = `  # HONEST SCOPE (H4): "operator" is a PRIVILEGED
   # but do not mistake that for containment. It is a deliberate, audited,
   # non-default opt-in (default is viewer). Trimming it to a truly-contained tier
   # vs splitting a "privileged-operator" is an open product decision (see D1).
+  #
+  # CLUSTER-WIDE READ is required, not optional, for this tier. "operator" is the
+  # profile ArgoCD adopts (the baseline ApplicationSets select
+  # agent-privilege-profile In [operator, admin]), and ArgoCD's cluster cache
+  # LISTS EVERY RESOURCE TYPE REGISTERED IN THE TARGET CLUSTER — including CRDs
+  # installed long after adoption. An enumerated allowlist can never be complete:
+  # a bare k3d cluster already exposes 76 listable types across 23 CRDs, and any
+  # type we miss fails the whole cache sync:
+  #
+  #   ComparisonError: failed to sync cluster ...: failed to load initial state of
+  #   resource X: X is forbidden: User "system:serviceaccount:astronomer-system:
+  #   astronomer-agent" cannot list resource "X" at the cluster scope
+  #
+  # That failure is silent and total — Applications still report health=Healthy
+  # while pinned at sync=Unknown forever, deploying nothing. "admin" only ever
+  # worked here by accident, via its apiGroups:["*"] wildcard.
+  #
+  # The delta this adds over the enumerated reads below is small in practice: this
+  # tier ALREADY reads every Secret in every namespace (see above), so the marginal
+  # exposure is CRD//built-in types we hadn't enumerated. WRITE stays strictly on
+  # the scoped allowlists that follow — this rule is read-only.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  # The enumerated reads below are subsumed by the cluster-wide read above. They
+  # are retained as the explicit floor: they document the minimum this tier needs
+  # for its own inventory/exec surface independently of ArgoCD, and keep working
+  # if the wildcard is ever narrowed.
   - apiGroups: [""]
     resources: ["configmaps", "endpoints", "events", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "replicationcontrollers", "secrets", "services", "serviceaccounts"]
     verbs: ["get", "list", "watch"]
@@ -345,8 +373,11 @@ const operatorRBACRulesYAML = `  # HONEST SCOPE (H4): "operator" is a PRIVILEGED
     resources: ["configmaps", "events", "namespaces", "persistentvolumeclaims", "pods", "pods/attach", "pods/exec", "pods/portforward", "secrets", "services", "serviceaccounts"]
     verbs: ["create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
+    resources: ["controllerrevisions", "daemonsets", "deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
     resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["create", "update", "patch", "delete"]
   - apiGroups: ["batch"]
     resources: ["cronjobs", "jobs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -382,8 +413,11 @@ const namespaceOperatorRBACRulesYAML = `  # Namespace-scoped workload operations
     resources: ["configmaps", "events", "persistentvolumeclaims", "pods", "pods/attach", "pods/exec", "pods/portforward", "services", "serviceaccounts"]
     verbs: ["create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
+    resources: ["controllerrevisions", "daemonsets", "deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
     resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["create", "update", "patch", "delete"]
   - apiGroups: ["batch"]
     resources: ["cronjobs", "jobs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

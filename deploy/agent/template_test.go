@@ -56,9 +56,19 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				`resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]`,
 				// Workload mutation verbs remain for day-2 ops.
 				`verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`,
+				// Cluster-wide READ is deliberate and required: ArgoCD adopts this
+				// profile, and its cluster cache lists every resource type registered
+				// in the cluster — including CRDs installed after adoption. An
+				// enumerated allowlist can never be complete, and every miss pins
+				// EVERY Application on the cluster at sync=Unknown while still
+				// reporting health=Healthy. This wildcard is read-only; wildcard
+				// verbs stay forbidden below, so operator is still not cluster-admin.
+				// See TestArgoManagedProfilesGrantClusterWideRead.
+				`resources: ["*"]`,
 			},
 			notWant: []string{
-				`resources: ["*"]`,
+				// operator must never be cluster-admin: no wildcard WRITE. The
+				// read-only wildcard above is the only wildcard permitted here.
 				`verbs: ["*"]`,
 			},
 		},
