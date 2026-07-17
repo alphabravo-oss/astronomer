@@ -336,6 +336,9 @@ const (
 
 	// UnsafeReplacementBlocked indicates a unsafe replacement blocked condition.
 	UnsafeReplacementBlocked Code = "unsafe_replacement_blocked"
+	// UnsafeLeaveLocalBlocked indicates leave_local was refused because the
+	// component is running under ArgoCD and would be orphaned by it.
+	UnsafeLeaveLocalBlocked Code = "unsafe_leave_local_blocked"
 
 	// UnsupportedProvider indicates a unsupported provider condition.
 	UnsupportedProvider Code = "unsupported_provider"

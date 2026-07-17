@@ -219,3 +219,94 @@ func TestArgoCDClusterOwnershipListsOnlyAutoProvisionedComponents(t *testing.T) 
 		t.Fatal("no components returned")
 	}
 }
+
+// ownershipAppStub adds the optional app-target query so leave_local can tell a
+// component that is really running from one that was never installed.
+type ownershipAppStub struct {
+	*argocdManagedClusterQueryStub
+	apps []sqlc.ArgocdApplication
+}
+
+func (s *ownershipAppStub) ListArgoCDApplicationsByManagedClusterTargets(
+	_ context.Context, _ sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams,
+) ([]sqlc.ArgocdApplication, error) {
+	return s.apps, nil
+}
+
+func ownershipStubWithApps(clusterID uuid.UUID, apps []sqlc.ArgocdApplication) *ownershipAppStub {
+	return &ownershipAppStub{
+		argocdManagedClusterQueryStub: &argocdManagedClusterQueryStub{
+			cluster: sqlc.Cluster{ID: clusterID, Name: "prod"},
+			managed: sqlc.ArgocdManagedCluster{
+				ID:                uuid.New(),
+				ArgocdInstanceID:  uuid.New(),
+				ClusterID:         clusterID,
+				ClusterSecretName: "cluster-prod",
+				ServerUrl:         "https://prod.example",
+				Labels:            json.RawMessage(`{"astronomer.io/cluster-name":"prod"}`),
+				UpdatedAt:         time.Now(),
+			},
+		},
+		apps: apps,
+	}
+}
+
+func postLeaveLocal(t *testing.T, h *ArgoCDHandler, clusterID uuid.UUID, slug, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	h.SetClusterOwnershipDecision(rr, argoOwnershipReq(http.MethodPost, clusterID, slug, bytes.NewBufferString(body)))
+	return rr
+}
+
+// "Leave local" does not uninstall: it drops the component from the desired
+// state and the ApplicationSet. On a component ArgoCD is currently running that
+// leaves the workload up with nothing reconciling it, so it must be refused —
+// the operator has to uninstall, which takes the workload with it.
+func TestArgoCDOwnershipLeaveLocalBlockedWhileComponentIsRunning(t *testing.T) {
+	clusterID := uuid.New()
+	q := ownershipStubWithApps(clusterID, []sqlc.ArgocdApplication{
+		{Name: "astronomer-trivy-prod", DestinationCluster: "https://prod.example"},
+	})
+	rr := postLeaveLocal(t, NewArgoCDHandler(q), clusterID, "trivy-operator",
+		`{"decision":"leave_local","reason":"we run our own"}`)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body=%s", rr.Code, rr.Body.String())
+	}
+	if _, ok := q.decisions["trivy-operator"]; ok {
+		t.Fatal("decision was persisted despite being refused — the component would be orphaned")
+	}
+}
+
+// The same opt-out on a component that is NOT running is the legitimate case:
+// "don't install yours here, I run my own". It must still work.
+func TestArgoCDOwnershipLeaveLocalAllowedWhenComponentNotRunning(t *testing.T) {
+	clusterID := uuid.New()
+	// An app for a DIFFERENT component must not block this one.
+	q := ownershipStubWithApps(clusterID, []sqlc.ArgocdApplication{
+		{Name: "astronomer-ksm-prod", DestinationCluster: "https://prod.example"},
+	})
+	rr := postLeaveLocal(t, NewArgoCDHandler(q), clusterID, "trivy-operator",
+		`{"decision":"leave_local","reason":"we run our own"}`)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if q.decisions["trivy-operator"].Decision != "leave_local" {
+		t.Fatalf("decision not persisted: %+v", q.decisions)
+	}
+}
+
+// leave_local is as consequential as replace, which has always required one.
+func TestArgoCDOwnershipLeaveLocalRequiresReason(t *testing.T) {
+	clusterID := uuid.New()
+	q := ownershipStubWithApps(clusterID, nil)
+	rr := postLeaveLocal(t, NewArgoCDHandler(q), clusterID, "trivy-operator", `{"decision":"leave_local"}`)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+	if _, ok := q.decisions["trivy-operator"]; ok {
+		t.Fatal("reasonless decision was persisted")
+	}
+}

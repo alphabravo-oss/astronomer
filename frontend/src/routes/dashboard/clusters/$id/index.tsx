@@ -627,8 +627,32 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
   );
 }
 
+type OwnershipDecision = 'adopt' | 'leave_local' | 'replace';
+
+// What each decision actually does to the cluster, in the operator's terms.
+// "Leave local" reads harmless and is not: it uninstalls nothing, it just stops
+// Astronomer managing the component, so a component that is already running is
+// left up with nothing to reconcile it. The server refuses that case outright
+// (409); this copy is what stops someone getting there by accident.
+function decisionConsequence(option: OwnershipDecision, name: string): string {
+  switch (option) {
+    case 'leave_local':
+      return `Astronomer will stop managing ${name} on this cluster. It is not uninstalled: if it is already running, the workload stays up but nothing will reconcile, upgrade or repair it. To remove it, uninstall it from Tools instead.`;
+    case 'adopt':
+      return `ArgoCD will take over managing ${name} on this cluster and reconcile it against the baseline from now on.`;
+    case 'replace':
+      return `The existing ${name} install will be replaced with Astronomer's baseline version. Resources not in the baseline may be removed.`;
+  }
+}
+
 function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
   const queryClient = useQueryClient();
+  const [pendingDecision, setPendingDecision] = useState<{
+    slug: string;
+    name: string;
+    option: OwnershipDecision;
+  } | null>(null);
+  const [decisionReason, setDecisionReason] = useState('');
   const ownershipQuery = useQuery({
     queryKey: queryKeys.argocd.clusterOwnership(cluster.id),
     queryFn: () => getArgoClusterOwnership(cluster.id),
@@ -829,16 +853,11 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
                         <button
                           key={option}
                           onClick={() => {
-                            const reason = window.prompt(`Reason for ${decisionLabel(option)} ${component.name}`);
-                            if (reason === null) return;
-                            if (option === 'replace' && reason.trim() === '') {
-                              toastError('Replace decisions require a reason');
-                              return;
-                            }
-                            decisionMutation.mutate({
+                            setDecisionReason('');
+                            setPendingDecision({
                               slug: component.slug,
-                              decision: option as 'adopt' | 'leave_local' | 'replace',
-                              reason,
+                              name: component.name,
+                              option: option as OwnershipDecision,
                             });
                           }}
                           disabled={decisionMutation.isPending}
@@ -855,6 +874,44 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={!!pendingDecision}
+        onClose={() => setPendingDecision(null)}
+        onConfirm={() => {
+          if (!pendingDecision) return;
+          // Every decision here is consequential enough to explain, and the
+          // server requires a reason for leave_local and replace.
+          if (decisionReason.trim() === '') {
+            toastError(`${decisionLabel(pendingDecision.option)} decisions require a reason`);
+            return;
+          }
+          decisionMutation.mutate(
+            { slug: pendingDecision.slug, decision: pendingDecision.option, reason: decisionReason.trim() },
+            { onSuccess: () => setPendingDecision(null) },
+          );
+        }}
+        title={pendingDecision ? `${decisionLabel(pendingDecision.option)} ${pendingDecision.name}?` : ''}
+        description={pendingDecision ? decisionConsequence(pendingDecision.option, pendingDecision.name) : ''}
+        confirmText={pendingDecision ? decisionLabel(pendingDecision.option) : 'Confirm'}
+        variant={pendingDecision?.option === 'adopt' ? undefined : 'destructive'}
+        loading={decisionMutation.isPending}
+      >
+        <div className="space-y-1.5">
+          <label htmlFor="ownership-reason" className="text-sm font-medium text-foreground">
+            Reason
+          </label>
+          <textarea
+            id="ownership-reason"
+            value={decisionReason}
+            onChange={(e) => setDecisionReason(e.target.value)}
+            rows={3}
+            placeholder="Recorded in the audit log — why is this the right call?"
+            className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm
+              placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

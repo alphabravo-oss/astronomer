@@ -107,7 +107,7 @@ func (h *ArgoCDHandler) SetClusterOwnershipDecision(w http.ResponseWriter, r *ht
 		}
 		expiresAt = pgtype.Timestamptz{Time: t, Valid: true}
 	}
-	if ok := h.validateArgoOwnershipDecision(w, r, clusterID, decision, reason); !ok {
+	if ok := h.validateArgoOwnershipDecision(w, r, clusterID, componentSlug, decision, reason); !ok {
 		return
 	}
 	row, err := h.queries.UpsertArgoCDBaselineOwnershipDecision(r.Context(), sqlc.UpsertArgoCDBaselineOwnershipDecisionParams{
@@ -132,7 +132,48 @@ func (h *ArgoCDHandler) SetClusterOwnershipDecision(w http.ResponseWriter, r *ht
 	RespondJSON(w, http.StatusOK, decisionSummary(row))
 }
 
-func (h *ArgoCDHandler) validateArgoOwnershipDecision(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, decision, reason string) bool {
+// argoCDOwnershipAppQuerier is the optional batch-query seam used to tell
+// "component was never installed here" from "component is installed and running
+// under ArgoCD". Optional so the many ArgoCDQuerier test stubs don't all have to
+// grow the method; the real *sqlc.Queries implements it, so production gets the
+// check. Same idiom as loadArgoCDPageData's argoCDBatchQuerier.
+type argoCDOwnershipAppQuerier interface {
+	ListArgoCDApplicationsByManagedClusterTargets(ctx context.Context, arg sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams) ([]sqlc.ArgocdApplication, error)
+}
+
+// componentIsArgoManaged reports whether an ArgoCD Application for this baseline
+// component currently targets this cluster — i.e. whether the component is
+// really out there running under ArgoCD's control.
+func (h *ArgoCDHandler) componentIsArgoManaged(ctx context.Context, cluster sqlc.Cluster, managedRows []sqlc.ArgocdManagedCluster, componentSlug string) bool {
+	q, ok := h.queries.(argoCDOwnershipAppQuerier)
+	if !ok {
+		return false
+	}
+	instanceIDs, targets := argoCDManagedClusterApplicationTargets(cluster, managedRows)
+	if len(instanceIDs) == 0 || len(targets) == 0 {
+		return false
+	}
+	apps, err := q.ListArgoCDApplicationsByManagedClusterTargets(ctx, sqlc.ListArgoCDApplicationsByManagedClusterTargetsParams{
+		ArgocdInstanceIds:   instanceIDs,
+		DestinationClusters: targets,
+	})
+	if err != nil {
+		// Best-effort, matching the rest of the ArgoCD read paths: if we cannot
+		// prove the component is running we do not block the operator.
+		return false
+	}
+	for _, app := range apps {
+		if item, ok := baselineComponentForApplicationName(app.Name); ok && item.Slug == componentSlug {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *ArgoCDHandler) validateArgoOwnershipDecision(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, componentSlug, decision, reason string) bool {
+	if decision == "leave_local" {
+		return h.validateArgoLeaveLocalDecision(w, r, clusterID, componentSlug, reason)
+	}
 	if decision != "replace" {
 		return true
 	}
@@ -156,6 +197,41 @@ func (h *ArgoCDHandler) validateArgoOwnershipDecision(w http.ResponseWriter, r *
 	}
 	if len(managedRows) == 0 {
 		RespondRequestError(w, r, http.StatusConflict, apierror.UnsafeReplacementBlocked, "cluster must be registered with ArgoCD before replace can be recorded")
+		return false
+	}
+	return true
+}
+
+// validateArgoLeaveLocalDecision gates the per-cluster opt-out.
+//
+// "Leave local" does not uninstall anything: it drops the component out of the
+// cluster's desired state and out of the baseline ApplicationSet's generator. On
+// a component that was never installed here that is exactly right — it is how an
+// operator says "I run my own kube-state-metrics on this cluster, keep yours
+// off". On a component ArgoCD is *currently running*, the workload stays up with
+// nothing left to reconcile, upgrade or repair it: an orphan that looks healthy
+// until it silently rots. So require a reason (as `replace` does — this is just
+// as consequential) and refuse outright once the component is really running.
+// The way to remove a running component is to uninstall it or disable the
+// baseline component, both of which take the workload with them.
+func (h *ArgoCDHandler) validateArgoLeaveLocalDecision(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, componentSlug, reason string) bool {
+	if reason == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ReasonRequired, "leave_local decisions require a reason")
+		return false
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		return false
+	}
+	managedRows, err := h.queries.ListArgoCDManagedClustersByCluster(r.Context(), clusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.OwnershipError, "Failed to load ArgoCD registration state")
+		return false
+	}
+	if h.componentIsArgoManaged(r.Context(), cluster, managedRows, componentSlug) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.UnsafeLeaveLocalBlocked,
+			"component is running under ArgoCD on this cluster; uninstall it or disable the baseline component instead of leaving the workload unmanaged")
 		return false
 	}
 	return true
