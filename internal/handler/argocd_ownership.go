@@ -203,6 +203,18 @@ func (h *ArgoCDHandler) clusterOwnershipResponse(ctx context.Context, clusterID 
 	for _, item := range platformBaselineComponentCatalog {
 		var decision *argoCDBaselineOwnershipDecisionSummary
 		rawDecision, hasDecision := decisionBySlug[item.Slug]
+		// This panel reports what Astronomer auto-provisions on the cluster, so
+		// it only lists the DefaultEnabled set (the two metrics exporters).
+		// The opt-in components (trivy, fluent-bit, ingress-nginx, cert-manager,
+		// gatekeeper) are add-ons installed from the Tools view; they surface
+		// here only once an operator has actually made an ownership decision for
+		// one. Without this gate the panel claimed ArgoCD owned five components
+		// that were never installed, naming ApplicationSets that do not exist.
+		// baselineComponentOwnership applies the same policy to the cluster
+		// response; orphan detection still sweeps the full catalog.
+		if !item.DefaultEnabled && !hasDecision {
+			continue
+		}
 		if hasDecision {
 			summary := decisionSummary(rawDecision)
 			decision = &summary

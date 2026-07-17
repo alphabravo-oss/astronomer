@@ -176,3 +176,46 @@ func argoOwnershipReq(method string, clusterID uuid.UUID, component string, body
 	}
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
+
+// The ownership panel must only claim the components Astronomer actually
+// auto-provisions. It previously listed the entire baseline catalog with
+// DesiredOwner=argocd, so five opt-in add-ons (trivy, fluent-bit, ingress-nginx,
+// cert-manager, gatekeeper) rendered as ArgoCD-managed — naming ApplicationSets
+// that were never created — on clusters where nothing was installed.
+func TestArgoCDClusterOwnershipListsOnlyAutoProvisionedComponents(t *testing.T) {
+	clusterID := uuid.New()
+	h := NewArgoCDHandler(&argocdManagedClusterQueryStub{
+		cluster: sqlc.Cluster{ID: clusterID, Name: "prod"},
+	})
+
+	rr := httptest.NewRecorder()
+	h.ClusterOwnership(rr, argoOwnershipReq(http.MethodGet, clusterID, "", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data argoCDClusterOwnershipResponse `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	got := make(map[string]bool, len(envelope.Data.Components))
+	for _, c := range envelope.Data.Components {
+		got[c.Slug] = true
+	}
+	// Derived from the registry, not hand-listed: whatever is DefaultEnabled
+	// must appear, and whatever is not must stay in the Tools add-on view until
+	// an operator makes an explicit ownership decision for it.
+	for _, item := range platformBaselineComponentCatalog {
+		if item.DefaultEnabled && !got[item.Slug] {
+			t.Errorf("auto-provisioned %q missing from ownership panel", item.Slug)
+		}
+		if !item.DefaultEnabled && got[item.Slug] {
+			t.Errorf("opt-in add-on %q claimed as auto-provisioned (no decision recorded)", item.Slug)
+		}
+	}
+	if len(envelope.Data.Components) == 0 {
+		t.Fatal("no components returned")
+	}
+}
