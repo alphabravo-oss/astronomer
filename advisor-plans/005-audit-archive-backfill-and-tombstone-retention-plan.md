@@ -1,0 +1,169 @@
+# 005 — audit_archive backfill + cluster tombstone retention
+
+**Status:** not started. Investigation complete, no code written, nothing deleted.
+**Raised:** 2026-07-17, from "why are decommissioned retained? how does rancher handle that".
+
+## The one rule
+
+**Backfill first, purge second. Never the reverse.**
+
+Purging cluster tombstones before the backfill silently orphans archived audit
+rows that have no other way to name their cluster. That is the whole reason this
+is a plan and not a one-liner.
+
+## Why tombstones exist (this part is correct — don't "fix" it)
+
+`internal/db/migrations/038_cluster_decommission.up.sql` documents it:
+
+> `decommissioned_at` on `clusters` — the soft-delete tombstone marker. The
+> cluster row stays around (so audit_archive.resource_id remains meaningful) but
+> the row is excluded from List by default.
+
+On decommission, audit rows are copied `audit_log` → `audit_archive` (unpartitioned,
+exempt from retention) and the cluster row is tombstoned rather than deleted, so
+those rows can still resolve *which cluster* they refer to.
+`cluster_decommissions.cluster_id` is deliberately NOT a FK for the same reason.
+
+`DELETE /clusters/{id}` (`internal/handler/clusters.go:1515`) is a task-based
+decommission with a grace window. It tombstones. It never hard-deletes.
+
+## Why it is load-bearing TODAY (verified, don't skip this)
+
+`audit_archive` already has a denormalized `resource_name`. It looked like the
+tombstone was redundant. It is not — the denormalization is half-done:
+
+| cluster-type rows in `audit_archive` | 1250 |
+| --- | --- |
+| with `resource_name` populated | 699 |
+| **blank** | **551** |
+
+`cluster.create` carries a name; `agent.token.rotated` does not. For ~44% of rows
+the tombstone is the only way to answer "which cluster was this?".
+
+## The actual defect
+
+Not the retention — the absence of any bound on it:
+
+- **No purge/retention job exists.** Tombstones accumulate forever. 68 rows
+  accrued in ~1 month of testing on dev.
+- **`DeleteCluster` (`DELETE FROM clusters`, `internal/db/queries/clusters.sql:115`)
+  has zero callers.** Dead code. There is no path in the product to remove a
+  tombstone at any age by any means.
+
+So: "retain forever, by omission" rather than by policy.
+
+## How Rancher does it (`/root/astronomer-all/rancher`)
+
+Fundamentally different — Rancher has no database. A cluster is a CR (`v3.Cluster`);
+delete removes the object from etcd. No tombstone, no `status='decommissioned'`.
+Cleanup ordering is expressed with **finalizers**: the object persists only until
+cleanup completes, then the finalizer drops and it vanishes.
+`pkg/controllers/management/clustergc/cluster_scoped_gc.go` exists purely to strip
+*dangling* finalizers so a delete cannot hang forever — its job is guaranteeing
+deletion completes, the opposite of retention.
+
+Rancher affords this because its audit trail is an external log sink, not a table
+you join against. Ours is relational, so the row is the join target. **Do not
+copy Rancher's model directly — close the gap instead: make each archived row
+self-describing, then the row stops being a join target.**
+
+## Plan
+
+### Step 1 — schema: give archived rows their own cluster name
+
+New migration (next free number; latest test is `migration_138_test.go`):
+
+```sql
+ALTER TABLE audit_archive
+    ADD COLUMN IF NOT EXISTS archived_cluster_name VARCHAR(255) NOT NULL DEFAULT '';
+
+-- backfill from the tombstones while they still exist
+UPDATE audit_archive a
+   SET archived_cluster_name = COALESCE(NULLIF(c.display_name, ''), c.name, '')
+  FROM clusters c
+ WHERE a.archived_cluster_id = c.id
+   AND a.archived_cluster_name = '';
+```
+
+**Its own column — do NOT overload `resource_name`.** The archive query sweeps
+two kinds of row (see `ArchiveAndPurgeAuditLogsForCluster`):
+
+```sql
+WHERE (resource_type = 'cluster' AND resource_id = <id>)
+   OR (detail ->> 'cluster_id') = <id>
+```
+
+The second arm pulls in **non-cluster** rows — `agent.token.rotated` is an *agent*
+row that merely references the cluster. Writing the cluster name into their
+`resource_name` would mislabel them as clusters. That is the trap.
+
+### Step 2 — populate it going forward
+
+`internal/db/queries/cluster_decommission.sql` → `ArchiveAndPurgeAuditLogsForCluster`
+(the live one, used by the decommission `archive_audit` phase; the older
+`ArchiveAuditLogsForCluster` is also present). Add `archived_cluster_name` to the
+INSERT column list and select it from `clusters` joined on the cluster_id arg.
+
+Preserve the existing single-snapshot semantics — the `to_archive` CTE pins the
+exact row set so the DELETE removes exactly what the INSERT archived. Do not
+restructure it; a row archived-but-not-deleted or deleted-but-not-archived is
+silent audit loss. That comment is on the query for a reason.
+
+> **`sqlc` is NOT installed** (`which sqlc` → not found). `cluster_decommission.sql.go`
+> is generated ("Code generated by sqlc. DO NOT EDIT.", v1.31.1). Either install
+> sqlc v1.31.1 and regenerate, or hand-edit the generated file — the repo already
+> has precedent for hand-maintained query files (`*_ext.sql.go`, `*_manual.go`).
+> Whichever you pick, keep the generated file and the `.sql` in sync.
+
+### Step 3 — verify the tombstone is no longer load-bearing
+
+Backfill must leave **zero** archived rows unable to name their cluster:
+
+```sql
+SELECT count(*) FROM audit_archive
+ WHERE archived_cluster_name = '' AND archived_cluster_id IS NOT NULL;
+-- must be 0 before ANY purge
+```
+
+### Step 4 — retention + wire up the dead code
+
+Only once step 3 returns 0:
+
+- Periodic worker task purging tombstones older than a retention window
+  (`internal/worker/tasks/enforce_backup_retention.go` is the pattern to copy).
+- Route it through the existing `DeleteCluster` query, which finally gets a caller.
+- Make the window configurable; default conservatively (90d+).
+- Audit the purge itself.
+
+### Step 5 — the dev-fleet debris (do LAST, after step 3)
+
+68 decommissioned rows on dev, 2026-06-16 → 07-08. Most look like test debris
+(`astro-test-*`, `soak-*`, `soakp-*`, `pull-e2e`, `dup-check-9`, `repro-500-test`,
+`ghost-prod`, `dc-v1-*`, `decomm2-531442`).
+
+**Do not blanket-delete.** Two rows are named `demo-keep` and `demo-orphan` —
+`demo-keep` is explicitly marked keep, and `demo-orphan` looks like a fixture for
+the decommission-cleanup gap (see the `decommission-cleanup-gap` memory).
+Confirm with the operator before removing anything that isn't obviously generated.
+
+## Verification queries
+
+```sql
+-- fleet reality (ALWAYS filter by status — a bare count(*) here is meaningless:
+-- 70 rows, 68 of them tombstones, 2 real clusters)
+SELECT status, count(*) FROM clusters GROUP BY 1;
+
+-- how load-bearing are the tombstones right now?
+SELECT count(*) AS total,
+       count(*) FILTER (WHERE resource_name <> '') AS has_name
+  FROM audit_archive WHERE resource_type = 'cluster';
+```
+
+## Files
+
+- `internal/db/migrations/` — new migration + test (mirror `migration_138_test.go`)
+- `internal/db/queries/cluster_decommission.sql` — `ArchiveAndPurgeAuditLogsForCluster`
+- `internal/db/sqlc/cluster_decommission.sql.go` — generated; regen or hand-edit
+- `internal/db/queries/clusters.sql:115` — `DeleteCluster`, currently dead
+- `internal/worker/tasks/` — new retention task
+- `internal/handler/clusters.go:1515` — `Delete` (decommission entry point)
