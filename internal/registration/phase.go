@@ -143,8 +143,16 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 			return PhaseConnected, nil
 		}
 	case PhaseReady:
-		// Terminal end-state. Only cancel (handled above) can move
-		// off it, and ready specifically doesn't accept cancel.
+		// End of the happy path, but not a dead end. A cluster with no
+		// baseline choice recorded reaches ready straight from the connect
+		// handshake (nothing is scheduled to provision), and an operator can
+		// still apply a template afterwards. Without this edge the phase would
+		// freeze on `ready` while the apply actually runs — the same trap the
+		// self-healing edges out of `failed` above exist to avoid. Cancel is
+		// still refused: a ready cluster is not in-flight.
+		if ev == EventTemplateApplying {
+			return PhaseProvisioning, nil
+		}
 	}
 	_ = baseline // suppress unused warning when callers omit it from non-baseline events
 	return current, fmt.Errorf("%w: %s + %s", ErrIllegalTransition, current, ev)

@@ -452,9 +452,17 @@ func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, age
 		}
 		return err
 	}
-	// If the operator opted out of baseline, head straight to ready.
+	// Nothing to provision? Head straight to ready.
+	//
+	// install_baseline is NULL for any cluster attached outside the wizard — a
+	// raw `kubectl apply` of the agent manifest never records a baseline choice.
+	// Only an explicit `true` means "a template apply is coming, wait for
+	// EventTemplateApplied". NULL means nobody ever scheduled one, so requiring
+	// `.Valid` here left those clusters pinned at `connected` forever, showing a
+	// warning badge while every condition was healthy. Treat "no explicit yes"
+	// as nothing-to-provision.
 	if rec.RegistrationPhase == string(PhaseConnected) {
-		if rec.InstallBaseline.Valid && !rec.InstallBaseline.Bool {
+		if !rec.InstallBaseline.Valid || !rec.InstallBaseline.Bool {
 			_, _ = s.Advance(ctx, clusterID, EventNoProvisioning)
 		}
 	}

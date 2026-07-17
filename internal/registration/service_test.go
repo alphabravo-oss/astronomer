@@ -268,6 +268,12 @@ func TestRegistrationWizard_ConfirmAdvancesPhase(t *testing.T) {
 // TestRegistrationWizard_AgentConnectAdvancesPhase — the hub-side hook
 // transitions awaiting_agent → connected and writes the
 // agent_connected step row.
+//
+// This cluster has no baseline choice recorded (seed passes nil), so nothing is
+// scheduled to provision and the handshake carries it on through to ready via
+// EventNoProvisioning; `connected` is a transient stop. The hook's own job —
+// the transition off awaiting_agent and the agent_connected step row, with the
+// agent version in its detail — is what this asserts.
 func TestRegistrationWizard_AgentConnectAdvancesPhase(t *testing.T) {
 	q := newFakeQuerier()
 	id := uuid.New()
@@ -279,12 +285,12 @@ func TestRegistrationWizard_AgentConnectAdvancesPhase(t *testing.T) {
 		t.Fatalf("OnAgentConnected: %v", err)
 	}
 	rec, _ := q.GetClusterRegistrationRecord(context.Background(), id)
-	if rec.RegistrationPhase != string(PhaseConnected) {
-		t.Fatalf("want connected, got %s", rec.RegistrationPhase)
+	if rec.RegistrationPhase != string(PhaseReady) {
+		t.Fatalf("want ready, got %s", rec.RegistrationPhase)
 	}
 	steps, _ := q.ListClusterRegistrationSteps(context.Background(), id)
-	if len(steps) != 1 || steps[0].StepName != "agent_connected" {
-		t.Fatalf("expected one agent_connected step, got %#v", steps)
+	if len(steps) != 2 || steps[0].StepName != "agent_connected" || steps[1].StepName != "no_provisioning" {
+		t.Fatalf("expected agent_connected then no_provisioning steps, got %#v", steps)
 	}
 	// Detail should contain agent_version.
 	var detail map[string]any
@@ -412,3 +418,41 @@ func TestRegistrationWizard_SSEStreamEmitsStepEvents(t *testing.T) {
 		t.Errorf("missing cluster.registration.step event, got %#v", gotTypes)
 	}
 }
+
+// A cluster attached outside the wizard (a raw `kubectl apply` of the agent
+// manifest) never records a baseline choice, so install_baseline stays NULL and
+// no template apply is ever scheduled. Nothing will ever deliver
+// EventTemplateApplied, so if the connect handshake doesn't advance it, the
+// cluster sits at `connected` forever — healthy on every condition, but wearing
+// a warning badge and never reaching ready.
+func TestOnAgentConnected_NullInstallBaselineReachesReady(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		baseline *bool
+		want     Phase
+	}{
+		{"never chosen (attached outside the wizard)", nil, PhaseReady},
+		{"explicitly opted out", boolPtr(false), PhaseReady},
+		{"opted in — an apply is coming, so wait for it", boolPtr(true), PhaseConnected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := newFakeQuerier()
+			id := uuid.New()
+			q.seed(id, PhaseAwaitingAgent, tc.baseline)
+			svc := New(q, nil)
+
+			if err := svc.OnAgentConnected(context.Background(), id, "v1.2.3"); err != nil {
+				t.Fatalf("OnAgentConnected: %v", err)
+			}
+			rec, err := q.GetClusterRegistrationRecord(context.Background(), id)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if got := Phase(rec.RegistrationPhase); got != tc.want {
+				t.Fatalf("phase = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }

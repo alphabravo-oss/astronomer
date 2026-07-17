@@ -193,3 +193,25 @@ func TestRegistrationWizard_StepLabel(t *testing.T) {
 		}
 	}
 }
+
+// A cluster that reached ready with nothing to provision can still have a
+// template applied later. Without this edge the phase freezes on `ready` while
+// the apply actually runs, and the operator watches a "ready" cluster that is
+// mid-provision.
+func TestPhaseReadyAcceptsLaterTemplateApply(t *testing.T) {
+	next, err := Transition(PhaseReady, EventTemplateApplying, false)
+	if err != nil {
+		t.Fatalf("ready + template_applying: %v", err)
+	}
+	if next != PhaseProvisioning {
+		t.Fatalf("phase = %s, want %s", next, PhaseProvisioning)
+	}
+	// ...and on through to ready again.
+	if next, err = Transition(next, EventTemplateApplied, false); err != nil || next != PhaseReady {
+		t.Fatalf("provisioning + template_applied = (%s, %v), want ready", next, err)
+	}
+	// Ready is still not in-flight: cancel stays refused.
+	if _, err := Transition(PhaseReady, EventCancel, false); err == nil {
+		t.Fatal("ready + cancel should stay illegal")
+	}
+}
