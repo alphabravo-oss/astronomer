@@ -295,7 +295,11 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "argocd_ui_upstream", Value: "http://astro-argocd-server.astronomer.svc.cluster.local:80"},
 		// Adopted clusters register against the authenticated, network-isolated
 		// internal proxy port — not the public :8000 listener.
-		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "http://astronomer-server.astronomer.svc.cluster.local:8090"},
+		// https, not http: client-go's clientcmd only merges a kubeconfig's bearer
+		// token when the transport is TLS, so a plaintext base URL makes ArgoCD's
+		// kubectl path (openapi validation, `kubectl auth reconcile`) send NO
+		// Authorization header and get 401'd. See Server.StartInternalArgoCDProxy.
+		envconfig.Default{Key: "argocd_cluster_proxy_base_url", Value: "https://astronomer-server.astronomer.svc.cluster.local:8090"},
 		envconfig.Default{Key: "argocd_internal_proxy_addr", Value: ":8090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
 		envconfig.Default{Key: "auth_local_password_only", Value: false},

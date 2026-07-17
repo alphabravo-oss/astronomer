@@ -65,7 +65,14 @@ func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
 			t.Fatalf("operator manifest missing %q", want)
 		}
 	}
-	if strings.Contains(manifest, `resources: ["*"]`) || strings.Contains(manifest, `verbs: ["*"]`) {
-		t.Fatalf("operator manifest rendered admin wildcard RBAC:\n%s", manifest)
+	// operator must never be cluster-admin: no wildcard WRITE. A read-only
+	// wildcard IS expected and required — ArgoCD adopts this profile and its
+	// cluster cache lists every resource type registered in the cluster
+	// (including CRDs added after adoption), so an enumerated allowlist always
+	// eventually misses one and silently pins every Application at sync=Unknown.
+	// See deploy/agent/template.go and TestArgoManagedProfilesGrantClusterWideRead
+	// / TestOperatorWildcardIsReadOnly, which pin both halves of that contract.
+	if strings.Contains(manifest, `verbs: ["*"]`) {
+		t.Fatalf("operator manifest rendered admin wildcard VERBS (cluster-admin):\n%s", manifest)
 	}
 }

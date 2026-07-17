@@ -637,7 +637,17 @@ func managedClusterCredential(ctx context.Context, deps ArgoCDAutoRegisterDeps, 
 		return "", "", nil, fmt.Errorf("%w: %v", errArgoCDManagedClusterCredentialUnavailable, err)
 	}
 	server := fmt.Sprintf("%s/api/v1/internal/argocd/clusters/%s/k8s", deps.ClusterProxyBaseURL, cluster.ID.String())
-	return token, server, nil, nil
+	// The internal proxy serves TLS with a per-pod self-signed cert (see
+	// Server.StartInternalArgoCDProxy: it must be TLS or client-go's clientcmd
+	// silently drops this bearer token, which 401s ArgoCD's kubectl path). With N
+	// server replicas there is no stable CA to pin, so skip server verification
+	// on this in-cluster hop. Authentication is unchanged and unweakened — the
+	// cluster-scoped proxy token is still required and validated, and the
+	// NetworkPolicy still restricts the port to the ArgoCD namespace. Compared to
+	// the plaintext listener this replaces, the token now at least crosses the
+	// pod network encrypted. Follow-up: issue a chart-managed cert and pin it via
+	// TLSClientConfig.CAData to drop Insecure.
+	return token, server, &argocdclient.TLSClientConfig{Insecure: true}, nil
 }
 
 func ensureArgoCDClusterProxyToken(ctx context.Context, deps ArgoCDAutoRegisterDeps, clusterID uuid.UUID) (string, error) {

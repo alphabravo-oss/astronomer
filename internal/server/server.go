@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +50,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	certutil "k8s.io/client-go/util/cert"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
@@ -1993,17 +1995,60 @@ func (s *Server) StartInternalArgoCDProxy(addr string) error {
 	if s.internalArgoCDHandler == nil || strings.TrimSpace(addr) == "" {
 		return nil
 	}
+	// This listener MUST be TLS, and that is a credential-transport requirement
+	// rather than the auth boundary (requireArgoCDClusterProxyToken remains the
+	// boundary and is unchanged).
+	//
+	// client-go's clientcmd merges a kubeconfig's user credentials ONLY when the
+	// transport is TLS:
+	//
+	//	// only try to read the auth information if we are secure
+	//	if restclient.IsConfigTransportTLS(*clientConfig) { ...merge token... }
+	//	  — k8s.io/client-go/tools/clientcmd/client_config.go
+	//
+	// ArgoCD reaches a managed cluster two different ways. Its in-process cluster
+	// cache builds a rest.Config directly (BearerToken set programmatically), so
+	// it never consults clientcmd and worked fine over plaintext. But its apply
+	// path — client-side openapi validation and `kubectl auth reconcile` for RBAC
+	// kinds — loads a generated kubeconfig through clientcmd. Over a plaintext
+	// server URL those requests silently went out with NO Authorization header at
+	// all, so the proxy correctly 401'd them and every Application on every
+	// adopted cluster sat at sync=Unknown/OutOfSync while still reporting
+	// health=Healthy, applying nothing. Serving TLS is what lets kubectl attach
+	// the token; it also stops the bearer token from crossing the pod network in
+	// the clear, so this is strictly stronger than what it replaces.
+	//
+	// The cert is self-signed and generated per-pod at boot: the peer is ArgoCD
+	// inside this cluster, it is pinned to this Service DNS name, and the client
+	// side sets Insecure (see managedClusterCredential) because with N replicas
+	// there is no stable CA to pin. Issuing a chart-managed cert and shipping its
+	// PEM as CAData is the follow-up that removes Insecure.
+	certPEM, keyPEM, err := certutil.GenerateSelfSignedCertKey(
+		"astronomer-server.astronomer.svc.cluster.local", nil,
+		[]string{"astronomer-server", "astronomer-server.astronomer", "astronomer-server.astronomer.svc", "localhost"},
+	)
+	if err != nil {
+		return fmt.Errorf("generate internal argocd proxy cert: %w", err)
+	}
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("load internal argocd proxy cert: %w", err)
+	}
 	srv := &http.Server{
 		Handler:           s.internalArgoCDHandler,
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{pair},
+			MinVersion:   tls.VersionTLS12,
+		},
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	s.logger.Info("internal argocd proxy listening", "addr", addr)
-	return srv.Serve(ln)
+	s.logger.Info("internal argocd proxy listening (tls)", "addr", addr)
+	return srv.ServeTLS(ln, "", "")
 }
 
 // Shutdown gracefully shuts down the server with a deadline.
