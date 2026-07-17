@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { normalizeToolStatus } from '@/lib/tool-status';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { ClusterTool, ClusterToolStatus, ToolStatus } from '@/types';
@@ -36,17 +35,10 @@ const statusToBadge: Record<ToolStatus, { status: string; label: string }> = {
   unknown: { status: 'warning', label: 'Unknown' },
 };
 
-const presetOptions = [
-  { value: 'development', label: 'Development' },
-  { value: 'staging', label: 'Staging' },
-  { value: 'production', label: 'Production' },
-];
-
 interface ToolCardProps {
   tool: ClusterTool;
   toolStatus?: ClusterToolStatus;
-  defaultPreset: string;
-  onInstall: (slug: string, preset: string) => void;
+  onInstall: (slug: string) => void;
   onUninstall: (slug: string) => void;
   onAdopt: (slug: string, releaseName: string) => void;
   installDisabledReason?: string;
@@ -60,7 +52,6 @@ interface ToolCardProps {
 export function ToolCard({
   tool,
   toolStatus,
-  defaultPreset,
   onInstall,
   onUninstall,
   onAdopt,
@@ -71,7 +62,6 @@ export function ToolCard({
   uninstalling,
   clusterDisconnected,
 }: ToolCardProps) {
-  const [selectedPreset, setSelectedPreset] = useState(defaultPreset);
   const status = normalizeToolStatus(toolStatus?.status);
   const badge = statusToBadge[status] || statusToBadge.unknown;
   const Icon = toolIcons[tool.slug] || Wrench;
@@ -117,20 +107,8 @@ export function ToolCard({
       <div className="pt-1">
         {status === 'not_installed' && (
           <div className="flex items-center gap-2">
-            <select
-              value={selectedPreset}
-              onChange={(e) => setSelectedPreset(e.target.value)}
-              className="flex-1 h-8 px-2 rounded-md border border-border bg-background text-xs
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              {presetOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
             <button
-              onClick={() => onInstall(tool.slug, selectedPreset)}
+              onClick={() => onInstall(tool.slug)}
               disabled={installing || !!enableDisabledReason}
               title={enableDisabledReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground
@@ -200,20 +178,8 @@ export function ToolCard({
 
         {status === 'failed' && (
           <div className="flex items-center gap-2">
-            <select
-              value={selectedPreset}
-              onChange={(e) => setSelectedPreset(e.target.value)}
-              className="flex-1 h-8 px-2 rounded-md border border-border bg-background text-xs
-                focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              {presetOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
             <button
-              onClick={() => onInstall(tool.slug, selectedPreset)}
+              onClick={() => onInstall(tool.slug)}
               disabled={installing || !!retryDisabledReason}
               title={retryDisabledReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground

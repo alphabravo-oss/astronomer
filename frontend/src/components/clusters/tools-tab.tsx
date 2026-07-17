@@ -50,18 +50,18 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
     ? clusterEnvironment
     : 'development';
 
-  const handleInstall = (slug: string, preset: string) => {
+  const handleInstall = (slug: string) => {
     if (!catalogCreateDecision.allowed) {
       toastPermissionDenied(catalogCreateDecision);
       return;
     }
     const tool = tools?.find((t) => t.slug === slug);
     if (tool) {
-      setInstallTool({ tool, preset });
+      setInstallTool({ tool, preset: defaultPreset });
     }
   };
 
-  const handleConfirmInstall = (valuesOverride?: string) => {
+  const handleConfirmInstall = (valuesOverride: string | undefined, preset: string) => {
     if (!installTool) return;
     if (!catalogCreateDecision.allowed) {
       toastPermissionDenied(catalogCreateDecision);
@@ -72,7 +72,7 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
       {
         slug: installTool.tool.slug,
         cluster_id: clusterId,
-        preset: installTool.preset,
+        preset,
         values_override: valuesOverride,
       },
       {
@@ -175,7 +175,6 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
             key={tool.slug}
             tool={tool}
             toolStatus={statusMap.get(tool.slug)}
-            defaultPreset={defaultPreset}
             onInstall={handleInstall}
             onUninstall={handleUninstall}
             onAdopt={handleAdopt}

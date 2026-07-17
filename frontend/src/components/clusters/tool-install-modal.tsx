@@ -15,13 +15,21 @@ interface ToolInstallModalProps {
   tool: ClusterTool;
   clusterId: string;
   preset: string;
-  onConfirm: (valuesOverride: string | undefined) => void;
+  onConfirm: (valuesOverride: string | undefined, preset: string) => void;
   onClose: () => void;
   installing?: boolean;
   confirmDecision?: PermissionDecision;
 }
 
 const EMPTY_TOOL_FIELDS: ToolFormField[] = [];
+
+// Chart value presets, offered at install time. Kept in sync with the cluster
+// `environment` values the backend accepts as a preset key.
+const PRESET_OPTIONS = [
+  { value: 'development', label: 'Development' },
+  { value: 'staging', label: 'Staging' },
+  { value: 'production', label: 'Production' },
+];
 
 // setPath writes value into a nested object at a dot-path, creating intermediate
 // objects as needed: setPath({}, "a.b.c", 1) => { a: { b: { c: 1 } } }.
@@ -89,6 +97,12 @@ export function ToolInstallModal({
   const fields = tool.form_schema?.fields ?? EMPTY_TOOL_FIELDS;
   const hasForm = fields.length > 0;
   const [mode, setMode] = useState<'form' | 'yaml'>(hasForm ? 'form' : 'yaml');
+  // The preset is an install-time choice, so it lives here rather than on the
+  // card: on the card it rendered next to every tool (installed ones included),
+  // reading as a per-tool environment switch instead of "which chart values to
+  // install with". `preset` seeds it from the cluster's environment. The chart
+  // preview below keys on this, so switching presets re-previews live.
+  const [selectedPreset, setSelectedPreset] = useState(preset);
 
   // Form state: path -> string value, seeded from schema defaults.
   const [values, setValues] = useState<Record<string, string>>(() => {
@@ -100,8 +114,8 @@ export function ToolInstallModal({
 
   // Chart metadata (name/version/namespace) for the header.
   const { data: preview, isLoading } = useQuery({
-    queryKey: queryKeys.tools.preview(tool.slug, clusterId, preset),
-    queryFn: () => apiClient.previewToolInstall(tool.slug, { cluster_id: clusterId, preset }),
+    queryKey: queryKeys.tools.preview(tool.slug, clusterId, selectedPreset),
+    queryFn: () => apiClient.previewToolInstall(tool.slug, { cluster_id: clusterId, preset: selectedPreset }),
   });
   const chart = preview?.charts?.[0];
 
@@ -129,7 +143,7 @@ export function ToolInstallModal({
       const obj = buildOverride(fields, values);
       override = Object.keys(obj).length ? yaml.dump(obj) : undefined;
     }
-    onConfirm(override);
+    onConfirm(override, selectedPreset);
   };
 
   return (
@@ -184,6 +198,28 @@ export function ToolInstallModal({
         </div>
       }
     >
+      <div className="mb-5 space-y-1.5">
+        <label htmlFor="tool-preset" className="text-sm font-medium text-foreground">
+          Preset
+        </label>
+        <select
+          id="tool-preset"
+          value={selectedPreset}
+          onChange={(e) => setSelectedPreset(e.target.value)}
+          className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm
+            focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          {PRESET_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Sizing and replica defaults for this install. Defaults to the cluster&apos;s environment.
+        </p>
+      </div>
+
       {mode === 'form' ? (
         <div className="space-y-6">
           <p className="text-xs text-muted-foreground">
