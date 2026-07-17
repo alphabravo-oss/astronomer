@@ -53,7 +53,7 @@ import {
   Waypoints,
   Rocket,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatK8sVersion } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/env';
 import { ExtensionNavItems } from '@/components/extensions/ExtensionNavItems';
 import { useAuthStore, useUIStore } from '@/lib/store';
@@ -717,7 +717,7 @@ export function Sidebar() {
               fallbackName={cluster?.displayName || cluster?.name || 'Cluster'}
             />
             {cluster?.kubernetesVersion && (
-              <p className="text-2xs text-muted-foreground mt-1 px-1">v{cluster.kubernetesVersion}</p>
+              <p className="text-2xs text-muted-foreground mt-1 px-1">{formatK8sVersion(cluster.kubernetesVersion)}</p>
             )}
           </div>
         </div>

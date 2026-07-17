@@ -315,3 +315,16 @@ export function gaugeTextColor(percentage: number): string {
   if (percentage >= 75) return 'text-status-warning';
   return 'text-status-success';
 }
+
+/**
+ * Format a Kubernetes version for display.
+ *
+ * The agent reports the version straight from the Kubernetes API, which already
+ * carries its own leading "v" ("v1.30.4+k3s1"). Call sites that hardcoded a `v`
+ * prefix rendered "vv1.30.4+k3s1". Only add the v when it isn't already there.
+ */
+export function formatK8sVersion(version: string | null | undefined): string {
+  const v = (version ?? '').trim();
+  if (!v) return '—';
+  return /^v/i.test(v) ? v : `v${v}`;
+}

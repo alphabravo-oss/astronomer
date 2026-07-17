@@ -41,6 +41,7 @@ import {
   formatPercentage,
   formatRelativeTime,
   distributionDisplayName,
+  formatK8sVersion,
 } from '@/lib/utils';
 import {
   Cpu,
@@ -233,14 +234,14 @@ function ClusterDetailPage() {
             <RegistrationPhaseHeaderBadge clusterId={clusterId} />
             {meshDetection && <MeshHeaderBadge clusterId={clusterId} mesh={meshDetection.detectedMesh} />}
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>{distributionDisplayName(cluster.distribution)}</span>
-            <span className="text-border">|</span>
-            <span>v{cluster.kubernetesVersion}</span>
-            <span className="text-border">|</span>
-            <span className="capitalize">{cluster.environment}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-3">
+              <span>{distributionDisplayName(cluster.distribution)}</span>
+              <span className="text-border">|</span>
+              <span>{formatK8sVersion(cluster.kubernetesVersion)}</span>
+              <span className="text-border">|</span>
+              <span className="capitalize">{cluster.environment}</span>
+            </span>
             {conditions && conditions.length > 0 && <ClusterConditionsBar conditions={conditions} />}
             <AgentAccessChip cluster={cluster} />
           </div>
@@ -980,6 +981,8 @@ const CONDITION_LABELS: Record<string, string> = {
   Connected: 'Connected',
   AgentReachable: 'Agent Reachable',
   GatewayAPISupported: 'Gateway API',
+  ArgoCDAdopted: 'ArgoCD Adopted',
+  MetricsAvailable: 'Metrics Available',
 };
 
 function relativeAge(iso: string): string {
@@ -1009,7 +1012,7 @@ function ClusterConditionsBar({ conditions }: { conditions: ClusterCondition[] }
   const visible = conditions.filter((c) => !isNoisyCapabilityCondition(c));
   if (visible.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+    <div className="flex flex-wrap items-center gap-1.5">
       {visible.map((c) => {
         const label = CONDITION_LABELS[c.type] || c.type;
         let tone = '';
