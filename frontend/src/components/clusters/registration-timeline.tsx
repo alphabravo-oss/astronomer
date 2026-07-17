@@ -149,7 +149,7 @@ export function RegistrationTimeline({ clusterId, embedded = false, onReady }: P
       steps={steps}
       emptyLabel={status ? 'Waiting for first step...' : 'Loading...'}
       footer={!embedded && status?.phase === 'failed' ? (
-        <div className="px-4 py-3 border-t border-border bg-status-danger/5">
+        <div className="px-4 py-3 border-t border-border bg-status-error/5">
           <p className="text-xs text-muted-foreground">
             Use the Retry buttons above to re-run a failing step, or talk to your platform team if
             the issue persists.
@@ -179,7 +179,7 @@ export function PhaseBadge({ phase }: { phase: RegistrationStatus['phase'] | und
   if (!phase) return <span className="text-xs text-muted-foreground">Loading...</span>;
   const colour =
     phase === 'ready' ? 'text-status-success' :
-    phase === 'failed' ? 'text-status-danger' :
+    phase === 'failed' ? 'text-status-error' :
     phase === 'provisioning' ? 'text-primary' :
     'text-muted-foreground';
   const label =

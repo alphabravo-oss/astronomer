@@ -134,13 +134,14 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
 
   const uninstallTool = tools.find((t) => t.slug === uninstallSlug);
 
-  // Sprint 074 — empty-state CTA. When NO tool is yet installed on this
-  // cluster, surface a prominent "Apply Platform Baseline template"
-  // pointer at the cluster's template-attach page. The baseline (sprint
-  // 074 seed) wires trivy-operator + kube-state-metrics + node-exporter
-  // + fluent-bit + ingress-nginx + cert-manager + gatekeeper in one click. Operators registered
-  // BEFORE sprint 074 don't have the auto-attach for free — this banner
-  // bridges them.
+  // Empty-state CTA, shown when this cluster has no add-on installed. It points
+  // at the template page, which installs the recommended set in one click.
+  //
+  // It deliberately does NOT count the auto-provisioned baseline: only
+  // kube-state-metrics and prometheus-node-exporter install automatically, and
+  // they arrive over the ArgoCD ApplicationSet path, not the Helm/tool path
+  // these statuses track — so they never appear here even when running.
+  // internal/baseline/registry.go is the source of truth for that split.
   const noToolsInstalled =
     !statuses ||
     statuses.length === 0 ||
@@ -152,18 +153,19 @@ export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: Tools
         <div className="mb-4 flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <Sparkles className="h-5 w-5 mt-0.5 text-primary flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-medium">No tools installed yet</p>
+            <p className="text-sm font-medium">No add-ons installed yet</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Apply the <strong>Platform Baseline</strong> template to install Astronomer&apos;s
-              recommended operators in one step: image-scanning (trivy-operator), metrics
-              (kube-state-metrics, node-exporter), log forwarding (fluent-bit), ingress
-              (ingress-nginx), TLS (cert-manager), and policy (Gatekeeper). New clusters get this automatically.
+              Metrics (kube-state-metrics, node-exporter) install automatically on every
+              cluster and are managed for you. Everything below is optional — enable what this
+              cluster needs: image scanning (trivy-operator), log forwarding (fluent-bit),
+              ingress (ingress-nginx), TLS (cert-manager), or policy (Gatekeeper). The{' '}
+              <strong>Platform Baseline</strong> template installs the recommended set in one step.
             </p>
             <Link
               href={`/dashboard/clusters/${clusterId}/template`}
               className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
-              Apply Platform Baseline →
+              Install the recommended set →
             </Link>
           </div>
         </div>

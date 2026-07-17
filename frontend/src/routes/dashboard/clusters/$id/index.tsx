@@ -436,7 +436,7 @@ function ClusterDetailPage() {
             icon={<ShieldAlert className="h-4 w-4" />}
             className={
               (vulnSummary?.critical ?? 0) > 0
-                ? 'cursor-pointer hover:border-status-critical/50 transition-colors'
+                ? 'cursor-pointer hover:border-status-error/50 transition-colors'
                 : 'cursor-pointer hover:border-muted-foreground/50 transition-colors'
             }
           />
@@ -694,7 +694,7 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
   const driftTone = !drift || drift.appCount === 0
     ? 'border-border bg-muted/30 text-muted-foreground'
     : drift.degradedCount > 0
-      ? 'border-status-danger/30 bg-status-danger/10 text-status-danger'
+      ? 'border-status-error/30 bg-status-error/10 text-status-error'
       : drift.outOfSyncCount > 0
         ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
         : 'border-status-success/30 bg-status-success/10 text-status-success';
@@ -753,7 +753,7 @@ function ArgoCDOwnershipPanel({ cluster }: { cluster: Cluster }) {
                       <span>Last sync: {formatRelativeTime(drift.lastSynced)}</span>
                     ) : null}
                     {drift.lastError ? (
-                      <span className={drift.degradedCount > 0 ? 'text-status-danger' : 'text-status-warning'}>
+                      <span className={drift.degradedCount > 0 ? 'text-status-error' : 'text-status-warning'}>
                         {drift.lastError}
                       </span>
                     ) : null}
@@ -919,7 +919,7 @@ function ClusterConditionsBar({ conditions }: { conditions: ClusterCondition[] }
             Icon = CheckCircle2;
             break;
           case 'False':
-            tone = 'bg-status-danger/10 text-status-danger border-status-danger/20';
+            tone = 'bg-status-error/10 text-status-error border-status-error/20';
             Icon = XCircle;
             break;
           default:
@@ -957,7 +957,7 @@ function ClusterRemediationFooter({ clusterId }: { clusterId: string }) {
     latest.outcome === 'success'
       ? 'text-status-success'
       : latest.outcome === 'failed'
-        ? 'text-status-danger'
+        ? 'text-status-error'
         : 'text-muted-foreground';
   return (
     <div

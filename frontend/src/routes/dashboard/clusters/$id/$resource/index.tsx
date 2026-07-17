@@ -1817,7 +1817,7 @@ function ConditionPill({ status, trueLabel, falseLabel }: { status: string; true
     return <span className="text-xs px-1.5 py-0.5 rounded bg-status-success/10 text-status-success">{trueLabel}</span>;
   }
   if (status === 'False') {
-    return <span className="text-xs px-1.5 py-0.5 rounded bg-status-danger/10 text-status-danger">{falseLabel}</span>;
+    return <span className="text-xs px-1.5 py-0.5 rounded bg-status-error/10 text-status-error">{falseLabel}</span>;
   }
   return <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{status}</span>;
 }

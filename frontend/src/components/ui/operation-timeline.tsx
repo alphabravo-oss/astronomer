@@ -49,7 +49,7 @@ export function OperationTimeline({
               {step.detail && (
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">{step.detail}</div>
               )}
-              {step.error && <div className="mt-1 text-xs text-status-danger">{step.error}</div>}
+              {step.error && <div className="mt-1 text-xs text-status-error">{step.error}</div>}
               {step.status === 'running' && step.progressPct && step.progressPct > 0 && (
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-muted">
                   <div className="h-full bg-primary" style={{ width: `${step.progressPct}%` }} />
@@ -76,7 +76,7 @@ function StepIcon({ status }: { status: OperationTimelineStepStatus }) {
     case 'running':
       return <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-primary" />;
     case 'failed':
-      return <X className="mt-0.5 h-4 w-4 text-status-danger" />;
+      return <X className="mt-0.5 h-4 w-4 text-status-error" />;
     case 'skipped':
       return <Circle className="mt-0.5 h-4 w-4 text-muted-foreground/40" />;
     default:

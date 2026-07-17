@@ -327,7 +327,7 @@ function compatibilityLabel(value: string): string {
 
 function compatibilityTone(value: string): string {
   if (value === 'supported') return 'border-status-success/30 bg-status-success/10 text-status-success';
-  if (value === 'blocked') return 'border-status-danger/30 bg-status-danger/10 text-status-danger';
+  if (value === 'blocked') return 'border-status-error/30 bg-status-error/10 text-status-error';
   if (value === 'deprecated') return 'border-status-warning/30 bg-status-warning/10 text-status-warning';
   return 'border-border bg-muted/30 text-muted-foreground';
 }
@@ -475,7 +475,7 @@ function AgentDiagnosticsDrawer({
                   </p>
                 )}
                 {actionError && (
-                  <p className="mt-3 rounded-md border border-status-danger/20 bg-status-danger/10 px-3 py-2 text-xs text-status-danger">
+                  <p className="mt-3 rounded-md border border-status-error/20 bg-status-error/10 px-3 py-2 text-xs text-status-error">
                     {actionError}
                   </p>
                 )}
@@ -576,7 +576,7 @@ function SelfTestSection({ result }: { result: AgentSelfTestResponse }) {
               {check.status === 'passed' ? (
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-status-success" />
               ) : check.status === 'failed' ? (
-                <X className="h-3.5 w-3.5 shrink-0 text-status-danger" />
+                <X className="h-3.5 w-3.5 shrink-0 text-status-error" />
               ) : (
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-status-warning" />
               )}
@@ -600,13 +600,13 @@ function SelfTestSection({ result }: { result: AgentSelfTestResponse }) {
 
 function selfTestTone(value: string): string {
   if (value === 'passed') return 'border-status-success/30 bg-status-success/10 text-status-success';
-  if (value === 'failed') return 'border-status-danger/30 bg-status-danger/10 text-status-danger';
+  if (value === 'failed') return 'border-status-error/30 bg-status-error/10 text-status-error';
   return 'border-status-warning/30 bg-status-warning/10 text-status-warning';
 }
 
 function selfTestTextTone(value: string): string {
   if (value === 'passed') return 'text-status-success';
-  if (value === 'failed') return 'text-status-danger';
+  if (value === 'failed') return 'text-status-error';
   return 'text-status-warning';
 }
 
@@ -636,7 +636,7 @@ function AgentOperationsSection({ operations, loading }: { operations: AgentLife
               <p className="mt-1 text-muted-foreground">
                 {operation.operationType.replace('_', ' ')} · {formatRelativeTime(operation.createdAt)}
               </p>
-              {operation.lastError && <p className="mt-1 text-status-danger">{operation.lastError}</p>}
+              {operation.lastError && <p className="mt-1 text-status-error">{operation.lastError}</p>}
             </div>
           ))}
         </div>

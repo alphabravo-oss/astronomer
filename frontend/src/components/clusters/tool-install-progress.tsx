@@ -35,7 +35,7 @@ export function ToolInstallProgress({ operationId, toolName, onClose }: ToolInst
   }, [events.length]);
 
   const StatusIcon = isTerminal ? (failed ? XCircle : CheckCircle2) : Loader2;
-  const statusTone = failed ? 'text-status-error' : isTerminal ? 'text-status-active' : 'text-primary';
+  const statusTone = failed ? 'text-status-error' : isTerminal ? 'text-status-success' : 'text-primary';
   const statusLabel = failed
     ? 'Failed'
     : status === 'completed'

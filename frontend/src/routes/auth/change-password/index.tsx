@@ -215,7 +215,7 @@ function PasswordField({
             hintTone === 'success'
               ? 'text-xs text-status-success'
               : hintTone === 'danger'
-                ? 'text-xs text-status-danger'
+                ? 'text-xs text-status-error'
                 : 'text-xs text-muted-foreground'
           }
         >

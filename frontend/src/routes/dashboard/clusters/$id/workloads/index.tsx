@@ -429,7 +429,7 @@ function computeStatus(w: Workload): {
   });
   const bad = (label: string) => ({
     label,
-    tone: 'text-status-critical',
+    tone: 'text-status-error',
     icon: <AlertCircle className="h-3.5 w-3.5" />,
   });
   const muted = (label: string) => ({

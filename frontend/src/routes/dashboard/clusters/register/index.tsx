@@ -105,14 +105,14 @@ function RegisterClusterWizardPage() {
                 onBlur={field.handleBlur}
                 placeholder="my-cluster"
                 className={`w-full h-10 px-3 rounded-lg border bg-background text-sm ${
-                  nameTaken ? 'border-status-danger' : 'border-border'
+                  nameTaken ? 'border-status-error' : 'border-border'
                 }`}
                 autoFocus
               />
             )}
           </form.Field>
           {nameTaken && (
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-status-danger">
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-status-error">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               A cluster named &quot;{name}&quot; already exists. Choose a different name.
             </p>
@@ -263,7 +263,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-foreground">
         {label}
-        {required && <span className="text-status-danger ml-1">*</span>}
+        {required && <span className="text-status-error ml-1">*</span>}
       </label>
       {children}
     </div>
