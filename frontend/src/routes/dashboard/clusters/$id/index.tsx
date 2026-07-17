@@ -240,9 +240,10 @@ function ClusterDetailPage() {
             <span className="text-border">|</span>
             <span className="capitalize">{cluster.environment}</span>
           </div>
-          {conditions && conditions.length > 0 && (
-            <ClusterConditionsBar conditions={conditions} />
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {conditions && conditions.length > 0 && <ClusterConditionsBar conditions={conditions} />}
+            <AgentAccessChip cluster={cluster} />
+          </div>
           <ClusterRemediationFooter clusterId={clusterId} />
         </div>
         <div className="flex items-center gap-2">
@@ -562,12 +563,15 @@ function ClusterDetailPage() {
   );
 }
 
-function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
-  // The local/self-managed cluster runs the in-process management agent (the
-  // chart's ServiceAccount + management ClusterRole), not a profile-generated
-  // remote agent — so the viewer/operator/admin model doesn't apply. Its stored
-  // annotation is empty (which would default to "viewer"), so surface its true
-  // posture explicitly instead of mislabeling it read-only.
+// agentAccessSummary derives the agent's access posture once, for both the
+// header chip and the full panel.
+//
+// The local/self-managed cluster runs the in-process management agent (the
+// chart's ServiceAccount + management ClusterRole), not a profile-generated
+// remote agent — so the viewer/operator/admin model doesn't apply. Its stored
+// annotation is empty (which would default to "viewer"), so surface its true
+// posture explicitly instead of mislabeling it read-only.
+function agentAccessSummary(cluster: Cluster) {
   const isLocal = !!cluster.isLocal;
   const profile = (cluster.agentPrivilegeProfile || 'admin').toLowerCase();
   const isAdmin = !isLocal && profile === 'admin';
@@ -585,11 +589,38 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
       : profile === 'operator'
         ? 'Workload operations without ClusterRole or cluster-admin escalation.'
         : 'Full API-group, resource, verb, and non-resource URL access.';
-  const tone = isLocal
-    ? 'border-status-info/30 bg-status-info/10 text-status-info'
-    : isAdmin
-      ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
-      : 'border-status-success/30 bg-status-success/10 text-status-success';
+  return { isLocal, profile, isAdmin, label, detail };
+}
+
+// AgentAccessChip states the agent's access mode inline with the other cluster
+// conditions, where it is scannable. Only `admin` — the posture that warrants a
+// warning — escalates to the full AgentPrivilegePanel below; a whole bordered
+// card with an icon, heading and docs link is a lot of chrome to say "Operator".
+function AgentAccessChip({ cluster }: { cluster: Cluster }) {
+  const { isAdmin, isLocal, label, detail } = agentAccessSummary(cluster);
+  const tone = isAdmin
+    ? 'bg-status-warning/10 text-status-warning border-status-warning/20'
+    : isLocal
+      ? 'bg-status-info/10 text-status-info border-status-info/20'
+      : 'bg-status-success/10 text-status-success border-status-success/20';
+  return (
+    <span
+      title={detail}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border ${tone}`}
+    >
+      <ShieldAlert className="h-3 w-3" />
+      Access: {label}
+    </span>
+  );
+}
+
+function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
+  const { isAdmin, label, detail } = agentAccessSummary(cluster);
+  // Everything except admin is now carried by the header chip. Admin keeps the
+  // full panel: it is the one posture with a caveat worth spelling out and a
+  // matrix worth linking.
+  if (!isAdmin) return null;
+  const tone = 'border-status-warning/30 bg-status-warning/10 text-status-warning';
 
   return (
     <div className="rounded-lg border border-border bg-card">
