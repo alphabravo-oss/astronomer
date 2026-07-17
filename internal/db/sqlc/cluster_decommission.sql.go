@@ -30,14 +30,15 @@ WITH to_archive AS (
         action, resource_type, resource_id, resource_name,
         http_method, path, status_code, duration_ms, request_id,
         ip_address, user_agent, detail, source, correlation_id,
-        archived_cluster_id
+        archived_cluster_id, archived_cluster_name
     )
     SELECT
         id, created_at, schema_version, user_id, actor_auth_method,
         action, resource_type, resource_id, resource_name,
         http_method, path, status_code, duration_ms, request_id,
         ip_address, user_agent, detail, source, correlation_id,
-        $1::uuid
+        $1::uuid,
+        COALESCE((SELECT COALESCE(NULLIF(c.display_name, ''), c.name) FROM clusters c WHERE c.id = $1::uuid), '')
     FROM to_archive
     ON CONFLICT (id, created_at) DO NOTHING
 )
@@ -73,14 +74,15 @@ INSERT INTO audit_archive (
     action, resource_type, resource_id, resource_name,
     http_method, path, status_code, duration_ms, request_id,
     ip_address, user_agent, detail, source, correlation_id,
-    archived_cluster_id
+    archived_cluster_id, archived_cluster_name
 )
 SELECT
     id, created_at, schema_version, user_id, actor_auth_method,
     action, resource_type, resource_id, resource_name,
     http_method, path, status_code, duration_ms, request_id,
     ip_address, user_agent, detail, source, correlation_id,
-    $1::uuid
+    $1::uuid,
+    COALESCE((SELECT COALESCE(NULLIF(c.display_name, ''), c.name) FROM clusters c WHERE c.id = $1::uuid), '')
 FROM audit_log
 WHERE
     (resource_type = 'cluster' AND resource_id = $2::text)

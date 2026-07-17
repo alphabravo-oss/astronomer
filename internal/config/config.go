@@ -74,9 +74,14 @@ type Config struct {
 
 	LogLevel string `mapstructure:"log_level"`
 
-	AuditLogRetentionMonths int    `mapstructure:"audit_log_retention_months"`
-	ServerMetricsAddr       string `mapstructure:"server_metrics_addr"`
-	WorkerMetricsAddr       string `mapstructure:"worker_metrics_addr"`
+	AuditLogRetentionMonths int `mapstructure:"audit_log_retention_months"`
+	// ClusterTombstoneRetentionDays is how long decommissioned cluster rows
+	// (tombstones) are kept before the worker retention sweep hard-deletes
+	// them. Conservative 90d default; chart-tunable via
+	// CLUSTER_TOMBSTONE_RETENTION_DAYS.
+	ClusterTombstoneRetentionDays int    `mapstructure:"cluster_tombstone_retention_days"`
+	ServerMetricsAddr             string `mapstructure:"server_metrics_addr"`
+	WorkerMetricsAddr             string `mapstructure:"worker_metrics_addr"`
 
 	// Account-lockout policy (migration 039 / NIST 800-53 AC-7).
 	// LoginFailureThreshold defaults to 5 when zero/negative; the
@@ -228,6 +233,7 @@ func Load() (*Config, error) {
 		"secret_key",
 		"server_url",
 		"audit_log_retention_months",
+		"cluster_tombstone_retention_days",
 		"server_metrics_addr",
 		"worker_metrics_addr",
 		"login_failure_threshold",
@@ -276,6 +282,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "log_level", Value: "info"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
+		envconfig.Default{Key: "cluster_tombstone_retention_days", Value: 90},
 		envconfig.Default{Key: "login_failure_threshold", Value: 5},
 		envconfig.Default{Key: "lockout_duration_minutes", Value: 15},
 		envconfig.Default{Key: "totp_issuer", Value: "Astronomer"},

@@ -97,6 +97,12 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Webhook delivery retention sweep — daily at 04:00 (offset from
 		// the email-retention task to spread DB load).
 		{"0 4 * * *", tasks.WebhookCleanupOldType, "webhook delivery retention sweep (30d)"},
+		// Cluster tombstone retention (plan 005): hard-delete decommissioned
+		// cluster rows once past the retention window AND every archived
+		// audit row for the cluster is self-describing (archived_cluster_name
+		// backfilled by migration 139). Daily at 05:00 — next free slot after
+		// the 04:xx retention sweeps.
+		{"0 5 * * *", tasks.ClusterTombstoneRetentionType, "cluster tombstone retention sweep (90d default)"},
 		// Cluster template drift sweep (migration 049). Hourly cadence —
 		// the per-cluster drift check is cheap (two JSONB diffs against
 		// the snapshot) and the result feeds a UI badge, not an

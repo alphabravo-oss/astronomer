@@ -139,6 +139,10 @@ type RuntimeDependencies struct {
 	PlatformName            string
 	ServerURL               string
 	AuditLogRetentionMonths int
+	// ClusterTombstoneRetentionDays is how long decommissioned cluster rows
+	// (tombstones) are kept before the retention sweep hard-deletes them.
+	// Mirrors cfg.ClusterTombstoneRetentionDays; defaults to 90 when unset.
+	ClusterTombstoneRetentionDays int
 	// RegistrationTokenTTLHours (task A3) is the TTL the Connected=False
 	// remediation reissue stamps on the registration token it mints. Mirrors
 	// cfg.RegistrationTokenTTLHours; defaults to 1 when unset.
@@ -201,6 +205,9 @@ func ConfigureRuntime(deps RuntimeDependencies) {
 	}
 	if runtimeDeps.AuditLogRetentionMonths <= 0 {
 		runtimeDeps.AuditLogRetentionMonths = 13
+	}
+	if runtimeDeps.ClusterTombstoneRetentionDays <= 0 {
+		runtimeDeps.ClusterTombstoneRetentionDays = defaultClusterTombstoneRetentionDays
 	}
 	if runtimeDeps.RegistrationTokenTTLHours <= 0 {
 		runtimeDeps.RegistrationTokenTTLHours = 1

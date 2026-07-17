@@ -970,6 +970,56 @@ func (q *Queries) ListClustersDueForAgentTokenRotation(ctx context.Context, rowL
 	return items, nil
 }
 
+const listExpiredClusterTombstones = `-- name: ListExpiredClusterTombstones :many
+SELECT id, name, display_name, decommissioned_at
+FROM clusters
+WHERE decommissioned_at IS NOT NULL
+  AND decommissioned_at < $1
+  AND NOT EXISTS (
+      SELECT 1 FROM audit_archive a
+      WHERE a.archived_cluster_id = clusters.id
+        AND a.archived_cluster_name = ''
+  )
+ORDER BY decommissioned_at ASC
+`
+
+type ListExpiredClusterTombstonesRow struct {
+	ID               uuid.UUID          `json:"id"`
+	Name             string             `json:"name"`
+	DisplayName      string             `json:"display_name"`
+	DecommissionedAt pgtype.Timestamptz `json:"decommissioned_at"`
+}
+
+// Tombstone retention sweep: decommissioned cluster rows older than the
+// cutoff. The NOT EXISTS guard enforces "backfill first, purge second" at
+// runtime: a tombstone is skipped while any of its archived audit rows still
+// lack archived_cluster_name (migration 139), because the clusters row is
+// then the only way to name those rows.
+func (q *Queries) ListExpiredClusterTombstones(ctx context.Context, cutoff pgtype.Timestamptz) ([]ListExpiredClusterTombstonesRow, error) {
+	rows, err := q.db.Query(ctx, listExpiredClusterTombstones, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExpiredClusterTombstonesRow{}
+	for rows.Next() {
+		var i ListExpiredClusterTombstonesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.DecommissionedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markClusterAgentTokenAdopted = `-- name: MarkClusterAgentTokenAdopted :exec
 UPDATE cluster_agent_tokens SET adopted_at = now() WHERE id = $1 AND adopted_at IS NULL
 `

@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 219**
+**Total codes: 220**
 
 ## Codes by category
 
@@ -101,6 +101,7 @@ Dominant HTTP status: 400 · Provenance: seed
 | `TemplateDisabled` | `template_disabled` | 400 / 422 | indicates a template disabled condition. |
 | `UnknownKey` | `unknown_key` | 400 / 422 | indicates a unknown key condition. |
 | `UnsafeReplacementBlocked` | `unsafe_replacement_blocked` | 400 / 422 | indicates a unsafe replacement blocked condition. |
+| `UnsafeLeaveLocalBlocked` | `unsafe_leave_local_blocked` | 400 / 422 | indicates leave_local was refused because the component is running under ArgoCD and would be orphaned by it. |
 | `UnsupportedProvider` | `unsupported_provider` | 400 / 422 | indicates a unsupported provider condition. |
 | `UnsupportedType` | `unsupported_type` | 400 / 422 | indicates a unsupported type condition. |
 

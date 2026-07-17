@@ -115,6 +115,23 @@ WHERE id = sqlc.arg(id);
 -- name: DeleteCluster :exec
 DELETE FROM clusters WHERE id = $1;
 
+-- name: ListExpiredClusterTombstones :many
+-- Tombstone retention sweep: decommissioned cluster rows older than the
+-- cutoff. The NOT EXISTS guard enforces "backfill first, purge second" at
+-- runtime: a tombstone is skipped while any of its archived audit rows still
+-- lack archived_cluster_name (migration 139), because the clusters row is
+-- then the only way to name those rows.
+SELECT id, name, display_name, decommissioned_at
+FROM clusters
+WHERE decommissioned_at IS NOT NULL
+  AND decommissioned_at < sqlc.arg(cutoff)
+  AND NOT EXISTS (
+      SELECT 1 FROM audit_archive a
+      WHERE a.archived_cluster_id = clusters.id
+        AND a.archived_cluster_name = ''
+  )
+ORDER BY decommissioned_at ASC;
+
 -- name: CountClusters :one
 SELECT count(*) FROM clusters WHERE decommissioned_at IS NULL;
 

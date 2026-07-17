@@ -1245,6 +1245,12 @@ type Querier interface {
 	// NOT accumulate deliveries the dispatcher will never send (operators
 	// toggle the flag while keeping the config row around).
 	ListEnabledWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
+	// Tombstone retention sweep: decommissioned cluster rows older than the
+	// cutoff. The NOT EXISTS guard enforces "backfill first, purge second" at
+	// runtime: a tombstone is skipped while any of its archived audit rows still
+	// lack archived_cluster_name (migration 139), because the clusters row is
+	// then the only way to name those rows.
+	ListExpiredClusterTombstones(ctx context.Context, cutoff pgtype.Timestamptz) ([]ListExpiredClusterTombstonesRow, error)
 	ListExpiredKubectlSessions(ctx context.Context) ([]KubectlSession, error)
 	ListExpiredTerminalSnapshots(ctx context.Context, limit int32) ([]ClusterSnapshot, error)
 	// The reaper pulls rows that have been tombstoned for longer than the

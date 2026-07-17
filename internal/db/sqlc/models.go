@@ -311,6 +311,8 @@ type AuditArchive struct {
 	CorrelationID     string          `json:"correlation_id"`
 	ArchivedClusterID pgtype.UUID     `json:"archived_cluster_id"`
 	ArchivedAt        time.Time       `json:"archived_at"`
+	// Denormalized name of the decommissioned cluster this row was archived for; makes the row self-describing so the cluster tombstone can eventually be purged.
+	ArchivedClusterName string `json:"archived_cluster_name"`
 }
 
 type AuditLog struct {

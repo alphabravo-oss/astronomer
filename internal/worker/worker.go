@@ -254,6 +254,7 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(tasks.ApiserverAuditRetentionType, instrumentTask(tasks.ApiserverAuditRetentionType, tasks.HandleApiserverAuditRetention))
 	w.mux.HandleFunc(TypeRunScheduledBackups, instrumentTask(TypeRunScheduledBackups, tasks.HandleRunScheduledBackups))
 	w.mux.HandleFunc(TypeEnforceBackupRetention, instrumentTask(TypeEnforceBackupRetention, tasks.HandleEnforceBackupRetention))
+	w.mux.HandleFunc(tasks.ClusterTombstoneRetentionType, instrumentTask(tasks.ClusterTombstoneRetentionType, tasks.HandleClusterTombstoneRetention))
 	w.mux.HandleFunc(TypeRunRestore, instrumentTask(TypeRunRestore, tasks.HandleRunRestore))
 	w.mux.HandleFunc(TypeProjectReconcile, instrumentTask(TypeProjectReconcile, tasks.HandleProjectReconcile))
 	w.mux.HandleFunc(TypeProjectReconcileAll, instrumentTask(TypeProjectReconcileAll, tasks.HandleProjectReconcileAll))

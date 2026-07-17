@@ -142,16 +142,17 @@ func main() {
 		eventBus.AttachRedis(client, events.DefaultRedisChannel, log)
 	}
 	tasks.ConfigureRuntime(tasks.RuntimeDependencies{
-		Queries:                   sqlc.New(database.Pool()),
-		Log:                       log,
-		AgentImageRepo:            cfg.AgentImageRepository,
-		AgentImageTag:             cfg.AgentImageTag,
-		PlatformName:              "Astronomer",
-		AuditLogRetentionMonths:   cfg.AuditLogRetentionMonths,
-		RegistrationTokenTTLHours: cfg.RegistrationTokenTTLHours,
-		Leader:                    leader.New(database.Pool(), log),
-		Enqueuer:                  runtimeEnqueuer,
-		Bus:                       eventBus,
+		Queries:                       sqlc.New(database.Pool()),
+		Log:                           log,
+		AgentImageRepo:                cfg.AgentImageRepository,
+		AgentImageTag:                 cfg.AgentImageTag,
+		PlatformName:                  "Astronomer",
+		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
+		ClusterTombstoneRetentionDays: cfg.ClusterTombstoneRetentionDays,
+		RegistrationTokenTTLHours:     cfg.RegistrationTokenTTLHours,
+		Leader:                        leader.New(database.Pool(), log),
+		Enqueuer:                      runtimeEnqueuer,
+		Bus:                           eventBus,
 	})
 	var controlPlaneK8s kubernetes.Interface
 	var controlPlaneDyn dynamic.Interface
