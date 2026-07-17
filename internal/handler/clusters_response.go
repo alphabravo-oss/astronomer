@@ -123,9 +123,17 @@ type ClusterBaselineComponentOwner struct {
 // overwrite them after the call.
 func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 	resp := ClusterResponse{
-		ID:                    c.ID.String(),
-		Name:                  c.Name,
-		DisplayName:           c.DisplayName,
+		ID:   c.ID.String(),
+		Name: c.Name,
+		// display_name is optional and unset on most clusters — anything not
+		// named through the wizard (a raw manifest attach, an agent
+		// self-registration) only ever gets `name`. Callers overwhelmingly render
+		// this straight into a heading, so returning "" left the cluster's name
+		// blank on its own detail page. Fall back to name here, in the one
+		// mapping every cluster response goes through, rather than asking each
+		// call site to remember. Matches the ownership endpoint, which has always
+		// coalesced these two.
+		DisplayName: firstNonEmptyAgentValue(c.DisplayName, c.Name),
 		Description:           c.Description,
 		Status:                c.Status,
 		ApiServerUrl:          c.ApiServerUrl,
