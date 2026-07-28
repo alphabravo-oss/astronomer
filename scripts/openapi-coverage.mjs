@@ -23,11 +23,14 @@
 // nil-gated route (see KNOWN_NIL_GATED below).
 //
 // CAVEAT: docs/routes.json is walked from the route-security test router,
-// which leaves some handler dependencies nil. chi omits routes whose handler
-// pointer is nil, so a handful of real, documented routes are absent from the
-// dump through no fault of the spec. Those are listed in KNOWN_NIL_GATED so
-// --check does not raise false drift on them. Anything NOT on that list that is
-// documented-but-unrouted IS treated as genuine drift and fails --check.
+// which may leave a handler dependency nil. chi omits routes whose handler
+// pointer is nil, so such a route is absent from the dump through no fault of
+// the spec. Those are listed in KNOWN_NIL_GATED so --check does not raise false
+// drift on them. Anything NOT on that list that is documented-but-unrouted IS
+// treated as genuine drift and fails --check. Most of that list is now inert:
+// the test router wires nearly every handler dep (see
+// TestRouteSecurityRouterWiresEveryHandlerDependency), which is also why the
+// dump — and therefore the "missing" count — grew to the real route surface.
 
 import fs from 'node:fs';
 import path from 'node:path';

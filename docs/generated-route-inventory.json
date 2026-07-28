@@ -14,6 +14,80 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/admin/alerting/inhibitions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/alerting/inhibitions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/admin/alerting/inhibitions/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/alerting/inhibitions/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/admin/alerting/inhibitions/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/admin/network-policy-templates/",
     "handler_owner": "handler.NetworkPolicyHandler",
     "surface": "administrative API",
@@ -349,6 +423,981 @@
       "TestAgentFleetUpgradeDoesNotQueueBlockedPlan"
     ],
     "security_registry_id": "agent-fleet-upgrade-queue"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/channels/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/channels/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/alerting/channels/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/channels/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/alerting/channels/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/channels/{id}/test/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/events/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/events/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/events/{id}/acknowledge/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/events/{id}/resolve/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/rules/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/rules/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/alerting/rules/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/rules/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/alerting/rules/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/rules/{id}/disable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/rules/{id}/enable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/alerting/silences/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/silences/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/alerting/silences/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerting/silences/{id}/expire/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerts/rules/{id}/disable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerts/rules/{id}/enable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/alerts/silences/{id}/expire/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-alerts",
+    "risk_reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/anomaly-baselines/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/anomaly-baselines/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/applications/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/applications/{id}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/applications/{id}/history/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/applications/{id}/manifests/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/applications/{id}/refresh/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/applications/{id}/sync/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/clusters/{cluster_id}/ownership/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/clusters/{cluster_id}/ownership/{component_slug}/decision/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/controller/status/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/argocd/instances/{id}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/argocd/instances/{id}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applications/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applications/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applications/{name}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applications/{name}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applications/{name}/sync/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applicationsets/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applicationsets/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/argocd/instances/{id}/applicationsets/{name}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/cached-applications/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/{cluster_id}/refresh-labels/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/{cluster_id}/register/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/clusters/{cluster_id}/register/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/health/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/orphan-report/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/projects/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/projects/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/argocd/instances/{id}/projects/{name}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/argocd/instances/{id}/projects/{name}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/argocd/instances/{id}/repos/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/instances/{id}/repos/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/repos/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/instances/{id}/repos/test/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/operations/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/argocd/operations/{id}/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/argocd/operations/{id}/retry/",
+    "handler_owner": "handler.ArgoCDHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
   },
   {
     "method": "GET",
@@ -1130,6 +2179,32 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/catalog/recommendations/popular/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/recommendations/similar/{chart_id}/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/catalog/repositories/",
     "handler_owner": "handler.CatalogHandler",
     "surface": "catalog and application API",
@@ -1223,6 +2298,93 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "catalog-repository-test-connection"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charts/{chart_id}/ratings/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charts/{chart_id}/ratings/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "Per-chart ratings are user-owned content: create binds the row to the authenticated caller, and update/delete refuse unless the caller owns the rating or is a superuser. Blast radius is one review row, not platform state."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charts/{chart_id}/ratings/aggregate/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charts/{chart_id}/ratings/mine/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/charts/{chart_id}/ratings/{rating_id}/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "Per-chart ratings are user-owned content: create binds the row to the authenticated caller, and update/delete refuse unless the caller owns the rating or is a superuser. Blast radius is one review row, not platform state."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/charts/{chart_id}/ratings/{rating_id}/",
+    "handler_owner": "handler.ChartRatingsHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "Per-chart ratings are user-owned content: create binds the row to the authenticated caller, and update/delete refuse unless the caller owns the rating or is a superuser. Blast radius is one review row, not platform state."
   },
   {
     "method": "GET",
@@ -1596,6 +2758,45 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/gateway-classes/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/ingress-classes/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/limit-ranges/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/metrics/",
     "handler_owner": "handler.ResourceHandler / cluster extension handlers",
     "surface": "adopted cluster management API",
@@ -1640,6 +2841,19 @@
     "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/namespaces/",
     "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/network-policies/",
+    "handler_owner": "handler.NetworkPolicyHandler",
     "surface": "adopted cluster management API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
     "rbac": "route-specific read/list permission or handler-domain gate",
@@ -2187,6 +3401,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/resource-quotas/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/resources/generic/{resource_type}/",
     "handler_owner": "handler.ResourceHandler",
     "surface": "per-cluster generic Kubernetes resource list for Secrets",
@@ -2249,6 +3476,45 @@
     "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/",
     "handler_owner": "handler.ResourceHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/security/policy/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/security/scans/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/security/scans/{id}/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
     "surface": "adopted cluster management API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
     "rbac": "route-specific read/list permission or handler-domain gate",
@@ -2595,8 +3861,141 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/tools/status/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/velero-status/",
     "handler_owner": "handler.ClusterSnapshotsHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/diff/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/export.csv",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/history/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/images/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/progress/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/reports/{id}/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/rescan/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Requeues the Trivy scan job for one cluster behind requirePermission(clusters:read) — the same gate as the rest of that cluster's vulnerability surface. It creates no cluster state and its blast radius is a scan re-run on the owning cluster."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/vulnerabilities/summary/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
     "surface": "adopted cluster management API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
     "rbac": "route-specific read/list permission or handler-domain gate",
@@ -2828,6 +4227,67 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{id}/gatekeeper/constraints/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/gatekeeper/constraints/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Server-side apply and delete of custom ConstraintTemplates/Constraints require the write-clusters scope AND clusters:update — the same authority as editing the cluster. The validate POST is a dry-run that only needs clusters:read."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/gatekeeper/constraints/validate/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Server-side apply and delete of custom ConstraintTemplates/Constraints require the write-clusters scope AND clusters:update — the same authority as editing the cluster. The validate POST is a dry-run that only needs clusters:read."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/clusters/{id}/gatekeeper/constraints/{name}/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Server-side apply and delete of custom ConstraintTemplates/Constraints require the write-clusters scope AND clusters:update — the same authority as editing the cluster. The validate POST is a dry-run that only needs clusters:read."
   },
   {
     "method": "POST",
@@ -3199,6 +4659,312 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/controllers/alerts/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/controllers/alerts/{id}/acknowledge/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Fleet-wide controller policy, alert acknowledgement and alertmanager silences are platform-admin actions; every mutator is wrapped in requireSuperuser (handler.RequireSuperuser) at the router while the paired GETs require alerts:read/list (SEC-05)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/controllers/policy/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/controllers/policy/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Fleet-wide controller policy, alert acknowledgement and alertmanager silences are platform-admin actions; every mutator is wrapped in requireSuperuser (handler.RequireSuperuser) at the router while the paired GETs require alerts:read/list (SEC-05)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/controllers/silences/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/controllers/silences/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Fleet-wide controller policy, alert acknowledgement and alertmanager silences are platform-admin actions; every mutator is wrapped in requireSuperuser (handler.RequireSuperuser) at the router while the paired GETs require alerts:read/list (SEC-05)."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/controllers/silences/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Fleet-wide controller policy, alert acknowledgement and alertmanager silences are platform-admin actions; every mutator is wrapped in requireSuperuser (handler.RequireSuperuser) at the router while the paired GETs require alerts:read/list (SEC-05)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/controllers/status/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/dashboards/clusters/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/dashboards/global/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/dashboards/projects/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/extensions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/extensions/mounts/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/extensions/sample-manifest/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/validate/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/verify-bundle/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/{name}/data/{dataSourceId}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/{name}/disable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/{name}/enable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/extensions/{name}/token/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-settings",
+    "risk_reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/fleet-operations/",
     "handler_owner": "handler.FleetOperationHandler",
     "surface": "management API",
@@ -3302,6 +5068,292 @@
     "method": "GET",
     "pattern": "/api/v1/*/fleet-operations/{id}/targets/",
     "handler_owner": "handler.FleetOperationHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/controller/status/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/operations/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/operations/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/operations/{id}/retry/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/outputs/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/outputs/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/logging/outputs/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/logging/outputs/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/outputs/{id}/disable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/outputs/{id}/enable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/outputs/{id}/query/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/outputs/{id}/test/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/pipelines/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/pipelines/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/logging/pipelines/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/logging/pipelines/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/pipelines/{id}/disable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/logging/pipelines/{id}/enable/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/pipelines/{id}/fluentbit-config/",
+    "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
     "rbac": "route-specific read/list permission or handler-domain gate",
@@ -3439,6 +5491,51 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/native-rbac-rules/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/native-rbac-rules/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-rbac",
+    "risk_reason": "Authoring native per-CRD rules is an RBAC-management action, so it carries the write-rbac API-token scope plus requirePermission on rbac.ResourceRBAC (create on POST, delete on DELETE) — the same gate as role and binding CRUD."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/native-rbac-rules/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-rbac",
+    "risk_reason": "Authoring native per-CRD rules is an RBAC-management action, so it carries the write-rbac API-token scope plus requirePermission on rbac.ResourceRBAC (create on POST, delete on DELETE) — the same gate as role and binding CRUD."
   },
   {
     "method": "POST",
@@ -4564,6 +6661,248 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/security/controller/status/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/policies/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/security/policies/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/security/policies/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/security/policies/{id}/apply/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/profiles/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/scans/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/security/scans/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/scans/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/scans/{id}/report.csv",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/templates/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/security/templates/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/security/templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/security/templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-security",
+    "risk_reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/vulnerabilities/summary/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/security/vulnerabilities/top-clusters/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/settings/",
     "handler_owner": "handler.ResourceHandler / settings handlers",
     "surface": "platform settings API",
@@ -4574,6 +6913,193 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/controller/status/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/operations/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/operations/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/tools/operations/{id}/retry/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/slug/{slug}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/tools/{slug:[^/]+}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/tools/{slug}/adopt/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/tools/{slug}/install/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/tools/{slug}/preview/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/tools/{slug}/uninstall/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/tools/{slug}/upgrade/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
   },
   {
     "method": "POST",
@@ -4740,6 +7266,106 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/compliance/export/",
+    "handler_owner": "handler.ComplianceHandler",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance/exports/{id}/",
+    "handler_owner": "handler.ComplianceHandler",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/dashboard-widgets/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/dashboard-widgets/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/dashboard-widgets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/dashboard-widgets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/dashboard-widgets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/emails/",
     "handler_owner": "handler.SMTPHandler",
     "surface": "administrative API",
@@ -4753,8 +7379,288 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/gitops-sources/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/clusters/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/preview/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/sync/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/key-status/",
     "handler_owner": "internal/server keyStatusHandler",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/prometheus-datasources/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/prometheus-datasources/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/prometheus-datasources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/prometheus-datasources/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/prometheus-datasources/{id}/test/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/quota-plans/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/quota-plans/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/quota-plans/{name}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/quota-plans/{name}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/quota-plans/{name}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/quota-usage/",
+    "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "administrative API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
     "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
@@ -4808,6 +7714,64 @@
     ],
     "risk_classification": "covered-superuser-gated",
     "risk_reason": "Mint/revoke the static bearer tokens the /scim/v2 provisioning chain authenticates against; the routes sit inside the JWT auth chain and are superuser-gated inside the handler (RequireSuperuser), the same posture as /admin/settings. The plaintext token is returned once on create and only its SHA-256 hash is persisted, with create/revoke audited via RecordAuditFromRequest."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/settings/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/settings/{key}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/settings/{key}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/settings/{key}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-superuser-gated",
+    "risk_reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
   },
   {
     "method": "GET",
@@ -5035,6 +7999,19 @@
   {
     "method": "GET",
     "pattern": "/api/v1/auth/me/",
+    "handler_owner": "handler.AuthHandler / handler.SSOHandler",
+    "surface": "authentication and account security API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/me/quota/",
     "handler_owner": "handler.AuthHandler / handler.SSOHandler",
     "surface": "authentication and account security API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
@@ -5431,6 +8408,19 @@
     "security_registry_id": "remotedialer-pods-demo"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/compliance/posture/",
+    "handler_owner": "handler.CompliancePostureHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
     "method": "CONNECT",
     "pattern": "/api/v1/connect/{cluster_id}/",
     "handler_owner": "internal/tunnel2.RemoteServer",
@@ -5557,6 +8547,22 @@
     "security_registry_id": "remotedialer-connect"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/gitops/sources/{id}/webhook/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "A git provider cannot present a JWT, so this push endpoint is deliberately outside the auth chain: the handler compares the X-Astronomer-Webhook-Secret (or bearer) against the configured shared secret in constant time and 503s when no secret is configured. It triggers a sync of the one source named in the path and nothing else."
+  },
+  {
     "method": "CONNECT",
     "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*",
     "handler_owner": "handler.ArgoCD internal Kubernetes proxy",
@@ -5753,6 +8759,19 @@
       "TestK8sProxyExecuteUpstreamStripsClientAuthHeaders"
     ],
     "security_registry_id": "argocd-k8s-proxy"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}/quota/",
+    "handler_owner": "handler.QuotaHandler",
+    "surface": "project and tenancy API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "GET",
@@ -5808,6 +8827,45 @@
       "TestAuditLogRoutesRequireAuditLogRBAC"
     ],
     "security_registry_id": "legacy-settings-audit-log-list"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/banner/",
+    "handler_owner": "handler.ResourceHandler / settings handlers",
+    "surface": "platform settings API",
+    "auth": "router-level public read route; handler response must stay non-sensitive",
+    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/branding/",
+    "handler_owner": "handler.ResourceHandler / settings handlers",
+    "surface": "platform settings API",
+    "auth": "router-level public read route; handler response must stay non-sensitive",
+    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/features/",
+    "handler_owner": "handler.ResourceHandler / settings handlers",
+    "surface": "platform settings API",
+    "auth": "router-level public read route; handler response must stay non-sensitive",
+    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "GET",
@@ -6095,6 +9153,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/settings/registration/",
+    "handler_owner": "handler.ResourceHandler / settings handlers",
+    "surface": "platform settings API",
+    "auth": "router-level public read route; handler response must stay non-sensitive",
+    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/settings/sso/",
     "handler_owner": "handler.ResourceHandler / settings handlers",
     "surface": "platform settings API",
@@ -6119,6 +9190,19 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "settings-sso-create"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/sso/presets/",
+    "handler_owner": "handler.ResourceHandler / settings handlers",
+    "surface": "platform settings API",
+    "auth": "router-level public read route; handler response must stay non-sensitive",
+    "rbac": "not applicable for public read, or handler-specific read filtering",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "DELETE",
@@ -6174,6 +9258,35 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "settings-token-delete"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/streams/tickets/",
+    "handler_owner": "handler.StreamTicketHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Mints a short-lived single-use websocket ticket. requireAuth at the router; the handler binds the ticket to the CALLER's own user id and re-checks that caller's RBAC on the requested cluster for the stream kind (read for events/logs/registration, clusters:update for exec/shell), so a ticket can never exceed the permissions of the principal that requested it."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/support-bundle/",
+    "handler_owner": "handler.SupportBundleHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "GET",
@@ -6554,5 +9667,208 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "internal-tunnel-k8s"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Groups",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/scim/v2/Groups",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/scim/v2/Groups/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Groups/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/scim/v2/Groups/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/ResourceTypes",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Schemas",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/ServiceProviderConfig",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Users",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/scim/v2/Users",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/scim/v2/Users/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Users/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/scim/v2/Users/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/scim/v2/Users/{id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-token-gated",
+    "risk_reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
   }
 ]

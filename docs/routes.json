@@ -9,7 +9,87 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/alerting/inhibitions"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/alerting/inhibitions"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/alerting/inhibitions/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/alerting/inhibitions/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/alerting/inhibitions/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance/export"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance/exports/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/dashboard-widgets"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/dashboard-widgets"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/dashboard-widgets/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/dashboard-widgets/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/dashboard-widgets/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/emails"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/gitops-sources"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/gitops-sources/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/gitops-sources/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/clusters"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/gitops-sources/{id}/sync"
   },
   {
     "method": "GET",
@@ -37,6 +117,50 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/prometheus-datasources"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/prometheus-datasources"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/prometheus-datasources/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/prometheus-datasources/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/prometheus-datasources/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/quota-plans"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/quota-plans"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/quota-plans/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/quota-plans/{name}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/quota-plans/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/quota-usage"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/scim-tokens"
   },
   {
@@ -46,6 +170,22 @@
   {
     "method": "DELETE",
     "pattern": "/api/v1/admin/scim-tokens/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/settings"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/settings/{key}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/settings/{key}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/settings/{key}"
   },
   {
     "method": "GET",
@@ -169,6 +309,270 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/alerting/channels"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/channels"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/alerting/channels/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/alerting/channels/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/alerting/channels/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/channels/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/alerting/events"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/alerting/events/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/events/{id}/acknowledge"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/events/{id}/resolve"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/alerting/rules"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/rules"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/alerting/rules/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/alerting/rules/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/alerting/rules/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/rules/{id}/disable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/rules/{id}/enable"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/alerting/silences"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/silences"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/alerting/silences/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerting/silences/{id}/expire"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerts/rules/{id}/disable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerts/rules/{id}/enable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/alerts/silences/{id}/expire"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/anomaly-baselines"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/anomaly-baselines/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/applications"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/applications/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/applications/{id}/history"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/applications/{id}/manifests"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/applications/{id}/refresh"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/applications/{id}/sync"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/clusters/{cluster_id}/ownership"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/clusters/{cluster_id}/ownership/{component_slug}/decision"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/argocd/instances/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/argocd/instances/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/applications"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/applications"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/argocd/instances/{id}/applications/{name}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/argocd/instances/{id}/applications/{name}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/applications/{name}/sync"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/applicationsets"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/applicationsets"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/argocd/instances/{id}/applicationsets/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/cached-applications"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/clusters"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/refresh-labels"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/register"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/register"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/health"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/orphan-report"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/projects"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/projects"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/argocd/instances/{id}/projects/{name}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/argocd/instances/{id}/projects/{name}"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/argocd/instances/{id}/repos"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/instances/{id}/repos"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/repos"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/instances/{id}/repos/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/argocd/operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/argocd/operations/{id}/retry"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/audit"
   },
   {
@@ -242,6 +646,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/auth/me"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/me/quota"
   },
   {
     "method": "POST",
@@ -465,6 +873,14 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/catalog/recommendations/popular"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/recommendations/similar/{chart_id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/catalog/repositories"
   },
   {
@@ -490,6 +906,30 @@
   {
     "method": "POST",
     "pattern": "/api/v1/catalog/repositories/{id}/test-connection"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charts/{chart_id}/ratings"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charts/{chart_id}/ratings"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charts/{chart_id}/ratings/aggregate"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charts/{chart_id}/ratings/mine"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/charts/{chart_id}/ratings/{rating_id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/charts/{chart_id}/ratings/{rating_id}"
   },
   {
     "method": "GET",
@@ -600,6 +1040,14 @@
     "pattern": "/api/v1/clusters/{cluster_id}/events"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/gateway-classes"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/ingress-classes"
+  },
+  {
     "method": "CONNECT",
     "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
   },
@@ -637,6 +1085,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/limit-ranges"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/metrics"
   },
   {
@@ -650,6 +1102,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/namespaces"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/network-policies"
   },
   {
     "method": "GET",
@@ -785,6 +1241,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resource-quotas"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/resources/generic/{resource_type}"
   },
   {
@@ -802,6 +1262,18 @@
   {
     "method": "DELETE",
     "pattern": "/api/v1/clusters/{cluster_id}/resources/{resource_type}/{namespace}/{name}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/security/policy"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/security/scans"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/security/scans/{id}"
   },
   {
     "method": "GET",
@@ -901,7 +1373,47 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/tools/status"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/velero-status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/diff"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/export.csv"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/history"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/images"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/progress"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/rescan"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/summary"
   },
   {
     "method": "GET",
@@ -966,6 +1478,22 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{id}/decommission"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/gatekeeper/constraints"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/gatekeeper/constraints"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/gatekeeper/constraints/validate"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}/gatekeeper/constraints/{name}"
   },
   {
     "method": "POST",
@@ -1076,6 +1604,10 @@
     "pattern": "/api/v1/clusters/{id}/v2/pods"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/compliance/posture"
+  },
+  {
     "method": "CONNECT",
     "pattern": "/api/v1/connect/{cluster_id}"
   },
@@ -1110,6 +1642,90 @@
   {
     "method": "TRACE",
     "pattern": "/api/v1/connect/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/controllers/alerts"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/controllers/alerts/{id}/acknowledge"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/controllers/policy"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/controllers/policy"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/controllers/silences"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/controllers/silences"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/controllers/silences/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/controllers/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/dashboards/clusters/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/dashboards/global"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/dashboards/projects/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/extensions"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/extensions/mounts"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/extensions/sample-manifest"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions/validate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions/verify-bundle"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions/{name}/data/{dataSourceId}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions/{name}/disable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions/{name}/enable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/extensions/{name}/token"
   },
   {
     "method": "GET",
@@ -1144,6 +1760,10 @@
     "pattern": "/api/v1/fleet-operations/{id}/targets"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/gitops/sources/{id}/webhook"
+  },
+  {
     "method": "CONNECT",
     "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
   },
@@ -1178,6 +1798,82 @@
   {
     "method": "TRACE",
     "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/operations/{id}/retry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/outputs"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/outputs"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/logging/outputs/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/logging/outputs/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/outputs/{id}/disable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/outputs/{id}/enable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/outputs/{id}/query"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/outputs/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/pipelines"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/pipelines"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/logging/pipelines/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/logging/pipelines/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/pipelines/{id}/disable"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/logging/pipelines/{id}/enable"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/logging/pipelines/{id}/fluentbit-config"
   },
   {
     "method": "GET",
@@ -1214,6 +1910,18 @@
   {
     "method": "GET",
     "pattern": "/api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/native-rbac-rules"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/native-rbac-rules"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/native-rbac-rules/{id}"
   },
   {
     "method": "POST",
@@ -1298,6 +2006,10 @@
   {
     "method": "PATCH",
     "pattern": "/api/v1/projects/{id}/policy"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/projects/{id}/quota"
   },
   {
     "method": "GET",
@@ -1549,11 +2261,91 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/security/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/policies"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/security/policies"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/security/policies/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/security/policies/{id}/apply"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/profiles"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/scans"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/security/scans"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/scans/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/scans/{id}/report.csv"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/templates"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/security/templates"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/security/templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/templates/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/security/templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/vulnerabilities/summary"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/security/vulnerabilities/top-clusters"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/settings"
   },
   {
     "method": "GET",
     "pattern": "/api/v1/settings/audit-logs"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/banner"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/branding"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/features"
   },
   {
     "method": "GET",
@@ -1633,11 +2425,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/settings/registration"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/settings/sso"
   },
   {
     "method": "POST",
     "pattern": "/api/v1/settings/sso"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/sso/presets"
   },
   {
     "method": "DELETE",
@@ -1654,6 +2454,66 @@
   {
     "method": "DELETE",
     "pattern": "/api/v1/settings/tokens/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/streams/tickets"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/support-bundle"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools/operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools/operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/tools/operations/{id}/retry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools/slug/{slug}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/tools/{slug}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/tools/{slug}/adopt"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/tools/{slug}/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/tools/{slug}/preview"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/tools/{slug}/uninstall"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/tools/{slug}/upgrade"
   },
   {
     "method": "GET",
@@ -1806,5 +2666,61 @@
   {
     "method": "POST",
     "pattern": "/internal/tunnel/k8s/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Groups"
+  },
+  {
+    "method": "POST",
+    "pattern": "/scim/v2/Groups"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/scim/v2/Groups/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Groups/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/scim/v2/Groups/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/ResourceTypes"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Schemas"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/ServiceProviderConfig"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Users"
+  },
+  {
+    "method": "POST",
+    "pattern": "/scim/v2/Users"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/scim/v2/Users/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/scim/v2/Users/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/scim/v2/Users/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/scim/v2/Users/{id}"
   }
 ]

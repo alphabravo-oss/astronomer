@@ -6,11 +6,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -440,6 +442,99 @@ func TestHighRiskRoutesDenyUnauthenticatedRequests(t *testing.T) {
 	}
 }
 
+// TestEveryRouteDeniesUnauthenticatedRequests is the default-deny complement of
+// TestHighRiskRoutesDenyUnauthenticatedRequests, which is opt-in: it only
+// checks routes somebody remembered to add to docs/security-sensitive-routes.json.
+// This sweeps the whole wired router instead, so a new route registered on a
+// group that carries no requireAuth fails here immediately rather than waiting
+// for an audit — which is exactly how GET /api/v1/settings/monitoring/backend/
+// answered anonymous callers with the backend's decoded authConfig.
+//
+// The allow-set is the union of the two existing public predicates plus the
+// non-/api/v1 surfaces that authenticate by other means (the agent CONNECT
+// handshake, the PSK-guarded internal tunnel listeners, the ArgoCD UI proxy,
+// and the health probes).
+func TestEveryRouteDeniesUnauthenticatedRequests(t *testing.T) {
+	router, _ := newRouteSecurityRouter(t)
+
+	var offenders []string
+	if err := chi.Walk(router, func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		req := httptest.NewRequest(methodForRoute(method), routeSweepSamplePath(route), nil)
+		req.Header.Set("Accept", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			return nil
+		}
+		// Consult the allow-list only for routes that actually admitted the
+		// anonymous request, so a listed pattern that later grows a real auth
+		// gate keeps being verified rather than silently skipped.
+		if isRouterAnonymousReachablePattern(normalizeRoutePattern(route)) {
+			return nil
+		}
+		offenders = append(offenders, fmt.Sprintf("%s %s -> %d", method, route, rec.Code))
+		return nil
+	}); err != nil {
+		t.Fatalf("walk router: %v", err)
+	}
+	if len(offenders) > 0 {
+		sort.Strings(offenders)
+		t.Fatalf("routes reachable without authentication (add requireAuth, or add the pattern to isRouterPublicReadPattern/isPublicAuthFlow if it is genuinely public):\n%s", strings.Join(offenders, "\n"))
+	}
+}
+
+// isRouterAnonymousReachablePattern is the enforcement allow-list for the
+// default-deny sweep. Unlike isRouterPublicReadPattern (which only feeds the
+// descriptive inventory), a pattern listed here is a deliberate decision that
+// anonymous traffic may reach it.
+func isRouterAnonymousReachablePattern(pattern string) bool {
+	if isRouterPublicReadPattern(pattern) || isPublicAuthFlow(pattern) {
+		return true
+	}
+	// A git provider cannot present a JWT: the handler authenticates the push
+	// with the X-Astronomer-Webhook-Secret shared secret and 503s until one is
+	// configured (which is why it answers here at all).
+	if pattern == "/api/v1/gitops/sources/{id}/webhook" {
+		return true
+	}
+	for _, prefix := range []string{
+		"/health",
+		"/readyz",
+		"/argocd",
+		"/helm-repo",
+		"/api/v1/openapi.yaml",
+		"/api/v1/docs",
+		// Agent CONNECT: authenticated by the join/agent token inside the
+		// websocket handshake, not by the JWT middleware.
+		"/api/v1/connect",
+		// PSK-guarded cross-pod tunnel listeners.
+		"/api/v1/internal",
+		"/internal/tunnel",
+	} {
+		if pattern == prefix || strings.HasPrefix(pattern, prefix+"/") || strings.HasPrefix(pattern, prefix+"{") {
+			return true
+		}
+	}
+	return false
+}
+
+// routeSweepSamplePath turns a chi pattern into a concrete request path. The
+// sweep only inspects the auth status, so any syntactically valid substitution
+// works — UUIDs satisfy the handlers that parse their id params before the
+// auth middleware would otherwise be reached.
+func routeSweepSamplePath(route string) string {
+	segments := strings.Split(route, "/")
+	for i, segment := range segments {
+		switch {
+		case segment == "*":
+			segments[i] = "sweep"
+		case strings.HasPrefix(segment, "{"):
+			segments[i] = uuid.NewString()
+		}
+	}
+	return strings.Join(segments, "/")
+}
+
 func TestRouteInventoryCanBeGenerated(t *testing.T) {
 	router, _ := newRouteSecurityRouter(t)
 	entries := collectRouteInventory(t, router)
@@ -783,6 +878,12 @@ func TestAuditLogRoutesRequireAuditLogRBAC(t *testing.T) {
 
 func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 	t.Helper()
+	deps, clusterID := routeSecurityRouterDependencies(t)
+	return NewRouter(&config.Config{}, deps), clusterID
+}
+
+func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) {
+	t.Helper()
 	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	hub := tunnel.NewHub(slog.Default())
@@ -796,7 +897,7 @@ func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 	}
 	shellHandler := handler.NewKubectlShellHandler(routeSecurityShellQuerier{}, nil, rbac.NewEngine(), kubectl.Deps{})
 	shellHandler.SetStreamAuth(jwtMgr, nil)
-	router := NewRouter(&config.Config{}, RouterDependencies{
+	return RouterDependencies{
 		JWT:                 jwtMgr,
 		RBACEngine:          rbac.NewEngine(),
 		RBACQueries:         routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
@@ -843,8 +944,115 @@ func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 		ArgoCDUIProxy:     argoUIProxy,
 		KubectlShell:      shellHandler,
 		SCIMTokenAdmin:    handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
-	})
-	return router, clusterID.String()
+		// Every handler-typed dep below gates a whole route group behind a
+		// `deps.X != nil` check. While they were nil, those groups were
+		// invisible to EVERY registry-driven test in this file — the route
+		// table golden, the generated inventory, the CSRF sweep, the
+		// classification sweep and the default-deny sweep all walked a router
+		// that simply did not contain them. That is how the monitoring routes
+		// went unnoticed. Nil-arg constructors are enough for router-shape
+		// tests: the group must be MOUNTED, the handlers never run.
+		// TestRouteSecurityRouterWiresEveryHandlerDependency keeps this list
+		// honest.
+		Alerting:          handler.NewAlertingHandler(nil),
+		Anomaly:           handler.NewAnomalyHandler(nil),
+		ArgoCD:            handler.NewArgoCDHandler(nil),
+		ChartRatings:      handler.NewChartRatingsHandler(nil),
+		ClusterResources:  handler.NewClusterResourcesHandler(nil),
+		Compliance:        handler.NewComplianceHandler(nil, nil),
+		CompliancePosture: handler.NewCompliancePostureHandler(nil, 0),
+		ControlPlane:      handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil),
+		Dashboards:        handler.NewDashboardHandler(nil),
+		Extensions:        handler.NewExtensionHandler(nil),
+		Gatekeeper:        handler.NewGatekeeperConstraintsHandler(nil, nil),
+		GitOps:            handler.NewGitOpsHandler(nil, nil, slog.Default()),
+		ImageVulns:        handler.NewImageVulnHandler(nil),
+		Logging:           handler.NewLoggingHandler(nil),
+		NativeRBAC:        handler.NewNativeRBACHandler(nil),
+		PlatformSettings:  handler.NewPlatformSettingsHandler(nil),
+		Quotas:            handler.NewQuotaHandler(nil),
+		SCIM:              handler.NewSCIMHandler(nil),
+		SSOPresets:        handler.NewSSOPresetsHandler(),
+		Security:          handler.NewSecurityHandler(nil),
+		StreamTickets:     handler.NewStreamTicketHandler(nil),
+		SupportBundle:     handler.NewSupportBundleHandler(nil, nil, ""),
+		Tools:             handler.NewToolHandler(nil),
+	}, clusterID.String()
+}
+
+// TestRouteSecurityRouterWiresEveryHandlerDependency is the structural backstop
+// for the bug class above: a handler-typed RouterDependencies field left nil in
+// newRouteSecurityRouter silently removes its whole route group from every
+// registry-driven test in this file. Reflect over the struct so adding a new
+// handler dep fails HERE (loudly, with the field name) instead of quietly
+// shrinking the audited surface.
+func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
+	deps, _ := routeSecurityRouterDependencies(t)
+	value := reflect.ValueOf(deps)
+	typ := value.Type()
+
+	var unwired []string
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if field.Type.Kind() != reflect.Ptr {
+			continue
+		}
+		elem := field.Type.Elem()
+		// Only the handler-owned route groups: those are the ones guarded by a
+		// `deps.X != nil` check in the route registration functions.
+		if elem.PkgPath() != "github.com/alphabravocompany/astronomer-go/internal/handler" {
+			continue
+		}
+		if routeSecurityRouterOptionalDeps[field.Name] {
+			continue
+		}
+		if value.Field(i).IsNil() {
+			unwired = append(unwired, field.Name)
+		}
+	}
+	if len(unwired) > 0 {
+		sort.Strings(unwired)
+		t.Fatalf("newRouteSecurityRouter leaves handler deps nil, hiding their routes from every route-security test:\n%s", strings.Join(unwired, "\n"))
+	}
+}
+
+// routeSecurityRouterOptionalDeps are handler deps deliberately left nil in the
+// test router, each for a reason that is NOT "nobody got around to it":
+// off-by-default feature surfaces, and handlers whose routes are already walked
+// through a different dep.
+var routeSecurityRouterOptionalDeps = map[string]bool{
+	// Off unless the operator opts in; the router must stay byte-for-byte
+	// unchanged by default, which is itself asserted elsewhere.
+	"ControlPlaneSnapshots": true,
+	"ManagementLogs":        true,
+	// Encryptor-dependent admin surfaces: constructing them with a nil
+	// encryptor would register routes that cannot exist in a real deployment
+	// without one.
+	"SIEMForwarders":        true,
+	"NotificationTemplates": true,
+	"GroupMappings":         true,
+	// Serve the embedded OpenAPI spec / Swagger UI and the platform Helm repo:
+	// static asset surfaces with no authz to audit.
+	"Docs":           true,
+	"PlatformCharts": true,
+	// Not route-owning: caches, policy evaluators and sub-handlers reached
+	// through another dep.
+	"SettingsCache": true,
+	// Remaining unmounted admin/platform surfaces. Wiring these is the next
+	// increment of the same cleanup; they are listed explicitly so the gap is
+	// visible rather than implied by a nil field.
+	"AdminDrill":               true,
+	"AdminQueues":              true,
+	"AdminTaskOutbox":          true,
+	"ComplianceBaselines":      true,
+	"EventStream":              true,
+	"License":                  true,
+	"Maintenance":              true,
+	"PlatformBaselineCoverage": true,
+	"PlatformDefaultTemplate":  true,
+	"PlatformHealth":           true,
+	"ReadAuditPolicies":        true,
+	"SSO":                      true,
 }
 
 func TestAdminRouteRegistrationsAreAuthProtected(t *testing.T) {
@@ -2930,7 +3138,7 @@ func isPublicAuthFlow(pattern string) bool {
 
 func isRouterPublicReadPattern(pattern string) bool {
 	switch pattern {
-	case "/api/v1/settings/general", "/api/v1/settings/sso", "/api/v1/settings/sso/presets", "/api/v1/settings/branding", "/api/v1/settings/banner", "/api/v1/settings/features":
+	case "/api/v1/settings/general", "/api/v1/settings/sso", "/api/v1/settings/sso/presets", "/api/v1/settings/branding", "/api/v1/settings/banner", "/api/v1/settings/registration", "/api/v1/settings/features":
 		return true
 	case "/api/v1/register/ca.crt":
 		return true

@@ -119,6 +119,271 @@
       ],
       "classification": "covered-rbac-global-monitoring",
       "reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
+    },
+    {
+      "id": "alerting-surface-rbac",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/alerting/channels",
+        "/api/v1/alerting/channels/{id}",
+        "/api/v1/alerting/channels/{id}/test",
+        "/api/v1/alerting/rules",
+        "/api/v1/alerting/rules/{id}",
+        "/api/v1/alerting/rules/{id}/enable",
+        "/api/v1/alerting/rules/{id}/disable",
+        "/api/v1/alerting/events/{id}/acknowledge",
+        "/api/v1/alerting/events/{id}/resolve",
+        "/api/v1/alerting/silences",
+        "/api/v1/alerting/silences/{id}",
+        "/api/v1/alerting/silences/{id}/expire",
+        "/api/v1/alerts/rules/{id}/enable",
+        "/api/v1/alerts/rules/{id}/disable",
+        "/api/v1/alerts/silences/{id}/expire",
+        "/api/v1/admin/alerting/inhibitions",
+        "/api/v1/admin/alerting/inhibitions/{id}"
+      ],
+      "classification": "covered-rbac-global-alerts",
+      "reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+    },
+    {
+      "id": "control-plane-controllers-superuser",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/controllers/policy",
+        "/api/v1/controllers/alerts/{id}/acknowledge",
+        "/api/v1/controllers/silences",
+        "/api/v1/controllers/silences/{id}"
+      ],
+      "classification": "covered-superuser-gated",
+      "reason": "Fleet-wide controller policy, alert acknowledgement and alertmanager silences are platform-admin actions; every mutator is wrapped in requireSuperuser (handler.RequireSuperuser) at the router while the paired GETs require alerts:read/list (SEC-05)."
+    },
+    {
+      "id": "platform-admin-scope-gated-crud",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/admin/settings/{key}",
+        "/api/v1/admin/dashboard-widgets",
+        "/api/v1/admin/dashboard-widgets/{id}",
+        "/api/v1/admin/prometheus-datasources",
+        "/api/v1/admin/prometheus-datasources/{id}",
+        "/api/v1/admin/prometheus-datasources/{id}/test",
+        "/api/v1/admin/quota-plans",
+        "/api/v1/admin/quota-plans/{name}",
+        "/api/v1/admin/gitops-sources",
+        "/api/v1/admin/gitops-sources/{id}",
+        "/api/v1/admin/gitops-sources/{id}/sync"
+      ],
+      "classification": "covered-superuser-gated",
+      "reason": "Platform-admin registries (global settings, dashboard widgets, Prometheus datasources, quota plans, GitOps sources). Each mutator is registered with requireAuth + requireScope(ScopeAdmin) so a read- or write-clusters-scoped API token is rejected at the router, and the handlers gate on superuser themselves so non-admin sessions get a clean 403."
+    },
+    {
+      "id": "security-surface-rbac",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/security/templates",
+        "/api/v1/security/templates/{id}",
+        "/api/v1/security/policies",
+        "/api/v1/security/policies/{id}",
+        "/api/v1/security/policies/{id}/apply",
+        "/api/v1/security/scans"
+      ],
+      "classification": "covered-rbac-global-security",
+      "reason": "Template/policy/scan mutators carry per-verb requirePermission on rbac.ResourceSecurity (create/update/delete). ApplyPolicy and CreateScan push configuration to a managed cluster through the tunnel and additionally require the write-clusters API-token scope."
+    },
+    {
+      "id": "gatekeeper-constraint-authoring",
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/clusters/{id}/gatekeeper/constraints",
+        "/api/v1/clusters/{id}/gatekeeper/constraints/{name}",
+        "/api/v1/clusters/{id}/gatekeeper/constraints/validate"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Server-side apply and delete of custom ConstraintTemplates/Constraints require the write-clusters scope AND clusters:update — the same authority as editing the cluster. The validate POST is a dry-run that only needs clusters:read."
+    },
+    {
+      "id": "native-rbac-rule-authoring",
+      "methods": [
+        "POST",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/native-rbac-rules",
+        "/api/v1/native-rbac-rules/{id}"
+      ],
+      "classification": "covered-rbac-global-rbac",
+      "reason": "Authoring native per-CRD rules is an RBAC-management action, so it carries the write-rbac API-token scope plus requirePermission on rbac.ResourceRBAC (create on POST, delete on DELETE) — the same gate as role and binding CRUD."
+    },
+    {
+      "id": "extensions-install-and-bridge",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/extensions",
+        "/api/v1/extensions/validate",
+        "/api/v1/extensions/verify-bundle",
+        "/api/v1/extensions/{name}/enable",
+        "/api/v1/extensions/{name}/disable",
+        "/api/v1/extensions/{name}/data/{dataSourceId}",
+        "/api/v1/extensions/{name}/token"
+      ],
+      "classification": "covered-rbac-global-settings",
+      "reason": "Install/enable/disable/verify-bundle require ScopeAdmin plus settings:update. The tenant-facing data proxy and bridge-token mint are deliberately only settings:read at the router: the real gate is inside ProxyData/IssueTicket, which re-checks the CALLING user's own RBAC against the manifest's declared dataSource, so an extension can never exceed its user."
+    },
+    {
+      "id": "argocd-lifecycle-cluster-scoped",
+      "methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/argocd/instances",
+        "/api/v1/argocd/instances/{id}",
+        "/api/v1/argocd/instances/{id}/applications",
+        "/api/v1/argocd/instances/{id}/applications/{name}",
+        "/api/v1/argocd/instances/{id}/applications/{name}/sync",
+        "/api/v1/argocd/instances/{id}/applicationsets",
+        "/api/v1/argocd/instances/{id}/applicationsets/{name}",
+        "/api/v1/argocd/instances/{id}/projects",
+        "/api/v1/argocd/instances/{id}/projects/{name}",
+        "/api/v1/argocd/instances/{id}/repos",
+        "/api/v1/argocd/instances/{id}/repos/test",
+        "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/register",
+        "/api/v1/argocd/instances/{id}/clusters/{cluster_id}/refresh-labels",
+        "/api/v1/argocd/applications/{id}/sync",
+        "/api/v1/argocd/applications/{id}/refresh",
+        "/api/v1/argocd/clusters/{cluster_id}/ownership/{component_slug}/decision",
+        "/api/v1/argocd/operations/{id}/retry"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    },
+    {
+      "id": "logging-pipeline-cluster-scoped",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/logging/outputs",
+        "/api/v1/logging/outputs/{id}",
+        "/api/v1/logging/outputs/{id}/enable",
+        "/api/v1/logging/outputs/{id}/disable",
+        "/api/v1/logging/outputs/{id}/test",
+        "/api/v1/logging/outputs/{id}/query",
+        "/api/v1/logging/pipelines",
+        "/api/v1/logging/pipelines/{id}",
+        "/api/v1/logging/pipelines/{id}/enable",
+        "/api/v1/logging/pipelines/{id}/disable",
+        "/api/v1/logging/operations/{id}/retry"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed."
+    },
+    {
+      "id": "tools-catalog-cluster-scoped",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/tools/{slug}/preview",
+        "/api/v1/tools/{slug}/install",
+        "/api/v1/tools/{slug}/upgrade",
+        "/api/v1/tools/{slug}/uninstall",
+        "/api/v1/tools/{slug}/adopt",
+        "/api/v1/tools/operations/{id}/retry"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+    },
+    {
+      "id": "chart-rating-owner-scoped",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/charts/{chart_id}/ratings",
+        "/api/v1/charts/{chart_id}/ratings/{rating_id}"
+      ],
+      "classification": "covered-owner-scoped",
+      "reason": "Per-chart ratings are user-owned content: create binds the row to the authenticated caller, and update/delete refuse unless the caller owns the rating or is a superuser. Blast radius is one review row, not platform state."
+    },
+    {
+      "id": "image-vuln-rescan-cluster-scoped",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/clusters/{cluster_id}/vulnerabilities/rescan"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Requeues the Trivy scan job for one cluster behind requirePermission(clusters:read) — the same gate as the rest of that cluster's vulnerability surface. It creates no cluster state and its blast radius is a scan re-run on the owning cluster."
+    },
+    {
+      "id": "stream-ticket-mint",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/streams/tickets"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Mints a short-lived single-use websocket ticket. requireAuth at the router; the handler binds the ticket to the CALLER's own user id and re-checks that caller's RBAC on the requested cluster for the stream kind (read for events/logs/registration, clusters:update for exec/shell), so a ticket can never exceed the permissions of the principal that requested it."
+    },
+    {
+      "id": "scim-provisioning-bearer-token",
+      "methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "patterns": [
+        "/scim/v2/Users",
+        "/scim/v2/Users/{id}",
+        "/scim/v2/Groups",
+        "/scim/v2/Groups/{id}"
+      ],
+      "classification": "covered-token-gated",
+      "reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
+    },
+    {
+      "id": "gitops-push-webhook-shared-secret",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/gitops/sources/{id}/webhook"
+      ],
+      "classification": "covered-token-gated",
+      "reason": "A git provider cannot present a JWT, so this push endpoint is deliberately outside the auth chain: the handler compares the X-Astronomer-Webhook-Secret (or bearer) against the configured shared secret in constant time and 503s when no secret is configured. It triggers a sync of the one source named in the path and nothing else."
     }
   ]
 }
