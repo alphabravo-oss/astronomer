@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -26,7 +28,7 @@ type recordingSender struct {
 	msgs []*protocol.Message
 }
 
-func (r *recordingSender) Send(msg *protocol.Message) error {
+func (r *recordingSender) SendBlocking(_ context.Context, msg *protocol.Message) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.msgs = append(r.msgs, msg)
@@ -45,7 +47,7 @@ type failingSender struct {
 	err error
 }
 
-func (f failingSender) Send(*protocol.Message) error {
+func (f failingSender) SendBlocking(context.Context, *protocol.Message) error {
 	return f.err
 }
 
@@ -523,4 +525,158 @@ type testWriter struct{ t *testing.T }
 func (w testWriter) Write(p []byte) (int, error) {
 	w.t.Logf("%s", string(p))
 	return len(p), nil
+}
+
+// TestReplayAllPacedUnderBoundedSender is the item-1 counterpart on the bulk
+// producer side: a reconnect replay of a large cluster must complete over the
+// SAME 256-slot send queue that the burst saturates, pacing itself against the
+// drain rate instead of shedding objects or closing the connection.
+//
+// It runs against a real *TunnelClient — the policy under test is the tunnel's,
+// not a fake's — with a consumer held off until the queue is provably full, so
+// the replay definitely meets a saturated channel rather than racing a fast
+// reader.
+//
+// Before the fix, replayAll called the non-blocking Send in a tight loop with no
+// pacing: object 257 overflowed, Send spawned failClose, IsConnected went false,
+// and every remaining object of the 5000 was discarded — after which the
+// reconnect drove another false->true edge and replayed the whole thing again.
+func TestReplayAllPacedUnderBoundedSender(t *testing.T) {
+	const objects = 5000
+
+	// Keep the production pacing shape but at a rate a test can afford.
+	defer func(prev int) { replayRatePerSecond = prev }(replayRatePerSecond)
+	replayRatePerSecond = 20000
+
+	tc := NewTunnelClient(testConfig(), testLogger())
+	tc.setConnected(true)
+
+	watcher := &fakeStateWatcher{}
+	watcher.setConnected(true)
+
+	subscriber := NewStateSubscriber(nil, tc, slog.New(slog.NewTextHandler(testWriter{t}, nil)))
+	subscriber.SetConnectionWatcher(watcher)
+
+	store := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	for i := 0; i < objects; i++ {
+		if err := store.Add(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name:            fmt.Sprintf("pod-%d", i),
+			Namespace:       "default",
+			ResourceVersion: "1",
+		}}); err != nil {
+			t.Fatalf("seed store: %v", err)
+		}
+	}
+	subscriber.recordStore("Pod", "", "v1", store, alwaysSynced)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Hold the consumer until the queue is provably saturated, then drain.
+	saturated := make(chan struct{})
+	var received atomic.Int64
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for len(tc.sendCh) < sendQueueSize {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			time.Sleep(time.Millisecond)
+		}
+		close(saturated)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-tc.sendCh:
+				if msg.Type == protocol.MsgStateUpdate {
+					received.Add(1)
+				}
+			}
+		}
+	}()
+
+	subscriber.replayAll(ctx)
+
+	select {
+	case <-saturated:
+	default:
+		t.Fatal("the send queue never saturated; the test did not exercise backpressure")
+	}
+	if !tc.IsConnected() {
+		t.Fatal("a bounded-sender replay closed the tunnel; the reconnect would replay it again")
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for received.Load() < objects && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := received.Load(); got != objects {
+		t.Fatalf("replayed %d of %d cached objects; a paced replay must lose none", got, objects)
+	}
+
+	cancel()
+	<-drained
+}
+
+// TestReplayAllAbandonsWhenTunnelDropsMidReplay: a replay into a connection
+// that has died must stop, not spend its full pacing budget filling a queue
+// nothing will ever drain. The next false->true edge starts a complete replay.
+func TestReplayAllAbandonsWhenTunnelDropsMidReplay(t *testing.T) {
+	defer func(prev int) { replayRatePerSecond = prev }(replayRatePerSecond)
+	replayRatePerSecond = 20000
+
+	tc := NewTunnelClient(testConfig(), testLogger())
+	tc.setConnected(true)
+
+	watcher := &fakeStateWatcher{}
+	watcher.setConnected(true)
+
+	subscriber := NewStateSubscriber(nil, tc, slog.New(slog.NewTextHandler(testWriter{t}, nil)))
+	subscriber.SetConnectionWatcher(watcher)
+
+	store := cache.NewStore(cache.MetaNamespaceKeyFunc)
+	for i := 0; i < 5000; i++ {
+		if err := store.Add(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name:            fmt.Sprintf("pod-%d", i),
+			Namespace:       "default",
+			ResourceVersion: "1",
+		}}); err != nil {
+			t.Fatalf("seed store: %v", err)
+		}
+	}
+	subscriber.recordStore("Pod", "", "v1", store, alwaysSynced)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Drop the tunnel as soon as the replay has queued a few frames.
+	go func() {
+		for len(tc.sendCh) < 8 {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			time.Sleep(time.Millisecond)
+		}
+		watcher.setConnected(false)
+	}()
+
+	done := make(chan struct{})
+	go func() { defer close(done); subscriber.replayAll(ctx) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("replayAll did not abandon after the tunnel dropped")
+	}
+
+	// Far short of 5000: the walk stopped instead of draining the whole cache
+	// into a dead connection.
+	if queued := len(tc.sendCh); queued >= sendQueueSize {
+		t.Fatalf("replay queued %d frames into a dropped tunnel; it should have abandoned early", queued)
+	}
 }

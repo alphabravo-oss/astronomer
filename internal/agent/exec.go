@@ -105,8 +105,18 @@ func (h *ExecHandler) HandleExecStart(ctx context.Context, msg *protocol.Message
 	stdoutW := &tunnelWriter{streamID: streamID, stream: "stdout", sendFn: sendFn}
 	stderrW := &tunnelWriter{streamID: streamID, stream: "stderr", sendFn: sendFn}
 
+	// The in-flight permit readLoop took for this EXEC_START belongs to the
+	// SESSION, not to this call: HandleExecStart returns as soon as the exec is
+	// launched, while the goroutine below holds an open apiserver stream and a
+	// live shell for as long as the user keeps it. Releasing it on return would
+	// let a peer open unbounded concurrent exec sessions.
+	releasePermit := adoptDispatchPermit(ctx)
+
 	// Run the exec in a goroutine.
 	go func() {
+		// Registered first so it runs LAST: the permit is returned only once
+		// the session is fully torn down and EXEC_END has been queued.
+		defer releasePermit()
 		defer func() {
 			h.mu.Lock()
 			delete(h.sessions, streamID)

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
@@ -169,8 +170,12 @@ const (
 // stateSender is the minimal slice of TunnelClient the subscriber needs.
 // Defining the interface here (instead of taking *TunnelClient directly)
 // keeps the subscriber unit-testable without spinning up a tunnel.
+//
+// SendBlocking, not Send: STATE_UPDATE is the highest-volume producer on the
+// tunnel and the reconnect replay is its worst burst, so it must feel
+// backpressure rather than discard frames the instant the queue is full.
 type stateSender interface {
-	Send(msg *protocol.Message) error
+	SendBlocking(ctx context.Context, msg *protocol.Message) error
 }
 
 // StateConnectionWatcher is the narrow tunnel-state surface the reconnect-
@@ -189,6 +194,13 @@ type stateStoreEntry struct {
 	apiGroup   string
 	apiVersion string
 	store      cache.Store
+	// hasSynced is the informer's own sync predicate. Replay does not need it
+	// (it only runs after the subscriber is ready), but the inventory readers
+	// below do: subscriber readiness is set even when SOME informers failed to
+	// sync, so an RBAC-denied Pod informer would otherwise present an empty
+	// store as an authoritative "zero pods". nil means "unknown", treated as
+	// not synced by the inventory readers.
+	hasSynced func() bool
 }
 
 // stateRateLimiter collapses bursty informer events to at most one emit per
@@ -294,11 +306,18 @@ type StateSubscriber struct {
 	// polls. nil-safe: when unwired (tests / older callers) the replay goroutine
 	// is never started, so behavior is exactly as before.
 	conn StateConnectionWatcher
+
+	// runCtx is Run's context, captured so the informer callbacks — which take
+	// no context of their own — can bound their blocking send and abandon it on
+	// shutdown. Written once at the top of Run, before any informer is started,
+	// so every reader is ordered after the write.
+	runCtx context.Context
 }
 
 // NewStateSubscriber constructs a StateSubscriber. The sender must be a live
-// tunnel client; the subscriber will never block on it (Send returns an error
-// if the channel is full and the message is dropped).
+// tunnel client; the subscriber applies backpressure through it (SendBlocking
+// waits a bounded time for queue room and only then drops the update, which is
+// safe for best-effort invalidation hints).
 func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *slog.Logger) *StateSubscriber {
 	if log == nil {
 		log = slog.Default()
@@ -368,6 +387,7 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 		s.log.Warn("state subscriber: nil clientset, skipping live updates")
 		return
 	}
+	s.runCtx = ctx
 
 	factory := informers.NewSharedInformerFactory(s.client, getStateSubscriberResyncPeriod())
 
@@ -535,7 +555,7 @@ func (s *StateSubscriber) registerEvents(factory informers.SharedInformerFactory
 // logic only lives in one place.
 func (s *StateSubscriber) attach(inf cache.SharedIndexInformer, kind, apiGroup, apiVersion string) {
 	// Record the store so reconnect-replay can re-emit this kind's cache.
-	s.recordStore(kind, apiGroup, apiVersion, inf.GetStore())
+	s.recordStore(kind, apiGroup, apiVersion, inf.GetStore(), inf.HasSynced)
 	_, err := inf.AddEventHandler(s.handlers(kind, apiGroup, apiVersion))
 	if err != nil {
 		s.log.Warn("state subscriber: failed to register handler", "kind", kind, "error", err)
@@ -663,7 +683,7 @@ func (s *StateSubscriber) runCRDInformer(ctx context.Context, k metadataKind, pa
 		}
 		if ok {
 			s.log.Info("state subscriber: CRD informer online", "gvr", k.gvr.String(), "kind", k.kind)
-			s.recordStore(k.kind, k.apiGroup, k.apiVersion, inf.GetStore())
+			s.recordStore(k.kind, k.apiGroup, k.apiVersion, inf.GetStore(), inf.HasSynced)
 			// Block until shutdown — the informer is running; the watcher
 			// goroutine closes innerStop when ctx/parentStop fire.
 			<-innerStop
@@ -730,14 +750,47 @@ func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, ap
 		s.log.Debug("state subscriber rate-limited", "key", key)
 		return
 	}
-	s.emit(op, kind, apiGroup, apiVersion, meta, key)
+	if s.tunnelDown() {
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("disconnected", kind)...).Inc()
+		return
+	}
+	s.emit(s.sendContext(), op, kind, apiGroup, apiVersion, meta, key)
+}
+
+// tunnelDown reports that the tunnel is KNOWN to be disconnected. It gates the
+// live informer-callback path only; the paced replay is deliberately left to
+// block on backpressure.
+//
+// Without it, an outage turns backpressure into its own failure mode. emit
+// binds its send to runCtx — the PROCESS context, not the connection — so while
+// disconnected there is no writeLoop, sendCh fills after 256 frames, and every
+// subsequent callback waits the full sendQueueWait before dropping. Each of the
+// ~24 informers has its own client-go processorListener whose pendingNotifications
+// is an unbounded RingGrowing, so the whole cluster's event stream would
+// accumulate behind those waits against a 512Mi limit — the OOM the in-flight
+// bound exists to prevent, reintroduced on the producer side. The work is waste
+// besides: replayAll re-emits everything from cache on the next false->true edge.
+// health.go gates its tick the same way.
+func (s *StateSubscriber) tunnelDown() bool {
+	return s != nil && s.conn != nil && !s.conn.IsConnected()
+}
+
+// sendContext is the context informer-callback sends are bound to. Falls back
+// to Background when the subscriber was never Run (tests, direct dispatch
+// calls), which only means the send waits out its own timeout instead of being
+// cancelled early.
+func (s *StateSubscriber) sendContext() context.Context {
+	if s.runCtx != nil {
+		return s.runCtx
+	}
+	return context.Background()
 }
 
 // emit marshals + sends one StateUpdate. Split out of dispatch so the
 // reconnect-replay path can re-emit cached objects WITHOUT going through the
 // per-key rate limiter (a one-shot bounded resync should never be collapsed by
 // the limiter that's there to absorb live event storms).
-func (s *StateSubscriber) emit(op protocol.StateUpdateOp, kind, apiGroup, apiVersion string, meta metav1.Object, key string) {
+func (s *StateSubscriber) emit(ctx context.Context, op protocol.StateUpdateOp, kind, apiGroup, apiVersion string, meta metav1.Object, key string) {
 	payload := protocol.StateUpdatePayload{
 		Op:              op,
 		Kind:            kind,
@@ -759,10 +812,15 @@ func (s *StateSubscriber) emit(op protocol.StateUpdateOp, kind, apiGroup, apiVer
 		Timestamp: time.Now().UTC(),
 		Payload:   body,
 	}
-	if err := s.sender.Send(msg); err != nil {
+	if err := s.sender.SendBlocking(ctx, msg); err != nil {
 		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("send_failed", kind)...).Inc()
-		// The send channel is bounded; on overflow we drop and let the next
-		// emit win the race.
+		// The send channel is bounded and STATE_UPDATE is best-effort: after
+		// waiting out the tunnel's queue timeout we genuinely drop this hint.
+		// That is safe because a STATE_UPDATE is an invalidation hint, not an
+		// authoritative delta — the next event for the same object, the 30m
+		// informer resync, or the next reconnect replay re-derives it, and the
+		// server collapses these on its own 500ms per-(kind, namespace) limiter
+		// anyway. What it must NOT do is take the tunnel down with it.
 		s.log.Warn("state subscriber: send failed", "kind", kind, "error", err)
 		return
 	}
@@ -772,13 +830,87 @@ func (s *StateSubscriber) emit(op protocol.StateUpdateOp, kind, apiGroup, apiVer
 
 // recordStore captures an informer's cache.Store so reconnect-replay can
 // iterate it later. Idempotent; replaces any prior entry for the same kind.
-func (s *StateSubscriber) recordStore(kind, apiGroup, apiVersion string, store cache.Store) {
+func (s *StateSubscriber) recordStore(kind, apiGroup, apiVersion string, store cache.Store, hasSynced func() bool) {
 	if store == nil {
 		return
 	}
 	s.storeMu.Lock()
 	defer s.storeMu.Unlock()
-	s.stores[kind] = stateStoreEntry{kind: kind, apiGroup: apiGroup, apiVersion: apiVersion, store: store}
+	s.stores[kind] = stateStoreEntry{kind: kind, apiGroup: apiGroup, apiVersion: apiVersion, store: store, hasSynced: hasSynced}
+}
+
+// syncedStore returns a kind's informer cache only when that informer has
+// completed its initial list. An unsynced (or unregistered, or RBAC-denied)
+// store is reported as unavailable rather than as an empty one, so callers fall
+// back to the apiserver instead of publishing a fabricated zero.
+func (s *StateSubscriber) syncedStore(kind string) (cache.Store, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.storeMu.RLock()
+	entry, ok := s.stores[kind]
+	s.storeMu.RUnlock()
+	if !ok || entry.store == nil || entry.hasSynced == nil || !entry.hasSynced() {
+		return nil, false
+	}
+	return entry.store, true
+}
+
+// InventoryNodes returns the cached Node objects, satisfying the health
+// reporter's InventorySource. The returned pointers are the informer's own
+// copies and MUST be treated as read-only: mutating one corrupts the cache
+// every other informer consumer reads.
+//
+// This exists so the heartbeat/metrics tickers stop issuing their own
+// cluster-wide Node LISTs against the apiserver every 30s — the objects are
+// already here, kept current by a watch.
+func (s *StateSubscriber) InventoryNodes() ([]*corev1.Node, bool) {
+	store, ok := s.syncedStore("Node")
+	if !ok {
+		return nil, false
+	}
+	objs := store.List()
+	nodes := make([]*corev1.Node, 0, len(objs))
+	for _, obj := range objs {
+		node, ok := obj.(*corev1.Node)
+		if !ok {
+			// A non-typed store for this kind would silently under-report, so
+			// treat any unexpected object type as "cache not usable".
+			return nil, false
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, true
+}
+
+// InventoryPodCount returns the number of cached Pods. It reads keys rather
+// than objects: the count is all the heartbeat needs, and ListKeys avoids
+// materializing a slice of every Pod in the cluster.
+func (s *StateSubscriber) InventoryPodCount() (int, bool) {
+	store, ok := s.syncedStore("Pod")
+	if !ok {
+		return 0, false
+	}
+	return len(store.ListKeys()), true
+}
+
+// InventoryPodsByNamespace returns cached Pod counts keyed by namespace, for
+// the per-namespace aggregation in the metrics payload. Also key-only: the map
+// is bounded by namespace count, not pod count.
+func (s *StateSubscriber) InventoryPodsByNamespace() (map[string]int, bool) {
+	store, ok := s.syncedStore("Pod")
+	if !ok {
+		return nil, false
+	}
+	counts := make(map[string]int)
+	for _, key := range store.ListKeys() {
+		ns, _, err := cache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			continue
+		}
+		counts[ns]++
+	}
+	return counts, true
 }
 
 // runReconnectReplay polls the tunnel state every 2s. On every false→true
@@ -798,7 +930,7 @@ func (s *StateSubscriber) runReconnectReplay(ctx context.Context) {
 		}
 		now := s.conn.IsConnected()
 		if now && !prev {
-			s.replayAll()
+			s.replayAll(ctx)
 		}
 		prev = now
 	}
@@ -807,10 +939,16 @@ func (s *StateSubscriber) runReconnectReplay(ctx context.Context) {
 // replayAll re-emits every cached object across every recorded store as a
 // StateUpdateOpModified (the "object currently exists / resync" op, matching
 // the informer's own 30m resync which redelivers cached objects as updates).
-// Bounded: it lists only the in-memory informer caches (no apiserver hit) and
-// bypasses the rate limiter, so a reconnect emits at most one snapshot per
-// up-edge over the same bounded send channel.
-func (s *StateSubscriber) replayAll() {
+// Bounded three ways: it lists only the in-memory informer caches (no apiserver
+// hit), it bypasses the per-key rate limiter (a one-shot resync should never be
+// collapsed by the limiter that exists to absorb live event storms), and it is
+// paced at replayRatePerSecond so a large cluster's snapshot arrives as a
+// stream rather than as one burst against a 256-slot send queue.
+//
+// It aborts as soon as the tunnel drops: continuing would spend the whole
+// replay filling a queue nothing is draining, and the next false->true edge
+// starts a fresh, complete replay anyway.
+func (s *StateSubscriber) replayAll(ctx context.Context) {
 	s.storeMu.RLock()
 	entries := make([]stateStoreEntry, 0, len(s.stores))
 	for _, e := range s.stores {
@@ -818,6 +956,9 @@ func (s *StateSubscriber) replayAll() {
 	}
 	s.storeMu.RUnlock()
 
+	// Burst 1: a replay must not be able to bank credit while idle and then
+	// spend it all at once, which is the whole point of pacing it.
+	limiter := rate.NewLimiter(rate.Limit(replayRatePerSecond), 1)
 	total := 0
 	for _, e := range entries {
 		for _, obj := range e.store.List() {
@@ -825,8 +966,16 @@ func (s *StateSubscriber) replayAll() {
 			if !ok {
 				continue
 			}
+			if err := limiter.Wait(ctx); err != nil {
+				s.log.Info("state subscriber: replay abandoned, context cancelled", "objects", total)
+				return
+			}
+			if s.conn != nil && !s.conn.IsConnected() {
+				s.log.Info("state subscriber: replay abandoned, tunnel dropped mid-replay", "objects", total)
+				return
+			}
 			key := fmt.Sprintf("%s|%s|%s", e.kind, meta.GetNamespace(), meta.GetName())
-			s.emit(protocol.StateUpdateOpModified, e.kind, e.apiGroup, e.apiVersion, meta, key)
+			s.emit(ctx, protocol.StateUpdateOpModified, e.kind, e.apiGroup, e.apiVersion, meta, key)
 			total++
 		}
 	}

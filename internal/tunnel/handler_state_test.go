@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -505,6 +506,156 @@ func TestHandleAgentUpgradeResultCompletesOperation(t *testing.T) {
 	}
 	if completed[0].ID != opID || completed[0].Status != "succeeded" || completed[0].LastError != "" {
 		t.Fatalf("completion = %+v", completed[0])
+	}
+}
+
+// Pre-fix behaviour: HandleUpgrade set Success=true the instant the Deployment
+// Update returned, and this handler turned that ack into StatusSucceeded — so
+// the fleet reported "succeeded" before the replacement agent had even been
+// scheduled, and a batched rollout marched on repeating the outage. The ack now
+// carries Phase=rollout_started and must leave the operation running.
+func TestUpgradeAckDoesNotTerminateOperation(t *testing.T) {
+	clusterID := uuid.New()
+	opID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String()}
+
+	body, _ := json.Marshal(protocol.AgentUpgradeResultPayload{
+		OperationID:   opID.String(),
+		ClusterID:     clusterID.String(),
+		Success:       true,
+		Phase:         protocol.AgentUpgradePhaseRolloutStarted,
+		ObservedImage: "example.com/astronomer-agent:v1.2.3",
+		RollbackImage: "example.com/astronomer-agent:v1.0.0",
+	})
+	h.handleAgentUpgradeResult(conn, &protocol.Message{Type: protocol.MsgAgentUpgradeResult, Payload: body})
+
+	if completed := validator.SnapshotCompletedOps(); len(completed) != 0 {
+		t.Fatalf("rollout_started ack completed the operation: %+v", completed)
+	}
+
+	// The ONLY success edge is the replacement agent heartbeating the target
+	// version.
+	hb, _ := json.Marshal(protocol.HeartbeatPayload{AgentVersion: "v1.2.3"})
+	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: hb})
+	marks := validator.SnapshotMarkSucceededArgs()
+	if len(marks) != 1 || marks[0].TargetVersion != "v1.2.3" || marks[0].ClusterID != clusterID {
+		t.Fatalf("mark succeeded args = %+v", marks)
+	}
+}
+
+// The watchdog's own `succeeded` verdict, relayed by the replacement agent and
+// keyed on OPERATION ID, is a second success edge. It exists because the primary
+// one — MarkRunningAgentUpgradeSucceededByVersion — is a single match between
+// the heartbeat's AgentVersion (a build-time ldflag) and the operation's
+// target_version (the chart's image.agent.tag). Those are configured
+// independently; before the ack was demoted a mismatch was invisible, now it
+// would leave a healthy upgrade to be re-dispatched for 30 minutes and then
+// reported failed.
+func TestWatchdogSucceededVerdictCompletesOperationWithoutAVersionMatch(t *testing.T) {
+	clusterID := uuid.New()
+	opID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String()}
+
+	body, _ := json.Marshal(protocol.AgentUpgradeResultPayload{
+		OperationID:   opID.String(),
+		ClusterID:     clusterID.String(),
+		Success:       true,
+		Phase:         protocol.AgentUpgradePhaseSucceeded,
+		ObservedImage: "example.com/astronomer-agent:v1.2.3",
+	})
+	h.handleAgentUpgradeResult(conn, &protocol.Message{Type: protocol.MsgAgentUpgradeResult, Payload: body})
+
+	completed := validator.SnapshotCompletedOps()
+	if len(completed) != 1 || completed[0].ID != opID || completed[0].Status != "succeeded" {
+		t.Fatalf("completion = %+v", completed)
+	}
+	if len(validator.SnapshotMarkSucceededArgs()) != 0 {
+		t.Fatal("the verdict path must not depend on a version comparison")
+	}
+}
+
+// A rolled-back agent reporting in is a terminal failure with the kubelet's
+// reason attached, not a timeout.
+func TestHandleAgentUpgradeResultFailsOperationOnRollback(t *testing.T) {
+	clusterID := uuid.New()
+	opID := uuid.New()
+	validator := &recordingValidator{}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String()}
+
+	body, _ := json.Marshal(protocol.AgentUpgradeResultPayload{
+		OperationID: opID.String(),
+		ClusterID:   clusterID.String(),
+		Success:     false,
+		Phase:       protocol.AgentUpgradePhaseRolledBack,
+		Error:       "ImagePullBackOff: Back-off pulling image",
+	})
+	h.handleAgentUpgradeResult(conn, &protocol.Message{Type: protocol.MsgAgentUpgradeResult, Payload: body})
+
+	completed := validator.SnapshotCompletedOps()
+	if len(completed) != 1 || completed[0].ID != opID || completed[0].Status != "failed" {
+		t.Fatalf("completion = %+v", completed)
+	}
+	if !strings.Contains(completed[0].LastError, "ImagePullBackOff") {
+		t.Fatalf("last error = %q", completed[0].LastError)
+	}
+}
+
+// The rollback image the operator approved at queue time is persisted in
+// operation_spec; it has to reach the agent or the watchdog has nothing to roll
+// back to but its own guess.
+func TestAgentUpgradeDispatchCarriesRollbackImageFromOperationSpec(t *testing.T) {
+	clusterID := uuid.New()
+	opID := uuid.New()
+	spec := []byte(`{"plan":{"rollback_image":"example.com/astronomer-agent:v1.0.0"}}`)
+	validator := &recordingValidator{
+		pendingOp: &sqlc.AgentLifecycleOperation{
+			ID:            opID,
+			ClusterID:     clusterID,
+			OperationType: "agent_upgrade",
+			Status:        "running",
+			TargetVersion: "v1.2.3",
+			TargetImage:   "example.com/astronomer-agent:v1.2.3",
+			OperationSpec: spec,
+		},
+	}
+	h := NewHubWithValidator(slog.Default(), validator)
+	conn := &AgentConnection{ClusterID: clusterID.String(), sendCh: make(chan *protocol.Message, 1)}
+	h.agents.Set(clusterID.String(), conn)
+
+	hb, _ := json.Marshal(protocol.HeartbeatPayload{AgentVersion: "v1.0.0"})
+	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: hb})
+
+	select {
+	case msg := <-conn.sendCh:
+		var payload protocol.AgentUpgradePayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			t.Fatalf("decode upgrade payload: %v", err)
+		}
+		if payload.RollbackImage != "example.com/astronomer-agent:v1.0.0" {
+			t.Fatalf("rollback image = %q", payload.RollbackImage)
+		}
+	default:
+		t.Fatal("expected agent upgrade command")
+	}
+}
+
+func TestAgentUpgradeRollbackImageToleratesAbsentOrInvalidSpec(t *testing.T) {
+	for name, spec := range map[string]string{
+		"empty":       "",
+		"not json":    "{{{",
+		"no plan":     `{"request":{}}`,
+		"empty value": `{"plan":{"rollback_image":"  "}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := agentUpgradeRollbackImage([]byte(spec)); got != "" {
+				t.Fatalf("agentUpgradeRollbackImage(%q) = %q, want empty", spec, got)
+			}
+		})
 	}
 }
 

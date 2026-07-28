@@ -81,6 +81,11 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// Recompute the auth_group_bindings gauge so it doesn't go
 		// stale between SSO login runs. Cheap — three COUNT(*)s.
 		{"@every 5m", tasks.RefreshGroupSyncMetricsType, "refresh group-sync binding gauge"},
+		// Backstop for agent upgrades whose replacement agent never reconnected.
+		// The success edge is a heartbeat from the new agent and the normal
+		// failure edge is the rolled-back agent reporting in; this catches the
+		// case where the cluster went dark and neither will ever arrive.
+		{"@every 5m", tasks.AgentUpgradeStuckSweepType, "fail stuck agent upgrade operations"},
 		// Opt-in telemetry POST (migration 046). Daily at 02:30 UTC.
 		// Handler short-circuits when telemetry.enabled is false.
 		{"30 2 * * *", tasks.TelemetrySendType, "telemetry send (daily 02:30)"},

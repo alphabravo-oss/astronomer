@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -204,6 +205,11 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 			ClusterID:     conn.ClusterID,
 			TargetVersion: op.TargetVersion,
 			TargetImage:   op.TargetImage,
+			// The plan's rollback image, persisted in operation_spec when the
+			// operation was queued. Empty is fine and common: the agent then
+			// falls back to the image it is currently running, which is the
+			// only one it can prove is pullable.
+			RollbackImage: agentUpgradeRollbackImage(op.OperationSpec),
 		}
 		body, err := json.Marshal(payload)
 		if err != nil {
@@ -229,6 +235,26 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 	default:
 		h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "unsupported agent lifecycle operation type: "+op.OperationType)
 	}
+}
+
+// agentUpgradeRollbackImage pulls the rollback image out of the operation spec
+// persisted at queue time (internal/handler/agent_fleet.go writes the whole
+// upgrade plan under "plan"). It is best-effort: a spec that is absent, invalid
+// or from an older schema yields "", and the agent falls back to the image it
+// is currently running.
+func agentUpgradeRollbackImage(spec json.RawMessage) string {
+	if len(spec) == 0 {
+		return ""
+	}
+	var envelope struct {
+		Plan struct {
+			RollbackImage string `json:"rollback_image"`
+		} `json:"plan"`
+	}
+	if err := json.Unmarshal(spec, &envelope); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(envelope.Plan.RollbackImage)
 }
 
 func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Message) {
@@ -258,7 +284,37 @@ func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Mess
 		)
 		return
 	}
+	// A patch ack is NOT a successful upgrade. An agent that reports
+	// rollout_started has only committed the Deployment change; with strategy
+	// Recreate it is about to be terminated by its own rollout and cannot know
+	// whether the replacement comes back. The operation stays `running` and the
+	// success edge is MarkRunningAgentUpgradeSucceededByVersion above — the
+	// replacement agent reconnecting and heartbeating the target version. A
+	// failure arrives either as an explicit rolled_back result from the
+	// rolled-back agent, or from the stuck-operation sweeper.
+	if payload.Phase == protocol.AgentUpgradePhaseRolloutStarted {
+		h.log.Info("agent upgrade rollout started; awaiting replacement agent",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("operation_id", payload.OperationID),
+			slog.String("observed_image", payload.ObservedImage),
+			slog.String("rollback_image", payload.RollbackImage),
+		)
+		return
+	}
 	if payload.Success {
+		// Two callers land here.
+		//
+		// Legacy: agents predating the self-upgrade hardening send no Phase and
+		// have no watchdog, so their ack is the only signal that will ever
+		// arrive. Keeping today's behavior for them is deliberate — the
+		// alternative would leave every already-deployed agent's upgrade stuck
+		// in `running` until the sweeper failed it.
+		//
+		// Hardened: Phase="succeeded" is the watchdog's own verdict, relayed by
+		// the replacement agent keyed on OPERATION ID. It is redundant with
+		// MarkRunningAgentUpgradeSucceededByVersion above and idempotent with
+		// it, and it is what keeps success from hinging entirely on the
+		// heartbeat's version string matching the operation's target_version.
 		h.completeAgentLifecycleOperation(operationID, agentlifecycle.StatusSucceeded, "")
 		h.log.Info("agent upgrade command completed",
 			slog.String("cluster_id", conn.ClusterID),

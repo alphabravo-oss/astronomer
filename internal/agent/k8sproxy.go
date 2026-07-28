@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -164,12 +165,19 @@ const k8sStreamChunkSize = 16 * 1024
 
 // maxK8sResponseBodyBytes caps how large a single proxied unary k8s response
 // body the agent will buffer in memory (via HandleRequest/HandleRequestStreaming).
-// Matches the server-side reassembly cap (handler.maxAssembledResponseBytes,
-// 64 MiB) so nothing that previously succeeded through chunking is newly
-// rejected; bodies past it fail closed with a 413 Status object. Watches use
-// the true-streaming HandleStreamRequest path and are not bounded here. Kept a
+// Bodies past it fail closed with a 413 Status object. Watches use the
+// true-streaming HandleStreamRequest path and are not bounded here. Kept a
 // var (not const) so it is configurable and overridable in tests.
-var maxK8sResponseBodyBytes int64 = 64 * 1024 * 1024
+//
+// Derived from the process memory limit rather than fixed at 64 MiB: a constant
+// cap is a promise about one response made without reference to how much memory
+// the agent actually has. At the shipped 512Mi limit this still evaluates to
+// exactly 64 MiB — matching the server-side reassembly cap, so nothing that
+// previously succeeded through chunking is newly rejected — and it shrinks with
+// the limit on a smaller install. It is only half the bound in any case: the
+// per-request cap says how big one answer may be, and agentResponseBudget says
+// how many of them may be resident at once.
+var maxK8sResponseBodyBytes = deriveMaxResponseBodyBytes(agentResponseBudget.limit)
 
 // HandleStreamRequest processes a K8S_STREAM_REQUEST and emits one or more
 // K8S_STREAM_FRAME messages back over the tunnel. Used for Watch and other
@@ -239,7 +247,10 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 		StatusCode: resp.StatusCode,
 		Headers:    headers,
 	}); err != nil {
-		return err
+		// The tunnel could not take the frame. Fail THIS stream — never the
+		// connection — and tell the server so, instead of leaving its consumer
+		// waiting on DataCh until the originator's context expires.
+		return p.sendStreamEnd(sendFn, msg.StreamID, err)
 	}
 
 	buf := make([]byte, k8sStreamChunkSize)
@@ -253,7 +264,10 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 				Kind: protocol.K8sStreamFrameData,
 				Body: base64.StdEncoding.EncodeToString(buf[:n]),
 			}); err != nil {
-				return err
+				// A gap in a watch stream is not recoverable by continuing:
+				// the consumer would silently miss MODIFIED/DELETED events.
+				// End the stream with the cause so the client re-lists.
+				return p.sendStreamEnd(sendFn, msg.StreamID, err)
 			}
 		}
 		if readErr == io.EOF {
@@ -327,14 +341,15 @@ func (p *K8sProxy) sendStreamEnd(sendFn func(*protocol.Message) error, streamID 
 // which chunks large bodies. Small responses go
 // through here unchanged.
 func (p *K8sProxy) HandleRequest(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
-	respBody, statusCode, respHeaders, err := p.executeUpstream(ctx, msg)
+	res, err := p.executeUpstream(ctx, msg)
 	if err != nil {
 		return nil, err
 	}
+	defer res.Release()
 	responsePayload := protocol.K8sResponsePayload{
-		StatusCode: statusCode,
-		Headers:    respHeaders,
-		Body:       base64.StdEncoding.EncodeToString(respBody),
+		StatusCode: res.StatusCode,
+		Headers:    res.Headers,
+		Body:       base64.StdEncoding.EncodeToString(res.Body),
 	}
 	payloadBytes, err := json.Marshal(responsePayload)
 	if err != nil {
@@ -359,10 +374,15 @@ func (p *K8sProxy) HandleRequest(ctx context.Context, msg *protocol.Message) (*p
 // (returns frames via sendFn). The legacy single-shot HandleRequest
 // stays for tests + any callers that want one in-memory response.
 func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Message, sendFn func(*protocol.Message) error) error {
-	respBody, statusCode, respHeaders, err := p.executeUpstream(ctx, msg)
+	res, err := p.executeUpstream(ctx, msg)
 	if err != nil {
 		return err
 	}
+	// Held until every frame derived from this body has been queued: the buffer
+	// is live for that whole span, so releasing its budget reservation earlier
+	// would let another request in against memory that is still in use.
+	defer res.Release()
+	respBody := res.Body
 
 	// Small body: single K8sResponse, same wire shape as before. The
 	// server's requester handles both shapes; keeping the small path
@@ -370,8 +390,8 @@ func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Mes
 	// reads).
 	if len(respBody) <= protocol.K8sChunkSizeBytes {
 		responsePayload := protocol.K8sResponsePayload{
-			StatusCode: statusCode,
-			Headers:    respHeaders,
+			StatusCode: res.StatusCode,
+			Headers:    res.Headers,
 			Body:       base64.StdEncoding.EncodeToString(respBody),
 		}
 		payloadBytes, merr := json.Marshal(responsePayload)
@@ -391,10 +411,10 @@ func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Mes
 	// (final chunk may be smaller); end frame closes the stream.
 	if err := p.sendStreamFrame(sendFn, msg.StreamID, protocol.K8sStreamFrame{
 		Kind:       protocol.K8sStreamFrameHeader,
-		StatusCode: statusCode,
-		Headers:    respHeaders,
+		StatusCode: res.StatusCode,
+		Headers:    res.Headers,
 	}); err != nil {
-		return err
+		return p.sendStreamEnd(sendFn, msg.StreamID, err)
 	}
 	for offset := 0; offset < len(respBody); offset += protocol.K8sChunkSizeBytes {
 		end := offset + protocol.K8sChunkSizeBytes
@@ -405,7 +425,10 @@ func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Mes
 			Kind: protocol.K8sStreamFrameData,
 			Body: base64.StdEncoding.EncodeToString(respBody[offset:end]),
 		}); err != nil {
-			return err
+			// A dropped middle chunk would otherwise be reassembled into a
+			// truncated body returned as HTTP 200. The error end frame makes
+			// the server surface it as a 502 instead.
+			return p.sendStreamEnd(sendFn, msg.StreamID, err)
 		}
 	}
 	return p.sendStreamEnd(sendFn, msg.StreamID, nil)
@@ -415,10 +438,10 @@ func (p *K8sProxy) HandleRequestStreaming(ctx context.Context, msg *protocol.Mes
 // body + status + headers. Factored out so HandleRequest and
 // HandleRequestStreaming share the I/O path; the only difference is how
 // they frame the response on the way back.
-func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) ([]byte, int, map[string]string, error) {
+func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (*upstreamResult, error) {
 	var req protocol.K8sRequestPayload
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return nil, 0, nil, fmt.Errorf("unmarshal k8s request: %w", err)
+		return nil, fmt.Errorf("unmarshal k8s request: %w", err)
 	}
 
 	p.log.Info("proxying k8s request", "method", req.Method, "path", req.Path)
@@ -429,14 +452,14 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 	if req.Body != "" {
 		decoded, err := base64.StdEncoding.DecodeString(req.Body)
 		if err != nil {
-			return nil, 0, nil, fmt.Errorf("decode request body: %w", err)
+			return nil, fmt.Errorf("decode request body: %w", err)
 		}
 		bodyReader = bytes.NewReader(decoded)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, targetURL, bodyReader)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("create http request: %w", err)
+		return nil, fmt.Errorf("create http request: %w", err)
 	}
 
 	for k, v := range req.Headers {
@@ -448,38 +471,79 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("execute k8s request: %w", err)
+		return nil, fmt.Errorf("execute k8s request: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
-	// Cap the in-memory read: a single non-paginated LIST on a large cluster
-	// (all pods/events/secrets) or a GET of a multi-hundred-MiB object would
-	// otherwise allocate the full body plus its base64 copy at once and, with
-	// goroutine-per-message dispatch, several concurrent large reads multiply
-	// this and OOM the agent pod. service_proxy caps the same way. Read one
-	// byte past the limit so we can distinguish "exactly at cap" from "over".
-	limited := io.LimitReader(resp.Body, maxK8sResponseBodyBytes+1)
-	respBody, err := io.ReadAll(limited)
+	// Cap the in-memory read twice over. maxK8sResponseBodyBytes caps THIS
+	// body: a single non-paginated LIST on a large cluster (all
+	// pods/events/secrets) or a GET of a multi-hundred-MiB object would
+	// otherwise allocate the full body plus its base64 copy at once. That alone
+	// is not a memory bound — with goroutine-per-message dispatch, N concurrent
+	// large reads buffer N caps — so every byte allocated here is also charged
+	// against the agent-wide agentResponseBudget, which is what actually keeps
+	// the sum under the container limit. Reading one byte past the per-request
+	// cap preserves the "exactly at cap" vs "over" distinction.
+	respBody, release, err := readBodyWithinBudget(resp.Body, maxK8sResponseBodyBytes, agentResponseBudget)
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("read k8s response body: %w", err)
+		if errors.Is(err, errResponseBudgetExhausted) {
+			// Retryable, not fatal: the request is fine, the agent is full.
+			// Same 429 the in-flight limiter sheds with, so the server and the
+			// browser see one overload contract.
+			return statusResult(http.StatusTooManyRequests, "TooManyRequests", overloadReplyMessage), nil
+		}
+		return nil, fmt.Errorf("read k8s response body: %w", err)
 	}
 	if int64(len(respBody)) > maxK8sResponseBodyBytes {
 		// Fail closed with a 413 Status object rather than forwarding a
 		// truncated (and therefore corrupt/unparseable) body. The status body
 		// mirrors what the apiserver itself returns so clients handle it.
-		statusJSON := fmt.Sprintf(
-			`{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"response body exceeds agent %d-byte limit","reason":"RequestEntityTooLarge","code":413}`,
-			maxK8sResponseBodyBytes,
-		)
-		return []byte(statusJSON), http.StatusRequestEntityTooLarge,
-			map[string]string{"Content-Type": "application/json"}, nil
+		release()
+		return statusResult(http.StatusRequestEntityTooLarge, "RequestEntityTooLarge",
+			fmt.Sprintf("response body exceeds agent %d-byte limit", maxK8sResponseBodyBytes)), nil
 	}
 
 	respHeaders := make(map[string]string)
 	for k := range resp.Header {
 		respHeaders[k] = resp.Header.Get(k)
 	}
-	return respBody, resp.StatusCode, respHeaders, nil
+	return &upstreamResult{
+		Body:       respBody,
+		StatusCode: resp.StatusCode,
+		Headers:    respHeaders,
+		release:    release,
+	}, nil
+}
+
+// upstreamResult is one buffered upstream response plus the release of the
+// byte-budget reservation its buffer holds. Callers MUST defer Release: the
+// reservation covers the buffer for as long as it is live, which includes the
+// chunked send that follows, so releasing early would understate resident
+// memory by exactly the amount that matters most.
+type upstreamResult struct {
+	Body       []byte
+	StatusCode int
+	Headers    map[string]string
+	release    func()
+}
+
+// Release returns this response's byte reservation. Idempotent and nil-safe.
+func (u *upstreamResult) Release() {
+	if u == nil || u.release == nil {
+		return
+	}
+	u.release()
+	u.release = nil
+}
+
+// statusResult builds an agent-generated apiserver Status response. Carries no
+// budget reservation: the body is a short constant-shaped string.
+func statusResult(code int, reason, message string) *upstreamResult {
+	return &upstreamResult{
+		Body:       []byte(statusBody(code, reason, message)),
+		StatusCode: code,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+	}
 }

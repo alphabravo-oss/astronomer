@@ -238,11 +238,65 @@ func (q *Queries) CompleteAgentLifecycleOperation(ctx context.Context, arg Compl
 	return scanAgentLifecycleOperation(row)
 }
 
+type FailStuckAgentUpgradeOperationsParams struct {
+	StuckAfterSeconds int32  `json:"stuck_after_seconds"`
+	LastError         string `json:"last_error"`
+}
+
+// failStuckAgentUpgradeOperations is the terminal backstop for an upgrade whose
+// agent never came back. The success edge is a heartbeat from the replacement
+// agent (MarkRunningAgentUpgradeSucceededByVersion); when that never arrives —
+// bad image, watchdog dead, cluster dark — the operation would otherwise sit in
+// `running` forever and a batched fleet rollout would keep marching. started_at
+// is used rather than updated_at because the heartbeat re-claim path touches
+// updated_at and would keep resetting the deadline.
+const failStuckAgentUpgradeOperations = `-- name: FailStuckAgentUpgradeOperations :many
+UPDATE agent_lifecycle_operations
+SET status = 'failed',
+    completed_at = COALESCE(completed_at, now()),
+    last_error = $2,
+    updated_at = now()
+WHERE operation_type = 'agent_upgrade'
+  AND status = 'running'
+  AND COALESCE(started_at, created_at) < now() - ($1::int * interval '1 second')
+RETURNING ` + agentLifecycleOperationColumns
+
+func (q *Queries) FailStuckAgentUpgradeOperations(ctx context.Context, arg FailStuckAgentUpgradeOperationsParams) ([]AgentLifecycleOperation, error) {
+	rows, err := q.db.Query(ctx, failStuckAgentUpgradeOperations, arg.StuckAfterSeconds, arg.LastError)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentLifecycleOperation{}
+	for rows.Next() {
+		item, err := scanAgentLifecycleOperation(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 type MarkRunningAgentUpgradeSucceededByVersionParams struct {
 	ClusterID     uuid.UUID `json:"cluster_id"`
 	TargetVersion string    `json:"target_version"`
 }
 
+// markRunningAgentUpgradeSucceededByVersion is the ONLY success edge for a
+// hardened agent: the patch ack no longer completes the operation, so an upgrade
+// is confirmed when the REPLACEMENT agent connects and heartbeats the target
+// version. That makes the comparison load-bearing, and the two sides are
+// configured independently — target_version comes from the operator's request or
+// config.AgentImageTag (the chart's image.agent.tag), while the heartbeat's
+// AgentVersion is pkg/version.Version baked in at image build time. A bare "v"
+// prefix or a case difference between them used to be invisible, because the ack
+// completed the operation; now it would leave every SUCCESSFUL upgrade in
+// `running` to be re-dispatched every 5 minutes and finally failed by the
+// stuck-operation sweeper. So the match is normalized rather than exact.
 const markRunningAgentUpgradeSucceededByVersion = `-- name: MarkRunningAgentUpgradeSucceededByVersion :execrows
 UPDATE agent_lifecycle_operations
 SET status = 'succeeded',
@@ -252,7 +306,8 @@ SET status = 'succeeded',
 WHERE cluster_id = $1
   AND operation_type = 'agent_upgrade'
   AND status = 'running'
-  AND target_version = $2`
+  AND ltrim(lower(btrim(target_version)), 'v') = ltrim(lower(btrim($2::text)), 'v')
+  AND btrim(target_version) <> ''`
 
 func (q *Queries) MarkRunningAgentUpgradeSucceededByVersion(ctx context.Context, arg MarkRunningAgentUpgradeSucceededByVersionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markRunningAgentUpgradeSucceededByVersion, arg.ClusterID, arg.TargetVersion)

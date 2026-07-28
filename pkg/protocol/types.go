@@ -275,19 +275,66 @@ type AgentUpgradePayload struct {
 	TargetImage     string `json:"target_image"`
 	AgentNamespace  string `json:"agent_namespace,omitempty"`
 	AgentDeployment string `json:"agent_deployment,omitempty"`
+	// RollbackImage is the image the in-cluster upgrade watchdog restores when
+	// the replacement agent never becomes Ready. Empty means "whatever the
+	// Deployment is running right now", which the agent reads for itself and
+	// which is the only image it can prove is pullable. Agents older than the
+	// self-upgrade hardening ignore this field.
+	RollbackImage string `json:"rollback_image,omitempty"`
+	// RolloutTimeoutSeconds bounds how long the watchdog waits for the
+	// replacement agent to report Ready before rolling back. Zero means the
+	// agent's own default.
+	RolloutTimeoutSeconds int `json:"rollout_timeout_seconds,omitempty"`
 }
 
-// AgentUpgradeResultPayload reports whether the self-upgrade command was
-// accepted by the Kubernetes API. A successful result means the Deployment
-// was patched; rollout completion is confirmed by later heartbeats reporting
-// the target agent version.
+// Agent self-upgrade result phases. Phase is the authoritative outcome signal
+// for agents carrying the self-upgrade hardening. It is ABSENT on already
+// deployed agents, and the server keeps the legacy Success-only interpretation
+// for those (see internal/tunnel/handler.go handleAgentUpgradeResult).
+const (
+	// AgentUpgradePhaseRejected means the agent refused the target image and
+	// made NO change to its Deployment. Terminal failure, zero downtime.
+	AgentUpgradePhaseRejected = "rejected"
+	// AgentUpgradePhaseRolloutStarted means the Deployment was patched and the
+	// in-cluster watchdog Job now owns verification and rollback. This is NOT
+	// success: the operation stays running until the replacement agent
+	// reconnects and heartbeats the target version.
+	AgentUpgradePhaseRolloutStarted = "rollout_started"
+	// AgentUpgradePhaseRolledBack means the watchdog restored the rollback
+	// image, and the restarted (old) agent is reporting that outcome on its
+	// first reconnect. Terminal failure.
+	AgentUpgradePhaseRolledBack = "rolled_back"
+	// AgentUpgradePhaseSucceeded means the watchdog observed the replacement
+	// agent become Available on the target image, and the replacement agent is
+	// relaying that verdict keyed by OPERATION ID. Terminal success.
+	//
+	// It is a second, redundant success edge. The primary one is the heartbeat's
+	// AgentVersion matching the operation's target_version server-side; this one
+	// does not depend on those two independently-configured strings agreeing, so
+	// a version-string mismatch degrades an upgrade from "confirmed at once" to
+	// "confirmed on the next reconnect" instead of to "reported as failed".
+	AgentUpgradePhaseSucceeded = "succeeded"
+)
+
+// AgentUpgradeResultPayload reports the outcome of a self-upgrade command.
+//
+// Success/Phase encoding, chosen so both mixed-version directions stay safe:
+//   - Success=true, Phase="" — a pre-hardening agent acked the Deployment
+//     patch. Legacy meaning only; the server completes the operation.
+//   - Success=true, Phase="rollout_started" — the patch landed and a watchdog
+//     is verifying. A NEW server leaves the operation running; an OLD server
+//     ignores Phase and behaves exactly as it does today.
+//   - Success=false, Phase="rejected"/"rolled_back" — terminal failure, with
+//     Error carrying the kubelet/rollout reason.
 type AgentUpgradeResultPayload struct {
 	OperationID   string `json:"operation_id"`
 	ClusterID     string `json:"cluster_id"`
 	Success       bool   `json:"success"`
+	Phase         string `json:"phase,omitempty"`
 	Message       string `json:"message,omitempty"`
 	Error         string `json:"error,omitempty"`
 	ObservedImage string `json:"observed_image,omitempty"`
+	RollbackImage string `json:"rollback_image,omitempty"`
 }
 
 // DesiredStateRequestPayload is the agent's request for its desired state.

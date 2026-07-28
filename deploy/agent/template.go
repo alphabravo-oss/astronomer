@@ -103,6 +103,7 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{CA_CERT}}", caCert,
 		"{{CA_CHECKSUM}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.CAChecksum)),
 		"{{AGENT_IMAGE}}", escapeYAMLDoubleQuoted(data.AgentImage),
+		"{{AGENT_IMAGE_REPOSITORY}}", escapeYAMLDoubleQuoted(imageRepositoryOf(data.AgentImage)),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),
 		"{{PRIVILEGE_PROFILE}}", profile,
@@ -112,6 +113,25 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_SELF_MANAGEMENT_NAMESPACED_RULES}}", SelfManagementNamespacedRulesYAML(),
 		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
 	).Replace(installTemplate)
+}
+
+// imageRepositoryOf strips the tag and/or digest from an image reference,
+// leaving the registry+path that the agent's self-upgrade allow-list matches
+// on. Deliberately duplicated here rather than imported from internal/agent —
+// that package imports this one. The agent re-parses and re-validates whatever
+// lands in ASTRONOMER_AGENT_IMAGE_REPOSITORY, so this only has to be a faithful
+// split, not a validator.
+func imageRepositoryOf(image string) string {
+	s := strings.TrimSpace(image)
+	if i := strings.Index(s, "@"); i >= 0 {
+		s = s[:i]
+	}
+	// The tag separator is the last ':' after the last '/', so a registry port
+	// ("registry.example:5000/astronomer-agent") is not mistaken for a tag.
+	if i := strings.LastIndex(s, ":"); i >= 0 && i > strings.LastIndex(s, "/") {
+		s = s[:i]
+	}
+	return s
 }
 
 func NormalizePrivilegeProfile(profile string) string {

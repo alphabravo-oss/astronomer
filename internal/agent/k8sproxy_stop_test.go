@@ -143,27 +143,37 @@ func TestExecuteUpstreamCapsBodySize(t *testing.T) {
 
 	// Over the cap → fail closed with 413 and a small body (NOT the giant body).
 	respBody = bytes.Repeat([]byte("x"), 8192)
-	body, status, _, err := proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
+	over, err := proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
 	if err != nil {
 		t.Fatalf("executeUpstream (over cap): %v", err)
 	}
-	if status != http.StatusRequestEntityTooLarge {
-		t.Fatalf("over-cap status = %d, want 413", status)
+	defer over.Release()
+	if over.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("over-cap status = %d, want 413", over.StatusCode)
 	}
-	if int64(len(body)) > maxK8sResponseBodyBytes {
-		t.Fatalf("over-cap returned %d body bytes, want a small 413 status body", len(body))
+	if int64(len(over.Body)) > maxK8sResponseBodyBytes {
+		t.Fatalf("over-cap returned %d body bytes, want a small 413 status body", len(over.Body))
 	}
 
 	// Under the cap → normal 200 with the full body preserved.
 	respBody = bytes.Repeat([]byte("y"), 512)
-	body, status, _, err = proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
+	under, err := proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
 	if err != nil {
 		t.Fatalf("executeUpstream (under cap): %v", err)
 	}
-	if status != http.StatusOK {
-		t.Fatalf("under-cap status = %d, want 200", status)
+	defer under.Release()
+	if under.StatusCode != http.StatusOK {
+		t.Fatalf("under-cap status = %d, want 200", under.StatusCode)
 	}
-	if !bytes.Equal(body, respBody) {
-		t.Fatalf("under-cap body was altered; got %d bytes want %d", len(body), len(respBody))
+	if !bytes.Equal(under.Body, respBody) {
+		t.Fatalf("under-cap body was altered; got %d bytes want %d", len(under.Body), len(respBody))
+	}
+
+	// Releasing every reservation must return the budget to zero: a leak here
+	// would silently shrink the agent's capacity for every later request.
+	over.Release()
+	under.Release()
+	if used := agentResponseBudget.Used(); used != 0 {
+		t.Fatalf("response budget leaked %d bytes after both responses were released", used)
 	}
 }

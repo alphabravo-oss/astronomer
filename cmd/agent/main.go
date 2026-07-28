@@ -21,6 +21,11 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
+// upgradeReportInterval is how often the agent re-reads its own Deployment for
+// a watchdog verdict it has not yet delivered. One named Get per minute against
+// the local apiserver, and only until the verdict is reported and cleared.
+const upgradeReportInterval = time.Minute
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -52,8 +57,23 @@ func main() {
 		},
 	}
 
+	// upgrade-watchdog is the self-upgrade safety net. It runs as a short-lived
+	// Job created by the agent BEFORE the agent patches its own Deployment: with
+	// strategy Recreate the patching process is terminated by its own rollout,
+	// so verification and rollback must live outside the pod. See
+	// internal/agent/upgrade_watchdog.go.
+	upgradeWatchdogCmd := &cobra.Command{
+		Use:    "upgrade-watchdog",
+		Short:  "Verify an in-flight agent self-upgrade and roll it back if it never becomes healthy",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return agent.RunUpgradeWatchdogFromEnv(cmd.Context(), logger)
+		},
+	}
+
 	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(connect2Cmd)
+	rootCmd.AddCommand(upgradeWatchdogCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -186,6 +206,11 @@ func runConnect(logger *slog.Logger) error {
 		}
 
 		selfUpgrade := agent.NewSelfUpgradeHandler(client, logger)
+		selfUpgrade.SetUpgradePolicy(agent.UpgradePolicy{
+			AllowedRepository: cfg.AgentImageRepository,
+			AllowMutableTag:   cfg.AgentAllowMutableTag,
+			RolloutTimeout:    time.Duration(cfg.AgentUpgradeRolloutTimeout) * time.Second,
+		})
 		tunnel.RegisterHandler(protocol.MsgAgentUpgrade, selfUpgrade.HandleUpgrade)
 
 		// Health reporter (heartbeat + metrics tickers + JSON probes).
@@ -242,6 +267,11 @@ func runConnect(logger *slog.Logger) error {
 			// replay loop re-emits cached informer state on every WS reconnect
 			// (L12 defense-in-depth — mirrors the MirrorSubscriber wiring below).
 			subscriber.SetConnectionWatcher(tunnel)
+			// Serve the heartbeat/metrics node + pod inventory from these
+			// informer caches instead of re-listing the whole cluster from the
+			// apiserver every 30s. Set before Run: until the caches report
+			// synced the reporter transparently uses its paged fallback.
+			health.SetInventorySource(subscriber)
 			subscriber.Run(ctx)
 		}()
 
@@ -296,6 +326,39 @@ func runConnect(logger *slog.Logger) error {
 			}
 		}
 
+		// Deliver the verdict the upgrade watchdog recorded on our own
+		// Deployment. If this process is running because the watchdog rolled a
+		// bad image back, the reason is durable in the cluster and the control
+		// plane still believes the operation is in flight — which is exactly
+		// why the rollback itself never depended on the control plane being
+		// reachable. Reporting it does need the tunnel.
+		//
+		// Re-checked periodically rather than once at first connect: the
+		// watchdog writes its `succeeded` verdict only after the replacement
+		// agent is Available, i.e. after THIS process already connected, so a
+		// one-shot report would systematically miss the success edge. The check
+		// is a single named Get on our own Deployment and the annotation is
+		// cleared as soon as a report is delivered, so the steady state is one
+		// cheap read per interval — an order of magnitude less traffic than the
+		// heartbeat, and well inside the server's stuck-operation deadline.
+		go func() {
+			ticker := time.NewTicker(upgradeReportInterval)
+			defer ticker.Stop()
+			for {
+				if tunnel.IsConnected() {
+					if err := agent.ReportPendingUpgradeOutcome(ctx, client, logger, cfg.ClusterID,
+						agent.DefaultAgentNamespace, agent.DefaultAgentDeploymentName, tunnel.SendFunc(ctx)); err != nil {
+						logger.Warn("could not report pending agent upgrade outcome", "error", err)
+					}
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+
 		// M4: drive readiness from EVERY tunnel transition (not a one-shot latch),
 		// so /readyz flips to NotReady when the tunnel drops and back on reconnect.
 		tunnel.SetConnectionListener(health.SetConnected)
@@ -312,7 +375,7 @@ func runConnect(logger *slog.Logger) error {
 				}
 			}
 			health.SetConnected(true)
-			health.Start(ctx, tunnel.Send)
+			health.Start(ctx, tunnel.SendFunc(ctx))
 		}()
 
 		// Fleet-style PULL reconcile loop (gated OFF by default). When the
@@ -340,7 +403,7 @@ func runConnect(logger *slog.Logger) error {
 						}
 					}
 					interval := time.Duration(cfg.PullReconcileInterval) * time.Second
-					reconciler.Run(ctx, interval, tunnel.Send)
+					reconciler.Run(ctx, interval, tunnel.SendFunc(ctx))
 				}()
 			}
 		}

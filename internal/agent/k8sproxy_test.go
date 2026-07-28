@@ -46,12 +46,13 @@ func TestK8sProxyExecuteUpstreamStripsClientAuthHeaders(t *testing.T) {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	_, status, _, err := proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
+	res, err := proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
 	if err != nil {
 		t.Fatalf("executeUpstream: %v", err)
 	}
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want 200", status)
+	defer res.Release()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
 
 	headers := <-seen

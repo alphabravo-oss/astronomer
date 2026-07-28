@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,6 +46,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -83,8 +85,12 @@ const mirrorResyncPeriod = 10 * time.Minute
 // MirrorSender is the narrow tunnel-send interface the subscriber
 // needs. Matches the shape used by StateSubscriber so the agent's
 // existing tunnel client can satisfy both.
+//
+// SendBlocking, not Send: the reconnect replay walks every cached
+// item across five GVKs in a tight loop, so it has to feel the send
+// queue's backpressure instead of discarding rows on first overflow.
 type MirrorSender interface {
-	Send(msg *protocol.Message) error
+	SendBlocking(ctx context.Context, msg *protocol.Message) error
 }
 
 // MirrorConnectionWatcher is the narrow tunnel-state surface the
@@ -117,6 +123,37 @@ type MirrorSubscriber struct {
 	// poll for reconnect detection. nil-safe: when unwired (tests /
 	// older callers), we skip the replay goroutine.
 	conn MirrorConnectionWatcher
+
+	// runCtx is Run's context, captured so the informer callbacks —
+	// which take no context of their own — can bound their blocking
+	// send and abandon it on shutdown. Written once at the top of Run,
+	// before any informer starts, so every reader is ordered after it.
+	runCtx context.Context
+}
+
+// sendContext is the context informer-callback sends are bound to.
+// Falls back to Background when the subscriber was never Run (tests,
+// direct dispatch calls), which only means a send waits out its own
+// timeout instead of being cancelled early.
+func (s *MirrorSubscriber) sendContext() context.Context {
+	if s.runCtx != nil {
+		return s.runCtx
+	}
+	return context.Background()
+}
+
+// tunnelDown reports that the tunnel is KNOWN to be disconnected. It gates the
+// live informer-callback path only; the paced replayAll is deliberately left to
+// block on backpressure (and checks connectivity per item anyway).
+//
+// Mirror frames carry FULL object bodies, so this matters more here than for
+// state updates: without the gate an outage parks every informer callback for
+// the full sendQueueWait per event on a queue nothing drains, and client-go's
+// unbounded pendingNotifications ring accumulates whole objects behind it
+// against a 512Mi limit. Dropping instantly costs nothing — replayAll re-emits
+// every cached item on the next reconnect.
+func (s *MirrorSubscriber) tunnelDown() bool {
+	return s != nil && s.conn != nil && !s.conn.IsConnected()
 }
 
 // informerStoreEntry pairs an informer store with the kind label that
@@ -184,6 +221,7 @@ func (s *MirrorSubscriber) Run(ctx context.Context) {
 		s.log.Warn("mirror subscriber: nil clientset, skipping")
 		return
 	}
+	s.runCtx = ctx
 
 	factory := informers.NewSharedInformerFactory(s.client, mirrorResyncPeriod)
 
@@ -396,17 +434,19 @@ func (s *MirrorSubscriber) runReconnectReplay(ctx context.Context) {
 		}
 		now := s.conn.IsConnected()
 		if now && !prev {
-			s.replayAll()
+			s.replayAll(ctx)
 		}
 		prev = now
 	}
 }
 
 // replayAll dispatches an Add for every cached item across every
-// recorded store. Cheap: each Add hits dispatchTyped or
-// dispatchUnstructured which marshals + queues onto the bounded send
-// channel; backpressure is the same as a regular informer Add storm.
-func (s *MirrorSubscriber) replayAll() {
+// recorded store. Each Add hits dispatchTyped or dispatchUnstructured,
+// which marshals the FULL object body and queues it on the bounded send
+// channel — a much heavier frame than a StateUpdate — so the walk is
+// paced at replayRatePerSecond and abandoned the moment the tunnel
+// drops. The next false->true edge starts a fresh, complete replay.
+func (s *MirrorSubscriber) replayAll(ctx context.Context) {
 	s.storeMu.RLock()
 	entries := make([]informerStoreEntry, 0, len(s.stores))
 	for _, e := range s.stores {
@@ -414,17 +454,27 @@ func (s *MirrorSubscriber) replayAll() {
 	}
 	s.storeMu.RUnlock()
 
+	// Burst 1: a replay must not be able to bank credit while idle and then
+	// spend it all at once, which is the whole point of pacing it.
+	limiter := rate.NewLimiter(rate.Limit(replayRatePerSecond), 1)
 	total := 0
 	for _, e := range entries {
-		items := e.store.List()
-		for _, obj := range items {
+		for _, obj := range e.store.List() {
+			if err := limiter.Wait(ctx); err != nil {
+				s.log.Info("mirror subscriber: replay abandoned, context cancelled", "items", total)
+				return
+			}
+			if s.conn != nil && !s.conn.IsConnected() {
+				s.log.Info("mirror subscriber: replay abandoned, tunnel dropped mid-replay", "items", total)
+				return
+			}
 			if e.dynamic {
 				s.dispatchUnstructured(protocol.MirrorOpAdded, e.kind, obj)
 			} else {
 				s.dispatchTyped(protocol.MirrorOpAdded, e.kind, obj)
 			}
+			total++
 		}
-		total += len(items)
 	}
 	if total > 0 {
 		s.log.Info("mirror subscriber: replayed cached items after reconnect", "items", total)
@@ -539,6 +589,10 @@ func (s *MirrorSubscriber) sendEvent(op protocol.MirrorEventOp, kind string, u *
 	if u == nil {
 		return
 	}
+	if s.tunnelDown() {
+		observability.RecordDroppedEvent("agent_mirror_event", "disconnected")
+		return
+	}
 	body, err := json.Marshal(u.Object)
 	if err != nil {
 		s.log.Warn("mirror subscriber: marshal object failed", "kind", kind, "error", err)
@@ -561,7 +615,7 @@ func (s *MirrorSubscriber) sendEvent(op protocol.MirrorEventOp, kind string, u *
 		Timestamp: time.Now().UTC(),
 		Payload:   pb,
 	}
-	if err := s.sender.Send(msg); err != nil {
+	if err := s.sender.SendBlocking(s.sendContext(), msg); err != nil {
 		s.log.Warn("mirror subscriber: send failed", "kind", kind, "error", err)
 	}
 }
@@ -571,6 +625,10 @@ func (s *MirrorSubscriber) sendEvent(op protocol.MirrorEventOp, kind string, u *
 // wraps the last-known object — we unwrap before reading meta.
 func (s *MirrorSubscriber) dispatchDelete(kind string, obj any) {
 	if !s.ready.Load() {
+		return
+	}
+	if s.tunnelDown() {
+		observability.RecordDroppedEvent("agent_mirror_event", "disconnected")
 		return
 	}
 	if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -600,7 +658,7 @@ func (s *MirrorSubscriber) dispatchDelete(kind string, obj any) {
 		Timestamp: time.Now().UTC(),
 		Payload:   pb,
 	}
-	if err := s.sender.Send(msg); err != nil {
+	if err := s.sender.SendBlocking(s.sendContext(), msg); err != nil {
 		s.log.Warn("mirror subscriber: send delete failed", "kind", kind, "error", err)
 	}
 }
@@ -610,6 +668,10 @@ func (s *MirrorSubscriber) dispatchDelete(kind string, obj any) {
 // dynamic informer cache uses the same tombstone shape.
 func (s *MirrorSubscriber) dispatchDeleteUnstructured(kind string, obj any) {
 	if !s.ready.Load() {
+		return
+	}
+	if s.tunnelDown() {
+		observability.RecordDroppedEvent("agent_mirror_event", "disconnected")
 		return
 	}
 	if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -636,7 +698,7 @@ func (s *MirrorSubscriber) dispatchDeleteUnstructured(kind string, obj any) {
 		Timestamp: time.Now().UTC(),
 		Payload:   pb,
 	}
-	if err := s.sender.Send(msg); err != nil {
+	if err := s.sender.SendBlocking(s.sendContext(), msg); err != nil {
 		s.log.Warn("mirror subscriber: send delete failed", "kind", kind, "error", err)
 	}
 }

@@ -22,6 +22,33 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// inventoryPageSize bounds one page of the fallback inventory LISTs (the path
+// taken before the informer caches have synced, or when they never do). The
+// pair that matters is ResourceVersion:"0" + Limit: with a revision of "0" the
+// apiserver serves the request from its watch cache instead of taking an etcd
+// quorum read, and it deliberately ignores the limit while doing so — so on a
+// current apiserver these calls cost one cache read and return no continue
+// token. The paging loop is what keeps the fallback bounded on the older /
+// cache-disabled apiservers that do honour the limit, and what makes a later
+// switch to a consistent read a one-line change rather than a reintroduced
+// full-cluster allocation.
+const inventoryPageSize = 500
+
+// InventorySource supplies cluster inventory from an already-synced informer
+// cache so the periodic collectors below do not have to ask the apiserver for
+// data the agent is already watching. *StateSubscriber implements it.
+//
+// Every method returns ok=false when its cache is unavailable (not yet synced,
+// not registered, or RBAC-denied). That is NOT the same as "zero": the
+// collectors must fall back to the apiserver rather than report a fabricated
+// count, otherwise an agent whose Pod informer is Forbidden would quietly
+// heartbeat "0 pods" forever instead of surfacing the degradation.
+type InventorySource interface {
+	InventoryNodes() ([]*corev1.Node, bool)
+	InventoryPodCount() (int, bool)
+	InventoryPodsByNamespace() (map[string]int, bool)
+}
+
 // HealthReporter sends periodic health data to the server.
 type HealthReporter struct {
 	client            kubernetes.Interface
@@ -37,8 +64,16 @@ type HealthReporter struct {
 	clusterID         string
 	startedAt         time.Time
 
-	// connected tracks whether the tunnel is up (for readiness probes).
+	// connected tracks whether the tunnel is up (for readiness probes) and
+	// gates periodic collection: there is no point paying for cluster
+	// inventory that cannot be delivered.
 	connected atomic.Bool
+
+	// inventory is the optional informer-backed inventory source, wired after
+	// the state subscriber exists (cmd/agent/main.go). Held as an atomic
+	// pointer because it is installed from the subscriber's goroutine while
+	// the health tickers read it from theirs. nil = apiserver fallback.
+	inventory atomic.Pointer[InventorySource]
 }
 
 // NewHealthReporter creates a new HealthReporter.
@@ -89,6 +124,95 @@ func (hr *HealthReporter) SetConnected(c bool) {
 	hr.connected.Store(c)
 }
 
+// SetInventorySource wires the informer-backed inventory source. Safe to call
+// at any time, including while the tickers are running: until it is set (or
+// while the caches are unsynced) the collectors use the paged apiserver
+// fallback, so the reported payload is identical either way.
+func (hr *HealthReporter) SetInventorySource(src InventorySource) {
+	if hr == nil || src == nil {
+		return
+	}
+	hr.inventory.Store(&src)
+}
+
+// nodes returns the cluster's Nodes, preferring the informer cache. The
+// fallback List is paged and watch-cache-served (see inventoryPageSize).
+func (hr *HealthReporter) nodes(ctx context.Context) ([]*corev1.Node, error) {
+	if src := hr.inventory.Load(); src != nil {
+		if nodes, ok := (*src).InventoryNodes(); ok {
+			return nodes, nil
+		}
+	}
+	if hr.client == nil {
+		return nil, fmt.Errorf("no kubernetes client")
+	}
+	var nodes []*corev1.Node
+	opts := metav1.ListOptions{ResourceVersion: "0", Limit: inventoryPageSize}
+	for {
+		page, err := hr.client.CoreV1().Nodes().List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		for i := range page.Items {
+			nodes = append(nodes, &page.Items[i])
+		}
+		if page.Continue == "" {
+			return nodes, nil
+		}
+		// A continue token already encodes the revision it resumes from, and
+		// the apiserver rejects a request carrying both.
+		opts = metav1.ListOptions{Limit: inventoryPageSize, Continue: page.Continue}
+	}
+}
+
+// podsByNamespace returns pod counts per namespace, preferring the informer
+// cache. The fallback pages so a 10k-pod cluster is never materialized in one
+// allocation; only the counts survive each page.
+func (hr *HealthReporter) podsByNamespace(ctx context.Context) (map[string]int, error) {
+	if src := hr.inventory.Load(); src != nil {
+		if counts, ok := (*src).InventoryPodsByNamespace(); ok {
+			return counts, nil
+		}
+	}
+	if hr.client == nil {
+		return nil, fmt.Errorf("no kubernetes client")
+	}
+	counts := make(map[string]int)
+	opts := metav1.ListOptions{ResourceVersion: "0", Limit: inventoryPageSize}
+	for {
+		page, err := hr.client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		for i := range page.Items {
+			counts[page.Items[i].Namespace]++
+		}
+		if page.Continue == "" {
+			return counts, nil
+		}
+		opts = metav1.ListOptions{Limit: inventoryPageSize, Continue: page.Continue}
+	}
+}
+
+// podCount returns the cluster-wide pod count. The informer path answers from
+// cache keys alone; the fallback shares the paged reader above.
+func (hr *HealthReporter) podCount(ctx context.Context) (int, error) {
+	if src := hr.inventory.Load(); src != nil {
+		if count, ok := (*src).InventoryPodCount(); ok {
+			return count, nil
+		}
+	}
+	counts, err := hr.podsByNamespace(ctx)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, c := range counts {
+		total += c
+	}
+	return total, nil
+}
+
 // Start begins periodic health reporting. It blocks until the context is
 // cancelled. Two independent tickers fire: HEARTBEAT (lightweight liveness +
 // inventory) and METRICS (detailed cluster utilization).
@@ -100,19 +224,36 @@ func (hr *HealthReporter) Start(ctx context.Context, sendFn func(*protocol.Messa
 
 	// Send an initial heartbeat immediately so the server registers liveness
 	// without waiting one full interval.
-	hr.sendHeartbeat(ctx, sendFn)
-	hr.sendMetrics(ctx, sendFn)
+	hr.tick(ctx, sendFn, hr.sendHeartbeat)
+	hr.tick(ctx, sendFn, hr.sendMetrics)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-heartbeatTicker.C:
-			hr.sendHeartbeat(ctx, sendFn)
+			hr.tick(ctx, sendFn, hr.sendHeartbeat)
 		case <-metricsTicker.C:
-			hr.sendMetrics(ctx, sendFn)
+			hr.tick(ctx, sendFn, hr.sendMetrics)
 		}
 	}
+}
+
+// tick runs one collector, but only while the tunnel is up. Collection is the
+// expensive half (cluster inventory, metrics API) and its product is a single
+// frame that a disconnected tunnel would drop anyway, so a disconnected agent
+// does no collection work at all — it stops charging the apiserver of a cluster
+// whose management plane it cannot reach.
+//
+// The tickers keep running rather than backing off: the skip costs one atomic
+// load, and a running ticker resumes reporting within one interval of the
+// reconnect instead of trailing a backoff curve.
+func (hr *HealthReporter) tick(ctx context.Context, sendFn func(*protocol.Message) error, collect func(context.Context, func(*protocol.Message) error)) {
+	if !hr.connected.Load() {
+		hr.log.Debug("skipping health collection while tunnel is disconnected")
+		return
+	}
+	collect(ctx, sendFn)
 }
 
 // sendMetrics gathers detailed cluster metrics and emits a METRICS message.
@@ -145,22 +286,20 @@ func (hr *HealthReporter) collectMetricsPayload(ctx context.Context) (*protocol.
 		MetricsAvailable: true,
 	}
 
-	nodes, err := hr.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := hr.nodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list nodes: %w", err)
 	}
-	out.ClusterNodeCount = len(nodes.Items)
+	out.ClusterNodeCount = len(nodes)
 
-	pods, err := hr.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	// Per-namespace pod counts. Only the counts are needed, so neither the
+	// informer path nor the fallback ever holds the cluster's Pod objects.
+	nsCounts, err := hr.podsByNamespace(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list pods: %w", err)
 	}
-	out.ClusterPodCount = len(pods.Items)
-
-	// Per-namespace pod counts.
-	nsCounts := make(map[string]int)
-	for _, p := range pods.Items {
-		nsCounts[p.Namespace]++
+	for _, c := range nsCounts {
+		out.ClusterPodCount += c
 	}
 	out.Namespaces = make([]protocol.NamespaceMetrics, 0, len(nsCounts))
 
@@ -182,9 +321,9 @@ func (hr *HealthReporter) collectMetricsPayload(ctx context.Context) (*protocol.
 	}
 
 	// Map node name -> capacity for per-node percentage.
-	capByNode := make(map[string]struct{ cpu, mem int64 }, len(nodes.Items))
+	capByNode := make(map[string]struct{ cpu, mem int64 }, len(nodes))
 	var totalCPUCap, totalMemCap int64
-	for _, n := range nodes.Items {
+	for _, n := range nodes {
 		cpu := n.Status.Allocatable.Cpu().MilliValue()
 		mem := n.Status.Allocatable.Memory().Value()
 		capByNode[n.Name] = struct{ cpu, mem int64 }{cpu, mem}
@@ -310,24 +449,27 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 		hb.KubernetesVersion = serverVersion.GitVersion
 	}
 
-	// Node count and distribution detection.
-	if nodes, err := hr.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err != nil {
-		hb.DegradedReasons = append(hb.DegradedReasons, fmt.Sprintf("list_nodes_failed: %v", err))
+	// Node count and distribution detection. The node set is fetched ONCE per
+	// beat and handed to collectMetrics, which previously listed it a second
+	// time for the same allocatable totals.
+	nodes, nodesErr := hr.nodes(ctx)
+	if nodesErr != nil {
+		hb.DegradedReasons = append(hb.DegradedReasons, fmt.Sprintf("list_nodes_failed: %v", nodesErr))
 	} else {
-		hb.NodeCount = len(nodes.Items)
-		hb.Distribution = detectDistribution(nodes.Items)
+		hb.NodeCount = len(nodes)
+		hb.Distribution = detectDistribution(nodes)
 	}
 	hb.AvailableAPIs = hr.collectAvailableAPIs(ctx)
 
 	// Pod count (all namespaces).
-	if pods, err := hr.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{}); err != nil {
+	if podCount, err := hr.podCount(ctx); err != nil {
 		hb.DegradedReasons = append(hb.DegradedReasons, fmt.Sprintf("list_pods_failed: %v", err))
 	} else {
-		hb.PodCount = len(pods.Items)
+		hb.PodCount = podCount
 	}
 
 	// CPU/Memory from metrics API (best-effort).
-	hr.collectMetrics(ctx, hb)
+	hr.collectMetrics(ctx, hb, nodes)
 
 	return hb, nil
 }
@@ -354,7 +496,10 @@ func (hr *HealthReporter) collectAvailableAPIs(ctx context.Context) []string {
 }
 
 // collectMetrics attempts to collect CPU/Memory metrics from the metrics API.
-func (hr *HealthReporter) collectMetrics(ctx context.Context, hb *protocol.HeartbeatPayload) {
+// nodes is the set already collected for this beat (nil when that collection
+// failed, in which case the percentages are left at zero exactly as they were
+// when this function did its own — third — Nodes list).
+func (hr *HealthReporter) collectMetrics(ctx context.Context, hb *protocol.HeartbeatPayload, nodes []*corev1.Node) {
 	if hr.metricsClient == nil {
 		hb.DegradedReasons = append(hb.DegradedReasons, "metrics API client is not configured")
 		return
@@ -373,14 +518,13 @@ func (hr *HealthReporter) collectMetrics(ctx context.Context, hb *protocol.Heart
 		totalMemUsage += nm.Usage.Memory().Value()
 	}
 
-	// Get allocatable resources from nodes to calculate percentages.
-	nodes, err := hr.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
+	// Allocatable resources come from the node set collected for this beat.
+	if len(nodes) == 0 {
 		return
 	}
 
 	var totalCPUCapacity, totalMemCapacity int64
-	for _, node := range nodes.Items {
+	for _, node := range nodes {
 		totalCPUCapacity += node.Status.Allocatable.Cpu().MilliValue()
 		totalMemCapacity += node.Status.Allocatable.Memory().Value()
 	}
@@ -394,8 +538,10 @@ func (hr *HealthReporter) collectMetrics(ctx context.Context, hb *protocol.Heart
 }
 
 // detectDistribution inspects node labels to determine the K8s distribution.
-func detectDistribution(nodes []corev1.Node) string {
-	if len(nodes) == 0 {
+// The nodes are informer-owned when the inventory source is wired, so this must
+// stay read-only.
+func detectDistribution(nodes []*corev1.Node) string {
+	if len(nodes) == 0 || nodes[0] == nil {
 		return "unknown"
 	}
 

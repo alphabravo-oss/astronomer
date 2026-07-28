@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -157,11 +158,17 @@ func (sp *ServiceProxy) HandleRequest(ctx context.Context, msg *protocol.Message
 		_ = resp.Body.Close()
 	}()
 
-	limited := io.LimitReader(resp.Body, MaxServiceProxyResponseSize+1)
-	body, err := io.ReadAll(limited)
+	// Charged against the same agent-wide budget as proxied k8s bodies: both
+	// buffer whole responses out of the one 512Mi heap, so bounding them
+	// separately would bound neither.
+	body, release, err := readBodyWithinBudget(resp.Body, MaxServiceProxyResponseSize, agentResponseBudget)
 	if err != nil {
+		if errors.Is(err, errResponseBudgetExhausted) {
+			return sp.errorResponse(msg, http.StatusTooManyRequests, errors.New(overloadReplyMessage)), nil
+		}
 		return sp.errorResponse(msg, http.StatusBadGateway, fmt.Errorf("read response body: %w", err)), nil
 	}
+	defer release()
 	if int64(len(body)) > MaxServiceProxyResponseSize {
 		return sp.errorResponse(msg, http.StatusRequestEntityTooLarge,
 			fmt.Errorf("response too large (>%d bytes)", MaxServiceProxyResponseSize)), nil

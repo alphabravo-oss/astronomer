@@ -391,14 +391,17 @@ func TestSend(t *testing.T) {
 		t.Fatalf("Send returned error: %v", err)
 	}
 
-	// Verify message is in the channel.
+	// A heartbeat is a control frame, so it lands on the control queue.
 	select {
-	case received := <-tc.sendCh:
+	case received := <-tc.controlCh:
 		if received.Type != protocol.MsgHeartbeat {
 			t.Errorf("received message type = %s, want %s", received.Type, protocol.MsgHeartbeat)
 		}
 	default:
-		t.Error("no message in send channel")
+		t.Error("no message in control channel")
+	}
+	if len(tc.sendCh) != 0 {
+		t.Error("control frame must not occupy a data-queue slot")
 	}
 }
 
@@ -413,9 +416,9 @@ func TestSendChannelFull(t *testing.T) {
 	log := testLogger()
 	tc := NewTunnelClient(cfg, log)
 
-	// Fill the channel.
-	for i := 0; i < 256; i++ {
-		_ = tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
+	// Fill the data queue.
+	for i := 0; i < sendQueueSize; i++ {
+		_ = tc.Send(&protocol.Message{Type: protocol.MsgStateUpdate, Timestamp: time.Now().UTC()})
 	}
 
 	// Next send should fail.
@@ -424,7 +427,7 @@ func TestSendChannelFull(t *testing.T) {
 		"component":              "agent_tunnel_send",
 		"reason":                 "channel_full",
 	})
-	err := tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
+	err := tc.Send(&protocol.Message{Type: protocol.MsgStateUpdate, Timestamp: time.Now().UTC()})
 	if err == nil {
 		t.Error("expected error when channel is full, got nil")
 	}
@@ -438,16 +441,17 @@ func TestSendChannelFull(t *testing.T) {
 	}
 }
 
-// When sendCh is saturated, Send() must force a
-// connection close so server-side originators stop waiting on the
-// missing reply. We verify by setting connected=true, filling the
-// channel, calling Send, then waiting for the async failClose
-// goroutine to flip IsConnected back to false.
+// When the CONTROL queue is saturated, Send() must still force a connection
+// close so server-side originators stop waiting on a reply that will never
+// come. This is the one drop class that keeps the eager close: a control frame
+// is either session lifecycle or the only answer to a blocked caller. We verify
+// by setting connected=true, filling the control queue, calling Send, then
+// waiting for the async failClose goroutine to flip IsConnected back to false.
 func TestSendChannelFull_TriggersFailClose(t *testing.T) {
 	tc := NewTunnelClient(testConfig(), testLogger())
 	tc.setConnected(true)
 
-	for i := 0; i < 256; i++ {
+	for i := 0; i < cap(tc.controlCh); i++ {
 		_ = tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
 	}
 	if !tc.IsConnected() {
@@ -456,7 +460,7 @@ func TestSendChannelFull_TriggersFailClose(t *testing.T) {
 
 	err := tc.Send(&protocol.Message{Type: protocol.MsgHeartbeat, Timestamp: time.Now().UTC()})
 	if err == nil {
-		t.Fatal("expected error when channel is full")
+		t.Fatal("expected error when the control queue is full")
 	}
 
 	deadline := time.Now().Add(500 * time.Millisecond)

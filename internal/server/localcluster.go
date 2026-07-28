@@ -250,9 +250,16 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 		} else {
 			logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
 		}
+		// Serve the heartbeat/metrics node + pod inventory from the informer
+		// caches this subscriber already maintains, instead of re-listing the
+		// whole cluster from the apiserver on every tick.
+		health.SetInventorySource(subscriber)
 		go subscriber.Run(ctx)
+		// Track every tunnel transition, not just the first connect, so
+		// collection pauses while the embedded tunnel is down.
+		tunnelClient.SetConnectionListener(health.SetConnected)
 		health.SetConnected(true)
-		health.Start(ctx, tunnelClient.Send)
+		health.Start(ctx, tunnelClient.SendFunc(ctx))
 	}()
 
 	go func() {

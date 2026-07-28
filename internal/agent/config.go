@@ -55,6 +55,19 @@ type AgentConfig struct {
 	HealthAddr        string `mapstructure:"health_addr"`        // Health server address (default :8081)
 	PrivilegeProfile  string `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
 
+	// In-flight caps on inbound tunnel dispatch. readLoop spawns one goroutine
+	// per message; these bound how many may run at once so a burst of proxied
+	// requests cannot multiply the per-response memory cap past the container
+	// limit. Zero or negative means the package default (see inflight.go).
+	//   - MaxInflightRequests covers unary handlers that buffer a whole
+	//     upstream response (k8s proxy, service proxy, RBAC sync).
+	//   - MaxInflightStreams covers long-lived, low-memory handlers (watches,
+	//     exec, log tails, Helm operations), which must not share a bound with
+	//     the unary ones or a handful of open watches would starve every API call.
+	// Env: ASTRONOMER_MAX_INFLIGHT_REQUESTS, ASTRONOMER_MAX_INFLIGHT_STREAMS.
+	MaxInflightRequests int `mapstructure:"max_inflight_requests"` // default 16
+	MaxInflightStreams  int `mapstructure:"max_inflight_streams"`  // default 256
+
 	// kube-apiserver audit-log forwarding (opt-in; disabled by default).
 	// Requires a cluster-admin prerequisite: the apiserver must be started
 	// with --audit-policy-file + --audit-log-path, and that log path must be
@@ -74,6 +87,21 @@ type AgentConfig struct {
 	// ASTRONOMER_PULL_RECONCILE_INTERVAL.
 	PullReconcileEnabled  bool `mapstructure:"pull_reconcile_enabled"`  // default false
 	PullReconcileInterval int  `mapstructure:"pull_reconcile_interval"` // seconds, default 300
+
+	// Self-upgrade image policy. The agent will only ever set its own
+	// Deployment image to a reference in AgentImageRepository (an EXACT
+	// repository match, never a prefix). When empty the agent uses the
+	// repository of the image it is currently RUNNING, which is trusted by
+	// construction and keeps manifests predating this field upgradable; moving
+	// the agent to a different registry then becomes an explicit opt-in.
+	// AgentAllowMutableTag re-permits floating tags such as :latest, which are
+	// refused by default because they can neither be verified nor rolled back
+	// to a known state. Env: ASTRONOMER_AGENT_IMAGE_REPOSITORY,
+	// ASTRONOMER_AGENT_ALLOW_MUTABLE_TAG,
+	// ASTRONOMER_AGENT_UPGRADE_ROLLOUT_TIMEOUT.
+	AgentImageRepository       string `mapstructure:"agent_image_repository"`
+	AgentAllowMutableTag       bool   `mapstructure:"agent_allow_mutable_tag"`
+	AgentUpgradeRolloutTimeout int    `mapstructure:"agent_upgrade_rollout_timeout"` // seconds, default 300
 
 	// Server-CA pinning on the agent tunnel (Rancher CATTLE_CA_CHECKSUM
 	// semantics). Both are empty by default, in which case the tunnel dialer
@@ -121,6 +149,8 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
 		envconfig.Default{Key: "privilege_profile", Value: agenttemplate.PrivilegeProfileViewer},
+		envconfig.Default{Key: "max_inflight_requests", Value: defaultMaxInflightRequests},
+		envconfig.Default{Key: "max_inflight_streams", Value: defaultMaxInflightStreams},
 		envconfig.Default{Key: "audit_enabled", Value: false},
 		envconfig.Default{Key: "audit_log_path", Value: ""},
 		envconfig.Default{Key: "audit_checkpoint_path", Value: ""},
@@ -131,6 +161,9 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "pull_reconcile_interval", Value: 300},
 		envconfig.Default{Key: "ca_cert", Value: ""},
 		envconfig.Default{Key: "ca_checksum", Value: ""},
+		envconfig.Default{Key: "agent_image_repository", Value: ""},
+		envconfig.Default{Key: "agent_allow_mutable_tag", Value: false},
+		envconfig.Default{Key: "agent_upgrade_rollout_timeout", Value: 300},
 	)
 
 	cfg := &AgentConfig{}
@@ -194,6 +227,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		}
 	}
 	cfg.CAChecksum = strings.TrimSpace(cfg.CAChecksum)
+	cfg.AgentImageRepository = strings.TrimSpace(cfg.AgentImageRepository)
 
 	return cfg, nil
 }

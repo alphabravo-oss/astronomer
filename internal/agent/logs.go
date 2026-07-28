@@ -16,7 +16,10 @@ import (
 
 // LogHandler streams pod logs via the tunnel.
 type LogHandler struct {
-	client *kubernetes.Clientset
+	// kubernetes.Interface rather than *kubernetes.Clientset: nothing here
+	// needs the concrete type, and the interface lets the session-lifetime
+	// tests drive a real HandleLogStart against a fake cluster.
+	client kubernetes.Interface
 	log    *slog.Logger
 
 	mu       sync.Mutex
@@ -24,7 +27,7 @@ type LogHandler struct {
 }
 
 // NewLogHandler creates a new LogHandler.
-func NewLogHandler(client *kubernetes.Clientset, log *slog.Logger) *LogHandler {
+func NewLogHandler(client kubernetes.Interface, log *slog.Logger) *LogHandler {
 	return &LogHandler{
 		client:   client,
 		log:      log,
@@ -80,8 +83,18 @@ func (h *LogHandler) HandleLogStart(ctx context.Context, msg *protocol.Message, 
 	h.sessions[streamID] = cancel
 	h.mu.Unlock()
 
+	// The in-flight permit readLoop took for this LOG_START belongs to the
+	// SESSION, not to this call: everything expensive about a log tail — this
+	// goroutine, the open kubelet stream, the 1 MiB scanner buffer below —
+	// outlives HandleLogStart by the whole life of the follow. Releasing it on
+	// return would let a peer open unbounded concurrent log sessions.
+	releasePermit := adoptDispatchPermit(ctx)
+
 	// Stream logs in a goroutine.
 	go func() {
+		// Registered first so it runs LAST: the permit is returned only once
+		// the session is fully torn down and LOG_END has been queued.
+		defer releasePermit()
 		defer func() {
 			_ = stream.Close()
 		}()

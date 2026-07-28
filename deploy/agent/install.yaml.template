@@ -648,6 +648,16 @@ spec:
             # with the OS trust store and standard verification (no pinning).
             - name: ASTRONOMER_CA_CHECKSUM
               value: "{{CA_CHECKSUM}}"
+            # Self-upgrade image allow-list. The agent will only ever set its
+            # OWN Deployment image to a reference in THIS repository (an exact
+            # match, never a prefix), so a fleet operator or a compromised
+            # management plane cannot point the agent at an arbitrary image.
+            # Rendered from the image this cluster was adopted with, and
+            # rendered into the Deployment so a Phase-2 self-apply preserves it.
+            # When absent (manifests predating this field) the agent falls back
+            # to the repository of the image it is currently running.
+            - name: ASTRONOMER_AGENT_IMAGE_REPOSITORY
+              value: "{{AGENT_IMAGE_REPOSITORY}}"
           ports:
             - name: health
               containerPort: 8081

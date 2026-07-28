@@ -290,6 +290,7 @@ func (w *Worker) RegisterHandlers() {
 	// flags clusters whose token_rotation_days policy elapsed; the tunnel
 	// server drives the grace rotation on the agent's next connect.
 	w.mux.HandleFunc(tasks.AgentTokenRotateSweepType, instrumentTask(tasks.AgentTokenRotateSweepType, tasks.HandleAgentTokenRotateSweep))
+	w.mux.HandleFunc(tasks.AgentUpgradeStuckSweepType, instrumentTask(tasks.AgentUpgradeStuckSweepType, tasks.HandleAgentUpgradeStuckSweep))
 	w.mux.HandleFunc(TypeDispatchDeferred, instrumentTask(TypeDispatchDeferred, tasks.HandleDispatchDeferred))
 	w.mux.HandleFunc(TypeTaskOutboxDispatch, instrumentTask(TypeTaskOutboxDispatch, tasks.HandleTaskOutboxDispatch))
 	// Migration 060: GitOps cluster registration sync.
