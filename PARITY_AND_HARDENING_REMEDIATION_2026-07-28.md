@@ -48,8 +48,8 @@ There are two readers.
 |---|---|---|---|---|
 | ~~P0~~ ✅ | `agent-ingest-token-shared-service-user-cross-cluster-rce` | transport-security | M | **shipped 2026-07-28** |
 | ~~P0~~ ✅ | `resources-group-version-kind-route-bypasses-per-resource-rbac` | transport-security | S | **shipped 2026-07-28** |
-| P1 | `monitoring-go-3815-line-split` (Part A only) | code-health / security | S |
-| P1 | `k8s-proxy-proxy-subresource-not-gated-nodes-proxy-is-kubelet-rce` | transport-security | M |
+| ~~P1~~ ✅ | `monitoring-go-3815-line-split` (Part A) | code-health / security | S | **shipped 2026-07-28** |
+| ~~P1~~ ✅ | `k8s-proxy-proxy-subresource-not-gated-nodes-proxy-is-kubelet-rce` | transport-security | M | **shipped 2026-07-28** |
 | P1 | `exec-logs-verb-mismatch` + `exec-logs-ws-ignore-pods-exec-and-pods-logs-verbs` | parity-core | M |
 | P1 | `role-update-no-escalation-guard` | parity-core | S |
 | P1 | `cluster-project-list-unfiltered` | parity-core | M |
@@ -267,7 +267,23 @@ Sibling routes are protected and this one is not: `ListNamedResources`/`ListGene
 
 ### [monitoring-go-3815-line-split] Three unauthenticated `/settings/monitoring/*` endpoints, produced by copy-paste in a 3,815-line file
 
-**Status:** PENDING APPROVAL · **Severity** high · **Dimension** code-health + transport-security · **Effort** Part A: S; Part B: L
+**Status:** ✅ Part A SHIPPED 2026-07-28 · Part B still PENDING APPROVAL · **Severity** high · **Dimension** code-health + transport-security · **Effort** Part A: S; Part B: L
+
+> **Part A implemented and validated.** Confirmed live before the fix: anonymous
+> `GET /api/v1/settings/monitoring/backend/` returned **200**. Both layers were fixed deliberately — the three
+> handlers gained the `authorizeGlobalAction` preamble their mutating siblings already had, AND the routes moved
+> onto a `requireAuth` group, with a test that unwires the handler's authz support to prove the router-level
+> check stands alone. `authConfig` is now redacted. Verified live on k3d-astro-p63: all three routes return
+> **401** anonymously, and an authenticated wildcard admin still gets 200.
+> Enumeration beyond the audit's list of three found `ListOperations` also anonymously reachable; it now
+> requires auth but deliberately keeps per-row RBAC filtering rather than gaining a global gate, which would
+> break cluster-scoped binding holders. `PUT /settings/monitoring/backend/` and POST retry moved to write-scope.
+> **Root cause of the blind spot:** the Monitoring handler was never wired into `newRouteSecurityRouter`, so all
+> 38 monitoring routes were invisible to every registry-driven security test. Wiring it — and then the remaining
+> 21 handler deps, surfacing 228 untested routes — shipped as a separate commit (`2c92f45`), which also adds the
+> whole-router default-deny sweep that would have caught this class of bug.
+> **Part B (the 3,815-line file split) was explicitly NOT done** and remains open.
+> Also noted, not fixed: `internal/handler/monitoring.go` is gofmt-dirty at HEAD, pre-existing.
 
 **Evidence** — Three structurally identical Preview/Install/Upgrade/Replace/Uninstall/Status families: shared-Thanos `monitoring.go:498-735`, shared-Alertmanager `:737-974`, per-cluster stack `:1071-1283`. Every mutating sibling opens with `h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, ...)` (`:519, 546, 582, 627, 677`), but `PreviewSharedThanosStack` (`:498`), `PreviewSharedAlertmanager` (`:737`) and `GetBackendConfig` (`:413`) have **no authorization call at all** — and their routes at `internal/server/routes.go:584, 590, 596` are registered on the bare `r` inside `r.Route("/settings")` (`routes.go:534`), which has no group-level `requireAuth`. There is no global auth middleware on the router (only RequestID/RealIP/SecurityHeaders/RequestLogger/Recoverer/Metrics/CORS, `routes.go:354-379`). Neither `/settings/monitoring/backend` nor the preview routes appear in `docs/security-sensitive-routes.json`, `docs/route-risk-classifications.json`, or `isRouterPublicReadPattern` (`routes_security_test.go:2735-2741`). Rest of file: async operation engine `3094-3550`, PromQL client `1284-1836`, Helm values/objstore rendering `1880-2790`, legacy shims `3703-3815`, dead assignment `_ = ok` at `:1165`.
 
@@ -301,7 +317,23 @@ Sibling routes are protected and this one is not: `ListNamedResources`/`ListGene
 
 ### [k8s-proxy-proxy-subresource-not-gated-nodes-proxy-is-kubelet-rce] The `/proxy` subresource is authorized as a plain read/update of the parent resource
 
-**Status:** PENDING APPROVAL · **Severity** high · **Dimension** transport-security · **Effort** M
+**Status:** ✅ SHIPPED 2026-07-28 (migration 141) · **Severity** high · **Dimension** transport-security · **Effort** M
+
+> **Implemented and validated.** The `subresource == "proxy"` branch is placed before both the `pods/log` branch
+> and the generic fallthrough — the ordering the audit flagged as load-bearing. Mutating `nodes/*/proxy`
+> additionally requires `pods:exec` via a second `CheckPermission`, since one call cannot express AND. Proxy
+> calls are now audited. A 14-case table test covers bare `/nodes/n1/proxy`, `/proxy/run/...`, mixed-case
+> `/PROXY/`, port-qualified `https:web:443`, unknown CRDs, and both single-permission deny cases.
+> **Migration 141 is an ADD-IF-MISSING reconcile, not a rewrite.** It restores `pods:proxy`/`services:proxy` on
+> built-in rows predating 032/098 (both insert with `WHERE NOT EXISTS`, skipping existing rows) so those roles
+> do not silently lose access. Operator-authored custom roles are untouched. **No template gains `nodes:proxy`** —
+> Node Operator keeps `nodes:[read,list,update,manage]` because cordon/drain/label need no kubelet proxy, and
+> widening it would re-open the RCE. Verified live: 0 built-in roles hold `nodes:proxy`.
+> **Live validation limit, stated honestly:** on k3d-astro-p63 a wildcard admin's `nodes/proxy` request passes
+> our gate and is then refused by the *downstream* cluster (`system:serviceaccount:astronomer:astronomer cannot
+> get nodes/proxy`) because of the agent privilege profile — so the live run proves the gate does not regress
+> admin access, but the negative case (limited user denied at our gate) is covered by the unit table, not by the
+> cluster.
 
 **Evidence** — `internal/server/routes.go:1509-1552` `k8sProxyPermission` special-cases only `exec|attach|portforward` (`:1524` via `isHighRiskPodProxySubresourceRef`, `:1962-1977`) and `pods/log` (`:1529`). There is **no branch for `subresource == "proxy"`**, so it falls through to `k8sProxyVerb` (`:1617-1645`) + `namedResourcePermission` (`:1749-1757`). `parseK8sProxyObjectRef` (`:1685-1716`) parses `/api/v1/nodes/n1/proxy/...` to resource=nodes, name=n1, subresource=proxy; `k8sProxyVerb` returns `VerbRead` for GET-with-name and `VerbUpdate` for POST-with-name. Result: `GET /api/v1/nodes/n1/proxy/runningpods/` → `nodes:read`; `POST /api/v1/nodes/n1/proxy/run/<ns>/<pod>/<container>` → `nodes:update` (the same verb the cordon/label routes use, `routes_resources_workloads.go:135-141`); `GET /api/v1/namespaces/x/pods/p/proxy/admin` → `pods:read`; services likewise. `rbac.VerbProxy` exists (`internal/rbac/types.go:105`) and the catalog grants it (`032_builtin_role_catalog.up.sql:20-21` pods:proxy; `098_rancher_grade_role_catalog.up.sql:51` services:proxy) but **no code path ever asks for it** — grep outside `internal/rbac` and the migrations returns only the builtin-role contract test. The forwarded request runs as the agent's SA (`internal/agent/k8sproxy.go:418-449`).
 
