@@ -765,6 +765,8 @@ export interface OpenAPIComponents {
           "auth_config"?: Record<string, unknown>;
           "enabled"?: boolean;
           "last_synced_at"?: string | null;
+          "last_sync_attempted_at"?: string | null;
+          "last_sync_error"?: string;
           "created_by_id"?: string | null;
           "created_at"?: string;
           "updated_at"?: string;

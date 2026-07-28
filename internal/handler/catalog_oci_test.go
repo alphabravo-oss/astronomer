@@ -5,9 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/registry"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -103,76 +100,6 @@ func TestParseOCIAuthConfig(t *testing.T) {
 	}
 	if got := parseOCIAuthConfig([]byte(`not-json`)); got.Username != "" {
 		t.Fatalf("expected zero value for invalid input, got %+v", got)
-	}
-}
-
-func TestSelectOCITags(t *testing.T) {
-	t.Parallel()
-
-	got := selectOCITags([]string{
-		"7.7.10",
-		"7.7.12-metadata",
-		"7.7.12",
-		" 7.7.11 ",
-		"",
-		"latest",
-	}, 3)
-	want := []string{"7.7.12", "7.7.11", "7.7.10"}
-	if len(got) != len(want) {
-		t.Fatalf("len(selectOCITags()) = %d, want %d (%v)", len(got), len(want), got)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("selectOCITags()[%d] = %q, want %q (%v)", i, got[i], want[i], got)
-		}
-	}
-}
-
-func TestOCIMetadataFromPull(t *testing.T) {
-	// Construct a synthetic Helm chart manifest and verify we extract the
-	// fields we persist on HelmChart. We use the public helm types directly
-	// so the fixture stays in lockstep with the SDK.
-	pull := &registry.PullResult{
-		Manifest: &registry.DescriptorPullSummary{Digest: "sha256:abcd"},
-		Chart: &registry.DescriptorPullSummaryWithMeta{
-			Meta: &chart.Metadata{
-				Name:        "argo-cd",
-				Version:     "5.51.0",
-				AppVersion:  "v2.9.3",
-				Description: "A GitOps continuous delivery tool.",
-				Icon:        "https://argo-cd.example/icon.png",
-				Home:        "https://argo-cd.example",
-				Keywords:    []string{"gitops", "cd"},
-				Maintainers: []*chart.Maintainer{
-					{Name: "alice", Email: "a@example.com"},
-				},
-				Deprecated: false,
-			},
-		},
-	}
-	got := ociMetadataFromPull(pull)
-	if got.description != "A GitOps continuous delivery tool." {
-		t.Fatalf("description: %q", got.description)
-	}
-	if got.icon != "https://argo-cd.example/icon.png" {
-		t.Fatalf("icon: %q", got.icon)
-	}
-	if got.home != "https://argo-cd.example" {
-		t.Fatalf("home: %q", got.home)
-	}
-	if len(got.keywords) != 2 || got.keywords[0] != "gitops" {
-		t.Fatalf("keywords: %v", got.keywords)
-	}
-	if len(got.maintainers) != 1 || got.maintainers[0].Name != "alice" {
-		t.Fatalf("maintainers: %+v", got.maintainers)
-	}
-
-	// Nil-safe.
-	if zero := ociMetadataFromPull(nil); zero.description != "" {
-		t.Fatalf("expected zero meta for nil pull, got %+v", zero)
-	}
-	if zero := ociMetadataFromPull(&registry.PullResult{}); zero.description != "" {
-		t.Fatalf("expected zero meta for empty pull, got %+v", zero)
 	}
 }
 

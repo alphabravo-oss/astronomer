@@ -42,7 +42,23 @@ WHERE id = $1
 RETURNING *;
 
 -- name: UpdateHelmRepositoryLastSynced :exec
-UPDATE helm_repositories SET last_synced_at = now() WHERE id = $1;
+-- A successful ingest advances the freshness clock AND clears any error left
+-- by an earlier failed sweep, so a repo that has recovered stops reporting a
+-- stale reason.
+UPDATE helm_repositories
+   SET last_synced_at = now(),
+       last_sync_attempted_at = now(),
+       last_sync_error = ''
+ WHERE id = $1;
+
+-- name: UpdateHelmRepositorySyncFailure :exec
+-- Records why this repository's last sync attempt failed. last_synced_at is
+-- deliberately left alone: a failed attempt must not make a stale catalog look
+-- fresh.
+UPDATE helm_repositories
+   SET last_sync_attempted_at = now(),
+       last_sync_error = $2
+ WHERE id = $1;
 
 -- name: DeleteHelmRepository :exec
 DELETE FROM helm_repositories WHERE id = $1;

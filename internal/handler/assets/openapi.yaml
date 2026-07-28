@@ -2083,9 +2083,28 @@ components:
         enabled:
           type: boolean
         last_synced_at:
+          description: |
+            Last SUCCESSFUL ingest. A failed sync attempt deliberately does not
+            advance it, so a repository that has been failing keeps reporting
+            its real (stale) freshness.
           type: string
           format: date-time
           nullable: true
+        last_sync_attempted_at:
+          description: |
+            Last time the scheduled sweep or the Sync button tried this
+            repository, successfully or not. Compare with last_synced_at to
+            tell "failing" from "no longer being visited".
+          type: string
+          format: date-time
+          nullable: true
+        last_sync_error:
+          description: |
+            Why the most recent sync attempt failed; empty when the last
+            attempt succeeded. The scheduled catalog sweep isolates failures
+            per repository, so this is the per-repo reason a repository is not
+            refreshing while the rest of the catalog is.
+          type: string
         created_by_id:
           type: string
           format: uuid

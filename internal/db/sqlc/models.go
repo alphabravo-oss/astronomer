@@ -1206,20 +1206,22 @@ type HelmChartVersion struct {
 }
 
 type HelmRepository struct {
-	ID             uuid.UUID          `json:"id"`
-	Name           string             `json:"name"`
-	Url            string             `json:"url"`
-	RepoType       string             `json:"repo_type"`
-	Description    string             `json:"description"`
-	IsDefault      bool               `json:"is_default"`
-	AuthType       string             `json:"auth_type"`
-	AuthConfig     json.RawMessage    `json:"auth_config"`
-	Enabled        bool               `json:"enabled"`
-	LastSyncedAt   pgtype.Timestamptz `json:"last_synced_at"`
-	CreatedByID    pgtype.UUID        `json:"created_by_id"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
-	OwnerProjectID pgtype.UUID        `json:"owner_project_id"`
+	ID                  uuid.UUID          `json:"id"`
+	Name                string             `json:"name"`
+	Url                 string             `json:"url"`
+	RepoType            string             `json:"repo_type"`
+	Description         string             `json:"description"`
+	IsDefault           bool               `json:"is_default"`
+	AuthType            string             `json:"auth_type"`
+	AuthConfig          json.RawMessage    `json:"auth_config"`
+	Enabled             bool               `json:"enabled"`
+	LastSyncedAt        pgtype.Timestamptz `json:"last_synced_at"`
+	CreatedByID         pgtype.UUID        `json:"created_by_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	OwnerProjectID      pgtype.UUID        `json:"owner_project_id"`
+	LastSyncError       string             `json:"last_sync_error"`
+	LastSyncAttemptedAt pgtype.Timestamptz `json:"last_sync_attempted_at"`
 }
 
 type IdentityGroupMapping struct {

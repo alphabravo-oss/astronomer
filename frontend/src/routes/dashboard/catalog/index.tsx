@@ -274,12 +274,20 @@ function CatalogPage() {
     {
       key: 'status',
       header: 'Status',
-      accessor: (row) => (
-        <StatusBadge
-          status={row.enabled ? 'active' : 'disconnected'}
-          label={row.enabled ? 'Enabled' : 'Disabled'}
-        />
-      ),
+      // The scheduled sweep isolates failures per repository, so a repo can be
+      // Enabled and silently not refreshing. Surface last_sync_error here or
+      // the only trace is a worker log line.
+      accessor: (row) =>
+        row.enabled && row.lastSyncError ? (
+          <span title={row.lastSyncError}>
+            <StatusBadge status="failed" label="Sync failed" />
+          </span>
+        ) : (
+          <StatusBadge
+            status={row.enabled ? 'active' : 'disconnected'}
+            label={row.enabled ? 'Enabled' : 'Disabled'}
+          />
+        ),
     },
     {
       key: 'actions',

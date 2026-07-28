@@ -1520,7 +1520,12 @@ export interface HelmRepository {
   isDefault: boolean;
   enabled: boolean;
   chartCount: number;
+  /** Last SUCCESSFUL ingest — a failed attempt deliberately does not advance it. */
   lastSyncedAt?: string;
+  /** Last attempt, successful or not. Compare with lastSyncedAt to tell "failing" from "no longer visited". */
+  lastSyncAttemptedAt?: string | null;
+  /** Why the most recent sync attempt failed; empty when the last attempt succeeded. */
+  lastSyncError?: string;
   createdAt: string;
   updatedAt: string;
 }

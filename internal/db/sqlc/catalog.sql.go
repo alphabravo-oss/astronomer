@@ -290,7 +290,7 @@ func (q *Queries) CreateHelmChartVersion(ctx context.Context, arg CreateHelmChar
 const createHelmRepository = `-- name: CreateHelmRepository :one
 INSERT INTO helm_repositories (name, url, repo_type, description, is_default, auth_type, auth_config, enabled, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id
+RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 `
 
 type CreateHelmRepositoryParams struct {
@@ -333,6 +333,8 @@ func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmReposi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OwnerProjectID,
+		&i.LastSyncError,
+		&i.LastSyncAttemptedAt,
 	)
 	return i, err
 }
@@ -569,7 +571,7 @@ func (q *Queries) GetHelmChartVersionByID(ctx context.Context, id uuid.UUID) (He
 
 const getHelmRepositoryByID = `-- name: GetHelmRepositoryByID :one
 
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories WHERE id = $1
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at FROM helm_repositories WHERE id = $1
 `
 
 // Helm Repositories
@@ -591,6 +593,8 @@ func (q *Queries) GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (Helm
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OwnerProjectID,
+		&i.LastSyncError,
+		&i.LastSyncAttemptedAt,
 	)
 	return i, err
 }
@@ -913,7 +917,7 @@ func (q *Queries) ListChartsByRepositoryIDs(ctx context.Context, arg ListChartsB
 }
 
 const listEnabledHelmRepositories = `-- name: ListEnabledHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories WHERE enabled = true ORDER BY name ASC
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at FROM helm_repositories WHERE enabled = true ORDER BY name ASC
 `
 
 func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error) {
@@ -940,6 +944,8 @@ func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmReposi
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OwnerProjectID,
+			&i.LastSyncError,
+			&i.LastSyncAttemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -952,7 +958,7 @@ func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmReposi
 }
 
 const listGlobalHelmRepositories = `-- name: ListGlobalHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at FROM helm_repositories
 WHERE owner_project_id IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -992,6 +998,8 @@ func (q *Queries) ListGlobalHelmRepositories(ctx context.Context, arg ListGlobal
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OwnerProjectID,
+			&i.LastSyncError,
+			&i.LastSyncAttemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1047,7 +1055,7 @@ func (q *Queries) ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) 
 }
 
 const listHelmRepositories = `-- name: ListHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListHelmRepositoriesParams struct {
@@ -1079,6 +1087,8 @@ func (q *Queries) ListHelmRepositories(ctx context.Context, arg ListHelmReposito
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OwnerProjectID,
+			&i.LastSyncError,
+			&i.LastSyncAttemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1266,7 +1276,7 @@ UPDATE helm_repositories SET
     auth_config = $8,
     enabled = $9
 WHERE id = $1
-RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id
+RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 `
 
 type UpdateHelmRepositoryParams struct {
@@ -1309,16 +1319,45 @@ func (q *Queries) UpdateHelmRepository(ctx context.Context, arg UpdateHelmReposi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OwnerProjectID,
+		&i.LastSyncError,
+		&i.LastSyncAttemptedAt,
 	)
 	return i, err
 }
 
 const updateHelmRepositoryLastSynced = `-- name: UpdateHelmRepositoryLastSynced :exec
-UPDATE helm_repositories SET last_synced_at = now() WHERE id = $1
+UPDATE helm_repositories
+   SET last_synced_at = now(),
+       last_sync_attempted_at = now(),
+       last_sync_error = ''
+ WHERE id = $1
 `
 
+// A successful ingest advances the freshness clock AND clears any error left
+// by an earlier failed sweep, so a repo that has recovered stops reporting a
+// stale reason.
 func (q *Queries) UpdateHelmRepositoryLastSynced(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, updateHelmRepositoryLastSynced, id)
+	return err
+}
+
+const updateHelmRepositorySyncFailure = `-- name: UpdateHelmRepositorySyncFailure :exec
+UPDATE helm_repositories
+   SET last_sync_attempted_at = now(),
+       last_sync_error = $2
+ WHERE id = $1
+`
+
+type UpdateHelmRepositorySyncFailureParams struct {
+	ID            uuid.UUID `json:"id"`
+	LastSyncError string    `json:"last_sync_error"`
+}
+
+// Records why this repository's last sync attempt failed. last_synced_at is
+// deliberately left alone: a failed attempt must not make a stale catalog look
+// fresh.
+func (q *Queries) UpdateHelmRepositorySyncFailure(ctx context.Context, arg UpdateHelmRepositorySyncFailureParams) error {
+	_, err := q.db.Exec(ctx, updateHelmRepositorySyncFailure, arg.ID, arg.LastSyncError)
 	return err
 }
 

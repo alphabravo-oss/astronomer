@@ -1958,7 +1958,14 @@ type Querier interface {
 	UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSourceParams) (GitopsRegistrationSource, error)
 	UpdateGlobalRole(ctx context.Context, arg UpdateGlobalRoleParams) (GlobalRole, error)
 	UpdateHelmRepository(ctx context.Context, arg UpdateHelmRepositoryParams) (HelmRepository, error)
+	// A successful ingest advances the freshness clock AND clears any error left
+	// by an earlier failed sweep, so a repo that has recovered stops reporting a
+	// stale reason.
 	UpdateHelmRepositoryLastSynced(ctx context.Context, id uuid.UUID) error
+	// Records why this repository's last sync attempt failed. last_synced_at is
+	// deliberately left alone: a failed attempt must not make a stale catalog look
+	// fresh.
+	UpdateHelmRepositorySyncFailure(ctx context.Context, arg UpdateHelmRepositorySyncFailureParams) error
 	UpdateInstalledChartStatus(ctx context.Context, arg UpdateInstalledChartStatusParams) error
 	UpdateInstalledChartValues(ctx context.Context, arg UpdateInstalledChartValuesParams) (InstalledChart, error)
 	UpdateLoggingOutput(ctx context.Context, arg UpdateLoggingOutputParams) (LoggingOutput, error)

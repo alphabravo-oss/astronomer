@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -286,7 +288,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count repositories")
 			return
 		}
-	RespondPaginated(w, r, redactHelmRepositories(rows), total)
+		RespondPaginated(w, r, redactHelmRepositories(rows), total)
 		return
 	}
 
@@ -562,47 +564,6 @@ type chartVersionIngestRow struct {
 	CreatedAtUpstream *time.Time      `json:"created_at_upstream"`
 }
 
-// helmRepoAuthConfig mirrors the auth_config JSON we accept for classic
-// (non-OCI) Helm repositories. All fields are optional. Basic auth uses
-// username/password; a bearer token can be supplied under either "token"
-// or "bearer".
-type helmRepoAuthConfig struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-	Token    string `json:"token,omitempty"`
-	Bearer   string `json:"bearer,omitempty"`
-}
-
-// applyRepoIndexAuth sets the Authorization header on an index.yaml (or
-// test-connection) request from the repository's stored credentials, so
-// private ChartMuseum / Artifactory / Nexus repos can be synced. Mirrors
-// the OCI ingest branch, which already honours username/password. A repo
-// with auth_type "" / "none" is left unauthenticated.
-func applyRepoIndexAuth(req *http.Request, repo sqlc.HelmRepository) {
-	authType := strings.ToLower(strings.TrimSpace(repo.AuthType))
-	if authType == "" || authType == "none" {
-		return
-	}
-	var cfg helmRepoAuthConfig
-	if len(repo.AuthConfig) > 0 {
-		_ = json.Unmarshal(repo.AuthConfig, &cfg)
-	}
-	switch authType {
-	case "basic":
-		if cfg.Username != "" || cfg.Password != "" {
-			req.SetBasicAuth(cfg.Username, cfg.Password)
-		}
-	case "bearer", "token":
-		token := cfg.Token
-		if token == "" {
-			token = cfg.Bearer
-		}
-		if token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
-		}
-	}
-}
-
 func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.HelmRepository) (chartCount, versionCount int, err error) {
 	indexURL := strings.TrimRight(repo.Url, "/") + "/index.yaml"
 	// SEC-02: same SSRF posture as the worker catalog_sync path.
@@ -636,6 +597,21 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 	for chartName, versions := range index.Entries {
 		if chartName == "" || len(versions) == 0 {
 			continue
+		}
+		// Apply the SAME last-N cap the scheduled sweep applies, on the same
+		// ordering. index.yaml entry order is conventionally newest-first but
+		// nothing guarantees it, so sort before truncating (the worker gets
+		// this from helm's IndexFile.SortEntries).
+		//
+		// Without this the two ingests disagreed destructively: Sync inserted
+		// every version in the index and the next sweep's GC deleted
+		// everything outside its own top-3. No chart archive is downloaded
+		// here, so capping costs nothing — it is purely a slice truncation.
+		slices.SortStableFunc(versions, func(a, b helmIndexChartVer) int {
+			return catalog.CompareVersionsDesc(a.Version, b.Version)
+		})
+		if len(versions) > catalog.MaxIndexVersionsPerChart {
+			versions = versions[:catalog.MaxIndexVersionsPerChart]
 		}
 		// Pick the first non-empty descriptive fields across all versions —
 		// some repos only set icon/home on the latest version.
@@ -1494,16 +1470,6 @@ func mergeAuthConfigPreservingSentinel(existing, incoming json.RawMessage) json.
 		return existing
 	}
 	return b
-}
-
-// isOCIRepoSpec reports whether the stored repository should be treated as
-// an OCI artifact registry. We accept either an oci:// URL or an explicit
-// repo_type='oci' marker so operators can override URL-based detection.
-func isOCIRepoSpec(repo sqlc.HelmRepository) bool {
-	if strings.EqualFold(strings.TrimSpace(repo.RepoType), "oci") {
-		return true
-	}
-	return IsOCIRepo(repo.Url)
 }
 
 // GetChartReadme handles GET /api/v1/catalog/charts/{id}/readme/.

@@ -45,7 +45,7 @@ INSERT INTO helm_repositories (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, name, url, repo_type, description, is_default, auth_type,
           auth_config, enabled, last_synced_at, created_by_id, created_at,
-          updated_at, owner_project_id
+          updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 `
 
 type CreateProjectOwnedCatalogParams struct {
@@ -90,6 +90,8 @@ func (q *Queries) CreateProjectOwnedCatalog(ctx context.Context, arg CreateProje
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OwnerProjectID,
+		&i.LastSyncError,
+		&i.LastSyncAttemptedAt,
 	)
 	return i, err
 }
@@ -112,7 +114,7 @@ func (q *Queries) DeleteProjectCatalogSubscription(ctx context.Context, arg Dele
 const getHelmRepositoryWithOwner = `-- name: GetHelmRepositoryWithOwner :one
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 FROM helm_repositories
 WHERE id = $1
 `
@@ -135,6 +137,8 @@ func (q *Queries) GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OwnerProjectID,
+		&i.LastSyncError,
+		&i.LastSyncAttemptedAt,
 	)
 	return i, err
 }
@@ -166,7 +170,7 @@ func (q *Queries) GetProjectCatalogSubscription(ctx context.Context, arg GetProj
 const listAdminCatalogsIncludingProjectOwned = `-- name: ListAdminCatalogsIncludingProjectOwned :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 FROM helm_repositories
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -201,6 +205,8 @@ func (q *Queries) ListAdminCatalogsIncludingProjectOwned(ctx context.Context, ar
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OwnerProjectID,
+			&i.LastSyncError,
+			&i.LastSyncAttemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +222,7 @@ const listCatalogsForProject = `-- name: ListCatalogsForProject :many
 
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 FROM helm_repositories
 WHERE owner_project_id IS NULL
    OR owner_project_id = $1::uuid
@@ -262,6 +268,8 @@ func (q *Queries) ListCatalogsForProject(ctx context.Context, projectID uuid.UUI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OwnerProjectID,
+			&i.LastSyncError,
+			&i.LastSyncAttemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -276,7 +284,7 @@ func (q *Queries) ListCatalogsForProject(ctx context.Context, projectID uuid.UUI
 const listProjectOwnedCatalogs = `-- name: ListProjectOwnedCatalogs :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
 FROM helm_repositories
 WHERE owner_project_id = $1::uuid
 ORDER BY name ASC
@@ -306,6 +314,8 @@ func (q *Queries) ListProjectOwnedCatalogs(ctx context.Context, projectID uuid.U
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OwnerProjectID,
+			&i.LastSyncError,
+			&i.LastSyncAttemptedAt,
 		); err != nil {
 			return nil, err
 		}
