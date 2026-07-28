@@ -825,20 +825,24 @@ func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 		ApiserverAudit:      handler.NewApiserverAuditHandler(nil),
 		ApiserverAllowlist:  handler.NewApiserverAllowlistHandler(nil),
 		ClusterTemplates:    handler.NewClusterTemplateHandler(nil),
-		NetworkPolicies:     handler.NewNetworkPolicyHandler(nil),
-		Workloads:           handler.NewWorkloadHandler(),
-		ServiceMesh:         handler.NewServiceMeshHandler(nil),
-		Proxy:               tunnel.NewProxyHandler(hub, slog.Default()),
-		ArgoCDProxyTokens:   &routeSecurityArgoTokenQuerier{clusterID: clusterID},
-		ServiceProxy:        routeSecurityServiceProxy(),
-		InternalK8s:         tunnel.NewInternalK8sHandler(hub, "route-security-psk", slog.Default()),
-		InternalHelm:        tunnel.NewInternalHelmHandler(hub, "route-security-psk", slog.Default()),
-		Exec:                execConsumer,
-		Logs:                logsConsumer,
-		RemoteServer:        tunnel2.NewRemoteServer(slog.Default(), nil),
-		ArgoCDUIProxy:       argoUIProxy,
-		KubectlShell:        shellHandler,
-		SCIMTokenAdmin:      handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
+		// Wired so the monitoring surface — including the /settings/monitoring
+		// routes that answered unauthenticated reads until the 2026-07-28 fix —
+		// is visible to the registry-driven route security tests at all.
+		Monitoring:        handler.NewMonitoringHandler(),
+		NetworkPolicies:   handler.NewNetworkPolicyHandler(nil),
+		Workloads:         handler.NewWorkloadHandler(),
+		ServiceMesh:       handler.NewServiceMeshHandler(nil),
+		Proxy:             tunnel.NewProxyHandler(hub, slog.Default()),
+		ArgoCDProxyTokens: &routeSecurityArgoTokenQuerier{clusterID: clusterID},
+		ServiceProxy:      routeSecurityServiceProxy(),
+		InternalK8s:       tunnel.NewInternalK8sHandler(hub, "route-security-psk", slog.Default()),
+		InternalHelm:      tunnel.NewInternalHelmHandler(hub, "route-security-psk", slog.Default()),
+		Exec:              execConsumer,
+		Logs:              logsConsumer,
+		RemoteServer:      tunnel2.NewRemoteServer(slog.Default(), nil),
+		ArgoCDUIProxy:     argoUIProxy,
+		KubectlShell:      shellHandler,
+		SCIMTokenAdmin:    handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
 	})
 	return router, clusterID.String()
 }
@@ -1724,6 +1728,171 @@ func TestK8sProxyPodExecRequiresPodExecPermission(t *testing.T) {
 	}
 }
 
+// TestK8sProxySubresourceRequiresProxyVerb pins the F1 (M5) contract: the
+// apiserver `proxy` subresource maps to the dedicated `proxy` verb on the
+// target resource, never to that resource's generic read/update verb. Before
+// the fix, GET .../nodes/n1/proxy/pods passed on nodes:read and POST
+// .../nodes/n1/proxy/run/<ns>/<pod>/<container> — the kubelet's arbitrary-
+// command endpoint — passed on nodes:update, the same verb the cordon/label
+// routes use. 503 means the request cleared authz and reached the (unwired)
+// proxy handler.
+func TestK8sProxySubresourceRequiresProxyVerb(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	clusterID := uuid.New()
+
+	rules := func(pairs ...rbac.Rule) []rbac.RoleBinding {
+		return []rbac.RoleBinding{{RoleRules: pairs}}
+	}
+	rule := func(resource rbac.Resource, verbs ...rbac.Verb) rbac.Rule {
+		values := make([]string, 0, len(verbs))
+		for _, verb := range verbs {
+			values = append(values, string(verb))
+		}
+		return rbac.Rule{Resource: string(resource), Verbs: values}
+	}
+
+	tests := []struct {
+		name     string
+		method   string
+		k8sPath  string
+		bindings []rbac.RoleBinding
+		want     int
+	}{
+		{
+			name:     "node proxy read denied with nodes read",
+			method:   http.MethodGet,
+			k8sPath:  "/api/v1/nodes/node-0/proxy/pods",
+			bindings: rules(rule(rbac.ResourceNodes, rbac.VerbRead, rbac.VerbList)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:     "node proxy read allowed with nodes proxy",
+			method:   http.MethodGet,
+			k8sPath:  "/api/v1/nodes/node-0/proxy/pods",
+			bindings: rules(rule(rbac.ResourceNodes, rbac.VerbProxy)),
+			want:     http.StatusServiceUnavailable,
+		},
+		{
+			// parseK8sProxyObjectRef drops everything after the subresource,
+			// so the bare form must be classified identically.
+			name:     "bare node proxy read denied with nodes read",
+			method:   http.MethodGet,
+			k8sPath:  "/api/v1/nodes/node-0/proxy",
+			bindings: rules(rule(rbac.ResourceNodes, rbac.VerbRead, rbac.VerbList)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:     "kubelet run denied with nodes update",
+			method:   http.MethodPost,
+			k8sPath:  "/api/v1/nodes/node-0/proxy/run/default/app-0/app",
+			bindings: rules(rule(rbac.ResourceNodes, rbac.VerbRead, rbac.VerbUpdate, rbac.VerbManage)),
+			want:     http.StatusForbidden,
+		},
+		{
+			// nodes:proxy alone is not enough: kubelet /run/ is pod exec by
+			// another name, so pods:exec is required as well.
+			name:     "kubelet run denied with nodes proxy but no pod exec",
+			method:   http.MethodPost,
+			k8sPath:  "/api/v1/nodes/node-0/proxy/run/default/app-0/app",
+			bindings: rules(rule(rbac.ResourceNodes, rbac.VerbProxy)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:     "kubelet run denied with pod exec but no nodes proxy",
+			method:   http.MethodPost,
+			k8sPath:  "/api/v1/nodes/node-0/proxy/run/default/app-0/app",
+			bindings: rules(rule(rbac.ResourcePods, rbac.VerbExec)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:    "kubelet run allowed with nodes proxy and pod exec",
+			method:  http.MethodPost,
+			k8sPath: "/api/v1/nodes/node-0/proxy/run/default/app-0/app",
+			bindings: rules(
+				rule(rbac.ResourceNodes, rbac.VerbProxy),
+				rule(rbac.ResourcePods, rbac.VerbExec),
+			),
+			want: http.StatusServiceUnavailable,
+		},
+		{
+			name:     "pod proxy denied with pods read",
+			method:   http.MethodGet,
+			k8sPath:  "/api/v1/namespaces/default/pods/app-0/proxy/metrics",
+			bindings: rules(rule(rbac.ResourcePods, rbac.VerbRead, rbac.VerbList, rbac.VerbLogs)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:     "pod proxy allowed with pods proxy",
+			method:   http.MethodGet,
+			k8sPath:  "/api/v1/namespaces/default/pods/app-0/proxy/metrics",
+			bindings: rules(rule(rbac.ResourcePods, rbac.VerbProxy)),
+			want:     http.StatusServiceUnavailable,
+		},
+		{
+			// Nothing in the parse path lowercases the subresource, so the
+			// branch must fold case itself or /PROXY/ degrades to pods:update.
+			name:     "mixed case pod proxy write denied with pods update",
+			method:   http.MethodPost,
+			k8sPath:  "/api/v1/namespaces/default/pods/app-0/PROXY/admin",
+			bindings: rules(rule(rbac.ResourcePods, rbac.VerbRead, rbac.VerbUpdate)),
+			want:     http.StatusForbidden,
+		},
+		{
+			// The port-qualified service proxy name form must not defeat the
+			// classification.
+			name:     "service proxy denied with services update",
+			method:   http.MethodPost,
+			k8sPath:  "/api/v1/namespaces/default/services/https:web:443/proxy/admin",
+			bindings: rules(rule(rbac.ResourceServices, rbac.VerbRead, rbac.VerbUpdate)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:     "service proxy allowed with services proxy",
+			method:   http.MethodPost,
+			k8sPath:  "/api/v1/namespaces/default/services/https:web:443/proxy/admin",
+			bindings: rules(rule(rbac.ResourceServices, rbac.VerbProxy)),
+			want:     http.StatusServiceUnavailable,
+		},
+		{
+			name:     "unknown crd proxy denied with custom_resources read",
+			method:   http.MethodGet,
+			k8sPath:  "/apis/foo.io/v1/namespaces/default/widgets/w1/proxy",
+			bindings: rules(rule(rbac.ResourceCustomResources, rbac.VerbRead, rbac.VerbList)),
+			want:     http.StatusForbidden,
+		},
+		{
+			name:     "unknown crd proxy allowed with custom_resources proxy",
+			method:   http.MethodGet,
+			k8sPath:  "/apis/foo.io/v1/namespaces/default/widgets/w1/proxy",
+			bindings: rules(rule(rbac.ResourceCustomResources, rbac.VerbProxy)),
+			want:     http.StatusServiceUnavailable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(&config.Config{}, RouterDependencies{
+				JWT:         jwtMgr,
+				RBACEngine:  rbac.NewEngine(),
+				RBACQueries: routeSecurityRBACQuerier{bindings: tt.bindings},
+				Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+			})
+			req := httptest.NewRequest(tt.method, "/api/v1/clusters/"+clusterID.String()+"/k8s"+tt.k8sPath, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tt.want, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestServiceProxyRequiresAuth(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
@@ -1859,6 +2028,44 @@ func TestApiserverAuditIngestRequiresWriteScope(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("read-only token status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+// TestMonitoringMutationsRequireWriteScope pins the two /settings/monitoring
+// mutators that were left on the requireAuth-only group: PUT backend/ persists
+// operator-supplied backend auth material and POST operations/{id}/retry/
+// re-enqueues helm work, so an API token without clusters:write must not drive
+// either even when its principal holds monitoring:update.
+func TestMonitoringMutationsRequireWriteScope(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	rawToken := "astro_route_security_monitoring_scope"
+
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT:         jwtMgr,
+		AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["projects:write"]`)),
+		RBACEngine:  rbac.NewEngine(),
+		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
+		// The /settings group (and therefore /settings/monitoring) is only
+		// mounted when Resources is wired.
+		Resources:  handler.NewResourceHandler(),
+		Monitoring: handler.NewMonitoringHandler(),
+	})
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPut, "/api/v1/settings/monitoring/backend/"},
+		{http.MethodPost, "/api/v1/settings/monitoring/operations/" + uuid.NewString() + "/retry/"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req.Header.Set("Authorization", "Bearer "+rawToken)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s %s status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusForbidden, rec.Body.String())
+		}
 	}
 }
 

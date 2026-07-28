@@ -32,9 +32,11 @@ DELETE /api/v1/clusters/{cluster_id}/snapshots/{id}
 DELETE /api/v1/clusters/{cluster_id}/template
 DELETE /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}
 DELETE /api/v1/clusters/{id}
+DELETE /api/v1/clusters/{id}/monitoring/stack/uninstall
 DELETE /api/v1/clusters/{id}/registry
 DELETE /api/v1/connect/{cluster_id}
 DELETE /api/v1/internal/argocd/clusters/{cluster_id}/k8s/*
+DELETE /api/v1/monitoring/endpoints/{id}
 DELETE /api/v1/projects/{id}
 DELETE /api/v1/projects/{project_id}/catalogs/{catalog_id}
 DELETE /api/v1/projects/{project_id}/cloud-credentials/{id}
@@ -48,6 +50,8 @@ DELETE /api/v1/rbac/project-bindings/{id}
 DELETE /api/v1/rbac/project-role-bindings/{id}
 DELETE /api/v1/rbac/project-roles/{id}
 DELETE /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}
+DELETE /api/v1/settings/monitoring/alertmanager/uninstall
+DELETE /api/v1/settings/monitoring/thanos/uninstall
 DELETE /api/v1/settings/sso/{id}
 DELETE /api/v1/settings/tokens/{id}
 DELETE /api/v1/users/{id}
@@ -122,6 +126,8 @@ GET /api/v1/clusters/{cluster_id}/apiserver-audit
 GET /api/v1/clusters/{cluster_id}/apps
 GET /api/v1/clusters/{cluster_id}/events
 GET /api/v1/clusters/{cluster_id}/k8s/*
+GET /api/v1/clusters/{cluster_id}/metrics
+GET /api/v1/clusters/{cluster_id}/metrics/summary
 GET /api/v1/clusters/{cluster_id}/namespaces
 GET /api/v1/clusters/{cluster_id}/network-policies/applications
 GET /api/v1/clusters/{cluster_id}/nodes
@@ -149,6 +155,7 @@ GET /api/v1/clusters/{cluster_id}/template
 GET /api/v1/clusters/{cluster_id}/velero-status
 GET /api/v1/clusters/{cluster_id}/workloads
 GET /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}
+GET /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/metrics
 GET /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods
 GET /api/v1/clusters/{id}
 GET /api/v1/clusters/{id}/condition-remediation
@@ -160,6 +167,8 @@ GET /api/v1/clusters/{id}/kubeconfig-preview
 GET /api/v1/clusters/{id}/manifest
 GET /api/v1/clusters/{id}/metrics
 GET /api/v1/clusters/{id}/metrics/summary
+GET /api/v1/clusters/{id}/monitoring/config
+GET /api/v1/clusters/{id}/monitoring/stack/status
 GET /api/v1/clusters/{id}/registration/status
 GET /api/v1/clusters/{id}/registry
 GET /api/v1/clusters/{id}/v2/pods
@@ -168,6 +177,11 @@ GET /api/v1/fleet-operations
 GET /api/v1/fleet-operations/{id}
 GET /api/v1/fleet-operations/{id}/targets
 GET /api/v1/internal/argocd/clusters/{cluster_id}/k8s/*
+GET /api/v1/monitoring/endpoints
+GET /api/v1/monitoring/endpoints/{id}
+GET /api/v1/monitoring/metrics/cluster-overview/{cluster_id}
+GET /api/v1/monitoring/metrics/node/{cluster_id}/{node}
+GET /api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}
 GET /api/v1/projects
 GET /api/v1/projects/{id}
 GET /api/v1/projects/{id}/clusters
@@ -204,6 +218,11 @@ GET /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}
 GET /api/v1/settings
 GET /api/v1/settings/audit-logs
 GET /api/v1/settings/general
+GET /api/v1/settings/monitoring/alertmanager/status
+GET /api/v1/settings/monitoring/backend
+GET /api/v1/settings/monitoring/operations
+GET /api/v1/settings/monitoring/operations/{id}
+GET /api/v1/settings/monitoring/thanos/status
 GET /api/v1/settings/sso
 GET /api/v1/settings/tokens
 GET /api/v1/users
@@ -300,6 +319,7 @@ POST /api/v1/clusters
 POST /api/v1/clusters/{cluster_id}/apiserver-allowlist/reconcile
 POST /api/v1/clusters/{cluster_id}/apiserver-audit
 POST /api/v1/clusters/{cluster_id}/k8s/*
+POST /api/v1/clusters/{cluster_id}/metrics
 POST /api/v1/clusters/{cluster_id}/network-policies/applications
 POST /api/v1/clusters/{cluster_id}/network-policies/applications/{id}/reapply
 POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
@@ -321,6 +341,9 @@ POST /api/v1/clusters/{id}/agent-token/revoke
 POST /api/v1/clusters/{id}/agent-token/rotate
 POST /api/v1/clusters/{id}/generate-kubeconfig
 POST /api/v1/clusters/{id}/generate_kubeconfig
+POST /api/v1/clusters/{id}/monitoring/stack/install
+POST /api/v1/clusters/{id}/monitoring/stack/preview
+POST /api/v1/clusters/{id}/monitoring/stack/replace
 POST /api/v1/clusters/{id}/ownership/takeover
 POST /api/v1/clusters/{id}/register
 POST /api/v1/clusters/{id}/registration/cancel
@@ -333,6 +356,8 @@ POST /api/v1/fleet-operations/{id}/pause
 POST /api/v1/fleet-operations/{id}/resume
 POST /api/v1/fleet-operations/{id}/retry-failed
 POST /api/v1/internal/argocd/clusters/{cluster_id}/k8s/*
+POST /api/v1/monitoring/endpoints
+POST /api/v1/monitoring/metrics/query/{cluster_id}
 POST /api/v1/nodes/{cluster_id}/{node_name}/annotations
 POST /api/v1/nodes/{cluster_id}/{node_name}/annotations/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/cordon
@@ -360,6 +385,13 @@ POST /api/v1/rbac/permission-preview
 POST /api/v1/rbac/project-bindings
 POST /api/v1/rbac/project-role-bindings
 POST /api/v1/rbac/project-roles
+POST /api/v1/settings/monitoring/alertmanager/install
+POST /api/v1/settings/monitoring/alertmanager/preview
+POST /api/v1/settings/monitoring/alertmanager/replace
+POST /api/v1/settings/monitoring/operations/{id}/retry
+POST /api/v1/settings/monitoring/thanos/install
+POST /api/v1/settings/monitoring/thanos/preview
+POST /api/v1/settings/monitoring/thanos/replace
 POST /api/v1/settings/sso
 POST /api/v1/settings/tokens
 POST /api/v1/users
@@ -388,10 +420,13 @@ PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
 PUT /api/v1/clusters/{cluster_id}/registries/{id}
 PUT /api/v1/clusters/{cluster_id}/snapshot-schedules/{id}
 PUT /api/v1/clusters/{id}
+PUT /api/v1/clusters/{id}/monitoring/config
+PUT /api/v1/clusters/{id}/monitoring/stack/upgrade
 PUT /api/v1/clusters/{id}/registration/options
 PUT /api/v1/clusters/{id}/registry
 PUT /api/v1/connect/{cluster_id}
 PUT /api/v1/internal/argocd/clusters/{cluster_id}/k8s/*
+PUT /api/v1/monitoring/endpoints/{id}
 PUT /api/v1/projects/{id}
 PUT /api/v1/projects/{id}/default-vault-connection
 PUT /api/v1/projects/{project_id}/cloud-credentials/{id}
@@ -400,6 +435,9 @@ PUT /api/v1/rbac/global-roles/{id}
 PUT /api/v1/rbac/project-roles/{id}
 PUT /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}
 PUT /api/v1/settings/general
+PUT /api/v1/settings/monitoring/alertmanager/upgrade
+PUT /api/v1/settings/monitoring/backend
+PUT /api/v1/settings/monitoring/thanos/upgrade
 PUT /api/v1/users/{id}
 PUT /argocd
 PUT /argocd/*

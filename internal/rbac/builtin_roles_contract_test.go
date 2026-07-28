@@ -74,6 +74,28 @@ func TestBuiltinRoleCatalogContract(t *testing.T) {
 	}
 }
 
+// TestBuiltinRolesNeverGrantNodeProxy pins the negative half of the proxy-verb
+// contract. nodes/{name}/proxy tunnels to the kubelet, whose /run/ endpoint
+// executes arbitrary commands in any container on the node, so it is
+// cluster-admin-adjacent: only the wildcard owner/admin templates may reach it.
+// A seeded role that names `nodes` explicitly and lists `proxy` (e.g. widening
+// 'Node Operator') would silently re-open a fleet-wide RCE through the role
+// catalog.
+func TestBuiltinRolesNeverGrantNodeProxy(t *testing.T) {
+	for _, role := range loadSeededRoles(t) {
+		for _, rule := range role.rules {
+			if rule.Resource != string(ResourceNodes) {
+				continue
+			}
+			for _, verb := range rule.Verbs {
+				if verb == string(VerbProxy) || verb == "*" {
+					t.Fatalf("builtin role %s/%s grants nodes:%s", role.scope, role.name, verb)
+				}
+			}
+		}
+	}
+}
+
 func expectPermission(resource, verb string) func(*testing.T, seededRole) {
 	return func(t *testing.T, role seededRole) {
 		t.Helper()

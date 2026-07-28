@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -131,6 +132,109 @@ func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
 			router.ServeHTTP(rec, req)
 			if rec.Code != http.StatusForbidden {
 				t.Fatalf("%s %s status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusForbidden, rec.Body.String())
+			}
+		})
+	}
+}
+
+// monitoringSettingsReadRoutes are the three /settings/monitoring routes that
+// were registered on the bare settings group and carried no authorization call
+// of their own: GET backend returned the decoded authConfig, and both previews
+// rendered the shared stack's helm values, all to an anonymous caller.
+var monitoringSettingsReadRoutes = []struct {
+	name string
+	// method + path as the frontend/CLI would call them.
+	method string
+	path   string
+	// status once the caller holds monitoring:read — the handlers run with a
+	// nil monitoring store here, so "through the gate" is 200 for the backend
+	// read and 400 ("monitoring store not configured") for the previews.
+	allowedStatus int
+}{
+	{"backend_config", http.MethodGet, "/api/v1/settings/monitoring/backend/", http.StatusOK},
+	{"thanos_preview", http.MethodPost, "/api/v1/settings/monitoring/thanos/preview/", http.StatusBadRequest},
+	{"alertmanager_preview", http.MethodPost, "/api/v1/settings/monitoring/alertmanager/preview/", http.StatusBadRequest},
+}
+
+func newMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.RoleBinding) chi.Router {
+	engine := rbac.NewEngine()
+	querier := routeSecurityRBACQuerier{bindings: bindings}
+	monitoring := handler.NewMonitoringHandler()
+	monitoring.SetAuthorization(engine, querier)
+	return NewRouter(&config.Config{}, RouterDependencies{
+		JWT:         jwtMgr,
+		RBACEngine:  engine,
+		RBACQueries: querier,
+		// The /settings group only exists when Resources is wired, and the
+		// monitoring routes hang off it.
+		Resources:  handler.NewResourceHandler(),
+		Monitoring: monitoring,
+	})
+}
+
+// TestMonitoringSettingsReadRoutesRequireMonitoringRBAC proves the three
+// monitoring settings read routes reject an anonymous caller (401) and an
+// authenticated caller without monitoring permission (403), while a holder of
+// monitoring:read still reaches the handler. Before the fix the anonymous case
+// returned 200 with the backend's decoded authConfig / rendered helm values.
+func TestMonitoringSettingsReadRoutesRequireMonitoringRBAC(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	token, err := jwtMgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+
+	// Authentication alone must not be enough: this principal holds every verb
+	// on clusters and nothing on monitoring.
+	noMonitoringRBAC := newMonitoringAuthzRouter(jwtMgr, routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead, rbac.VerbList, rbac.VerbUpdate))
+	withMonitoringRBAC := newMonitoringAuthzRouter(jwtMgr, routeSecurityBindings(rbac.ResourceMonitoring, rbac.VerbRead))
+
+	for _, tc := range monitoringSettingsReadRoutes {
+		t.Run(tc.name, func(t *testing.T) {
+			anonReq := httptest.NewRequest(tc.method, tc.path, nil)
+			anonRec := httptest.NewRecorder()
+			noMonitoringRBAC.ServeHTTP(anonRec, anonReq)
+			if anonRec.Code != http.StatusUnauthorized {
+				t.Fatalf("anonymous %s %s status = %d, want %d; body=%s", tc.method, tc.path, anonRec.Code, http.StatusUnauthorized, anonRec.Body.String())
+			}
+
+			deniedReq := httptest.NewRequest(tc.method, tc.path, nil)
+			deniedReq.Header.Set("Authorization", "Bearer "+token)
+			deniedRec := httptest.NewRecorder()
+			noMonitoringRBAC.ServeHTTP(deniedRec, deniedReq)
+			if deniedRec.Code != http.StatusForbidden {
+				t.Fatalf("authenticated without monitoring RBAC %s %s status = %d, want %d; body=%s", tc.method, tc.path, deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
+			}
+
+			allowedReq := httptest.NewRequest(tc.method, tc.path, nil)
+			allowedReq.Header.Set("Authorization", "Bearer "+token)
+			allowedRec := httptest.NewRecorder()
+			withMonitoringRBAC.ServeHTTP(allowedRec, allowedReq)
+			if allowedRec.Code != tc.allowedStatus {
+				t.Fatalf("monitoring:read %s %s status = %d, want %d; body=%s", tc.method, tc.path, allowedRec.Code, tc.allowedStatus, allowedRec.Body.String())
+			}
+		})
+	}
+}
+
+// TestMonitoringSettingsReadRoutesDenyUnauthenticatedWithoutHandlerAuthz proves
+// the router-level requireAuth is a genuine second line of defence: even with
+// the handler's own authorization support unwired (engine nil, which makes
+// authorizeGlobalAction fall through to "allowed"), an anonymous request never
+// reaches the handler.
+func TestMonitoringSettingsReadRoutesDenyUnauthenticatedWithoutHandlerAuthz(t *testing.T) {
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT:        auth.NewJWTManager("route-security-test-secret", 60),
+		Resources:  handler.NewResourceHandler(),
+		Monitoring: handler.NewMonitoringHandler(),
+	})
+	for _, tc := range monitoringSettingsReadRoutes {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("anonymous %s %s status = %d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusUnauthorized, rec.Body.String())
 			}
 		})
 	}

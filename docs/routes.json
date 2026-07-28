@@ -637,6 +637,18 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/metrics"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{cluster_id}/metrics"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/metrics/summary"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/namespaces"
   },
   {
@@ -905,6 +917,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/metrics"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods"
   },
   {
@@ -982,6 +998,38 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{id}/metrics/summary"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/monitoring/config"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/monitoring/config"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/monitoring/stack/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/monitoring/stack/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/monitoring/stack/replace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/monitoring/stack/status"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}/monitoring/stack/uninstall"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/monitoring/stack/upgrade"
   },
   {
     "method": "POST",
@@ -1130,6 +1178,42 @@
   {
     "method": "TRACE",
     "pattern": "/api/v1/internal/argocd/clusters/{cluster_id}/k8s/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/monitoring/endpoints"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/monitoring/endpoints"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/monitoring/endpoints/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/monitoring/endpoints/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/monitoring/endpoints/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/monitoring/metrics/cluster-overview/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/monitoring/metrics/node/{cluster_id}/{node}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/monitoring/metrics/query/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}"
   },
   {
     "method": "POST",
@@ -1478,6 +1562,74 @@
   {
     "method": "PUT",
     "pattern": "/api/v1/settings/general"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/replace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/status"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/uninstall"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/upgrade"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/backend"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/backend"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/operations"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/operations/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/operations/{id}/retry"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/thanos/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/thanos/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/thanos/replace"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/thanos/status"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/monitoring/thanos/uninstall"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/thanos/upgrade"
   },
   {
     "method": "GET",

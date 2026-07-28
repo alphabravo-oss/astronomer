@@ -121,6 +121,7 @@ server through this resource/action contract.
 | `ingresses:create/read/update/delete/list/watch` | Matching Ingress/Gateway entry-point verbs. |
 | `nodes:read/list/watch` | `get`, `list`, `watch` Nodes. |
 | `nodes:update/manage` | `patch` nodes and create pod eviction requests during drain. |
+| `nodes:proxy` | `get`/`create` on the node `proxy` subresource (the kubelet's own endpoint). Mutating calls additionally require `pods:exec`, because kubelet `/run/` executes arbitrary commands in any container on the node. Granted by no built-in template other than the wildcard owner/admin roles. |
 | `storage:create/read/update/delete/list/watch` | Matching PVC/PV/StorageClass verbs. |
 | `network_policies:*` | NetworkPolicy template management in Astronomer; per-cluster apply is executed through controlled project/cluster reconciliation. |
 | `argocd:*` | Argo CD API and ApplicationSet operations. Argo controller then applies Kubernetes changes using its configured cluster credentials. |

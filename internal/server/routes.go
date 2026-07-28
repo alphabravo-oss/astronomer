@@ -581,19 +581,34 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 					// monitoringWriteScope enforces clusters:write on the
 					// mutating helm verbs (reads/preview/status pass through).
 					monitoringMutate := r.With(requireAuth(deps.JWT, deps.AuthQueries), appmiddleware.RequireWriteScopeForMutations(iauth.ScopeWriteClusters))
-					r.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
-					r.Put("/monitoring/backend/", deps.Monitoring.UpdateBackendConfig)
-					r.Get("/monitoring/operations/", deps.Monitoring.ListOperations)
-					r.Get("/monitoring/operations/{id}/", deps.Monitoring.GetOperation)
-					r.Post("/monitoring/operations/{id}/retry/", deps.Monitoring.RetryOperation)
-					r.Get("/monitoring/thanos/status/", deps.Monitoring.GetSharedThanosStatus)
-					r.Post("/monitoring/thanos/preview/", deps.Monitoring.PreviewSharedThanosStack)
+					// The remaining monitoring routes were registered on the
+					// bare /settings group, which carries no requireAuth — so
+					// GET /monitoring/backend/ answered 200 to an anonymous
+					// caller with the backend's decoded authConfig, and both
+					// preview routes rendered chart values for free. They now
+					// authenticate at the router as well as authorizing in the
+					// handler.
+					monitoringAuthed := r.With(requireAuth(deps.JWT, deps.AuthQueries))
+					monitoringAuthed.Get("/monitoring/backend/", deps.Monitoring.GetBackendConfig)
+					// PUT backend/ persists operator-supplied backend auth
+					// material and POST retry/ re-enqueues helm work, so both
+					// belong on the write-scope backstop alongside every other
+					// monitoring mutation: a read-scoped API token whose
+					// principal holds monitoring:update must not drive them.
+					// This narrows those two routes for existing read-scoped
+					// tokens — deliberate, and the point of the GATE-0 block.
+					monitoringMutate.Put("/monitoring/backend/", deps.Monitoring.UpdateBackendConfig)
+					monitoringAuthed.Get("/monitoring/operations/", deps.Monitoring.ListOperations)
+					monitoringAuthed.Get("/monitoring/operations/{id}/", deps.Monitoring.GetOperation)
+					monitoringMutate.Post("/monitoring/operations/{id}/retry/", deps.Monitoring.RetryOperation)
+					monitoringAuthed.Get("/monitoring/thanos/status/", deps.Monitoring.GetSharedThanosStatus)
+					monitoringAuthed.Post("/monitoring/thanos/preview/", deps.Monitoring.PreviewSharedThanosStack)
 					monitoringMutate.Post("/monitoring/thanos/install/", deps.Monitoring.InstallSharedThanosStack)
 					monitoringMutate.Put("/monitoring/thanos/upgrade/", deps.Monitoring.UpgradeSharedThanosStack)
 					monitoringMutate.Post("/monitoring/thanos/replace/", deps.Monitoring.ReplaceSharedThanosStack)
 					monitoringMutate.Delete("/monitoring/thanos/uninstall/", deps.Monitoring.UninstallSharedThanosStack)
-					r.Get("/monitoring/alertmanager/status/", deps.Monitoring.GetSharedAlertmanagerStatus)
-					r.Post("/monitoring/alertmanager/preview/", deps.Monitoring.PreviewSharedAlertmanager)
+					monitoringAuthed.Get("/monitoring/alertmanager/status/", deps.Monitoring.GetSharedAlertmanagerStatus)
+					monitoringAuthed.Post("/monitoring/alertmanager/preview/", deps.Monitoring.PreviewSharedAlertmanager)
 					monitoringMutate.Post("/monitoring/alertmanager/install/", deps.Monitoring.InstallSharedAlertmanager)
 					monitoringMutate.Put("/monitoring/alertmanager/upgrade/", deps.Monitoring.UpgradeSharedAlertmanager)
 					monitoringMutate.Post("/monitoring/alertmanager/replace/", deps.Monitoring.ReplaceSharedAlertmanager)
@@ -1317,6 +1332,20 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 			k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
 			ref := parseK8sProxyObjectRef(k8sPath)
 			namespace := ref["namespace"]
+			// F1 (M5): a mutating nodes/{name}/proxy request reaches the
+			// kubelet's own HTTP surface, whose /run/ and /exec/ endpoints run
+			// arbitrary commands in any container on the node. That is pod exec
+			// by another name, so it must satisfy pods:exec IN ADDITION to
+			// nodes:proxy. A single CheckPermission call cannot express AND, so
+			// the conjunct lives here. Node paths are cluster-scoped (namespace
+			// is empty), so this requires a cluster-wide pods:exec grant — and
+			// deliberately not the native allow layer, which refuses to widen
+			// exec at all.
+			if resource == rbac.ResourceNodes && verb == rbac.VerbProxy && isMutatingK8sProxyMethod(r.Method) &&
+				!engine.CheckPermission(bindings, rbac.ResourcePods, rbac.VerbExec, clusterID, projectID, namespace) {
+				writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+				return
+			}
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
 				// Coarse RBAC denied. Consult the native per-CRD allow layer as
 				// an ADDITIVE override: a native rule can grant this exact
@@ -1523,6 +1552,32 @@ func k8sProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
 	// (e.g. direct handler calls in tests).
 	if isHighRiskPodProxySubresourceRef(ref) || isHighRiskPodProxySubresource(r.URL.Path) {
 		return rbac.ResourcePods, rbac.VerbExec
+	}
+
+	// F1 (M5): the apiserver's `proxy` subresource tunnels an arbitrary request
+	// to the target's OWN endpoint, which is a different capability from
+	// reading or writing the target object: nodes/{name}/proxy reaches the
+	// kubelet (including /run/<ns>/<pod>/<container>, i.e. command execution in
+	// any container on the node), pods/{name}/proxy and services/{name}/proxy
+	// reach the workload's port directly. Without this branch those requests
+	// degrade to the target's generic read/update verb and the dedicated
+	// `proxy` verb the role catalog already grants gates nothing.
+	// parseK8sProxyObjectRef drops every segment after the subresource, so
+	// /nodes/n1/proxy and /nodes/n1/proxy/run/... both land here. Decide it
+	// BEFORE the pods/log branch and the k8sProxyResourcePolicy fallthrough.
+	// The extra pods:exec conjunct for node proxy lives in
+	// requireK8sProxyPermission — one permission pair cannot express AND.
+	if strings.ToLower(strings.TrimSpace(ref["subresource"])) == "proxy" {
+		if resource, ok := knownK8sProxyResource(ref["resource"]); ok {
+			return resource, rbac.VerbProxy
+		}
+		if resource, ok := k8sProxyResourcePolicy(ref); ok {
+			return resource, rbac.VerbProxy
+		}
+		// Unknown core-group resource with a proxy subresource: fail closed on
+		// clusters:proxy (which no template grants) rather than degrading to
+		// the generic clusters read/update verb.
+		return rbac.ResourceClusters, rbac.VerbProxy
 	}
 
 	verb := k8sProxyVerb(r, ref)

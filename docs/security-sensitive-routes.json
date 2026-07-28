@@ -3246,5 +3246,53 @@
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ]
+  },
+  {
+    "id": "monitoring-backend-config-read",
+    "route": "/api/v1/settings/monitoring/backend/",
+    "sample_path": "/api/v1/settings/monitoring/backend/",
+    "method": "GET",
+    "expected_unauthenticated_status": 401,
+    "surface": "shared monitoring backend configuration read",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit middleware when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ]
+  },
+  {
+    "id": "monitoring-shared-thanos-preview",
+    "route": "/api/v1/settings/monitoring/thanos/preview/",
+    "sample_path": "/api/v1/settings/monitoring/thanos/preview/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "shared Thanos stack helm values preview",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "read-side preview; no helm mutation and no secrets in the rendered values",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ]
+  },
+  {
+    "id": "monitoring-shared-alertmanager-preview",
+    "route": "/api/v1/settings/monitoring/alertmanager/preview/",
+    "sample_path": "/api/v1/settings/monitoring/alertmanager/preview/",
+    "method": "POST",
+    "expected_unauthenticated_status": 401,
+    "surface": "shared Alertmanager stack helm values preview",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "read-side preview; no helm mutation and no secrets in the rendered values",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ]
   }
 ]

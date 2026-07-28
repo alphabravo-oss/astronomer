@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -411,6 +412,12 @@ func (h *MonitoringHandler) runReconciler(ctx context.Context) {
 }
 
 func (h *MonitoringHandler) GetBackendConfig(w http.ResponseWriter, r *http.Request) {
+	// The response embeds the backend's decoded authConfig (operator-supplied
+	// backend auth material), so this read carries the same monitoring gate as
+	// its mutating sibling — it was previously reachable unauthenticated.
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbRead) {
+		return
+	}
 	if h.queries == nil {
 		RespondJSON(w, http.StatusOK, map[string]any{})
 		return
@@ -492,10 +499,13 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		"tenant_id":        backend.TenantID,
 		"auth_type":        backend.AuthType,
 	})
-	RespondJSON(w, http.StatusOK, monitoringBackendResponse(backend))
+	RespondJSON(w, http.StatusOK, monitoringBackendWriteResponse(backend))
 }
 
 func (h *MonitoringHandler) PreviewSharedThanosStack(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbRead) {
+		return
+	}
 	req, values, _, backend, err := h.sharedThanosPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -735,6 +745,9 @@ func (h *MonitoringHandler) GetSharedThanosStatus(w http.ResponseWriter, r *http
 }
 
 func (h *MonitoringHandler) PreviewSharedAlertmanager(w http.ResponseWriter, r *http.Request) {
+	if !h.authz.authorizeGlobalAction(w, r, rbac.ResourceMonitoring, rbac.VerbRead) {
+		return
+	}
 	req, values, backend, err := h.sharedAlertmanagerPayload(r.Context(), r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -1153,8 +1166,7 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
-	_, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
-	if loadErr != nil {
+	if _, _, loadErr := h.loadStackConfig(r.Context(), clusterID); loadErr != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, loadErr.Error())
 		return
 	}
@@ -1162,7 +1174,6 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to persist monitoring stack config")
 		return
 	}
-	_ = ok
 	op, err := h.enqueueClusterStackOperation(withOperationIdempotency(r, "monitoring"), currentUserUUID(r), "replace", clusterID, req, values)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to create monitoring operation")
@@ -1833,8 +1844,29 @@ func constantPoints(now time.Time, span time.Duration, count int, value float64)
 	return out
 }
 
+// monitoringBackendResponse renders a backend row for a READ. authConfig is
+// operator-supplied backend auth material (bearer tokens, basic-auth
+// passwords, custom headers) and monitoring:read is a low-privilege verb — the
+// shipped troubleshooter/viewer templates all carry it — so reads get the
+// non-secret projection only: the operationPolicies block, plus the key names
+// so an operator can still see that credentials are configured.
 func monitoringBackendResponse(backend sqlc.MonitoringBackend) map[string]any {
+	return monitoringBackendPayload(backend, false)
+}
+
+// monitoringBackendWriteResponse is the monitoring:update round-trip: the
+// caller just supplied this authConfig in the same request, so echoing it back
+// leaks nothing they did not already hold.
+func monitoringBackendWriteResponse(backend sqlc.MonitoringBackend) map[string]any {
+	return monitoringBackendPayload(backend, true)
+}
+
+func monitoringBackendPayload(backend sqlc.MonitoringBackend, includeAuthConfig bool) map[string]any {
 	authConfig := decodeJSONMap(backend.AuthConfig)
+	exposed := authConfig
+	if !includeAuthConfig {
+		exposed = redactedMonitoringAuthConfig(authConfig)
+	}
 	return map[string]any{
 		"id":                 backend.ID.String(),
 		"name":               backend.Name,
@@ -1843,12 +1875,41 @@ func monitoringBackendResponse(backend sqlc.MonitoringBackend) map[string]any {
 		"alertmanagerUrl":    backend.AlertmanagerUrl,
 		"tenantId":           backend.TenantID,
 		"authType":           backend.AuthType,
-		"authConfig":         authConfig,
+		"authConfig":         exposed,
+		"authConfigKeys":     monitoringAuthConfigKeys(authConfig),
 		"operationPolicies":  mapFromMapValue(authConfig["operationPolicies"]),
 		"defaultStepSeconds": backend.DefaultStepSeconds,
 		"timeoutSeconds":     backend.TimeoutSeconds,
 		"isDefault":          backend.IsDefault,
 	}
+}
+
+// redactedMonitoringAuthConfig keeps only the keys that are definitionally not
+// credentials. operationPolicies is retry/rollback policy the UI reads back;
+// everything else in authConfig is treated as secret, because the shape is
+// operator-authored and an allow-list is the only safe direction.
+func redactedMonitoringAuthConfig(authConfig map[string]any) map[string]any {
+	out := map[string]any{}
+	if _, ok := authConfig["operationPolicies"]; ok {
+		out["operationPolicies"] = mapFromMapValue(authConfig["operationPolicies"])
+	}
+	return out
+}
+
+// monitoringAuthConfigKeys lists the authConfig key names (never values) so a
+// read-only operator can tell whether auth material is configured without
+// receiving it — the same "configured, not disclosed" shape the SIEM forwarder
+// surface uses.
+func monitoringAuthConfigKeys(authConfig map[string]any) []string {
+	keys := make([]string, 0, len(authConfig))
+	for key := range authConfig {
+		if key == "operationPolicies" {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func clusterMonitoringConfigResponse(cfg sqlc.ClusterMonitoringConfig) map[string]any {
@@ -2372,8 +2433,8 @@ func (h *MonitoringHandler) renderSharedAlertmanagerConfig(ctx context.Context, 
 			"resolve_timeout": "5m",
 		},
 		"route": map[string]any{
-			"receiver":        "null",
-			"group_by":        []string{"alertname", "astronomer_rule_id", "cluster"},
+			"receiver": "null",
+			"group_by": []string{"alertname", "astronomer_rule_id", "cluster"},
 			// Defaults match platform_settings alertmanager.* (DIR-08); monitoring
 			// stack render does not currently thread SettingsCache, so keep the
 			// same registry defaults here for parity with AlertingHandler.

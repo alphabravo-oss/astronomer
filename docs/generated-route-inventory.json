@@ -1596,6 +1596,48 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/metrics/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/metrics/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/metrics/summary/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/namespaces/",
     "handler_owner": "handler.ResourceHandler / cluster extension handlers",
     "surface": "adopted cluster management API",
@@ -2607,6 +2649,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/metrics/",
+    "handler_owner": "handler.WorkloadHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods/",
     "handler_owner": "handler.WorkloadHandler",
     "surface": "adopted cluster management API",
@@ -2881,6 +2936,128 @@
     ]
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/config/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/config/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/stack/install/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/stack/preview/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/stack/replace/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/stack/status/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/stack/uninstall/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/clusters/{id}/monitoring/stack/upgrade/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/*/clusters/{id}/ownership/takeover/",
     "handler_owner": "handler.ClusterHandler",
@@ -3125,6 +3302,135 @@
     "method": "GET",
     "pattern": "/api/v1/*/fleet-operations/{id}/targets/",
     "handler_owner": "handler.FleetOperationHandler",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/monitoring/endpoints/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/monitoring/endpoints/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/monitoring/endpoints/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/monitoring/endpoints/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/monitoring/endpoints/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/monitoring/metrics/cluster-overview/{cluster_id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/monitoring/metrics/node/{cluster_id}/{node}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/monitoring/metrics/query/{cluster_id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
     "rbac": "route-specific read/list permission or handler-domain gate",
@@ -5529,6 +5835,263 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "settings-general-update"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/install/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/preview/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "shared Alertmanager stack helm values preview",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "read-side preview; no helm mutation and no secrets in the rendered values",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ],
+    "security_registry_id": "monitoring-shared-alertmanager-preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/replace/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/status/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/uninstall/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/alertmanager/upgrade/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/backend/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "shared monitoring backend configuration read",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "not applicable: GET",
+    "audit": "read-side audit middleware when configured",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ],
+    "security_registry_id": "monitoring-backend-config-read"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/backend/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/operations/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/operations/{id}/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/operations/{id}/retry/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/thanos/install/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/thanos/preview/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "shared Thanos stack helm values preview",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "read-side preview; no helm mutation and no secrets in the rendered values",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestMonitoringSettingsReadRoutesRequireMonitoringRBAC"
+    ],
+    "security_registry_id": "monitoring-shared-thanos-preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/settings/monitoring/thanos/replace/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/settings/monitoring/thanos/status/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/settings/monitoring/thanos/uninstall/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/settings/monitoring/thanos/upgrade/",
+    "handler_owner": "handler.MonitoringHandler",
+    "surface": "platform settings API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-global-monitoring",
+    "risk_reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
   },
   {
     "method": "GET",

@@ -49,6 +49,76 @@
       ],
       "classification": "covered-rbac-cluster-scoped",
       "reason": "Trigger a durable agent-token rotation (sets rotation_pending_at; the grace rotation completes on the agent's next CONNECT and never invalidates the token the agent currently holds) or hard-revoke the token (revoked_at) for one cluster. Both are gated on the clusters:update RBAC permission plus the write-clusters scope, blast radius is the owning cluster only, and each call is audited (agent.token.rotate.requested / agent.token.revoked)."
+    },
+    {
+      "id": "monitoring-settings-unauthenticated-read-fix",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/settings/monitoring/backend",
+        "/api/v1/settings/monitoring/thanos/preview",
+        "/api/v1/settings/monitoring/alertmanager/preview"
+      ],
+      "classification": "covered-rbac-global-monitoring",
+      "reason": "The three routes that answered an unauthenticated caller before the 2026-07-28 fix: the backend read returned the decoded authConfig (operator-supplied backend auth material) and the two previews rendered the shared Thanos/Alertmanager helm values. They now sit behind requireAuth at the router and monitoring:read inside the handler, and each is additionally declared in docs/security-sensitive-routes.json so TestHighRiskRoutesDenyUnauthenticatedRequests asserts the 401."
+    },
+    {
+      "id": "monitoring-shared-stack-lifecycle",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/settings/monitoring/backend",
+        "/api/v1/settings/monitoring/operations/{id}/retry",
+        "/api/v1/settings/monitoring/thanos/install",
+        "/api/v1/settings/monitoring/thanos/upgrade",
+        "/api/v1/settings/monitoring/thanos/replace",
+        "/api/v1/settings/monitoring/thanos/uninstall",
+        "/api/v1/settings/monitoring/alertmanager/install",
+        "/api/v1/settings/monitoring/alertmanager/upgrade",
+        "/api/v1/settings/monitoring/alertmanager/replace",
+        "/api/v1/settings/monitoring/alertmanager/uninstall"
+      ],
+      "classification": "covered-rbac-global-monitoring",
+      "reason": "Shared Thanos/Alertmanager lifecycle against the management cluster, plus the default-backend upsert and the operation retry. All are gated on monitoring:update inside the handler (the retry additionally re-checks the operation's own target), the helm verbs carry the write-clusters scope backstop, and each enqueues an audited monitoring operation (monitoring.shared_thanos.* / monitoring.shared_alertmanager.* / monitoring.endpoint.update / monitoring.operation.retry)."
+    },
+    {
+      "id": "monitoring-cluster-stack-lifecycle",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/clusters/{id}/monitoring/config",
+        "/api/v1/clusters/{id}/monitoring/stack/preview",
+        "/api/v1/clusters/{id}/monitoring/stack/install",
+        "/api/v1/clusters/{id}/monitoring/stack/upgrade",
+        "/api/v1/clusters/{id}/monitoring/stack/replace",
+        "/api/v1/clusters/{id}/monitoring/stack/uninstall"
+      ],
+      "classification": "covered-rbac-cluster-scoped",
+      "reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    },
+    {
+      "id": "monitoring-endpoint-and-metrics-queries",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/monitoring/endpoints",
+        "/api/v1/monitoring/endpoints/{id}",
+        "/api/v1/monitoring/metrics/query/{cluster_id}",
+        "/api/v1/clusters/{cluster_id}/metrics"
+      ],
+      "classification": "covered-rbac-global-monitoring",
+      "reason": "Monitoring backend endpoint CRUD and the two POST-shaped metric query aliases. All carry requirePermission(monitoring, create/update/delete for CRUD, read for the queries) inside the authenticated router; the query routes are POST only because the PromQL selector travels in the body, and they mutate nothing."
     }
   ]
 }
