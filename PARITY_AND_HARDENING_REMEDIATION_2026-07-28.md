@@ -361,7 +361,24 @@ Sibling routes are protected and this one is not: `ListNamedResources`/`ListGene
 
 ### [exec-logs-verb-mismatch] + [exec-logs-ws-ignore-pods-exec-and-pods-logs-verbs] WebSocket exec/logs gate on `clusters:update`/`clusters:read` instead of `pods:exec`/`pods:logs`
 
-**Status:** PENDING APPROVAL · **Severity** high · **Dimension** parity-core / transport-security · **Effort** M
+**Status:** ✅ SHIPPED 2026-07-28 (migration 142) — with one documented residual gap
+
+> Issuance and redemption moved together. Logs issuance accepts `pods:logs` OR `pods:read`, because the
+> pod-watch redeemer gates on `pods:read` — without that the two redeemers disagree and a mintable ticket
+> becomes unredeemable.
+> Migration 142 is ADD-IF-MISSING, `is_builtin`-only, repairing exactly three 001-era rows whose grants had
+> diverged from their templates (Cluster Member, Cluster Viewer, Project Viewer). Every other role losing
+> logs is an intended over-grant removal, enumerated by name in the SQL. Platform Operator's exec removal is
+> an owner-authorized privilege reduction, labelled as such.
+>
+> **RESIDUAL GAP — needs its own authorization, not closed here.** The in-browser kubectl shell is a
+> different route (`routes_cluster_addons.go:173`) that authenticates its own `StreamKindShell` ticket and
+> never reaches the exec consumer, so **Platform Operator and Cluster Registrar keep shell access via
+> `clusters:update`**. Platform Operator's interactive access is therefore only *partly* removed. Moving the
+> shell to `pods:exec` would be an **escalation** — it would hand a cluster-wide break-glass kubectl session
+> (read-only default still reads every Secret) to `support-engineer`, `Cluster Troubleshooter` and
+> `Pod Incident Responder`. The strictly-reducing form (`clusters:update` AND `pods:exec`) is ~20 lines but
+> breaks 9 existing shell tests and is a separate authorization decision. · **Severity** high · **Dimension** parity-core / transport-security · **Effort** M
 *(Two finding IDs, one defect. Fix once.)*
 
 **Evidence** — `internal/tunnel/exec_consumer.go:108-118` `authorizeCluster` ends in `ec.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil, namespace)` and is the sole authz call in `HandleExec` (`:159-163`); the route at `internal/server/routes.go:1097-1100` carries `rateLimit` only. `internal/tunnel/logs_consumer.go:99-108` mirrors it with `ResourceClusters, VerbRead` (route `:1102-1104`). `internal/handler/stream_tickets.go:74-90` mirrors both. The HTTP k8s-proxy path uses the opposite vocabulary: `routes.go:1524-1525` returns `(ResourcePods, VerbExec)` for exec/attach/portforward and `:1529-1531` `(ResourcePods, VerbLogs)`. `internal/handler/kubectl_shell.go:243` uses the same `clusters:update` coupling.
@@ -396,7 +413,21 @@ The dedicated verbs exist (`internal/rbac/types.go:103-105`) and the catalog gra
 
 ### [role-update-no-escalation-guard] PUT on global/cluster/project roles has no escalation check and no built-in-role protection
 
-**Status:** PENDING APPROVAL · **Severity** high · **Dimension** parity-core · **Effort** S
+**Status:** ✅ SHIPPED 2026-07-28
+
+> **⚠️ THIS DOCUMENT WAS WRONG ABOUT THE SEVERITY.** The "Why it matters" text below says exploitation
+> "requires an operator-authored custom role carrying `rbac:update`-without-`*`" and is "not a live
+> out-of-box hole." That is false. `internal/db/migrations/032_builtin_role_catalog.up.sql:7` seeds a
+> **built-in** global role `RBAC Administrator` with `[{"resource":"rbac","verbs":["*"]},{"resource":"users","verbs":["read","list"]}]`
+> — `rbac:*` without `*:*`. Anyone bound to that shipped role could PUT `*:*` onto their own role and be
+> platform admin on the next request. This was a live out-of-the-box escalation path. Verified against source.
+>
+> Fixed: the three update handlers delegate to the same `enforceNoEscalation` the binding guards use;
+> built-in roles are frozen against PUT and DELETE (403-reject rather than Rancher's strip-fields, because
+> our role rows have no writable field left after stripping); `is_builtin` is no longer accepted from the
+> request body. DELETE deliberately does NOT get the escalation guard — deleting grants nothing, and
+> requiring the caller to hold the deleted role's rules would remove an ability shipped `RBAC Administrator`
+> has today; the lockout half is closed by the freeze instead. Kubernetes draws the same line. · **Severity** high · **Dimension** parity-core · **Effort** S
 
 **Evidence** — `internal/handler/rbac.go:233-261` `UpdateGlobalRole` decodes and calls `h.queries.UpdateGlobalRole(...)` with `Rules: defaultJSON(req.Rules)` — no guard call, no `is_builtin` check, no caller-permission comparison. `UpdateClusterRole` (`:337-363`) and `UpdateProjectRole` (`:436-462`) are identical in shape. The escalation machinery exists and is wired only to *bindings*: `:885-895` `guardGlobalBinding`, `:900-911` `guardClusterBinding`, `:913-923` `guardProjectBinding`, all delegating to `:941` `enforceNoEscalation`. SQL has no guard: `internal/db/queries/rbac.sql:14-22` is an unqualified `UPDATE global_roles SET ... rules = $6 WHERE id = $1`; `:24-25` an unqualified DELETE (whose `ON DELETE CASCADE on global_role_bindings` removes every binding for the role, per the comment at `rbac.go:276-277`). The targets are real rows: `internal/db/migrations/001_initial.up.sql:686-688` seeds `('Administrator', ..., '[{"resource":"*","verbs":["*"]}]', true)`. Route requires only `rbac:update` (`internal/server/routes_rbac_audit_agents.go:21`). `internal/handler/rbac_escalation_test.go` covers only binding creation. Rancher blocks exactly this: `rancher/pkg/api/norman/customization/globalrole/validator.go:29-37` strips every mutable field on a PUT when `gr.Builtin` is true.
 
@@ -424,7 +455,17 @@ The dedicated verbs exist (`internal/rbac/types.go:103-105`) and the catalog gra
 
 ### [cluster-project-list-unfiltered] Cluster and project LIST return every row, and a cluster-scoped user gets 403 on the fleet landing page
 
-**Status:** PENDING APPROVAL · **Severity** high · **Dimension** parity-core · **Effort** M
+**Status:** ✅ SHIPPED 2026-07-28
+
+> New `rbac.AuthorizedScopeIDs` shaped after the existing `AuthorizedNamespaces`, with
+> `RequireCollectionPermission` as the relaxed gate. Filtering is pushed into SQL and COUNT is filtered to
+> match, so a page and its total agree — an unfiltered total over a filtered page is both an info leak and a
+> broken pager. `/projects/` uses `NarrowedClustersExcluded` so a namespace-narrowed binding on a shared
+> cluster cannot surface a neighbouring tenant's projects; `/clusters/` keeps `Widen`.
+> **Validated end-to-end on k3d-astro-p63** (the one item provable on the cluster rather than only in unit
+> tests): a user bound Cluster Owner on one cluster gets **HTTP 200 with exactly 1 cluster and `count: 1`**
+> where it previously returned 403; a global admin still sees all 2 clusters with `count: 2`; a user with no
+> binding still gets 403. · **Severity** high · **Dimension** parity-core · **Effort** M
 
 **Evidence** — `internal/handler/clusters.go:957-1003` `(*ClusterHandler).List` calls `h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit, Offset})` and `CountClusters(r.Context())` — no user, no bindings, no predicate. `internal/handler/projects.go:443-468` is the same shape. The only gate is `internal/server/routes_clusters.go:18` `requirePermission(..., rbac.ResourceClusters, rbac.VerbList)`; that middleware (`routes.go:1187-1228`) derives scope via `permissionScopeIDs(r)` (`:1232-1253`), which for the collection URL finds no `cluster_id` and no `id` and passes `uuid.Nil`. `(*Engine).bindingApplies` (`internal/rbac/engine.go:271-293`) then returns true only for global bindings — a cluster-scoped binding has `b.ClusterID != ""`, which can never equal `uuid.Nil.String()`. `rg 'AuthorizedClusters|visibleClusters|clusterIDsFor'` returns nothing: no post-query filter exists. Rancher filters per object (`rancher/pkg/rbac/user_based.go:76-100` `FilterList`).
 
