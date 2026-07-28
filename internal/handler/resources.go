@@ -335,21 +335,6 @@ func (h *ResourceHandler) SetRBACCacheInvalidator(inv rbacCacheInvalidator) {
 	}
 }
 
-func (h *ResourceHandler) ListResources(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
-	group := chi.URLParam(r, "group")
-	version := chi.URLParam(r, "version")
-	kind := chi.URLParam(r, "kind")
-
-	var path string
-	if group == "core" {
-		path = fmt.Sprintf("/api/%s/%s", version, kind)
-	} else {
-		path = fmt.Sprintf("/apis/%s/%s/%s", group, version, kind)
-	}
-	h.proxyJSON(w, r, clusterID, http.MethodGet, path, nil, requestHeaders(""))
-}
-
 func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Request) {
 	clusterID := chi.URLParam(r, "cluster_id")
 	resourceType := chi.URLParam(r, "resource_type")

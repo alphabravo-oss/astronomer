@@ -111,17 +111,27 @@ func (s tunnelAuditSender) Send(ctx context.Context, events []json.RawMessage) e
 // rotated token (re-delivered on reconnect) takes effect on the next batch.
 //
 // fallback is the tunnel sender used while no token has arrived yet (or never
-// does): the HTTP path can't authenticate without one, so rather than drop or
-// stall audit events we deliver them over the authenticated tunnel and warn
-// once. warned dedupes that warning.
+// does), and after the server rejects the one we hold: the HTTP path can't
+// authenticate without a usable token, so rather than drop or stall audit
+// events we deliver them over the authenticated tunnel and warn once. warned
+// dedupes that warning.
+//
+// rejectedToken is the token value the server last answered 401/403 for — set
+// when a server-side revocation (e.g. migration 140 retiring the legacy shared
+// principal, or a decommission) invalidates a token the agent still holds in
+// memory. Subsequent batches skip straight to the tunnel instead of POSTing
+// into a guaranteed 401. Comparing by value rather than latching a bool means
+// the next CONNECT_ACK, which delivers a freshly-minted token, transparently
+// re-enables the HTTP path.
 type httpAuditSender struct {
-	client    *http.Client
-	baseURL   string
-	clusterID string
-	getToken  func() string
-	fallback  AuditEventSender
-	log       *slog.Logger
-	warned    bool
+	client        *http.Client
+	baseURL       string
+	clusterID     string
+	getToken      func() string
+	fallback      AuditEventSender
+	log           *slog.Logger
+	warned        bool
+	rejectedToken string
 }
 
 // newHTTPAuditSender builds an httpAuditSender. wsServerURL is the agent's
@@ -186,22 +196,23 @@ func (s *httpAuditSender) Send(ctx context.Context, events []json.RawMessage) er
 	if len(events) == 0 {
 		return nil
 	}
-	// Lazily read the CONNECT_ACK-delivered token. Until it arrives, carry the
-	// batch over the authenticated tunnel so audit events aren't dropped or
-	// stalled while the handshake completes (or if the server never issues one).
+	// Lazily read the CONNECT_ACK-delivered token. Until it arrives — or while
+	// the one we hold is known-rejected — carry the batch over the
+	// authenticated tunnel so audit events aren't dropped or stalled while the
+	// handshake completes (or if the server never issues one).
 	token := ""
 	if s.getToken != nil {
 		token = s.getToken()
 	}
-	if token == "" {
+	if token == "" || token == s.rejectedToken {
 		if !s.warned && s.log != nil {
-			s.log.Warn("apiserver-audit: AUDIT_DELIVERY=http but no ingest token yet; delivering over tunnel until one arrives")
+			s.log.Warn("apiserver-audit: AUDIT_DELIVERY=http but no usable ingest token; delivering over tunnel until one is issued")
 			s.warned = true
 		}
 		if s.fallback != nil {
 			return s.fallback.Send(ctx, events)
 		}
-		return fmt.Errorf("apiserver-audit: no ingest token and no tunnel fallback")
+		return fmt.Errorf("apiserver-audit: no usable ingest token and no tunnel fallback")
 	}
 	body, err := json.Marshal(protocol.ApiserverAuditPayload{Events: events})
 	if err != nil {
@@ -222,6 +233,21 @@ func (s *httpAuditSender) Send(ctx context.Context, events []json.RawMessage) er
 	defer resp.Body.Close()
 	// Drain so the connection can be reused (keep-alive).
 	_, _ = io.Copy(io.Discard, resp.Body)
+	// 401/403 means the token we still hold was invalidated server-side (an
+	// upgrade that revoked it, a decommission, a re-mint we never received).
+	// Re-POSTing it every poll would drop audit events indefinitely, so mark it
+	// rejected and degrade this batch to the tunnel; the next CONNECT_ACK
+	// delivers a fresh token and the HTTP path resumes on its own.
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		s.rejectedToken = token
+		if s.log != nil {
+			s.log.Warn("apiserver-audit: ingest token rejected by the management plane; delivering over tunnel until a fresh token is issued",
+				"status", resp.StatusCode)
+		}
+		if s.fallback != nil {
+			return s.fallback.Send(ctx, events)
+		}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("apiserver-audit ingest returned status %d", resp.StatusCode)
 	}

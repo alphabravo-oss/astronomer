@@ -19557,65 +19557,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/clusters/{cluster_id}/resources/{group}/{version}/{kind}:
-    get:
-      operationId: listClusterResourcesByGVK
-      summary: List resources by API group/version/kind (raw passthrough)
-      description: Proxies a Kubernetes list call to the target cluster via the agent tunnel. The group `core` maps to the `/api/{version}/{kind}` core API path; any other group maps to `/apis/{group}/{version}/{kind}`. The raw Kubernetes List object (apiVersion/kind/items/metadata) is returned verbatim under the `data` envelope; the handler does not flatten it.
-      tags:
-        - resources-explorer
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Target cluster UUID.
-          schema:
-            type: string
-        - name: group
-          in: path
-          required: true
-          description: Kubernetes API group, or the literal `core` for the core API.
-          schema:
-            type: string
-        - name: version
-          in: path
-          required: true
-          description: Kubernetes API version (e.g. v1).
-          schema:
-            type: string
-        - name: kind
-          in: path
-          required: true
-          description: Plural resource name as used in the API path (e.g. `deployments`).
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Raw Kubernetes List object returned under `data`. Shape is whatever the cluster API server returns; not normalized by Astronomer.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DataEnvelope'
-        '401':
-          description: Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '403':
-          description: Caller lacks clusters:read permission.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Tunnel requester not configured or the proxied call to the cluster failed (code `proxy_error`).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/clusters/{cluster_id}/resources/{resource_type}:
     get:
       operationId: listNamedClusterResources

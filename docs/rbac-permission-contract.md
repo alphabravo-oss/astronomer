@@ -48,6 +48,7 @@ server through this resource/action contract.
 | `fleet_operations` | Legacy-named multi-cluster operation authoring and execution until the API is renamed. |
 | `network_policies` | Global network policy template CRUD and policy-template management. |
 | `custom_resources` | k8s-proxy access to custom resources (CRDs / non-core apigroups under `apis/<group>/<version>/...`). Lets operators grant or withhold CRD access deliberately instead of having it collapse into the generic `clusters` permission. |
+| `audit_ingest` | Machine-only write side of kube-apiserver audit collection: the per-cluster agent POSTing batched audit events. Separate from `audit_logs` (reading that evidence back) so an agent ingest credential cannot also satisfy `clusters:update`. |
 | `*` | Owner/admin wildcard. Allowed only in built-in owner/admin roles or explicit break-glass grants. |
 
 ## Verbs
@@ -98,6 +99,7 @@ server through this resource/action contract.
 | Manage SSO and Dex connectors | `sso:create/read/update/delete/list` |
 | Manage global settings | `settings:read/update/manage` |
 | Search/export audit logs | `audit_logs:read` and `audit_logs:list` |
+| Agent POST of kube-apiserver audit batches | `audit_ingest:create` (held only by the per-cluster agent ingest token) |
 | Generate or download support bundles | `support_bundles:create/read/list` |
 
 ## Kubernetes Verb Map

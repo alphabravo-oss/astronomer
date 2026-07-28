@@ -1,11 +1,15 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestGenerateAgentIngestTokenShape(t *testing.T) {
@@ -54,6 +58,65 @@ func TestAgentIngestTokenScopesAreMinimal(t *testing.T) {
 	// It is not a read-only set (it can mutate) but also not admin.
 	if IsReadOnlyScopeSet(scopes) {
 		t.Error("clusters:write set should not be read-only")
+	}
+}
+
+// TestAgentIngestTokenIsScopedToOneCluster pins the per-cluster ingest
+// identity: two connecting clusters must resolve to two distinct service
+// principals, each holding exactly one cluster_role_binding for its own
+// cluster. With a single shared owner the principal accumulates one binding per
+// connected cluster, so any one agent's token authorizes ingest fleet-wide.
+func TestAgentIngestTokenIsScopedToOneCluster(t *testing.T) {
+	clusterA := uuid.New()
+	clusterB := uuid.New()
+	f := &fakeIngestQuerier{}
+
+	if _, err := IssueAgentIngestToken(context.Background(), f, clusterA); err != nil {
+		t.Fatalf("issue for cluster A: %v", err)
+	}
+	if _, err := IssueAgentIngestToken(context.Background(), f, clusterB); err != nil {
+		t.Fatalf("issue for cluster B: %v", err)
+	}
+
+	userA, ok := f.users[AgentIngestServiceUsername(clusterA)]
+	if !ok {
+		t.Fatalf("no service user for cluster A; have %v", f.users)
+	}
+	userB, ok := f.users[AgentIngestServiceUsername(clusterB)]
+	if !ok {
+		t.Fatalf("no service user for cluster B; have %v", f.users)
+	}
+	if userA.ID == userB.ID {
+		t.Fatalf("both clusters resolved to the same principal %v", userA.ID)
+	}
+	// The users table requires a unique email, so the placeholder must be
+	// per-cluster too or the second CreateServiceUser would collide.
+	if userA.Email == userB.Email {
+		t.Fatalf("placeholder emails collide across clusters: %q", userA.Email)
+	}
+	if !strings.HasSuffix(userA.Email, ".invalid") {
+		t.Errorf("placeholder email %q must stay non-routable", userA.Email)
+	}
+
+	// Cluster A's principal carries exactly one binding, for cluster A.
+	var forA []sqlc.CreateClusterRoleBindingParams
+	for _, b := range f.bindings {
+		if b.UserID == (pgtype.UUID{Bytes: userA.ID, Valid: true}) {
+			forA = append(forA, b)
+		}
+	}
+	if len(forA) != 1 {
+		t.Fatalf("cluster A principal has %d bindings, want 1", len(forA))
+	}
+	if forA[0].ClusterID != clusterA {
+		t.Errorf("cluster A binding targets %v, want %v", forA[0].ClusterID, clusterA)
+	}
+
+	// And its token is owned by that principal, not the other cluster's.
+	for _, tok := range f.tokens {
+		if tok.Name == AgentIngestTokenName(clusterA) && tok.UserID != userA.ID {
+			t.Errorf("cluster A token owned by %v, want %v", tok.UserID, userA.ID)
+		}
 	}
 }
 

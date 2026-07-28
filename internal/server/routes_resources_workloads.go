@@ -109,8 +109,6 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 		r.Group(func(r chi.Router) {
 			r.Use(mutationWriteScope)
 			r.Use(idem)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
-				Get("/clusters/{cluster_id}/resources/{group}/{version}/{kind}/", deps.Resources.ListResources)
 			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbList)).
 				Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/", deps.Resources.ListNamedResources)
 			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbCreate)).

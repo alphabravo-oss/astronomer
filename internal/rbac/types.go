@@ -52,7 +52,14 @@ const (
 	// any other cluster read/write. Mapping them to a dedicated resource lets
 	// operators grant or withhold CRD access deliberately (F2 / M3).
 	ResourceCustomResources Resource = "custom_resources"
-	ResourceWildcard        Resource = "*"
+	// ResourceAuditIngest gates the agent's apiserver-audit ingest POST
+	// (/api/v1/clusters/{cluster_id}/apiserver-audit/). Distinct from
+	// ResourceAuditLogs, which gates reading that evidence back: ingest is a
+	// machine-only write held by the per-cluster agent token, and giving it its
+	// own resource keeps that credential from satisfying clusters:update — the
+	// verb that also opens exec tickets and k8s-proxy writes.
+	ResourceAuditIngest Resource = "audit_ingest"
+	ResourceWildcard    Resource = "*"
 )
 
 var canonicalResources = []Resource{
@@ -85,6 +92,7 @@ var canonicalResources = []Resource{
 	ResourceFleetOperations,
 	ResourceNetworkPolicies,
 	ResourceCustomResources,
+	ResourceAuditIngest,
 	ResourceWildcard,
 }
 

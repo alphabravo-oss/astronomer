@@ -209,6 +209,9 @@ type Querier interface {
 	// Lightweight count for the /status endpoint — avoids hauling the
 	// whole list back when we only need the integer.
 	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Pairs with ListUsers: the same is_service exclusion, so seat counts
+	// (telemetry) and the "is this a fresh database?" bootstrap check don't count
+	// machine principals as users.
 	CountUsers(ctx context.Context) (int64, error)
 	CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
 	CountVulnerabilitiesForReport(ctx context.Context, arg CountVulnerabilitiesForReportParams) (int64, error)
@@ -381,14 +384,16 @@ type Querier interface {
 	CreateSecurityScanResult(ctx context.Context, arg CreateSecurityScanResultParams) (SecurityScanResult, error)
 	// Agent apiserver-audit ingest service identity (PATH A).
 	//
-	// These power the get-or-create of the reserved service principal + its
-	// cluster-scoped cluster:update grant, plus the mint-fresh-revoke-old token
+	// These power the get-or-create of the per-cluster service principal + its
+	// cluster-scoped audit_ingest:create grant, plus the mint-fresh-revoke-old token
 	// lifecycle the tunnel CONNECT handshake drives. Kept in one file so the
 	// ingest auth path is reviewable in isolation.
 	// Inserts a service principal (is_service=true). Service users are excluded
 	// from human-user surfaces; they exist solely to satisfy the api_tokens FK and
 	// carry RBAC bindings. ON CONFLICT keeps get-or-create race-safe under
-	// concurrent agent connects.
+	// concurrent agent connects, and re-asserts is_active: a decommission (or an
+	// operator/SCIM reconcile) that deactivated the row would otherwise wedge
+	// ingest forever, since auth rejects tokens whose owner is inactive.
 	CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error)
 	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
 	CreateToolOperationEvent(ctx context.Context, arg CreateToolOperationEventParams) (ToolOperationEvent, error)
@@ -1526,6 +1531,11 @@ type Querier interface {
 	// are meaningful for each row; unused columns are returned as NULL.
 	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]ListUserBindingsWithRolesRow, error)
 	ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]ListUserQuotaSnapshotsRow, error)
+	// Human-user enumeration only. Service principals (is_service, migration 116 —
+	// e.g. the per-cluster agent-ingest identities) exist solely to own tokens and
+	// carry RBAC bindings; surfacing them on the admin user list, SCIM /Users, or a
+	// support bundle would hand an IdP one synthetic account per cluster to
+	// reconcile.
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Vault connections CRUD (migration 067).
 	//
@@ -1742,6 +1752,14 @@ type Querier interface {
 	// old row and mint a fresh one, keeping at most one valid token per cluster and
 	// preventing token pileup.
 	RevokeAPITokensByName(ctx context.Context, arg RevokeAPITokensByNameParams) error
+	// Retires a decommissioned cluster's ingest identity: revoke its token and
+	// deactivate the per-cluster service principal that owns it. Decommission only
+	// tombstones the cluster row, so no FK cascade fires — without this the
+	// identity survives forever as a live bearer credential with zero RBAC
+	// bindings (its cluster_role_binding is deleted by the same phase). The
+	// data-modifying CTE always runs to completion; the returned count is the
+	// number of tokens revoked. $1 is the service username, $2 the token name.
+	RevokeAgentIngestIdentityForCluster(ctx context.Context, arg RevokeAgentIngestIdentityForClusterParams) (int64, error)
 	// Standalone revocation: the durable token (and any grace token) is denied
 	// from the next CONNECT onward. Clears previous_token_hash so the grace
 	// window can't keep an already-revoked credential alive.

@@ -55,6 +55,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
@@ -255,6 +256,11 @@ type ClusterDecommissionQuerier interface {
 	DeleteClusterSecurityPoliciesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteProjectNamespacesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteClusterRoleBindingsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// The per-cluster apiserver-audit ingest identity is named, not
+	// cluster_id-keyed, so no By-Cluster delete reaches it. Revoking the token
+	// and deactivating its service principal here stops a decommissioned
+	// cluster from leaving behind a live bearer credential forever.
+	RevokeAgentIngestIdentityForCluster(ctx context.Context, arg sqlc.RevokeAgentIngestIdentityForClusterParams) (int64, error)
 	// Additional dependent tables that hold a cluster_id FK but were never
 	// cleaned on decommission — most importantly cluster_snapshot_schedules,
 	// whose orphaned rows keep the snapshot dispatcher firing Velero jobs at a
@@ -858,6 +864,17 @@ func phaseDeleteDependents(ctx context.Context, deps ClusterDecommissionDeps, ro
 		{"cluster_security_policies", q.DeleteClusterSecurityPoliciesByCluster},
 		{"project_namespaces", q.DeleteProjectNamespacesByCluster},
 		{"cluster_role_bindings", q.DeleteClusterRoleBindingsByCluster},
+		// The cluster's agent-ingest identity (service principal + bearer
+		// token) is keyed by name, not cluster_id, so nothing above reaches it.
+		// Run it after cluster_role_bindings: the binding is already gone, and
+		// a live token whose owner has no bindings still authenticates against
+		// every route that doesn't gate on a permission.
+		{"agent_ingest_identity", func(ctx context.Context, id uuid.UUID) (int64, error) {
+			return q.RevokeAgentIngestIdentityForCluster(ctx, sqlc.RevokeAgentIngestIdentityForClusterParams{
+				Username: auth.AgentIngestServiceUsername(id),
+				Name:     auth.AgentIngestTokenName(id),
+			})
+		}},
 		// cluster_snapshot_schedules first — the actively-harmful orphan whose
 		// rows keep the snapshot dispatcher creating Velero backup jobs for a
 		// tombstoned cluster.

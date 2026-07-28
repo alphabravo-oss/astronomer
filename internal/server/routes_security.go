@@ -50,11 +50,13 @@ func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDepende
 
 	// --- P1 item 7: kube-apiserver audit-event collection -----------------
 	// The per-cluster agent POSTs batched audit.k8s.io events to the ingest
-	// endpoint (a write, gated on cluster:update); operators read them back
-	// via the list endpoint (cluster:read). Cluster-scoped, idempotent on
+	// endpoint (a write, gated on the dedicated audit_ingest:create — NOT
+	// cluster:update, so an agent's ingest token cannot also mint exec
+	// tickets or drive k8s-proxy writes); operators read them back via the
+	// list endpoint (cluster:read). Cluster-scoped, idempotent on
 	// (cluster_id, auditID) so a re-delivered batch is a no-op.
 	if deps.ApiserverAudit != nil {
-		auditIngest := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)
+		auditIngest := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceAuditIngest, rbac.VerbCreate)
 		auditRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
 		r.With(requireScope(iauth.ScopeWriteClusters), auditIngest).Post("/clusters/{cluster_id}/apiserver-audit/", deps.ApiserverAudit.Ingest)
 		r.With(auditRead).Get("/clusters/{cluster_id}/apiserver-audit/", deps.ApiserverAudit.List)

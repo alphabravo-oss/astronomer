@@ -21,9 +21,12 @@ func (q *Queries) ClearMustChangePassword(ctx context.Context, id uuid.UUID) err
 }
 
 const countUsers = `-- name: CountUsers :one
-SELECT count(*) FROM users
+SELECT count(*) FROM users WHERE is_service = false
 `
 
+// Pairs with ListUsers: the same is_service exclusion, so seat counts
+// (telemetry) and the "is this a fresh database?" bootstrap check don't count
+// machine principals as users.
 func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countUsers)
 	var count int64
@@ -253,7 +256,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service FROM users WHERE is_service = false ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListUsersParams struct {
@@ -261,6 +264,11 @@ type ListUsersParams struct {
 	Offset int32 `json:"offset"`
 }
 
+// Human-user enumeration only. Service principals (is_service, migration 116 —
+// e.g. the per-cluster agent-ingest identities) exist solely to own tokens and
+// carry RBAC bindings; surfacing them on the admin user list, SCIM /Users, or a
+// support bundle would hand an IdP one synthetic account per cluster to
+// reconcile.
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset)
 	if err != nil {

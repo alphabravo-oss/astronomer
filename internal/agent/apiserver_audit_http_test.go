@@ -175,6 +175,65 @@ func TestHTTPAuditSenderLazyTokenFallback(t *testing.T) {
 	}
 }
 
+// TestHTTPAuditSenderRevokedTokenDegradesToTunnel pins the recovery path for a
+// server-side token revocation (migration 140 retiring the legacy shared
+// principal, a decommission, a re-mint the agent never received). The agent
+// still holds the plaintext, so without this the HTTP path 401s on every poll
+// and audit events are dropped for the life of the pod. Instead: the rejected
+// token is remembered, batches go over the tunnel with no further HTTP
+// attempts, and the next CONNECT_ACK token transparently restores HTTP.
+func TestHTTPAuditSenderRevokedTokenDegradesToTunnel(t *testing.T) {
+	var httpCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpCalls++
+		if r.Header.Get("Authorization") == "Bearer revoked" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	token := "revoked"
+	fallback := &captureSender{}
+	s := newHTTPAuditSender(srv.Client(), "ws://"+srv.Listener.Addr().String(), "cid",
+		func() string { return token }, newTunnelAuditSender(fallback), nil)
+
+	events := []json.RawMessage{json.RawMessage(`{"auditID":"a1"}`)}
+
+	// First batch: 401 -> delivered over the tunnel, not lost, no error (the
+	// tailer must advance its checkpoint since the batch WAS delivered).
+	if err := s.Send(context.Background(), events); err != nil {
+		t.Fatalf("Send (revoked token): %v", err)
+	}
+	if len(fallback.payloads) != 1 {
+		t.Fatalf("expected the rejected batch on the tunnel, got %d", len(fallback.payloads))
+	}
+
+	// Second batch: the token is known-bad, so no wasted HTTP round trip.
+	if err := s.Send(context.Background(), events); err != nil {
+		t.Fatalf("Send (still revoked): %v", err)
+	}
+	if httpCalls != 1 {
+		t.Errorf("expected no further HTTP attempts with the rejected token, got %d calls", httpCalls)
+	}
+	if len(fallback.payloads) != 2 {
+		t.Errorf("expected 2 tunnel batches, got %d", len(fallback.payloads))
+	}
+
+	// Reconnect mints a fresh token -> HTTP resumes without a restart.
+	token = "fresh"
+	if err := s.Send(context.Background(), events); err != nil {
+		t.Fatalf("Send (fresh token): %v", err)
+	}
+	if httpCalls != 2 {
+		t.Errorf("expected HTTP delivery to resume on the fresh token, got %d calls", httpCalls)
+	}
+	if len(fallback.payloads) != 2 {
+		t.Errorf("fresh-token batch must not hit the tunnel, got %d", len(fallback.payloads))
+	}
+}
+
 func TestHTTPBaseFromWS(t *testing.T) {
 	cases := map[string]string{
 		"ws://host:8000":   "http://host:8000",

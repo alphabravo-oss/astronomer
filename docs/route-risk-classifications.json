@@ -23,7 +23,7 @@
         "/api/v1/clusters/{cluster_id}/apiserver-audit"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the cluster:update RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
+      "reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the dedicated audit_ingest:create RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
     },
     {
       "id": "scim-token-admin",

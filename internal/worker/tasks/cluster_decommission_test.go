@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -49,6 +50,10 @@ type fakeDecommQuerier struct {
 	updatePhasesErr  error
 	claimErr         error
 	argocdManaged    []sqlc.ArgocdManagedCluster
+
+	// Params the agent-ingest identity retirement was called with, so the
+	// test can assert the cluster-derived username/token name.
+	ingestIdentity sqlc.RevokeAgentIngestIdentityForClusterParams
 
 	// Per-method call counters (so tests can assert what was invoked).
 	calls map[string]int
@@ -189,6 +194,14 @@ func (f *fakeDecommQuerier) DeleteApiserverAuditEventsByCluster(_ context.Contex
 func (f *fakeDecommQuerier) DeleteControlPlaneSnapshotsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
 	f.bump("DeleteControlPlaneSnapshotsByCluster")
 	return 3, nil
+}
+
+func (f *fakeDecommQuerier) RevokeAgentIngestIdentityForCluster(_ context.Context, arg sqlc.RevokeAgentIngestIdentityForClusterParams) (int64, error) {
+	f.bump("RevokeAgentIngestIdentityForCluster")
+	f.mu.Lock()
+	f.ingestIdentity = arg
+	f.mu.Unlock()
+	return 1, nil
 }
 
 func (f *fakeDecommQuerier) DeleteClusterRegistryConfigsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
@@ -899,10 +912,20 @@ func TestDeleteDependents_CleansSnapshotSchedulesAndOrphanTables(t *testing.T) {
 		// control_plane_snapshots: etcd DR snapshot registry (migration 125),
 		// orphaned by the tombstone exactly like apiserver_audit_events.
 		"DeleteControlPlaneSnapshotsByCluster",
+		// The per-cluster agent-ingest identity is named, not cluster_id-keyed:
+		// without this the decommissioned cluster leaves a live bearer token
+		// behind whose owner holds no RBAC bindings at all.
+		"RevokeAgentIngestIdentityForCluster",
 	} {
 		if q.calls[name] != 1 {
 			t.Errorf("expected %s called once during delete_dependents, got %d", name, q.calls[name])
 		}
+	}
+	if got, want := q.ingestIdentity.Username, auth.AgentIngestServiceUsername(q.row.ClusterID); got != want {
+		t.Errorf("ingest identity username = %q, want %q", got, want)
+	}
+	if got, want := q.ingestIdentity.Name, auth.AgentIngestTokenName(q.row.ClusterID); got != want {
+		t.Errorf("ingest identity token name = %q, want %q", got, want)
 	}
 }
 

@@ -17,7 +17,10 @@ import (
 // provisioning call so the test can assert the service identity, the
 // cluster-scoped grant, and the minted token carry exactly the needed authority.
 type fakeIngestQuerier struct {
-	user     *sqlc.User
+	// users is keyed by username: the service principal is per-cluster, so a
+	// multi-cluster test must see distinct rows, not one shared identity.
+	users    map[string]sqlc.User
+	user     *sqlc.User // most recently created, for single-cluster assertions
 	role     *sqlc.ClusterRole
 	bindings []sqlc.CreateClusterRoleBindingParams
 	tokens   []sqlc.CreateAPITokenParams
@@ -28,15 +31,25 @@ type fakeIngestQuerier struct {
 }
 
 func (f *fakeIngestQuerier) GetUserByUsername(_ context.Context, username string) (sqlc.User, error) {
-	if f.user != nil && f.user.Username == username {
-		return *f.user, nil
+	if u, ok := f.users[username]; ok {
+		return u, nil
 	}
 	return sqlc.User{}, errors.New("not found")
 }
 
 func (f *fakeIngestQuerier) CreateServiceUser(_ context.Context, arg sqlc.CreateServiceUserParams) (sqlc.User, error) {
 	f.createUserCalls++
-	u := sqlc.User{ID: uuid.New(), Email: arg.Email, Username: arg.Username, IsActive: true}
+	// Mirrors the real query: the insert (and its ON CONFLICT branch) always
+	// leaves the row is_service=true and is_active=true, keeping the existing
+	// row's id on conflict.
+	u := sqlc.User{ID: uuid.New(), Email: arg.Email, Username: arg.Username, IsActive: true, IsService: true}
+	if f.users == nil {
+		f.users = map[string]sqlc.User{}
+	}
+	if existing, ok := f.users[arg.Username]; ok {
+		u.ID = existing.ID
+	}
+	f.users[u.Username] = u
 	f.user = &u
 	return u, nil
 }
@@ -92,8 +105,8 @@ func TestIssueAgentIngestTokenProvisionsNarrowAuthority(t *testing.T) {
 	if f.createUserCalls != 1 {
 		t.Errorf("createUserCalls = %d, want 1", f.createUserCalls)
 	}
-	if f.user == nil || f.user.Username != AgentIngestServiceUsername {
-		t.Fatalf("service user not created with reserved username")
+	if f.user == nil || f.user.Username != AgentIngestServiceUsername(clusterID) {
+		t.Fatalf("service user not created with this cluster's reserved username")
 	}
 
 	// 2. Exactly one cluster-scoped binding for THIS cluster, no namespace,
@@ -112,9 +125,9 @@ func TestIssueAgentIngestTokenProvisionsNarrowAuthority(t *testing.T) {
 		t.Errorf("binding user = %v, want %v", b.UserID, f.user.ID)
 	}
 
-	// 3. The role grants exactly clusters:update — assert via the real RBAC
-	//    engine that the binding lets cluster:update through on THIS cluster but
-	//    not on another, and grants nothing else.
+	// 3. The role grants exactly audit_ingest:create — assert via the real RBAC
+	//    engine that the binding lets ingest through on THIS cluster but not on
+	//    another, and grants nothing else.
 	var rules []rbac.Rule
 	if err := json.Unmarshal(f.role.Rules, &rules); err != nil {
 		t.Fatalf("role rules JSON: %v", err)
@@ -126,11 +139,16 @@ func TestIssueAgentIngestTokenProvisionsNarrowAuthority(t *testing.T) {
 		ClusterID: clusterID.String(),
 	}
 	engine := rbac.NewEngine()
-	if !engine.CheckPermission([]rbac.RoleBinding{binding}, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil) {
-		t.Error("binding must grant clusters:update on the target cluster")
+	if !engine.CheckPermission([]rbac.RoleBinding{binding}, rbac.ResourceAuditIngest, rbac.VerbCreate, clusterID, uuid.Nil) {
+		t.Error("binding must grant audit_ingest:create on the target cluster")
 	}
-	if engine.CheckPermission([]rbac.RoleBinding{binding}, rbac.ResourceClusters, rbac.VerbUpdate, uuid.New(), uuid.Nil) {
-		t.Error("binding must NOT grant clusters:update on a different cluster")
+	if engine.CheckPermission([]rbac.RoleBinding{binding}, rbac.ResourceAuditIngest, rbac.VerbCreate, uuid.New(), uuid.Nil) {
+		t.Error("binding must NOT grant audit_ingest:create on a different cluster")
+	}
+	// The ingest grant must not double as a cluster-mutation grant:
+	// clusters:update is what opens exec tickets and k8s-proxy writes.
+	if engine.CheckPermission([]rbac.RoleBinding{binding}, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil) {
+		t.Error("binding must NOT grant clusters:update")
 	}
 	if engine.CheckPermission([]rbac.RoleBinding{binding}, rbac.ResourceClusters, rbac.VerbDelete, clusterID, uuid.Nil) {
 		t.Error("binding must NOT grant clusters:delete")
@@ -194,5 +212,34 @@ func TestIssueAgentIngestTokenReusesIdentityAndRemints(t *testing.T) {
 	}
 	if len(f.tokens) != 2 {
 		t.Errorf("tokens minted = %d, want 2", len(f.tokens))
+	}
+}
+
+// TestIssueAgentIngestTokenReactivatesDeactivatedIdentity: the service
+// principal can be deactivated out from under us — by a decommission, an
+// operator cleaning up what looks like a junk account, or an IdP SCIM reconcile
+// PATCHing active=false. The auth middleware rejects any token whose owner is
+// inactive, so a plain get-or-create would happily mint tokens against the dead
+// row and wedge ingest for that cluster permanently. Re-provisioning on CONNECT
+// must be self-healing.
+func TestIssueAgentIngestTokenReactivatesDeactivatedIdentity(t *testing.T) {
+	clusterID := uuid.New()
+	username := AgentIngestServiceUsername(clusterID)
+	existingID := uuid.New()
+	f := &fakeIngestQuerier{users: map[string]sqlc.User{
+		username: {ID: existingID, Username: username, IsActive: false, IsService: true},
+	}}
+
+	if _, err := IssueAgentIngestToken(context.Background(), f, clusterID); err != nil {
+		t.Fatalf("IssueAgentIngestToken: %v", err)
+	}
+	if f.createUserCalls != 1 {
+		t.Fatalf("createUserCalls = %d, want 1 (must re-assert the row, not reuse it inactive)", f.createUserCalls)
+	}
+	if got := f.users[username]; !got.IsActive {
+		t.Error("service principal must be reactivated; an inactive owner fails auth on every ingest request")
+	}
+	if len(f.tokens) != 1 || f.tokens[0].UserID != existingID {
+		t.Errorf("token must be minted for the existing principal %v, got %+v", existingID, f.tokens)
 	}
 }

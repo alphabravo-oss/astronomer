@@ -781,10 +781,6 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/clusters/{cluster_id}/resources/{group}/{version}/{kind}"
-  },
-  {
-    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/resources/{resource_type}"
   },
   {

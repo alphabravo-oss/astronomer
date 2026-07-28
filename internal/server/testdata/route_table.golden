@@ -134,7 +134,6 @@ GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
 GET /api/v1/clusters/{cluster_id}/registries
 GET /api/v1/clusters/{cluster_id}/registries/{id}
 GET /api/v1/clusters/{cluster_id}/resources/generic/{resource_type}
-GET /api/v1/clusters/{cluster_id}/resources/{group}/{version}/{kind}
 GET /api/v1/clusters/{cluster_id}/resources/{resource_type}
 GET /api/v1/clusters/{cluster_id}/service-mesh
 GET /api/v1/clusters/{cluster_id}/service-mesh/inventory

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -9,9 +11,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
@@ -268,5 +272,169 @@ func TestRawBearerExecRejectsReadScopedTokens(t *testing.T) {
 	logsReadRouter.ServeHTTP(logsRec, logsReq)
 	if logsRec.Code == http.StatusUnauthorized {
 		t.Fatalf("read-scoped raw-bearer logs status = %d (rejected); logs must stay read-eligible; body=%s", logsRec.Code, logsRec.Body.String())
+	}
+}
+
+// ingestProvisioner is an in-memory auth.AgentIngestQuerier so the ingest
+// tests below run the REAL issuance path and then evaluate the authority the
+// resulting identity actually carries, instead of hand-writing bindings that
+// could drift from what a CONNECT provisions.
+type ingestProvisioner struct {
+	users    map[string]sqlc.User
+	role     *sqlc.ClusterRole
+	bindings []sqlc.CreateClusterRoleBindingParams
+}
+
+func (p *ingestProvisioner) GetUserByUsername(_ context.Context, username string) (sqlc.User, error) {
+	if u, ok := p.users[username]; ok {
+		return u, nil
+	}
+	return sqlc.User{}, errors.New("not found")
+}
+
+func (p *ingestProvisioner) CreateServiceUser(_ context.Context, arg sqlc.CreateServiceUserParams) (sqlc.User, error) {
+	if p.users == nil {
+		p.users = map[string]sqlc.User{}
+	}
+	u := sqlc.User{ID: uuid.New(), Email: arg.Email, Username: arg.Username, IsActive: true}
+	p.users[u.Username] = u
+	return u, nil
+}
+
+func (p *ingestProvisioner) GetClusterRoleByName(_ context.Context, name string) (sqlc.ClusterRole, error) {
+	if p.role != nil && p.role.Name == name {
+		return *p.role, nil
+	}
+	return sqlc.ClusterRole{}, errors.New("not found")
+}
+
+func (p *ingestProvisioner) CreateClusterRole(_ context.Context, arg sqlc.CreateClusterRoleParams) (sqlc.ClusterRole, error) {
+	r := sqlc.ClusterRole{ID: uuid.New(), Name: arg.Name, Rules: arg.Rules}
+	p.role = &r
+	return r, nil
+}
+
+func (p *ingestProvisioner) CountClusterRoleBindingForUserCluster(_ context.Context, arg sqlc.CountClusterRoleBindingForUserClusterParams) (int64, error) {
+	for _, b := range p.bindings {
+		if b.UserID == arg.UserID && b.ClusterID == arg.ClusterID && b.RoleID == arg.RoleID {
+			return 1, nil
+		}
+	}
+	return 0, nil
+}
+
+func (p *ingestProvisioner) CreateClusterRoleBinding(_ context.Context, arg sqlc.CreateClusterRoleBindingParams) (sqlc.ClusterRoleBinding, error) {
+	p.bindings = append(p.bindings, arg)
+	return sqlc.ClusterRoleBinding{ID: uuid.New()}, nil
+}
+
+func (p *ingestProvisioner) RevokeAPITokensByName(_ context.Context, _ sqlc.RevokeAPITokensByNameParams) error {
+	return nil
+}
+
+func (p *ingestProvisioner) CreateAPIToken(_ context.Context, arg sqlc.CreateAPITokenParams) (sqlc.ApiToken, error) {
+	return sqlc.ApiToken{ID: uuid.New(), UserID: arg.UserID, Name: arg.Name}, nil
+}
+
+// bindingsFor returns the RBAC bindings the middleware would load for one
+// provisioned ingest principal — exactly the rows CONNECT created for it.
+func (p *ingestProvisioner) bindingsFor(t *testing.T, userID uuid.UUID) []rbac.RoleBinding {
+	t.Helper()
+	var rules []rbac.Rule
+	if err := json.Unmarshal(p.role.Rules, &rules); err != nil {
+		t.Fatalf("ingest role rules JSON: %v", err)
+	}
+	var out []rbac.RoleBinding
+	for _, b := range p.bindings {
+		if b.UserID != (pgtype.UUID{Bytes: userID, Valid: true}) {
+			continue
+		}
+		out = append(out, rbac.RoleBinding{
+			UserID:    userID.String(),
+			RoleRules: rules,
+			Scope:     "cluster",
+			ClusterID: b.ClusterID.String(),
+		})
+	}
+	return out
+}
+
+// issueIngestIdentity provisions ingest tokens for every cluster (as their
+// agents connecting in turn would) and returns the plaintext token, owning user
+// ID, and RBAC bindings for the FIRST cluster's principal.
+func issueIngestIdentity(t *testing.T, clusters ...uuid.UUID) (string, uuid.UUID, []rbac.RoleBinding) {
+	t.Helper()
+	p := &ingestProvisioner{}
+	var plaintext string
+	for i, c := range clusters {
+		tok, err := auth.IssueAgentIngestToken(context.Background(), p, c)
+		if err != nil {
+			t.Fatalf("issue ingest token for cluster %d: %v", i, err)
+		}
+		if i == 0 {
+			plaintext = tok
+		}
+	}
+	owner := p.users[auth.AgentIngestServiceUsername(clusters[0])]
+	return plaintext, owner.ID, p.bindingsFor(t, owner.ID)
+}
+
+func ingestTokenScopes(t *testing.T) json.RawMessage {
+	t.Helper()
+	scopes, err := json.Marshal(auth.AgentIngestTokenScopes())
+	if err != nil {
+		t.Fatalf("marshal ingest scopes: %v", err)
+	}
+	return scopes
+}
+
+// TestAgentIngestTokenCannotMintExecTicketForAnotherCluster is the P0-1
+// regression: an apiserver-audit ingest token carries clusters:write scope, so
+// the scope backstop alone lets it reach the exec-ticket RBAC gate. Its
+// principal must therefore be authorized for nothing but ingest on its own
+// cluster — before the fix a single shared principal accumulated a
+// clusters:update binding per connected cluster, so clusterA's agent token
+// could mint an exec ticket into clusterB.
+func TestAgentIngestTokenCannotMintExecTicketForAnotherCluster(t *testing.T) {
+	clusterA := uuid.New()
+	clusterB := uuid.New()
+	rawToken, userID, bindings := issueIngestIdentity(t, clusterA, clusterB)
+	router := newStreamTicketRouter(rawToken, userID, ingestTokenScopes(t), bindings)
+
+	rec := issueTicket(router, rawToken, auth.StreamKindExec, clusterB.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-cluster exec ticket status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	// Nor on its own cluster: ingest authority is not cluster-mutation authority.
+	ownRec := issueTicket(router, rawToken, auth.StreamKindExec, clusterA.String())
+	if ownRec.Code != http.StatusForbidden {
+		t.Fatalf("own-cluster exec ticket status = %d, want %d; body=%s", ownRec.Code, http.StatusForbidden, ownRec.Body.String())
+	}
+}
+
+// TestAgentIngestTokenIngestsForItsOwnCluster is the other half: narrowing the
+// ingest gate to audit_ingest:create must not break real audit delivery. The
+// token an agent actually receives still reaches the ingest handler for its own
+// cluster, and still cannot ingest for another one.
+func TestAgentIngestTokenIngestsForItsOwnCluster(t *testing.T) {
+	clusterA := uuid.New()
+	clusterB := uuid.New()
+	rawToken, userID, bindings := issueIngestIdentity(t, clusterA, clusterB)
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT:            auth.NewJWTManager("route-security-test-secret", 60),
+		AuthQueries:    routeSecurityAPITokenQuerier(rawToken, userID, ingestTokenScopes(t)),
+		RBACEngine:     rbac.NewEngine(),
+		RBACQueries:    routeSecurityRBACQuerier{bindings: bindings},
+		ApiserverAudit: handler.NewApiserverAuditHandler(nil),
+	})
+
+	rec := doRequest(router, http.MethodPost, "/api/v1/clusters/"+clusterA.String()+"/apiserver-audit/", rawToken, `{"events":[]}`)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("own-cluster ingest status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+
+	otherRec := doRequest(router, http.MethodPost, "/api/v1/clusters/"+clusterB.String()+"/apiserver-audit/", rawToken, `{"events":[]}`)
+	if otherRec.Code != http.StatusForbidden {
+		t.Fatalf("cross-cluster ingest status = %d, want %d; body=%s", otherRec.Code, http.StatusForbidden, otherRec.Body.String())
 	}
 }

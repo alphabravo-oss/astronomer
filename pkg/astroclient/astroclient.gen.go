@@ -9570,9 +9570,6 @@ type ClientInterface interface {
 	// DeletePersistentVolume request
 	DeletePersistentVolume(ctx context.Context, clusterId string, name string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListClusterResourcesByGVK request
-	ListClusterResourcesByGVK(ctx context.Context, clusterId string, group string, version string, kind string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListNamedClusterResources request
 	ListNamedClusterResources(ctx context.Context, clusterId string, resourceType ListNamedClusterResourcesParamsResourceType, params *ListNamedClusterResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -9764,9 +9761,6 @@ type ClientInterface interface {
 
 	// PostApiV1ClustersIdRegistrationConfirm request
 	PostApiV1ClustersIdRegistrationConfirm(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetApiV1ClustersIdRegistrationEvents request
-	GetApiV1ClustersIdRegistrationEvents(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutApiV1ClustersIdRegistrationOptionsWithBody request with any body
 	PutApiV1ClustersIdRegistrationOptionsWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -13868,18 +13862,6 @@ func (c *Client) DeletePersistentVolume(ctx context.Context, clusterId string, n
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListClusterResourcesByGVK(ctx context.Context, clusterId string, group string, version string, kind string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListClusterResourcesByGVKRequest(c.Server, clusterId, group, version, kind)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) ListNamedClusterResources(ctx context.Context, clusterId string, resourceType ListNamedClusterResourcesParamsResourceType, params *ListNamedClusterResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListNamedClusterResourcesRequest(c.Server, clusterId, resourceType, params)
 	if err != nil {
@@ -14686,18 +14668,6 @@ func (c *Client) PostApiV1ClustersIdRegistrationCancel(ctx context.Context, id o
 
 func (c *Client) PostApiV1ClustersIdRegistrationConfirm(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1ClustersIdRegistrationConfirmRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetApiV1ClustersIdRegistrationEvents(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetApiV1ClustersIdRegistrationEventsRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -27472,61 +27442,6 @@ func NewDeletePersistentVolumeRequest(server string, clusterId string, name stri
 	return req, nil
 }
 
-// NewListClusterResourcesByGVKRequest generates requests for ListClusterResourcesByGVK
-func NewListClusterResourcesByGVKRequest(server string, clusterId string, group string, version string, kind string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "group", runtime.ParamLocationPath, group)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam2 string
-
-	pathParam2, err = runtime.StyleParamWithLocation("simple", false, "version", runtime.ParamLocationPath, version)
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam3 string
-
-	pathParam3, err = runtime.StyleParamWithLocation("simple", false, "kind", runtime.ParamLocationPath, kind)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clusters/%s/resources/%s/%s/%s", pathParam0, pathParam1, pathParam2, pathParam3)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewListNamedClusterResourcesRequest generates requests for ListNamedClusterResources
 func NewListNamedClusterResourcesRequest(server string, clusterId string, resourceType ListNamedClusterResourcesParamsResourceType, params *ListNamedClusterResourcesParams) (*http.Request, error) {
 	var err error
@@ -29897,40 +29812,6 @@ func NewPostApiV1ClustersIdRegistrationConfirmRequest(server string, id openapi_
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetApiV1ClustersIdRegistrationEventsRequest generates requests for GetApiV1ClustersIdRegistrationEvents
-func NewGetApiV1ClustersIdRegistrationEventsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clusters/%s/registration/events/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -39129,9 +39010,6 @@ type ClientWithResponsesInterface interface {
 	// DeletePersistentVolumeWithResponse request
 	DeletePersistentVolumeWithResponse(ctx context.Context, clusterId string, name string, reqEditors ...RequestEditorFn) (*DeletePersistentVolumeResponse, error)
 
-	// ListClusterResourcesByGVKWithResponse request
-	ListClusterResourcesByGVKWithResponse(ctx context.Context, clusterId string, group string, version string, kind string, reqEditors ...RequestEditorFn) (*ListClusterResourcesByGVKResponse, error)
-
 	// ListNamedClusterResourcesWithResponse request
 	ListNamedClusterResourcesWithResponse(ctx context.Context, clusterId string, resourceType ListNamedClusterResourcesParamsResourceType, params *ListNamedClusterResourcesParams, reqEditors ...RequestEditorFn) (*ListNamedClusterResourcesResponse, error)
 
@@ -39323,9 +39201,6 @@ type ClientWithResponsesInterface interface {
 
 	// PostApiV1ClustersIdRegistrationConfirmWithResponse request
 	PostApiV1ClustersIdRegistrationConfirmWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1ClustersIdRegistrationConfirmResponse, error)
-
-	// GetApiV1ClustersIdRegistrationEventsWithResponse request
-	GetApiV1ClustersIdRegistrationEventsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdRegistrationEventsResponse, error)
 
 	// PutApiV1ClustersIdRegistrationOptionsWithBodyWithResponse request with any body
 	PutApiV1ClustersIdRegistrationOptionsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutApiV1ClustersIdRegistrationOptionsResponse, error)
@@ -45611,31 +45486,6 @@ func (r DeletePersistentVolumeResponse) StatusCode() int {
 	return 0
 }
 
-type ListClusterResourcesByGVKResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *DataEnvelope
-	JSON401      *ErrorEnvelope
-	JSON403      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r ListClusterResourcesByGVKResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListClusterResourcesByGVKResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type ListNamedClusterResourcesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -47115,27 +46965,6 @@ func (r PostApiV1ClustersIdRegistrationConfirmResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiV1ClustersIdRegistrationConfirmResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetApiV1ClustersIdRegistrationEventsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-}
-
-// Status returns HTTPResponse.Status
-func (r GetApiV1ClustersIdRegistrationEventsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetApiV1ClustersIdRegistrationEventsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -54570,15 +54399,6 @@ func (c *ClientWithResponses) DeletePersistentVolumeWithResponse(ctx context.Con
 	return ParseDeletePersistentVolumeResponse(rsp)
 }
 
-// ListClusterResourcesByGVKWithResponse request returning *ListClusterResourcesByGVKResponse
-func (c *ClientWithResponses) ListClusterResourcesByGVKWithResponse(ctx context.Context, clusterId string, group string, version string, kind string, reqEditors ...RequestEditorFn) (*ListClusterResourcesByGVKResponse, error) {
-	rsp, err := c.ListClusterResourcesByGVK(ctx, clusterId, group, version, kind, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListClusterResourcesByGVKResponse(rsp)
-}
-
 // ListNamedClusterResourcesWithResponse request returning *ListNamedClusterResourcesResponse
 func (c *ClientWithResponses) ListNamedClusterResourcesWithResponse(ctx context.Context, clusterId string, resourceType ListNamedClusterResourcesParamsResourceType, params *ListNamedClusterResourcesParams, reqEditors ...RequestEditorFn) (*ListNamedClusterResourcesResponse, error) {
 	rsp, err := c.ListNamedClusterResources(ctx, clusterId, resourceType, params, reqEditors...)
@@ -55177,15 +54997,6 @@ func (c *ClientWithResponses) PostApiV1ClustersIdRegistrationConfirmWithResponse
 		return nil, err
 	}
 	return ParsePostApiV1ClustersIdRegistrationConfirmResponse(rsp)
-}
-
-// GetApiV1ClustersIdRegistrationEventsWithResponse request returning *GetApiV1ClustersIdRegistrationEventsResponse
-func (c *ClientWithResponses) GetApiV1ClustersIdRegistrationEventsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiV1ClustersIdRegistrationEventsResponse, error) {
-	rsp, err := c.GetApiV1ClustersIdRegistrationEvents(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetApiV1ClustersIdRegistrationEventsResponse(rsp)
 }
 
 // PutApiV1ClustersIdRegistrationOptionsWithBodyWithResponse request with arbitrary body returning *PutApiV1ClustersIdRegistrationOptionsResponse
@@ -66539,53 +66350,6 @@ func ParseDeletePersistentVolumeResponse(rsp *http.Response) (*DeletePersistentV
 	return response, nil
 }
 
-// ParseListClusterResourcesByGVKResponse parses an HTTP response from a ListClusterResourcesByGVKWithResponse call
-func ParseListClusterResourcesByGVKResponse(rsp *http.Response) (*ListClusterResourcesByGVKResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListClusterResourcesByGVKResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest DataEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseListNamedClusterResourcesResponse parses an HTTP response from a ListNamedClusterResourcesWithResponse call
 func ParseListNamedClusterResourcesResponse(rsp *http.Response) (*ListNamedClusterResourcesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -68926,22 +68690,6 @@ func ParsePostApiV1ClustersIdRegistrationConfirmResponse(rsp *http.Response) (*P
 		}
 		response.JSON200 = &dest
 
-	}
-
-	return response, nil
-}
-
-// ParseGetApiV1ClustersIdRegistrationEventsResponse parses an HTTP response from a GetApiV1ClustersIdRegistrationEventsWithResponse call
-func ParseGetApiV1ClustersIdRegistrationEventsResponse(rsp *http.Response) (*GetApiV1ClustersIdRegistrationEventsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetApiV1ClustersIdRegistrationEventsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
 	}
 
 	return response, nil

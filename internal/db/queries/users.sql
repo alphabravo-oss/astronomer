@@ -8,7 +8,12 @@ SELECT * FROM users WHERE email = $1;
 SELECT * FROM users WHERE username = $1;
 
 -- name: ListUsers :many
-SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+-- Human-user enumeration only. Service principals (is_service, migration 116 —
+-- e.g. the per-cluster agent-ingest identities) exist solely to own tokens and
+-- carry RBAC bindings; surfacing them on the admin user list, SCIM /Users, or a
+-- support bundle would hand an IdP one synthetic account per cluster to
+-- reconcile.
+SELECT * FROM users WHERE is_service = false ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: CreateUser :one
 INSERT INTO users (email, username, first_name, last_name, password, is_active, is_staff, is_superuser)
@@ -50,7 +55,10 @@ UPDATE users SET password = $2, updated_at = now() WHERE id = $1;
 UPDATE users SET last_login = now() WHERE id = $1;
 
 -- name: CountUsers :one
-SELECT count(*) FROM users;
+-- Pairs with ListUsers: the same is_service exclusion, so seat counts
+-- (telemetry) and the "is this a fresh database?" bootstrap check don't count
+-- machine principals as users.
+SELECT count(*) FROM users WHERE is_service = false;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;

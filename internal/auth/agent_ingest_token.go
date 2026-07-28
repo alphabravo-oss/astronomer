@@ -13,21 +13,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// AgentIngestServiceUsername is the username of the single reserved service
-// principal that owns every per-cluster apiserver-audit ingest token. It is
-// flagged is_service=true (migration 116) so it never appears on human-user
-// surfaces. The "system:" prefix mirrors Kubernetes' reserved-identity
-// convention and the colon keeps it from colliding with an operator-chosen
-// username (which the UI disallows).
-const AgentIngestServiceUsername = "system:agent-ingest"
+// AgentIngestServiceUsername is the username of the reserved service principal
+// that owns one cluster's apiserver-audit ingest token. It is derived per
+// cluster (mirroring AgentIngestTokenName) so the principal carries exactly one
+// cluster_role_binding: a single shared owner would accumulate one binding per
+// connected cluster and every agent's token would then authorize ingest
+// fleet-wide. The row is flagged is_service=true (migration 116) so it never
+// appears on human-user surfaces. The "system:" prefix mirrors Kubernetes'
+// reserved-identity convention and the colon keeps it from colliding with an
+// operator-chosen username (which the UI disallows).
+func AgentIngestServiceUsername(clusterID uuid.UUID) string {
+	return "system:agent-ingest:" + clusterID.String()
+}
 
-// AgentIngestServiceEmail is a non-routable placeholder email for the reserved
-// service user. The users table requires a unique non-null email; .invalid is
-// reserved by RFC 2606 so it can never be a real deliverable address.
-const AgentIngestServiceEmail = "system+agent-ingest@astronomer.invalid"
+// AgentIngestServiceEmail is a non-routable placeholder email for a cluster's
+// service user. The users table requires a unique non-null email, so it carries
+// the same cluster UUID that makes the username unique; .invalid is reserved by
+// RFC 2606 so it can never be a real deliverable address.
+func AgentIngestServiceEmail(clusterID uuid.UUID) string {
+	return "system+agent-ingest-" + clusterID.String() + "@astronomer.invalid"
+}
 
 // AgentIngestClusterRoleName is the single reserved cluster role granting
-// exactly clusters:update. The service user is bound to it per-cluster via a
+// exactly audit_ingest:create. Each cluster's service user is bound to it via a
 // cluster-scoped cluster_role_binding, so the grant is narrowed to one cluster
 // even though the role definition is shared.
 const AgentIngestClusterRoleName = "system:agent-ingest"
@@ -83,8 +91,8 @@ func AgentIngestTokenScopes() []string {
 // (GenerateAgentIngestToken + HashAgentIngestToken + AgentIngestTokenDisplayPrefix).
 //
 // The token is associated with serviceUserID — the caller supplies the user
-// whose RBAC bindings grant clusters:update on the target cluster, because the
-// ingest route also gates on that permission. Naming the params after the
+// whose RBAC bindings grant audit_ingest:create on the target cluster, because
+// the ingest route also gates on that permission. Naming the params after the
 // cluster keeps the row identifiable in the operator UI.
 func AgentIngestTokenParams(serviceUserID, clusterID uuid.UUID, tokenHash, prefix string) sqlc.CreateAPITokenParams {
 	// json.Marshal of a non-nil string slice never fails; ignore the error to
@@ -111,10 +119,12 @@ func AgentIngestTokenName(clusterID uuid.UUID) string {
 }
 
 // agentIngestClusterRoleRules is the role definition body granting exactly
-// clusters:update — the verb the apiserver-audit ingest route gates on
-// (requirePermission(ResourceClusters, VerbUpdate)). Nothing else.
+// audit_ingest:create — the permission the apiserver-audit ingest route gates
+// on (requirePermission(ResourceAuditIngest, VerbCreate)). Nothing else, and
+// deliberately not clusters:update: an ingest credential must not satisfy the
+// cluster-mutation gates (exec tickets, k8s-proxy writes) that verb opens.
 var agentIngestClusterRoleRules = []map[string]any{
-	{"resource": "clusters", "verbs": []string{"update"}},
+	{"resource": "audit_ingest", "verbs": []string{"create"}},
 }
 
 // AgentIngestQuerier is the narrow slice of sqlc.Queries that
@@ -133,17 +143,18 @@ type AgentIngestQuerier interface {
 	CreateAPIToken(ctx context.Context, arg sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
 }
 
-// IssueAgentIngestToken provisions (idempotently) the reserved service
-// principal, the shared cluster:update role, and a cluster-scoped binding for
-// the connecting cluster, then mints a fresh scoped clusters:write ingest token
-// and returns its plaintext. Any previously-issued token for this cluster is
-// revoked first so at most one valid token exists per cluster (the plaintext is
-// never stored, so it can't be re-delivered — re-mint is the only safe reuse).
+// IssueAgentIngestToken provisions (idempotently) this cluster's reserved
+// service principal, the shared audit_ingest:create role, and a cluster-scoped
+// binding for the connecting cluster, then mints a fresh scoped clusters:write
+// ingest token and returns its plaintext. Any previously-issued token for this
+// cluster is revoked first so at most one valid token exists per cluster (the
+// plaintext is never stored, so it can't be re-delivered — re-mint is the only
+// safe reuse).
 //
 // The returned plaintext is delivered once in CONNECT_ACK; only its SHA-256
 // hash is persisted.
 func IssueAgentIngestToken(ctx context.Context, q AgentIngestQuerier, clusterID uuid.UUID) (string, error) {
-	user, err := ensureAgentIngestServiceUser(ctx, q)
+	user, err := ensureAgentIngestServiceUser(ctx, q, clusterID)
 	if err != nil {
 		return "", fmt.Errorf("ensure ingest service user: %w", err)
 	}
@@ -196,15 +207,20 @@ func (i *IngestIssuer) IssueIngestToken(ctx context.Context, clusterID uuid.UUID
 	return IssueAgentIngestToken(ctx, i.q, clusterID)
 }
 
-func ensureAgentIngestServiceUser(ctx context.Context, q AgentIngestQuerier) (sqlc.User, error) {
-	if user, err := q.GetUserByUsername(ctx, AgentIngestServiceUsername); err == nil {
+func ensureAgentIngestServiceUser(ctx context.Context, q AgentIngestQuerier, clusterID uuid.UUID) (sqlc.User, error) {
+	username := AgentIngestServiceUsername(clusterID)
+	if user, err := q.GetUserByUsername(ctx, username); err == nil && user.IsActive && user.IsService {
 		return user, nil
 	}
-	// Not found (or transient): CreateServiceUser is ON CONFLICT (username) DO
-	// UPDATE, so a concurrent connect that already inserted the row is handled.
+	// Missing, transient, or wedged: an existing-but-inactive row (deactivated
+	// by decommission, or by an SCIM/operator sweep that mistook it for junk)
+	// would authenticate nothing — the auth middleware rejects tokens whose
+	// owner is inactive — so fall through and let CreateServiceUser's ON
+	// CONFLICT re-assert is_active/is_service. That also handles the concurrent
+	// connect that already inserted the row.
 	return q.CreateServiceUser(ctx, sqlc.CreateServiceUserParams{
-		Email:    AgentIngestServiceEmail,
-		Username: AgentIngestServiceUsername,
+		Email:    AgentIngestServiceEmail(clusterID),
+		Username: username,
 	})
 }
 
@@ -216,7 +232,7 @@ func ensureAgentIngestClusterRole(ctx context.Context, q AgentIngestQuerier) (sq
 	role, err := q.CreateClusterRole(ctx, sqlc.CreateClusterRoleParams{
 		Name:        AgentIngestClusterRoleName,
 		DisplayName: "Agent Audit Ingest",
-		Description: "Reserved role granting clusters:update for per-cluster apiserver-audit ingest tokens.",
+		Description: "Reserved role granting audit_ingest:create for per-cluster apiserver-audit ingest tokens.",
 		Permissions: json.RawMessage(`[]`),
 		Rules:       rules,
 		IsBuiltin:   true,

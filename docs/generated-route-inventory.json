@@ -1552,7 +1552,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the cluster:update RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
+    "risk_reason": "The per-cluster agent POSTs batched audit.k8s.io events to this ingest endpoint, gated on the dedicated audit_ingest:create RBAC permission and idempotent on (cluster_id, auditID); it carries no high-risk blast radius beyond the owning cluster."
   },
   {
     "method": "GET",
@@ -2157,19 +2157,6 @@
       "TestGenericSecretResourcesRequireSecretsListAndAudit"
     ],
     "security_registry_id": "generic-secret-resource-list"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/clusters/{cluster_id}/resources/{group}/{version}/{kind}/",
-    "handler_owner": "handler.ResourceHandler",
-    "surface": "adopted cluster management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
   },
   {
     "method": "DELETE",
@@ -5121,22 +5108,6 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/clusters/{id}/registration/events/",
-    "handler_owner": "handler.ClusterRegistrationHandler",
-    "surface": "cluster registration server-sent events",
-    "auth": "stream ticket or bearer/session auth",
-    "rbac": "clusters:read",
-    "csrf": "not applicable: GET stream",
-    "audit": "read-side audit middleware when configured",
-    "tests": [
-      "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestRegistrationEventsRejectQueryJWT",
-      "TestRegistrationEventsAuthAndRBAC"
-    ],
-    "security_registry_id": "registration-events"
   },
   {
     "method": "GET",

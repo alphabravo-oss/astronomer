@@ -25,16 +25,22 @@ selected by `ASTRONOMER_AUDIT_DELIVERY`:
   narrowly-scoped `clusters:write` API token the server delivers to the agent in
   the tunnel `CONNECT_ACK`. Use this when you want audit events to take a
   different path than the proxy tunnel (e.g. so they don't share its
-  backpressure). If no ingest token has been delivered, this falls back to the
-  tunnel path.
+  backpressure). If no ingest token has been delivered — or the one the agent
+  holds is rejected (`401`/`403`, e.g. after a server-side revocation) — this
+  falls back to the tunnel path and resumes HTTP delivery once the next
+  `CONNECT_ACK` mints a fresh token. No operator action is needed.
 - **`stub`**: a no-op sender that batches and checkpoints but **drops** events
   (logging the batch size). For local development / wiring tests only.
 
 The ingest route is mounted behind `requireAuth` (a JWT session or a
 user/service API token), and additionally requires the `clusters:write` scope
-and the `cluster:update` RBAC permission
-(`internal/server/routes_security.go`). The default `tunnel` path satisfies
-this implicitly via the tunnel session, which is why it needs no extra token.
+and the `audit_ingest:create` RBAC permission
+(`internal/server/routes_security.go`). That permission is deliberately not
+`cluster:update`: the ingest token is granted it on exactly one cluster, so a
+leaked agent credential can neither ingest for another cluster nor reach the
+cluster-mutation surfaces (exec tickets, k8s-proxy writes) `cluster:update`
+opens. The default `tunnel` path satisfies this implicitly via the tunnel
+session, which is why it needs no extra token.
 
 ## Enabling
 

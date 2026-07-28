@@ -1308,6 +1308,35 @@ func TestGenericSecretResourcesRequireSecretsListAndAudit(t *testing.T) {
 	}
 }
 
+// The raw group/version/kind passthrough was gated on clusters:read only, with
+// no per-resource check, no namespace filter and no secret-read audit, so a
+// viewer could LIST every Secret in the cluster. It is deleted; arbitrary
+// group/version/kind reads go through /k8s/* instead, which is covered by
+// TestK8sProxySecretReadsRequireSecretsRBACAndAudit.
+func TestResourcesGroupVersionKindRouteDeleted(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	clusterID := uuid.New()
+
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		JWT:         jwtMgr,
+		RBACEngine:  rbac.NewEngine(),
+		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)},
+		Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/resources/core/v1/secrets/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("gvk secret list status = %d, want %d; body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
 func TestGenericResourceListsRequireCanonicalRBAC(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
@@ -1443,45 +1472,6 @@ func TestNamespaceScopedBindingsAreEnforcedOnGenericResourceRoutes(t *testing.T)
 				}
 			}
 		})
-	}
-}
-
-func TestDynamicResourceListRequiresClusterRead(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
-	userID := uuid.New()
-	token, err := jwtMgr.GenerateAccessToken(userID)
-	if err != nil {
-		t.Fatalf("generate token: %v", err)
-	}
-	clusterID := uuid.New()
-	path := "/api/v1/clusters/" + clusterID.String() + "/resources/apps/v1/deployments/"
-
-	deniedRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceWorkloads, rbac.VerbList)},
-		Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-	})
-	deniedReq := httptest.NewRequest(http.MethodGet, path, nil)
-	deniedReq.Header.Set("Authorization", "Bearer "+token)
-	deniedRec := httptest.NewRecorder()
-	deniedRouter.ServeHTTP(deniedRec, deniedReq)
-	if deniedRec.Code != http.StatusForbidden {
-		t.Fatalf("workloads:list status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
-	}
-
-	allowedRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)},
-		Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-	})
-	allowedReq := httptest.NewRequest(http.MethodGet, path, nil)
-	allowedReq.Header.Set("Authorization", "Bearer "+token)
-	allowedRec := httptest.NewRecorder()
-	allowedRouter.ServeHTTP(allowedRec, allowedReq)
-	if allowedRec.Code != http.StatusOK {
-		t.Fatalf("clusters:read status = %d, want %d; body=%s", allowedRec.Code, http.StatusOK, allowedRec.Body.String())
 	}
 }
 
