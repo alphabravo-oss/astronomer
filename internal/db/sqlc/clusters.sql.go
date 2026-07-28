@@ -57,6 +57,22 @@ func (q *Queries) CountClusters(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countClustersForScopes = `-- name: CountClustersForScopes :one
+SELECT count(*) FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY($1::uuid[])
+`
+
+// Total for a ListClustersForScopes page. The predicate MUST stay identical to
+// ListClustersForScopes': a filtered page under an unfiltered total leaks the
+// fleet size and breaks the pager (a `next` link to rows that never arrive).
+func (q *Queries) CountClustersForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countClustersForScopes, clusterIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCluster = `-- name: CreateCluster :one
 INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, created_by_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -960,6 +976,80 @@ func (q *Queries) ListClustersDueForAgentTokenRotation(ctx context.Context, rowL
 	for rows.Next() {
 		var i ListClustersDueForAgentTokenRotationRow
 		if err := rows.Scan(&i.ClusterID, &i.TokenRotationDays); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersForScopes = `-- name: ListClustersForScopes :many
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY($1::uuid[])
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListClustersForScopesParams struct {
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+// Scope-filtered ListClusters: only the clusters the caller's cluster-scoped
+// bindings name (see rbac.AuthorizedScopeIDs). Callers holding a platform-wide
+// grant use plain ListClusters instead — this variant is never reached for
+// them. Same tombstone predicate and ordering as ListClusters so a filtered
+// page differs only in which rows it may contain.
+func (q *Queries) ListClustersForScopes(ctx context.Context, arg ListClustersForScopesParams) ([]Cluster, error) {
+	rows, err := q.db.Query(ctx, listClustersForScopes, arg.ClusterIds, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cluster{}
+	for rows.Next() {
+		var i Cluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Status,
+			&i.ApiServerUrl,
+			&i.CaCertificate,
+			&i.Environment,
+			&i.Region,
+			&i.Provider,
+			&i.Labels,
+			&i.Annotations,
+			&i.Distribution,
+			&i.AgentVersion,
+			&i.LastHeartbeat,
+			&i.KubernetesVersion,
+			&i.NodeCount,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsLocal,
+			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

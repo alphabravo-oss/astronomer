@@ -1,0 +1,16 @@
+-- 142 only ADDS the `logs` verb where the shipped template catalog already
+-- intended it (cluster-member.yaml, cluster-viewer.yaml and project-viewer.yaml
+-- all declare pods:[read,list,watch,logs]), so the three rows it touches end up
+-- matching what a fresh install applying those templates gets. Stripping the
+-- verb on the way down would therefore break roles that were already meant to
+-- have it — and we cannot tell "142 added this" from "an operator added it",
+-- because both look identical in the rules array.
+--
+-- Rolling back the code puts /api/v1/ws/logs/ back on clusters:read, at which
+-- point pods:logs on these three roles gates nothing extra: each already
+-- matches clusters:read outright or by wildcard, so their WS log access is
+-- unchanged either way. The only
+-- residual effect is that they keep pod-log reads on the HTTP k8s-proxy path,
+-- which is exactly what their templates grant on a fresh install. Leaving the
+-- verb in place is the safe direction.
+SELECT 1;

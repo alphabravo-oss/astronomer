@@ -75,6 +75,26 @@ func (q *Queries) CountProjectsByCluster(ctx context.Context, clusterID uuid.UUI
 	return count, err
 }
 
+const countProjectsForScopes = `-- name: CountProjectsForScopes :one
+SELECT count(*) FROM projects
+WHERE id = ANY($1::uuid[])
+   OR cluster_id = ANY($2::uuid[])
+`
+
+type CountProjectsForScopesParams struct {
+	ProjectIds []uuid.UUID `json:"project_ids"`
+	ClusterIds []uuid.UUID `json:"cluster_ids"`
+}
+
+// Total for a ListProjectsForScopes page; predicate MUST match it exactly (see
+// CountClustersForScopes).
+func (q *Queries) CountProjectsForScopes(ctx context.Context, arg CountProjectsForScopesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProjectsForScopes, arg.ProjectIds, arg.ClusterIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     name, display_name, description, cluster_id, namespaces, resource_quota,
@@ -429,6 +449,77 @@ type ListProjectsByClusterParams struct {
 
 func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error) {
 	rows, err := q.db.Query(ctx, listProjectsByCluster, arg.ClusterID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Project{}
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.ClusterID,
+			&i.Namespaces,
+			&i.ResourceQuota,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LimitRange,
+			&i.NetworkPolicyMode,
+			&i.PodSecurityProfile,
+			&i.ResourceQuotaCpuLimit,
+			&i.ResourceQuotaMemoryLimit,
+			&i.ResourceQuotaPodCount,
+			&i.QuotaPlan,
+			&i.QuotaOverrides,
+			&i.DefaultVaultConnectionID,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsForScopes = `-- name: ListProjectsForScopes :many
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
+WHERE id = ANY($1::uuid[])
+   OR cluster_id = ANY($2::uuid[])
+ORDER BY created_at DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListProjectsForScopesParams struct {
+	ProjectIds  []uuid.UUID `json:"project_ids"`
+	ClusterIds  []uuid.UUID `json:"cluster_ids"`
+	QueryOffset int32       `json:"query_offset"`
+	QueryLimit  int32       `json:"query_limit"`
+}
+
+// Scope-filtered ListProjects: the projects the caller is bound to directly,
+// plus every project on a cluster they hold the grant over WITHOUT a namespace
+// narrowing (a Cluster Owner sees their cluster's projects; a caller confined to
+// one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
+// Same ordering as ListProjects.
+func (q *Queries) ListProjectsForScopes(ctx context.Context, arg ListProjectsForScopesParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsForScopes,
+		arg.ProjectIds,
+		arg.ClusterIds,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

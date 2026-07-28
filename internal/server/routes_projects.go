@@ -15,7 +15,9 @@ func registerProjectRoutes(r chi.Router, deps RouterDependencies) {
 
 	if deps.Projects != nil {
 		r.With(featureGate("feature.projects", deps.SettingsCache)).Route("/projects", func(r chi.Router) {
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/", deps.Projects.List)
+			// Collection gate: cluster-/project-scoped callers are admitted and
+			// the handler filters the page. See RequireCollectionPermission.
+			r.With(requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/", deps.Projects.List)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbCreate)).Post("/", deps.Projects.Create)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/", deps.Projects.Get)
 			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/{id}/", deps.Projects.Update)

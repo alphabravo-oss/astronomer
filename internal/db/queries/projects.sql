@@ -14,6 +14,25 @@ SELECT * FROM projects WHERE name = $1 AND cluster_id = $2;
 -- name: ListProjects :many
 SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
+-- name: ListProjectsForScopes :many
+-- Scope-filtered ListProjects: the projects the caller is bound to directly,
+-- plus every project on a cluster they hold the grant over WITHOUT a namespace
+-- narrowing (a Cluster Owner sees their cluster's projects; a caller confined to
+-- one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
+-- Same ordering as ListProjects.
+SELECT * FROM projects
+WHERE id = ANY(sqlc.arg(project_ids)::uuid[])
+   OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY created_at DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountProjectsForScopes :one
+-- Total for a ListProjectsForScopes page; predicate MUST match it exactly (see
+-- CountClustersForScopes).
+SELECT count(*) FROM projects
+WHERE id = ANY(sqlc.arg(project_ids)::uuid[])
+   OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);
+
 -- name: ListProjectsByCluster :many
 SELECT * FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 

@@ -25,6 +25,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -53,6 +54,16 @@ var rfc1123ClusterName = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?
 // validClusterName enforces the RFC-1123 label rules.
 func validClusterName(s string) bool {
 	return rfc1123ClusterName.MatchString(s)
+}
+
+// clusterScopeQuerier is the OPTIONAL capability a ClusterQuerier may provide
+// to serve a scope-filtered list page. Kept off ClusterQuerier on purpose: only
+// the list path needs it, so the dozen existing test fakes that implement the
+// full interface stay untouched. A scope-restricted caller whose querier does
+// NOT implement it gets a 500, never an unfiltered fleet.
+type clusterScopeQuerier interface {
+	ListClustersForScopes(ctx context.Context, arg sqlc.ListClustersForScopesParams) ([]sqlc.Cluster, error)
+	CountClustersForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error)
 }
 
 // ClusterQuerier abstracts the cluster-related database queries needed by ClusterHandler.
@@ -205,6 +216,21 @@ type ClusterHandler struct {
 	// registration-token mint path applies. Defaults to time.Hour; wired from
 	// cfg.RegistrationTokenTTLHours via SetRegistrationTokenTTL.
 	registrationTokenTTL time.Duration
+	// authz scope-filters the list page to the clusters the caller may see.
+	// Fails closed when unwired (500 for an authenticated caller), so
+	// SetAuthorization is mandatory wherever the list route is served.
+	authz authorizationSupport
+}
+
+// SetAuthorization wires the RBAC engine + binding querier used to scope-filter
+// GET /clusters/. Must be set wherever RequireCollectionPermission gates the
+// route: the gate admits cluster-scoped callers and this is what narrows their
+// page.
+func (h *ClusterHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.authz.SetAuthorization(engine, querier)
 }
 
 // AgentDisconnector force-closes a cluster's live agent tunnel session.
@@ -962,19 +988,57 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := int32(limitInt)
 	offset := int32(offsetInt)
 
-	clusters, err := h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{
-		Limit:  limit,
-		Offset: offset,
-	})
+	// Scope filter. The collection gate (RequireCollectionPermission) admits a
+	// caller whose only grant is a cluster_role_bindings row, so the page must
+	// be narrowed to the clusters they may see. A platform-wide grant (and a
+	// superuser) returns all==true and takes the original unfiltered path
+	// below, byte-identical to before.
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceClusters, rbac.VerbList, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 
-	total, err := h.queries.CountClusters(r.Context())
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
-		return
+	var clusters []sqlc.Cluster
+	var total int64
+	if all {
+		clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+			return
+		}
+		total, err = h.queries.CountClusters(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+			return
+		}
+	} else {
+		scoped, ok := h.queries.(clusterScopeQuerier)
+		if !ok {
+			// Authorization is wired but the query surface cannot filter. Fail
+			// closed rather than serve the whole fleet to a scoped caller.
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Scoped cluster listing is not available")
+			return
+		}
+		clusters, err = scoped.ListClustersForScopes(r.Context(), sqlc.ListClustersForScopesParams{
+			ClusterIds:  clusterIDs,
+			QueryLimit:  limit,
+			QueryOffset: offset,
+		})
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+			return
+		}
+		// Count over the SAME predicate: an unfiltered total under a filtered
+		// page would both leak the fleet size and break the pager.
+		total, err = scoped.CountClustersForScopes(r.Context(), clusterIDs)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+			return
+		}
 	}
 
 	// Hoist the global platform-setting read out of the per-cluster loop:
@@ -988,7 +1052,20 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i, c := range clusters {
 		pageIDs[i] = c.ID
 	}
-	decommissioning := h.inFlightDecommissionSet(r.Context(), pageIDs, total)
+	// `total` is scope-dependent now, so it can no longer serve as the fetch
+	// bound: ListPendingClusterDecommissions is a fleet-wide query, and a
+	// caller scoped to one cluster would fetch limit=1 and miss their own row
+	// whenever another tenant's decommission sorts first. Bound it by the
+	// unfiltered cluster count instead — that is the count the invariant in
+	// inFlightDecommissionSet actually rests on. Best-effort like the rest of
+	// this enrichment: on a count error we fall back to the scoped total.
+	fleetTotal := total
+	if !all {
+		if n, err := h.queries.CountClusters(r.Context()); err == nil {
+			fleetTotal = n
+		}
+	}
+	decommissioning := h.inFlightDecommissionSet(r.Context(), pageIDs, fleetTotal)
 
 	// Batch the ArgoCD enrichment for the whole page (managed-cluster rows +
 	// their applications) into two queries instead of ~2 per cluster.
@@ -1005,13 +1082,15 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // inFlightDecommissionSet returns which of the given cluster IDs have a
 // pending/running decommission. Best-effort — returns an empty set on any
-// error. The fetch is bounded by the total (non-tombstoned) cluster count
-// rather than a fixed cap: an in-flight decommission always belongs to a
-// still-existing cluster, so the number of in-flight rows can never exceed
-// total. The old fixed 500 cap silently rendered clusters past the cap as
-// Decommissioning=false once the fleet had >500 concurrent decommissions.
+// error. The fetch is bounded by fleetTotal, the UNFILTERED (non-tombstoned)
+// cluster count, rather than a fixed cap: an in-flight decommission always
+// belongs to a still-existing cluster, so the number of in-flight rows can
+// never exceed it. The old fixed 500 cap silently rendered clusters past the
+// cap as Decommissioning=false once the fleet had >500 concurrent
+// decommissions. Do NOT pass a scope-filtered count here — the underlying
+// query is fleet-wide, so a smaller bound can truncate away this page's rows.
 // The already-fetched rows are then filtered to this page's IDs in Go.
-func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context, ids []uuid.UUID, total int64) map[uuid.UUID]bool {
+func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context, ids []uuid.UUID, fleetTotal int64) map[uuid.UUID]bool {
 	set := map[uuid.UUID]bool{}
 	if len(ids) == 0 {
 		return set
@@ -1020,7 +1099,7 @@ func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context, ids []uuid
 	for _, id := range ids {
 		want[id] = struct{}{}
 	}
-	limit := total
+	limit := fleetTotal
 	if limit > 1<<31-1 {
 		limit = 1<<31 - 1
 	}

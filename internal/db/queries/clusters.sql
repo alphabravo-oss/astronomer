@@ -51,6 +51,26 @@ SELECT * FROM clusters WHERE name = $1 AND decommissioned_at IS NULL;
 -- their row in the DB for forensics but never appear in the UI list.
 SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
+-- name: ListClustersForScopes :many
+-- Scope-filtered ListClusters: only the clusters the caller's cluster-scoped
+-- bindings name (see rbac.AuthorizedScopeIDs). Callers holding a platform-wide
+-- grant use plain ListClusters instead — this variant is never reached for
+-- them. Same tombstone predicate and ordering as ListClusters so a filtered
+-- page differs only in which rows it may contain.
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY created_at DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountClustersForScopes :one
+-- Total for a ListClustersForScopes page. The predicate MUST stay identical to
+-- ListClustersForScopes': a filtered page under an unfiltered total leaks the
+-- fleet size and breaks the pager (a `next` link to rows that never arrive).
+SELECT count(*) FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY(sqlc.arg(cluster_ids)::uuid[]);
+
 -- name: ListClustersByStatus :many
 SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 

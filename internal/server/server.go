@@ -533,6 +533,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// shared K8sRequester (for ResourceQuota / LimitRange / NetworkPolicy
 	// server-side apply through the tunnel).
 	projectHandler := handler.NewProjectHandler(queries)
+	// MUST be set — see clusterHandler.SetAuthorization.
+	projectHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	projectHandler.SetEncryptor(encryptor)
 	projectHandler.SetTaskQueue(queue)
 	projectHandler.SetTaskOutbox(queries)
@@ -839,6 +841,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	dexHandler.SetLogger(logger)
 
 	clusterHandler := handler.NewClusterHandler(queries)
+	// MUST be set: the /clusters/ collection gate admits cluster-scoped callers
+	// and this is what filters their page down to their own clusters.
+	clusterHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentDisconnector(hub)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)

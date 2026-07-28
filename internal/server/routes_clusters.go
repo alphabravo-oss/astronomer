@@ -15,7 +15,10 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 
 	if deps.Clusters != nil {
 		r.Route("/clusters", func(r chi.Router) {
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/", deps.Clusters.List)
+			// Collection gate: cluster-scoped callers are admitted and the
+			// handler filters the page to their clusters. See
+			// RequireCollectionPermission.
+			r.With(requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/", deps.Clusters.List)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbCreate)).Post("/", deps.Clusters.Create)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/", deps.Clusters.Get)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/", deps.Clusters.Update)
@@ -31,12 +34,12 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/conditions/", deps.Clusters.ListConditions)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/condition-remediation/", deps.Clusters.ListConditionRemediation)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/register/", deps.Clusters.GenerateRegistrationToken)
-				// Durable agent-token lifecycle (task A2). Rotate triggers a
-				// grace rotation on the agent's next connect; Revoke denies the
-				// token outright (operator must re-import). Both gated
-				// writeClusters + VerbUpdate, audited.
-				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/agent-token/rotate/", deps.Clusters.RotateAgentToken)
-				r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/agent-token/revoke/", deps.Clusters.RevokeAgentToken)
+			// Durable agent-token lifecycle (task A2). Rotate triggers a
+			// grace rotation on the agent's next connect; Revoke denies the
+			// token outright (operator must re-import). Both gated
+			// writeClusters + VerbUpdate, audited.
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/agent-token/rotate/", deps.Clusters.RotateAgentToken)
+			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/{id}/agent-token/revoke/", deps.Clusters.RevokeAgentToken)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/registry/", deps.Clusters.GetRegistryConfig)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Put("/{id}/registry/", deps.Clusters.UpdateRegistryConfig)
 			r.With(writeClusters, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/{id}/registry/", deps.Clusters.DeleteRegistryConfig)

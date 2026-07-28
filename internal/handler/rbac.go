@@ -158,7 +158,12 @@ type roleRequest struct {
 	Description    string          `json:"description"`
 	Permissions    json.RawMessage `json:"permissions"`
 	Rules          json.RawMessage `json:"rules"`
-	IsBuiltin      bool            `json:"is_builtin"`
+	// No IsBuiltin. is_builtin is migration-owned (see rejectBuiltinRoleWrite):
+	// it now freezes a row against update AND delete, so honouring it from a
+	// request body would let anyone holding rbac:create mint a role that not
+	// even a superuser can edit or remove through the API. An `is_builtin` key
+	// in the body is accepted and ignored — the decoder does not reject unknown
+	// fields, so existing clients that echo it back keep working.
 }
 
 // resolveDisplayName returns the display_name from the request, falling back
@@ -208,7 +213,6 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-		IsBuiltin:   req.IsBuiltin,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role")
@@ -240,6 +244,9 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	if !h.guardGlobalRoleRules(w, r, id, defaultJSON(req.Rules)) {
+		return
+	}
 	role, err := h.queries.UpdateGlobalRole(r.Context(), sqlc.UpdateGlobalRoleParams{
 		ID:          id,
 		Name:        req.Name,
@@ -265,10 +272,18 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	roleName := ""
-	if existing, lookupErr := h.queries.GetGlobalRoleByID(r.Context(), id); lookupErr == nil {
-		roleName = existing.Name
+	// Read the row first: the built-in check needs it, so a failed lookup is
+	// now a 404 instead of a delete-anyway (a DELETE that matches no row is not
+	// an error in Postgres, so the old path answered 204 for an unknown ID).
+	existing, err := h.queries.GetGlobalRoleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		return
 	}
+	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
+		return
+	}
+	roleName := existing.Name
 	if err := h.queries.DeleteGlobalRole(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
 		return
@@ -307,7 +322,6 @@ func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) 
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-		IsBuiltin:   req.IsBuiltin,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role")
@@ -344,6 +358,9 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	if !h.guardClusterRoleRules(w, r, id, defaultJSON(req.Rules)) {
+		return
+	}
 	role, err := h.queries.UpdateClusterRole(r.Context(), sqlc.UpdateClusterRoleParams{
 		ID:          id,
 		Name:        req.Name,
@@ -366,10 +383,15 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	roleName := ""
-	if existing, lookupErr := h.queries.GetClusterRoleByID(r.Context(), id); lookupErr == nil {
-		roleName = existing.Name
+	existing, err := h.queries.GetClusterRoleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		return
 	}
+	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
+		return
+	}
+	roleName := existing.Name
 	if err := h.queries.DeleteClusterRole(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
 		return
@@ -406,7 +428,6 @@ func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) 
 		Description: req.Description,
 		Permissions: defaultJSON(req.Permissions),
 		Rules:       defaultJSON(req.Rules),
-		IsBuiltin:   req.IsBuiltin,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role")
@@ -443,6 +464,9 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	if !h.guardProjectRoleRules(w, r, id, defaultJSON(req.Rules)) {
+		return
+	}
 	role, err := h.queries.UpdateProjectRole(r.Context(), sqlc.UpdateProjectRoleParams{
 		ID:          id,
 		Name:        req.Name,
@@ -465,10 +489,15 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	roleName := ""
-	if existing, lookupErr := h.queries.GetProjectRoleByID(r.Context(), id); lookupErr == nil {
-		roleName = existing.Name
+	existing, err := h.queries.GetProjectRoleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		return
 	}
+	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
+		return
+	}
+	roleName := existing.Name
 	if err := h.queries.DeleteProjectRole(r.Context(), id); err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
 		return
@@ -920,6 +949,102 @@ func (h *RBACHandler) guardProjectBinding(w http.ResponseWriter, r *http.Request
 		return false
 	}
 	return h.enforceNoEscalation(w, r, role.Rules, uuid.UUID{}, projectID, "")
+}
+
+// guardGlobalRoleRules is the role-definition counterpart of
+// guardGlobalBinding: it gates a write to the role itself rather than to a
+// binding. Without it the binding guard is trivially bypassed — instead of
+// granting themselves a stronger role, a caller holding rbac:update rewrites
+// the rules of a role they are already bound to, and h.invalidateAll() makes it
+// effective on the next request. rules is the incoming rule set.
+func (h *RBACHandler) guardGlobalRoleRules(w http.ResponseWriter, r *http.Request, id uuid.UUID, rules json.RawMessage) bool {
+	existing, err := h.queries.GetGlobalRoleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		return false
+	}
+	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
+		return false
+	}
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	// Global scope (all-zero IDs): a role definition is not attached to a
+	// cluster or project — it can be bound anywhere — so the caller must hold
+	// each rule everywhere. It is also the scope the route middleware itself
+	// resolves for these paths, which carry no cluster_id/project_id param.
+	return h.enforceNoEscalation(w, r, rules, uuid.UUID{}, uuid.UUID{}, "")
+}
+
+// guardClusterRoleRules is the cluster-role-definition counterpart.
+func (h *RBACHandler) guardClusterRoleRules(w http.ResponseWriter, r *http.Request, id uuid.UUID, rules json.RawMessage) bool {
+	existing, err := h.queries.GetClusterRoleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		return false
+	}
+	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
+		return false
+	}
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	return h.enforceNoEscalation(w, r, rules, uuid.UUID{}, uuid.UUID{}, "")
+}
+
+// guardProjectRoleRules is the project-role-definition counterpart.
+func (h *RBACHandler) guardProjectRoleRules(w http.ResponseWriter, r *http.Request, id uuid.UUID, rules json.RawMessage) bool {
+	existing, err := h.queries.GetProjectRoleByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		return false
+	}
+	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
+		return false
+	}
+	if h.engine == nil || h.bindings == nil {
+		return true
+	}
+	return h.enforceNoEscalation(w, r, rules, uuid.UUID{}, uuid.UUID{}, "")
+}
+
+// rejectBuiltinRoleWrite freezes the seeded built-in roles against update and
+// delete. Returns true (and writes the 403) when the write must be refused.
+//
+// is_builtin is MIGRATION-OWNED and must stay that way: this freeze is
+// permanent and unrecoverable through the API, so the create handlers
+// deliberately do not read the flag off the request body (see roleRequest).
+// Otherwise any caller holding rbac:create could plant roles nobody — superuser
+// included — can ever edit or delete.
+//
+// Rancher's equivalent (pkg/api/norman/customization/globalrole/validator.go)
+// strips the mutable fields from a PUT to a builtin instead of failing, because
+// one field (newUserDefault) legitimately stays writable there. Our role rows
+// have no such field — name, display_name, description, permissions and rules
+// are the whole record — so stripping would turn every PUT into a 200 that
+// changed nothing while recording a role.update audit event that never
+// happened. We reject instead, so the operator learns the truth. 403 rather
+// than 409: the refusal is permanent and independent of the request body, and
+// it matches how the rest of this surface reports "not allowed". Built-ins are
+// reconciled by migrations (see 141) so an accepted edit would not survive the
+// next upgrade anyway.
+//
+// Deliberately NOT here: an escalation check on delete. Deleting a role hands
+// the caller no permission, and requiring the caller to hold the deleted role's
+// rules would take an ability away from a role that ships today — the seeded
+// 'RBAC Administrator' (migration 032: rbac:* plus users:read/list) could no
+// longer clean up any operator-authored role carrying permissions beyond its
+// own, with no migration able to give that back. Kubernetes draws the same line:
+// its escalate check applies only to writes that create rules. The lockout half
+// of the finding is closed by the built-in freeze above — the cascade from
+// global_role_bindings can no longer take out the seeded 'Administrator' row.
+func rejectBuiltinRoleWrite(w http.ResponseWriter, r *http.Request, isBuiltin bool) bool {
+	if !isBuiltin {
+		return false
+	}
+	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+		"Built-in roles cannot be modified or deleted")
+	return true
 }
 
 // enforceNoEscalation implements Kubernetes' "you cannot grant permissions you

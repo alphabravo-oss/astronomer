@@ -195,6 +195,76 @@ func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rb
 	}
 }
 
+// RequireCollectionPermission gates a top-level COLLECTION route (GET
+// /clusters/, GET /projects/) — one whose URL carries no cluster or project id.
+// It behaves EXACTLY like RequirePermission except that a caller who fails the
+// plain check is given a second chance through HasAnyScopedAccess: holding the
+// permission on ANY cluster or project admits them to the handler, which then
+// filters the page down to the objects they may actually see.
+//
+// Without this, the scope check runs at uuid.Nil and only a GLOBAL binding can
+// match, so a user whose sole grant is "Cluster Owner on one cluster" is 403'd
+// off the fleet landing page entirely. The fallback grants no visibility on its
+// own: every handler behind it MUST filter (see authorizedScopeIDs).
+func RequireCollectionPermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := GetAuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				resp := map[string]interface{}{
+					"error": map[string]string{
+						"code":    "authentication_required",
+						"message": "Authentication is required to access this resource",
+					},
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+				return
+			}
+
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				resp := map[string]interface{}{
+					"error": map[string]string{
+						"code":    "internal_error",
+						"message": "Failed to retrieve user permissions",
+					},
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+				return
+			}
+
+			// A collection URL has no {id}/{cluster_id}/{project_id} to bind, so
+			// both scopes stay uuid.Nil and only a global binding can satisfy
+			// CheckPermission. A pinned ?namespace= is still honoured, same as
+			// RequireListPermission, so a crafted namespace cannot widen anything.
+			namespace := namespaceContext(r)
+			allowed := engine.CheckPermission(bindings, resource, verb, uuid.UUID{}, uuid.UUID{}, namespace)
+			if !allowed && namespace == "" {
+				allowed = engine.HasAnyScopedAccess(bindings, resource, verb)
+			}
+
+			if !allowed {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				resp := map[string]interface{}{
+					"error": map[string]string{
+						"code":    "permission_denied",
+						"message": "You do not have permission to perform this action",
+					},
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func namespaceContext(r *http.Request) string {
 	if r == nil {
 		return ""

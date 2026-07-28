@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 
 	"github.com/google/uuid"
 
@@ -173,7 +174,77 @@ func (a *authorizationSupport) authorizedNamespaces(ctx context.Context, cluster
 	return all, names, nil
 }
 
+// authorizedScopeIDs reports the cluster/project visibility the caller has for
+// (resource, verb) on a COLLECTION request — a list with no scope in the URL.
+// Pairs with middleware.RequireCollectionPermission, which admits scope-bound
+// callers the plain gate would 403; this is the filter that keeps that safe.
+//
+//   - all==true: the caller may see everything — a superuser, a platform-wide
+//     grant, or an unauthenticated context (which never reaches these routes;
+//     the auth middleware 401s first). Both slices are nil.
+//   - all==false: clusterIDs / projectIDs are the exact allow-sets, sorted so
+//     the query argument is stable. Both empty means "see nothing".
+//
+// narrowed is passed straight through to rbac.AuthorizedScopeIDs and must match
+// what the collection lists: NarrowedClustersWiden for /clusters/ (the objects
+// ARE the clusters), NarrowedClustersExcluded for /projects/ (the objects live
+// inside one, so widening would disclose a neighbouring tenant's rows).
+//
+// Unlike authorizedNamespaces this is NOT gated on the namespaceScoped flag:
+// cluster_role_bindings are always live, so an unfiltered page would leak the
+// whole fleet to a single-cluster user the moment the gate admits them.
+//
+// A non-nil error means the binding lookup failed OR authorization was never
+// wired for an authenticated caller (bindingsForContext fails closed the same
+// way authorizeClusterAction does) — callers must surface a 500, never fall
+// back to an unfiltered page. SetAuthorization is therefore mandatory on any
+// handler serving a gated collection route.
+func (a *authorizationSupport) authorizedScopeIDs(ctx context.Context, resource rbac.Resource, verb rbac.Verb, narrowed rbac.NarrowedClusterPolicy) (bool, []uuid.UUID, []uuid.UUID, error) {
+	bindings, restricted, err := a.bindingsForContext(ctx)
+	if err != nil {
+		return false, nil, nil, err
+	}
+	if !restricted || a.engine == nil {
+		return true, nil, nil, nil
+	}
+	all, clusterIDs, projectIDs := a.engine.AuthorizedScopeIDs(bindings, resource, verb, narrowed)
+	if all {
+		return true, nil, nil, nil
+	}
+	return false, sortedUUIDs(clusterIDs), sortedUUIDs(projectIDs), nil
+}
+
+// sortedUUIDs flattens an id set into a deterministically ordered slice. Always
+// returns a non-nil slice: a nil uuid[] argument makes `= ANY(...)` yield NULL
+// rather than false, which would drop the predicate's fail-closed behaviour.
+func sortedUUIDs(set map[uuid.UUID]struct{}) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+	return ids
+}
+
 func (a *authorizationSupport) authorizeClusterAction(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, resource rbac.Resource, verb rbac.Verb) bool {
+	return a.authorizeClusterActionAny(w, r, clusterID, clusterPermission{resource, verb})
+}
+
+// clusterPermission is one (resource, verb) alternative for
+// authorizeClusterActionAny.
+type clusterPermission struct {
+	Resource rbac.Resource
+	Verb     rbac.Verb
+}
+
+// authorizeClusterActionAny is authorizeClusterAction for an endpoint whose
+// admission is a DISJUNCTION: any one of perms suffices. It exists for the
+// stream-ticket mint path, where a single ticket kind is redeemed by more than
+// one route and issuance must therefore match the WEAKEST redeemer — a ticket
+// stricter than the stream it opens is a silent feature outage, and a ticket
+// looser than one is only safe because every redeemer re-checks its own gate.
+// Do not reach for it to soften a single-redeemer gate.
+func (a *authorizationSupport) authorizeClusterActionAny(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, perms ...clusterPermission) bool {
 	bindings, restricted, err := a.bindingsForContext(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
@@ -182,11 +253,13 @@ func (a *authorizationSupport) authorizeClusterAction(w http.ResponseWriter, r *
 	if !restricted {
 		return true
 	}
-	if !a.allowsCluster(bindings, clusterID, resource, verb) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
-		return false
+	for _, p := range perms {
+		if a.allowsCluster(bindings, clusterID, p.Resource, p.Verb) {
+			return true
+		}
 	}
-	return true
+	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	return false
 }
 
 // resourceScopeFilter returns a predicate for filtering a list of resources the

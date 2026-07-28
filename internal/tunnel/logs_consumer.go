@@ -89,13 +89,19 @@ func (lc *LogsConsumer) SetAuthorization(engine *rbac.Engine, querier middleware
 	lc.rbacQuerier = querier
 }
 
-// authorizeCluster reports whether userID holds clusters:read on clusterID
-// within namespace. Pod logs frequently contain secrets, so streaming them
-// requires the same clusters:read gate the stream-ticket issuance path
-// (internal/handler/stream_tickets.go) enforces for logs tickets. The concrete
-// namespace is threaded through so a namespace-scoped binding grants access in
-// the pod's namespace; cluster-wide bindings still pass for any namespace. When
-// the RBAC engine/querier are not wired the check is skipped.
+// authorizeCluster reports whether userID holds pods:logs on clusterID within
+// namespace. Pod logs routinely carry bearer tokens and PII, so streaming them
+// requires the dedicated pods:logs verb — the same vocabulary the HTTP
+// k8s-proxy path already gates GET pods/{name}/log on (k8sProxyPermission in
+// internal/server/routes.go). This used to check clusters:read, which handed
+// every log line in every namespace to any role holding a cluster read (audit,
+// monitoring, GitOps viewers) while the granular pods:logs grant the catalog
+// hands out was never consulted. The stream-ticket issuance path
+// (internal/handler/stream_tickets.go) moved with it, so a ticket that can be
+// minted stays redeemable. The concrete namespace is threaded through so a
+// namespace-scoped binding grants access in the pod's namespace; cluster-wide
+// bindings still pass for any namespace. When the RBAC engine/querier are not
+// wired the check is skipped.
 func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID, namespace string) bool {
 	if lc.rbacEngine == nil || lc.rbacQuerier == nil {
 		return true
@@ -104,7 +110,7 @@ func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID 
 	if err != nil {
 		return false
 	}
-	return lc.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbRead, clusterID, uuid.Nil, namespace)
+	return lc.rbacEngine.CheckPermission(bindings, rbac.ResourcePods, rbac.VerbLogs, clusterID, uuid.Nil, namespace)
 }
 
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent

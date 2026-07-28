@@ -173,14 +173,23 @@ func issueTicket(h http.Handler, rawToken, streamType, clusterID string) *httpte
 }
 
 // TestExecShellTicketIssuanceRejectsReadScopedTokens is half of the H2
-// negative test: a read-scoped token (even with clusters:update RBAC)
+// negative test: a read-scoped token (even with the RBAC the stream needs)
 // cannot mint an exec or shell ticket, but a clusters:write token with
 // the same RBAC can. Logs tickets stay read-eligible. Missing RBAC is
 // denied regardless of scope.
+//
+// The bindings carry both vocabularies because issuance is per-kind: exec
+// needs pods:exec, shell needs clusters:update, logs needs pods:logs (see
+// handler.StreamTicketHandler.Create). The subject under test is the token
+// SCOPE backstop, not the verb choice, so the fixtures grant whatever RBAC
+// the kind requires and let the scope decide.
 func TestExecShellTicketIssuanceRejectsReadScopedTokens(t *testing.T) {
 	userID := uuid.New()
 	clusterID := uuid.New().String()
-	updateRBAC := routeSecurityMultiRuleBindings(rule(rbac.ResourceClusters, rbac.VerbUpdate, rbac.VerbRead))
+	updateRBAC := routeSecurityMultiRuleBindings(
+		rule(rbac.ResourceClusters, rbac.VerbUpdate, rbac.VerbRead),
+		rule(rbac.ResourcePods, rbac.VerbExec),
+	)
 
 	for _, kind := range []string{auth.StreamKindExec, auth.StreamKindShell} {
 		t.Run("read_token_"+kind, func(t *testing.T) {
@@ -214,7 +223,10 @@ func TestExecShellTicketIssuanceRejectsReadScopedTokens(t *testing.T) {
 	// Logs tickets remain read-eligible: a read-scoped token with cluster
 	// read RBAC can still mint one.
 	t.Run("read_token_logs_allowed", func(t *testing.T) {
-		readRBAC := routeSecurityMultiRuleBindings(rule(rbac.ResourceClusters, rbac.VerbRead))
+		readRBAC := routeSecurityMultiRuleBindings(
+			rule(rbac.ResourceClusters, rbac.VerbRead),
+			rule(rbac.ResourcePods, rbac.VerbLogs),
+		)
 		router := newStreamTicketRouter("astro_ticket_logs", userID, json.RawMessage(`["read"]`), readRBAC)
 		rec := issueTicket(router, "astro_ticket_logs", auth.StreamKindLogs, clusterID)
 		if rec.Code != http.StatusCreated {

@@ -149,6 +149,10 @@ type Querier interface {
 	CountClusterTemplates(ctx context.Context) (int64, error)
 	CountClusterTools(ctx context.Context) (int64, error)
 	CountClusters(ctx context.Context) (int64, error)
+	// Total for a ListClustersForScopes page. The predicate MUST stay identical to
+	// ListClustersForScopes': a filtered page under an unfiltered total leaks the
+	// fleet size and breaks the pager (a `next` link to rows that never arrive).
+	CountClustersForScopes(ctx context.Context, clusterIds []uuid.UUID) (int64, error)
 	CountClustersInGroup(ctx context.Context, groupID uuid.UUID) (int64, error)
 	CountClustersInGroupTree(ctx context.Context, id uuid.UUID) (int64, error)
 	// Per-tenant usage counters ----------------------------------------------
@@ -190,6 +194,9 @@ type Querier interface {
 	CountProjectRoles(ctx context.Context) (int64, error)
 	CountProjects(ctx context.Context) (int64, error)
 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	// Total for a ListProjectsForScopes page; predicate MUST match it exactly (see
+	// CountClustersForScopes).
+	CountProjectsForScopes(ctx context.Context, arg CountProjectsForScopesParams) (int64, error)
 	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
 	CountRestoreOperations(ctx context.Context) (int64, error)
@@ -1193,6 +1200,12 @@ type Querier interface {
 	// which don't already have a pending/active rotation. last_rotated_at NULL
 	// means the token has never been rotated, so created_at is the age reference.
 	ListClustersDueForAgentTokenRotation(ctx context.Context, rowLimit int32) ([]ListClustersDueForAgentTokenRotationRow, error)
+	// Scope-filtered ListClusters: only the clusters the caller's cluster-scoped
+	// bindings name (see rbac.AuthorizedScopeIDs). Callers holding a platform-wide
+	// grant use plain ListClusters instead — this variant is never reached for
+	// them. Same tombstone predicate and ordering as ListClusters so a filtered
+	// page differs only in which rows it may contain.
+	ListClustersForScopes(ctx context.Context, arg ListClustersForScopesParams) ([]Cluster, error)
 	// All non-decommissioned clusters. The orchestrator's selector
 	// evaluator walks this list in Go (matchLabels intersection is a
 	// string-map comparison that's easier to reason about than a JSONB
@@ -1457,6 +1470,12 @@ type Querier interface {
 	ListProjectSubscriptions(ctx context.Context, projectID uuid.UUID) ([]ProjectCatalogSubscription, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
 	ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error)
+	// Scope-filtered ListProjects: the projects the caller is bound to directly,
+	// plus every project on a cluster they hold the grant over WITHOUT a namespace
+	// narrowing (a Cluster Owner sees their cluster's projects; a caller confined to
+	// one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
+	// Same ordering as ListProjects.
+	ListProjectsForScopes(ctx context.Context, arg ListProjectsForScopesParams) ([]Project, error)
 	// Prometheus datasources -------------------------------------------------
 	ListPrometheusDatasources(ctx context.Context) ([]PrometheusDatasource, error)
 	// Dispatcher worker batch read. Returns rows the worker should attempt

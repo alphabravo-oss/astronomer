@@ -1188,6 +1188,19 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 	return appmiddleware.RequirePermission(engine, querier, resource, verb)
 }
 
+// requireCollectionPermission gates a top-level collection route (GET
+// /clusters/, GET /projects/), admitting callers whose grant is cluster- or
+// project-scoped instead of global. The handler behind it filters the page —
+// see the RequireCollectionPermission doc for why the gate alone is not enough.
+func requireCollectionPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+	return appmiddleware.RequireCollectionPermission(engine, querier, resource, verb)
+}
+
 type permissionRequirement struct {
 	resource rbac.Resource
 	verb     rbac.Verb

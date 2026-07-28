@@ -23,9 +23,18 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
+
+// projectScopeQuerier is the OPTIONAL scope-filtered list capability, the
+// project twin of clusterScopeQuerier. See that type for why it is not folded
+// into ProjectQuerier.
+type projectScopeQuerier interface {
+	ListProjectsForScopes(ctx context.Context, arg sqlc.ListProjectsForScopesParams) ([]sqlc.Project, error)
+	CountProjectsForScopes(ctx context.Context, arg sqlc.CountProjectsForScopesParams) (int64, error)
+}
 
 // ProjectQuerier abstracts project-related database queries. Phase B3 added
 // the project_namespaces sidecar (per-namespace reconcile state); the
@@ -108,6 +117,19 @@ type ProjectHandler struct {
 	// after a membership change — otherwise a removed namespace keeps granting
 	// access for up to the cache TTL. Optional + nil-safe.
 	rbacBindings middleware.RBACQuerier
+
+	// authz scope-filters the list page to the projects the caller may see.
+	// See ClusterHandler.authz — mandatory wherever the list route is served.
+	authz authorizationSupport
+}
+
+// SetAuthorization wires the RBAC engine + binding querier used to scope-filter
+// GET /projects/. See ClusterHandler.SetAuthorization.
+func (h *ProjectHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+	if h == nil {
+		return
+	}
+	h.authz.SetAuthorization(engine, querier)
 }
 
 // ProjectNamespaceTx is the tx-scoped query surface AddNamespace /
@@ -444,19 +466,64 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryInt(r, "offset", 0))
 
-	projects, err := h.queries.ListProjects(r.Context(), sqlc.ListProjectsParams{
-		Limit:  limit,
-		Offset: offset,
-	})
+	// Scope filter — mirrors ClusterHandler.List. The collection gate admits
+	// callers bound only to a cluster or a project; the page is narrowed to the
+	// projects they own directly plus every project on a cluster they hold
+	// projects:list over. all==true keeps the original unfiltered path.
+	//
+	// NarrowedClustersExcluded, unlike ClusterHandler.List: a namespace-narrowed
+	// cluster binding must NOT widen to every project on that cluster. Projects
+	// live inside a cluster, so widening would list a neighbouring tenant's
+	// projects to a namespace-confined caller whose GET /projects/{id}/ 403s on
+	// every one of those rows. That shape is not exotic — expandProjectBindings
+	// emits it for every project binding when namespace-scoped RBAC is on.
+	all, clusterIDs, projectIDs, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceProjects, rbac.VerbList, rbac.NarrowedClustersExcluded)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 
-	total, err := h.queries.CountProjects(r.Context())
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
-		return
+	var projects []sqlc.Project
+	var total int64
+	if all {
+		projects, err = h.queries.ListProjects(r.Context(), sqlc.ListProjectsParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
+			return
+		}
+		total, err = h.queries.CountProjects(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
+			return
+		}
+	} else {
+		scoped, ok := h.queries.(projectScopeQuerier)
+		if !ok {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Scoped project listing is not available")
+			return
+		}
+		projects, err = scoped.ListProjectsForScopes(r.Context(), sqlc.ListProjectsForScopesParams{
+			ProjectIds:  projectIDs,
+			ClusterIds:  clusterIDs,
+			QueryLimit:  limit,
+			QueryOffset: offset,
+		})
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
+			return
+		}
+		// Same predicate as the page — see CountClustersForScopes.
+		total, err = scoped.CountProjectsForScopes(r.Context(), sqlc.CountProjectsForScopesParams{
+			ProjectIds: projectIDs,
+			ClusterIds: clusterIDs,
+		})
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
+			return
+		}
 	}
 
 	items := make([]ProjectResponse, 0, len(projects))

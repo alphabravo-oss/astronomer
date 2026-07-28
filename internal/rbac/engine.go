@@ -262,6 +262,106 @@ func (e *Engine) AuthorizedNamespaces(bindings []RoleBinding, resource Resource,
 	return false, names
 }
 
+// HasAnyScopedAccess reports whether the bindings grant (resource, verb) at ANY
+// scope — globally, on some cluster, or on some project. It is the collection
+// counterpart of HasAnyNamespaceAccess: a COLLECTION URL (/clusters/,
+// /projects/) carries no cluster or project id, so permissionScopeIDs resolves
+// uuid.Nil and a plain CheckPermission only ever matches a GLOBAL binding. A
+// caller whose sole grant is a cluster_role_bindings row would be 403'd off the
+// fleet landing page. This lets them reach the list handler, which then filters
+// the page down to AuthorizedScopeIDs. Superuser short-circuits to true.
+//
+// Admission uses NarrowedClustersWiden regardless of what the handler's own
+// filter uses: the gate only decides "may this caller reach the handler at
+// all", and a caller with a namespace-narrowed binding always has SOMETHING to
+// see. Narrowing is the filter's job, not the gate's.
+func (e *Engine) HasAnyScopedAccess(bindings []RoleBinding, resource Resource, verb Verb) bool {
+	all, clusterIDs, projectIDs := e.AuthorizedScopeIDs(bindings, resource, verb, NarrowedClustersWiden)
+	return all || len(clusterIDs) > 0 || len(projectIDs) > 0
+}
+
+// NarrowedClusterPolicy decides whether a namespace-narrowed CLUSTER binding
+// contributes its whole cluster to the cluster allow-set. The right answer
+// depends on what the collection lists, so the caller must say.
+type NarrowedClusterPolicy bool
+
+const (
+	// NarrowedClustersWiden is for collections whose objects ARE the clusters
+	// (GET /clusters/). Being able to read something inside a cluster already
+	// implies knowing the cluster exists, so a namespace-narrowed binding may
+	// name its cluster.
+	NarrowedClustersWiden NarrowedClusterPolicy = true
+	// NarrowedClustersExcluded is for collections whose objects merely LIVE IN
+	// a cluster (GET /projects/). Widening there would disclose every sibling
+	// object on the cluster — every other tenant's project — to a caller
+	// confined to one namespace, and the per-object route denies each of those
+	// rows. Only bindings covering the whole cluster contribute.
+	NarrowedClustersExcluded NarrowedClusterPolicy = false
+)
+
+// AuthorizedScopeIDs computes the cluster/project visibility a set of bindings
+// grants for (resource, verb) on a COLLECTION request — one with no scope in
+// the URL, where there is no single cluster or project to check against.
+//
+//   - all==true means the caller may see every object: a superuser, or a global
+//     binding (ClusterID/ProjectID/Namespace all empty) that grants the
+//     permission. That is exactly the set of callers CheckPermission already
+//     admits at uuid.Nil scope today, so the unfiltered path stays unchanged for
+//     every platform-wide grant. When all is true both maps are nil.
+//   - all==false means the caller is scope-restricted: clusterIDs and projectIDs
+//     are the exact allow-sets. Both empty with all==false means "see nothing".
+//
+// Same allow-list discipline as AuthorizedNamespaces, at one scope level up.
+// narrowed decides what a namespace-narrowed CLUSTER binding contributes — see
+// NarrowedClusterPolicy; it is load-bearing because the querier expands EVERY
+// project binding into namespace-narrowed cluster bindings when namespace-scoped
+// RBAC is enabled (expandProjectBindings in internal/server/middleware), so
+// under that flag "narrowed cluster binding" is the normal shape of a
+// project-confined tenant, not a corner case. A project binding contributes only
+// its project — the binding row carries no cluster_id, and inferring one would
+// be a DB lookup the pure engine must not do; the original project binding
+// survives that expansion, so a project-scoped caller keeps its projects through
+// projectIDs either way. A namespace-narrowed GLOBAL binding is invalid and
+// fails closed, mirroring bindingApplies.
+func (e *Engine) AuthorizedScopeIDs(bindings []RoleBinding, resource Resource, verb Verb, narrowed NarrowedClusterPolicy) (bool, map[uuid.UUID]struct{}, map[uuid.UUID]struct{}) {
+	for _, b := range bindings {
+		if b.IsSuperuser {
+			return true, nil, nil
+		}
+	}
+	clusterIDs := make(map[uuid.UUID]struct{})
+	projectIDs := make(map[uuid.UUID]struct{})
+	for _, b := range bindings {
+		granted := false
+		for _, rule := range b.RoleRules {
+			if e.matchRule(rule, resource, verb) {
+				granted = true
+				break
+			}
+		}
+		if !granted {
+			continue
+		}
+		isGlobal := b.ClusterID == "" && b.ProjectID == ""
+		switch {
+		case isGlobal && b.Namespace == "":
+			return true, nil, nil
+		case b.ClusterID != "":
+			if b.Namespace != "" && narrowed == NarrowedClustersExcluded {
+				continue
+			}
+			if id, err := uuid.Parse(b.ClusterID); err == nil {
+				clusterIDs[id] = struct{}{}
+			}
+		case b.ProjectID != "":
+			if id, err := uuid.Parse(b.ProjectID); err == nil {
+				projectIDs[id] = struct{}{}
+			}
+		}
+	}
+	return false, clusterIDs, projectIDs
+}
+
 // bindingApplies checks whether a binding is applicable at the given scope.
 //   - Global bindings (no ClusterID, no ProjectID) always apply.
 //   - Cluster bindings apply when the clusterID matches.

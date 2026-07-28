@@ -97,14 +97,23 @@ func (ec *ExecConsumer) SetAuthorization(engine *rbac.Engine, querier appmiddlew
 	ec.rbacQuerier = querier
 }
 
-// authorizeCluster reports whether userID holds clusters:update on clusterID
-// within namespace. An interactive exec session is a cluster write /
-// RCE-equivalent action, so it mirrors the clusters:update gate the
-// stream-ticket issuance path (internal/handler/stream_tickets.go) and the
-// kubectl shell front door enforce. The concrete namespace is threaded through
-// so a namespace-scoped binding grants access in the pod's namespace;
-// cluster-wide bindings still pass for any namespace. When the RBAC
-// engine/querier are not wired the check is skipped.
+// authorizeCluster reports whether userID holds pods:exec on clusterID within
+// namespace. An interactive exec session is RCE-equivalent, and the dedicated
+// pods:exec verb is exactly the vocabulary the HTTP k8s-proxy path already
+// gates pods/{name}/exec on (k8sProxyPermission in internal/server/routes.go).
+// This used to check clusters:update, which was wrong in both directions: it
+// let a role holding cluster write but no pods grant (e.g. 'Platform
+// Operator') exec into any pod, and it 403'd the diagnostic roles whose whole
+// purpose is pods:exec ('Cluster Troubleshooter', 'Support Engineer').
+// Note this closes ONE of the two exec-shaped paths clusters:update opens: the
+// in-browser kubectl shell (internal/handler/kubectl_shell.go) authenticates
+// its own StreamKindShell ticket and never reaches here, so it is still gated
+// on clusters:update alone. See the residual-gap note in migration 142.
+// The stream-ticket issuance path (internal/handler/stream_tickets.go) moved
+// with it, so a ticket that can be minted stays redeemable. The concrete
+// namespace is threaded through so a namespace-scoped binding grants access in
+// the pod's namespace; cluster-wide bindings still pass for any namespace. When
+// the RBAC engine/querier are not wired the check is skipped.
 func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID, namespace string) bool {
 	if ec.rbacEngine == nil || ec.rbacQuerier == nil {
 		return true
@@ -113,7 +122,7 @@ func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID 
 	if err != nil {
 		return false
 	}
-	return ec.rbacEngine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil, namespace)
+	return ec.rbacEngine.CheckPermission(bindings, rbac.ResourcePods, rbac.VerbExec, clusterID, uuid.Nil, namespace)
 }
 
 // HandleExec upgrades to WebSocket and relays exec I/O between the frontend
