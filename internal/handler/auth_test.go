@@ -101,7 +101,7 @@ func makeTestUser(t *testing.T, active bool) sqlc.User {
 }
 
 func TestLogin(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 
 	tests := []struct {
 		name       string
@@ -263,7 +263,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestRefresh(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	user := makeTestUser(t, true)
 
 	t.Run("successful refresh writes audit", func(t *testing.T) {
@@ -597,7 +597,7 @@ func setAuthUser(r *http.Request, userID string) *http.Request {
 }
 
 func TestCreateToken(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 
 	t.Run("successful creation", func(t *testing.T) {
@@ -695,7 +695,7 @@ func TestCreateToken(t *testing.T) {
 }
 
 func TestListTokens(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 
 	t.Run("returns paginated list", func(t *testing.T) {
@@ -755,7 +755,7 @@ func TestListTokens(t *testing.T) {
 }
 
 func TestRevokeToken(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 
 	t.Run("successful revoke", func(t *testing.T) {
@@ -884,7 +884,7 @@ func TestGenerateAPIToken(t *testing.T) {
 // land in the stored row + come back in the response so the CRUD UI
 // can render them immediately.
 func TestCreateToken_PersistsScopesAndCidrs(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 
 	tokenQ := newMockTokenQuerier()
@@ -942,7 +942,7 @@ func TestCreateToken_PersistsScopesAndCidrs(t *testing.T) {
 // TestCreateToken_RejectsInvalidCIDR ensures a typo in allowed_cidrs
 // fails the CREATE with a 400 rather than silently allowing every IP.
 func TestCreateToken_RejectsInvalidCIDR(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 	tokenQ := newMockTokenQuerier()
 	handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)

@@ -1,0 +1,13 @@
+-- 143 only fills a version_constraint that was blank, so the rows it touches
+-- end up carrying the same pin the compiled-in registry would have supplied
+-- anyway. Clearing it on the way down is not the symmetric operation: we
+-- cannot tell "143 wrote this" from "an operator pinned the same version by
+-- hand", and blanking an operator's pin would put their Tools-view installs
+-- back on upstream-latest — the exact behavior this change exists to remove.
+--
+-- Rolling back the code restores `targetRevision: "*"` in the baseline
+-- generator, at which point version_constraint is inert for the ApplicationSet
+-- path and means what it has always meant for the Tools path: install this
+-- version. Leaving it in place is the safe direction — no install starts
+-- floating again because of the rollback alone.
+SELECT 1;

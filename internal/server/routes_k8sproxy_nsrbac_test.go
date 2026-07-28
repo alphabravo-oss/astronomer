@@ -49,7 +49,7 @@ func nsRBACProxyToken(t *testing.T, jwtMgr *auth.JWTManager, userID uuid.UUID) s
 // with no agent connected, returns 503 (ServiceUnavailable). A denied request is
 // stopped at 403 (Forbidden). We distinguish admission from denial by that pair.
 func TestK8sProxyNamespaceScopedListGate(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token := nsRBACProxyToken(t, jwtMgr, userID)
 	clusterID := uuid.New()

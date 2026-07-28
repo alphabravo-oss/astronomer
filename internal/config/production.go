@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -13,6 +14,33 @@ import (
 const (
 	devSecretKey     = "local-dev-secret-key-change-in-production"
 	devEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+)
+
+// Every other key literal published in this repository. The chart no longer
+// ships key material, but the repo's own laptop paths still have to hand the
+// install SOMETHING, and a value committed here is exactly as forgeable as the
+// two sentinels above — so detection must cover them or the dev loop is
+// strictly less observable than it was before the chart defaults were removed.
+//
+//   - deploy/chart/values-k3d.yaml, scripts/k3d-bootstrap.sh and the Makefile's
+//     HELM_* defaults: real installs, on a laptop.
+//   - scripts/verify-enterprise.sh, scripts/extract-images.sh and
+//     .github/workflows/release.yaml: render-only, never applied — listed
+//     anyway so copy-pasting one into an install is caught.
+var (
+	publishedSecretKeys = []string{
+		devSecretKey,
+		"k3d-smoke-test-jwt-signing-key-32-chars",
+		"make-local-dev-jwt-signing-key-32-chars",
+		"verify-enterprise-render-signing-key",
+		"extract-images-render-only",
+		"release-lint-render-only",
+	}
+	publishedEncryptionKeys = []string{
+		devEncryptionKey,
+		"3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo=",
+		"I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=",
+	}
 )
 
 // IsProduction reports whether this process is running in production mode. The
@@ -40,6 +68,33 @@ func DSNEnforcesTLS(dsn string) bool {
 		strings.Contains(d, "sslmode=verify-full")
 }
 
+// Metric/label names for the credentials guarded by the dev sentinels. They
+// double as the label values of astronomer_insecure_dev_key_in_use.
+const (
+	DevSentinelSecretKey     = "secret_key"
+	DevSentinelEncryptionKey = "encryption_key"
+)
+
+// DevSentinelsInUse reports which credentials are still set to a value
+// published in this repository, returning the names above (nil when none are).
+// Unlike ValidateProductionSecurity this is env-independent on purpose: a
+// "development" install signs real JWTs and wraps real cluster credentials, so
+// the server and the worker log + export the result on every boot regardless of
+// config.env (dev-keys-default-and-silent).
+func DevSentinelsInUse(cfg *Config) []string {
+	if cfg == nil {
+		return nil
+	}
+	var inUse []string
+	if slices.Contains(publishedSecretKeys, strings.TrimSpace(cfg.SecretKey)) {
+		inUse = append(inUse, DevSentinelSecretKey)
+	}
+	if slices.Contains(publishedEncryptionKeys, strings.TrimSpace(cfg.EncryptionKey)) {
+		inUse = append(inUse, DevSentinelEncryptionKey)
+	}
+	return inUse
+}
+
 // ValidateProductionSecurity fails fast when a production deployment is misconfigured
 // in a way that is unsafe: an empty/dev secret or encryption key, a non-decodable
 // encryption key (encryptorReady=false), a DSN that does not enforce TLS, an
@@ -60,18 +115,19 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 	if cfg == nil {
 		errs = append(errs, "config is nil")
 	} else {
+		sentinels := DevSentinelsInUse(cfg)
 		secretKey := strings.TrimSpace(cfg.SecretKey)
-		switch secretKey {
-		case "":
+		switch {
+		case secretKey == "":
 			errs = append(errs, "secret_key is empty")
-		case devSecretKey:
+		case slices.Contains(sentinels, DevSentinelSecretKey):
 			errs = append(errs, "secret_key is still the known development value")
 		}
 		encryptionKey := strings.TrimSpace(cfg.EncryptionKey)
 		switch {
 		case encryptionKey == "":
 			errs = append(errs, "astronomer_encryption_key is empty")
-		case encryptionKey == devEncryptionKey:
+		case slices.Contains(sentinels, DevSentinelEncryptionKey):
 			errs = append(errs, "astronomer_encryption_key is still the known development value")
 		case !encryptorReady:
 			errs = append(errs, "astronomer_encryption_key could not initialize encryptor")

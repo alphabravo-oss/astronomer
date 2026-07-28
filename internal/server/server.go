@@ -196,6 +196,15 @@ func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryp
 	return config.ValidateProductionSecurity(cfg, encryptor != nil)
 }
 
+// reportInsecureDevKeys logs + exports the dev-sentinel state on every boot,
+// in every environment. validateProductionSecurityConfig above only speaks up
+// under config.env=production, which is where the published chart keys used to
+// hide: a "development" install signs the same JWTs and wraps the same stored
+// cluster credentials (dev-keys-default-and-silent).
+func reportInsecureDevKeys(cfg *config.Config, logger *slog.Logger) {
+	observability.ReportInsecureDevKeys(logger, config.DevSentinelsInUse(cfg))
+}
+
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
 	if !isProductionConfig(cfg) {
 		return nil
@@ -331,7 +340,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 
 	queries := sqlc.New(database.Pool())
-	jwtManager := auth.NewJWTManager(cfg.SecretKey, cfg.SessionTimeoutMinutes)
+	jwtManager, jwtErr := auth.NewJWTManager(cfg.SecretKey, cfg.SessionTimeoutMinutes)
+	if jwtErr != nil {
+		database.Close()
+		return nil, jwtErr
+	}
 
 	// Best-effort Fernet encryptor + SSO manager. Both are optional: if the
 	// encryption key is missing or invalid we still come up so dev/local
@@ -360,6 +373,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		database.Close()
 		return nil, err
 	}
+	reportInsecureDevKeys(cfg, logger)
 
 	// Migration 045 — Dex consolidation.
 	//

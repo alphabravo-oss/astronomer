@@ -220,7 +220,7 @@ func TestEndSessionURL_EmptyEndpointErrors(t *testing.T) {
 func TestLogout_ReturnsRedirectURLWhenSSOSession(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	rev := newRecordingRevocationQuerier()
 	store := newRecordingSSOSessionStore()
@@ -290,7 +290,7 @@ func TestLogout_ReturnsRedirectURLWhenSSOSession(t *testing.T) {
 func TestLogout_NoRedirectURLForLocalLogin(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	rev := newRecordingRevocationQuerier()
 	store := newRecordingSSOSessionStore() // empty — no sso_sessions row
@@ -335,7 +335,7 @@ func TestLogout_NoRedirectURLForLocalLogin(t *testing.T) {
 func TestLogout_DeletesSSOSessionRow(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	rev := newRecordingRevocationQuerier()
 	store := newRecordingSSOSessionStore()
@@ -378,7 +378,7 @@ func TestLogout_DeletesSSOSessionRow(t *testing.T) {
 func TestLogout_NoEndpointFallsBackToLocal(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	rev := newRecordingRevocationQuerier()
 	store := newRecordingSSOSessionStore()
@@ -431,7 +431,7 @@ func TestForceLogout_DeletesAllUserSSOSessions(t *testing.T) {
 		users: map[uuid.UUID]sqlc.User{admin.ID: admin, target.ID: target},
 	}
 	h := NewResourceHandlerWithQueries(rq, nil)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h.SetJWTManager(jwtMgr)
 
 	store := newRecordingSSOSessionStore()
@@ -495,7 +495,7 @@ func TestForceLogout_DeletesAllUserSSOSessions(t *testing.T) {
 // TestLogoutDoneEndpoint covers the post_logout_redirect_uri landing
 // page: 303 to /dashboard/login + a marker cookie the SPA reads.
 func TestLogoutDoneEndpoint(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(newMockQuerier(), jwtMgr)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/logout-done/", nil)
@@ -530,7 +530,7 @@ func TestLogoutDoneEndpoint(t *testing.T) {
 func TestCallback_PersistsSSOSession(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	store := newRecordingSSOSessionStore()
 
@@ -591,7 +591,7 @@ func TestCallback_PersistsSSOSession(t *testing.T) {
 func TestCallback_SkipsPersistenceWhenNoUpstreamToken(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	store := newRecordingSSOSessionStore()
 

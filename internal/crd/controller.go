@@ -1651,6 +1651,11 @@ func validateComponentBundleSourceSpec(source ComponentBundleSourceSpec, path st
 		if strings.TrimSpace(source.Chart) == "" {
 			problems = append(problems, fieldPath(path, "chart")+" is required for helm bundles")
 		}
+		// Required, with no default: an unset revision would render "*" and let
+		// an upstream chart publish reach every target the bundle fans out to.
+		if strings.TrimSpace(source.TargetRevision) == "" {
+			problems = append(problems, fieldPath(path, "targetRevision")+" is required for helm bundles")
+		}
 	case "kustomize", "git-path", "raw":
 		if strings.TrimSpace(source.RepoURL) == "" {
 			problems = append(problems, fieldPath(path, "repoURL")+" is required for git-backed bundles")
@@ -2619,6 +2624,9 @@ func validateGitOpsTemplateSpec(spec gitOpsTemplateSpec) []string {
 		if strings.TrimSpace(spec.Source.Chart) == "" {
 			problems = append(problems, "source.chart is required for helm templates")
 		}
+		if strings.TrimSpace(spec.Source.TargetRevision) == "" {
+			problems = append(problems, "source.targetRevision is required for helm templates")
+		}
 	case "kustomize", "git-path", "raw":
 		if strings.TrimSpace(spec.Source.RepoURL) == "" {
 			problems = append(problems, "source.repoURL is required for git-backed templates")
@@ -2640,10 +2648,18 @@ func applicationSourceFromComponentBundleSource(source ComponentBundleSourceSpec
 	revision := strings.TrimSpace(source.TargetRevision)
 	switch strings.TrimSpace(source.Type) {
 	case "helm":
+		// No "*" default. An omitted revision used to mean "whatever the Helm
+		// repo published last", applied by an automated ApplicationSet — the
+		// same floating-pin hazard the platform baseline carried. The two
+		// validators below reject it first; this is the backstop for any future
+		// caller that renders a source without validating.
+		if revision == "" {
+			return nil, fmt.Errorf("source.targetRevision is required for helm sources")
+		}
 		return map[string]any{
 			"repoURL":        strings.TrimSpace(source.RepoURL),
 			"chart":          strings.TrimSpace(source.Chart),
-			"targetRevision": strutil.FirstNonBlankTrimmed(revision, "*"),
+			"targetRevision": revision,
 		}, nil
 	case "kustomize", "git-path", "raw":
 		return map[string]any{

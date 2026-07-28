@@ -1,6 +1,10 @@
 package baseline
 
-import "testing"
+import (
+	"testing"
+
+	semver "github.com/Masterminds/semver/v3"
+)
 
 // TestDeliveryPathRoutesOnlyDefaultEnabledToApplicationSets is the dispatcher
 // seam's contract test: exactly the two metrics exporters ride the baseline
@@ -51,6 +55,30 @@ func TestDeliveryPathRoutesOnlyDefaultEnabledToApplicationSets(t *testing.T) {
 		// Delivery path components carry the chart coordinates the server needs.
 		if c.ChartName == "" || c.RepoURL == "" {
 			t.Errorf("%s: ApplicationSet component missing chart coordinates", c.Slug)
+		}
+	}
+}
+
+// TestBaselineRegistryPinsEveryDefault is the fence on the floating-version
+// fix: anything routed to the ApplicationSet lifecycle is auto-delivered to
+// every adopted cluster with prune and selfHeal on, so it must name the exact
+// chart version it delivers. Before the fix every one of them rendered
+// targetRevision "*" and took whatever upstream published last.
+func TestBaselineRegistryPinsEveryDefault(t *testing.T) {
+	for _, c := range ApplicationSetComponents() {
+		if c.ChartVersion == "" {
+			t.Errorf("%s: ApplicationSet component has no ChartVersion pin", c.Slug)
+			continue
+		}
+		if c.ChartVersion == "*" {
+			t.Errorf("%s: ChartVersion %q floats to upstream-latest", c.Slug, c.ChartVersion)
+			continue
+		}
+		// ArgoCD parses a Helm targetRevision as a semver constraint, so the pin
+		// has to be one; an exact version is the constraint that matches only
+		// itself.
+		if _, err := semver.NewVersion(c.ChartVersion); err != nil {
+			t.Errorf("%s: ChartVersion %q is not an exact semver version: %v", c.Slug, c.ChartVersion, err)
 		}
 	}
 }

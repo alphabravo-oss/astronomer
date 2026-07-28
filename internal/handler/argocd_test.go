@@ -41,9 +41,15 @@ type argoCDQueryRecorder struct {
 	getAppErr      error
 	auditRows      []sqlc.CreateAuditLogV1Params
 	requeued       []sqlc.RequeueArgoCDOperationParams
-	pendingOps     []sqlc.ArgocdOperation
-	runningOps     []sqlc.ArgocdOperation
-	markRunCalls   int
+
+	// instanceCreates/instanceUpdates capture the verify_ssl column the
+	// instance CRUD handlers actually write (argocd_verify_ssl_test.go).
+	instanceCreates []sqlc.CreateArgoCDInstanceParams
+	instanceUpdates []sqlc.UpdateArgoCDInstanceParams
+
+	pendingOps   []sqlc.ArgocdOperation
+	runningOps   []sqlc.ArgocdOperation
+	markRunCalls int
 
 	// instances backs ListArgoCDInstances (health-probe fan-out tests).
 	instances []sqlc.ArgocdInstance
@@ -131,11 +137,31 @@ func (q *argoCDQueryRecorder) UpsertDiscoveredArgoCDApplication(_ context.Contex
 func (q *argoCDQueryRecorder) ListArgoCDInstances(context.Context, sqlc.ListArgoCDInstancesParams) ([]sqlc.ArgocdInstance, error) {
 	return q.instances, nil
 }
-func (q *argoCDQueryRecorder) CreateArgoCDInstance(context.Context, sqlc.CreateArgoCDInstanceParams) (sqlc.ArgocdInstance, error) {
-	panic("not used")
+func (q *argoCDQueryRecorder) CreateArgoCDInstance(_ context.Context, arg sqlc.CreateArgoCDInstanceParams) (sqlc.ArgocdInstance, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.instanceCreates = append(q.instanceCreates, arg)
+	return sqlc.ArgocdInstance{
+		ID:                 uuid.New(),
+		Name:               arg.Name,
+		ClusterID:          arg.ClusterID,
+		ApiUrl:             arg.ApiUrl,
+		AuthTokenEncrypted: arg.AuthTokenEncrypted,
+		VerifySsl:          arg.VerifySsl,
+	}, nil
 }
-func (q *argoCDQueryRecorder) UpdateArgoCDInstance(context.Context, sqlc.UpdateArgoCDInstanceParams) (sqlc.ArgocdInstance, error) {
-	panic("not used")
+func (q *argoCDQueryRecorder) UpdateArgoCDInstance(_ context.Context, arg sqlc.UpdateArgoCDInstanceParams) (sqlc.ArgocdInstance, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.instanceUpdates = append(q.instanceUpdates, arg)
+	return sqlc.ArgocdInstance{
+		ID:                 arg.ID,
+		Name:               arg.Name,
+		ClusterID:          q.instance.ClusterID,
+		ApiUrl:             arg.ApiUrl,
+		AuthTokenEncrypted: arg.AuthTokenEncrypted,
+		VerifySsl:          arg.VerifySsl,
+	}, nil
 }
 func (q *argoCDQueryRecorder) UpdateArgoCDInstanceHealth(context.Context, sqlc.UpdateArgoCDInstanceHealthParams) error {
 	return nil

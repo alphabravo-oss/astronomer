@@ -18,6 +18,7 @@ func renderDexRuntimeContract(t *testing.T) []renderedDoc {
 	t.Helper()
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 		"--set", "dex.enabled=true",
 		"--set", "dex.runtimeSecretName=dex-runtime-contract")
 	var stdout, stderr bytes.Buffer
@@ -85,7 +86,7 @@ func TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName(t *testing.T) {
 
 func TestDexBundledIdentityTracksCustomReleaseNamespaceAndRuntimeName(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
-	cmd := exec.Command("helm", "template", "elite", chart, "--namespace", "platform-auth", "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
+	cmd := exec.Command("helm", "template", "elite", chart, "--namespace", "platform-auth", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
 	raw, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %v\n%s", err, raw)
@@ -147,6 +148,7 @@ func TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData(t *testing.T) 
 func TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 		"--set", "dex.enabled=true",
 		"--set", "dex.runtimeSecretName=dex-runtime-contract",
 		"--set", "dex.migration.phase=cutover")
@@ -282,6 +284,7 @@ func TestDexRenderedReleaseNeverArchivesCredentialCanaries(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	for _, phase := range []string{"fresh", "cutover"} {
 		cmd := exec.Command("helm", "template", "astronomer", chart,
+			"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 			"--set", "dex.enabled=true", "--set", "dex.migration.phase="+phase,
 			"--set-string", "dex.runtimeSecretName=dex-runtime-contract")
 		var stdout, stderr bytes.Buffer

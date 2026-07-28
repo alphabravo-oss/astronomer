@@ -684,7 +684,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// docs/secret-rotation-runbook.md). Authenticated; the handler
 		// gates on superuser internally rather than via middleware so the
 		// failure mode is a clean 403.
-		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/key-status/", keyStatusHandler(deps))
+		r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/admin/key-status/", keyStatusHandler(cfg, deps))
 
 		// Platform health rollup — single JSON document with cluster +
 		// queue health for the top-of-dashboard banner. Authenticated;
@@ -2139,14 +2139,16 @@ func remoteV2PodsHandler(cfg *config.Config, deps RouterDependencies) http.Handl
 }
 
 // keyStatusHandler returns the number of loaded encryption + JWT signing
-// keys. The runbook (docs/secret-rotation-runbook.md) tells operators to
-// poll this during a rotation to confirm the new key is in fact loaded and
-// that the old key has been dropped at the end of the procedure.
+// keys, plus any credential still set to a published development sentinel
+// (dev-keys-default-and-silent) so the UI can show a red banner. The runbook
+// (docs/secret-rotation-runbook.md) tells operators to poll this during a
+// rotation to confirm the new key is in fact loaded and that the old key has
+// been dropped at the end of the procedure.
 //
 // Auth: superuser only — the count itself is harmless, but the diagnostic
 // is intended for the operator running the rotation, not the general user
 // population.
-func keyStatusHandler(deps RouterDependencies) http.HandlerFunc {
+func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := handler.RequireSuperuser(w, r, deps.AuthQueries, handler.SuperuserGateConfig{
 			StoreUnavailableStatus:  http.StatusInternalServerError,
@@ -2165,21 +2167,27 @@ func keyStatusHandler(deps RouterDependencies) http.HandlerFunc {
 		if deps.JWT != nil {
 			jwtKeys = deps.JWT.KeyCount()
 		}
+		insecureDevKeys := config.DevSentinelsInUse(cfg)
+		if insecureDevKeys == nil {
+			insecureDevKeys = []string{}
+		}
 
 		// Read-only superuser endpoint that exposes the live key-rotation
 		// state — leave an explicit audit trail. The mutating-HTTP audit
 		// middleware skips GET, so this trail wouldn't otherwise exist.
 		handler.RecordAuditFromRequest(r, deps.AuthQueries, "admin.key_status.viewed",
 			"platform", "", "key-status", map[string]any{
-				"encryption_keys": encKeys,
-				"jwt_keys":        jwtKeys,
+				"encryption_keys":   encKeys,
+				"jwt_keys":          jwtKeys,
+				"insecure_dev_keys": insecureDevKeys,
 			})
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"encryption_keys": encKeys,
-			"jwt_keys":        jwtKeys,
-			"as_of":           time.Now().UTC().Format(time.RFC3339),
+			"encryption_keys":   encKeys,
+			"jwt_keys":          jwtKeys,
+			"insecure_dev_keys": insecureDevKeys,
+			"as_of":             time.Now().UTC().Format(time.RFC3339),
 		})
 	}
 }

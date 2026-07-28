@@ -18,7 +18,7 @@ import (
 func TestLogout_InvalidatesRefreshTokenViaCutoff(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	rev := newRecordingRevocationQuerier()
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetRevocationQuerier(rev)

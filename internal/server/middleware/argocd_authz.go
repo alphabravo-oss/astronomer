@@ -26,12 +26,29 @@ type LocalClusterResolver func(ctx context.Context) (uuid.UUID, error)
 // read-only viewer with zero grants — is transparently logged into ArgoCD as
 // admin (broken access control / vertical privilege escalation).
 //
-// Method → permission mapping, anchored to the local cluster scope:
+// Method → permission mapping:
 //
-//   - GET/HEAD reads                              → argocd:read
-//   - POST/PUT/PATCH/DELETE + ArgoCD action paths → clusters:update
-//     (ArgoCD issues sync/rollback/terminate as POST, but a GET to an action
-//     path is still treated as a mutation out of caution)
+//   - GET/HEAD reads                              → argocd:read at the local
+//     cluster scope (the cluster the proxied Argo CD runs on)
+//   - POST/PUT/PATCH/DELETE + ArgoCD action paths → clusters:update at GLOBAL
+//     scope (ArgoCD issues sync/rollback/terminate as POST, but a GET to an
+//     action path is still treated as a mutation out of caution)
+//
+// Why mutations are evaluated at global scope: a proxied request carries no
+// usable destination. The Argo CD SPA drives sync, rollback, terminate and
+// resource-action calls against Applications that deploy to ANY registered
+// cluster, and it also issues stream/watch and resource-tree calls whose paths
+// do not name the Application at all — so parsing the destination out of the
+// path is not sound. Anchoring the mutation check to the local cluster meant a
+// cluster-scoped grant on the one cluster hosting Argo CD authorized mutations
+// against every other cluster's delivery. Requiring a grant that is not
+// cluster-bounded (a global role binding, or superuser) is the honest
+// expression of what the proxy actually permits.
+//
+// Reduced surface, deliberately documented: a cluster-scoped operator can still
+// READ the Argo CD console, but must use the product's own
+// /api/v1/argocd/... routes — which resolve and authorize the destination
+// cluster per operation — to change anything.
 //
 // Fail-closed: if the RBAC engine or binding querier is nil (misconfiguration),
 // every request is denied rather than silently opening the admin proxy. The
@@ -59,12 +76,15 @@ func ArgoCDAuthz(engine *rbac.Engine, querier RBACQuerier, localCluster LocalClu
 				return
 			}
 
-			// Anchor the check to the local cluster the proxy targets. A DB
-			// error resolving it is fail-closed; a not-yet-bootstrapped local
-			// cluster (uuid.Nil) leaves the check at global scope so only
-			// global/superuser grants pass.
+			resource, verb := argoCDProxyPermission(r)
+
+			// Reads anchor to the local cluster the proxy targets. A DB error
+			// resolving it is fail-closed; a not-yet-bootstrapped local cluster
+			// (uuid.Nil) leaves the check at global scope so only
+			// global/superuser grants pass. Mutations stay at global scope
+			// unconditionally — see the doc comment.
 			var clusterID uuid.UUID
-			if localCluster != nil {
+			if localCluster != nil && !argoCDProxyMutation(r) {
 				cid, cerr := localCluster(r.Context())
 				if cerr != nil {
 					writeArgoCDForbidden(w, r)
@@ -73,7 +93,6 @@ func ArgoCDAuthz(engine *rbac.Engine, querier RBACQuerier, localCluster LocalClu
 				clusterID = cid
 			}
 
-			resource, verb := argoCDProxyPermission(r)
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, uuid.Nil) {
 				writeArgoCDForbidden(w, r)
 				return
@@ -88,14 +107,21 @@ func ArgoCDAuthz(engine *rbac.Engine, querier RBACQuerier, localCluster LocalClu
 // resource+verb it requires. Mutating HTTP methods and ArgoCD action paths
 // (sync/rollback/terminate) require clusters:update; everything else is a read.
 func argoCDProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
+	if argoCDProxyMutation(r) {
+		return rbac.ResourceClusters, rbac.VerbUpdate
+	}
+	return rbac.ResourceArgoCD, rbac.VerbRead
+}
+
+// argoCDProxyMutation reports whether the request can change cluster state.
+// Safe methods are reads unless they hit an ArgoCD action path; everything else
+// counts as a mutation.
+func argoCDProxyMutation(r *http.Request) bool {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		if isArgoCDMutatingPath(r.URL.Path) {
-			return rbac.ResourceClusters, rbac.VerbUpdate
-		}
-		return rbac.ResourceArgoCD, rbac.VerbRead
+		return isArgoCDMutatingPath(r.URL.Path)
 	default:
-		return rbac.ResourceClusters, rbac.VerbUpdate
+		return true
 	}
 }
 

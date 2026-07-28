@@ -59,8 +59,8 @@ func TestDistributedJWTAndRBACInvalidationAcrossReplicas(t *testing.T) {
 	t.Cleanup(func() { _ = clientA.Close(); _ = clientB.Close() })
 
 	revocations := newSharedRevocations()
-	jwtA := auth.NewJWTManager("distributed-cache-test-secret", 60)
-	jwtB := auth.NewJWTManager("distributed-cache-test-secret", 60)
+	jwtA := auth.MustNewJWTManager("distributed-cache-test-secret", 60)
+	jwtB := auth.MustNewJWTManager("distributed-cache-test-secret", 60)
 	jwtA.SetRevocationChecker(revocations)
 	jwtB.SetRevocationChecker(revocations)
 	rbacA := appmiddleware.NewRBACCacheWithOptions(time.Minute, 10)
@@ -129,7 +129,7 @@ func TestRedisDisconnectBypassesPrimedJWTAndRBACCaches(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: mini.Addr(), DialTimeout: 50 * time.Millisecond, ReadTimeout: 50 * time.Millisecond, MaxRetries: 0})
 	t.Cleanup(func() { _ = client.Close() })
 	revocations := newSharedRevocations()
-	manager := auth.NewJWTManager("disconnect-test-secret", 60)
+	manager := auth.MustNewJWTManager("disconnect-test-secret", 60)
 	manager.SetRevocationChecker(revocations)
 	cache := appmiddleware.NewRBACCacheWithOptions(time.Minute, 10)
 	target := securityCacheTarget{jwt: manager, rbac: cache}

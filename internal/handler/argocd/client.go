@@ -157,13 +157,16 @@ type Client struct {
 
 // Options control client construction.
 type Options struct {
-	// VerifySSL toggles TLS verification. False matches argocd-cli's
-	// --insecure flag for self-signed clusters.
-	VerifySSL bool
+	// SkipTLSVerify disables TLS verification, matching argocd-cli's
+	// --insecure flag for self-signed clusters. Stated in the skip direction
+	// so the zero value verifies: this used to be a VerifySSL bool, where a
+	// caller that forgot the field silently got an unverified connection.
+	SkipTLSVerify bool
 	// Timeout overrides DefaultTimeout when non-zero.
 	Timeout time.Duration
 	// HTTPClient lets tests inject an httptest.Server-backed client.
-	// When set, VerifySSL and Timeout are ignored.
+	// When set, SkipTLSVerify and Timeout are ignored — callers that inject
+	// one must build it with HTTPClientFor so the two cannot disagree.
 	HTTPClient *http.Client
 }
 
@@ -178,20 +181,27 @@ func NewClient(baseURL, token string, opts Options) *Client {
 		c.httpClient = opts.HTTPClient
 		return c
 	}
-	timeout := opts.Timeout
+	c.httpClient = HTTPClientFor(opts.Timeout, opts.SkipTLSVerify)
+	return c
+}
+
+// HTTPClientFor builds the HTTP client NewClient uses when none is injected.
+// It is the ONLY place in the codebase that turns on InsecureSkipVerify for an
+// ArgoCD instance: callers that need to issue raw requests against an instance
+// (internal/handler/argocd.go's instanceHTTPClient) route through here rather
+// than hand-rolling a second tls.Config that can drift from this one.
+//
+// SEC-R05: dial-guarded. Argo CD is commonly in-cluster, so AllowPrivate is
+// enabled — loopback, link-local, and cloud metadata remain blocked.
+func HTTPClientFor(timeout time.Duration, skipTLSVerify bool) *http.Client {
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
-	// SEC-R05: dial-guarded client. Argo CD is commonly in-cluster, so
-	// AllowPrivate is enabled — loopback, link-local, and cloud metadata
-	// remain blocked. VerifySSL=false keeps the existing insecure path
-	// for self-signed management clusters.
 	var tlsCfg *tls.Config
-	if !opts.VerifySSL {
-		tlsCfg = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — operator-opt-in
+	if skipTLSVerify {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — operator-opt-in via verify_ssl=false
 	}
-	c.httpClient = httpclient.SafeClientAllowPrivateWithTLS(timeout, tlsCfg)
-	return c
+	return httpclient.SafeClientAllowPrivateWithTLS(timeout, tlsCfg)
 }
 
 // SyncOptions carries the body of POST /api/v1/applications/{name}/sync.

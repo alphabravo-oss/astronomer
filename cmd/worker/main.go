@@ -62,6 +62,10 @@ func main() {
 		log.Error("production security config invalid; refusing to start", "error", secErr)
 		os.Exit(1)
 	}
+	// dev-keys-default-and-silent: the published chart sentinels are just as
+	// forgeable in development, so report them on every boot in every env. The
+	// worker decrypts the same credential columns the server does.
+	observability.ReportInsecureDevKeys(log, config.DevSentinelsInUse(cfg))
 
 	// Distributed tracing — same InitTracing/Shutdown contract as
 	// the server. The worker's asynq handlers extract traceparent from

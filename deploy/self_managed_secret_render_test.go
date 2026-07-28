@@ -68,7 +68,7 @@ func TestDexLegacyInlineCredentialValuesAreRejected(t *testing.T) {
 		"dex.clientSecretRef.name=legacy-dex-secret",
 		"dex.futurePassword=SYNTHETIC-DEX-HISTORY-CANARY",
 	} {
-		cmd := exec.Command("helm", "template", "astronomer", chart, "--set", "dex.enabled=true", "--set", legacy)
+		cmd := exec.Command("helm", "template", "astronomer", chart, "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", legacy)
 		if err := cmd.Run(); err == nil {
 			t.Fatalf("legacy/unknown Dex credential value %q was accepted into Helm release values", strings.SplitN(legacy, "=", 2)[0])
 		}
@@ -78,13 +78,13 @@ func TestDexLegacyInlineCredentialValuesAreRejected(t *testing.T) {
 func TestDexRuntimeSecretNameSchemaEnforcesDNS1123Subdomain(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	for _, invalid := range []string{"UPPERCASE", "bad_name", "-leading", "trailing-", strings.Repeat("a", 64) + ".example"} {
-		cmd := exec.Command("helm", "template", "astronomer", chart, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+invalid)
+		cmd := exec.Command("helm", "template", "astronomer", chart, "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+invalid)
 		if err := cmd.Run(); err == nil {
 			t.Fatalf("invalid runtime Secret name %q passed chart schema", invalid)
 		}
 	}
 	valid := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61)
-	cmd := exec.Command("helm", "template", "astronomer", chart, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+valid)
+	cmd := exec.Command("helm", "template", "astronomer", chart, "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+valid)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("valid 253-byte DNS subdomain rejected: %v\n%s", err, output)
 	}

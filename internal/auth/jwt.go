@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -133,7 +134,11 @@ type validationCacheEntry struct {
 //  3. wait out the longest token lifetime (refresh = 7d) so every active
 //     session has been re-issued under <new>
 //  4. drop the old key from config on the next restart
-func NewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
+//
+// An empty secretKey is an error: a manager built from one used to sign with a
+// zero-length HMAC key, which every reader of this repository can reproduce
+// (dev-keys-default-and-silent).
+func NewJWTManager(secretKey string, accessLifetimeMinutes int) (*JWTManager, error) {
 	if accessLifetimeMinutes < sessionpolicy.MinMinutes || accessLifetimeMinutes > sessionpolicy.MaxMinutes {
 		accessLifetimeMinutes = sessionpolicy.DefaultMinutes
 	}
@@ -146,11 +151,7 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
 		keys = append(keys, []byte(s))
 	}
 	if len(keys) == 0 {
-		// Preserve the legacy zero-key behavior; callers that hand in an
-		// empty string used to get a manager with []byte("") which signed
-		// and validated tokens but produced trivially-forgeable JWTs in
-		// dev. We keep the same shape so existing tests don't regress.
-		keys = [][]byte{[]byte(secretKey)}
+		return nil, errors.New("jwt: secret key is empty; set SECRET_KEY (chart: secrets.secretKey) to real signing material")
 	}
 	return &JWTManager{
 		secretKeys:           keys,
@@ -158,7 +159,17 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
 		refreshTokenLifetime: 7 * 24 * time.Hour, // 7 days
 		cacheTTL:             JWTValidationCacheTTL,
 		cache:                make(map[string]validationCacheEntry),
+	}, nil
+}
+
+// MustNewJWTManager is NewJWTManager for callers holding a compile-time signing
+// key (tests, fixtures). It panics rather than returning an error.
+func MustNewJWTManager(secretKey string, accessLifetimeMinutes int) *JWTManager {
+	m, err := NewJWTManager(secretKey, accessLifetimeMinutes)
+	if err != nil {
+		panic(err)
 	}
+	return m
 }
 
 // SetRevocationChecker wires the JTI deny-list + per-user invalidation

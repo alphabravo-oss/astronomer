@@ -80,7 +80,7 @@ func typedMutationCases(clusterID string) []typedMutationCase {
 }
 
 func newTypedMutationRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage, bindings []rbac.RoleBinding) http.Handler {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	return NewRouter(&config.Config{}, RouterDependencies{
 		JWT:         jwtMgr,
 		AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes),
@@ -148,7 +148,7 @@ func doRequest(h http.Handler, method, path, rawToken, body string) *httptest.Re
 // streamTicketRouter wires the StreamTickets handler + API-token auth so a
 // raw-bearer caller can attempt to mint an exec/shell/logs ticket.
 func newStreamTicketRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage, bindings []rbac.RoleBinding) http.Handler {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	ticketStore := auth.NewStreamTicketStore(0)
 	ticketHandler := handler.NewStreamTicketHandler(ticketStore)
 	ticketHandler.SetAuthorization(rbac.NewEngine(), routeSecurityRBACQuerier{bindings: bindings})
@@ -239,7 +239,7 @@ func TestExecShellTicketIssuanceRejectsReadScopedTokens(t *testing.T) {
 // stream auth so a raw `Authorization: Bearer astro_*` handshake exercises
 // the AuthorizeStreamRequestWithTickets scope backstop.
 func newRawBearerStreamRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage) http.Handler {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	authQueries := routeSecurityAPITokenQuerier(rawToken, userID, scopes)
 	hub := tunnel.NewHub(slog.Default())
 	execConsumer := tunnel.NewExecConsumer(hub, slog.Default())
@@ -433,7 +433,7 @@ func TestAgentIngestTokenIngestsForItsOwnCluster(t *testing.T) {
 	clusterB := uuid.New()
 	rawToken, userID, bindings := issueIngestIdentity(t, clusterA, clusterB)
 	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:            auth.NewJWTManager("route-security-test-secret", 60),
+		JWT:            auth.MustNewJWTManager("route-security-test-secret", 60),
 		AuthQueries:    routeSecurityAPITokenQuerier(rawToken, userID, ingestTokenScopes(t)),
 		RBACEngine:     rbac.NewEngine(),
 		RBACQueries:    routeSecurityRBACQuerier{bindings: bindings},

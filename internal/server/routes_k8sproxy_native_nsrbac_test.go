@@ -38,7 +38,7 @@ func (f fakeNativeNSAuthorizer) AuthorizedNamespaces(_ context.Context, _, _, _,
 // coarse bindings, so engine.AuthorizedNamespaces contributes nothing; only the
 // folded native namespaces admit the request.
 func TestK8sProxyNativeNamespaceListFold(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {

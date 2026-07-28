@@ -366,6 +366,41 @@ which case NOTES.txt warns instead. Returns "" so callers can discard it.
 {{- end }}
 
 {{/*
+astronomer.requireSecretMaterial is consumed by configmap.yaml to fail the
+render whenever the install would come up on key material that isn't the
+operator's own: an empty value, or one of the chart's historically-shipped dev
+sentinels. It deliberately sits OUTSIDE the config.env=production wrapper below
+— a "development" install signs its JWTs and wraps every stored credential
+(kubeconfigs, git PATs, registry passwords, SSO client secrets) with exactly the
+same two keys a production one does, and both sentinels are published in this
+repository, so anyone can mint an admin token against a default install.
+Skipped entirely when secrets.existingSecret points at a pre-created Secret.
+Returns "" so callers can drop the result without it appearing in the
+rendered manifest.
+*/}}
+{{- define "astronomer.requireSecretMaterial" -}}
+  {{- if not .Values.secrets.existingSecret }}
+    {{- $errs := list }}
+    {{- $secretKey := default "" .Values.secrets.secretKey }}
+    {{- $encryptionKey := default "" .Values.secrets.encryptionKey }}
+    {{- if eq $secretKey "" }}
+      {{- $errs = append $errs "  - secrets.secretKey is empty — it is the HMAC key that signs every access/refresh token" }}
+    {{- else if eq $secretKey "local-dev-secret-key-change-in-production" }}
+      {{- $errs = append $errs "  - secrets.secretKey is the chart's published development value — anyone with this repository can forge an admin JWT against it" }}
+    {{- end }}
+    {{- if eq $encryptionKey "" }}
+      {{- $errs = append $errs "  - secrets.encryptionKey is empty — it is the Fernet key that wraps every stored credential" }}
+    {{- else if eq $encryptionKey "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }}
+      {{- $errs = append $errs "  - secrets.encryptionKey is the chart's published development Fernet key — every stored kubeconfig, git PAT, registry password and SSO client secret would be readable by anyone with this repository" }}
+    {{- end }}
+    {{- if gt (len $errs) 0 }}
+      {{- $msg := printf "\n\nAstronomer secret preflight failed:\n%s\n\nThe chart ships NO default key material. Generate both keys once, keep them for\nthe life of the install (losing them makes every encrypted column undecryptable\n— see docs/management-plane-dr-runbook.md), and pass them at install time:\n\n  openssl rand -base64 32 > ./jwt-key\n  python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" > ./fernet-key\n\n  helm install astronomer ./deploy/chart \\\n    --set-file secrets.secretKey=./jwt-key \\\n    --set-file secrets.encryptionKey=./fernet-key\n\nOr create the Secret out of band and set secrets.existingSecret to its name\n(see deploy/chart/README.md, \"Dev vs. Production Posture\")." (join "\n" $errs) }}
+      {{- fail $msg }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{/*
 astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
 render when env=production but mandatory production knobs are missing. Helm's
 `fail` builtin aborts the whole release with a single human-readable message
@@ -414,18 +449,9 @@ rendered manifest.
         {{- $errs = append $errs "  - tls.letsEncrypt.email must be set when tls.source=letsEncrypt" }}
       {{- end }}
     {{- end }}
-    {{- if and (not .Values.secrets.existingSecret) (eq (default "" .Values.secrets.secretKey) "local-dev-secret-key-change-in-production") }}
-      {{- $errs = append $errs "  - secrets.secretKey is still the chart's known dev value — replace it (JWT signing key)" }}
-    {{- end }}
-    {{- if and (not .Values.secrets.existingSecret) (eq (default "" .Values.secrets.encryptionKey) "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=") }}
-      {{- $errs = append $errs "  - secrets.encryptionKey is still the chart's known dev Fernet key — replace it" }}
-    {{- end }}
-    {{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.secretKey) }}
-      {{- $errs = append $errs "  - secrets.secretKey is empty (required)" }}
-    {{- end }}
-    {{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.encryptionKey) }}
-      {{- $errs = append $errs "  - secrets.encryptionKey is empty (required Fernet key)" }}
-    {{- end }}
+    {{- /* Empty / dev-sentinel secretKey + encryptionKey are checked
+           unconditionally by astronomer.requireSecretMaterial above — a
+           forgeable signing key is not a production-only problem. */ -}}
     {{- /* F8 (C-04): bootstrap-secret.yaml generates randAlphaNum when
            bootstrap.password is empty and the `lookup` guard can't see the
            existing Secret. Under GitOps / `helm template` (no live cluster)

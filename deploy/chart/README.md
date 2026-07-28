@@ -4,13 +4,25 @@
 
 The base `values.yaml` is tuned for **first-touch development** — it boots a
 working management plane on a single laptop/k3d cluster with bundled Postgres
-+ Redis StatefulSets, TLS disabled, and a known-dev Fernet key. **Do not run
-this profile in production.** Three value files ship with the chart:
++ Redis StatefulSets and TLS disabled. **Do not run this profile in
+production.** Three value files ship with the chart:
+
+The chart ships **no key material in any profile**: `secrets.secretKey` and
+`secrets.encryptionKey` are empty and every render — development included —
+fails until you supply your own or point `secrets.existingSecret` at a
+pre-created Secret. The chart used to default both to values published in this
+repository, which made a default install's JWTs forgeable and its stored
+credentials readable by anyone. Generate them once and keep them:
+
+```bash
+openssl rand -base64 32 > ./jwt-key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ./fernet-key
+```
 
 | File | Use case | Notable settings |
 |------|----------|------------------|
 | `values.yaml`            | dev / first install / CI | bundled Postgres + Redis, TLS off, replicas=2, debug=true |
-| `values-k3d.yaml`        | k3d laptop testing | replicas=1, scheduling helpers off, dev Fernet key |
+| `values-k3d.yaml`        | k3d laptop testing | replicas=1, scheduling helpers off, throwaway laptop keys |
 | `values-production.yaml` | real installs | bundled DBs **off**, TLS required, replicas=3, env=production, debug=false |
 
 For a production install, layer the production override on top of the base:
@@ -65,7 +77,9 @@ they're the bare minimum a production install needs:
 - `tls.letsEncrypt.email` — required when `tls.source=letsEncrypt`
 - `secrets.encryptionKey` — must be a real Fernet key; generate with
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
-- `secrets.secretKey` — JWT signing material
+  (required in every environment, not just production — see above)
+- `secrets.secretKey` — JWT signing material; generate with `openssl rand -base64 32`
+  (required in every environment)
 - `config.serverURL` — external URL; seeds the Argo self-management hostname
 - `bootstrap.email` — the bootstrap admin login email
 - the retained Dex runtime Secret is created metadata-only by the chart and is
@@ -508,3 +522,29 @@ The Secret is mounted at `/astronomer/trust/extra/ca-additional.pem` and Go's
 `SSL_CERT_DIR` is set so `crypto/x509` reads it alongside the system pool. This
 is independent of the Gateway/Ingress TLS — it only affects the server's
 outbound trust store.
+
+### Argo CD instance TLS verification (behavior change)
+
+`POST/PUT /api/v1/argocd/instances/` accepts a `verify_ssl` flag that controls
+whether the server verifies TLS when it talks to that Argo CD instance's
+`api_url` — the connection carrying the instance's admin bearer token, and the
+git repository password and SSH key on the `.../repos/` route.
+
+The field used to be a plain bool, so **omitting it meant `false`**: an API
+create that left it out, and any partial PUT (a rename, an `api_url` change),
+silently disabled verification. It is now optional, and omission means:
+
+| Request                          | Stored `verify_ssl`          |
+|----------------------------------|------------------------------|
+| `POST` without `verify_ssl`      | `true` (was `false`)         |
+| `PUT` without `verify_ssl`       | unchanged (was `false`)      |
+| Explicit `"verify_ssl": false`   | `false`, plus a server warning |
+
+The UI has always sent an explicit value, so this only affects direct API
+callers. **No data migration ships with this change**: rows already storing
+`false` are left alone, because the server cannot distinguish an operator who
+chose skip-verify from one bitten by the old default, and rewriting them would
+break self-signed Argo CD endpoints (including the in-cluster instance the
+self-managed install registers, which requires `verify_ssl=false`). Audit
+existing instances with `GET /api/v1/argocd/instances/` and re-`PUT` any that
+should verify.

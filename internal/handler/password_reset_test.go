@@ -114,7 +114,7 @@ func newPasswordResetHandler(t *testing.T) (*AuthHandler, *fakeAuthQuerier, *fak
 		usersByEmail: map[string]sqlc.User{},
 		usersByID:    map[uuid.UUID]sqlc.User{},
 	}
-	jwt := auth.NewJWTManager("test-secret-key-32-bytes-min-yo!", 60)
+	jwt := auth.MustNewJWTManager("test-secret-key-32-bytes-min-yo!", 60)
 	h := NewAuthHandlerWithTokens(q, nil, jwt)
 	store := &fakePasswordResetStore{}
 	notifier := &recordingEmailNotifier{}

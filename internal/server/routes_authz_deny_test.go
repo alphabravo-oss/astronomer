@@ -20,7 +20,7 @@ import (
 // behind ONLY the feature-flag gate, so any authenticated principal could
 // create/update/delete templates and policies and launch scans.
 func TestSecurityMutatingRoutesRequireSecurityRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	token, err := jwtMgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -61,7 +61,7 @@ func TestSecurityMutatingRoutesRequireSecurityRBAC(t *testing.T) {
 // zero-grant viewer, honoring the catalog:create/update/delete requirement that
 // docs/security-sensitive-routes.json already declares.
 func TestCatalogRepositoryRoutesRequireCatalogRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	token, err := jwtMgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -100,7 +100,7 @@ func TestCatalogRepositoryRoutesRequireCatalogRBAC(t *testing.T) {
 // controllers surface refuses a non-superuser principal with 403. Before the
 // fix the mutating routes were reachable by any authenticated caller.
 func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -178,7 +178,7 @@ func newMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.RoleBindi
 // monitoring:read still reaches the handler. Before the fix the anonymous case
 // returned 200 with the backend's decoded authConfig / rendered helm values.
 func TestMonitoringSettingsReadRoutesRequireMonitoringRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	token, err := jwtMgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -224,7 +224,7 @@ func TestMonitoringSettingsReadRoutesRequireMonitoringRBAC(t *testing.T) {
 // reaches the handler.
 func TestMonitoringSettingsReadRoutesDenyUnauthenticatedWithoutHandlerAuthz(t *testing.T) {
 	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:        auth.NewJWTManager("route-security-test-secret", 60),
+		JWT:        auth.MustNewJWTManager("route-security-test-secret", 60),
 		Resources:  handler.NewResourceHandler(),
 		Monitoring: handler.NewMonitoringHandler(),
 	})

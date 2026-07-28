@@ -15,7 +15,7 @@ import (
 const testSecret = "test-secret-key-for-auth-middleware"
 
 func newTestJWTManager() *auth.JWTManager {
-	return auth.NewJWTManager(testSecret, 60)
+	return auth.MustNewJWTManager(testSecret, 60)
 }
 
 // generateExpiredToken creates a JWT that is already expired.
@@ -198,7 +198,7 @@ func TestRequireAuth_SameAsAuth(t *testing.T) {
 // mustSignWithDifferentKey creates a valid-looking JWT signed with a different secret.
 func mustSignWithDifferentKey(t *testing.T, userID uuid.UUID) string {
 	t.Helper()
-	mgr := auth.NewJWTManager("completely-different-secret-key", 60)
+	mgr := auth.MustNewJWTManager("completely-different-secret-key", 60)
 	tok, err := mgr.GenerateAccessToken(userID)
 	if err != nil {
 		t.Fatalf("failed to generate token with different key: %v", err)

@@ -133,7 +133,7 @@ func filterProjectsByScope(projects []sqlc.Project, projectIDs, clusterIDs []uui
 
 func newCollectionScopeRouter(t *testing.T, bindings []rbac.RoleBinding, clusters []sqlc.Cluster, projects []sqlc.Project) (http.Handler, string) {
 	t.Helper()
-	jwtMgr := auth.NewJWTManager("collection-scope-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("collection-scope-test-secret", 60)
 	token, err := jwtMgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -438,7 +438,7 @@ func TestCollectionWithoutAnyRelevantBindingIsStillForbidden(t *testing.T) {
 // caller the entire fleet. It must 500 instead.
 func TestCollectionFailsClosedWhenHandlerAuthorizationUnwired(t *testing.T) {
 	clusters := collectionTestClusters(3)
-	jwtMgr := auth.NewJWTManager("collection-scope-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("collection-scope-test-secret", 60)
 	token, err := jwtMgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate token: %v", err)

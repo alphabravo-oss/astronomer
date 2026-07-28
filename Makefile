@@ -41,6 +41,26 @@ IMG_FRONTEND = $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG)
 # on a third-party registry whose tag schedule we can't control.
 IMG_SHELL    = $(IMG_REGISTRY)/astronomer-shell:$(IMG_TAG)
 
+# Key material for `make helm-install`. The chart ships NO defaults — it used to
+# ship a working JWT signing key and Fernet key, which made every default install
+# forgeable by anyone holding this repository. These are throwaway LOCAL-DEV
+# values, stable across runs so a re-install still decrypts what the last one
+# stored. They are published HERE, though, so they are in the sentinel set
+# (internal/config/production.go): an install standing on them logs an ERROR on
+# every boot and reports astronomer_insecure_dev_key_in_use=1. That is correct —
+# override (or use secrets.existingSecret) for anything that isn't a laptop:
+#   make helm-install HELM_SECRET_KEY=... HELM_ENCRYPTION_KEY=...
+#
+# Upgrading a cluster that was installed BEFORE the chart defaults were removed:
+# it is holding the old chart-default Fernet key, and this one is different, so
+# every credential already stored (kubeconfigs, agent tokens, git PATs, SSO
+# client secrets) becomes undecryptable — silently, with the bundled Postgres
+# PVC still in place. The old value cannot be reused (the chart now rejects it).
+# Recreate the install instead — drop the namespace with its Postgres PVC, or
+# delete and re-bootstrap the k3d cluster.
+HELM_SECRET_KEY     ?= make-local-dev-jwt-signing-key-32-chars
+HELM_ENCRYPTION_KEY ?= 3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo=
+
 # k3d cluster name (override on the command line: `make k3d-bootstrap CLUSTER=foo`).
 CLUSTER     ?= astronomer-mgmt
 
@@ -216,7 +236,9 @@ helm-install: ## Install/upgrade the Helm chart (CLUSTER=$(CLUSTER) NAMESPACE=as
 		--set image.migrate.tag=$(IMG_TAG) \
 		--set frontend.image.tag=$(IMG_TAG) \
 		--set preflight.image.tag=$(IMG_TAG) \
-		--set-string kubectlShell.image=$(IMG_SHELL)
+		--set-string kubectlShell.image=$(IMG_SHELL) \
+		--set-string secrets.secretKey=$(HELM_SECRET_KEY) \
+		--set-string secrets.encryptionKey=$(HELM_ENCRYPTION_KEY)
 
 helm-uninstall: ## Uninstall the Helm release
 	helm uninstall astronomer --namespace $${NAMESPACE:-astronomer}

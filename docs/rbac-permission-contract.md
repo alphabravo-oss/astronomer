@@ -91,6 +91,10 @@ server through this resource/action contract.
 | Manage Services, Ingresses, and entry points | `services:*`, `ingresses:*`, or `service_mesh:*` as appropriate |
 | Cordon, uncordon, drain, label, annotate, or taint nodes | `nodes:manage` or `nodes:update` |
 | View or run Argo sync, rollback, AppProject, repository, or ApplicationSet actions | `argocd:read/list/sync/create/update/delete/manage` |
+| Create, patch, delete, sync, or refresh an Argo Application | `workloads:<verb>` on the cluster hosting the Argo instance **and** on the cluster the Application's `spec.destination` resolves to. A destination that matches no registered cluster is denied. |
+| Create an ApplicationSet | `workloads:create` on the instance's cluster **and** on every registered cluster the generator's selector currently matches |
+| Delete an ApplicationSet | `workloads:delete` on the instance's cluster **and** on every registered cluster the LIVE set's selector currently matches — the delete cascades to the generated Applications, which carry a resources-finalizer |
+| Register, refresh-labels, or unregister a cluster in Argo | `workloads:update` on the instance's cluster **and** `clusters:update` on the cluster in the URL |
 | Queue agent diagnostics, self-test, or upgrade | `agents:read`, `agents:list`, `agents:update`, or `agents:manage` |
 | Manage backups or restores | `backups:create/read/update/delete/manage` |
 | Manage scans, compliance, or security evidence | `security:create/read/update/delete/list` |

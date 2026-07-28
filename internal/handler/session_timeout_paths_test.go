@@ -22,7 +22,7 @@ import (
 const explicitSessionTTL = 120 * time.Minute
 
 func newExplicitSessionJWT() *auth.JWTManager {
-	manager := auth.NewJWTManager("session-timeout-path-test-secret", sessionpolicy.DefaultMinutes)
+	manager := auth.MustNewJWTManager("session-timeout-path-test-secret", sessionpolicy.DefaultMinutes)
 	manager.SetAccessTokenTTLProvider(func(ctx context.Context) time.Duration {
 		if minutes, ok := sessionpolicy.MinutesFromContext(ctx); ok {
 			return time.Duration(minutes) * time.Minute

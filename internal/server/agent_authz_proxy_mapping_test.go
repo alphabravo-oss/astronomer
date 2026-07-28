@@ -24,7 +24,7 @@ import (
 // the test isolates the RBAC *mapping* under examination.
 func newProxyPermissionRouter(t *testing.T, bindings []rbac.RoleBinding) (http.Handler, string) {
 	t.Helper()
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -246,7 +246,7 @@ func TestProxyEvictionRequiresPodsDelete(t *testing.T) {
 // auth so the NEW-1 write-scope backstop on the helm lifecycle routes can be
 // exercised by a read- vs write-scoped token.
 func newHelmMutationRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage, bindings []rbac.RoleBinding) http.Handler {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	return NewRouter(&config.Config{}, RouterDependencies{
 		JWT:         jwtMgr,
 		AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes),

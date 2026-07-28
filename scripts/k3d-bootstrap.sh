@@ -30,6 +30,8 @@
 #                  The supported pair is NGF 2.6.0 + Gateway API v1.4.1.
 #   SKIP_BUILD    Skip docker build step                     (default: 0)
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
+#   SECRET_KEY    JWT signing key                            (default: a local-dev value)
+#   ENCRYPTION_KEY Fernet key wrapping stored credentials     (default: a local-dev value)
 
 set -euo pipefail
 
@@ -44,6 +46,23 @@ GW_API_VER="${GW_API_VER:-v1.4.1}"
 NGF_VERSION="${NGF_VERSION:-2.6.0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PREREQS="${SKIP_PREREQS:-0}"
+# The chart ships no key material — it used to default to a JWT signing key and
+# Fernet key published in this repository, so any default install was forgeable.
+# These throwaway LOCAL-DEV values are stable across runs so a re-bootstrap can
+# still decrypt what the last one stored. They are published here too, so they
+# are in the sentinel set (internal/config/production.go) and the server logs an
+# ERROR + reports astronomer_insecure_dev_key_in_use=1 while they are in use.
+# Never use them off a laptop.
+#
+# A cluster bootstrapped BEFORE the chart defaults were removed is holding the
+# old chart-default Fernet key. This one is different, and `helm upgrade
+# --install` over the existing Postgres PVC swaps it under a database full of
+# rows encrypted with the old one — every stored kubeconfig, agent token, git
+# PAT and SSO client secret stops decrypting, with no error at install time.
+# The old value cannot be reused (the chart rejects it by design), so recreate
+# the cluster (`k3d cluster delete`) rather than re-running over it.
+SECRET_KEY="${SECRET_KEY:-k3d-smoke-test-jwt-signing-key-32-chars}"
+ENCRYPTION_KEY="${ENCRYPTION_KEY:-3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo=}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT_DIR}/scripts/lib/gatewayclass-readiness.sh"
@@ -146,6 +165,8 @@ helm upgrade --install astronomer deploy/chart \
   --set frontend.image.tag="${IMG_TAG}" \
   --set preflight.image.tag="${IMG_TAG}" \
   --set-string kubectlShell.image="${IMG_SHELL}" \
+  --set-string secrets.secretKey="${SECRET_KEY}" \
+  --set-string secrets.encryptionKey="${ENCRYPTION_KEY}" \
   --set config.serverURL="${SERVER_URL}" \
   --set config.corsAllowedOrigins="${SERVER_URL}" \
   --set ingress.enabled=false \

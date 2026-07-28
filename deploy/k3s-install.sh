@@ -131,6 +131,16 @@ import_img "astronomer-go-agent:${IMG_AGENT}"
 
 # ── 5. Astronomer (fresh helm install; migrate.enabled=true runs all migrations) ─
 log "helm install astronomer (bundles astro-argocd subchart)"
+# The chart ships no default key material (it used to default to a JWT signing
+# key and Fernet key published in this repository), so the authoritative values
+# file carrying secrets.secretKey / secrets.encryptionKey — or a pre-created
+# Secret referenced by secrets.existingSecret — is now mandatory, not optional.
+if [[ ! -f "$VALUES" ]]; then
+  echo "k3s-install: values file not found: $VALUES" >&2
+  echo "  It must carry secrets.secretKey + secrets.encryptionKey (or secrets.existingSecret)," >&2
+  echo "  the bootstrap credentials, and the postgres password. Set VALUES=/path/to/values.yaml." >&2
+  exit 1
+fi
 helm dependency build "${REPO_DIR}/deploy/chart"   # vendor argo-cd subchart
 helm upgrade --install astronomer "${REPO_DIR}/deploy/chart" \
   --namespace astronomer --create-namespace \

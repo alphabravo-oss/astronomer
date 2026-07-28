@@ -1991,7 +1991,7 @@
     "expected_unauthenticated_status": 401,
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -2006,7 +2006,7 @@
     "expected_unauthenticated_status": 401,
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [

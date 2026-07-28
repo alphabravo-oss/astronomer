@@ -278,7 +278,7 @@
         "/api/v1/argocd/operations/{id}/retry"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+      "reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:<verb> on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
     },
     {
       "id": "logging-pipeline-cluster-scoped",

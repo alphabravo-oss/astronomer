@@ -22,7 +22,7 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "generate access token and validate returns correct claims",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 60)
+				mgr := MustNewJWTManager(secretKey, 60)
 
 				token, err := mgr.GenerateAccessToken(userID)
 				if err != nil {
@@ -57,7 +57,7 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "generate refresh token and validate returns correct token_type",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 60)
+				mgr := MustNewJWTManager(secretKey, 60)
 
 				token, err := mgr.GenerateRefreshToken(userID)
 				if err != nil {
@@ -80,7 +80,7 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "generate token pair returns two valid tokens",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 60)
+				mgr := MustNewJWTManager(secretKey, 60)
 
 				accessToken, refreshToken, err := mgr.GenerateTokenPair(userID)
 				if err != nil {
@@ -112,7 +112,7 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "expired token fails validation",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 60)
+				mgr := MustNewJWTManager(secretKey, 60)
 
 				// Create a token that expired in the past
 				now := time.Now()
@@ -141,8 +141,8 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "wrong secret key fails validation",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 60)
-				wrongMgr := NewJWTManager("wrong-secret-key", 60)
+				mgr := MustNewJWTManager(secretKey, 60)
+				wrongMgr := MustNewJWTManager("wrong-secret-key", 60)
 
 				token, err := mgr.GenerateAccessToken(userID)
 				if err != nil {
@@ -159,7 +159,7 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "malformed token fails validation",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 60)
+				mgr := MustNewJWTManager(secretKey, 60)
 
 				_, err := mgr.ValidateToken("not.a.valid.jwt.token")
 				if err == nil {
@@ -181,30 +181,25 @@ func TestJWTManager(t *testing.T) {
 			},
 		},
 		{
-			name: "empty secret key still creates a manager with defaults",
+			// dev-keys-default-and-silent: this used to return a manager that
+			// signed with a zero-length HMAC key, i.e. tokens anyone could mint.
+			name: "empty secret key is rejected",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager("", 0)
-
-				// Should use default 60 min lifetime
-				token, err := mgr.GenerateAccessToken(userID)
-				if err != nil {
-					t.Fatalf("GenerateAccessToken() with empty key error = %v", err)
-				}
-
-				// Should still validate with the same (empty) key
-				claims, err := mgr.ValidateToken(token)
-				if err != nil {
-					t.Fatalf("ValidateToken() error = %v", err)
-				}
-				if claims.UserID != userID {
-					t.Errorf("UserID = %v, want %v", claims.UserID, userID)
+				for _, key := range []string{"", "   ", ",", " , "} {
+					mgr, err := NewJWTManager(key, 0)
+					if err == nil {
+						t.Fatalf("NewJWTManager(%q) = %v, want error", key, mgr)
+					}
+					if mgr != nil {
+						t.Fatalf("NewJWTManager(%q) returned a manager alongside the error", key)
+					}
 				}
 			},
 		},
 		{
 			name: "default access lifetime is 60 minutes when zero provided",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, 0)
+				mgr := MustNewJWTManager(secretKey, 0)
 
 				token, err := mgr.GenerateAccessToken(userID)
 				if err != nil {
@@ -227,7 +222,7 @@ func TestJWTManager(t *testing.T) {
 		{
 			name: "negative access lifetime uses default",
 			run: func(t *testing.T) {
-				mgr := NewJWTManager(secretKey, -10)
+				mgr := MustNewJWTManager(secretKey, -10)
 
 				token, err := mgr.GenerateAccessToken(userID)
 				if err != nil {
@@ -256,7 +251,7 @@ func TestJWTManager(t *testing.T) {
 // AUTH-R02: session.timeout_minutes provider is applied at access-token mint
 // without requiring each caller to SetAccessTokenTTL first.
 func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
-	mgr := NewJWTManager("ttl-provider-secret", 60) // boot default 60m
+	mgr := MustNewJWTManager("ttl-provider-secret", 60) // boot default 60m
 	mgr.SetAccessTokenTTLProvider(func(context.Context) time.Duration {
 		return 15 * time.Minute
 	})
@@ -282,9 +277,9 @@ func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
 
 func TestNewJWTManagerBoundsBootSessionTimeout(t *testing.T) {
 	for _, minutes := range []int{0, -1, sessionpolicy.MinMinutes - 1, sessionpolicy.MaxMinutes + 1} {
-		mgr := NewJWTManager("test-secret", minutes)
+		mgr := MustNewJWTManager("test-secret", minutes)
 		if got := mgr.AccessTokenTTL(); got != sessionpolicy.DefaultMinutes*time.Minute {
-			t.Errorf("NewJWTManager(_, %d) TTL = %s, want %s", minutes, got, sessionpolicy.DefaultMinutes*time.Minute)
+			t.Errorf("MustNewJWTManager(_, %d) TTL = %s, want %s", minutes, got, sessionpolicy.DefaultMinutes*time.Minute)
 		}
 	}
 }
@@ -298,7 +293,7 @@ func TestJWTManagerMultiKeyRotation(t *testing.T) {
 	newKey := "jwt-new-test-secret-fedcba098765"
 	userID := uuid.New()
 
-	mgrOld := NewJWTManager(oldKey, 60)
+	mgrOld := MustNewJWTManager(oldKey, 60)
 	if mgrOld.KeyCount() != 1 {
 		t.Errorf("KeyCount = %d, want 1", mgrOld.KeyCount())
 	}
@@ -308,7 +303,7 @@ func TestJWTManagerMultiKeyRotation(t *testing.T) {
 	}
 
 	// Rotation in flight: new primary, old fallback.
-	mgrMixed := NewJWTManager(newKey+","+oldKey, 60)
+	mgrMixed := MustNewJWTManager(newKey+","+oldKey, 60)
 	if mgrMixed.KeyCount() != 2 {
 		t.Errorf("KeyCount = %d, want 2", mgrMixed.KeyCount())
 	}
@@ -328,7 +323,7 @@ func TestJWTManagerMultiKeyRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateAccessToken(mixed): %v", err)
 	}
-	mgrNewOnly := NewJWTManager(newKey, 60)
+	mgrNewOnly := MustNewJWTManager(newKey, 60)
 	if _, err := mgrNewOnly.ValidateToken(tokenUnderNew); err != nil {
 		t.Fatalf("ValidateToken(new token under new-only): %v", err)
 	}

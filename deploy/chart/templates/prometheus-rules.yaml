@@ -375,6 +375,29 @@ spec:
               AstronomerAuditEventsDropped. Inspect Postgres and server logs.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/audit-events-dropped.md
 
+        # ── Published development key in use ────────────────────────────
+        # The chart used to ship a working JWT signing key + Fernet key as
+        # its defaults, and the runtime accepted them silently outside
+        # production. An install still holding either one can have admin
+        # tokens forged against it and every stored credential decrypted by
+        # anyone with the chart, so this pages regardless of config.env.
+        - alert: AstronomerInsecureDevKeyInUse
+          expr: max by (key) (astronomer_insecure_dev_key_in_use) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: security
+          annotations:
+            summary: "Astronomer is running on a published development key ({{ `{{ $labels.key }}` }})"
+            description: |
+              astronomer_insecure_dev_key_in_use is 1 — this install's
+              {{ `{{ $labels.key }}` }} is the value published in the Astronomer
+              repository. JWTs signed with it are forgeable by anyone, and
+              credentials wrapped with it (kubeconfigs, git PATs, registry
+              passwords, SSO client secrets) are readable by anyone. Rotate
+              now: docs/secret-rotation-runbook.md.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/insecure-dev-key-in-use.md
+
         # ── SIEM forwarding loss ────────────────────────────────────────
         - alert: AstronomerSIEMEventsDropped
           expr: rate(astronomer_siem_dropped_total[10m]) > 0

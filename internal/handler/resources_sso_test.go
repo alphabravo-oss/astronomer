@@ -87,7 +87,7 @@ func TestCreateSSOProviderRegistersGenericOIDCProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
-	jwtManager := auth.NewJWTManager("test-secret", 60)
+	jwtManager := auth.MustNewJWTManager("test-secret", 60)
 	ssoMgr := auth.NewSSOManager(enc, jwtManager, "https://astro.example.com/api/v1")
 	ssoMgr.SetDiscoveryClient(auth.NewOIDCDiscoveryClient(issuer.Client()))
 
@@ -190,7 +190,7 @@ func TestDeleteSSOProviderRemovesProviderFromManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
-	jwtManager := auth.NewJWTManager("test-secret", 60)
+	jwtManager := auth.MustNewJWTManager("test-secret", 60)
 	ssoMgr := auth.NewSSOManager(enc, jwtManager, "https://astro.example.com/api/v1")
 	secret, err := enc.Encrypt("secret")
 	if err != nil {

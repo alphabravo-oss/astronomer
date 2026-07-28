@@ -19,6 +19,13 @@ import api from '../api';
 export interface KeyStatus {
   encryptionKeys: number;
   jwtKeys: number;
+  /**
+   * Credentials still set to a value published in the Astronomer repository
+   * ("secret_key" | "encryption_key"). Non-empty means this install's tokens
+   * are forgeable and its stored credentials are readable — see
+   * docs/runbooks/insecure-dev-key-in-use.md. Optional: older servers omit it.
+   */
+  insecureDevKeys?: string[];
   asOf: string;
 }
 

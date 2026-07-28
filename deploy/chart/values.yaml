@@ -526,12 +526,19 @@ secrets:
   secretKeyKey: SECRET_KEY
   encryptionKeyKey: ASTRONOMER_ENCRYPTION_KEY
   postgresPasswordKey: POSTGRES_PASSWORD
-  secretKey: "local-dev-secret-key-change-in-production"
+  # REQUIRED (no default). The chart used to ship a working JWT signing key and
+  # Fernet key here, which meant every default install was forgeable by anyone
+  # holding this repository. Both are now empty and the render fails until you
+  # supply your own or point at secrets.existingSecret — including in
+  # development, because dev installs hold real cluster credentials too.
+  # Generate with: openssl rand -base64 32
+  secretKey: ""
   # Fernet key (32 random bytes, url-safe base64). REQUIRED to be a real
-  # Fernet key — Astronomer wraps SSO/agent secrets with it. Replace in any
-  # production install (rotation reencrypts all wrapped values). Generate
+  # Fernet key — Astronomer wraps SSO/agent secrets with it. Keep it for the
+  # life of the install; losing it makes every encrypted column undecryptable
+  # (rotation reencrypts all wrapped values). Generate
   # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-  encryptionKey: "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+  encryptionKey: ""
   githubClientID: ""
   githubClientSecret: ""
   googleClientID: ""

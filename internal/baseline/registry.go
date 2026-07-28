@@ -39,7 +39,21 @@ type Component struct {
 	ApplicationPrefix  string
 	ChartName          string
 	RepoURL            string
-	ValuesYAML         string
+	// ChartVersion is the compiled-in floor pin for the ApplicationSet path.
+	// ArgoCD reads a Helm `targetRevision` as a semver CONSTRAINT, so an exact
+	// version here means exactly that version and nothing else. It exists so a
+	// baseline component can never resolve to "whatever upstream published
+	// last" — the operator-facing pin is cluster_tools (charts[].version, else
+	// version_constraint; migration 143 seeds it), and this is the last-resort
+	// default when that row is absent or blank.
+	//
+	// The shipped values are the versions the old "*" resolved to on
+	// 2026-07-28, deliberately: pinning must change the MECHANISM without
+	// moving already-deployed state, and prune+selfHeal are on, so pinning to
+	// anything older would roll every adopted cluster backwards on the next
+	// reconcile. Bumping these is an ordinary reviewed code change.
+	ChartVersion string
+	ValuesYAML   string
 	// DefaultEnabled drives DeliveryPath: only the two metrics exporters ship on
 	// by default and are auto-delivered as baseline ApplicationSets. Everything
 	// else is opt-in via the tool_operations path.
@@ -71,6 +85,7 @@ var Registry = []Component{
 		ApplicationPrefix:  "astronomer-ksm",
 		ChartName:          "kube-state-metrics",
 		RepoURL:            "https://prometheus-community.github.io/helm-charts",
+		ChartVersion:       "8.0.0",
 		ValuesYAML:         "metricLabelsAllowlist:\n  - pods=[*]\n  - deployments=[*]\n",
 		DefaultEnabled:     true,
 	},
@@ -82,6 +97,7 @@ var Registry = []Component{
 		ApplicationPrefix:  "astronomer-node-exporter",
 		ChartName:          "prometheus-node-exporter",
 		RepoURL:            "https://prometheus-community.github.io/helm-charts",
+		ChartVersion:       "4.56.1",
 		ValuesYAML:         "hostRootFsMount:\n  enabled: true\n",
 		DefaultEnabled:     true,
 	},

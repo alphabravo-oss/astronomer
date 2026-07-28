@@ -70,7 +70,7 @@ func TestAuthorizeStreamRequest_NilJWT_AllowsThrough(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_MissingToken_Rejects(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
 	uid, ok := AuthorizeStreamRequest(req, nil, jwt)
 	if ok {
@@ -82,7 +82,7 @@ func TestAuthorizeStreamRequest_MissingToken_Rejects(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_HeaderJWT_OK(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	userID := uuid.New()
 	tok, err := jwt.GenerateAccessToken(userID)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestAuthorizeStreamRequest_HeaderJWT_OK(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_QueryJWT_Rejects(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	userID := uuid.New()
 	tok, err := jwt.GenerateAccessToken(userID)
 	if err != nil {
@@ -115,7 +115,7 @@ func TestAuthorizeStreamRequest_QueryJWT_Rejects(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_HeaderIgnoresQueryToken(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	headerUser := uuid.New()
 	queryUser := uuid.New()
 	headerTok, _ := jwt.GenerateAccessToken(headerUser)
@@ -142,8 +142,8 @@ func TestAuthorizeStreamRequest_ExpiredJWT_Rejects(t *testing.T) {
 	// generate a token, then build a SECOND manager with a different key
 	// and validate against it; ValidateToken returns an error for bad
 	// signatures, which is the same `err != nil` branch as "expired".
-	jwt1 := NewJWTManager("secret-a", 60)
-	jwt2 := NewJWTManager("secret-b", 60)
+	jwt1 := MustNewJWTManager("secret-a", 60)
+	jwt2 := MustNewJWTManager("secret-b", 60)
 	tok, _ := jwt1.GenerateAccessToken(uuid.New())
 
 	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
@@ -155,7 +155,7 @@ func TestAuthorizeStreamRequest_ExpiredJWT_Rejects(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_APIToken_OK(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_abcdef"
 	q := &fakeTokenQuerier{
@@ -184,7 +184,7 @@ func TestAuthorizeStreamRequest_APIToken_OK(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_APIToken_NoQuerier_Rejects(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
 	req.Header.Set("Authorization", "Bearer astro_xyz")
 	if _, ok := AuthorizeStreamRequest(req, nil, jwt); ok {
@@ -195,7 +195,7 @@ func TestAuthorizeStreamRequest_APIToken_NoQuerier_Rejects(t *testing.T) {
 func TestAuthorizeStreamRequest_APIToken_Revoked_Rejects(t *testing.T) {
 	// GetTokenByHash enforces is_revoked=false at the SQL layer; our fake
 	// mirrors that, so a revoked token reads as "not found".
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_revoked"
 	q := &fakeTokenQuerier{
@@ -219,7 +219,7 @@ func TestAuthorizeStreamRequest_APIToken_Revoked_Rejects(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_APIToken_Expired_Rejects(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_expired"
 	q := &fakeTokenQuerier{
@@ -246,7 +246,7 @@ func TestAuthorizeStreamRequest_APIToken_Expired_Rejects(t *testing.T) {
 }
 
 func TestAuthorizeStreamRequest_APIToken_InactiveUser_Rejects(t *testing.T) {
-	jwt := NewJWTManager("secret", 60)
+	jwt := MustNewJWTManager("secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_inactive"
 	q := &fakeTokenQuerier{

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	semver "github.com/Masterminds/semver/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -40,6 +40,18 @@ const (
 	// push generator must not fan a baseline App onto it. adopt/replace (and the
 	// absent-row default) keep the component under Argo push.
 	baselineOwnershipDecisionLeaveLocal = "leave_local"
+	// baselineFloatingChartVersion is the constraint that resolves to whatever
+	// the upstream Helm repo published most recently. It used to be hard-coded
+	// as every baseline component's targetRevision, which meant an upstream
+	// release landed on every adopted cluster within one reconcile tick, with
+	// prune on, unreviewed. It is now emitted ONLY when the operator asks for
+	// it via platformSettingBaselineUnpinnedCharts.
+	baselineFloatingChartVersion = "*"
+	// platformSettingBaselineUnpinnedCharts restores the pre-pin behavior for
+	// operators who deliberately want to track upstream. Absent / unreadable
+	// means false — the safe direction, unlike the manage-baseline and
+	// per-component gates, which default to their shipped-on state.
+	platformSettingBaselineUnpinnedCharts = "argocd.baseline_unpinned_charts"
 )
 
 var argocdApplicationSetGVR = kubeutil.ArgoApplicationSetGVR
@@ -50,9 +62,13 @@ type baselineApplicationSetComponent struct {
 	Slug               string
 	ChartName          string
 	RepoURL            string
-	Namespace          string
-	ValuesYAML         string
-	SyncPhase          baselineSyncPhase
+	// ChartVersion is the resolved, already-validated Helm targetRevision for
+	// this component. It is never empty and never "*" unless the operator opted
+	// into floating versions — see resolveBaselineChartVersion.
+	ChartVersion string
+	Namespace    string
+	ValuesYAML   string
+	SyncPhase    baselineSyncPhase
 	// DefaultEnabled installs this component on every adopted cluster unless an
 	// operator explicitly disables it. Only the two metrics exporters
 	// (kube-state-metrics, prometheus-node-exporter) ship on by default — they
@@ -115,7 +131,12 @@ type baselineChartCoordinates struct {
 	ChartName string `json:"chart_name"`
 	RepoURL   string `json:"repo_url"`
 	Namespace string `json:"namespace"`
-	Order     int    `json:"order"`
+	// Version is the per-chart pin. It is the most specific operator-controlled
+	// source for targetRevision (a multi-chart tool row can pin each chart
+	// independently); cluster_tools.version_constraint is the tool-wide
+	// fallback, and baseline.Component.ChartVersion the compiled-in floor.
+	Version string `json:"version"`
+	Order   int    `json:"order"`
 }
 
 // fallbackBaselineApplicationSetComponents is the platform baseline that
@@ -142,6 +163,7 @@ func baselineApplicationSetComponentsFromRegistry() []baselineApplicationSetComp
 			DefaultEnabled:     c.DefaultEnabled,
 			ChartName:          c.ChartName,
 			RepoURL:            c.RepoURL,
+			ChartVersion:       c.ChartVersion,
 			Namespace:          c.Namespace,
 			ValuesYAML:         c.ValuesYAML,
 			SyncPhase:          baselineSyncPhaseWorkloads,
@@ -198,31 +220,99 @@ func baselineComponentEnabled(ctx context.Context, q platformSettingReader, c ba
 	return enabled
 }
 
+// baselineFloatingChartVersionsAllowed reports whether the operator has
+// explicitly opted every baseline component back onto the upstream-latest
+// constraint. Unlike argoCDManagePlatformBaselineEnabled this fails to FALSE on
+// a nil querier or any read error: the whole point of the pin is that nothing
+// implicit can put "*" back.
+func baselineFloatingChartVersionsAllowed(ctx context.Context, q platformSettingReader) bool {
+	if q == nil {
+		return false
+	}
+	row, err := q.GetPlatformSetting(ctx, platformSettingBaselineUnpinnedCharts)
+	if err != nil {
+		return false
+	}
+	var allowed bool
+	if err := json.Unmarshal(row.Value, &allowed); err != nil {
+		return false
+	}
+	return allowed
+}
+
+// resolveBaselineChartVersion picks the first candidate that is a usable Helm
+// targetRevision, in caller-supplied precedence order (most specific first,
+// compiled-in floor last).
+//
+// A candidate is usable when it parses as a semver CONSTRAINT — ArgoCD does not
+// treat targetRevision as an exact version for Helm sources, so "8.0.0",
+// ">=8.0.0 <9.0.0" and "8.0.x" are all legal operator input and mean different
+// things. "*" is a legal constraint too, which is exactly why it needs its own
+// gate rather than being caught by the parser.
+//
+// Unparseable or blank candidates are SKIPPED rather than fatal. This mirrors
+// how the rest of this file treats bad operator data (firstToolChart on
+// malformed JSON, leaveLocalExclusionsByComponent on a query error): the
+// generator runs unattended every 30s with no channel to report a typo to, so
+// the safe failure is to fall through to the compiled-in pin — never to "*",
+// and never to halting the reconcile of every other component.
+func resolveBaselineChartVersion(allowFloating bool, candidates ...string) string {
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if candidate == baselineFloatingChartVersion {
+			if allowFloating {
+				return candidate
+			}
+			continue
+		}
+		if _, err := semver.NewConstraint(candidate); err != nil {
+			continue
+		}
+		return candidate
+	}
+	return ""
+}
+
 func baselineApplicationSetComponents(ctx context.Context, q baselineToolQuerier) []baselineApplicationSetComponent {
+	// q is the real *sqlc.Queries (implements platformSettingReader); tool-only
+	// fakes and nil resolve to the pinned default.
+	settings, _ := q.(platformSettingReader)
+	allowFloating := baselineFloatingChartVersionsAllowed(ctx, settings)
 	components := make([]baselineApplicationSetComponent, 0, len(fallbackBaselineApplicationSetComponents))
 	for _, fallback := range fallbackBaselineApplicationSetComponents {
-		components = append(components, baselineComponentFromTool(ctx, q, fallback))
+		components = append(components, baselineComponentFromTool(ctx, q, fallback, allowFloating))
 	}
 	return components
 }
 
-func baselineComponentFromTool(ctx context.Context, q baselineToolQuerier, fallback baselineApplicationSetComponent) baselineApplicationSetComponent {
+func baselineComponentFromTool(ctx context.Context, q baselineToolQuerier, fallback baselineApplicationSetComponent, allowFloating bool) baselineApplicationSetComponent {
 	out := fallback
+	// Resolve the compiled-in pin up front so every early return below (no
+	// querier, pgx.ErrNoRows, a real query error) still carries a validated
+	// version rather than the raw registry string.
+	out.ChartVersion = resolveBaselineChartVersion(allowFloating, fallback.ChartVersion)
 	if q == nil {
 		return out
 	}
 	tool, err := q.GetToolBySlug(ctx, fallback.Slug)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return out
-		}
 		return out
 	}
+	chartVersion := ""
 	if chart, ok := firstToolChart(tool.Charts); ok {
 		out.ChartName = strutil.FirstNonBlankTrimmed(chart.ChartName, out.ChartName)
 		out.RepoURL = strutil.FirstNonBlankTrimmed(chart.RepoURL, out.RepoURL)
 		out.Namespace = strutil.FirstNonBlankTrimmed(chart.Namespace, out.Namespace)
+		chartVersion = chart.Version
 	}
+	// version_constraint is already the pin the OTHER delivery path honors
+	// (handler/tools.go and fleet_dispatcher.go pass it as the helm version for
+	// a Tools-view install), so reading it here is what makes one catalog row
+	// mean one version on both paths.
+	out.ChartVersion = resolveBaselineChartVersion(allowFloating, chartVersion, tool.VersionConstraint, fallback.ChartVersion)
 	if values := defaultPresetValues(tool.Presets); values != "" {
 		out.ValuesYAML = values
 	}
@@ -285,6 +375,16 @@ func ensureBaselineApplicationSets(ctx context.Context, dyn dynamic.Interface, q
 				return fmt.Errorf("delete applicationset %s: %w", component.ApplicationSetName, err)
 			}
 			continue
+		}
+		// Unreachable from operator data — resolveBaselineChartVersion always
+		// falls through to the compiled-in pin, and
+		// TestBaselineRegistryPinsEveryDefault asserts every
+		// ApplicationSet-path component carries one. It is fatal
+		// rather than a "*" fallback so a future registry entry that forgets its
+		// pin fails loudly instead of quietly reintroducing floating versions on
+		// the whole fleet.
+		if strings.TrimSpace(component.ChartVersion) == "" {
+			return fmt.Errorf("baseline component %s has no pinned chart version", component.Slug)
 		}
 		obj := baselineApplicationSetObject(component, excludeByComponentSlug[component.Slug])
 		current, err := res.Get(ctx, component.ApplicationSetName, metav1.GetOptions{})
@@ -437,9 +537,13 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent, exc
 					"spec": map[string]any{
 						"project": "default",
 						"source": map[string]any{
-							"repoURL":        component.RepoURL,
-							"chart":          component.ChartName,
-							"targetRevision": "*",
+							"repoURL": component.RepoURL,
+							"chart":   component.ChartName,
+							// Pinned, not "*". Every reconcile tick rewrites this
+							// object in place (see ensureBaselineApplicationSets),
+							// so an upgrade repins ApplicationSets that were
+							// created floating without any migration.
+							"targetRevision": component.ChartVersion,
 							"helm":           helm,
 						},
 						"destination": map[string]any{
@@ -447,6 +551,14 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent, exc
 							"namespace": component.Namespace,
 						},
 						"syncPolicy": map[string]any{
+							// prune + selfHeal stay ON now that the revision is
+							// pinned. The hazard was the floating revision, not the
+							// automation: against a fixed targetRevision selfHeal
+							// only reverts local drift, and prune is what makes the
+							// resources-finalizer above actually remove the
+							// footprint when a component is disabled or a cluster
+							// goes leave_local. Upgrades are now a reviewed change
+							// to the pin instead of an upstream publish.
 							"automated": map[string]any{
 								"prune":    true,
 								"selfHeal": true,

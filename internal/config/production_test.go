@@ -77,3 +77,35 @@ func TestValidateProductionSecurity_EnforcesTLSAndURL(t *testing.T) {
 		t.Fatalf("expected https server_url error, got %v", err)
 	}
 }
+
+// TestDevSentinelsInUse is the dev-keys-default-and-silent regression: the
+// sentinels are published in this repository, so detection must be independent
+// of config.env — a "development" install signs the same JWTs and wraps the
+// same stored cluster credentials as a production one.
+func TestDevSentinelsInUse(t *testing.T) {
+	both := &Config{Env: "development", SecretKey: devSecretKey, EncryptionKey: devEncryptionKey}
+	got := DevSentinelsInUse(both)
+	if len(got) != 2 || got[0] != DevSentinelSecretKey || got[1] != DevSentinelEncryptionKey {
+		t.Fatalf("DevSentinelsInUse(both dev keys) = %v, want [%s %s]",
+			got, DevSentinelSecretKey, DevSentinelEncryptionKey)
+	}
+
+	// Whitespace around a sentinel is still that sentinel — the chart's
+	// --set-file recipe leaves a trailing newline.
+	padded := &Config{Env: "production", SecretKey: "  " + devSecretKey + "\n"}
+	if got := DevSentinelsInUse(padded); len(got) != 1 || got[0] != DevSentinelSecretKey {
+		t.Fatalf("DevSentinelsInUse(padded secret key) = %v, want [%s]", got, DevSentinelSecretKey)
+	}
+
+	onlyEncryption := &Config{Env: "development", SecretKey: "a-real-unique-secret", EncryptionKey: devEncryptionKey}
+	if got := DevSentinelsInUse(onlyEncryption); len(got) != 1 || got[0] != DevSentinelEncryptionKey {
+		t.Fatalf("DevSentinelsInUse(dev fernet key only) = %v, want [%s]", got, DevSentinelEncryptionKey)
+	}
+
+	if got := DevSentinelsInUse(prodBase()); len(got) != 0 {
+		t.Fatalf("DevSentinelsInUse(real keys) = %v, want empty", got)
+	}
+	if got := DevSentinelsInUse(nil); len(got) != 0 {
+		t.Fatalf("DevSentinelsInUse(nil) = %v, want empty", got)
+	}
+}

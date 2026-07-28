@@ -32,7 +32,7 @@ func nativeRuleRow(group, resource string, verbs []string) sqlc.NativeRbacRule {
 // coarse deny — isolating the native additive-allow behavior.
 func newProxyRouterWithNative(t *testing.T, rows []sqlc.NativeRbacRule) (http.Handler, string) {
 	t.Helper()
-	jwtMgr := auth.NewJWTManager("native-rbac-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("native-rbac-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {

@@ -172,7 +172,7 @@ func mustEncryptor(t *testing.T) *auth.Encryptor {
 
 func TestEnrollFlow_StartThenConfirm(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 
@@ -266,7 +266,7 @@ func decryptChallengeSecret(t *testing.T, enc *auth.Encryptor, challenge string)
 
 func TestDisableRequiresPasswordAndCode(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	// Pre-seed an enrollment so Disable has something to find.
@@ -334,7 +334,7 @@ func TestDisableRequiresPasswordAndCode(t *testing.T) {
 
 func TestLogin_TOTPRequiredAfterEnroll(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	// Pre-seed enrollment.
@@ -374,7 +374,7 @@ func TestLogin_TOTPRequiredAfterEnroll(t *testing.T) {
 
 func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
@@ -432,7 +432,7 @@ func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 
 func TestLogin_TOTPChallengeWithRecoveryCode(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
@@ -491,7 +491,7 @@ func TestLogin_TOTPChallengeWithRecoveryCode(t *testing.T) {
 // per-attempt 401 contract.
 func TestLogin_TOTPLockoutAfterN(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
@@ -523,7 +523,7 @@ func TestLogin_TOTPLockoutAfterN(t *testing.T) {
 // receives an enrollment-only challenge instead of a session.
 func TestRequireMode_NewUserMustEnroll(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 
@@ -560,7 +560,7 @@ func TestRequireMode_NewUserMustEnroll(t *testing.T) {
 // succeeds with a session.
 func TestTOTPPolicy_RuntimeEnforcement(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 
@@ -609,7 +609,7 @@ func TestTOTPPolicy_RuntimeEnforcement(t *testing.T) {
 // hand back the same enroll-only challenge.
 func TestRefreshEnforcesEnrollment(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 
@@ -657,7 +657,7 @@ func TestRefreshEnforcesEnrollment(t *testing.T) {
 // rather than minting a privileged session.
 func TestTOTPPolicy_FailsClosedOnDBError(t *testing.T) {
 	user := makeTestUser(t, true)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 
@@ -747,7 +747,7 @@ func TestAdminForceDisable_RequiresSuperuser(t *testing.T) {
 	})
 
 	mock := newMockQuerier(target, nonAdmin)
-	jwtMgr := auth.NewJWTManager("test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
 	h := NewTOTPHandler(store, mock, enc, jwtMgr)
 
 	req := newAdminTOTPRequest(http.MethodPost, target.ID, nonAdmin)

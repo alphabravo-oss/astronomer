@@ -37,6 +37,7 @@ Anything with a `runbook_url` on a PrometheusRule in
 | `AstronomerManagementBackupFailed` | [backup-restore-drill-failed.md](backup-restore-drill-failed.md) |
 | `AstronomerAuditEventsDropped` | [audit-events-dropped.md](audit-events-dropped.md) |
 | `AstronomerAuditWriteFailures` | [audit-events-dropped.md](audit-events-dropped.md) |
+| `AstronomerInsecureDevKeyInUse` | [insecure-dev-key-in-use.md](insecure-dev-key-in-use.md) |
 | `AstronomerSIEMEventsDropped` | [siem-events-dropped.md](siem-events-dropped.md) |
 | `AstronomerManagementLoggingForwarderDown` | [management-logging-down.md](management-logging-down.md) |
 | `AstronomerClusterLoggingFlatlined` | [logging-flatlined.md](logging-flatlined.md) |

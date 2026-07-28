@@ -98,17 +98,53 @@ func TestArgoCDAuthz_ReadOnlyMutation_Denied(t *testing.T) {
 	}
 }
 
-// TestArgoCDAuthz_ClusterUpdateUser_MutationAllowed confirms a user with
-// clusters:update on the local cluster can drive ArgoCD mutations.
-func TestArgoCDAuthz_ClusterUpdateUser_MutationAllowed(t *testing.T) {
+// TestArgoCDAuthz_ClusterScopedGrant_MutationDenied is the destination-anchoring
+// assertion for the proxy: a wildcard grant on the cluster Argo CD RUNS ON does
+// not authorize a console mutation, because the proxied request never names the
+// destination cluster the sync will act on. Before the fix this returned 200 and
+// the caller could sync any Application to any cluster.
+func TestArgoCDAuthz_ClusterScopedGrant_MutationDenied(t *testing.T) {
 	engine := rbac.NewEngine()
 	local := uuid.New()
-	q := &mockRBACQuerier{bindings: clusterBindings(local.String())} // wildcard on the cluster
+	q := &mockRBACQuerier{bindings: clusterBindings(local.String())} // wildcard on the local cluster only
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/argocd/api/v1/applications/foo/sync"},
+		{http.MethodDelete, "/argocd/api/v1/applications/foo"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		nextCalled, rec := serveArgoCDAuthz(t, engine, q, fixedLocalCluster(local), req)
+		if rec.Code != http.StatusForbidden || nextCalled {
+			t.Errorf("%s %s: cluster-scoped grant must not drive a console mutation: nextCalled=%v code=%d", tc.method, tc.path, nextCalled, rec.Code)
+		}
+	}
+
+	// The same grant still opens the console read-only.
+	req := httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications", nil)
+	nextCalled, rec := serveArgoCDAuthz(t, engine, q, fixedLocalCluster(local), req)
+	if !nextCalled || rec.Code != http.StatusOK {
+		t.Fatalf("cluster-scoped grant should still read the console: nextCalled=%v code=%d", nextCalled, rec.Code)
+	}
+}
+
+// TestArgoCDAuthz_FleetWideGrant_MutationAllowed is the positive half: a grant
+// that is NOT cluster-bounded (a global role binding — what GitOps Admin and
+// superuser carry) still drives console mutations, so the console is not dead
+// for the operators who legitimately have fleet-wide reach.
+func TestArgoCDAuthz_FleetWideGrant_MutationAllowed(t *testing.T) {
+	engine := rbac.NewEngine()
+	local := uuid.New()
+	q := &mockRBACQuerier{bindings: []rbac.RoleBinding{{
+		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceClusters), Verbs: []string{string(rbac.VerbUpdate)}}},
+	}}}
 
 	req := httptest.NewRequest(http.MethodPost, "/argocd/api/v1/applications/foo/sync", nil)
 	nextCalled, rec := serveArgoCDAuthz(t, engine, q, fixedLocalCluster(local), req)
 	if !nextCalled || rec.Code != http.StatusOK {
-		t.Fatalf("cluster-update user should be allowed to sync: nextCalled=%v code=%d", nextCalled, rec.Code)
+		t.Fatalf("fleet-wide grant should be allowed to sync: nextCalled=%v code=%d", nextCalled, rec.Code)
 	}
 }
 

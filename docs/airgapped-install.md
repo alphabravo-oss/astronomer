@@ -85,6 +85,8 @@ helm install astronomer ./deploy/chart \
   --set 'postgres.external.dsn=postgres://...' \
   --set 'redis.external.address=...' \
   --set 'config.serverURL=https://astronomer.internal.example.com' \
+  --set-file secrets.secretKey=./jwt-key \
+  --set-file secrets.encryptionKey=./fernet-key \
   # …plus the rest of the production preflight inputs (see the
   # chart README "Dev vs. Production Posture" section).
 ```

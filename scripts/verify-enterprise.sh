@@ -185,11 +185,21 @@ verify_helm() {
   step "Helm dependencies from Chart.lock"
   run_logged helm-dependency-build helm dependency build deploy/chart
 
+  # The chart ships no key material: secrets.secretKey / secrets.encryptionKey
+  # are empty by default and every render must supply its own (the chart used to
+  # default to a JWT signing key and Fernet key published in this repository).
+  # These are throwaway render-only values.
+  local render_keys=(
+    --set secrets.secretKey=verify-enterprise-render-signing-key
+    --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
+  )
+
   step "Helm lint"
-  run_logged helm-lint helm lint deploy/chart
+  run_logged helm-lint helm lint deploy/chart "${render_keys[@]}"
 
   step "Development Helm render"
   render_helm helm-development helm template astronomer deploy/chart \
+    "${render_keys[@]}" \
     --set frontend.enabled=true \
     --set dex.enabled=true \
     --set config.env=development

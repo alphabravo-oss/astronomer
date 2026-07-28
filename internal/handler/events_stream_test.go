@@ -52,7 +52,7 @@ func TestEventStream_UnauthedWhenNoJWT(t *testing.T) {
 func TestEventStream_RequiresAuthWhenJWTWired(t *testing.T) {
 	bus := events.NewBus()
 	h := NewEventStreamHandler(bus)
-	jwt := auth.NewJWTManager("test-secret-key-for-stream", 15)
+	jwt := auth.MustNewJWTManager("test-secret-key-for-stream", 15)
 	h.SetAuth(jwt, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/stream/", nil)
 	rec := httptest.NewRecorder()
@@ -154,7 +154,7 @@ func (s stubStreamRBACQuerier) GetUserBindings(context.Context, string) ([]rbac.
 func TestEventStream_RestrictedUserGetsPingNotUnscopedEvents(t *testing.T) {
 	bus := events.NewBus()
 	h := NewEventStreamHandler(bus)
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-stream", 15)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-stream", 15)
 	h.SetAuth(jwtMgr, nil)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
@@ -216,7 +216,7 @@ func (s *mutableStreamRBACQuerier) set(b []rbac.RoleBinding) {
 func TestEventStream_BindingRefreshPicksUpRevocation(t *testing.T) {
 	bus := events.NewBus()
 	h := NewEventStreamHandler(bus)
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-stream", 15)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-stream", 15)
 	h.SetAuth(jwtMgr, nil)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)

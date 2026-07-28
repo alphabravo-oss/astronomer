@@ -206,12 +206,12 @@ config:
   serverURL: ""
 
 # ── Secrets ───────────────────────────────────────────────────────────────
-# The chart's bundled `secrets.encryptionKey` is a known DEV key shipped
-# with the chart for local testing — it MUST be replaced. Generate with
+# The chart ships NO key material in any profile — the render fails until you
+# supply both. Generate the Fernet key with
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # and pass via:
 #   --set-file secrets.encryptionKey=./prod-fernet-key
-# (Same for secrets.secretKey — JWT signing material.)
+# (Same for secrets.secretKey — JWT signing material; openssl rand -base64 32.)
 secrets:
   existingSecret: ""
   secretKey: ""        # required — JWT signing

@@ -55,7 +55,7 @@ func (q *quotaEnforcerFakeQuerier) CountTotalActiveUsers(_ context.Context) (int
 // per-user token cap. The enforcer is wired with a fake that reports
 // "you already have 5 tokens, max is 5" → CreateToken must return 429.
 func TestAuthHandler_TokenCreateQuotaExceeded(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 
 	tokenQ := newMockTokenQuerier()
@@ -99,7 +99,7 @@ func TestAuthHandler_TokenCreateQuotaExceeded(t *testing.T) {
 // enforcer is wired but the user is well under the cap; the create
 // proceeds with a normal 201.
 func TestAuthHandler_TokenCreateAllowsUnderCap(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("test-secret-key-for-testing", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-testing", 60)
 	userID := uuid.New()
 
 	tokenQ := newMockTokenQuerier()

@@ -48,7 +48,7 @@ func TestConfigureSessionTimeoutPolicyMissingRowIndependentOfEncryptedFeatures(t
 	// provider on a fresh database.
 	for _, mode := range []string{"no encryptor", "encryptor configured"} {
 		t.Run(mode, func(t *testing.T) {
-			manager := auth.NewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
+			manager := auth.MustNewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
 			authHandler := handler.NewAuthHandler(nil, manager)
 			settings := &fakeSessionTimeoutSettings{err: pgx.ErrNoRows}
 			configureSessionTimeoutPolicy(authHandler, manager, settings, slog.Default())
@@ -63,7 +63,7 @@ func TestConfigureSessionTimeoutPolicyMissingRowIndependentOfEncryptedFeatures(t
 }
 
 func TestConfigureSessionTimeoutPolicyExplicitValueAppliesToEveryMintContract(t *testing.T) {
-	manager := auth.NewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
+	manager := auth.MustNewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
 	authHandler := handler.NewAuthHandler(nil, manager)
 	settings := &fakeSessionTimeoutSettings{
 		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("120")},
@@ -85,7 +85,7 @@ func TestConfigureSessionTimeoutPolicyExplicitValueAppliesToEveryMintContract(t 
 }
 
 func TestAuthHandlerMintContextReadsSessionSettingOnce(t *testing.T) {
-	manager := auth.NewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
+	manager := auth.MustNewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
 	authHandler := handler.NewAuthHandler(nil, manager)
 	settings := &fakeSessionTimeoutSettings{
 		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("120")},

@@ -187,13 +187,19 @@ jobs:
         # docker-compose dev values plus the bootstrap admin the live specs
         # log in as (EnsureBootstrapAdmin creates an immediately usable
         # admin@astronomer.local — no forced password reset).
+        #
+        # The signing / Fernet keys are generated per run rather than taken
+        # from the repo: a committed value is a value anyone can sign a token
+        # with, which is exactly what config.DevSentinelsInUse now flags and
+        # AstronomerInsecureDevKeyInUse pages on. Nothing in the live specs
+        # depends on the literals — the DB is thrown away with the job.
         run: |
+          export SECRET_KEY="pr-validation-e2e-$(openssl rand -hex 16)"
+          export ASTRONOMER_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
           go run ./cmd/server >server.log 2>&1 &
         env:
           DATABASE_URL: postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
           REDIS_URL: redis://localhost:6380/0
-          SECRET_KEY: local-dev-secret-key-change-in-production
-          ASTRONOMER_ENCRYPTION_KEY: RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=
           ENV: development
           DEBUG: "true"
           ALLOWED_HOSTS: "*"

@@ -155,7 +155,7 @@ func doLogin(t *testing.T, h *AuthHandler, body []byte) *httptest.ResponseRecord
 func TestLogin_IncrementsOnFailure(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newRecordingLockoutQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 	h.SetLockoutPolicy(5, 15*time.Minute)
@@ -183,7 +183,7 @@ func TestLogin_LocksAfterThreshold(t *testing.T) {
 	// and trips the threshold.
 	user.FailedLoginCount = 4
 	q := newRecordingLockoutQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 	h.SetLockoutPolicy(5, 15*time.Minute)
@@ -215,7 +215,7 @@ func TestLogin_RejectsLockedAccount(t *testing.T) {
 	user.LockedUntil = pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true}
 	user.LockedReason = auth.LockoutReasonTooManyFailedAttempts
 	q := newRecordingLockoutQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 	auditWriter := &recordingAuthAuditWriter{}
@@ -245,7 +245,7 @@ func TestLogin_ResetsCountOnSuccess(t *testing.T) {
 	user := makeTestUser(t, true)
 	user.FailedLoginCount = 3
 	q := newRecordingLockoutQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 
@@ -270,7 +270,7 @@ func TestLogin_ExpiredLockProceeds(t *testing.T) {
 	user.LockedUntil = pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true}
 	user.LockedReason = auth.LockoutReasonTooManyFailedAttempts
 	q := newRecordingLockoutQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 
@@ -291,7 +291,7 @@ func TestLogin_LockedAuditDetail(t *testing.T) {
 	user := makeTestUser(t, true)
 	user.FailedLoginCount = 4
 	q := newRecordingLockoutQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 	auditWriter := &recordingAuthAuditWriter{}

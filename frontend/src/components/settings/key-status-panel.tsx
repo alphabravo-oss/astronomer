@@ -52,6 +52,18 @@ export function KeyStatusPanel() {
         />
       ) : data ? (
         <div className="grid grid-cols-2 gap-3">
+          {data.insecureDevKeys && data.insecureDevKeys.length > 0 ? (
+            <div className="col-span-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
+              <p className="text-sm font-semibold text-destructive">
+                Insecure development key in use: {data.insecureDevKeys.join(', ')}
+              </p>
+              <p className="mt-1 text-xs text-destructive/90">
+                This value is published in the Astronomer repository — tokens signed with it
+                are forgeable and credentials wrapped with it are readable. Rotate now
+                (docs/runbooks/insecure-dev-key-in-use.md).
+              </p>
+            </div>
+          ) : null}
           <KeyTile label="Encryption keys" value={data.encryptionKeys} />
           <KeyTile label="JWT signing keys" value={data.jwtKeys} />
           <p className="col-span-2 text-2xs text-muted-foreground">

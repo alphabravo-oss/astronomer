@@ -228,7 +228,13 @@ jobs:
           helm dependency build deploy/chart
 
       - name: Lint
-        run: helm lint deploy/chart
+        # The chart ships no key material — secrets.secretKey / secrets.encryptionKey
+        # are empty and the render fails without them, so lint gets throwaway values
+        # (they are never packaged; `helm package` copies values.yaml as-is).
+        run: |
+          helm lint deploy/chart \
+            --set secrets.secretKey=release-lint-render-only \
+            --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
 
       - name: Login · package · push (OCI)
         run: |

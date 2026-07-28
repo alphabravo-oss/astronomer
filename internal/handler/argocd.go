@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -226,7 +225,39 @@ type CreateArgoCDInstanceRequest struct {
 	ApiUrl             string    `json:"api_url"`
 	AuthToken          string    `json:"auth_token,omitempty"`
 	AuthTokenEncrypted string    `json:"auth_token_encrypted,omitempty"`
-	VerifySsl          bool      `json:"verify_ssl"`
+	// VerifySsl is a pointer so an omitted field is distinguishable from an
+	// explicit false. As a plain bool it decoded to false, so a create that
+	// left it out — or any partial PUT — silently disabled TLS verification
+	// for the ArgoCD admin bearer token and the git credentials the repos
+	// route sends to the same api_url.
+	VerifySsl *bool `json:"verify_ssl,omitempty"`
+}
+
+// resolveVerifySSL returns the column value to write for verify_ssl. An
+// explicit value in the body always wins; an omitted field preserves the
+// stored value on update (current non-nil) and verifies on create, mirroring
+// the preserve-on-omit branch UpdateInstance already applies to the token.
+func resolveVerifySSL(req CreateArgoCDInstanceRequest, current *bool) bool {
+	if req.VerifySsl != nil {
+		return *req.VerifySsl
+	}
+	if current != nil {
+		return *current
+	}
+	return true
+}
+
+// warnUnverifiedInstance records an instance written with verification off.
+// Worth an operational trail beyond the audit row: everything this client
+// carries to the operator-supplied api_url — the decrypted ArgoCD admin token,
+// and git repo passwords and SSH keys on the repos route — is exposed to an
+// on-path attacker. Mirrors the siem tls_skip_verify warning.
+func (h *ArgoCDHandler) warnUnverifiedInstance(instance sqlc.ArgocdInstance) {
+	if h == nil || h.log == nil {
+		return
+	}
+	h.log.Warn("argocd instance stored with verify_ssl=false; upstream TLS is not verified",
+		"instance_id", instance.ID.String(), "name", instance.Name, "api_url", instance.ApiUrl)
 }
 
 // resolveAuthToken returns the column value to write for auth_token_encrypted.
@@ -469,7 +500,7 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		ClusterID:          req.ClusterID,
 		ApiUrl:             req.ApiUrl,
 		AuthTokenEncrypted: tokenColumn,
-		VerifySsl:          req.VerifySsl,
+		VerifySsl:          resolveVerifySSL(req, nil),
 	})
 	if err != nil {
 		// Most realistic failure here is FK violation (cluster_id refers to a
@@ -483,6 +514,9 @@ func (h *ArgoCDHandler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !instance.VerifySsl {
+		h.warnUnverifiedInstance(instance)
+	}
 	h.publishArgoCDChanged(instance.ClusterID, instance.ID.String(), "instance")
 	recordArgoAudit(r, h.queries, "argocd.instance.create", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
@@ -585,13 +619,16 @@ func (h *ArgoCDHandler) UpdateInstance(w http.ResponseWriter, r *http.Request) {
 		Name:               req.Name,
 		ApiUrl:             req.ApiUrl,
 		AuthTokenEncrypted: tokenColumn,
-		VerifySsl:          req.VerifySsl,
+		VerifySsl:          resolveVerifySSL(req, &current.VerifySsl),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update ArgoCD instance")
 		return
 	}
 
+	if !instance.VerifySsl {
+		h.warnUnverifiedInstance(instance)
+	}
 	h.publishArgoCDChanged(instance.ClusterID, instance.ID.String(), "instance")
 	recordArgoAudit(r, h.queries, "argocd.instance.update", "argocd_instance", instance.ID.String(), instance.Name, map[string]any{
 		"cluster_id": instance.ClusterID.String(),
@@ -737,13 +774,21 @@ func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.syncResolvedApp(w, r, app)
+	h.syncResolvedApp(w, r, instance, app)
 }
 
 // syncResolvedApp validates the bounded operator request and creates the
 // durable operation after authorization and live Application identity
 // discovery have both succeeded. It never accepts an upstream spec payload.
-func (h *ArgoCDHandler) syncResolvedApp(w http.ResponseWriter, r *http.Request, app sqlc.ArgocdApplication) {
+//
+// This is the single chokepoint both sync routes funnel through, so the
+// destination-scoped gate lives here: discovery has just refreshed
+// destination_cluster from the live Application, and a sync — which may prune —
+// acts on the DESTINATION cluster, not the one Argo CD runs on.
+func (h *ArgoCDHandler) syncResolvedApp(w http.ResponseWriter, r *http.Request, instance sqlc.ArgocdInstance, app sqlc.ArgocdApplication) {
+	if !h.authorizeCachedDestination(w, r, instance, app, rbac.VerbUpdate) {
+		return
+	}
 
 	var req SyncRequest
 	// An empty body is fine; we only fail on malformed JSON.
@@ -913,6 +958,15 @@ func (h *ArgoCDHandler) RefreshApp(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
 		return
 	}
+	// A refresh re-evaluates the Application against its destination cluster
+	// — and a hard refresh on an auto-syncing Application makes Argo CD
+	// reconcile against it — so it is gated on that cluster too. Unlike the
+	// sync routes this one runs no discovery first, so the cached destination
+	// may name a cluster the live Application has since moved off; read the
+	// live spec.destination instead of trusting the row.
+	if !h.authorizeUpstreamDestination(w, r, instance, app.Name, rbac.VerbUpdate) {
+		return
+	}
 	hard := strings.EqualFold(r.URL.Query().Get("hard"), "true")
 	client := h.argoCDClient(instance)
 	upstream, err := client.Refresh(r.Context(), app.Name, hard)
@@ -980,7 +1034,7 @@ func (h *ArgoCDHandler) SyncAppByName(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.syncResolvedApp(w, r, app)
+	h.syncResolvedApp(w, r, instance, app)
 }
 
 // discoverArgoCDApplication resolves one exact name from the authorized
@@ -1204,6 +1258,12 @@ func (h *ArgoCDHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
+		return
+	}
+	// A retry re-runs the sync, so it needs the same destination-scoped grant
+	// the sync routes require. Without this the destination gate is trivially
+	// bypassed: fail a sync, then retry the operation it left behind.
+	if !h.authorizeOperationDestination(w, r, op, rbac.VerbUpdate) {
 		return
 	}
 	safePayload, safeReason, err := sanitizeArgoCDOperationPayload(op.Payload)
@@ -2019,23 +2079,26 @@ func (h *ArgoCDHandler) pollOneRunningOperation(ctx context.Context, op sqlc.Arg
 
 // instanceHTTPClient returns an HTTP client whose TLS verification honors the
 // instance's verify_ssl setting. When verify_ssl is true the shared client is
-// reused unchanged (connection pooling); when false a dedicated client with
-// InsecureSkipVerify is built so self-signed ArgoCD endpoints are reachable
-// (matches argocd-cli --insecure). Without this, passing the shared client
-// always verified TLS and silently discarded verify_ssl=false.
+// reused unchanged (connection pooling); when false a dedicated skip-verify
+// client is built so self-signed ArgoCD endpoints are reachable (matches
+// argocd-cli --insecure). Without this, passing the shared client always
+// verified TLS and silently discarded verify_ssl=false.
+//
+// This client is what argoCDClient injects as Options.HTTPClient, which wins
+// over Options.SkipTLSVerify inside NewClient — so this function, not the
+// Options field, is what actually decides TLS verification on every typed-client
+// call. Both derive from instance.VerifySsl and the skip-verify client is built
+// by argocdclient.HTTPClientFor, so there is exactly one InsecureSkipVerify
+// construction site for the two to agree on.
 func (h *ArgoCDHandler) instanceHTTPClient(instance sqlc.ArgocdInstance) *http.Client {
 	if instance.VerifySsl {
 		return h.http
 	}
-	timeout := 10 * time.Second
+	timeout := argocdclient.DefaultTimeout
 	if h.http != nil && h.http.Timeout != 0 {
 		timeout = h.http.Timeout
 	}
-	// SEC-R05: same AllowPrivate dial policy as the shared client, with
-	// TLS verification skipped for self-signed Argo CD endpoints.
-	return httpclient.SafeClientAllowPrivateWithTLS(timeout, &tls.Config{
-		InsecureSkipVerify: true, // #nosec G402 — operator-opt-in via verify_ssl=false
-	})
+	return argocdclient.HTTPClientFor(timeout, true)
 }
 
 // argoCDClient builds a typed client for the given instance. The token is
@@ -2055,9 +2118,9 @@ func (h *ArgoCDHandler) argoCDClient(instance sqlc.ArgocdInstance) *argocdclient
 		token = ""
 	}
 	return argocdclient.NewClient(instance.ApiUrl, token, argocdclient.Options{
-		VerifySSL:  instance.VerifySsl,
-		Timeout:    argocdclient.DefaultTimeout,
-		HTTPClient: h.instanceHTTPClient(instance),
+		SkipTLSVerify: !instance.VerifySsl,
+		Timeout:       argocdclient.DefaultTimeout,
+		HTTPClient:    h.instanceHTTPClient(instance),
 	})
 }
 
@@ -2644,6 +2707,11 @@ func (h *ArgoCDHandler) CreateApplication(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
+	// The new Application deploys to req.Spec.Destination, not to the cluster
+	// hosting this instance — gate on the destination before creating it.
+	if !h.authorizeSpecDestination(w, r, instance, req.Spec.Destination, rbac.VerbCreate) {
+		return
+	}
 	client := h.argoCDClient(instance)
 	app, err := client.CreateApplication(r.Context(), req.Name, req.Spec)
 	if translateClientError(w, r, err) {
@@ -2678,6 +2746,21 @@ func (h *ArgoCDHandler) PatchApplication(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
+	// Both ends of the patch are authorized: the destination the Application
+	// deploys to today (which the patch can re-point away from), and the one it
+	// would deploy to afterwards. Checking only the current destination would
+	// let a caller move an auto-syncing Application onto a cluster they hold
+	// nothing on and let Argo CD do the delivery.
+	if !h.authorizeUpstreamDestination(w, r, instance, name, rbac.VerbUpdate) {
+		return
+	}
+	patched, ok := patchedApplicationDestination(w, r, raw)
+	if !ok {
+		return
+	}
+	if patched != nil && !h.authorizeSpecDestination(w, r, instance, patched, rbac.VerbUpdate) {
+		return
+	}
 	client := h.argoCDClient(instance)
 	app, err := client.PatchApplication(r.Context(), name, raw)
 	if translateClientError(w, r, err) {
@@ -2702,6 +2785,11 @@ func (h *ArgoCDHandler) DeleteApplication(w http.ResponseWriter, r *http.Request
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "application name is required")
+		return
+	}
+	// ?cascade=true deletes the deployed resources in the destination cluster,
+	// so the delete is gated there and not on the instance's cluster.
+	if !h.authorizeUpstreamDestination(w, r, instance, name, rbac.VerbDelete) {
 		return
 	}
 	cascade := strings.EqualFold(r.URL.Query().Get("cascade"), "true")
@@ -2856,6 +2944,12 @@ func (h *ArgoCDHandler) CreateApplicationSet(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
+	// validateApplicationSetClusterGenerators above only forces the selector to
+	// carry the astronomer.io/managed-by label; it does not bound the fan-out to
+	// clusters the caller is granted. That is this gate's job.
+	if !h.authorizeApplicationSetDestinations(w, r, instance, req.Spec, rbac.VerbCreate) {
+		return
+	}
 	client := h.argoCDClient(instance)
 	out, err := client.CreateApplicationSet(r.Context(), req.Name, req.Spec)
 	if translateClientError(w, r, err) {
@@ -2945,6 +3039,13 @@ func (h *ArgoCDHandler) DeleteApplicationSet(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "applicationset name is required")
 		return
 	}
+	// The delete cascades to the generated Applications, which carry a
+	// resources-finalizer, so it reaches the workloads in every cluster the set
+	// fans out to. Gate it on that fan-out exactly like creation, or the
+	// creation gate is trivially side-stepped by deleting instead.
+	if !h.authorizeUpstreamApplicationSetDestinations(w, r, instance, name, rbac.VerbDelete) {
+		return
+	}
 	client := h.argoCDClient(instance)
 	if err := client.DeleteApplicationSet(r.Context(), name); translateClientError(w, r, err) {
 		return
@@ -3004,6 +3105,13 @@ func (h *ArgoCDHandler) RegisterManagedCluster(w http.ResponseWriter, r *http.Re
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	// The instance gate above only says the caller may drive this Argo CD.
+	// Registration hands Argo CD credentials for the cluster named in the URL
+	// (and, with a `server` override, re-points where those credentials are
+	// used), so it is a mutation of THAT cluster and needs a grant on it.
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
@@ -3160,6 +3268,11 @@ func (h *ArgoCDHandler) RefreshManagedClusterLabels(w http.ResponseWriter, r *ht
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
+	// Re-stamping the labels changes which ApplicationSets adopt this cluster,
+	// so it is authorized on the cluster in the URL, not on the instance's.
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
+		return
+	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
@@ -3234,6 +3347,11 @@ func (h *ArgoCDHandler) UnregisterManagedCluster(w http.ResponseWriter, r *http.
 	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	// Unregistering breaks the target cluster's GitOps delivery, so the grant
+	// has to be on that cluster rather than on the instance's.
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate) {
 		return
 	}
 	row, err := h.queries.GetArgoCDManagedCluster(r.Context(), sqlc.GetArgoCDManagedClusterParams{

@@ -9,7 +9,7 @@ import (
 
 // SEC-R05: default NewClient (no injected HTTPClient) must refuse loopback dials.
 func TestNewClient_DefaultSafeClientBlocksLoopback(t *testing.T) {
-	c := NewClient("https://argocd.example.invalid", "tok", Options{VerifySSL: true, Timeout: 2 * time.Second})
+	c := NewClient("https://argocd.example.invalid", "tok", Options{Timeout: 2 * time.Second})
 	if c.httpClient == nil {
 		t.Fatal("httpClient must be set")
 	}

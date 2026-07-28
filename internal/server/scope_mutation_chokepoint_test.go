@@ -32,7 +32,7 @@ func TestScopeChokepointRejectsReadTokenOnUnguardedMutation(t *testing.T) {
 
 	newRouter := func(rawToken string, scopes json.RawMessage) http.Handler {
 		return NewRouter(&config.Config{}, RouterDependencies{
-			JWT:         auth.NewJWTManager("scope-chokepoint-test-secret", 60),
+			JWT:         auth.MustNewJWTManager("scope-chokepoint-test-secret", 60),
 			AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes),
 			RBACEngine:  rbac.NewEngine(),
 			RBACQueries: routeSecurityRBACQuerier{bindings: readRBAC},

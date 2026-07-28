@@ -72,7 +72,7 @@ func (f *fakeRevocationChecker) invalidate(userID uuid.UUID, at time.Time) {
 }
 
 func TestValidateToken_RejectsRevokedJTI(t *testing.T) {
-	mgr := NewJWTManager("test-secret", 60)
+	mgr := MustNewJWTManager("test-secret", 60)
 	mgr.SetValidationCacheTTL(0) // cache off so the second Validate sees the revocation immediately
 
 	checker := newFakeRevocationChecker()
@@ -103,7 +103,7 @@ func TestValidateToken_RejectsRevokedJTI(t *testing.T) {
 }
 
 func TestValidateToken_RejectsTokensIssuedBeforeInvalidation(t *testing.T) {
-	mgr := NewJWTManager("test-secret", 60)
+	mgr := MustNewJWTManager("test-secret", 60)
 	mgr.SetValidationCacheTTL(0)
 	checker := newFakeRevocationChecker()
 	mgr.SetRevocationChecker(checker)
@@ -122,7 +122,7 @@ func TestValidateToken_RejectsTokensIssuedBeforeInvalidation(t *testing.T) {
 }
 
 func TestValidateToken_AcceptsNewTokensAfterInvalidation(t *testing.T) {
-	mgr := NewJWTManager("test-secret", 60)
+	mgr := MustNewJWTManager("test-secret", 60)
 	mgr.SetValidationCacheTTL(0)
 	checker := newFakeRevocationChecker()
 	mgr.SetRevocationChecker(checker)
@@ -148,7 +148,7 @@ func TestValidateToken_AcceptsNewTokensAfterInvalidation(t *testing.T) {
 func TestValidateToken_NoCheckerLeavesValidationUntouched(t *testing.T) {
 	// Backwards-compat: the manager without a RevocationChecker
 	// must behave exactly as before — purely signature/expiry-based.
-	mgr := NewJWTManager("test-secret", 60)
+	mgr := MustNewJWTManager("test-secret", 60)
 	token, err := mgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate: %v", err)
@@ -161,7 +161,7 @@ func TestValidateToken_NoCheckerLeavesValidationUntouched(t *testing.T) {
 func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t *testing.T) {
 	for _, failure := range []string{"jti", "user_cutoff"} {
 		t.Run(failure, func(t *testing.T) {
-			mgr := NewJWTManager("test-secret", 60)
+			mgr := MustNewJWTManager("test-secret", 60)
 			checker := newFakeRevocationChecker()
 			if failure == "jti" {
 				checker.revErr = errors.New("db unavailable")
@@ -192,7 +192,7 @@ func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t
 // flush it, which we cover in the handler-side tests. Here we just
 // pin the cache contract.
 func TestValidateToken_PositiveCacheMasksRevocationUntilFlush(t *testing.T) {
-	mgr := NewJWTManager("test-secret", 60)
+	mgr := MustNewJWTManager("test-secret", 60)
 	checker := newFakeRevocationChecker()
 	mgr.SetRevocationChecker(checker)
 	// Default TTL of 30s — that's effectively "never" for this test.
@@ -224,7 +224,7 @@ func TestValidateToken_PositiveCacheMasksRevocationUntilFlush(t *testing.T) {
 // after a force-logout).
 func TestValidateToken_CustomIssuedAtIsCompared(t *testing.T) {
 	secret := "test-secret"
-	mgr := NewJWTManager(secret, 60)
+	mgr := MustNewJWTManager(secret, 60)
 	mgr.SetValidationCacheTTL(0)
 	checker := newFakeRevocationChecker()
 	mgr.SetRevocationChecker(checker)

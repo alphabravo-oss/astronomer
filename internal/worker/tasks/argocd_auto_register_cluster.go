@@ -578,7 +578,7 @@ func autoRegisterClusterIntoInstance(ctx context.Context, deps ArgoCDAutoRegiste
 		return err
 	}
 	client := argocdclient.NewClient(instance.ApiUrl, instanceToken, argocdclient.Options{
-		VerifySSL: instance.VerifySsl,
+		SkipTLSVerify: !instance.VerifySsl,
 	})
 	projects, err := argolabels.ProjectsForCluster(ctx, deps.Queries, cluster.ID)
 	if err != nil {

@@ -59,7 +59,7 @@ func (q *recordingRevocationQuerier) InvalidateAllTokens(_ context.Context, arg 
 func TestLogout_RevokesJTI(t *testing.T) {
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	rev := newRecordingRevocationQuerier()
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetRevocationQuerier(rev)
@@ -115,7 +115,7 @@ func TestLogout_NoBearerSkipsRevocation(t *testing.T) {
 	// return 200 to keep the frontend's logout flow happy.
 	user := makeTestUser(t, true)
 	q := newMockQuerier(user)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	rev := newRecordingRevocationQuerier()
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetRevocationQuerier(rev)
@@ -218,7 +218,7 @@ func TestForceLogout_InvalidatesAllUserTokens(t *testing.T) {
 		users: map[uuid.UUID]sqlc.User{admin.ID: admin, target.ID: target},
 	}
 	h := NewResourceHandlerWithQueries(rq, nil)
-	jwtMgr := auth.NewJWTManager("test-secret-key", 60)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h.SetJWTManager(jwtMgr)
 
 	r := chi.NewRouter()

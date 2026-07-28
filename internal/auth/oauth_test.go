@@ -20,7 +20,7 @@ func newTestSSOManager(t *testing.T) (*SSOManager, *Encryptor) {
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
-	jwt := NewJWTManager("test-secret", 60)
+	jwt := MustNewJWTManager("test-secret", 60)
 	mgr := NewSSOManager(enc, jwt, "https://app.example.com")
 	return mgr, enc
 }

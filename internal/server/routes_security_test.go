@@ -390,7 +390,7 @@ func (routeSecurityShellQuerier) CountKubectlSessionCommands(context.Context, uu
 }
 
 func TestLongLivedClusterRoutesRequireAuth(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	router := NewRouter(&config.Config{}, RouterDependencies{
 		JWT:                 jwtMgr,
@@ -646,7 +646,7 @@ func TestMutatingRoutesHaveSecurityClassification(t *testing.T) {
 
 func TestBrowserCookieMutatingRoutesRequireCSRF(t *testing.T) {
 	router, clusterID := newRouteSecurityRouter(t)
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	token, err := jwtMgr.GenerateAccessToken(uuid.New())
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
@@ -682,7 +682,7 @@ func TestBrowserCookieMutatingRoutesRequireCSRF(t *testing.T) {
 }
 
 func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -746,7 +746,7 @@ func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
 // just like POST /register/ — a read-only API token must be denied (scope_denied)
 // before any token is minted. FAILS WITHOUT THE FIX (route was VerbRead/no scope).
 func TestManifestEndpointRequiresWriteScope(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_user_manifest_scope_test"
 	router := NewRouter(&config.Config{}, RouterDependencies{
@@ -773,7 +773,7 @@ func TestManifestEndpointRequiresWriteScope(t *testing.T) {
 }
 
 func TestLegacySettingsMutatorsRequireRBACAndAdminScope(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -833,7 +833,7 @@ func TestLegacySettingsMutatorsRequireRBACAndAdminScope(t *testing.T) {
 }
 
 func TestAuditLogRoutesRequireAuditLogRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -884,7 +884,7 @@ func newRouteSecurityRouter(t *testing.T) (chi.Router, string) {
 
 func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) {
 	t.Helper()
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	hub := tunnel.NewHub(slog.Default())
 	execConsumer := tunnel.NewExecConsumer(hub, slog.Default())
@@ -1101,7 +1101,7 @@ func TestAdminRouteRegistrationsAreAuthProtected(t *testing.T) {
 }
 
 func TestExecAndLogsRejectQueryJWT(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1146,7 +1146,7 @@ func TestExecAndLogsRejectQueryJWT(t *testing.T) {
 }
 
 func TestDirectExecAndLogsStreamsAuditOpen(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1191,7 +1191,7 @@ func TestDirectExecAndLogsStreamsAuditOpen(t *testing.T) {
 }
 
 func TestRemotedialerPodDemoRouteDisabledInProduction(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1215,7 +1215,7 @@ func TestRemotedialerPodDemoRouteDisabledInProduction(t *testing.T) {
 }
 
 func TestK8sProxyRequiresAuth(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	router := NewRouter(&config.Config{}, RouterDependencies{
 		JWT:         jwtMgr,
@@ -1233,7 +1233,7 @@ func TestK8sProxyRequiresAuth(t *testing.T) {
 }
 
 func TestK8sProxyMutationsRequireWritePermission(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1265,7 +1265,7 @@ func TestK8sProxyMutationsRequireWritePermission(t *testing.T) {
 }
 
 func TestK8sProxyUsesCanonicalResourceRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1358,7 +1358,7 @@ func TestK8sProxyUsesCanonicalResourceRBAC(t *testing.T) {
 }
 
 func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1465,7 +1465,7 @@ func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
 }
 
 func TestGenericSecretResourcesRequireSecretsListAndAudit(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1526,7 +1526,7 @@ func TestGenericSecretResourcesRequireSecretsListAndAudit(t *testing.T) {
 // group/version/kind reads go through /k8s/* instead, which is covered by
 // TestK8sProxySecretReadsRequireSecretsRBACAndAudit.
 func TestResourcesGroupVersionKindRouteDeleted(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1550,7 +1550,7 @@ func TestResourcesGroupVersionKindRouteDeleted(t *testing.T) {
 }
 
 func TestGenericResourceListsRequireCanonicalRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1625,7 +1625,7 @@ func TestGenericResourceListsRequireCanonicalRBAC(t *testing.T) {
 }
 
 func TestNamespaceScopedBindingsAreEnforcedOnGenericResourceRoutes(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1688,7 +1688,7 @@ func TestNamespaceScopedBindingsAreEnforcedOnGenericResourceRoutes(t *testing.T)
 }
 
 func TestNamedResourceRoutesRequireCanonicalRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1770,7 +1770,7 @@ func TestNamedResourceRoutesRequireCanonicalRBAC(t *testing.T) {
 }
 
 func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1856,7 +1856,7 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 }
 
 func TestK8sProxyMutationsAreAudited(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1898,7 +1898,7 @@ func TestK8sProxyMutationsAreAudited(t *testing.T) {
 }
 
 func TestK8sProxyPodExecRequiresPodExecPermission(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -1945,7 +1945,7 @@ func TestK8sProxyPodExecRequiresPodExecPermission(t *testing.T) {
 // routes use. 503 means the request cleared authz and reached the (unwired)
 // proxy handler.
 func TestK8sProxySubresourceRequiresProxyVerb(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -2102,7 +2102,7 @@ func TestK8sProxySubresourceRequiresProxyVerb(t *testing.T) {
 }
 
 func TestServiceProxyRequiresAuth(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	router := NewRouter(&config.Config{}, RouterDependencies{
 		JWT:          jwtMgr,
@@ -2120,7 +2120,7 @@ func TestServiceProxyRequiresAuth(t *testing.T) {
 }
 
 func TestServiceProxyMutationsRequireClusterUpdate(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -2152,7 +2152,7 @@ func TestServiceProxyMutationsRequireClusterUpdate(t *testing.T) {
 }
 
 func TestServiceProxyAllowsClusterUpdateMutation(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {
@@ -2176,7 +2176,7 @@ func TestServiceProxyAllowsClusterUpdateMutation(t *testing.T) {
 }
 
 func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	userID := uuid.New()
 	rawToken := "astro_route_security_service_proxy_scope"
@@ -2213,7 +2213,7 @@ func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 }
 
 func TestApiserverAuditIngestRequiresWriteScope(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	userID := uuid.New()
 	rawToken := "astro_route_security_apiserver_audit_scope"
@@ -2245,7 +2245,7 @@ func TestApiserverAuditIngestRequiresWriteScope(t *testing.T) {
 // re-enqueues helm work, so an API token without clusters:write must not drive
 // either even when its principal holds monitoring:update.
 func TestMonitoringMutationsRequireWriteScope(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_route_security_monitoring_scope"
 
@@ -2278,7 +2278,7 @@ func TestMonitoringMutationsRequireWriteScope(t *testing.T) {
 }
 
 func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
-	jwtMgr := auth.NewJWTManager("route-security-test-secret", 60)
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
 	if err != nil {

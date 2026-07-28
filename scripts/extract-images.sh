@@ -34,10 +34,16 @@ if [[ ! -d "$CHART_DIR" ]]; then
     exit 2
 fi
 
-# Pull every `image:` reference out of a helm template render.
+# Pull every `image:` reference out of a helm template render. The chart ships
+# no key material (secrets.secretKey / secrets.encryptionKey are empty and the
+# render fails without them), so every call passes throwaway values — nothing
+# here ever reaches a cluster, we only want the image refs.
 extract_images() {
     # shellcheck disable=SC2068
-    helm template astronomer "$CHART_DIR" $@ 2>/dev/null \
+    helm template astronomer "$CHART_DIR" \
+        --set secrets.secretKey=extract-images-render-only \
+        --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= \
+        $@ 2>/dev/null \
         | grep -oE 'image: "?[^"]+"?' \
         | sed -E 's/^image: //; s/^"//; s/"$//'
 }

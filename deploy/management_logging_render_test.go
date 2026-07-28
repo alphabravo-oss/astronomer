@@ -19,6 +19,17 @@ import (
 	"testing"
 )
 
+// The chart ships no key material — secrets.secretKey / secrets.encryptionKey
+// are empty by default and astronomer.requireSecretMaterial fails any render
+// that doesn't supply them (dev-keys-default-and-silent). Every success-path
+// render below therefore passes these throwaway values; they are prepended to
+// the argument list so a test that cares about the keys can still override
+// them with its own --set.
+const (
+	testRenderSecretKeySet     = "secrets.secretKey=chart-render-test-jwt-signing-key"
+	testRenderEncryptionKeySet = "secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo="
+)
+
 // helmTemplate runs `helm template astronomer <chart> -f values.yaml --set ...`
 // and returns the stdout. Fails the test on any non-zero exit.
 func helmTemplate(t *testing.T, sets ...string) string {
@@ -44,7 +55,7 @@ func helmTemplateWithValueFiles(t *testing.T, valueFiles []string, sets ...strin
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)
 	}
-	for _, s := range sets {
+	for _, s := range append([]string{testRenderSecretKeySet, testRenderEncryptionKeySet}, sets...) {
 		args = append(args, "--set", s)
 	}
 	cmd := exec.Command("helm", args...)

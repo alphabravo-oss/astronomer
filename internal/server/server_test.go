@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -161,6 +163,37 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 	}
 }
 
+// TestReportInsecureDevKeysOutsideProduction is the dev-keys-default-and-silent
+// regression: validateProductionSecurityConfig is a no-op outside production,
+// which is exactly where the published chart keys used to hide. Booting on them
+// must be loud in development too.
+func TestReportInsecureDevKeysOutsideProduction(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	reportInsecureDevKeys(&config.Config{
+		Env:           "development",
+		SecretKey:     devSecretKey,
+		EncryptionKey: devEncryptionKey,
+	}, logger)
+	logged := buf.String()
+	for _, want := range []string{"level=ERROR", "secret_key", "encryption_key"} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("dev-sentinel boot log missing %q:\n%s", want, logged)
+		}
+	}
+
+	buf.Reset()
+	reportInsecureDevKeys(&config.Config{
+		Env:           "development",
+		SecretKey:     "a-real-unique-secret",
+		EncryptionKey: "mjc2rBj19lSbsCp4LzOVgAuWBxGJIGsQNc6oZi0iDTQ=",
+	}, logger)
+	if buf.Len() != 0 {
+		t.Fatalf("real keys logged %q, want silence", buf.String())
+	}
+}
+
 func TestValidateProductionSecurityWiring(t *testing.T) {
 	if err := validateProductionSecurityWiring(&config.Config{Env: "development"}, RouterDependencies{}); err != nil {
 		t.Fatalf("development wiring should not fail closed: %v", err)
@@ -176,7 +209,7 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 		t.Fatalf("NewEncryptor(valid): %v", err)
 	}
 	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, RouterDependencies{
-		JWT:         auth.NewJWTManager("production-jwt-signing-key", 60),
+		JWT:         auth.MustNewJWTManager("production-jwt-signing-key", 60),
 		AuthQueries: productionSecurityAuthQuerier{},
 		RBACEngine:  rbac.NewEngine(),
 		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},

@@ -24,7 +24,7 @@ func testSSOHandler(t *testing.T) *SSOHandler {
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}
-	jwt := auth.NewJWTManager("super-secret-state-key", 60)
+	jwt := auth.MustNewJWTManager("super-secret-state-key", 60)
 	mgr := auth.NewSSOManager(enc, jwt, "https://app.example.com")
 	encrypted, err := enc.Encrypt("client-secret")
 	if err != nil {
