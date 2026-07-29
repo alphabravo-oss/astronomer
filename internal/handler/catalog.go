@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -61,6 +62,9 @@ type CatalogQuerier interface {
 	// query with real LIMIT/OFFSET + COUNT (replaces the per-catalog fan-out).
 	ListChartsByRepositoryIDs(ctx context.Context, arg sqlc.ListChartsByRepositoryIDsParams) ([]sqlc.HelmChart, error)
 	CountChartsByRepositoryIDs(ctx context.Context, repositoryIds []uuid.UUID) (int64, error)
+	// CountChartsPerRepository backs the chart_count field on the catalog
+	// Repositories table: one grouped aggregate for the whole page.
+	CountChartsPerRepository(ctx context.Context, repositoryIds []uuid.UUID) ([]sqlc.CountChartsPerRepositoryRow, error)
 	GetHelmChartByID(ctx context.Context, id uuid.UUID) (sqlc.HelmChart, error)
 	GetHelmChartByRepoAndName(ctx context.Context, arg sqlc.GetHelmChartByRepoAndNameParams) (sqlc.HelmChart, error)
 	CreateHelmChart(ctx context.Context, arg sqlc.CreateHelmChartParams) (sqlc.HelmChart, error)
@@ -133,6 +137,40 @@ type CatalogHandler struct {
 	// the install fails with a clear error.
 	vaultResolver *avault.Resolver
 	bus           *events.Bus
+	// encryptor seals/unseals helm_repositories.auth_config (migration 145).
+	// Optional only in development: config.ValidateProductionSecurity refuses
+	// to start a production server without one. When nil, credentials are
+	// written to the plaintext JSONB column exactly as they were before 145,
+	// which is the row shape the resolver's legacy branch already handles.
+	encryptor *auth.Encryptor
+}
+
+// SetEncryptor wires the Fernet encryptor used for chart-repository
+// credentials at rest (migration 145).
+func (h *CatalogHandler) SetEncryptor(encryptor *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = encryptor
+}
+
+// decryptor returns h.encryptor as a catalog.Decryptor, or a genuinely nil
+// interface when none is wired. Returning h.encryptor directly would hand back
+// a non-nil interface holding a nil *auth.Encryptor, and the nil check in
+// catalog.ResolveAuthConfig would pass straight into a nil-receiver Decrypt.
+func (h *CatalogHandler) decryptor() catalog.Decryptor {
+	if h == nil || h.encryptor == nil {
+		return nil
+	}
+	return h.encryptor
+}
+
+// sealer mirrors decryptor for the write path.
+func (h *CatalogHandler) sealer() catalog.Encryptor {
+	if h == nil || h.encryptor == nil {
+		return nil
+	}
+	return h.encryptor
 }
 
 // SetEventBus wires the SSE bus for catalog_release.changed liveness events
@@ -270,7 +308,8 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		}
 		// TODO(total): ListCatalogsForProject returns the full unpaged set;
 		// no COUNT query exists, so total is the returned length.
-		RespondList(w, redactHelmRepositories(rows), NewPagination(len(rows), int(limit), int(offset), len(rows)))
+		RespondList(w, helmRepositoriesToResponse(h.redactHelmRepositories(rows), h.chartCountsFor(r.Context(), rows)),
+			NewPagination(len(rows), int(limit), int(offset), len(rows)))
 		return
 	}
 
@@ -288,7 +327,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count repositories")
 			return
 		}
-		RespondPaginated(w, r, redactHelmRepositories(rows), total)
+		RespondPaginated(w, r, helmRepositoriesToResponse(h.redactHelmRepositories(rows), h.chartCountsFor(r.Context(), rows)), total)
 		return
 	}
 
@@ -312,7 +351,7 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, redactHelmRepositories(repos), total)
+	RespondPaginated(w, r, helmRepositoriesToResponse(h.redactHelmRepositories(repos), h.chartCountsFor(r.Context(), repos)), total)
 }
 
 // CreateRepoRequest represents the request body for creating a helm repository.
@@ -324,13 +363,64 @@ type CreateRepoRequest struct {
 	IsDefault   bool            `json:"is_default"`
 	AuthType    string          `json:"auth_type"`
 	AuthConfig  json.RawMessage `json:"auth_config"`
-	Enabled     bool            `json:"enabled"`
+	// Enabled defaults to TRUE when the key is absent. It used to be a bare
+	// bool, so a body that omitted it created a DISABLED repository: the
+	// scheduled sweep reads ListEnabledHelmRepositories, so the repo was
+	// never synced and never showed a chart. Nobody asks for a repository
+	// they do not want synced. Mirrors CreateProjectCatalogRequest.Enabled.
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// misplacedCredentialFields are decoded ONLY so they can be rejected.
+	//
+	// Credentials belong in auth_config. The UI posted them here — flat
+	// `username`/`password` — for as long as this endpoint existed, and
+	// encoding/json discards unknown fields silently, so the repository was
+	// created with no credential at all and the first sign of trouble was a
+	// 401 from the registry that reads as a wrong password rather than a
+	// dropped one. Answering 400 costs one branch and makes that class of
+	// mistake impossible to make quietly, for this UI or any other client.
+	misplacedCredentialFields
+}
+
+// misplacedCredentialFields captures the top-level credential keys this API
+// has never accepted, so create and update can both refuse them by name
+// instead of ignoring them.
+type misplacedCredentialFields struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Token    string `json:"token"`
+}
+
+// rejectMisplacedCredentials answers 400 when credentials arrive at the top
+// level of the body instead of inside auth_config. Reports whether the request
+// may continue.
+func rejectMisplacedCredentials(w http.ResponseWriter, r *http.Request, f misplacedCredentialFields) bool {
+	if f.Username == "" && f.Password == "" && f.Token == "" {
+		return true
+	}
+	RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+		`Credentials belong in auth_config, not at the top level of the request: `+
+			`{"auth_type":"basic","auth_config":{"username":"...","password":"..."}}`)
+	return false
+}
+
+// valueOr dereferences an optional request field, falling back to the stored
+// value when the client omitted the key. This is what makes "absent leaves the
+// stored value alone" a rule rather than a per-field decision.
+func valueOr[T any](p *T, stored T) T {
+	if p == nil {
+		return stored
+	}
+	return *p
 }
 
 // CreateRepo handles POST /api/v1/catalog/repositories/.
 func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	var req CreateRepoRequest
 	if !decodeAndValidate(w, r, &req) {
+		return
+	}
+	if !rejectMisplacedCredentials(w, r, req.misplacedCredentialFields) {
 		return
 	}
 
@@ -344,6 +434,13 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if req.RepoType == "" && IsOCIRepo(req.URL) {
 		req.RepoType = "oci"
 	}
+	// Same treatment for the other half of the credential: an auth_config
+	// carrying a username/password with no auth_type would be stored intact
+	// and then never sent, because ApplyIndexAuth short-circuits on an empty
+	// auth_type. A stated auth_type always wins.
+	if req.AuthType == "" {
+		req.AuthType = catalog.InferAuthType(req.AuthConfig)
+	}
 	// DIR-07: accept git-sourced chart repos (clone/index path lands in worker).
 	if strings.EqualFold(req.RepoType, "git") {
 		req.RepoType = "git"
@@ -353,15 +450,30 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Migration 145: the credential goes to the database as a Fernet envelope;
+	// only the non-secret projection stays in the JSONB column.
+	sealed, publicCfg, err := catalog.SealAuthConfig(req.AuthConfig, h.sealer())
+	if err != nil {
+		h.log.Error("encrypt chart repository credential", "repository", req.Name, "error", err)
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to secure repository credentials")
+		return
+	}
+
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
 	repo, err := h.queries.CreateHelmRepository(r.Context(), sqlc.CreateHelmRepositoryParams{
-		Name:        req.Name,
-		Url:         req.URL,
-		RepoType:    req.RepoType,
-		Description: req.Description,
-		IsDefault:   req.IsDefault,
-		AuthType:    req.AuthType,
-		AuthConfig:  req.AuthConfig,
-		Enabled:     req.Enabled,
+		Name:                req.Name,
+		Url:                 req.URL,
+		RepoType:            req.RepoType,
+		Description:         req.Description,
+		IsDefault:           req.IsDefault,
+		AuthType:            req.AuthType,
+		AuthConfig:          publicCfg,
+		AuthConfigEncrypted: sealed,
+		Enabled:             enabled,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create repository")
@@ -375,7 +487,9 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Location", "/api/v1/catalog/repositories/"+repo.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, redactHelmRepository(repo))
+	// A repository has ingested nothing at the instant it is created, so the
+	// count is 0 by construction rather than by query.
+	RespondJSON(w, http.StatusCreated, helmRepositoryToResponse(h.redactHelmRepository(repo), 0))
 }
 
 // GetRepo handles GET /api/v1/catalog/repositories/{id}/.
@@ -393,19 +507,31 @@ func (h *CatalogHandler) GetRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// SEC-01: never return live registry passwords/tokens on GET.
-	RespondJSON(w, http.StatusOK, redactHelmRepository(repo))
+	RespondJSON(w, http.StatusOK, helmRepositoryToResponse(h.redactHelmRepository(repo),
+		h.chartCountsFor(r.Context(), []sqlc.HelmRepository{repo})[repo.ID]))
 }
 
 // UpdateRepoRequest represents the request body for updating a helm repository.
+//
+// Every field is a pointer and every field means the same thing: ABSENT
+// LEAVES THE STORED VALUE ALONE. UpdateHelmRepository writes all nine columns
+// on every call, so with plain scalars a body that mentioned only `name`
+// blanked the URL, disabled the repository, and — because auth_config was
+// normalised from nil to `{}` before the merge — erased the credential.
+// The credential case is the dangerous one: the operator renames a repo and
+// discovers days later that the nightly sync has been 401ing ever since.
 type UpdateRepoRequest struct {
-	Name        string          `json:"name"`
-	URL         string          `json:"url"`
-	RepoType    string          `json:"repo_type"`
-	Description string          `json:"description"`
-	IsDefault   bool            `json:"is_default"`
-	AuthType    string          `json:"auth_type"`
-	AuthConfig  json.RawMessage `json:"auth_config"`
-	Enabled     bool            `json:"enabled"`
+	Name        *string          `json:"name"`
+	URL         *string          `json:"url"`
+	RepoType    *string          `json:"repo_type"`
+	Description *string          `json:"description"`
+	IsDefault   *bool            `json:"is_default"`
+	AuthType    *string          `json:"auth_type"`
+	AuthConfig  *json.RawMessage `json:"auth_config"`
+	Enabled     *bool            `json:"enabled"`
+
+	// Rejected, not ignored — see CreateRepoRequest.
+	misplacedCredentialFields
 }
 
 // UpdateRepo handles PUT /api/v1/catalog/repositories/{id}/.
@@ -420,27 +546,70 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-
-	if req.AuthConfig == nil {
-		req.AuthConfig = json.RawMessage(`{}`)
+	if !rejectMisplacedCredentials(w, r, req.misplacedCredentialFields) {
+		return
 	}
 
-	// SEC-01: when the client echoes the redaction sentinel, keep existing secrets.
-	existing, existingErr := h.queries.GetHelmRepositoryByID(r.Context(), id)
-	if existingErr == nil {
-		req.AuthConfig = mergeAuthConfigPreservingSentinel(existing.AuthConfig, req.AuthConfig)
+	// The stored row is now required, not best-effort: it is the base every
+	// omitted field falls back to.
+	existing, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+		return
+	}
+
+	// SEC-01: when the client echoes the redaction sentinel, keep existing
+	// secrets. The stored secrets live in the Fernet envelope since migration
+	// 145, so the merge base has to be the DECRYPTED document — merging
+	// against the stripped JSONB projection would resolve every echoed
+	// sentinel to "absent" and quietly delete the credential the operator
+	// meant to leave alone.
+	existingCfg, resolveErr := catalog.ResolveAuthConfig(existing, h.decryptor())
+	if resolveErr != nil {
+		// Fail the write rather than merge against a document we could not
+		// read: silently dropping a credential the operator asked us to
+		// preserve is worse than an error they can act on.
+		h.log.Error("decrypt chart repository credential for update", "repository", existing.Name, "error", resolveErr)
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError,
+			"Failed to read existing repository credentials; check the platform encryption key")
+		return
+	}
+
+	// An absent auth_config means "do not touch the credential"; a present one
+	// replaces the document, with sentinel/empty secret values still resolving
+	// to the stored value so a redacted GET can be edited and PUT straight back.
+	authConfig := existingCfg
+	if req.AuthConfig != nil {
+		authConfig = mergeAuthConfigPreservingSentinel(existingCfg, *req.AuthConfig)
+	}
+
+	name := valueOr(req.Name, existing.Name)
+	authType := valueOr(req.AuthType, existing.AuthType)
+	// auth_type and auth_config are one credential: a document that gained a
+	// username/password while auth_type stayed empty would be stored and then
+	// never sent. Same rule as CreateRepo — a stated auth_type always wins.
+	if authType == "" {
+		authType = catalog.InferAuthType(authConfig)
+	}
+
+	sealed, publicCfg, err := catalog.SealAuthConfig(authConfig, h.sealer())
+	if err != nil {
+		h.log.Error("encrypt chart repository credential", "repository", name, "error", err)
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to secure repository credentials")
+		return
 	}
 
 	repo, err := h.queries.UpdateHelmRepository(r.Context(), sqlc.UpdateHelmRepositoryParams{
-		ID:          id,
-		Name:        req.Name,
-		Url:         req.URL,
-		RepoType:    req.RepoType,
-		Description: req.Description,
-		IsDefault:   req.IsDefault,
-		AuthType:    req.AuthType,
-		AuthConfig:  req.AuthConfig,
-		Enabled:     req.Enabled,
+		ID:                  id,
+		Name:                name,
+		Url:                 valueOr(req.URL, existing.Url),
+		RepoType:            valueOr(req.RepoType, existing.RepoType),
+		Description:         valueOr(req.Description, existing.Description),
+		IsDefault:           valueOr(req.IsDefault, existing.IsDefault),
+		AuthType:            authType,
+		AuthConfig:          publicCfg,
+		AuthConfigEncrypted: sealed,
+		Enabled:             valueOr(req.Enabled, existing.Enabled),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update repository")
@@ -453,7 +622,8 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 		"auth_type": repo.AuthType,
 	})
 
-	RespondJSON(w, http.StatusOK, redactHelmRepository(repo))
+	RespondJSON(w, http.StatusOK, helmRepositoryToResponse(h.redactHelmRepository(repo),
+		h.chartCountsFor(r.Context(), []sqlc.HelmRepository{repo})[repo.ID]))
 }
 
 // DeleteRepo handles DELETE /api/v1/catalog/repositories/{id}/.
@@ -574,7 +744,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 	if err != nil {
 		return 0, 0, fmt.Errorf("build index request: %w", err)
 	}
-	applyRepoIndexAuth(req, repo)
+	h.applyRepoIndexAuth(req, repo)
 	client := httpclient.SafeClient(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1338,7 +1508,20 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
 			return
 		}
-		cfg := parseOCIAuthConfig(repo.AuthConfig)
+		// Test-connection is the one place an operator is explicitly asking
+		// "does this credential work", so an unreadable credential is reported
+		// as such instead of being downgraded to an anonymous probe that
+		// answers "reachable" and teaches them nothing.
+		cfg, err := h.resolveOCIAuthConfig(repo)
+		if err != nil {
+			h.log.Error("test connection: chart repository credential could not be decrypted",
+				"repository", repo.Name, "error", err)
+			RespondJSON(w, http.StatusOK, map[string]any{
+				"success": false,
+				"message": "Stored credentials could not be decrypted; check the platform encryption key.",
+			})
+			return
+		}
 		if cfg.Username != "" || cfg.Password != "" {
 			req.SetBasicAuth(cfg.Username, cfg.Password)
 		}
@@ -1370,7 +1553,25 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
 		return
 	}
-	applyRepoIndexAuth(req, repo)
+	// Same rule as the OCI branch above: test-connection is the one endpoint
+	// where the operator is explicitly asking "does this credential work", so
+	// resolve it here rather than through applyRepoIndexAuth, which logs a
+	// decrypt failure and continues unauthenticated. Doing that here would
+	// report the upstream's 401 as the answer, and the operator would conclude
+	// the password is wrong when the real fault is the platform encryption key
+	// — verbatim the misdiagnosis catalog.ErrAuthConfigUnavailable exists to
+	// prevent.
+	authCfg, err := catalog.ResolveIndexAuthConfig(repo, h.decryptor())
+	if err != nil {
+		h.log.Error("test connection: chart repository credential could not be decrypted",
+			"repository", repo.Name, "error", err)
+		RespondJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"message": "Stored credentials could not be decrypted; check the platform encryption key.",
+		})
+		return
+	}
+	catalog.SetIndexAuthHeader(req, repo.AuthType, authCfg)
 	resp, err := client.Do(req)
 	if err != nil {
 		RespondJSON(w, http.StatusBadGateway, map[string]any{"success": false, "message": err.Error()})
@@ -1392,19 +1593,41 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 // redactHelmRepository strips secret fields from auth_config for API responses
 // (SEC-01). Mirrors webhook SecretSentinel: clients that echo the sentinel on
 // PUT leave the stored secret unchanged.
-func redactHelmRepository(repo sqlc.HelmRepository) sqlc.HelmRepository {
+//
+// GET/POST/PUT /api/v1/catalog/repositories/ serialise sqlc.HelmRepository
+// wholesale, so this function is the ONLY thing standing between the stored
+// credential and the wire. Since migration 145 that means two jobs:
+//
+//   - auth_config_encrypted is blanked unconditionally. It is ciphertext, it
+//     is of no use to any client, and shipping it hands every catalog reader
+//     an offline target for whoever later obtains the Fernet key.
+//   - the sentinel is reconstructed from the DECRYPTED document, so the
+//     response shape is unchanged from before 145: a client can still tell
+//     that a password is configured, and can still echo the sentinel back on
+//     PUT to leave it alone. When the credential cannot be decrypted the key
+//     is simply absent — fail closed, never emit ciphertext as if it were the
+//     secret.
+func (h *CatalogHandler) redactHelmRepository(repo sqlc.HelmRepository) sqlc.HelmRepository {
 	out := repo
-	out.AuthConfig = redactAuthConfigJSON(repo.AuthConfig)
+	out.AuthConfigEncrypted = ""
+	resolved, err := catalog.ResolveAuthConfig(repo, h.decryptor())
+	if err != nil {
+		h.log.Error("chart repository credential could not be decrypted for redaction",
+			"repository", repo.Name, "error", err)
+		out.AuthConfig = redactAuthConfigJSON(catalog.StripAuthConfigSecrets(repo.AuthConfig))
+		return out
+	}
+	out.AuthConfig = redactAuthConfigJSON(resolved)
 	return out
 }
 
-func redactHelmRepositories(repos []sqlc.HelmRepository) []sqlc.HelmRepository {
+func (h *CatalogHandler) redactHelmRepositories(repos []sqlc.HelmRepository) []sqlc.HelmRepository {
 	if len(repos) == 0 {
 		return repos
 	}
 	out := make([]sqlc.HelmRepository, len(repos))
 	for i := range repos {
-		out[i] = redactHelmRepository(repos[i])
+		out[i] = h.redactHelmRepository(repos[i])
 	}
 	return out
 }
@@ -1417,8 +1640,11 @@ func redactAuthConfigJSON(raw json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
 		return json.RawMessage(`{}`)
 	}
-	secretKeys := []string{"password", "token", "bearer", "secret", "client_secret", "access_token", "refresh_token"}
-	for _, k := range secretKeys {
+	// The one list, not a copy of it. redactHelmRepository now feeds the
+	// DECRYPTED document in here, so a key that catalog.SealAuthConfig knows
+	// is secret but this function did not would be stripped into the envelope
+	// and then emitted in the clear in every list/get response.
+	for _, k := range catalog.AuthConfigSecretKeys {
 		if v, ok := m[k]; ok {
 			if s, isStr := v.(string); isStr && s != "" {
 				m[k] = SecretSentinel
@@ -1447,8 +1673,9 @@ func mergeAuthConfigPreservingSentinel(existing, incoming json.RawMessage) json.
 	if ex == nil {
 		ex = map[string]any{}
 	}
-	secretKeys := []string{"password", "token", "bearer", "secret", "client_secret", "access_token", "refresh_token"}
-	for _, k := range secretKeys {
+	// Same list the sealing and redaction paths use; see
+	// catalog.AuthConfigSecretKeys.
+	for _, k := range catalog.AuthConfigSecretKeys {
 		v, ok := in[k]
 		if !ok {
 			continue

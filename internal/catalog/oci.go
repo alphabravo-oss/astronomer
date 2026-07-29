@@ -77,11 +77,19 @@ func ParseOCIAuthConfig(raw []byte) OCIAuthConfig {
 // "anonymous" GHCR namespaces refuse it. We therefore prefer an explicit
 // chart-name list (auth_config.charts) and only attempt /v2/_catalog when
 // the operator opts in via auth_config.allow_catalog.
-func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, log *slog.Logger) (chartCount, versionCount int, err error) {
+func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, dec Decryptor, log *slog.Logger) (chartCount, versionCount int, err error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	cfg := ParseOCIAuthConfig(repo.AuthConfig)
+	// Fail the ingest rather than silently falling back to an anonymous pull:
+	// a private registry answers an anonymous pull with 401, which would be
+	// recorded against the repository as an upstream authentication problem
+	// and send the operator looking at registry ACLs instead of at the Fernet
+	// key. See ErrAuthConfigUnavailable.
+	cfg, err := ResolveOCIAuthConfig(repo, dec)
+	if err != nil {
+		return 0, 0, err
+	}
 	clientOpts := []registry.ClientOption{
 		registry.ClientOptWriter(io.Discard),
 	}

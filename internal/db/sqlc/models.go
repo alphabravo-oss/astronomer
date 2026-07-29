@@ -1222,6 +1222,7 @@ type HelmRepository struct {
 	OwnerProjectID      pgtype.UUID        `json:"owner_project_id"`
 	LastSyncError       string             `json:"last_sync_error"`
 	LastSyncAttemptedAt pgtype.Timestamptz `json:"last_sync_attempted_at"`
+	AuthConfigEncrypted string             `json:"auth_config_encrypted"`
 }
 
 type IdentityGroupMapping struct {

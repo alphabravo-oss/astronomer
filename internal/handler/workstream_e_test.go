@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -43,9 +44,10 @@ func TestSyncWindowOverrideNoteIsHonest(t *testing.T) {
 // --- Finding 2: private HTTP Helm repo index auth ---
 
 func TestApplyRepoIndexAuth(t *testing.T) {
+	h := &CatalogHandler{log: slog.Default()}
 	// basic auth
 	req := httptest.NewRequest(http.MethodGet, "https://charts.example.com/index.yaml", nil)
-	applyRepoIndexAuth(req, sqlc.HelmRepository{AuthType: "basic", AuthConfig: json.RawMessage(`{"username":"u","password":"p"}`)})
+	h.applyRepoIndexAuth(req, sqlc.HelmRepository{AuthType: "basic", AuthConfig: json.RawMessage(`{"username":"u","password":"p"}`)})
 	user, pass, ok := req.BasicAuth()
 	if !ok || user != "u" || pass != "p" {
 		t.Fatalf("basic auth not applied: ok=%v user=%q pass=%q", ok, user, pass)
@@ -53,14 +55,14 @@ func TestApplyRepoIndexAuth(t *testing.T) {
 
 	// bearer token
 	req2 := httptest.NewRequest(http.MethodGet, "https://charts.example.com/index.yaml", nil)
-	applyRepoIndexAuth(req2, sqlc.HelmRepository{AuthType: "bearer", AuthConfig: json.RawMessage(`{"token":"tok"}`)})
+	h.applyRepoIndexAuth(req2, sqlc.HelmRepository{AuthType: "bearer", AuthConfig: json.RawMessage(`{"token":"tok"}`)})
 	if got := req2.Header.Get("Authorization"); got != "Bearer tok" {
 		t.Fatalf("bearer auth header=%q want %q", got, "Bearer tok")
 	}
 
 	// no auth type → request left unauthenticated even if creds present
 	req3 := httptest.NewRequest(http.MethodGet, "https://charts.example.com/index.yaml", nil)
-	applyRepoIndexAuth(req3, sqlc.HelmRepository{AuthType: "", AuthConfig: json.RawMessage(`{"username":"u"}`)})
+	h.applyRepoIndexAuth(req3, sqlc.HelmRepository{AuthType: "", AuthConfig: json.RawMessage(`{"username":"u"}`)})
 	if got := req3.Header.Get("Authorization"); got != "" {
 		t.Fatalf("expected no Authorization header, got %q", got)
 	}

@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -163,6 +165,30 @@ type RuntimeDependencies struct {
 	// to the server pods' relays; in the server process it is the shared
 	// in-memory bus. Optional and nil-safe: publishers are fire-and-forget.
 	Bus *events.Bus
+	// CatalogDecryptor unwraps helm_repositories.auth_config_encrypted
+	// (migration 145) for the unattended catalog:sync sweep. The interactive
+	// handler and this sweep are SEPARATE readers of the same credential, and
+	// wiring only one of them is how an encryption-at-rest change ships half
+	// done: the operator clicks Sync and it works, then every scheduled sweep
+	// 401s. Nil-safe — a nil decryptor reads pre-145 (unsealed) rows fine and
+	// declines to authenticate sealed ones (see catalog.ResolveAuthConfig).
+	CatalogDecryptor catalog.Decryptor
+}
+
+// CatalogDecryptorFor adapts a possibly-nil *auth.Encryptor to the narrow
+// interface the catalog credential resolver takes.
+//
+// The explicit nil is the point: assigning a nil *auth.Encryptor straight into
+// an interface field yields a NON-nil interface holding a nil pointer, so
+// every `dec == nil` check downstream would pass and the first Decrypt would
+// panic on a nil receiver. Both processes that wire this (internal/server and
+// cmd/worker) can legitimately have no encryptor in development, so this is a
+// live path, not a theoretical one.
+func CatalogDecryptorFor(enc *auth.Encryptor) catalog.Decryptor {
+	if enc == nil {
+		return nil
+	}
+	return enc
 }
 
 // Enqueuer is the narrow asynq surface a task uses to enqueue a follow-up

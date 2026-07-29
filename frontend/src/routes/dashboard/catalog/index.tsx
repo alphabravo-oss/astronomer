@@ -20,6 +20,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { HelmValuesForm } from '@/components/catalog/helm-values-form';
 import { SuggestedCatalogs } from '@/components/catalog/suggested-catalogs';
+import { RepositoriesTable } from './-repositories-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { OverlayShell } from '@/components/ui/overlay-shell';
 import { formatRelativeTime, cn } from '@/lib/utils';
@@ -33,7 +34,6 @@ import {
   type HelmValuesSchemaNode,
 } from '@/lib/helm-values-schema';
 import type {
-  HelmRepository,
   HelmChart,
   HelmChartVersion,
   HelmChartCategory,
@@ -44,13 +44,11 @@ import {
   Package,
   Plus,
   Search,
-  RefreshCw,
   Trash2,
   X,
   Loader2,
   Download,
   RotateCcw,
-  Globe,
   ChevronDown,
   Braces,
   FileCode2,
@@ -222,104 +220,6 @@ function CatalogPage() {
     },
   ];
 
-  // --- Repository Table ---
-  const repoColumns: Column<HelmRepository>[] = [
-    {
-      key: 'name',
-      header: 'Name',
-      accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-foreground">{row.name}</span>
-          {row.isDefault && (
-            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">Default</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'url',
-      header: 'URL',
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground truncate max-w-[300px] block">{row.url}</span>
-      ),
-    },
-    {
-      key: 'type',
-      header: 'Type',
-      accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground uppercase">
-          {row.repoType}
-        </span>
-      ),
-    },
-    {
-      key: 'charts',
-      header: 'Charts',
-      accessor: (row) => (
-        <span className="tabular-nums text-sm text-muted-foreground">{row.chartCount}</span>
-      ),
-      sortAccessor: (row) => row.chartCount,
-      align: 'center',
-    },
-    {
-      key: 'lastSynced',
-      header: 'Last Synced',
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.lastSyncedAt ? formatRelativeTime(row.lastSyncedAt) : 'Never'}
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      // The scheduled sweep isolates failures per repository, so a repo can be
-      // Enabled and silently not refreshing. Surface last_sync_error here or
-      // the only trace is a worker log line.
-      accessor: (row) =>
-        row.enabled && row.lastSyncError ? (
-          <span title={row.lastSyncError}>
-            <StatusBadge status="failed" label="Sync failed" />
-          </span>
-        ) : (
-          <StatusBadge
-            status={row.enabled ? 'active' : 'disconnected'}
-            label={row.enabled ? 'Enabled' : 'Disabled'}
-          />
-        ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      accessor: (row) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => syncRepo.mutate(row.id)}
-            disabled={syncRepo.isPending}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground
-              hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Sync repository"
-          >
-            <RefreshCw className={cn('h-3 w-3', syncRepo.isPending && 'animate-spin')} />
-            Sync
-          </button>
-          <button
-            onClick={() => {
-              if (confirm(`Delete repository "${row.name}"?`)) {
-                deleteRepo.mutate(row.id);
-              }
-            }}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete repository"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
-      sortable: false,
-    },
-  ];
 
   return (
     <div className="space-y-6">
@@ -518,13 +418,12 @@ function CatalogPage() {
             <SuggestedCatalogs existing={repos} />
             <div className="space-y-3">
               <h2 className="text-sm font-semibold text-foreground">Your repositories</h2>
-              <DataTable
-                data={repos || []}
-                columns={repoColumns}
-                keyExtractor={(row) => row.id}
-                searchPlaceholder="Search repositories..."
+              <RepositoriesTable
+                repos={repos || []}
                 loading={reposLoading}
-                emptyMessage="No repositories configured"
+                onSync={(id) => syncRepo.mutate(id)}
+                onDelete={(id) => deleteRepo.mutate(id)}
+                syncPending={syncRepo.isPending}
               />
             </div>
           </div>

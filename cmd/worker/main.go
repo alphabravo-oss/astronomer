@@ -52,9 +52,16 @@ func main() {
 	// the check exists to surface. warn-only in dev (ValidateProductionSecurity
 	// is a no-op outside production).
 	encryptorReady := false
+	// Retained (not just probed) because the catalog:sync sweep needs it to
+	// unwrap helm_repositories.auth_config_encrypted — migration 145. The
+	// scheduled sweep and the interactive handler are separate readers of the
+	// same credential; a worker without this key syncs private chart
+	// repositories unauthenticated.
+	var platformEncryptor *auth.Encryptor
 	if cfg.EncryptionKey != "" {
-		if _, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
+		if e, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
 			encryptorReady = true
+			platformEncryptor = e
 		}
 	}
 	if secErr := config.ValidateProductionSecurity(cfg, encryptorReady); secErr != nil {
@@ -157,6 +164,7 @@ func main() {
 		Leader:                        leader.New(database.Pool(), log),
 		Enqueuer:                      runtimeEnqueuer,
 		Bus:                           eventBus,
+		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
 	})
 	var controlPlaneK8s kubernetes.Interface
 	var controlPlaneDyn dynamic.Interface

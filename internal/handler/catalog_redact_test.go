@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -14,7 +15,7 @@ func TestRedactHelmRepository_StripsSecrets(t *testing.T) {
 		AuthType:   "basic",
 		AuthConfig: json.RawMessage(`{"username":"u","password":"s3cret","token":"tok"}`),
 	}
-	out := redactHelmRepository(repo)
+	out := (&CatalogHandler{log: slog.Default()}).redactHelmRepository(repo)
 	var m map[string]any
 	if err := json.Unmarshal(out.AuthConfig, &m); err != nil {
 		t.Fatal(err)

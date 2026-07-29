@@ -866,6 +866,18 @@ func (q *fakeProjectCatalogQuerier) CountChartsByRepositoryIDs(_ context.Context
 	}
 	return n, nil
 }
+
+// CountChartsPerRepository mirrors the real GROUP BY: repositories with no
+// charts produce no row at all, so callers must default them to zero.
+func (q *fakeProjectCatalogQuerier) CountChartsPerRepository(_ context.Context, repoIDs []uuid.UUID) ([]sqlc.CountChartsPerRepositoryRow, error) {
+	out := []sqlc.CountChartsPerRepositoryRow{}
+	for _, rid := range repoIDs {
+		if n := len(q.chartsByRepo[rid]); n > 0 {
+			out = append(out, sqlc.CountChartsPerRepositoryRow{RepositoryID: rid, ChartCount: int64(n)})
+		}
+	}
+	return out, nil
+}
 func (q *fakeProjectCatalogQuerier) ListChartVersionStrings(context.Context, uuid.UUID) ([]string, error) {
 	return nil, nil
 }
@@ -874,4 +886,70 @@ func (q *fakeProjectCatalogQuerier) BulkCreateHelmChartVersions(context.Context,
 }
 func (q *fakeProjectCatalogQuerier) GetInstalledChartByClusterAndTool(context.Context, sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
 	return sqlc.InstalledChart{}, pgx.ErrNoRows
+}
+
+// ---------------------------------------------------------------------------
+// Credential handling parity with the admin CreateRepo path
+// ---------------------------------------------------------------------------
+
+// TestCreateProjectCatalog_InfersAuthTypeFromAuthConfig pins the second half of
+// the credential on the project-scoped endpoint.
+//
+// auth_type and auth_config are two halves of one thing: catalog.ApplyIndexAuth
+// returns early on an empty auth_type, so a catalog created with a perfectly
+// good username/password and no auth_type would be stored, encrypted, and then
+// never sent — the operator sees a 401 from the registry and reads it as a bad
+// password. CatalogHandler.CreateRepo was hardened against exactly this; both
+// handlers write the same helm_repositories row, so this one must be too.
+func TestCreateProjectCatalog_InfersAuthTypeFromAuthConfig(t *testing.T) {
+	h, q, projectA, _ := newProjectCatalogTestEnv(t)
+	caller := uuid.New()
+	q.users[caller] = sqlc.User{ID: caller}
+	body := mustMarshal(t, map[string]any{
+		"name":        "private",
+		"url":         "https://charts.example.com/private",
+		"auth_config": map[string]any{"username": "u", "password": "p"},
+	})
+	rec := httptest.NewRecorder()
+	req := authedReq(http.MethodPost, "/api/v1/projects/"+projectA.String()+"/catalogs/", body, caller, map[string]string{
+		"project_id": projectA.String(),
+	})
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var created sqlc.HelmRepositoryWithOwner
+	for _, cat := range q.catalogs {
+		created = cat
+	}
+	if created.AuthType != "basic" {
+		t.Fatalf("auth_type = %q, want %q — the credential would be stored and never sent", created.AuthType, "basic")
+	}
+}
+
+// TestCreateProjectCatalog_RejectsTopLevelCredentials is the other half of the
+// same parity: credentials posted at the top level of the body have never been
+// read by this API, and silently dropping them is how a private catalog ends up
+// configured with no credential at all.
+func TestCreateProjectCatalog_RejectsTopLevelCredentials(t *testing.T) {
+	h, q, projectA, _ := newProjectCatalogTestEnv(t)
+	caller := uuid.New()
+	q.users[caller] = sqlc.User{ID: caller}
+	body := mustMarshal(t, map[string]any{
+		"name":     "private",
+		"url":      "https://charts.example.com/private",
+		"username": "u",
+		"password": "p",
+	})
+	rec := httptest.NewRecorder()
+	req := authedReq(http.MethodPost, "/api/v1/projects/"+projectA.String()+"/catalogs/", body, caller, map[string]string{
+		"project_id": projectA.String(),
+	})
+	h.Create(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for top-level credentials; got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(q.catalogs) != 0 {
+		t.Fatalf("a catalog was created from a rejected request: %d rows", len(q.catalogs))
+	}
 }

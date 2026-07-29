@@ -79,3 +79,28 @@ func TestRewriteTargetsCoverAllEncryptedColumns(t *testing.T) {
 		}
 	}
 }
+
+// TestRewriteTargetsCoverChartRepositoryAuthConfig pins the migration-145
+// column explicitly.
+//
+// TestRewriteTargetsCoverAllEncryptedColumns above already derives this from
+// the migrations, but only because auth_config_encrypted was deliberately
+// shaped to match its regex ("*encrypted*" + TEXT). Had the ciphertext been
+// tucked inside the existing auth_config JSONB — the obvious "don't add a
+// column" alternative — that guard would have seen nothing, keyrotate would
+// have swept nothing, and every stored chart-repository credential would have
+// become undecryptable the first time an operator retired a key. This test
+// states the requirement directly so the reasoning survives a refactor of the
+// regex.
+func TestRewriteTargetsCoverChartRepositoryAuthConfig(t *testing.T) {
+	for _, tg := range rewriteTargets {
+		if tg.table == "helm_repositories" && tg.column == "auth_config_encrypted" {
+			if tg.idCol != "id" {
+				t.Fatalf("helm_repositories primary key column is %q, want \"id\"", tg.idCol)
+			}
+			return
+		}
+	}
+	t.Fatal("helm_repositories.auth_config_encrypted is not in rewriteTargets: " +
+		"a key rotation would leave every chart-repository credential encrypted under the retired key")
+}

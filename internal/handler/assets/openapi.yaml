@@ -2060,6 +2060,32 @@ components:
               type: integer
             failedCount:
               type: integer
+    HelmRepositoryAuthConfig:
+      type: object
+      description: |
+        Credential document for a chart repository. This is the ONLY place
+        credentials are accepted; the top level of the request body is not.
+
+        At rest the secret-valued keys live in a Fernet envelope
+        (`helm_repositories.auth_config_encrypted`, migration 145) and only the
+        non-secret keys stay queryable as JSONB. Responses replace every
+        non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
+        the ciphertext.
+      additionalProperties: true
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          description: write-only; read back as the redaction sentinel
+        token:
+          type: string
+          description: write-only; read back as the redaction sentinel
+        charts:
+          type: array
+          description: OCI only — the chart names to ingest from the registry.
+          items:
+            type: string
     HelmRepository:
       type: object
       properties:
@@ -2119,6 +2145,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        chart_count:
+          description: |
+            Number of charts ingested from this repository, used by the catalog
+            Repositories table. Enrichment computed per response, not a stored
+            column: a repository that has never synced reports 0.
+          type: integer
+          format: int64
     HelmChart:
       type: object
       properties:
@@ -11142,6 +11175,10 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
     post:
       summary: Create a helm repository (catalog)
+      description: |
+        Credentials go in `auth_config`, never at the top level of the body.
+        A request carrying a top-level `username`, `password` or `token` is
+        rejected with 400 rather than silently created without a credential.
       tags:
         - catalog
       security:
@@ -11169,11 +11206,19 @@ paths:
                   type: boolean
                 auth_type:
                   type: string
+                  description: |
+                    'none' | 'basic' | 'bearer'. Inferred from auth_config when
+                    empty (username/password → basic, token/bearer → bearer):
+                    a credential stored without an auth_type would never be
+                    sent.
                 auth_config:
-                  type: object
-                  description: raw JSON auth config (e.g. username/password/charts for OCI)
+                  $ref: '#/components/schemas/HelmRepositoryAuthConfig'
                 enabled:
                   type: boolean
+                  default: true
+                  description: |
+                    Defaults to true when absent. A disabled repository is
+                    skipped by the scheduled sync sweep entirely.
       responses:
         '201':
           description: Repository created.
@@ -11236,6 +11281,20 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
     put:
       summary: Update a helm repository
+      description: |
+        Every field is optional and **an absent field leaves the stored value
+        unchanged** — a body of `{"name":"new"}` renames the repository and
+        touches nothing else.
+
+        `auth_config` in particular: omit it to keep the stored credential,
+        send it to replace the whole credential document. Within a supplied
+        document, a secret whose value is the redaction sentinel
+        (`__ASTRONOMER_SECRET_UNCHANGED__`) or the empty string keeps its
+        stored value, so a redacted GET body can be edited and PUT straight
+        back. Send `auth_config: {}` to remove the credential outright.
+
+        Credentials at the top level of the body (`username`, `password`,
+        `token`) are rejected with 400.
       tags:
         - catalog
       security:
@@ -11267,7 +11326,7 @@ paths:
                 auth_type:
                   type: string
                 auth_config:
-                  type: object
+                  $ref: '#/components/schemas/HelmRepositoryAuthConfig'
                 enabled:
                   type: boolean
       responses:
@@ -11283,6 +11342,12 @@ paths:
                         $ref: '#/components/schemas/HelmRepository'
         '400':
           description: Invalid repository ID or body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Repository not found.
           content:
             application/json:
               schema:

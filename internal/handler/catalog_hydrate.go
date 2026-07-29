@@ -34,6 +34,7 @@ import (
 	"helm.sh/helm/v3/pkg/registry"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
@@ -166,16 +167,19 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 	if err != nil {
 		return nil, err
 	}
-	// Best-effort basic auth pass-through. The same auth_config format
-	// the OCI path consumes works here: {"username": "...", "password": "..."}.
-	if strings.EqualFold(repo.AuthType, "basic") && len(repo.AuthConfig) > 0 {
-		var creds struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		if err := json.Unmarshal(repo.AuthConfig, &creds); err == nil && creds.Username != "" {
-			req.SetBasicAuth(creds.Username, creds.Password)
-		}
+	// Best-effort auth pass-through. Same credential the index sweep uses,
+	// unwrapped from the migration-145 envelope by the same helper — this is a
+	// third reader of auth_config and reading the raw column here would send
+	// the stripped projection (no password) at a private repo.
+	//
+	// Same-host only, on the same shared helper as the sweep's chart-asset
+	// fetch (internal/worker/tasks/catalog_sync.go). `target` comes from the
+	// repository's own index.yaml and may be an absolute URL naming ANY host;
+	// GuardPublicHost above blocks loopback/private/metadata, not third
+	// parties. Without this guard a repo index pointing at attacker.example
+	// collects the operator's credential on the first lazy hydrate.
+	if catalog.SameHost(repo.Url, target) {
+		h.applyRepoIndexAuth(req, repo)
 	}
 
 	client := httpclient.SafeClient(60 * time.Second)
@@ -195,7 +199,10 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.HelmRepository, chart sqlc.HelmChart, version sqlc.HelmChartVersion) ([]byte, error) {
 	_ = ctx // registry.Client doesn't take a context; we rely on its internal HTTP defaults
 
-	cfg := parseOCIAuthConfig(repo.AuthConfig)
+	cfg, err := h.resolveOCIAuthConfig(repo)
+	if err != nil {
+		return nil, err
+	}
 	clientOpts := []registry.ClientOption{
 		registry.ClientOptWriter(io.Discard),
 	}

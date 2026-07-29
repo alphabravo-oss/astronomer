@@ -182,7 +182,7 @@ func syncOneRepository(ctx context.Context, repoRecord sqlc.HelmRepository) erro
 		// A correct OCI GC needs IngestOCIRepo to distinguish "saw no tags"
 		// from "could not ask", which is a change to that function's contract
 		// and out of scope for this item.
-		if _, _, err := ociIngest(ctx, runtimeDeps.Queries, repoRecord, runtimeLogger()); err != nil {
+		if _, _, err := ociIngest(ctx, runtimeDeps.Queries, repoRecord, runtimeDeps.CatalogDecryptor, runtimeLogger()); err != nil {
 			return err
 		}
 	case catalog.IsGitRepo(repoRecord):
@@ -296,7 +296,7 @@ func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL str
 	// private ChartMuseum/Artifactory/Nexus repo answers the unattended sweep
 	// with a 401 forever while its Sync button works, which reads as "the
 	// scheduler is broken" rather than "the scheduler never authenticated".
-	catalog.ApplyIndexAuth(req, repoRecord)
+	catalog.ApplyIndexAuth(req, repoRecord, runtimeDeps.CatalogDecryptor, runtimeLogger())
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -536,13 +536,11 @@ func fetchChartAssets(ctx context.Context, repoRecord sqlc.HelmRepository, urls 
 	// rows stick with an empty schema/values/README forever (the next sweep
 	// finds the row and skips it).
 	//
-	// Same-host only, which is helm's own rule: `helm repo add` passes the
-	// repository credentials to the chart URL only when it resolves to the
-	// repository's host, and requires --pass-credentials to go wider. Index
-	// entries routinely point at a CDN or a github release, and those are not
-	// places to send the operator's Artifactory password.
-	if sameHost(repoRecord.Url, chartURL) {
-		catalog.ApplyIndexAuth(req, repoRecord)
+	// Same-host only — see catalog.SameHost for why, and note that the
+	// handler's lazy-hydrate path guards on the same shared helper so the two
+	// chart-asset fetches cannot drift apart on this rule again.
+	if catalog.SameHost(repoRecord.Url, chartURL) {
+		catalog.ApplyIndexAuth(req, repoRecord, runtimeDeps.CatalogDecryptor, runtimeLogger())
 	}
 	resp, err := httpclient.SafeClient(catalogFetchTimeout).Do(req)
 	if err != nil {
@@ -576,20 +574,6 @@ func fetchChartAssets(ctx context.Context, repoRecord sqlc.HelmRepository, urls 
 		}
 	}
 	return defaultValues, schema, readme
-}
-
-// sameHost reports whether two URLs share scheme+host, i.e. whether the second
-// is still "the repository" for credential purposes.
-func sameHost(a, b string) bool {
-	ua, err := url.Parse(a)
-	if err != nil {
-		return false
-	}
-	ub, err := url.Parse(b)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
 }
 
 // resolveChartURL handles index entries whose URLs are relative to the repo.

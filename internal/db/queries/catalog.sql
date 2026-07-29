@@ -24,8 +24,11 @@ SELECT count(*) FROM helm_repositories WHERE owner_project_id IS NULL;
 SELECT * FROM helm_repositories WHERE enabled = true ORDER BY name ASC;
 
 -- name: CreateHelmRepository :one
-INSERT INTO helm_repositories (name, url, repo_type, description, is_default, auth_type, auth_config, enabled, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+-- auth_config carries only the non-secret projection (username, charts,
+-- allow_catalog); the complete document, secrets included, is the Fernet token
+-- in auth_config_encrypted. Migration 145.
+INSERT INTO helm_repositories (name, url, repo_type, description, is_default, auth_type, auth_config, auth_config_encrypted, enabled, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateHelmRepository :one
@@ -37,9 +40,49 @@ UPDATE helm_repositories SET
     is_default = $6,
     auth_type = $7,
     auth_config = $8,
-    enabled = $9
+    auth_config_encrypted = $9,
+    enabled = $10
 WHERE id = $1
 RETURNING *;
+
+-- name: ListHelmRepositoriesWithLegacyAuthConfig :many
+-- Rows that still hold their credential as plaintext JSONB, for the
+-- security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
+-- marker of a pre-145 row.
+--
+-- The EXISTS clause is what makes "returned by this query" mean "has something
+-- to seal", and it must stay in step with catalog.hasAuthConfigSecret: a
+-- non-empty STRING under one of catalog.AuthConfigSecretKeys. A looser
+-- predicate (auth_config <> '{}', or a bare key-existence test) also matches
+-- rows the sweep can never seal — an OCI repo whose auth_config is just
+-- {"charts":[...]}, or a repo with only a username. Those rows never leave the
+-- result set, so a full page of them ahead of a credentialed row would make
+-- the sweep re-read the same page forever and never reach the credential.
+SELECT * FROM helm_repositories
+WHERE auth_config_encrypted = ''
+  AND auth_config IS NOT NULL
+  AND EXISTS (
+        SELECT 1
+        FROM unnest(ARRAY[
+            'password', 'token', 'bearer', 'secret',
+            'client_secret', 'access_token', 'refresh_token'
+        ]) AS secret_key
+        WHERE jsonb_typeof(auth_config -> secret_key) = 'string'
+          AND auth_config ->> secret_key <> ''
+      )
+ORDER BY id
+LIMIT $1 OFFSET $2;
+
+-- name: SealHelmRepositoryAuthConfig :exec
+-- Compare-and-set on the empty ciphertext: two schedulers (server + dedicated
+-- worker both run this task) racing on the same row must not have the loser
+-- overwrite a freshly-sealed envelope with a re-encryption of a document it
+-- read before the winner stripped it.
+UPDATE helm_repositories
+   SET auth_config_encrypted = $2,
+       auth_config = $3
+ WHERE id = $1
+   AND auth_config_encrypted = '';
 
 -- name: UpdateHelmRepositoryLastSynced :exec
 -- A successful ingest advances the freshness clock AND clears any error left
@@ -65,6 +108,17 @@ DELETE FROM helm_repositories WHERE id = $1;
 
 -- name: CountHelmRepositories :one
 SELECT count(*) FROM helm_repositories;
+
+-- name: CountChartsPerRepository :many
+-- Chart totals for the catalog Repositories table, one aggregate for the whole
+-- page rather than a count per row. Distinct from CountChartsByRepositoryIDs,
+-- which returns a single grand total across the set for browse pagination.
+-- Repositories that have never ingested a chart produce no group, so the
+-- caller defaults a missing repository to 0.
+SELECT repository_id, count(*) AS chart_count
+FROM helm_charts
+WHERE repository_id = ANY(sqlc.arg(repository_ids)::uuid[])
+GROUP BY repository_id;
 
 -- Helm Charts
 

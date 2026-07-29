@@ -456,6 +456,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
 	catalogHandler.SetLogger(logger)
+	// Migration 145: chart-repository credentials are Fernet-sealed at rest.
+	catalogHandler.SetEncryptor(encryptor)
 	// P4.9 — catalog_release.changed liveness events on installed-chart writes.
 	catalogHandler.SetEventBus(bus)
 	backupHandler := handler.NewBackupHandler(queries)
@@ -622,6 +624,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// Per-project BYO catalogs (migration 061).
 	projectCatalogsHandler := handler.NewProjectCatalogHandler(queries)
 	projectCatalogsHandler.SetAuditor(queries)
+	projectCatalogsHandler.SetEncryptor(encryptor)
 	// Cluster groups (migration 066).
 	clusterGroupsHandler := handler.NewClusterGroupHandler(queries)
 	clusterGroupsHandler.SetAuditor(queries)
@@ -1758,6 +1761,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		K8s:            requester,
 		Enqueuer:       queue,
 		Bus:            bus,
+		// The in-server scheduler runs catalog:sync too, so this reader needs
+		// the same key the interactive handler above got (migration 145).
+		CatalogDecryptor: tasks.CatalogDecryptorFor(encryptor),
 	})
 	// Migration 092: durable task outbox dispatcher. Handlers can commit a
 	// task_outbox row in the same transaction as product state, and this

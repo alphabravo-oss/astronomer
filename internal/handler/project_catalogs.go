@@ -42,6 +42,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -74,11 +76,34 @@ type ProjectCatalogQuerier interface {
 type ProjectCatalogHandler struct {
 	queries ProjectCatalogQuerier
 	auditor any // recordAudit type-asserts to auditWriterV1 internally
+	// encryptor seals helm_repositories.auth_config (migration 145). This
+	// handler writes the same table as CatalogHandler, so it has to seal the
+	// same way or a project-owned private catalog would be the one row shape
+	// still storing its password in the clear.
+	encryptor *auth.Encryptor
 }
 
 // NewProjectCatalogHandler constructs the handler.
 func NewProjectCatalogHandler(q ProjectCatalogQuerier) *ProjectCatalogHandler {
 	return &ProjectCatalogHandler{queries: q}
+}
+
+// SetEncryptor wires the Fernet encryptor used for catalog credentials at rest.
+func (h *ProjectCatalogHandler) SetEncryptor(encryptor *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = encryptor
+}
+
+// sealer returns h.encryptor as a catalog.Encryptor, or a genuinely nil
+// interface when none is wired (see CatalogHandler.decryptor for why the
+// explicit nil matters).
+func (h *ProjectCatalogHandler) sealer() catalog.Encryptor {
+	if h == nil || h.encryptor == nil {
+		return nil
+	}
+	return h.encryptor
 }
 
 // SetAuditor wires the audit writer. Best-effort; nil-safe.
@@ -121,6 +146,12 @@ type CreateProjectCatalogRequest struct {
 	AuthType    string          `json:"auth_type"`
 	AuthConfig  json.RawMessage `json:"auth_config"`
 	Enabled     *bool           `json:"enabled,omitempty"`
+
+	// Rejected, not accepted — see misplacedCredentialFields. This endpoint
+	// writes the same helm_repositories row as CatalogHandler.CreateRepo, so
+	// it owes callers the same 400 instead of quietly dropping a credential
+	// posted at the top level.
+	misplacedCredentialFields
 }
 
 // --- Helpers ---------------------------------------------------------------
@@ -262,26 +293,42 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Catalog URL is required")
 		return
 	}
+	if !rejectMisplacedCredentials(w, r, req.misplacedCredentialFields) {
+		return
+	}
 	if req.AuthConfig == nil {
 		req.AuthConfig = json.RawMessage(`{}`)
 	}
 	if req.RepoType == "" && IsOCIRepo(req.URL) {
 		req.RepoType = "oci"
 	}
+	// Both halves of the credential, same as CatalogHandler.CreateRepo: an
+	// auth_config carrying a username/password with no auth_type would be
+	// stored and encrypted and then never sent, because ApplyIndexAuth
+	// short-circuits on an empty auth_type. A stated auth_type always wins.
+	if req.AuthType == "" {
+		req.AuthType = catalog.InferAuthType(req.AuthConfig)
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	sealed, publicCfg, err := catalog.SealAuthConfig(req.AuthConfig, h.sealer())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to secure catalog credentials")
+		return
+	}
 	cat, err := h.queries.CreateProjectOwnedCatalog(r.Context(), sqlc.CreateProjectOwnedCatalogParams{
-		Name:        req.Name,
-		Url:         req.URL,
-		RepoType:    req.RepoType,
-		Description: req.Description,
-		IsDefault:   false,
-		AuthType:    req.AuthType,
-		AuthConfig:  req.AuthConfig,
-		Enabled:     enabled,
-		CreatedByID: currentUserUUID(r),
+		Name:                req.Name,
+		Url:                 req.URL,
+		RepoType:            req.RepoType,
+		Description:         req.Description,
+		IsDefault:           false,
+		AuthType:            req.AuthType,
+		AuthConfig:          publicCfg,
+		AuthConfigEncrypted: sealed,
+		Enabled:             enabled,
+		CreatedByID:         currentUserUUID(r),
 		OwnerProjectID: pgtype.UUID{
 			Bytes: projectID,
 			Valid: true,

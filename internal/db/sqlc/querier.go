@@ -133,6 +133,12 @@ type Querier interface {
 	CountBackups(ctx context.Context) (int64, error)
 	CountBlessedCharts(ctx context.Context) (int64, error)
 	CountChartsByRepositoryIDs(ctx context.Context, repositoryIds []uuid.UUID) (int64, error)
+	// Chart totals for the catalog Repositories table, one aggregate for the whole
+	// page rather than a count per row. Distinct from CountChartsByRepositoryIDs,
+	// which returns a single grand total across the set for browse pagination.
+	// Repositories that have never ingested a chart produce no group, so the
+	// caller defaults a missing repository to 0.
+	CountChartsPerRepository(ctx context.Context, repositoryIds []uuid.UUID) ([]CountChartsPerRepositoryRow, error)
 	// Counts attempts for a (cluster, type) within a window. The reconciler
 	// uses this as a daily-cap circuit breaker so a permanently-broken
 	// cluster can't drive unbounded token reissuance / audit-log growth.
@@ -345,6 +351,9 @@ type Querier interface {
 	CreateGroupSyncProjectBindingForConnector(ctx context.Context, arg CreateGroupSyncProjectBindingForConnectorParams) (ProjectRoleBinding, error)
 	CreateHelmChart(ctx context.Context, arg CreateHelmChartParams) (HelmChart, error)
 	CreateHelmChartVersion(ctx context.Context, arg CreateHelmChartVersionParams) (HelmChartVersion, error)
+	// auth_config carries only the non-secret projection (username, charts,
+	// allow_catalog); the complete document, secrets included, is the Fernet token
+	// in auth_config_encrypted. Migration 145.
 	CreateHelmRepository(ctx context.Context, arg CreateHelmRepositoryParams) (HelmRepository, error)
 	CreateInstalledChart(ctx context.Context, arg CreateInstalledChartParams) (InstalledChart, error)
 	// Kubectl shell session bookkeeping (migration 065).
@@ -1343,6 +1352,19 @@ type Querier interface {
 	ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg ListGroupSyncProjectBindingsForConnectorParams) ([]ProjectRoleBinding, error)
 	ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) ([]HelmChart, error)
 	ListHelmRepositories(ctx context.Context, arg ListHelmRepositoriesParams) ([]HelmRepository, error)
+	// Rows that still hold their credential as plaintext JSONB, for the
+	// security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
+	// marker of a pre-145 row.
+	//
+	// The EXISTS clause is what makes "returned by this query" mean "has something
+	// to seal", and it must stay in step with catalog.hasAuthConfigSecret: a
+	// non-empty STRING under one of catalog.AuthConfigSecretKeys. A looser
+	// predicate (auth_config <> '{}', or a bare key-existence test) also matches
+	// rows the sweep can never seal — an OCI repo whose auth_config is just
+	// {"charts":[...]}, or a repo with only a username. Those rows never leave the
+	// result set, so a full page of them ahead of a credentialed row would make
+	// the sweep re-read the same page forever and never reach the credential.
+	ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, arg ListHelmRepositoriesWithLegacyAuthConfigParams) ([]HelmRepository, error)
 	ListInstalledCharts(ctx context.Context, arg ListInstalledChartsParams) ([]InstalledChart, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg ListInstalledChartsByClusterParams) ([]InstalledChart, error)
 	// Active installed charts the tool-drift sweep probes against their live
@@ -1798,6 +1820,11 @@ type Querier interface {
 	// adopts the new one), token/token_hash become the freshly-minted values,
 	// last_rotated_at is stamped and rotation_pending_at is cleared.
 	RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error)
+	// Compare-and-set on the empty ciphertext: two schedulers (server + dedicated
+	// worker both run this task) racing on the same row must not have the loser
+	// overwrite a freshly-sealed envelope with a re-encryption of a document it
+	// read before the winner stripped it.
+	SealHelmRepositoryAuthConfig(ctx context.Context, arg SealHelmRepositoryAuthConfigParams) error
 	// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
 	// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
 	// when a rotation is already in flight: rotation_pending_at already set (trigger

@@ -12,7 +12,8 @@
 -- name: ListCatalogsForProject :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
+       auth_config_encrypted
 FROM helm_repositories
 WHERE owner_project_id IS NULL
    OR owner_project_id = sqlc.arg(project_id)::uuid
@@ -45,7 +46,8 @@ WHERE project_id = $1 AND catalog_id = $2;
 -- name: ListProjectOwnedCatalogs :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
+       auth_config_encrypted
 FROM helm_repositories
 WHERE owner_project_id = sqlc.arg(project_id)::uuid
 ORDER BY name ASC;
@@ -53,23 +55,26 @@ ORDER BY name ASC;
 -- name: GetHelmRepositoryWithOwner :one
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
+       auth_config_encrypted
 FROM helm_repositories
 WHERE id = $1;
 
 -- name: CreateProjectOwnedCatalog :one
 INSERT INTO helm_repositories (
     name, url, repo_type, description, is_default, auth_type,
-    auth_config, enabled, created_by_id, owner_project_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    auth_config, enabled, created_by_id, owner_project_id, auth_config_encrypted
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING id, name, url, repo_type, description, is_default, auth_type,
           auth_config, enabled, last_synced_at, created_by_id, created_at,
-          updated_at, owner_project_id, last_sync_error, last_sync_attempted_at;
+          updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
+          auth_config_encrypted;
 
 -- name: ListAdminCatalogsIncludingProjectOwned :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
-       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at
+       updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
+       auth_config_encrypted
 FROM helm_repositories
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;

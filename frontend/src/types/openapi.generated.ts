@@ -771,7 +771,14 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
           "owner_project_id"?: string | null;
+          "chart_count"?: number;
         };
+    HelmRepositoryAuthConfig: {
+          "username"?: string;
+          "password"?: string;
+          "token"?: string;
+          "charts"?: string[];
+        } & Record<string, unknown>;
     InhibitionMatcher: {
           "label": string;
           "value": string;
@@ -1686,6 +1693,7 @@ export type FleetOperationTargetResponse = OpenAPIComponents['schemas']['FleetOp
 export type HelmChart = OpenAPIComponents['schemas']['HelmChart'];
 export type HelmChartVersion = OpenAPIComponents['schemas']['HelmChartVersion'];
 export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];
+export type HelmRepositoryAuthConfig = OpenAPIComponents['schemas']['HelmRepositoryAuthConfig'];
 export type InhibitionMatcher = OpenAPIComponents['schemas']['InhibitionMatcher'];
 export type InhibitionRequest = OpenAPIComponents['schemas']['InhibitionRequest'];
 export type InstalledAppEnriched = OpenAPIComponents['schemas']['InstalledAppEnriched'];

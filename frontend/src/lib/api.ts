@@ -1495,6 +1495,31 @@ export async function getHelmRepositories() {
   return res.data.data;
 }
 
+/**
+ * Create a chart repository.
+ *
+ * The argument stays camelCase because that is what the rest of the frontend
+ * speaks; the BODY is written snake_case here, at the transport boundary,
+ * because that is what the API speaks. Only responses are translated
+ * automatically (the `camelizeKeys` interceptor above) — there is no request
+ * interceptor, so an outgoing body has to be spelled the way the server
+ * reads it.
+ *
+ * This function used to POST `data` verbatim, which meant:
+ *
+ *   - `repoType` instead of `repo_type`, so the type the operator chose was
+ *     discarded and the repo was stored with an empty type;
+ *   - `username`/`password` at the top level, where the handler never looks —
+ *     it reads `auth_config`. A private repository was created with NO
+ *     credential and the first symptom was a 401 from the registry days
+ *     later, which reads as a wrong password rather than a dropped one;
+ *   - no `enabled`, which decoded to Go's zero value `false`, so every
+ *     repository added from the UI was created DISABLED and the scheduled
+ *     sweep (ListEnabledHelmRepositories) skipped it forever.
+ *
+ * The backend now answers 400 for top-level credentials rather than dropping
+ * them, so this shape cannot regress silently.
+ */
 export async function createHelmRepository(data: {
   name: string;
   url: string;
@@ -1503,7 +1528,21 @@ export async function createHelmRepository(data: {
   username?: string;
   password?: string;
 }) {
-  const res = await api.post<APIResponse<import('@/types').HelmRepository>>('/catalog/repositories', data);
+  const authConfig: Record<string, string> = {};
+  if (data.username) authConfig.username = data.username;
+  if (data.password) authConfig.password = data.password;
+  const body = {
+    name: data.name,
+    url: data.url,
+    repo_type: data.repoType,
+    description: data.description,
+    enabled: true,
+    // auth_type gates whether the credential is sent at all: the sync path
+    // short-circuits on 'none'.
+    auth_type: Object.keys(authConfig).length > 0 ? 'basic' : 'none',
+    auth_config: authConfig,
+  };
+  const res = await api.post<APIResponse<import('@/types').HelmRepository>>('/catalog/repositories', body);
   return res.data.data;
 }
 

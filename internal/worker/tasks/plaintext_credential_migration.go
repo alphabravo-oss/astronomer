@@ -8,6 +8,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -18,6 +19,9 @@ type PlaintextCredentialMigrationQuerier interface {
 	UpdateBackupStorageConfig(ctx context.Context, arg sqlc.UpdateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error)
 	ListAllClusterRegistryConfigs(ctx context.Context) ([]sqlc.ClusterRegistryConfig, error)
 	UpdateClusterRegistryConfig(ctx context.Context, arg sqlc.UpdateClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error)
+	// Migration 145 — chart-repository credentials.
+	ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, arg sqlc.ListHelmRepositoriesWithLegacyAuthConfigParams) ([]sqlc.HelmRepository, error)
+	SealHelmRepositoryAuthConfig(ctx context.Context, arg sqlc.SealHelmRepositoryAuthConfigParams) error
 }
 
 type PlaintextCredentialMigrationDeps struct {
@@ -51,7 +55,69 @@ func HandlePlaintextCredentialMigration(ctx context.Context, _ *asynq.Task) erro
 	if err := migrateClusterRegistryCredentials(ctx, deps); err != nil {
 		return err
 	}
+	if err := migrateHelmRepositoryAuthConfigs(ctx, deps); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateHelmRepositoryAuthConfigs seals pre-145 chart-repository credentials.
+//
+// This is what ends the upgrade window opened by migration 145: the migration
+// can only add the column (SQL has no access to the Fernet key), so every
+// existing row arrives with an empty auth_config_encrypted and its password still
+// in the clear in the JSONB. Readers tolerate that shape, which is what keeps
+// an upgrade from breaking every authenticated repository — but tolerating it
+// forever would mean the security fix only ever applied to repositories
+// somebody happened to re-save. This runs @every 6h in both the server and the
+// dedicated worker, so the window closes on its own.
+func migrateHelmRepositoryAuthConfigs(ctx context.Context, deps PlaintextCredentialMigrationDeps) error {
+	const pageSize int32 = 500
+	// Rows this sweep has looked at and could NOT seal. Sealing removes a row
+	// from the query's predicate, so the unsealed remainder always begins with
+	// exactly these — offsetting by their count lands on the first row not yet
+	// visited, which is the same walk the two converters below perform.
+	//
+	// The query only returns rows that carry a non-empty secret, so this
+	// should stay 0; it exists so that a disagreement between the SQL
+	// predicate and catalog.SealAuthConfig degrades into skipping a row rather
+	// than re-reading the same page forever. Encryption that silently stops
+	// half-done is the failure this whole task exists to prevent.
+	skipped := int32(0)
+	for {
+		rows, err := deps.Queries.ListHelmRepositoriesWithLegacyAuthConfig(ctx, sqlc.ListHelmRepositoriesWithLegacyAuthConfigParams{
+			Limit:  pageSize,
+			Offset: skipped,
+		})
+		if err != nil {
+			return fmt.Errorf("list chart repositories with plaintext auth_config: %w", err)
+		}
+		for _, row := range rows {
+			ciphertext, public, err := catalog.SealAuthConfig(row.AuthConfig, deps.Encryptor)
+			if err != nil {
+				return fmt.Errorf("encrypt chart repository auth_config %s: %w", row.ID, err)
+			}
+			if ciphertext == "" {
+				// Nothing to protect (a `charts` list, a bare username), and
+				// writing an envelope anyway would move the chart list out of
+				// the catalog API's reach. Walk past it.
+				runtimeLogger().WarnContext(ctx, "chart repository matched the plaintext-credential sweep but carries no sealable secret",
+					"repository_id", row.ID)
+				skipped++
+				continue
+			}
+			if err := deps.Queries.SealHelmRepositoryAuthConfig(ctx, sqlc.SealHelmRepositoryAuthConfigParams{
+				ID:                  row.ID,
+				AuthConfigEncrypted: ciphertext,
+				AuthConfig:          public,
+			}); err != nil {
+				return fmt.Errorf("seal chart repository auth_config %s: %w", row.ID, err)
+			}
+		}
+		if int32(len(rows)) < pageSize {
+			return nil
+		}
+	}
 }
 
 func migrateBackupStorageCredentials(ctx context.Context, deps PlaintextCredentialMigrationDeps) error {

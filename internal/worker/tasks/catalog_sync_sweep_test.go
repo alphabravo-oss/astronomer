@@ -261,7 +261,7 @@ func TestHandleCatalogSyncIngestsOCIRepos(t *testing.T) {
 	runtimeDeps = RuntimeDependencies{Queries: q, Log: slog.Default()}
 
 	var ingested []string
-	ociIngest = func(_ context.Context, _ catalog.OCIQuerier, repo sqlc.HelmRepository, _ *slog.Logger) (int, int, error) {
+	ociIngest = func(_ context.Context, _ catalog.OCIQuerier, repo sqlc.HelmRepository, _ catalog.Decryptor, _ *slog.Logger) (int, int, error) {
 		ingested = append(ingested, repo.Url)
 		return 1, 3, nil
 	}

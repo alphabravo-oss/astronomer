@@ -1485,20 +1485,61 @@ type HelmChartVersion struct {
 
 // HelmRepository defines model for HelmRepository.
 type HelmRepository struct {
-	AuthConfig     *map[string]interface{} `json:"auth_config,omitempty"`
-	AuthType       *string                 `json:"auth_type,omitempty"`
-	CreatedAt      *time.Time              `json:"created_at,omitempty"`
-	CreatedById    *openapi_types.UUID     `json:"created_by_id"`
-	Description    *string                 `json:"description,omitempty"`
-	Enabled        *bool                   `json:"enabled,omitempty"`
-	Id             *openapi_types.UUID     `json:"id,omitempty"`
-	IsDefault      *bool                   `json:"is_default,omitempty"`
-	LastSyncedAt   *time.Time              `json:"last_synced_at"`
-	Name           *string                 `json:"name,omitempty"`
-	OwnerProjectId *openapi_types.UUID     `json:"owner_project_id"`
-	RepoType       *string                 `json:"repo_type,omitempty"`
-	UpdatedAt      *time.Time              `json:"updated_at,omitempty"`
-	Url            *string                 `json:"url,omitempty"`
+	AuthConfig *map[string]interface{} `json:"auth_config,omitempty"`
+	AuthType   *string                 `json:"auth_type,omitempty"`
+
+	// ChartCount Number of charts ingested from this repository, used by the catalog
+	// Repositories table. Enrichment computed per response, not a stored
+	// column: a repository that has never synced reports 0.
+	ChartCount  *int64              `json:"chart_count,omitempty"`
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
+	CreatedById *openapi_types.UUID `json:"created_by_id"`
+	Description *string             `json:"description,omitempty"`
+	Enabled     *bool               `json:"enabled,omitempty"`
+	Id          *openapi_types.UUID `json:"id,omitempty"`
+	IsDefault   *bool               `json:"is_default,omitempty"`
+
+	// LastSyncAttemptedAt Last time the scheduled sweep or the Sync button tried this
+	// repository, successfully or not. Compare with last_synced_at to
+	// tell "failing" from "no longer being visited".
+	LastSyncAttemptedAt *time.Time `json:"last_sync_attempted_at"`
+
+	// LastSyncError Why the most recent sync attempt failed; empty when the last
+	// attempt succeeded. The scheduled catalog sweep isolates failures
+	// per repository, so this is the per-repo reason a repository is not
+	// refreshing while the rest of the catalog is.
+	LastSyncError *string `json:"last_sync_error,omitempty"`
+
+	// LastSyncedAt Last SUCCESSFUL ingest. A failed sync attempt deliberately does not
+	// advance it, so a repository that has been failing keeps reporting
+	// its real (stale) freshness.
+	LastSyncedAt   *time.Time          `json:"last_synced_at"`
+	Name           *string             `json:"name,omitempty"`
+	OwnerProjectId *openapi_types.UUID `json:"owner_project_id"`
+	RepoType       *string             `json:"repo_type,omitempty"`
+	UpdatedAt      *time.Time          `json:"updated_at,omitempty"`
+	Url            *string             `json:"url,omitempty"`
+}
+
+// HelmRepositoryAuthConfig Credential document for a chart repository. This is the ONLY place
+// credentials are accepted; the top level of the request body is not.
+//
+// At rest the secret-valued keys live in a Fernet envelope
+// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
+// non-secret keys stay queryable as JSONB. Responses replace every
+// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
+// the ciphertext.
+type HelmRepositoryAuthConfig struct {
+	// Charts OCI only — the chart names to ingest from the registry.
+	Charts *[]string `json:"charts,omitempty"`
+
+	// Password write-only; read back as the redaction sentinel
+	Password *string `json:"password,omitempty"`
+
+	// Token write-only; read back as the redaction sentinel
+	Token                *string                `json:"token,omitempty"`
+	Username             *string                `json:"username,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // InhibitionMatcher defines model for InhibitionMatcher.
@@ -3035,13 +3076,28 @@ type GetApiV1CatalogRepositoriesParams struct {
 
 // PostApiV1CatalogRepositoriesJSONBody defines parameters for PostApiV1CatalogRepositories.
 type PostApiV1CatalogRepositoriesJSONBody struct {
-	// AuthConfig raw JSON auth config (e.g. username/password/charts for OCI)
-	AuthConfig  *map[string]interface{} `json:"auth_config,omitempty"`
-	AuthType    *string                 `json:"auth_type,omitempty"`
-	Description *string                 `json:"description,omitempty"`
-	Enabled     *bool                   `json:"enabled,omitempty"`
-	IsDefault   *bool                   `json:"is_default,omitempty"`
-	Name        string                  `json:"name"`
+	// AuthConfig Credential document for a chart repository. This is the ONLY place
+	// credentials are accepted; the top level of the request body is not.
+	//
+	// At rest the secret-valued keys live in a Fernet envelope
+	// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
+	// non-secret keys stay queryable as JSONB. Responses replace every
+	// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
+	// the ciphertext.
+	AuthConfig *HelmRepositoryAuthConfig `json:"auth_config,omitempty"`
+
+	// AuthType 'none' | 'basic' | 'bearer'. Inferred from auth_config when
+	// empty (username/password → basic, token/bearer → bearer):
+	// a credential stored without an auth_type would never be
+	// sent.
+	AuthType    *string `json:"auth_type,omitempty"`
+	Description *string `json:"description,omitempty"`
+
+	// Enabled Defaults to true when absent. A disabled repository is
+	// skipped by the scheduled sync sweep entirely.
+	Enabled   *bool  `json:"enabled,omitempty"`
+	IsDefault *bool  `json:"is_default,omitempty"`
+	Name      string `json:"name"`
 
 	// RepoType auto-detected as 'oci' for oci:// URLs when empty
 	RepoType *string `json:"repo_type,omitempty"`
@@ -3050,14 +3106,22 @@ type PostApiV1CatalogRepositoriesJSONBody struct {
 
 // PutApiV1CatalogRepositoriesIdJSONBody defines parameters for PutApiV1CatalogRepositoriesId.
 type PutApiV1CatalogRepositoriesIdJSONBody struct {
-	AuthConfig  *map[string]interface{} `json:"auth_config,omitempty"`
-	AuthType    *string                 `json:"auth_type,omitempty"`
-	Description *string                 `json:"description,omitempty"`
-	Enabled     *bool                   `json:"enabled,omitempty"`
-	IsDefault   *bool                   `json:"is_default,omitempty"`
-	Name        *string                 `json:"name,omitempty"`
-	RepoType    *string                 `json:"repo_type,omitempty"`
-	Url         *string                 `json:"url,omitempty"`
+	// AuthConfig Credential document for a chart repository. This is the ONLY place
+	// credentials are accepted; the top level of the request body is not.
+	//
+	// At rest the secret-valued keys live in a Fernet envelope
+	// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
+	// non-secret keys stay queryable as JSONB. Responses replace every
+	// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
+	// the ciphertext.
+	AuthConfig  *HelmRepositoryAuthConfig `json:"auth_config,omitempty"`
+	AuthType    *string                   `json:"auth_type,omitempty"`
+	Description *string                   `json:"description,omitempty"`
+	Enabled     *bool                     `json:"enabled,omitempty"`
+	IsDefault   *bool                     `json:"is_default,omitempty"`
+	Name        *string                   `json:"name,omitempty"`
+	RepoType    *string                   `json:"repo_type,omitempty"`
+	Url         *string                   `json:"url,omitempty"`
 }
 
 // GetApiV1ClusterTemplatesParams defines parameters for GetApiV1ClusterTemplates.
@@ -5325,6 +5389,119 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 		object["updated_at"], err = json.Marshal(a.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for HelmRepositoryAuthConfig. Returns the specified
+// element and whether it was found
+func (a HelmRepositoryAuthConfig) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for HelmRepositoryAuthConfig
+func (a *HelmRepositoryAuthConfig) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for HelmRepositoryAuthConfig to handle AdditionalProperties
+func (a *HelmRepositoryAuthConfig) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["charts"]; found {
+		err = json.Unmarshal(raw, &a.Charts)
+		if err != nil {
+			return fmt.Errorf("error reading 'charts': %w", err)
+		}
+		delete(object, "charts")
+	}
+
+	if raw, found := object["password"]; found {
+		err = json.Unmarshal(raw, &a.Password)
+		if err != nil {
+			return fmt.Errorf("error reading 'password': %w", err)
+		}
+		delete(object, "password")
+	}
+
+	if raw, found := object["token"]; found {
+		err = json.Unmarshal(raw, &a.Token)
+		if err != nil {
+			return fmt.Errorf("error reading 'token': %w", err)
+		}
+		delete(object, "token")
+	}
+
+	if raw, found := object["username"]; found {
+		err = json.Unmarshal(raw, &a.Username)
+		if err != nil {
+			return fmt.Errorf("error reading 'username': %w", err)
+		}
+		delete(object, "username")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for HelmRepositoryAuthConfig to handle AdditionalProperties
+func (a HelmRepositoryAuthConfig) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.Charts != nil {
+		object["charts"], err = json.Marshal(a.Charts)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'charts': %w", err)
+		}
+	}
+
+	if a.Password != nil {
+		object["password"], err = json.Marshal(a.Password)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'password': %w", err)
+		}
+	}
+
+	if a.Token != nil {
+		object["token"], err = json.Marshal(a.Token)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'token': %w", err)
+		}
+	}
+
+	if a.Username != nil {
+		object["username"], err = json.Marshal(a.Username)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'username': %w", err)
 		}
 	}
 
@@ -43579,6 +43756,7 @@ type PutApiV1CatalogRepositoriesIdResponse struct {
 		Data HelmRepository `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
+	JSON404 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
 }
 
@@ -63031,6 +63209,13 @@ func ParsePutApiV1CatalogRepositoriesIdResponse(rsp *http.Response) (*PutApiV1Ca
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorEnvelope

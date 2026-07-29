@@ -31,6 +31,7 @@ classification.
 | `cluster_registry_configs.registry_password_encrypted` | encrypted | Fernet ciphertext for registry passwords; new registry writes use this column when a Fernet key is configured. |
 | `scim_tokens.token_hash` | hashed | Lookup hash for SCIM provisioning bearer tokens; plaintext is shown once at creation and never stored. |
 | `dex_settings.public_clients_encrypted` | encrypted | Fernet ciphertext containing canonical Dex static-client JSON. It becomes authoritative after the explicit quiesced cutover. |
+| `helm_repositories.auth_config_encrypted` | encrypted | Fernet ciphertext over the COMPLETE chart-repository auth_config document (migration 145). Authoritative whenever non-empty; `auth_config` then holds only the non-secret projection (username, charts, allow_catalog). |
 
 ## Legacy Plaintext To Migrate
 
@@ -42,6 +43,8 @@ classification.
 | `backup_storage_configs.access_key` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
 | `backup_storage_configs.secret_key` | deprecated plaintext credential | New encrypted writes blank this column; `security:migrate_plaintext_credentials` encrypts and blanks legacy rows when a Fernet key is configured. |
 | `dex_settings.public_clients` | mixed-version compatibility credential | Dual-written only until `keyrotate --dex-public-clients-cutover-confirmed` CAS-scrubs it and stamps `public_clients_cutover_at`; later writes are DB-rejected. |
+| `helm_repositories.auth_config` | non-secret projection, plus pre-145 legacy rows | New writes strip every secret key into `auth_config_encrypted`. Rows created before migration 145 still hold the whole document, including the password, and are readable as such until `security:migrate_plaintext_credentials` (@every 6h) seals them. Readers disambiguate on `auth_config_encrypted = ''`, never by inspecting the bytes. |
+| `monitoring_backends.auth_config` | **UNFIXED plaintext credential** | Same finding as `helm_repositories.auth_config` was: bare JSONB (002_monitoring.up.sql:9), written by `UpdateBackendConfig`, read by `internal/monitoring/prometheus.go` to authenticate to Thanos/Prometheus/Alertmanager. Deliberately not addressed in 145 — the column doubles as a config bag (`operationPolicies`, `sharedAlertingAssets`) with at least four read-modify-write call sites, each of which must become resolve → mutate → re-seal or it silently drops the credential. Tracked as its own unit of work; see the block comment in 145_helm_repository_auth_config_encrypted.up.sql. |
 
 ## Non-Secret References Or Metadata
 

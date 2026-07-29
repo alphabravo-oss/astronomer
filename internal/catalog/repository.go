@@ -10,8 +10,6 @@
 package catalog
 
 import (
-	"encoding/json"
-	"net/http"
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
@@ -86,45 +84,13 @@ func IsGitRepo(repo sqlc.HelmRepository) bool {
 // username/password; a bearer token can be supplied under either "token" or
 // "bearer".
 //
-// NOTE: auth_config is plaintext JSONB (migration 001) — there is no Fernet
-// wrapper on this column, so there is no decrypt step to get wrong and both
-// the handler and the worker read the credential the same way.
+// It describes the DECRYPTED document. Since migration 145 the credential is
+// held as a Fernet envelope in auth_config_encrypted; construct this via
+// ResolveIndexAuthConfig (authconfig.go) rather than unmarshalling
+// repo.AuthConfig, which after sealing carries the non-secret projection only.
 type IndexAuthConfig struct {
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 	Token    string `json:"token,omitempty"`
 	Bearer   string `json:"bearer,omitempty"`
-}
-
-// ApplyIndexAuth sets the Authorization header on an index.yaml (or
-// test-connection) request from the repository's stored credentials, so
-// private ChartMuseum / Artifactory / Nexus repos can be synced. Mirrors the
-// OCI ingest branch, which already honours username/password. A repo with
-// auth_type "" / "none" is left unauthenticated.
-func ApplyIndexAuth(req *http.Request, repo sqlc.HelmRepository) {
-	if req == nil {
-		return
-	}
-	authType := strings.ToLower(strings.TrimSpace(repo.AuthType))
-	if authType == "" || authType == "none" {
-		return
-	}
-	var cfg IndexAuthConfig
-	if len(repo.AuthConfig) > 0 {
-		_ = json.Unmarshal(repo.AuthConfig, &cfg)
-	}
-	switch authType {
-	case "basic":
-		if cfg.Username != "" || cfg.Password != "" {
-			req.SetBasicAuth(cfg.Username, cfg.Password)
-		}
-	case "bearer", "token":
-		token := cfg.Token
-		if token == "" {
-			token = cfg.Bearer
-		}
-		if token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
-		}
-	}
 }
