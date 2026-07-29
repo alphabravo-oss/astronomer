@@ -17,6 +17,7 @@ import (
 	ctrlrt "sigs.k8s.io/controller-runtime"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -87,7 +88,7 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 	}
 
 	labels := marshalStringMap(spec.Labels)
-	annotations := marshalStringMap(clusterAnnotationsWithAgentProfile(spec))
+	annotations := marshalStringMap(clusterAnnotationsWithAgentProfile(spec, existing.Annotations))
 	updated, uerr := a.queries.UpdateCluster(ctx, sqlc.UpdateClusterParams{
 		ID:          existing.ID,
 		DisplayName: spec.DisplayName,
@@ -481,10 +482,27 @@ func marshalStringMap(m map[string]string) json.RawMessage {
 	return b
 }
 
-func clusterAnnotationsWithAgentProfile(spec crd.ClusterSpec) map[string]string {
+// clusterAnnotationsWithAgentProfile builds the annotation map the CRD reconcile
+// writes for a Cluster CR. `stored` is the row's current annotations, needed
+// because this map REPLACES them wholesale in UpdateCluster.
+func clusterAnnotationsWithAgentProfile(spec crd.ClusterSpec, stored json.RawMessage) map[string]string {
 	annotations := make(map[string]string, len(spec.Annotations)+3)
 	for k, v := range spec.Annotations {
 		annotations[k] = v
+	}
+	// The downstream-impersonation mode is NOT settable through a Cluster CR.
+	// The REST path gates it on superuser + the agent's capability
+	// advertisement (handler/clusters_impersonation.go); this path has neither
+	// gate and copies spec.Annotations verbatim, so without this it would be a
+	// second, ungated writer of the same key — anyone who can author a CR could
+	// set `enforce`, and the next sync would silently CLEAR a mode a superuser
+	// did set. Drop whatever the CR carries and re-inject the stored value, so
+	// a CR can neither raise the mode nor lower it. If CR-driven configuration
+	// is wanted later it must route through callerid.ParseMode plus the
+	// capability check, not through this free-form blob.
+	delete(annotations, callerid.ModeAnnotation)
+	if mode := callerid.ModeFromJSON(stored); mode != callerid.ModeOff {
+		annotations[callerid.ModeAnnotation] = string(mode)
 	}
 	profile := agenttemplate.NormalizePrivilegeProfile(spec.Agent.PrivilegeProfile)
 	if strings.TrimSpace(spec.Agent.PrivilegeProfile) != "" {

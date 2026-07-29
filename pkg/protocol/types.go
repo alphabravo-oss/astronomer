@@ -426,11 +426,17 @@ type ConnectAckPayload struct {
 }
 
 // K8sRequestPayload represents a proxied Kubernetes API request.
+//
+// The embedded CallerIdentity is populated server-side from the authenticated
+// session (or stamped as an explicit machine origin) and is UNUSED in Phase 0 —
+// see identity.go and docs/design/downstream-impersonation.md §8.
 type K8sRequestPayload struct {
 	Method  string            `json:"method"`
 	Path    string            `json:"path"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"` // base64 encoded
+
+	CallerIdentity
 }
 
 // K8sResponsePayload represents the result of a proxied Kubernetes API request.
@@ -547,6 +553,8 @@ type HeartbeatPayload struct {
 }
 
 // ExecStartPayload to initiate pod exec.
+//
+// CallerIdentity: same contract as K8sRequestPayload — populated, unused.
 type ExecStartPayload struct {
 	Namespace string   `json:"namespace"`
 	Pod       string   `json:"pod"`
@@ -554,6 +562,8 @@ type ExecStartPayload struct {
 	Command   []string `json:"command"`
 	TTY       bool     `json:"tty"`
 	Stdin     bool     `json:"stdin"`
+
+	CallerIdentity
 }
 
 // ExecResizePayload for terminal resize.
@@ -568,6 +578,7 @@ type ExecResizePayload struct {
 // SinceSeconds is non-nil the agent passes it through to kubelet; when nil,
 // the older line-count path is used (Rancher-style: the UI picks one or the
 // other, never both).
+// CallerIdentity: same contract as K8sRequestPayload — populated, unused.
 type LogStartPayload struct {
 	Namespace    string `json:"namespace"`
 	Pod          string `json:"pod"`
@@ -576,6 +587,8 @@ type LogStartPayload struct {
 	TailLines    int    `json:"tail_lines,omitempty"`
 	SinceSeconds *int64 `json:"since_seconds,omitempty"`
 	Timestamps   bool   `json:"timestamps,omitempty"`
+
+	CallerIdentity
 }
 
 // RBACSyncRequestPayload contains RBAC resources to apply.

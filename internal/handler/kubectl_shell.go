@@ -41,6 +41,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
@@ -711,7 +712,17 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.Exec.ProxyToAgentWithInputRecorder(r.Context(), conn, row.ClusterID.String(), row.PodNamespace, row.PodName, kubectl.ContainerName, onInput)
+	// §10.4 machine origin. The exec that bridges this WebSocket targets the
+	// session POD, and the shell's per-caller enforcement is the session
+	// ServiceAccount that kubectl.Open already provisioned from the caller's
+	// CallerScope. Impersonation does not apply to it and must not be layered on
+	// top, so the relay is stamped machine even though a human is on the other
+	// end of the socket. The human remains attributed by the shell's own audit
+	// trail (the session row plus the per-command recorder above).
+	h.Exec.ProxyToAgentWithInputRecorder(
+		callerid.WithMachine(r.Context(), callerid.SourceKubectlShell),
+		conn, row.ClusterID.String(), row.PodNamespace, row.PodName, kubectl.ContainerName, onInput,
+	)
 }
 
 // drainRecordedCommands runs while the WS is open, inserting one

@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
@@ -2021,7 +2022,18 @@ func requireArgoCDClusterProxyToken(queries ArgoCDClusterProxyTokenQuerier) func
 				return
 			}
 			_ = queries.TouchArgoCDClusterProxyToken(r.Context(), row.ID)
-			next.ServeHTTP(w, r)
+			// Positive machine-origin marker (design doc §10.1). Stamped here,
+			// on the single gate both the internal listener and the public
+			// compatibility route share, so neither can drift: the token is
+			// cluster-scoped and this middleware deliberately never accepts a
+			// user JWT, so there is provably no human behind the request.
+			//
+			// It is NOT inferred from the absence of a user — §7 invariant 4 —
+			// and it matters beyond attribution: ArgoCD's cluster cache LISTs
+			// every registered resource type, so an impersonated identity here
+			// would fail the whole cache sync and pin every Application at
+			// sync=Unknown, silently.
+			next.ServeHTTP(w, r.WithContext(callerid.WithMachine(r.Context(), callerid.SourceArgoCDProxy)))
 		})
 	}
 }

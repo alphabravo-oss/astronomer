@@ -607,3 +607,84 @@ and must be covered by a test that fails if the exemption is dropped.
    `cluster-project-list-unfiltered` and the two P0 items are the *reason* a second
    line is wanted; they must be fixed on their own terms first. Plan sequencing note
    34 says the same thing.
+
+---
+
+## 12. Implementation status
+
+**Phase 0 is implemented.** §8 items 1-7 and 10 ship; items 8 and 9 are deferred
+to Phase 1 for the reason below. Nothing consumes the identity: with the flag at
+its `off` default the agent's upstream request is byte-identical to before, and
+no code path sets an `Impersonate-*` header. `deploy/agent/template.go` and
+`pkg/proxyhdr`'s allowlist are untouched.
+
+| §8 item | Where |
+|---|---|
+| 1 typed payload fields | `pkg/protocol/identity.go`, embedded on the three payloads in `types.go` |
+| 2 origin discriminator | `protocol.CallerOrigin`; zero value is neither user nor machine |
+| 3 server-side population | `tunnel/proxy.go`, `tunnel/originators.go`, `tunnel/exec_consumer.go`, `tunnel/logs_consumer.go`, `tunnel/internal_k8s.go`, `handler/k8s_requester.go` (`Do` **and** `forwardToOwner`) |
+| 4 one identity minter | `internal/callerid`; `CallerScope.ImpersonationHeaders` deleted, replaced by `ImpersonationSubject` |
+| 5 header-hygiene regressions | `pkg/proxyhdr/proxyhdr_test.go`, `internal/agent/caller_identity_test.go`, `internal/server/routes_caller_identity_test.go` |
+| 6 capability handshake | `internal/agent/impersonation_probe.go` (SSAR, hourly cache) → `HeartbeatPayload`; server gate in `handler/clusters_impersonation.go` |
+| 7 flag plumbing | `internal/callerid/mode.go` + `handler/clusters_impersonation.go`. Verified: `clusters.annotations` already exists as `jsonb NOT NULL DEFAULT '{}'`, so **no migration** |
+| 10 one machineOrigin predicate | `callerid.IsMachineOrigin` / `callerid.Resolve`, with §10 as the `exemptions` table |
+
+**Items 8 (attribution stamping) and 9 (403 disambiguation) are Phase 1.** Both
+are conditioned on the mode being something other than `off`, and item 7
+deliberately specifies the flag *without* any transport to the agent ("always
+resolves to `off` until Phase 1"). So in Phase 0 the agent cannot learn the mode,
+and wiring either item would mean choosing between dead code and a behaviour
+change at the default flag value. Adding a mode field to the payload is the
+Phase 1 change that unblocks both, and it belongs with the soak that exercises
+them.
+
+**Four decisions taken during review, recorded because they narrow §7 and §8:**
+
+- **The CRD reconcile path is a NON-writer of the mode.** `internal/crd` syncs
+  `spec.Annotations` verbatim and `UpdateCluster` replaces
+  `clusters.annotations` wholesale, so without an explicit rule the CR would be
+  a second writer with neither the superuser gate nor the capability gate — and
+  the next sync would silently clear a mode a superuser had set.
+  `clusterAnnotationsWithAgentProfile` (`internal/server/crd_wiring.go`) now
+  drops the key from whatever the CR carries and re-injects the stored value.
+  Routing a CR-driven set through `callerid.ParseMode` plus the capability check
+  is possible later; the free-form blob is not the way to do it.
+- **`CallerIdentity.RequestID` carries only server-minted ids.** The control
+  plane accepts a caller-supplied `X-Correlation-Id` / `X-Request-ID`
+  (`internal/server/middleware/requestid.go`) and echoes it into logs and audit
+  rows, which is right for those. But under Option D that value would ride
+  downstream as `Impersonate-Extra-Astronomer-Request` and land in the apiserver
+  audit event and in `AdmissionReview.request.userInfo.extra`, letting a caller
+  forge the correlation between a downstream action and an arbitrary
+  control-plane request — the attribution in §1 point 4 is the whole point of
+  the feature. `middleware.GetGeneratedRequestID` returns the id only when the
+  server minted it, and `callerid.Resolve` uses that. The field is therefore
+  EMPTY on requests where the caller brought its own correlation id: no
+  correlation is strictly better than a forged one. This is §7 invariant 3
+  applied to the one field it had not been applied to.
+- **The mode is read off the raw JSONB, not off `map[string]string`.**
+  `clusters.annotations` is free-form and may legally hold non-string values;
+  decoding it into a string map fails wholesale, which both mis-reported the
+  mode as `off` and (in the write gate's preserve branch) destroyed every
+  sibling key. `callerid.ModeFromJSON` decodes only the one key.
+- **The write gate's pre-read is fail-closed.** A shape that ran the guard only
+  when the stored row read successfully turned any transient DB fault into
+  permission to write the annotation blob ungated. `ClusterHandler.Update` now
+  404s on `ErrNoRows` and 500s on anything else rather than falling through.
+
+**Two notes on §10 discovered during implementation:**
+
+- §10.2's self-management is *agent-side*: `internal/agent/reconcile.go` applies
+  the pulled desired state with the agent's own in-cluster client, so there is no
+  `K8sRequestPayload` to stamp. The server-side traffic that does touch
+  `AstronomerOwnedNamespaces` through the tunnel is the agent-fleet live probe
+  set (`handler/agent_fleet.go`), and that is where the marker went.
+- The `/internal/tunnel/helm/{cluster_id}` fallback named in §8 item 2 carries a
+  `HelmRequestPayload`, which has no identity field — consistent with §11.2,
+  where helm is out of scope.
+
+Background worker tasks (`internal/worker/tasks/*`) that call through the tunnel
+on a background context are left UNATTRIBUTED rather than being guessed at. That
+is the safe state (neither user nor machine) and it is exactly what Phase 1's
+exit criterion — "zero user-origin requests observed carrying none" — is designed
+to surface.

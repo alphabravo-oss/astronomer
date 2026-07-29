@@ -36,6 +36,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -196,6 +197,17 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"decode payload"}`, http.StatusBadRequest)
 		return
 	}
+	// This door is TRANSPORT, not origin (design doc §10.3). A user-originated
+	// request that landed on a non-owner replica arrives here still
+	// user-originated, so whatever identity the sibling stamped is forwarded
+	// VERBATIM — Fill only supplies one when the payload arrives unattributed,
+	// which means the hop genuinely started at an internal caller. Note the
+	// identity is taken from the PSK-authenticated sibling's payload, not from
+	// any header on this request. PHASE 0: populated, unused.
+	payload.CallerIdentity = callerid.Fill(
+		callerid.WithMachine(r.Context(), callerid.SourceCrossPodTransport),
+		payload.CallerIdentity,
+	)
 
 	agent := h.hub.GetAgent(clusterID)
 	if agent == nil {

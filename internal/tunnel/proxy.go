@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
@@ -486,6 +487,14 @@ func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error
 		Path:    path,
 		Headers: headers,
 		Body:    body,
+		// Typed caller identity, resolved from the authenticated session (or
+		// from the positive machine marker the ArgoCD proxy gate stamps) — never
+		// from a header. Note this runs AFTER the allowlist loop above, which
+		// has already dropped any Impersonate-* / X-Remote-* the client sent, so
+		// there is no path by which a caller-supplied header can influence it.
+		//
+		// PHASE 0: populated, unused.
+		CallerIdentity: callerid.Resolve(r.Context()),
 	}, nil
 }
 

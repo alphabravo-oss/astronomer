@@ -51,7 +51,11 @@ type InventorySource interface {
 
 // HealthReporter sends periodic health data to the server.
 type HealthReporter struct {
-	client            kubernetes.Interface
+	client kubernetes.Interface
+	// impersonation caches the agent's SelfSubjectAccessReview answer to
+	// "may I impersonate the pinned astronomer proxy subject?", advertised in
+	// EnabledFeatures / DeniedFeatures. See impersonation_probe.go.
+	impersonation     impersonationProbe
 	metricsClient     metricsv.Interface
 	log               *slog.Logger
 	heartbeatInterval time.Duration
@@ -434,6 +438,12 @@ func (hr *HealthReporter) collectHeartbeat(ctx context.Context) (*protocol.Heart
 	if len(hb.EnabledFeatures) == 0 && len(hb.DeniedFeatures) == 0 {
 		hb.EnabledFeatures, hb.DeniedFeatures = capabilityFeaturesForProfile(hb.PrivilegeProfile)
 	}
+	// Impersonation capability handshake. Appended AFTER the profile fallback
+	// above so it cannot make the lists non-empty and suppress it. The answer
+	// comes from an hourly-cached SelfSubjectAccessReview, not from the profile
+	// name — the server must gate `enforce` on what the apiserver actually
+	// grants this agent, not on what we think the manifest said.
+	applyImpersonationCapability(hb, hr.impersonation.allowedNow(ctx, hr.client))
 
 	// Inventory collection is best-effort and DECOUPLED from liveness (H11):
 	// a failed apiserver List must not suppress the heartbeat. On a partial

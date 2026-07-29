@@ -81,8 +81,13 @@ type ClusterResponse struct {
 	// finishes. Once tombstoned (decommissioned_at set) the row leaves the list.
 	Decommissioning bool `json:"decommissioning"`
 
-	AgentPrivilegeProfile string               `json:"agent_privilege_profile"`
-	ArgoCD                ClusterArgoCDSummary `json:"argocd"`
+	AgentPrivilegeProfile string `json:"agent_privilege_profile"`
+	// DownstreamImpersonation is the tri-state per-cluster mode
+	// (off|attribute|enforce) from docs/design/downstream-impersonation.md.
+	// Always "off" unless a superuser has explicitly set the annotation, and
+	// read by nothing in Phase 0.
+	DownstreamImpersonation string               `json:"downstream_impersonation"`
+	ArgoCD                  ClusterArgoCDSummary `json:"argocd"`
 }
 
 type ClusterArgoCDSummary struct {
@@ -133,32 +138,33 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		// mapping every cluster response goes through, rather than asking each
 		// call site to remember. Matches the ownership endpoint, which has always
 		// coalesced these two.
-		DisplayName: firstNonEmptyAgentValue(c.DisplayName, c.Name),
-		Description:           c.Description,
-		Status:                c.Status,
-		ApiServerUrl:          c.ApiServerUrl,
-		CaCertificate:         c.CaCertificate,
-		Environment:           c.Environment,
-		Region:                c.Region,
-		Provider:              c.Provider,
-		Labels:                c.Labels,
-		Annotations:           c.Annotations,
-		Distribution:          c.Distribution,
-		AgentVersion:          c.AgentVersion,
-		KubernetesVersion:     c.KubernetesVersion,
-		NodeCount:             c.NodeCount,
-		CreatedAt:             c.CreatedAt.Format(time.RFC3339Nano),
-		UpdatedAt:             c.UpdatedAt.Format(time.RFC3339Nano),
-		IsLocal:               c.IsLocal,
-		ClusterUid:            c.ClusterUid,
-		RegistrationPhase:     c.RegistrationPhase,
-		ManagedBy:             c.ManagedBy,
-		ExternalRefApiVersion: c.ExternalRefApiVersion,
-		ExternalRefKind:       c.ExternalRefKind,
-		ExternalRefNamespace:  c.ExternalRefNamespace,
-		ExternalRefName:       c.ExternalRefName,
-		ObservedGeneration:    c.ObservedGeneration,
-		AgentPrivilegeProfile: clusterAgentPrivilegeProfile(c.Annotations),
+		DisplayName:             firstNonEmptyAgentValue(c.DisplayName, c.Name),
+		Description:             c.Description,
+		Status:                  c.Status,
+		ApiServerUrl:            c.ApiServerUrl,
+		CaCertificate:           c.CaCertificate,
+		Environment:             c.Environment,
+		Region:                  c.Region,
+		Provider:                c.Provider,
+		Labels:                  c.Labels,
+		Annotations:             c.Annotations,
+		Distribution:            c.Distribution,
+		AgentVersion:            c.AgentVersion,
+		KubernetesVersion:       c.KubernetesVersion,
+		NodeCount:               c.NodeCount,
+		CreatedAt:               c.CreatedAt.Format(time.RFC3339Nano),
+		UpdatedAt:               c.UpdatedAt.Format(time.RFC3339Nano),
+		IsLocal:                 c.IsLocal,
+		ClusterUid:              c.ClusterUid,
+		RegistrationPhase:       c.RegistrationPhase,
+		ManagedBy:               c.ManagedBy,
+		ExternalRefApiVersion:   c.ExternalRefApiVersion,
+		ExternalRefKind:         c.ExternalRefKind,
+		ExternalRefNamespace:    c.ExternalRefNamespace,
+		ExternalRefName:         c.ExternalRefName,
+		ObservedGeneration:      c.ObservedGeneration,
+		AgentPrivilegeProfile:   clusterAgentPrivilegeProfile(c.Annotations),
+		DownstreamImpersonation: clusterDownstreamImpersonationMode(c.Annotations),
 		ArgoCD: ClusterArgoCDSummary{
 			BaselineManagedBy:  "unknown",
 			BaselineComponents: baselineComponentOwnership("unknown"),

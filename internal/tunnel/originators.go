@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -226,6 +227,11 @@ func (h *Hub) StartLogStream(ctx context.Context, clusterID string, payload prot
 	if agent == nil {
 		return nil, fmt.Errorf("cluster agent not connected")
 	}
+	// Typed caller identity from the session (or the caller's explicit machine
+	// marker). Fill, not Resolve: a caller that already stamped an identity —
+	// e.g. a front door that authenticated outside the middleware chain — keeps
+	// it. PHASE 0: populated, unused.
+	payload.CallerIdentity = callerid.Fill(ctx, payload.CallerIdentity)
 
 	streamID := uuid.NewString()
 	stream, err := agent.Streams.CreateStream(streamID)
@@ -299,6 +305,8 @@ func (h *Hub) StartExecSession(ctx context.Context, clusterID string, payload pr
 	if agent == nil {
 		return nil, fmt.Errorf("cluster agent not connected")
 	}
+	// Same contract as StartLogStream above. PHASE 0: populated, unused.
+	payload.CallerIdentity = callerid.Fill(ctx, payload.CallerIdentity)
 
 	streamID := uuid.NewString()
 	stream, err := agent.Streams.CreateStream(streamID)

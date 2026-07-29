@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -152,6 +153,13 @@ func ToSessionInfo(row sqlc.KubectlSession, commandCount int64, idle time.Durati
 // land. The caller sees an error and the reaper later cleans up any
 // straggling objects via the orphan-pod sweep.
 func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error) {
+	// Session provisioning/teardown is a §10.4 machine path: these calls
+	// create (and delete) the ServiceAccount, Role(s), Binding(s) and Pod that
+	// ARE the shell's per-caller enforcement, so they must run as the agent SA.
+	// Marked positively even though a human triggered the request — an explicit
+	// machine origin is what keeps this exempt if impersonation is ever
+	// enforced on the proxy path. PHASE 0: populated, unused.
+	ctx = callerid.WithMachine(ctx, callerid.SourceKubectlShell)
 	if deps.Queries == nil {
 		return nil, errors.New("kubectl: queries not configured")
 	}
@@ -271,6 +279,13 @@ func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error)
 // status=closed. Idempotent: repeated calls are no-ops once the row is
 // already in a terminal state.
 func Close(ctx context.Context, deps Deps, sessionID uuid.UUID) error {
+	// Session provisioning/teardown is a §10.4 machine path: these calls
+	// create (and delete) the ServiceAccount, Role(s), Binding(s) and Pod that
+	// ARE the shell's per-caller enforcement, so they must run as the agent SA.
+	// Marked positively even though a human triggered the request — an explicit
+	// machine origin is what keeps this exempt if impersonation is ever
+	// enforced on the proxy path. PHASE 0: populated, unused.
+	ctx = callerid.WithMachine(ctx, callerid.SourceKubectlShell)
 	if deps.Queries == nil {
 		return errors.New("kubectl: queries not configured")
 	}
@@ -302,6 +317,13 @@ func Close(ctx context.Context, deps Deps, sessionID uuid.UUID) error {
 // Idle ⇒ status='expired'. Hard cap ⇒ status='expired'. Orphan pods
 // without a DB row ⇒ best-effort DELETE.
 func Reap(ctx context.Context, deps Deps) error {
+	// Session provisioning/teardown is a §10.4 machine path: these calls
+	// create (and delete) the ServiceAccount, Role(s), Binding(s) and Pod that
+	// ARE the shell's per-caller enforcement, so they must run as the agent SA.
+	// Marked positively even though a human triggered the request — an explicit
+	// machine origin is what keeps this exempt if impersonation is ever
+	// enforced on the proxy path. PHASE 0: populated, unused.
+	ctx = callerid.WithMachine(ctx, callerid.SourceKubectlShell)
 	if deps.Queries == nil {
 		return errors.New("kubectl: queries not configured")
 	}

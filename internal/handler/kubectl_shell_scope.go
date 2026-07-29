@@ -36,9 +36,10 @@
 //   - HandleWS(): re-derives + fails closed before the WS upgrade, and
 //     tags out-of-scope namespace targets in the command audit trail.
 //
-// Header-based enforcement (K8s impersonation) is provided by
-// CallerScope.ImpersonationHeaders() for the exec proxy to adopt; see
-// integration notes.
+// The caller identity this scope would be impersonated as is available
+// via CallerScope.ImpersonationSubject(); the subject itself is minted by
+// internal/callerid, which is the single identity minter. Nothing sets an
+// Impersonate-* header today — see docs/design/downstream-impersonation.md.
 package handler
 
 import (
@@ -48,6 +49,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -248,20 +250,25 @@ func (s CallerScope) SortedNamespaces() []string {
 	return out
 }
 
-// ImpersonationHeaders returns the K8s impersonation headers a proxy
-// can attach to per-request calls so the apiserver evaluates the
-// caller's identity (RBAC) instead of the shell SA's blanket grant.
-// Superuser scopes are NOT impersonated (they legitimately need the
-// cluster-admin binding). Returns nil when there is nothing to
-// impersonate. Consumed by the exec proxy if/when it adopts
-// header-based enforcement — see integration notes.
-func (s CallerScope) ImpersonationHeaders() map[string]string {
+// ImpersonationSubject returns the canonical astronomer subject this scope
+// would be impersonated as, or "" when it must not be impersonated.
+//
+// This replaces the old ImpersonationHeaders(), which built the
+// "astronomer:user:<uuid>" string inline and returned it pre-wrapped in an
+// Impersonate-User header map. It was dead code — referenced only by its own
+// test — and it was a SECOND spelling of the canonical subject. The subject is
+// now minted in exactly one place (callerid.UserSubject); what survives here is
+// the only thing that was ever scope-specific: the §7 invariant 5 rule that
+// SUPERUSER SCOPES ARE NOT IMPERSONATED, because they legitimately need the
+// cluster-admin binding.
+//
+// It returns a subject, not headers, deliberately: nothing in this phase may
+// set an Impersonate-* header on an outbound request.
+func (s CallerScope) ImpersonationSubject() string {
 	if s.Superuser || s.Caller == uuid.Nil {
-		return nil
+		return ""
 	}
-	return map[string]string{
-		"Impersonate-User": "astronomer:user:" + s.Caller.String(),
-	}
+	return callerid.UserSubject(s.Caller)
 }
 
 // scopeEnforcementLabel names the in-cluster enforcement shape a session

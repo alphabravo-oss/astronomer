@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -105,6 +106,13 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		defer func() { finalize(retErr) }()
 	}
 
+	// Resolve the typed caller identity ONCE, here, so the direct path and the
+	// cross-pod forward path below stamp exactly the same value. Deriving it
+	// separately in each is how forwardToOwner silently drops identity on
+	// multi-replica installs (design doc §8 item 3, §10.3: the sibling hop is
+	// TRANSPORT, not origin). PHASE 0: populated, unused.
+	identity := callerid.Resolve(ctx)
+
 	agent := r.hub.GetAgent(clusterID)
 	if agent == nil {
 		// Cross-pod fallback: ask the locator which sibling pod owns
@@ -113,7 +121,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		// deployments — without this every server-internal tunnel call
 		// (shell open SA/Role/Pod create, project reconciler, etc.)
 		// 503s for the half of clusters whose WS landed on a sibling.
-		if resp, ok, ferr := r.forwardToOwner(ctx, clusterID, method, path, body, headers); ok {
+		if resp, ok, ferr := r.forwardToOwner(ctx, clusterID, method, path, body, headers, identity); ok {
 			return resp, ferr
 		}
 		return nil, fmt.Errorf("cluster agent not connected")
@@ -127,9 +135,10 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 	defer agent.Streams.CloseStream(streamID)
 
 	payload := protocol.K8sRequestPayload{
-		Method:  method,
-		Path:    path,
-		Headers: headers,
+		Method:         method,
+		Path:           path,
+		Headers:        headers,
+		CallerIdentity: identity,
 	}
 	if len(body) > 0 {
 		payload.Body = base64.StdEncoding.EncodeToString(body)
@@ -305,7 +314,15 @@ func ensureSuccess(resp *protocol.K8sResponsePayload) error {
 // (stale entry — falling through to the 503 surfaces the real
 // disconnect), or the PSK isn't configured. retErr non-nil means the
 // forward happened but the sibling returned an error.
-func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (resp *protocol.K8sResponsePayload, ok bool, retErr error) {
+//
+// identity is passed in rather than re-derived. This hop is TRANSPORT, not
+// origin (design doc §10.3): a user-originated request that landed on a
+// non-owner replica is still user-originated when it reaches the owner, so the
+// identity Do resolved travels verbatim in the rebuilt payload. Re-deriving it
+// here would resolve against the same ctx and happen to work today, but
+// clearing or omitting it — which is what this function did before — silently
+// drops identity for exactly half the traffic on a multi-replica install.
+func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, identity protocol.CallerIdentity) (resp *protocol.K8sResponsePayload, ok bool, retErr error) {
 	if r == nil || r.hub == nil || r.psk == "" {
 		return nil, false, nil
 	}
@@ -318,7 +335,7 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 		return nil, false, nil
 	}
 
-	payload := protocol.K8sRequestPayload{Method: method, Path: path, Headers: headers}
+	payload := protocol.K8sRequestPayload{Method: method, Path: path, Headers: headers, CallerIdentity: identity}
 	if len(body) > 0 {
 		payload.Body = base64.StdEncoding.EncodeToString(body)
 	}

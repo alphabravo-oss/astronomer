@@ -34,3 +34,19 @@ func (sm *StreamManager) SoleStreamForTest() *Stream {
 	}
 	return nil
 }
+
+// OutboundForTest returns the registered agent's send channel so a test can
+// read the exact protocol.Message the server put on the wire. Pairs with
+// RegisterAgentForTest, whose sendCh has no writePump draining it.
+//
+// Route-level tests in internal/server use this to assert on the
+// K8sRequestPayload produced by the REAL middleware chain — a test that called
+// the payload builder directly would prove nothing about the wire. Returns nil
+// when no agent is registered for the cluster.
+func (h *Hub) OutboundForTest(clusterID string) <-chan *protocol.Message {
+	agent := h.agents.Get(clusterID)
+	if agent == nil {
+		return nil
+	}
+	return agent.sendCh
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -248,6 +249,10 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		TailLines:    tailLines,
 		SinceSeconds: sinceSeconds,
 		Timestamps:   timestamps,
+		// Typed caller identity, resolved from the userID this front door just
+		// authenticated (stream ticket or bearer) — never from the request.
+		// PHASE 0: populated, unused.
+		CallerIdentity: callerid.Resolve(callerid.WithUser(r.Context(), userID)),
 	})
 
 	startMsg := &protocol.Message{

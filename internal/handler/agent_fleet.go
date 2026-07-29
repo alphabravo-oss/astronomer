@@ -17,6 +17,7 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -1367,6 +1368,22 @@ func agentClockSkewDiagnosticCheck(headers map[string]string, now time.Time) age
 	}
 }
 
+// agentSelfManagementContext stamps the positive machine-origin marker on every
+// live probe this handler makes. Each of them targets astronomer's OWN
+// footprint — the astronomer-system Deployment/Pods/Events, the agent's pod
+// logs, /version, /apis discovery, and the SelfSubjectAccessReview self-probe —
+// which is design doc §10.2 (self-management into AstronomerOwnedNamespaces)
+// and §10.5 (agent lifecycle and SSAR self-probes).
+//
+// A human triggers these by opening the fleet page, so an authenticated user IS
+// in ctx. The explicit marker deliberately wins over that: these are astronomer
+// acting on itself and must never be impersonated as the person who clicked. It
+// is stamped in the three shared helpers rather than at each call site so a new
+// probe cannot forget it.
+func agentSelfManagementContext(ctx context.Context) context.Context {
+	return callerid.WithMachine(ctx, callerid.SourceSelfManage)
+}
+
 func (h *AgentFleetHandler) getLiveJSON(ctx context.Context, clusterID, path string, out any) error {
 	body, _, err := h.getLiveRaw(ctx, clusterID, path)
 	if err != nil {
@@ -1379,7 +1396,7 @@ func (h *AgentFleetHandler) getLiveJSON(ctx context.Context, clusterID, path str
 }
 
 func (h *AgentFleetHandler) getLiveRaw(ctx context.Context, clusterID, path string) ([]byte, map[string]string, error) {
-	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	resp, err := h.requester.Do(agentSelfManagementContext(ctx), clusterID, http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1395,7 +1412,7 @@ func (h *AgentFleetHandler) postLiveJSON(ctx context.Context, clusterID, path st
 	if err != nil {
 		return err
 	}
-	resp, err := h.requester.Do(ctx, clusterID, http.MethodPost, path, raw, requestHeaders("application/json"))
+	resp, err := h.requester.Do(agentSelfManagementContext(ctx), clusterID, http.MethodPost, path, raw, requestHeaders("application/json"))
 	if err != nil {
 		return err
 	}

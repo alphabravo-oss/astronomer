@@ -1147,6 +1147,15 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if annotations == nil {
 		annotations = json.RawMessage(`{}`)
 	}
+	// Downstream-impersonation mode: superuser-only, validated, default off.
+	// uuid.Nil as the cluster id is correct here — the row does not exist yet,
+	// so there is nothing stored to preserve and no agent that could have
+	// advertised the capability, which makes `enforce` unreachable at create
+	// time by construction.
+	annotations, ok := guardDownstreamImpersonationAnnotation(w, r, h.queries, uuid.Nil, nil, annotations)
+	if !ok {
+		return
+	}
 	cluster, err := h.queries.CreateCluster(r.Context(), sqlc.CreateClusterParams{
 		Name:         req.Name,
 		DisplayName:  req.DisplayName,
@@ -1344,6 +1353,31 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if blocked != "" {
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
+		return
+	}
+
+	// Downstream-impersonation mode: superuser-only, validated, capability-
+	// gated for `enforce`, and PRESERVED when the caller's annotation blob
+	// simply omits the key (so a normal edit cannot silently clear it).
+	//
+	// The pre-read is FAIL-CLOSED. An earlier shape ran the guard only when the
+	// read succeeded, which turned any transient DB fault into permission to
+	// write the annotation blob ungated — a non-superuser could set `enforce`
+	// by racing a pool exhaustion. The cluster's existence is already
+	// established by the ownership check above, so a non-nil error here is an
+	// infrastructure fault, not a 404.
+	existing, gerr := h.queries.GetClusterByID(r.Context(), id)
+	if gerr != nil {
+		if errors.Is(gerr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			return
+		}
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load cluster")
+		return
+	}
+	var annotationsOK bool
+	annotations, annotationsOK = guardDownstreamImpersonationAnnotation(w, r, h.queries, id, existing.Annotations, annotations)
+	if !annotationsOK {
 		return
 	}
 

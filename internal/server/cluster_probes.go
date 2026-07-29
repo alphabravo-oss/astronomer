@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 )
@@ -76,6 +77,11 @@ func sweepClusterProbes(ctx context.Context, logger *slog.Logger, queries *sqlc.
 }
 
 func probeOne(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, requester handler.K8sRequester, clusterID uuid.UUID) {
+	// Positive machine-origin marker: this is a background health probe with no
+	// human anywhere near it (design doc §10.5, agent lifecycle / health). It is
+	// stamped rather than left to fall through as "no user", because §7
+	// invariant 4 forbids inferring machine from the absence of a user.
+	ctx = callerid.WithMachine(ctx, callerid.SourceAgentLifecycle)
 	upsert := func(condType, status, reason, message string) {
 		if _, err := queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 			ClusterID: clusterID,

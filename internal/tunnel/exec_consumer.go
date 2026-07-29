@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -185,7 +186,10 @@ func (ec *ExecConsumer) HandleExec(w http.ResponseWriter, r *http.Request) {
 	}()
 	recordStreamOpenAudit(r, ec.auditWriter, userID, "pod.exec.opened", clusterID, namespace, pod, container)
 
-	ec.ProxyToAgent(r.Context(), conn, clusterID, namespace, pod, container)
+	// Carry the just-authenticated user into the relay so the EXEC_START
+	// payload is attributed to them. userID is the output of
+	// authenticateStreamRequest above — the session, not the request.
+	ec.ProxyToAgent(callerid.WithUser(r.Context(), userID), conn, clusterID, namespace, pod, container)
 }
 
 // ProxyToAgent runs the exec relay between an already-upgraded WebSocket
@@ -249,6 +253,14 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 		Command:   []string{"/bin/sh"},
 		TTY:       true,
 		Stdin:     true,
+		// Typed caller identity. This front door authenticates outside the
+		// standard middleware chain (single-use stream ticket or bearer), so
+		// HandleExec stamps the verified user onto ctx with callerid.WithUser
+		// before calling in; the kubectl-shell front door stamps its §10
+		// machine marker instead. Either way it is resolved server-side from an
+		// authentication result, never from anything the client sent.
+		// PHASE 0: populated, unused.
+		CallerIdentity: callerid.Resolve(ctx),
 	})
 
 	startMsg := &protocol.Message{

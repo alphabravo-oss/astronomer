@@ -443,6 +443,7 @@ export interface OpenAPIComponents {
           "is_local"?: boolean;
           "decommissioned_at"?: string | null;
           "agent_privilege_profile"?: "viewer" | "operator" | "namespace-viewer" | "namespace-operator" | "custom" | "admin";
+          "downstream_impersonation"?: "off" | "attribute" | "enforce";
           "cpu_percentage"?: number;
           "memory_percentage"?: number;
           "pod_count"?: number;

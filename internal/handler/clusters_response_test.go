@@ -130,6 +130,9 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 			}
 			delete(dtoMap, "argocd")
 			delete(dtoMap, "agent_privilege_profile")
+			// Additive, same as agent_privilege_profile: derived from
+			// annotations, always "off" unless a superuser set the flag.
+			delete(dtoMap, "downstream_impersonation")
 			dtoJSON, err = json.Marshal(dtoMap)
 			if err != nil {
 				t.Fatalf("remarshal dto: %v", err)

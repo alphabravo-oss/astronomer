@@ -348,6 +348,20 @@ components:
             - namespace-operator
             - custom
             - admin
+        downstream_impersonation:
+          type: string
+          description: >-
+            Tri-state downstream-impersonation mode for this cluster
+            (docs/design/downstream-impersonation.md §5), stored in
+            `annotations` under `astronomer.io/downstream-impersonation`.
+            Writable by superusers only, and `enforce` additionally requires the
+            agent to have advertised the impersonation capability. Absent,
+            blank and unrecognized all read as `off`, which is the default and
+            — in Phase 0 — the only mode any code path acts on.
+          enum:
+            - "off"
+            - attribute
+            - enforce
         cpu_percentage:
           type: number
         memory_percentage:

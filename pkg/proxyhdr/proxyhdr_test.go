@@ -91,3 +91,37 @@ func TestShouldForwardRequestHeaderCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+// TestAllowlistIsAHardDenyForCallerSuppliedIdentity pins invariant 1 of
+// docs/design/downstream-impersonation.md §7 by name, so that a future change
+// that adds caller identity to the tunnel cannot quietly reintroduce
+// header-carried identity as a shortcut.
+//
+// Identity travels as a TYPED PAYLOAD FIELD populated server-side from the
+// session (protocol.CallerIdentity). This allowlist must stay a hard deny for
+// every header form of identity: if any of these were forwardable, a client
+// could assert its own identity to the downstream apiserver — the exact attack
+// the feature must not enable. The audit records this allowlist as a product
+// STRENGTH ([strength-proxy-header-allowlist]); this test is what keeps it one.
+func TestAllowlistIsAHardDenyForCallerSuppliedIdentity(t *testing.T) {
+	// Every header form the kube-apiserver would honour as an identity claim:
+	// impersonation, and the --requestheader front-proxy headers.
+	for _, name := range []string{
+		"Impersonate-User",
+		"Impersonate-Group",
+		"Impersonate-Uid",
+		"Impersonate-Extra-Astronomer-User",
+		"impersonate-extra-scopes",
+		"IMPERSONATE-USER",
+		"X-Remote-User",
+		"X-Remote-Group",
+		"X-Remote-Uid",
+		"X-Remote-Extra-Astronomer-User",
+		"x-remote-extra-anything",
+		"Authorization",
+	} {
+		if ShouldForwardRequestHeader(name) {
+			t.Errorf("§7 invariant 1 violated: %q must never be forwardable", name)
+		}
+	}
+}

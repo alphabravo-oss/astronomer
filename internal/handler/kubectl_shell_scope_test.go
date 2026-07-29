@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -47,8 +48,9 @@ func TestDeriveCallerScope(t *testing.T) {
 		if s.Verbs != rw {
 			t.Fatalf("superuser verbs = %+v, want %+v", s.Verbs, rw)
 		}
-		if s.ImpersonationHeaders() != nil {
-			t.Fatalf("superuser scope must not impersonate")
+		// §7 invariant 5: superuser scopes are never impersonated.
+		if s.ImpersonationSubject() != "" {
+			t.Fatalf("superuser scope must not impersonate, got %q", s.ImpersonationSubject())
 		}
 	})
 
@@ -86,8 +88,10 @@ func TestDeriveCallerScope(t *testing.T) {
 		if s.Allows("") == false {
 			t.Fatalf("empty (default) namespace should be allowed")
 		}
-		if s.ImpersonationHeaders()["Impersonate-User"] != "astronomer:user:"+caller.String() {
-			t.Fatalf("impersonation header = %v", s.ImpersonationHeaders())
+		// The subject comes from the single minter, not from a second
+		// spelling built here.
+		if got, want := s.ImpersonationSubject(), callerid.UserSubject(caller); got != want {
+			t.Fatalf("impersonation subject = %q, want %q", got, want)
 		}
 	})
 
