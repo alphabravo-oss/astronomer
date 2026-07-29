@@ -1224,12 +1224,15 @@ func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imon
 	}
 	if joined, err := runtimeDeps.Queries.GetClusterMonitoringContext(ctx, clusterID); err == nil {
 		client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-			QueryURL:           joined.QueryUrl,
-			TenantID:           joined.TenantID,
-			AuthType:           joined.AuthType,
-			AuthConfig:         joined.AuthConfig,
-			DefaultStepSeconds: joined.DefaultStepSeconds,
-			TimeoutSeconds:     joined.TimeoutSeconds,
+			QueryURL:            joined.QueryUrl,
+			TenantID:            joined.TenantID,
+			AuthType:            joined.AuthType,
+			AuthConfig:          joined.AuthConfig,
+			AuthConfigEncrypted: joined.AuthConfigEncrypted,
+			Decryptor:           monitoringDecryptor(),
+			Logger:              runtimeLogger(),
+			DefaultStepSeconds:  joined.DefaultStepSeconds,
+			TimeoutSeconds:      joined.TimeoutSeconds,
 		})
 		if err != nil {
 			return nil, monitoringSelector{}, false, err
@@ -1249,12 +1252,15 @@ func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imon
 		return nil, monitoringSelector{}, false, err
 	}
 	client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-		QueryURL:           backend.QueryUrl,
-		TenantID:           backend.TenantID,
-		AuthType:           backend.AuthType,
-		AuthConfig:         backend.AuthConfig,
-		DefaultStepSeconds: backend.DefaultStepSeconds,
-		TimeoutSeconds:     backend.TimeoutSeconds,
+		QueryURL:            backend.QueryUrl,
+		TenantID:            backend.TenantID,
+		AuthType:            backend.AuthType,
+		AuthConfig:          backend.AuthConfig,
+		AuthConfigEncrypted: backend.AuthConfigEncrypted,
+		Decryptor:           monitoringDecryptor(),
+		Logger:              runtimeLogger(),
+		DefaultStepSeconds:  backend.DefaultStepSeconds,
+		TimeoutSeconds:      backend.TimeoutSeconds,
 	})
 	if err != nil {
 		return nil, monitoringSelector{}, false, err

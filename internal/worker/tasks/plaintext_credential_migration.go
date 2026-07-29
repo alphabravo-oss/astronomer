@@ -10,6 +10,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
 const PlaintextCredentialMigrationType = "security:migrate_plaintext_credentials"
@@ -22,6 +23,9 @@ type PlaintextCredentialMigrationQuerier interface {
 	// Migration 145 — chart-repository credentials.
 	ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, arg sqlc.ListHelmRepositoriesWithLegacyAuthConfigParams) ([]sqlc.HelmRepository, error)
 	SealHelmRepositoryAuthConfig(ctx context.Context, arg sqlc.SealHelmRepositoryAuthConfigParams) error
+	// Migration 146 — monitoring-backend credentials.
+	ListMonitoringBackendsWithLegacyAuthConfig(ctx context.Context, arg sqlc.ListMonitoringBackendsWithLegacyAuthConfigParams) ([]sqlc.MonitoringBackend, error)
+	SealMonitoringBackendAuthConfig(ctx context.Context, arg sqlc.SealMonitoringBackendAuthConfigParams) error
 }
 
 type PlaintextCredentialMigrationDeps struct {
@@ -58,7 +62,64 @@ func HandlePlaintextCredentialMigration(ctx context.Context, _ *asynq.Task) erro
 	if err := migrateHelmRepositoryAuthConfigs(ctx, deps); err != nil {
 		return err
 	}
+	if err := migrateMonitoringBackendAuthConfigs(ctx, deps); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateMonitoringBackendAuthConfigs seals pre-146 monitoring-backend
+// credentials.
+//
+// This is what ends the upgrade window opened by migration 146, on the same
+// terms as the chart-repository converter below it: the migration can only add
+// the column, so every existing row arrives with an empty
+// auth_config_encrypted and its Thanos/Prometheus bearer token or password
+// still in the clear in the JSONB.
+//
+// The paging walk mirrors migrateHelmRepositoryAuthConfigs and for the same
+// reason — sealing removes a row from the query's predicate, so an unsealable
+// row that the SQL predicate nevertheless returns would otherwise be re-read
+// forever. In practice this table holds one row ('default'), which makes the
+// runaway harmless but also makes it invisible in testing; the walk is written
+// to be correct at any row count rather than correct at one.
+func migrateMonitoringBackendAuthConfigs(ctx context.Context, deps PlaintextCredentialMigrationDeps) error {
+	const pageSize int32 = 500
+	skipped := int32(0)
+	for {
+		rows, err := deps.Queries.ListMonitoringBackendsWithLegacyAuthConfig(ctx, sqlc.ListMonitoringBackendsWithLegacyAuthConfigParams{
+			Limit:  pageSize,
+			Offset: skipped,
+		})
+		if err != nil {
+			return fmt.Errorf("list monitoring backends with plaintext auth_config: %w", err)
+		}
+		for _, row := range rows {
+			ciphertext, public, err := imonitoring.SealAuthConfig(row.AuthConfig, deps.Encryptor)
+			if err != nil {
+				return fmt.Errorf("encrypt monitoring backend auth_config %s: %w", row.ID, err)
+			}
+			if ciphertext == "" {
+				// Nothing outside the non-secret allow-list, so there is
+				// nothing to protect and sealing would only move the config
+				// bag behind a decrypt. Walk past it.
+				runtimeLogger().WarnContext(ctx, "monitoring backend matched the plaintext-credential sweep but carries no sealable secret",
+					"backend_id", row.ID)
+				skipped++
+				continue
+			}
+			if err := deps.Queries.SealMonitoringBackendAuthConfig(ctx, sqlc.SealMonitoringBackendAuthConfigParams{
+				ID:                  row.ID,
+				AuthConfigEncrypted: ciphertext,
+				AuthConfig:          public,
+			}); err != nil {
+				return fmt.Errorf("seal monitoring backend auth_config %s: %w", row.ID, err)
+			}
+		}
+		if int32(len(rows)) < pageSize {
+			return nil
+		}
+	}
 }
 
 // migrateHelmRepositoryAuthConfigs seals pre-145 chart-repository credentials.

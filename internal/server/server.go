@@ -446,6 +446,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	helmRequester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
 	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
 	monitoringHandler.SetLogger(logger)
+	// Migration 146: the Thanos/Prometheus/Alertmanager credential is
+	// Fernet-sealed at rest. This handler both reads it (to build a monitoring
+	// client) and read-modify-writes the column it lives in.
+	monitoringHandler.SetEncryptor(encryptor)
+	alertingHandler := handler.NewAlertingHandlerWithDeps(queries, requester)
+	// Migration 146: persistSharedAlertingAssetHashes is a read-modify-write on
+	// monitoring_backends.auth_config, so this handler needs the same key the
+	// monitoring handler got. Without it, syncing alerting assets would re-seal
+	// a document it could not read.
+	alertingHandler.SetEncryptor(encryptor)
 	argocdHandler := handler.NewArgoCDHandler(queries)
 	argocdHandler.SetLogger(logger)
 	argocdHandler.SetEventBus(bus)
@@ -1197,7 +1207,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Projects:              projectHandler,
 		Tools:                 toolHandler,
 		Audit:                 handler.NewAuditHandler(queries),
-		Alerting:              handler.NewAlertingHandlerWithDeps(queries, requester),
+		Alerting:              alertingHandler,
 		Anomaly:               anomalyHandler,
 		ArgoCD:                argocdHandler,
 		Backups:               backupHandler,
@@ -1764,6 +1774,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// The in-server scheduler runs catalog:sync too, so this reader needs
 		// the same key the interactive handler above got (migration 145).
 		CatalogDecryptor: tasks.CatalogDecryptorFor(encryptor),
+		// monitoring:reconcile and alert:evaluate run here too, and the
+		// reconcile tick read-modify-writes monitoring_backends.auth_config
+		// (migration 146) — so this runtime needs both directions, not just
+		// decrypt.
+		MonitoringCipher: tasks.MonitoringCipherFor(encryptor),
 	})
 	// Migration 092: durable task outbox dispatcher. Handlers can commit a
 	// task_outbox row in the same transaction as product state, and this

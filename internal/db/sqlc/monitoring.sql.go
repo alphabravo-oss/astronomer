@@ -79,6 +79,11 @@ SELECT
     mb.tenant_id,
     mb.auth_type,
     mb.auth_config,
+    -- Migration 146: the credential half of the pair. Selected here because
+    -- alert evaluation and the cluster-metrics handler build a monitoring
+    -- client straight off this joined row; without it they would authenticate
+    -- with the stripped projection.
+    mb.auth_config_encrypted,
     mb.default_step_seconds,
     mb.timeout_seconds
 FROM cluster_monitoring_configs cmc
@@ -115,6 +120,7 @@ type GetClusterMonitoringContextRow struct {
 	TenantID                string             `json:"tenant_id"`
 	AuthType                string             `json:"auth_type"`
 	AuthConfig              json.RawMessage    `json:"auth_config"`
+	AuthConfigEncrypted     string             `json:"auth_config_encrypted"`
 	DefaultStepSeconds      int32              `json:"default_step_seconds"`
 	TimeoutSeconds          int32              `json:"timeout_seconds"`
 }
@@ -151,6 +157,7 @@ func (q *Queries) GetClusterMonitoringContext(ctx context.Context, clusterID uui
 		&i.TenantID,
 		&i.AuthType,
 		&i.AuthConfig,
+		&i.AuthConfigEncrypted,
 		&i.DefaultStepSeconds,
 		&i.TimeoutSeconds,
 	)
@@ -158,7 +165,7 @@ func (q *Queries) GetClusterMonitoringContext(ctx context.Context, clusterID uui
 }
 
 const getDefaultMonitoringBackend = `-- name: GetDefaultMonitoringBackend :one
-SELECT id, name, backend_type, query_url, alertmanager_url, tenant_id, auth_type, auth_config, default_step_seconds, timeout_seconds, is_default, created_by_id, created_at, updated_at FROM monitoring_backends
+SELECT id, name, backend_type, query_url, alertmanager_url, tenant_id, auth_type, auth_config, default_step_seconds, timeout_seconds, is_default, created_by_id, created_at, updated_at, auth_config_encrypted FROM monitoring_backends
 WHERE is_default = true OR name = 'default'
 ORDER BY is_default DESC, created_at ASC
 LIMIT 1
@@ -182,8 +189,104 @@ func (q *Queries) GetDefaultMonitoringBackend(ctx context.Context) (MonitoringBa
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthConfigEncrypted,
 	)
 	return i, err
+}
+
+const listMonitoringBackendsWithLegacyAuthConfig = `-- name: ListMonitoringBackendsWithLegacyAuthConfig :many
+SELECT id, name, backend_type, query_url, alertmanager_url, tenant_id, auth_type, auth_config, default_step_seconds, timeout_seconds, is_default, created_by_id, created_at, updated_at, auth_config_encrypted FROM monitoring_backends
+WHERE auth_config_encrypted = ''
+  AND auth_config IS NOT NULL
+  AND jsonb_typeof(auth_config) = 'object'
+  AND EXISTS (
+        SELECT 1
+        FROM jsonb_object_keys(auth_config) AS config_key
+        WHERE config_key <> ALL (ARRAY[
+            'operationPolicies', 'sharedThanos', 'sharedAlertmanager',
+            'sharedAlertingAssets', 'status'
+        ])
+      )
+ORDER BY id
+LIMIT $1 OFFSET $2
+`
+
+type ListMonitoringBackendsWithLegacyAuthConfigParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+// Rows that still hold their credential as plaintext JSONB, for the
+// security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
+// marker of a pre-146 row.
+//
+// The EXISTS clause is what makes "returned by this query" mean "has something
+// to seal", and it must stay in exact step with monitoring.HasAuthConfigSecret:
+// at least one key OUTSIDE the non-secret allow-list. A looser predicate
+// (auth_config <> '{}') also matches rows the sweep can never seal — a backend
+// whose auth_config is nothing but {"operationPolicies":{...}}, which is the
+// common case for an unauthenticated in-cluster Prometheus. Those rows never
+// leave the result set, so a full page of them ahead of a credentialed row
+// would make the sweep re-read the same page forever and never reach it.
+//
+// jsonb_typeof guards jsonb_object_keys, which errors on a non-object.
+func (q *Queries) ListMonitoringBackendsWithLegacyAuthConfig(ctx context.Context, arg ListMonitoringBackendsWithLegacyAuthConfigParams) ([]MonitoringBackend, error) {
+	rows, err := q.db.Query(ctx, listMonitoringBackendsWithLegacyAuthConfig, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MonitoringBackend{}
+	for rows.Next() {
+		var i MonitoringBackend
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.BackendType,
+			&i.QueryUrl,
+			&i.AlertmanagerUrl,
+			&i.TenantID,
+			&i.AuthType,
+			&i.AuthConfig,
+			&i.DefaultStepSeconds,
+			&i.TimeoutSeconds,
+			&i.IsDefault,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AuthConfigEncrypted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sealMonitoringBackendAuthConfig = `-- name: SealMonitoringBackendAuthConfig :exec
+UPDATE monitoring_backends
+   SET auth_config_encrypted = $2,
+       auth_config = $3
+ WHERE id = $1
+   AND auth_config_encrypted = ''
+`
+
+type SealMonitoringBackendAuthConfigParams struct {
+	ID                  uuid.UUID       `json:"id"`
+	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
+	AuthConfig          json.RawMessage `json:"auth_config"`
+}
+
+// Compare-and-set on the empty ciphertext: the server and the dedicated worker
+// both run the sealing task, and the loser of a race must not overwrite a
+// freshly-sealed envelope with a re-encryption of the document it read before
+// the winner stripped it.
+func (q *Queries) SealMonitoringBackendAuthConfig(ctx context.Context, arg SealMonitoringBackendAuthConfigParams) error {
+	_, err := q.db.Exec(ctx, sealMonitoringBackendAuthConfig, arg.ID, arg.AuthConfigEncrypted, arg.AuthConfig)
+	return err
 }
 
 const upsertClusterMonitoringConfig = `-- name: UpsertClusterMonitoringConfig :one
@@ -325,12 +428,13 @@ INSERT INTO monitoring_backends (
     tenant_id,
     auth_type,
     auth_config,
+    auth_config_encrypted,
     default_step_seconds,
     timeout_seconds,
     is_default,
     created_by_id
 )
-VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+VALUES ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)
 ON CONFLICT (name) DO UPDATE SET
     backend_type = EXCLUDED.backend_type,
     query_url = EXCLUDED.query_url,
@@ -338,25 +442,33 @@ ON CONFLICT (name) DO UPDATE SET
     tenant_id = EXCLUDED.tenant_id,
     auth_type = EXCLUDED.auth_type,
     auth_config = EXCLUDED.auth_config,
+    auth_config_encrypted = EXCLUDED.auth_config_encrypted,
     default_step_seconds = EXCLUDED.default_step_seconds,
     timeout_seconds = EXCLUDED.timeout_seconds,
     is_default = true,
     updated_at = now()
-RETURNING id, name, backend_type, query_url, alertmanager_url, tenant_id, auth_type, auth_config, default_step_seconds, timeout_seconds, is_default, created_by_id, created_at, updated_at
+RETURNING id, name, backend_type, query_url, alertmanager_url, tenant_id, auth_type, auth_config, default_step_seconds, timeout_seconds, is_default, created_by_id, created_at, updated_at, auth_config_encrypted
 `
 
 type UpsertDefaultMonitoringBackendParams struct {
-	BackendType        string          `json:"backend_type"`
-	QueryUrl           string          `json:"query_url"`
-	AlertmanagerUrl    string          `json:"alertmanager_url"`
-	TenantID           string          `json:"tenant_id"`
-	AuthType           string          `json:"auth_type"`
-	AuthConfig         json.RawMessage `json:"auth_config"`
-	DefaultStepSeconds int32           `json:"default_step_seconds"`
-	TimeoutSeconds     int32           `json:"timeout_seconds"`
-	CreatedByID        pgtype.UUID     `json:"created_by_id"`
+	BackendType         string          `json:"backend_type"`
+	QueryUrl            string          `json:"query_url"`
+	AlertmanagerUrl     string          `json:"alertmanager_url"`
+	TenantID            string          `json:"tenant_id"`
+	AuthType            string          `json:"auth_type"`
+	AuthConfig          json.RawMessage `json:"auth_config"`
+	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
+	DefaultStepSeconds  int32           `json:"default_step_seconds"`
+	TimeoutSeconds      int32           `json:"timeout_seconds"`
+	CreatedByID         pgtype.UUID     `json:"created_by_id"`
 }
 
+// auth_config and auth_config_encrypted are two halves of ONE value (migration
+// 146) and this statement always writes both. Every caller builds its params
+// through handler.sealMonitoringBackendAuthConfig / tasks.sealMonitoringBackendAuthConfig,
+// which set the pair together from a RESOLVED document — a writer that set the
+// projection without the envelope would silently drop the credential during an
+// unrelated config edit.
 func (q *Queries) UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error) {
 	row := q.db.QueryRow(ctx, upsertDefaultMonitoringBackend,
 		arg.BackendType,
@@ -365,6 +477,7 @@ func (q *Queries) UpsertDefaultMonitoringBackend(ctx context.Context, arg Upsert
 		arg.TenantID,
 		arg.AuthType,
 		arg.AuthConfig,
+		arg.AuthConfigEncrypted,
 		arg.DefaultStepSeconds,
 		arg.TimeoutSeconds,
 		arg.CreatedByID,
@@ -385,6 +498,7 @@ func (q *Queries) UpsertDefaultMonitoringBackend(ctx context.Context, arg Upsert
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthConfigEncrypted,
 	)
 	return i, err
 }

@@ -1418,6 +1418,21 @@ type Querier interface {
 	// ---------------------------------------------------------------------
 	ListMirroredResourceQuotas(ctx context.Context, clusterID uuid.UUID) ([]MirroredResourceQuota, error)
 	ListMirroredResourceQuotasByNamespace(ctx context.Context, arg ListMirroredResourceQuotasByNamespaceParams) ([]MirroredResourceQuota, error)
+	// Rows that still hold their credential as plaintext JSONB, for the
+	// security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
+	// marker of a pre-146 row.
+	//
+	// The EXISTS clause is what makes "returned by this query" mean "has something
+	// to seal", and it must stay in exact step with monitoring.HasAuthConfigSecret:
+	// at least one key OUTSIDE the non-secret allow-list. A looser predicate
+	// (auth_config <> '{}') also matches rows the sweep can never seal — a backend
+	// whose auth_config is nothing but {"operationPolicies":{...}}, which is the
+	// common case for an unauthenticated in-cluster Prometheus. Those rows never
+	// leave the result set, so a full page of them ahead of a credentialed row
+	// would make the sweep re-read the same page forever and never reach it.
+	//
+	// jsonb_typeof guards jsonb_object_keys, which errors on a non-object.
+	ListMonitoringBackendsWithLegacyAuthConfig(ctx context.Context, arg ListMonitoringBackendsWithLegacyAuthConfigParams) ([]MonitoringBackend, error)
 	ListMonitoringOperationEvents(ctx context.Context, operationID uuid.UUID) ([]MonitoringOperationEvent, error)
 	ListMonitoringOperations(ctx context.Context, arg ListMonitoringOperationsParams) ([]MonitoringOperation, error)
 	// Admin overview across all users, paged.
@@ -1825,6 +1840,11 @@ type Querier interface {
 	// overwrite a freshly-sealed envelope with a re-encryption of a document it
 	// read before the winner stripped it.
 	SealHelmRepositoryAuthConfig(ctx context.Context, arg SealHelmRepositoryAuthConfigParams) error
+	// Compare-and-set on the empty ciphertext: the server and the dedicated worker
+	// both run the sealing task, and the loser of a race must not overwrite a
+	// freshly-sealed envelope with a re-encryption of the document it read before
+	// the winner stripped it.
+	SealMonitoringBackendAuthConfig(ctx context.Context, arg SealMonitoringBackendAuthConfigParams) error
 	// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
 	// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
 	// when a rotation is already in flight: rotation_pending_at already set (trigger
@@ -2068,6 +2088,12 @@ type Querier interface {
 	// and re-assert is_default, but deliberately leave `enabled` alone so an operator
 	// who disabled a default repo keeps it disabled across reconciles.
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
+	// auth_config and auth_config_encrypted are two halves of ONE value (migration
+	// 146) and this statement always writes both. Every caller builds its params
+	// through handler.sealMonitoringBackendAuthConfig / tasks.sealMonitoringBackendAuthConfig,
+	// which set the pair together from a RESOLVED document — a writer that set the
+	// projection without the envelope would silently drop the credential during an
+	// unrelated config edit.
 	UpsertDefaultMonitoringBackend(ctx context.Context, arg UpsertDefaultMonitoringBackendParams) (MonitoringBackend, error)
 	// A single statement is the transaction boundary for concurrent discovery.
 	// The stable local ID is preserved on conflict so already-audited operation

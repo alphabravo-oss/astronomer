@@ -17,6 +17,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -173,6 +174,48 @@ type RuntimeDependencies struct {
 	// 401s. Nil-safe — a nil decryptor reads pre-145 (unsealed) rows fine and
 	// declines to authenticate sealed ones (see catalog.ResolveAuthConfig).
 	CatalogDecryptor catalog.Decryptor
+	// MonitoringCipher seals and unseals monitoring_backends.auth_config_encrypted
+	// (migration 146). Unlike CatalogDecryptor this needs BOTH halves: the
+	// monitoring reconcile tick does a read-modify-write on the column to
+	// stamp the shared-Thanos status, so it must re-seal what it resolved.
+	//
+	// Nil-safe — a nil cipher reads pre-146 (unsealed) rows fine, declines to
+	// authenticate sealed ones, and writes back the pre-146 row shape.
+	MonitoringCipher MonitoringCipher
+}
+
+// MonitoringCipher is the narrow both-directions surface the monitoring
+// credential envelope needs. *auth.Encryptor satisfies it.
+type MonitoringCipher interface {
+	Encrypt(plaintext string) (string, error)
+	Decrypt(token string) (string, error)
+}
+
+// MonitoringCipherFor adapts a possibly-nil *auth.Encryptor, for the same
+// reason CatalogDecryptorFor does: a nil *auth.Encryptor assigned straight
+// into an interface field is a NON-nil interface holding a nil pointer, so
+// every `== nil` guard downstream passes and the first call panics.
+func MonitoringCipherFor(enc *auth.Encryptor) MonitoringCipher {
+	if enc == nil {
+		return nil
+	}
+	return enc
+}
+
+// monitoringDecryptor / monitoringEncryptor narrow the configured cipher to
+// one direction, preserving the genuinely-nil interface when none is wired.
+func monitoringDecryptor() imonitoring.Decryptor {
+	if runtimeDeps.MonitoringCipher == nil {
+		return nil
+	}
+	return runtimeDeps.MonitoringCipher
+}
+
+func monitoringEncryptor() imonitoring.Encryptor {
+	if runtimeDeps.MonitoringCipher == nil {
+		return nil
+	}
+	return runtimeDeps.MonitoringCipher
 }
 
 // CatalogDecryptorFor adapts a possibly-nil *auth.Encryptor to the narrow

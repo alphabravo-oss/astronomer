@@ -57,6 +57,11 @@ func main() {
 	// scheduled sweep and the interactive handler are separate readers of the
 	// same credential; a worker without this key syncs private chart
 	// repositories unauthenticated.
+	//
+	// monitoring:reconcile and alert:evaluate need it for the same reason
+	// against monitoring_backends.auth_config_encrypted (migration 146), and
+	// the reconcile tick additionally re-seals what it resolved — so this
+	// process needs both directions of the cipher, not just decrypt.
 	var platformEncryptor *auth.Encryptor
 	if cfg.EncryptionKey != "" {
 		if e, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
@@ -165,6 +170,7 @@ func main() {
 		Enqueuer:                      runtimeEnqueuer,
 		Bus:                           eventBus,
 		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
+		MonitoringCipher:              tasks.MonitoringCipherFor(platformEncryptor),
 	})
 	var controlPlaneK8s kubernetes.Interface
 	var controlPlaneDyn dynamic.Interface

@@ -1,0 +1,36 @@
+-- Reverse of 146: drop the monitoring-backend credential envelope.
+--
+-- This is lossy and it is lossy on purpose. Once the sealing task has run, the
+-- credential lives ONLY in auth_config_encrypted; auth_config holds the
+-- non-secret projection (operationPolicies, sharedThanos, sharedAlertmanager,
+-- sharedAlertingAssets, status). Dropping the column discards the credential,
+-- and the platform falls back to unauthenticated queries against Thanos /
+-- Prometheus / Alertmanager until an operator re-enters it.
+--
+-- The alternative — decrypting back into auth_config on the way down — is not
+-- available here: a migration has no access to the Fernet key, so it cannot
+-- reverse the transform it did not perform. Re-entering the credential through
+-- PUT /api/v1/settings/monitoring/backend/ is the documented rollback step; it
+-- is one small visible action, whereas silently writing something wrong into
+-- auth_config would be neither.
+--
+-- The operator-visible symptom of forgetting that step is specific and worth
+-- writing down: the monitoring backend reports `degraded` (the reconciler's
+-- health check 401s), cluster metrics fall back to the synthetic summaries,
+-- and alert evaluation stops firing on real data. None of that says
+-- "credential".
+--
+-- Rolling back the CODE alone (without this migration) is safe ONLY for rows
+-- the sealing task has not yet touched. security:migrate_plaintext_credentials
+-- runs @every 6h, so that window is short: once the row is sealed its
+-- auth_config has the credential REMOVED, and an older binary — which knows
+-- only that column — sends no Authorization header at all.
+--
+-- Do not edit the monitoring backend mid-rollout while both binaries are live.
+-- An old pod's UpdateBackendConfig does not touch auth_config_encrypted and
+-- treats auth_config as the whole document, so it writes a plaintext
+-- credential into auth_config while new pods keep decrypting the stale
+-- envelope: the change appears to have been accepted and has not taken effect,
+-- and the credential is back in the clear.
+
+ALTER TABLE monitoring_backends DROP COLUMN IF EXISTS auth_config_encrypted;

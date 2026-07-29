@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -15,10 +16,29 @@ import (
 )
 
 type BackendConfig struct {
-	QueryURL           string
-	TenantID           string
-	AuthType           string
-	AuthConfig         json.RawMessage
+	QueryURL string
+	TenantID string
+	AuthType string
+	// AuthConfig is the stored auth_config JSONB column: the non-secret
+	// projection for a sealed row, or the complete document for a row that
+	// predates migration 146.
+	AuthConfig json.RawMessage
+	// AuthConfigEncrypted is the auth_config_encrypted column. When non-empty
+	// it is authoritative and Decryptor must be able to unwrap it.
+	//
+	// Both halves live on this struct — rather than the caller resolving and
+	// passing one document — because this is the ONLY live reader of the
+	// monitoring credential and there are five construction sites across two
+	// processes. A site that forgot to resolve would authenticate with the
+	// stripped projection and get an upstream 401 that reads like a wrong
+	// password; a site that cannot forget to pass a column it must copy off
+	// the same row cannot make that mistake.
+	AuthConfigEncrypted string
+	// Decryptor unwraps AuthConfigEncrypted. Nil-safe: a nil decryptor reads
+	// pre-146 rows fine and declines to authenticate sealed ones.
+	Decryptor Decryptor
+	// Logger records a decrypt failure. Optional; slog.Default() otherwise.
+	Logger             *slog.Logger
 	DefaultStepSeconds int32
 	TimeoutSeconds     int32
 }
@@ -45,9 +65,30 @@ func NewClient(cfg BackendConfig) (*Client, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
+	// Migration 146: the credential lives in the Fernet envelope whenever
+	// auth_config_encrypted is non-empty.
+	//
+	// A decrypt failure yields NO credential and a logged error — never the
+	// ciphertext, and never a hard failure of the client. Returning an error
+	// here would take every dashboard, alert evaluation and reconcile tick
+	// down over a key-management problem; sending the ciphertext as a password
+	// (the shape decryptGitAuth in gitops_sync.go has) would report a key
+	// problem as an upstream authentication failure. The backend answers 401,
+	// the reconciler records the backend as degraded, and the log line says
+	// what actually happened.
+	resolved, resolveErr := ResolveAuthConfig(cfg.AuthConfigEncrypted, cfg.AuthConfig, cfg.Decryptor)
+	if resolveErr != nil {
+		logger := cfg.Logger
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("monitoring backend request sent unauthenticated: credential could not be decrypted",
+			"query_url", baseURL, "error", resolveErr)
+		resolved = nil
+	}
 	authCfg := map[string]any{}
-	if len(cfg.AuthConfig) > 0 {
-		if err := json.Unmarshal(cfg.AuthConfig, &authCfg); err != nil {
+	if len(resolved) > 0 {
+		if err := json.Unmarshal(resolved, &authCfg); err != nil {
 			return nil, fmt.Errorf("decode auth config: %w", err)
 		}
 	}

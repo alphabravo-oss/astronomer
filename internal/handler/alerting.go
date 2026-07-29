@@ -15,9 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -94,6 +96,34 @@ type AlertingHandler struct {
 	// settingsCache resolves DIR-08 Alertmanager timing knobs at render time.
 	settingsCache *SettingsCache
 	bus           *events.Bus
+	// encryptor seals/unseals monitoring_backends.auth_config (migration 146).
+	// This handler is a WRITER of that column — persistSharedAlertingAssetHashes
+	// stamps the rendered-asset hashes into it — so it needs the key for the
+	// same reason MonitoringHandler does. Optional in development only.
+	encryptor *auth.Encryptor
+}
+
+// SetEncryptor wires the Fernet encryptor for the monitoring-backend
+// credential (migration 146).
+func (h *AlertingHandler) SetEncryptor(encryptor *auth.Encryptor) {
+	if h == nil {
+		return
+	}
+	h.encryptor = encryptor
+}
+
+func (h *AlertingHandler) monitoringDecryptor() imonitoring.Decryptor {
+	if h == nil || h.encryptor == nil {
+		return nil
+	}
+	return h.encryptor
+}
+
+func (h *AlertingHandler) monitoringSealer() imonitoring.Encryptor {
+	if h == nil || h.encryptor == nil {
+		return nil
+	}
+	return h.encryptor
 }
 
 // NewAlertingHandler creates a new alerting handler.
@@ -1233,26 +1263,32 @@ func (h *AlertingHandler) syncSharedAlertingAssets(ctx context.Context) error {
 }
 
 func (h *AlertingHandler) persistSharedAlertingAssetHashes(ctx context.Context, backend sqlc.MonitoringBackend, hashes map[string]any) error {
-	authCfg := decodeJSONMap(backend.AuthConfig)
+	// RMW site (migration 146). This is the least obvious of the four: it runs
+	// as a side effect of an alert-rule or notification-channel edit, so a
+	// version of it that re-marshalled the stored JSONB projection would let
+	// "operator adds a Slack channel" delete the Thanos credential.
+	authCfg, err := resolveMonitoringBackendAuthConfig(backend, h.monitoringDecryptor())
+	if err != nil {
+		return fmt.Errorf("resolve monitoring backend auth_config: %w", err)
+	}
 	authCfg["sharedAlertingAssets"] = map[string]any{
 		"hashes":    hashes,
 		"updatedAt": time.Now().UTC().Format(time.RFC3339),
 	}
-	raw, err := json.Marshal(authCfg)
-	if err != nil {
-		return err
-	}
-	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, sqlc.UpsertDefaultMonitoringBackendParams{
+	params := sqlc.UpsertDefaultMonitoringBackendParams{
 		BackendType:        backend.BackendType,
 		QueryUrl:           backend.QueryUrl,
 		AlertmanagerUrl:    backend.AlertmanagerUrl,
 		TenantID:           backend.TenantID,
 		AuthType:           backend.AuthType,
-		AuthConfig:         raw,
 		DefaultStepSeconds: backend.DefaultStepSeconds,
 		TimeoutSeconds:     backend.TimeoutSeconds,
 		CreatedByID:        backend.CreatedByID,
-	})
+	}
+	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
+		return err
+	}
+	_, err = h.queries.UpsertDefaultMonitoringBackend(ctx, params)
 	return err
 }
 

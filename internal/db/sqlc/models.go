@@ -1491,20 +1491,21 @@ type MirroredResourceQuota struct {
 }
 
 type MonitoringBackend struct {
-	ID                 uuid.UUID       `json:"id"`
-	Name               string          `json:"name"`
-	BackendType        string          `json:"backend_type"`
-	QueryUrl           string          `json:"query_url"`
-	AlertmanagerUrl    string          `json:"alertmanager_url"`
-	TenantID           string          `json:"tenant_id"`
-	AuthType           string          `json:"auth_type"`
-	AuthConfig         json.RawMessage `json:"auth_config"`
-	DefaultStepSeconds int32           `json:"default_step_seconds"`
-	TimeoutSeconds     int32           `json:"timeout_seconds"`
-	IsDefault          bool            `json:"is_default"`
-	CreatedByID        pgtype.UUID     `json:"created_by_id"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	ID                  uuid.UUID       `json:"id"`
+	Name                string          `json:"name"`
+	BackendType         string          `json:"backend_type"`
+	QueryUrl            string          `json:"query_url"`
+	AlertmanagerUrl     string          `json:"alertmanager_url"`
+	TenantID            string          `json:"tenant_id"`
+	AuthType            string          `json:"auth_type"`
+	AuthConfig          json.RawMessage `json:"auth_config"`
+	DefaultStepSeconds  int32           `json:"default_step_seconds"`
+	TimeoutSeconds      int32           `json:"timeout_seconds"`
+	IsDefault           bool            `json:"is_default"`
+	CreatedByID         pgtype.UUID     `json:"created_by_id"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
 }
 
 type MonitoringOperation struct {

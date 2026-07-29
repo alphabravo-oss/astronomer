@@ -18,13 +18,13 @@ package catalog
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/credential"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -32,14 +32,10 @@ import (
 // declared as an interface here so this package does not depend on the auth
 // package (and so the worker can keep injecting a narrow dependency, the same
 // shape as tasks.GitOpsDecryptor).
-type Decryptor interface {
-	Decrypt(token string) (string, error)
-}
+type Decryptor = credential.Decryptor
 
 // Encryptor seals the envelope on the write path.
-type Encryptor interface {
-	Encrypt(plaintext string) (string, error)
-}
+type Encryptor = credential.Encryptor
 
 // AuthConfigSecretKeys are the auth_config keys whose values are credentials.
 // They are stripped from the plaintext JSONB projection on write and replaced
@@ -62,7 +58,12 @@ var AuthConfigSecretKeys = []string{
 // operator as "the repository rejected my credential" when what actually
 // happened is that ASTRONOMER_ENCRYPTION_KEY is wrong or a rotation dropped a
 // key too early. The hardened sibling is ArgoCDHandler.decryptInstanceToken.
-var ErrAuthConfigUnavailable = errors.New("chart repository credential unavailable")
+//
+// It is credential.ErrUnavailable itself, not a distinct sentinel wrapping it:
+// the monitoring-backend envelope (migration 146) shares these mechanics, and
+// one sentinel means a caller that checks the wrong package's name still gets
+// the right answer.
+var ErrAuthConfigUnavailable = credential.ErrUnavailable
 
 // ResolveAuthConfig returns the plaintext auth_config document for a
 // repository.
@@ -76,26 +77,8 @@ var ErrAuthConfigUnavailable = errors.New("chart repository credential unavailab
 // The error is terminal for credential purposes. It is never accompanied by a
 // usable document.
 func ResolveAuthConfig(repo sqlc.HelmRepository, dec Decryptor) (json.RawMessage, error) {
-	sealed := strings.TrimSpace(repo.AuthConfigEncrypted)
-	if sealed == "" {
-		// Legacy / unsealed row: auth_config is the complete document. This
-		// branch is what keeps an existing install working across the upgrade
-		// until security:migrate_plaintext_credentials seals the row.
-		return repo.AuthConfig, nil
-	}
-	if dec == nil {
-		return nil, fmt.Errorf("%w: repository %q is encrypted but no Fernet key is configured (check ASTRONOMER_ENCRYPTION_KEY)",
-			ErrAuthConfigUnavailable, repo.Name)
-	}
-	plaintext, err := dec.Decrypt(sealed)
-	if err != nil {
-		return nil, fmt.Errorf("%w: decrypt repository %q auth_config (check ASTRONOMER_ENCRYPTION_KEY / key rotation): %w",
-			ErrAuthConfigUnavailable, repo.Name, err)
-	}
-	if strings.TrimSpace(plaintext) == "" {
-		return json.RawMessage(`{}`), nil
-	}
-	return json.RawMessage(plaintext), nil
+	return credential.Resolve(repo.AuthConfigEncrypted, repo.AuthConfig, dec,
+		fmt.Sprintf("chart repository %q auth_config", repo.Name))
 }
 
 // ResolveIndexAuthConfig resolves and decodes the credential for a classic
@@ -132,33 +115,12 @@ func ResolveOCIAuthConfig(repo sqlc.HelmRepository, dec Decryptor) (OCIAuthConfi
 // the resolver's empty-ciphertext branch expects. Encrypting is not silently
 // skipped in production because there is no such thing as a production server
 // without an encryptor.
+// Nothing secret in the document (the common case: a public repo, or an OCI
+// repo with only a `charts` list) leaves the envelope empty: sealing it anyway
+// would put the chart list out of reach of the catalog API for no gain and
+// make the repository list depend on a successful decrypt.
 func SealAuthConfig(full json.RawMessage, enc Encryptor) (ciphertext string, public json.RawMessage, err error) {
-	if len(full) == 0 {
-		full = json.RawMessage(`{}`)
-	}
-	if enc == nil {
-		return "", full, nil
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(full, &doc); err != nil || doc == nil {
-		// Unparseable or JSON null: there is nothing to protect and nothing
-		// worth storing. Normalising to {} keeps the column's NOT NULL
-		// JSONB contract and matches ParseOCIAuthConfig's permissiveness.
-		return "", json.RawMessage(`{}`), nil
-	}
-	if !hasAuthConfigSecret(doc) {
-		// Nothing secret in the document (the common case: a public repo, or
-		// an OCI repo with only a `charts` list). Sealing it anyway would put
-		// the chart list out of reach of the catalog API for no gain and make
-		// the repository list depend on a successful decrypt.
-		return "", full, nil
-	}
-	ciphertext, err = enc.Encrypt(string(full))
-	if err != nil {
-		return "", nil, fmt.Errorf("encrypt chart repository auth_config: %w", err)
-	}
-	public = StripAuthConfigSecrets(full)
-	return ciphertext, public, nil
+	return credential.Seal(full, enc, hasAuthConfigSecret, stripAuthConfigSecretKeys, "chart repository auth_config")
 }
 
 // StripAuthConfigSecrets removes — not blanks — every secret-valued key, so no
@@ -170,14 +132,21 @@ func StripAuthConfigSecrets(raw json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(raw, &doc); err != nil || doc == nil {
 		return json.RawMessage(`{}`)
 	}
-	for _, k := range AuthConfigSecretKeys {
-		delete(doc, k)
-	}
-	out, err := json.Marshal(doc)
+	out, err := json.Marshal(stripAuthConfigSecretKeys(doc))
 	if err != nil {
 		return json.RawMessage(`{}`)
 	}
 	return out
+}
+
+// stripAuthConfigSecretKeys is the decoded-document form credential.Seal takes.
+// It mutates and returns doc, which is safe because Seal owns the map it
+// decoded from the caller's bytes.
+func stripAuthConfigSecretKeys(doc map[string]any) map[string]any {
+	for _, k := range AuthConfigSecretKeys {
+		delete(doc, k)
+	}
+	return doc
 }
 
 // InferAuthType derives the auth_type a credential document implies, or "" if

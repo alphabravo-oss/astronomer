@@ -104,3 +104,27 @@ func TestRewriteTargetsCoverChartRepositoryAuthConfig(t *testing.T) {
 	t.Fatal("helm_repositories.auth_config_encrypted is not in rewriteTargets: " +
 		"a key rotation would leave every chart-repository credential encrypted under the retired key")
 }
+
+// TestRewriteTargetsCoverMonitoringBackendAuthConfig pins the migration-146
+// column explicitly, for the same reason as its 145 sibling above.
+//
+// The monitoring case is the one where an unswept envelope is hardest to
+// diagnose. Losing the chart-repository credential shows up as a 401 recorded
+// in helm_repositories.last_sync_error, next to the repository name. Losing
+// this one shows up as the monitoring backend reporting "degraded", cluster
+// metrics silently falling back to synthetic summaries, and alert rules
+// evaluating against nothing — three symptoms, none of which says
+// "credential", and all of which appear hours after the rotation that caused
+// them.
+func TestRewriteTargetsCoverMonitoringBackendAuthConfig(t *testing.T) {
+	for _, tg := range rewriteTargets {
+		if tg.table == "monitoring_backends" && tg.column == "auth_config_encrypted" {
+			if tg.idCol != "id" {
+				t.Fatalf("monitoring_backends primary key column is %q, want \"id\"", tg.idCol)
+			}
+			return
+		}
+	}
+	t.Fatal("monitoring_backends.auth_config_encrypted is not in rewriteTargets: " +
+		"a key rotation would leave the Thanos/Prometheus/Alertmanager credential encrypted under the retired key")
+}

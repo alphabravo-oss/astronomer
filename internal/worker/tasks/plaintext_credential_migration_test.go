@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
 type fakePlaintextCredentialMigrationQuerier struct {
@@ -19,6 +21,8 @@ type fakePlaintextCredentialMigrationQuerier struct {
 	backupUpdates   []sqlc.UpdateBackupStorageConfigParams
 	registryUpdates []sqlc.UpdateClusterRegistryConfigParams
 	repoSeals       []sqlc.SealHelmRepositoryAuthConfigParams
+	backends        []sqlc.MonitoringBackend
+	backendSeals    []sqlc.SealMonitoringBackendAuthConfigParams
 
 	// looseRepoListPredicate reproduces the PRE-FIX SQL, which selected on
 	// `auth_config <> '{}'` and so also returned rows with no secret to seal.
@@ -77,6 +81,45 @@ func (f *fakePlaintextCredentialMigrationQuerier) SealHelmRepositoryAuthConfig(_
 		if f.repos[i].ID == arg.ID && f.repos[i].AuthConfigEncrypted == "" {
 			f.repos[i].AuthConfigEncrypted = arg.AuthConfigEncrypted
 			f.repos[i].AuthConfig = arg.AuthConfig
+		}
+	}
+	return nil
+}
+
+// Mirrors the SQL predicate in internal/db/queries/monitoring.sql: an empty
+// envelope AND at least one key OUTSIDE the non-secret allow-list, so a sealed
+// row stops matching and a backend whose auth_config is nothing but
+// operationPolicies never matches at all.
+func (f *fakePlaintextCredentialMigrationQuerier) ListMonitoringBackendsWithLegacyAuthConfig(_ context.Context, arg sqlc.ListMonitoringBackendsWithLegacyAuthConfigParams) ([]sqlc.MonitoringBackend, error) {
+	out := make([]sqlc.MonitoringBackend, 0, len(f.backends))
+	for _, b := range f.backends {
+		if b.AuthConfigEncrypted != "" || len(b.AuthConfig) == 0 {
+			continue
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(b.AuthConfig, &doc); err != nil {
+			continue
+		}
+		if imonitoring.HasAuthConfigSecret(doc) {
+			out = append(out, b)
+		}
+	}
+	if int(arg.Offset) >= len(out) {
+		return nil, nil
+	}
+	out = out[arg.Offset:]
+	if int(arg.Limit) < len(out) {
+		out = out[:arg.Limit]
+	}
+	return out, nil
+}
+
+func (f *fakePlaintextCredentialMigrationQuerier) SealMonitoringBackendAuthConfig(_ context.Context, arg sqlc.SealMonitoringBackendAuthConfigParams) error {
+	f.backendSeals = append(f.backendSeals, arg)
+	for i := range f.backends {
+		if f.backends[i].ID == arg.ID && f.backends[i].AuthConfigEncrypted == "" {
+			f.backends[i].AuthConfigEncrypted = arg.AuthConfigEncrypted
+			f.backends[i].AuthConfig = arg.AuthConfig
 		}
 	}
 	return nil
@@ -213,5 +256,83 @@ func TestPlaintextCredentialMigrationBlanksRowsWithExistingCiphertext(t *testing
 	}
 	if q.registryUpdates[0].RegistryPasswordEncrypted != registryCiphertext {
 		t.Fatal("expected existing registry ciphertext to be preserved")
+	}
+}
+
+// Migration 146 adds a FOURTH case to this sweep: the monitoring backend.
+//
+// The migration itself can only add the column (SQL has no Fernet key), so an
+// upgraded install arrives with the Thanos credential still in the clear in
+// auth_config. Without this converter the fix would only ever apply to
+// installs where somebody happened to re-save the backend through the API.
+func TestPlaintextCredentialMigrationSealsMonitoringBackendAuthConfig(t *testing.T) {
+	ResetPlaintextCredentialMigration()
+	key, err := auth.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	enc, err := auth.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	credentialed := uuid.New()
+	q := &fakePlaintextCredentialMigrationQuerier{
+		backends: []sqlc.MonitoringBackend{
+			{
+				ID:         credentialed,
+				Name:       "default",
+				AuthType:   "bearer",
+				AuthConfig: json.RawMessage(`{"token":"s3cr3t-thanos-token","operationPolicies":{"maxRetryAttempts":3}}`),
+			},
+			{
+				// Nothing outside the non-secret allow-list. Sealing this
+				// would put the retry policy behind a decrypt for no gain, and
+				// a row the sweep cannot seal must be walked PAST rather than
+				// re-read forever.
+				ID:         uuid.New(),
+				Name:       "config-only",
+				AuthConfig: json.RawMessage(`{"operationPolicies":{"maxRetryAttempts":1}}`),
+			},
+		},
+	}
+	ConfigurePlaintextCredentialMigration(PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc})
+	t.Cleanup(ResetPlaintextCredentialMigration)
+
+	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+		t.Fatalf("HandlePlaintextCredentialMigration: %v", err)
+	}
+	if len(q.backendSeals) != 1 {
+		t.Fatalf("expected exactly one monitoring backend sealed, got %d", len(q.backendSeals))
+	}
+	seal := q.backendSeals[0]
+	if seal.ID != credentialed {
+		t.Fatalf("sealed the wrong backend: %s", seal.ID)
+	}
+	if strings.Contains(string(seal.AuthConfig), "s3cr3t-thanos-token") {
+		t.Fatalf("the sweep left the credential in the clear: %s", seal.AuthConfig)
+	}
+	plain, err := enc.Decrypt(seal.AuthConfigEncrypted)
+	if err != nil {
+		t.Fatalf("Decrypt sealed auth_config: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(plain), &doc); err != nil {
+		t.Fatalf("decode sealed auth_config: %v", err)
+	}
+	if doc["token"] != "s3cr3t-thanos-token" {
+		t.Fatalf("the envelope does not hold the credential: %v", doc)
+	}
+	// The config bag stays queryable in the JSONB.
+	if !strings.Contains(string(seal.AuthConfig), "maxRetryAttempts") {
+		t.Fatalf("the sweep sealed the non-secret config bag away: %s", seal.AuthConfig)
+	}
+
+	// Idempotent: a second pass finds the sealed row no longer matching.
+	before := len(q.backendSeals)
+	if err := HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
+		t.Fatalf("second pass: %v", err)
+	}
+	if len(q.backendSeals) != before {
+		t.Fatalf("second pass re-sealed an already-sealed row: %d -> %d", before, len(q.backendSeals))
 	}
 }
