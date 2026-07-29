@@ -132,7 +132,7 @@ func TestStreamUpstreamRequestCarriesNoImpersonationWithFlagOff(t *testing.T) {
 func TestImpersonationCapabilityDeniedWithoutGrant(t *testing.T) {
 	// The fake clientset returns a zero-valued review: Allowed=false. That is
 	// exactly what a real apiserver returns for an agent without the verb.
-	if probeImpersonationAllowed(context.Background(), fake.NewSimpleClientset()) {
+	if probeImpersonationAllowed(context.Background(), fake.NewClientset()) {
 		t.Fatal("probe must not report allowed without an impersonate grant")
 	}
 	if probeImpersonationAllowed(context.Background(), nil) {
@@ -158,7 +158,7 @@ func TestImpersonationCapabilityDeniedWithoutGrant(t *testing.T) {
 // TestImpersonationProbeCaches proves the probe is not a per-heartbeat
 // apiserver call: heartbeats default to every 30s, the probe TTL is an hour.
 func TestImpersonationProbeCaches(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	calls := 0
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
 		calls++

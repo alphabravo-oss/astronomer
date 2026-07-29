@@ -57,7 +57,7 @@ func TestRemoveAgentReportsSupersession(t *testing.T) {
 func TestSupersededDisconnectDoesNotClobberLocator(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	ctx := context.Background()
 
 	h := NewHub(slog.Default())

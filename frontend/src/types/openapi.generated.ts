@@ -918,6 +918,7 @@ export interface OpenAPIComponents {
           "delete_empty_dir_data"?: boolean;
           "grace_period_seconds"?: number;
           "dry_run"?: boolean;
+          "force"?: boolean;
         };
     NodeDrainResponse: {
           "node"?: string;

@@ -230,6 +230,7 @@ func fleetTargetToResponse(t sqlc.FleetOperationTarget) FleetOperationTargetResp
 }
 
 // CreateFleetOperationRequest is the POST body shape.
+// openapi:request CreateFleetOperationRequest
 type CreateFleetOperationRequest struct {
 	Name                      string          `json:"name"`
 	Description               string          `json:"description"`

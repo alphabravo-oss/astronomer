@@ -230,7 +230,7 @@ func (s *httpAuditSender) Send(ctx context.Context, events []json.RawMessage) er
 	if err != nil {
 		return fmt.Errorf("post apiserver-audit batch: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Drain so the connection can be reused (keep-alive).
 	_, _ = io.Copy(io.Discard, resp.Body)
 	// 401/403 means the token we still hold was invalidated server-side (an
@@ -373,7 +373,8 @@ func (t *AuditTailer) poll(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open audit log: %w", err)
 	}
-	defer f.Close()
+	// Read-only handle: Close cannot report a lost write.
+	defer func() { _ = f.Close() }()
 
 	size, err := fileSize(f)
 	if err != nil {

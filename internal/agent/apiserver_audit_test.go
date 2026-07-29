@@ -129,7 +129,9 @@ func TestAuditTailer_CheckpointResumes(t *testing.T) {
 	if _, err := f.WriteString(auditLine("c") + "\n" + auditLine("d") + "\n"); err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := tl.poll(context.Background()); err != nil {
 		t.Fatalf("third poll: %v", err)
@@ -227,9 +229,16 @@ func TestAuditTailer_PartialTrailingLineDeferred(t *testing.T) {
 	}
 
 	// Finish the partial line.
-	f, _ := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o600)
-	f.WriteString(`"verb":"list"}` + "\n")
-	f.Close()
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`"verb":"list"}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := tl.poll(context.Background()); err != nil {
 		t.Fatalf("poll 2: %v", err)

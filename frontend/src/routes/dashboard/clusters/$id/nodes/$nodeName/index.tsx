@@ -298,7 +298,7 @@ function NodeDetailPage() {
   const [showYaml, setShowYaml] = useState(false);
   const [showDrain, setShowDrain] = useState(false);
   const [showAddTaint, setShowAddTaint] = useState(false);
-  const [newTaint, setNewTaint] = useState({ key: '', value: '', effect: 'NoSchedule' });
+  const [newTaint, setNewTaint] = useState<apiClient.NodeTaintRequest>({ key: '', value: '', effect: 'NoSchedule' });
   const [showAddLabel, setShowAddLabel] = useState(false);
   const [newLabel, setNewLabel] = useState({ key: '', value: '' });
   const [showAddAnnotation, setShowAddAnnotation] = useState(false);
@@ -860,13 +860,14 @@ function NodeDetailPage() {
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Value</label>
-                <input type="text" value={newTaint.value} onChange={(e) => setNewTaint({ ...newTaint, value: e.target.value })}
+                <input type="text" value={newTaint.value ?? ''} onChange={(e) => setNewTaint({ ...newTaint, value: e.target.value })}
                   placeholder="(optional)"
                   className="w-full h-8 px-3 rounded border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring" />
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Effect</label>
-                <select value={newTaint.effect} onChange={(e) => setNewTaint({ ...newTaint, effect: e.target.value })}
+                <select value={newTaint.effect}
+                  onChange={(e) => setNewTaint({ ...newTaint, effect: e.target.value as apiClient.NodeTaintRequest['effect'] })}
                   className="w-full h-8 px-3 rounded border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring">
                   <option value="NoSchedule">NoSchedule</option>
                   <option value="PreferNoSchedule">PreferNoSchedule</option>

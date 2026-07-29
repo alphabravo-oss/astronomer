@@ -280,7 +280,10 @@ func (tc *TunnelClient) shedInbound(msg *protocol.Message, class dispatchClass) 
 	if reply == nil {
 		return
 	}
-	if err := tc.enqueueClass(nil, reply, frameStream, 0); err != nil {
+	// context.TODO: this is the non-blocking path (wait == 0), so enqueueClass
+	// never selects on ctx.Done — and this runs on readLoop, which must not
+	// block on a connection context here.
+	if err := tc.enqueueClass(context.TODO(), reply, frameStream, 0); err != nil {
 		tc.log.Warn("could not queue overload rejection", "type", msg.Type, "error", err)
 	}
 }

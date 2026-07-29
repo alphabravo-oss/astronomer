@@ -72,6 +72,9 @@ type effectivePermissionSource struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// openapi:request RBACPermissionPreviewRequest
+// openapi:request-allow cluster_id  DEBT: required by the handler when scope=cluster; undocumented
+// openapi:request-allow project_id  DEBT: required by the handler when scope=project; undocumented
 type permissionPreviewRequest struct {
 	Scope        string          `json:"scope"`
 	RoleID       string          `json:"role_id"`

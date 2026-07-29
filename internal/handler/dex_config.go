@@ -187,7 +187,6 @@ func (h *DexHandler) normalizeRuntimeIdentity(row sqlc.DexSetting) (sqlc.DexSett
 	return row, nil
 }
 
-type dexConnectorSpec = dexconfig.ConnectorSpec
 type nestedRequirement = dexconfig.NestedRequirement
 
 // dexConnectorRegistry is a read-only projection of the shared runtime
@@ -369,6 +368,7 @@ func sanitizeDexMap(raw map[string]any) map[string]any {
 }
 
 // connectorRequest is the JSON shape POST/PATCH accepts.
+// openapi:request DexConnectorRequest
 type connectorRequest struct {
 	Type        string         `json:"type"`
 	Name        string         `json:"name"`
@@ -378,6 +378,7 @@ type connectorRequest struct {
 }
 
 // settingsRequest is the JSON shape PUT /settings accepts.
+// openapi:request DexSettingsRequest
 type settingsRequest struct {
 	IssuerURL         string `json:"issuer_url"`
 	ClusterID         string `json:"cluster_id"`
@@ -1231,41 +1232,6 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		"applied":                 result.Applied,
 		action:                    true,
 	})
-}
-
-func (h *DexHandler) writeDexSSO(ctx context.Context, existing sqlc.SsoConfiguration, enabled bool, displayName string, config json.RawMessage, clientID, encryptedSecret string) (sqlc.SsoConfiguration, error) {
-	organizations := existing.AllowedOrganizations
-	domains := existing.AllowedDomains
-	if len(organizations) == 0 {
-		organizations = json.RawMessage(`[]`)
-	}
-	if len(domains) == 0 {
-		domains = json.RawMessage(`[]`)
-	}
-	if existing.ID != uuid.Nil {
-		return h.queries.UpdateSSOConfiguration(ctx, sqlc.UpdateSSOConfigurationParams{
-			ID: existing.ID, IsEnabled: enabled, DisplayName: displayName, Config: config,
-			ClientID: clientID, ClientSecretEncrypted: encryptedSecret,
-			AllowedOrganizations: organizations, AllowedDomains: domains,
-			AutoCreateUsers: existing.AutoCreateUsers, DefaultGlobalRoleID: existing.DefaultGlobalRoleID,
-		})
-	}
-	created, err := h.queries.CreateSSOConfiguration(ctx, sqlc.CreateSSOConfigurationParams{
-		Provider: "dex", IsEnabled: enabled, DisplayName: displayName, Config: config,
-		ClientID: clientID, ClientSecretEncrypted: encryptedSecret,
-		AllowedOrganizations: organizations, AllowedDomains: domains,
-		AutoCreateUsers: true,
-	})
-	if err == nil {
-		return created, nil
-	}
-	// A concurrent or retried registration may have created the provider after
-	// our initial lookup. Re-read and converge through the same idempotent update.
-	current, getErr := h.queries.GetSSOConfigurationByProvider(ctx, "dex")
-	if getErr != nil {
-		return sqlc.SsoConfiguration{}, err
-	}
-	return h.writeDexSSO(ctx, current, enabled, displayName, config, clientID, encryptedSecret)
 }
 
 func (h *DexHandler) astronomerPublicClients(ctx context.Context, settings sqlc.DexSetting, clientID, clientSecret string) ([]map[string]any, sqlc.DexSetting, error) {

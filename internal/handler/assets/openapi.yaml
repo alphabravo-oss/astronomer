@@ -1361,6 +1361,14 @@ components:
         dry_run:
           type: boolean
           default: false
+        force:
+          type: boolean
+          default: false
+          description: >-
+            Mirrors `kubectl drain --force`: evict standalone pods that have no
+            ownerReferences. Without it such pods are reported as blockers
+            instead, because deleting them is irreversible — no controller
+            exists to recreate them.
     NodeDrainPodRef:
       type: object
       properties:

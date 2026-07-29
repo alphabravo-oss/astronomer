@@ -228,6 +228,7 @@ type MaterializationStatus struct {
 // required key (per the provider spec) must be present and non-empty;
 // PUT accepts a sentinel value for any secret key to preserve the
 // stored value.
+// openapi:request CloudCredentialRequest
 type CloudCredentialRequest struct {
 	Name        string         `json:"name"`
 	Provider    string         `json:"provider"`

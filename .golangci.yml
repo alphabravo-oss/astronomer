@@ -1,7 +1,9 @@
 version: "2"
 
 run:
-  timeout: 5m
+  # The tree is ~350k lines across ~40 packages; 5m is not enough for a cold
+  # typecheck + staticcheck pass on a CI runner with no build cache.
+  timeout: 15m
   tests: true
 
 linters:
@@ -10,3 +12,50 @@ linters:
     paths:
       - frontend/node_modules
       - internal/db/sqlc
+  settings:
+    staticcheck:
+      # This list is golangci-lint's own default for staticcheck
+      # (all, -ST1000, -ST1003, -ST1016, -ST1020, -ST1021, -ST1022) with
+      # -ST1005 added. Setting `checks` REPLACES the default rather than
+      # appending to it, so the default entries must be repeated verbatim —
+      # dropping them would silently switch on six style checks (package
+      # comments, initialisms, receiver naming, exported-symbol doc comments)
+      # that this tree has never been held to.
+      #
+      # ST1005 ("error strings should not be capitalized") produced 60 of the
+      # 158 findings on this config's first full run, and ALL 60 are the same
+      # false positive: an error string that opens with a product name the
+      # platform integrates with — 31 "Argo…", 25 "Dex…", 4 "Helm…". ST1005
+      # has no proper-noun allowlist, and golangci-lint's exclusion rules match
+      # the issue message ("error strings should not be capitalized"), not the
+      # offending literal, so there is no way to admit those three words and
+      # keep the rule.
+      #
+      # Satisfying it would mean either lowercasing the product names ("dex
+      # runtime Secret does not exist…") or rewriting 60 operator- and
+      # API-visible messages to bury the noun mid-sentence. Both are product
+      # copy changes with no correctness value, so the rule is off rather than
+      # the messages being churned or the findings being baselined.
+      #
+      # What this costs: ST1005 also flags trailing punctuation and embedded
+      # newlines in error strings. Neither appears in the tree today. If a
+      # proper-noun allowlist ever lands upstream, delete this block — nothing
+      # else here depends on it.
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1005
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+
+issues:
+  # golangci-lint defaults to max-issues-per-linter: 50 and max-same-issues: 3,
+  # which SILENTLY TRUNCATES the report: on the first full run of this config
+  # the caps showed 53 issues where the tree actually had 158. A gate that
+  # hides two thirds of its own findings is worse than no gate — the count
+  # looks clean while regressions accumulate under the cap. Report everything.
+  max-issues-per-linter: 0
+  max-same-issues: 0

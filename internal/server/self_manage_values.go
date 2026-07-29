@@ -965,7 +965,10 @@ func currentHelmReleaseSelection(ctx context.Context, k8s kubernetes.Interface) 
 		if err != nil {
 			return nil, fmt.Errorf("open Helm release payload: %w", err)
 		}
-		defer gz.Close()
+		// The JSON decode below is the authority on whether the payload was
+		// readable; gzip.Reader.Close only re-reports a trailing checksum
+		// mismatch we would already have seen as a decode failure.
+		defer func() { _ = gz.Close() }()
 		reader = gz
 	}
 	var release struct {

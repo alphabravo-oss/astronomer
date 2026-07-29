@@ -58,7 +58,7 @@ func TestCredentialResolutionOrderAndBootstrapAPIRead(t *testing.T) {
 	legacy := testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken)
 	identity := emptyIdentityContainer()
 
-	client := fake.NewSimpleClientset(identity, legacy, bootstrap)
+	client := fake.NewClientset(identity, legacy, bootstrap)
 	got, source, err := resolveCredentialFromSecrets(ctx, client, "astronomer-system", cfg)
 	if err != nil || got != testLegacyToken || source != credentialSourceLegacy {
 		t.Fatalf("legacy migration resolution = (%q, %q, %v)", got, source, err)
@@ -97,7 +97,7 @@ func TestIdentityContainerAndReadErrorsFailClosed(t *testing.T) {
 			if tt.identity != nil {
 				objects = append(objects, tt.identity)
 			}
-			client := fake.NewSimpleClientset(objects...)
+			client := fake.NewClientset(objects...)
 			if _, _, err := resolveCredentialFromSecrets(ctx, client, "astronomer-system", cfg); err == nil {
 				t.Fatal("invalid identity container state must fail closed")
 			}
@@ -106,7 +106,7 @@ func TestIdentityContainerAndReadErrorsFailClosed(t *testing.T) {
 
 	for _, failedName := range []string{cfg.IdentityTokenSecretName, cfg.LegacyTokenSecretName, cfg.BootstrapTokenSecretName} {
 		t.Run("read error "+failedName, func(t *testing.T) {
-			client := fake.NewSimpleClientset(emptyIdentityContainer(), testCredentialSecret(cfg.BootstrapTokenSecretName, testBootstrapToken))
+			client := fake.NewClientset(emptyIdentityContainer(), testCredentialSecret(cfg.BootstrapTokenSecretName, testBootstrapToken))
 			client.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
 				if action.(ktesting.GetAction).GetName() == failedName {
 					return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, failedName, errors.New("denied"))
@@ -133,7 +133,7 @@ func TestLegacyLayoutFallbackIsLimitedToIdentityForbiddenOrNotFound(t *testing.T
 		{name: "image-only old RBAC", identityErr: apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, cfg.IdentityTokenSecretName, errors.New("old role"))},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			client := fake.NewSimpleClientset(testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken))
+			client := fake.NewClientset(testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken))
 			client.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
 				if action.(ktesting.GetAction).GetName() == cfg.IdentityTokenSecretName {
 					return true, nil, tt.identityErr
@@ -147,7 +147,7 @@ func TestLegacyLayoutFallbackIsLimitedToIdentityForbiddenOrNotFound(t *testing.T
 		})
 	}
 
-	client := fake.NewSimpleClientset(testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken))
+	client := fake.NewClientset(testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken))
 	client.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
 		if action.(ktesting.GetAction).GetName() == cfg.IdentityTokenSecretName {
 			return true, nil, apierrors.NewInternalError(errors.New("apiserver timeout"))
@@ -158,7 +158,7 @@ func TestLegacyLayoutFallbackIsLimitedToIdentityForbiddenOrNotFound(t *testing.T
 		t.Fatal("legacy-layout marker must not downgrade an arbitrary identity read error")
 	}
 
-	identityClient := fake.NewSimpleClientset(
+	identityClient := fake.NewClientset(
 		testCredentialSecret(cfg.IdentityTokenSecretName, testIdentityToken),
 		testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken),
 	)
@@ -170,7 +170,7 @@ func TestLegacyLayoutFallbackIsLimitedToIdentityForbiddenOrNotFound(t *testing.T
 	noMarkerCfg := credentialTestConfig("")
 	noMarkerCfg.IdentityLayoutConfigured = false
 	noMarkerCfg.LegacyLayoutConfigured = false
-	noMarkerClient := fake.NewSimpleClientset(testCredentialSecret(noMarkerCfg.LegacyTokenSecretName, testLegacyToken))
+	noMarkerClient := fake.NewClientset(testCredentialSecret(noMarkerCfg.LegacyTokenSecretName, testLegacyToken))
 	if _, _, err := resolveCredentialFromSecrets(context.Background(), noMarkerClient, "astronomer-system", noMarkerCfg); err == nil {
 		t.Fatal("missing identity without an explicit legacy-layout marker must fail closed")
 	}
@@ -186,7 +186,7 @@ func TestImageFirstUpgradeThenCurrentManifestMigration(t *testing.T) {
 	legacyCfg := credentialTestConfig("")
 	legacyCfg.IdentityLayoutConfigured = false
 	legacyCfg.LegacyLayoutConfigured = true
-	legacyClient := fake.NewSimpleClientset(testCredentialSecret(legacyCfg.LegacyTokenSecretName, testLegacyToken))
+	legacyClient := fake.NewClientset(testCredentialSecret(legacyCfg.LegacyTokenSecretName, testLegacyToken))
 	var imageFirstPatchNames []string
 	legacyClient.PrependReactor("get", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
 		if action.(ktesting.GetAction).GetName() == legacyCfg.IdentityTokenSecretName {
@@ -224,7 +224,7 @@ func TestImageFirstUpgradeThenCurrentManifestMigration(t *testing.T) {
 	// reads legacy once, migrates after Accepted=true, then active identity wins
 	// even if a cached old manifest later overwrites legacy material.
 	currentCfg := credentialTestConfig("")
-	currentClient := fake.NewSimpleClientset(
+	currentClient := fake.NewClientset(
 		emptyIdentityContainer(),
 		testCredentialSecret(currentCfg.LegacyTokenSecretName, testRotatedToken),
 		testCredentialSecret(currentCfg.BootstrapTokenSecretName, testBootstrapToken),
@@ -279,7 +279,7 @@ func TestDurablePersistenceUsesExactSSAAndScrubsLegacyAnnotations(t *testing.T) 
 	identity.Annotations = map[string]string{lastAppliedAnnotation: "sensitive-legacy-document"}
 	legacy := testCredentialSecret(cfg.LegacyTokenSecretName, testLegacyToken)
 	legacy.Annotations = map[string]string{lastAppliedAnnotation: "other-sensitive-document"}
-	client := fake.NewSimpleClientset(identity, legacy)
+	client := fake.NewClientset(identity, legacy)
 
 	var applyPayload []byte
 	var scrubPatchCount int
@@ -344,7 +344,7 @@ func TestDurablePersistenceUsesExactSSAAndScrubsLegacyAnnotations(t *testing.T) 
 
 func TestWrongClusterIdentityNeverFallsBack(t *testing.T) {
 	identity := testCredentialSecret("astronomer-agent-identity", "wrong-cluster-durable-token-00000001")
-	client := fake.NewSimpleClientset(identity, testCredentialSecret("astronomer-agent-registration-token", testBootstrapToken))
+	client := fake.NewClientset(identity, testCredentialSecret("astronomer-agent-registration-token", testBootstrapToken))
 	got, source, err := resolveCredentialFromSecrets(context.Background(), client, "astronomer-system", credentialTestConfig(testBootstrapToken))
 	if err != nil {
 		t.Fatal(err)

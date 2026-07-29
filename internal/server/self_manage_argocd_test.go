@@ -36,7 +36,7 @@ func newLocalArgoTokenCountingClientset(t *testing.T) (*fake.Clientset, *int) {
 	t.Helper()
 	client := fake.NewClientset()
 	tokenMints := 0
-	client.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() != "token" {
 			return false, nil, nil
 		}
@@ -48,7 +48,7 @@ func newLocalArgoTokenCountingClientset(t *testing.T) (*fake.Clientset, *int) {
 
 func localArgoClusterSecretMutationActions(client *fake.Clientset) []k8stesting.Action {
 	var mutations []k8stesting.Action
-	for _, action := range client.Fake.Actions() {
+	for _, action := range client.Actions() {
 		if action.GetResource().Resource != "secrets" {
 			continue
 		}
@@ -930,7 +930,7 @@ func TestBuildSelfManagedAstronomerValuesDecomposesDistinctImageRegistries(t *te
 		t.Fatalf("true-to-false frontend intent was not overlaid: %#v", disabledFrontend)
 	}
 	failFrontendRead := true
-	client.Fake.PrependReactor("get", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		get, ok := action.(k8stesting.GetAction)
 		if failFrontendRead && ok && get.GetName() == localAstronomerReleaseName+"-frontend" {
 			return true, nil, errors.New("frontend API unavailable")
@@ -1070,7 +1070,7 @@ func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing
 					if state.present {
 						objects = append(objects, component.object(state.terminating))
 					}
-					client := fake.NewSimpleClientset(objects...)
+					client := fake.NewClientset(objects...)
 					zero := int32(0)
 					if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
 						t.Fatal(err)
@@ -1079,7 +1079,7 @@ func TestSelfManagedBundledComponentIntentRequiresWorkloadConvergence(t *testing
 						markServerDeploymentRolloutCompleteForTest(t, client)
 					}
 					if state.apiError {
-						client.Fake.PrependReactor("get", component.resource, func(action k8stesting.Action) (bool, runtime.Object, error) {
+						client.PrependReactor("get", component.resource, func(action k8stesting.Action) (bool, runtime.Object, error) {
 							get, ok := action.(k8stesting.GetAction)
 							if ok && get.GetName() == component.workload {
 								return true, nil, errors.New(component.name + " API unavailable")
@@ -1374,7 +1374,7 @@ func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t
 		t.Fatal(err)
 	}
 	client.ClearActions()
-	client.Fake.PrependReactor("get", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("same-revision build attempted live discovery")
 	})
 	same, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{AgentImageRepository: "drifted/agent", AgentImageTag: "drift"}, client, "https://different.example", selfManagedValuesSource{ValuesYAML: canonical})
@@ -1413,7 +1413,7 @@ func TestEmbeddedArgoInlineSecretsFailBeforeApplicationWrite(t *testing.T) {
 		t.Run(name+"/application-write", func(t *testing.T) {
 			raw := string(yamlOrPanic(values))
 			dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-			err := ensureSelfManagedAstronomerApplication(context.Background(), fake.NewSimpleClientset(), dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, raw)
+			err := ensureSelfManagedAstronomerApplication(context.Background(), fake.NewClientset(), dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, raw)
 			if err == nil || !strings.Contains(err.Error(), "inline") {
 				t.Fatalf("unsafe Application error = %v", err)
 			}
@@ -1423,7 +1423,7 @@ func TestEmbeddedArgoInlineSecretsFailBeforeApplicationWrite(t *testing.T) {
 			t.Run(name+"/"+mode, func(t *testing.T) {
 				raw := string(yamlOrPanic(values))
 				if mode == "same" {
-					if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{}, fake.NewSimpleClientset(), "https://ignored.example", selfManagedValuesSource{ValuesYAML: raw}); err == nil || !strings.Contains(err.Error(), "inline") {
+					if _, err := buildSelfManagedAstronomerValues(context.Background(), &config.Config{}, fake.NewClientset(), "https://ignored.example", selfManagedValuesSource{ValuesYAML: raw}); err == nil || !strings.Contains(err.Error(), "inline") {
 						t.Fatalf("same-revision unsafe error = %v", err)
 					}
 					return
@@ -1431,7 +1431,7 @@ func TestEmbeddedArgoInlineSecretsFailBeforeApplicationWrite(t *testing.T) {
 				releaseValues := selfManagedBundledIntentReleaseValues()
 				deepMergeSelfManagedValues(releaseValues, values)
 				objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
-				client := fake.NewSimpleClientset(objects...)
+				client := fake.NewClientset(objects...)
 				zero := int32(0)
 				_, _ = client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{})
 				var err error
@@ -1518,7 +1518,7 @@ func selfManagedSecretEvidenceTestBuild(t *testing.T, bounded bool, scenario str
 		}
 		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: localAstronomerNamespace, UID: types.UID("input-" + name), ResourceVersion: "input-1"}, Data: map[string][]byte{"value": []byte("reference")}})
 	}
-	client := fake.NewSimpleClientset(objects...)
+	client := fake.NewClientset(objects...)
 	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
 	server.Spec.Template.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-auth"}}
 	if _, err := client.AppsV1().Deployments(localAstronomerNamespace).Update(context.Background(), server, metav1.UpdateOptions{}); err != nil {
@@ -1583,7 +1583,7 @@ func selfManagedNonArgoSecretReferenceNames() []string {
 
 func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
 	t.Run("initial carries runtime evidence and same revision does not", func(t *testing.T) {
-		client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+		client := fake.NewClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
 		zero := int32(0)
 		if _, err := client.AppsV1().StatefulSets(localArgoNamespace).Create(context.Background(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}, metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
@@ -1763,7 +1763,7 @@ func TestBoundedAdoptionSnapshotBlocksRestageOnEvidenceDrift(t *testing.T) {
 
 func selfManagedInitialSnapshotTestBuild(t *testing.T) (*fake.Clientset, *dynamicfake.FakeDynamicClient, selfManagedValuesBuild) {
 	t.Helper()
-	client := fake.NewSimpleClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
+	client := fake.NewClientset(selfManagedBundledIntentBaseObjects(t, selfManagedBundledIntentReleaseValues())...)
 	markServerDeploymentRolloutCompleteForTest(t, client)
 	zero := int32(0)
 	controller := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}
@@ -1784,7 +1784,7 @@ func selfManagedInitialFallbackSnapshotTestBuild(t *testing.T, dexFallback bool)
 	t.Helper()
 	releaseValues := selfManagedBundledIntentReleaseValues()
 	objects := selfManagedBundledIntentBaseObjects(t, releaseValues)
-	client := fake.NewSimpleClientset(objects...)
+	client := fake.NewClientset(objects...)
 	server, _ := client.AppsV1().Deployments(localAstronomerNamespace).Get(context.Background(), localAstronomerReleaseName+"-server", metav1.GetOptions{})
 	filtered := server.Spec.Template.Spec.Containers[0].Env[:0]
 	for _, env := range server.Spec.Template.Spec.Containers[0].Env {
@@ -1867,7 +1867,7 @@ func selfManagedSnapshotTestBuild(t *testing.T, component string, present bool) 
 		metadata.SetResourceVersion("100")
 		objects = append(objects, workload)
 	}
-	client := fake.NewSimpleClientset(objects...)
+	client := fake.NewClientset(objects...)
 	markServerDeploymentRolloutCompleteForTest(t, client)
 	zero := int32(0)
 	controller := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace, UID: "snapshot-controller", ResourceVersion: "1"}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}

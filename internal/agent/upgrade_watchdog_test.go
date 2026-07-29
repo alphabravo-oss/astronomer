@@ -279,7 +279,7 @@ func TestBuildWatchdogJobRunsTheKnownGoodImageWithBoundedLifetime(t *testing.T) 
 	// These labels are what the shipped astronomer-agent NetworkPolicy selects;
 	// without them the watchdog loses egress to the kube-apiserver on clusters
 	// running an older manifest and could not roll anything back.
-	labels := job.Spec.Template.ObjectMeta.Labels
+	labels := job.Spec.Template.Labels
 	if labels["app.kubernetes.io/name"] != "astronomer-agent" || labels["app.kubernetes.io/component"] != "agent" {
 		t.Fatalf("watchdog pod labels = %v", labels)
 	}

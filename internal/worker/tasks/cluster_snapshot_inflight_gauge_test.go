@@ -45,9 +45,11 @@ func TestPoller_MaintainsInFlightGauge(t *testing.T) {
 		aRows = append(aRows, row.ID)
 		d.backupStatus[name] = VeleroBackupStatusSnapshot{Phase: "InProgress"}
 	}
-	q.CreateClusterSnapshot(context.Background(), sqlc.CreateClusterSnapshotParams{
+	if _, err := q.CreateClusterSnapshot(context.Background(), sqlc.CreateClusterSnapshotParams{
 		ClusterID: clusterB, VeleroName: "b1", Phase: "InProgress",
-	})
+	}); err != nil {
+		t.Fatalf("seed cluster B snapshot: %v", err)
+	}
 	d.backupStatus["b1"] = VeleroBackupStatusSnapshot{Phase: "InProgress"}
 
 	ConfigureClusterSnapshotTasks(ClusterSnapshotDeps{Queries: q, Driver: d})

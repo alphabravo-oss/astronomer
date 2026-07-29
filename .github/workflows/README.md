@@ -26,6 +26,7 @@ parallel:
 The scopes are intentionally additive rather than quick approximations:
 
 - `backend` runs migration safety, sqlc generated drift, `go build`, `go vet`,
+  `scripts/check-go-lint.sh` (golangci-lint, pinned, against `.golangci.yml`),
   the complete normal and race suites, and API/OpenAPI/generated/embed/route/
   error-code contracts.
 - `frontend` runs code-health, lint with zero warnings, type-check, unit tests,
@@ -86,10 +87,16 @@ That scope verifies:
 2. `go test` for the API packages: `internal/handler`, `internal/server`,
    `internal/auth`, `internal/server/middleware` (`-count=1`).
 3. `node scripts/openapi-coverage.mjs --check` — fails on spec/route drift.
-4. `node scripts/generate-openapi-types.mjs --check` — fails when the
+4. `node scripts/openapi-request-fields.mjs --check` — field-level request
+   contract: compares each documented request schema against the Go struct that
+   decodes it (associated by an `// openapi:request <Schema>` marker on the
+   struct) and fails on drift in either direction. `openapi-coverage` only
+   proves the path still exists; this is what catches a field that the handler
+   reads but the spec never mentions, or vice versa.
+5. `node scripts/generate-openapi-types.mjs --check` — fails when the
    committed `frontend/src/types/openapi.generated.ts` is stale.
-5. `go test ./internal/server/ -run RouteTable -count=1` — golden route table.
-6. `go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1` —
+6. `go test ./internal/server/ -run RouteTable -count=1` — golden route table.
+7. `go test ./internal/handler/ -run TestApierrorCatalogCoverage -count=1` —
    apierror catalog lint.
 
 `make verify` runs the same focused sequence locally. The broader

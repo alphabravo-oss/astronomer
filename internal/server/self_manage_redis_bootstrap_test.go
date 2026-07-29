@@ -17,7 +17,7 @@ import (
 func TestRemoveHelmOwnedArgoRedisSecretInitHooks(t *testing.T) {
 	ctx := context.Background()
 	objects := redisSecretInitHookFixtures()
-	client := fake.NewSimpleClientset(objects...)
+	client := fake.NewClientset(objects...)
 
 	if err := removeHelmOwnedArgoRedisSecretInitHooks(ctx, client); err != nil {
 		t.Fatalf("remove Helm-owned hooks: %v", err)
@@ -39,7 +39,7 @@ func TestRemoveHelmOwnedArgoRedisSecretInitHooksRefusesLookalike(t *testing.T) {
 	objects := redisSecretInitHookFixtures()
 	role := objects[2].(*rbacv1.Role)
 	role.Labels["app.kubernetes.io/managed-by"] = "some-other-controller"
-	client := fake.NewSimpleClientset(objects...)
+	client := fake.NewClientset(objects...)
 
 	err := removeHelmOwnedArgoRedisSecretInitHooks(ctx, client)
 	if err == nil || !strings.Contains(err.Error(), "refuse to delete Role") {

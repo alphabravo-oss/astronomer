@@ -188,6 +188,7 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
+	// openapi:request SetOptionsRequest
 	var req struct {
 		InstallBaseline *bool `json:"install_baseline"`
 	}

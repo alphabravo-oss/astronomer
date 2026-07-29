@@ -111,7 +111,10 @@ func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, ": connected\n\n")
+	// Best-effort SSE preamble: if the client is already gone the write fails
+	// here and again on the first event, and the stream loop below is what
+	// tears the watch down. Nothing to do with the error at this point.
+	_, _ = fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
 	// Keepalive comment keeps idle-closing proxies from dropping the watch.

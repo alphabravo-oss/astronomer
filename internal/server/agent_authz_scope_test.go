@@ -40,12 +40,11 @@ func rule(resource rbac.Resource, verbs ...rbac.Verb) rbac.Rule {
 // requires, and a sample request that should pass route validation so a
 // scope+RBAC-authorized caller reaches the handler.
 type typedMutationCase struct {
-	name       string
-	method     string
-	path       string
-	body       string
-	rbacRule   rbac.Rule
-	otherScope string // a non-clusters write scope insufficient for this route
+	name     string
+	method   string
+	path     string
+	body     string
+	rbacRule rbac.Rule
 }
 
 func typedMutationCases(clusterID string) []typedMutationCase {

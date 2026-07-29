@@ -22,7 +22,10 @@ func isValidKind(kind string) bool {
 		return false
 	}
 	for _, r := range kind {
-		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+		isUpper := r >= 'A' && r <= 'Z'
+		isLower := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		if !isUpper && !isLower && !isDigit {
 			return false
 		}
 	}

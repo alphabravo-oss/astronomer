@@ -85,7 +85,10 @@ func AstronomerDefaultValuesShape() (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open pinned argo-cd chart: %w", err)
 	}
-	defer gz.Close()
+	// Reader Close only reports a trailing checksum/length mismatch; this loop
+	// stops at the one member it wants and never reads to EOF, so there is no
+	// meaningful error to surface here.
+	defer func() { _ = gz.Close() }()
 	tr := tar.NewReader(gz)
 	argoDefaults := map[string]any{}
 	for {

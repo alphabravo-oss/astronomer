@@ -11,8 +11,8 @@
 //   - apiVersion MUST be exactly astronomer.alphabravo.io/v1.
 //   - kind MUST be exactly ClusterRegistration.
 //   - metadata.name MUST be a non-empty RFC-1123 cluster name (validation
-//     is delegated to the caller via the existing validClusterName helper;
-//     Parse only enforces non-emptiness).
+//     is delegated to the caller via ValidClusterName in apply.go; Parse only
+//     enforces non-emptiness).
 //
 // Anything that doesn't match is rejected with a typed error so the sync
 // worker can log-and-skip non-ClusterRegistration YAML (e.g. a

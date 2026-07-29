@@ -2,6 +2,8 @@
 // Astronomer Platform Types
 // ============================================================
 
+import type { OpenAPIComponents } from '@/types/openapi.generated';
+
 // --- API Response Types ---
 
 export interface APIResponse<T> {
@@ -411,7 +413,9 @@ export interface NodeAddress {
 export interface NodeTaint {
   key: string;
   value: string;
-  effect: string;
+  // Same closed enum the taint write path uses, so a taint read off a node can
+  // be handed straight back to removeNodeTaint without a cast.
+  effect: OpenAPIComponents['schemas']['NodeTaintRequest']['effect'];
 }
 
 export interface NodeImage {

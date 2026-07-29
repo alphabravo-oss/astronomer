@@ -147,10 +147,170 @@ function stripImportsPreservingLines(source) {
   );
 }
 
+const GENERATED_TYPES_FILE = 'frontend/src/types/openapi.generated.ts';
+
+// Declarations under frontend/src that re-type a schema generated from
+// docs/openapi.yaml, keyed `<file>:<TypeName>`.
+//
+// THIS IS A DEBT LIST, NOT AN APPROVAL. Every entry is a wire shape maintained
+// in two places, so the spec can gain, lose or rename a field with nothing
+// failing — which is exactly how NodeDrainRequest.force stayed unreachable from
+// the UI while every gate was green. Retiring an entry means deriving the type
+// from `@/types/openapi.generated` (see the RequireKeys helper in
+// frontend/src/lib/api.ts for the all-optional-generated-schema case) and
+// deleting the line. Do NOT add an entry to silence this gate on a type you are
+// writing now — derive it instead. An entry that no longer shadows anything
+// fails too, so the list cannot rot.
+const SHADOWED_GENERATED_SCHEMAS = new Set([
+  'frontend/src/lib/api/admin-security.ts:ShellSession',
+  'frontend/src/lib/api/cluster-detail.ts:RestoreSnapshotRequest',
+  'frontend/src/lib/api/cluster-detail.ts:ServiceMeshInventory',
+  'frontend/src/lib/api/cluster-detail.ts:ServiceMeshPolicyValidation',
+  'frontend/src/lib/api/cluster-detail.ts:SnapshotSpec',
+  'frontend/src/lib/api/extensions.ts:ExtensionManifest',
+  'frontend/src/lib/api/extensions.ts:ExtensionMount',
+  'frontend/src/lib/api/extensions.ts:ExtensionMountsResponse',
+  'frontend/src/lib/api/extensions.ts:ExtensionRecord',
+  'frontend/src/lib/api/fleet-operations.ts:CreateFleetOperationRequest',
+  'frontend/src/lib/api/kubectl-shell.ts:ShellSession',
+  'frontend/src/lib/api/project-detail.ts:CloudCredential',
+  'frontend/src/lib/api/project-detail.ts:CreateProjectCatalogRequest',
+  'frontend/src/lib/api/project-detail.ts:ProjectCatalog',
+  'frontend/src/lib/api/settings.ts:ApplyNetworkPolicyRequest',
+  'frontend/src/lib/api/settings.ts:WebhookDelivery',
+  'frontend/src/lib/api/settings.ts:WebhookSubscription',
+  'frontend/src/lib/api/vault.ts:VaultConnection',
+  'frontend/src/lib/api/vault.ts:VaultTestResult',
+  'frontend/src/routes/dashboard/clusters/$id/workloads/index.tsx:Workload',
+  'frontend/src/types/index.ts:AgentFleetItem',
+  'frontend/src/types/index.ts:AgentFleetResponse',
+  'frontend/src/types/index.ts:AgentLifecycleOperation',
+  'frontend/src/types/index.ts:AgentLifecycleOperationsResponse',
+  'frontend/src/types/index.ts:AgentOfflineBehavior',
+  'frontend/src/types/index.ts:AgentUpgradeOperationResponse',
+  'frontend/src/types/index.ts:AgentUpgradePlanRequest',
+  'frontend/src/types/index.ts:ArgoOperation',
+  'frontend/src/types/index.ts:ArgoOperationEvent',
+  'frontend/src/types/index.ts:ArgoOrphanApplication',
+  'frontend/src/types/index.ts:ArgoOrphanReport',
+  'frontend/src/types/index.ts:AuditLogEntry',
+  'frontend/src/types/index.ts:Cluster',
+  'frontend/src/types/index.ts:ClusterEvent',
+  'frontend/src/types/index.ts:DexConnector',
+  'frontend/src/types/index.ts:DexSettings',
+  'frontend/src/types/index.ts:HelmChart',
+  'frontend/src/types/index.ts:HelmChartVersion',
+  'frontend/src/types/index.ts:HelmRepository',
+  'frontend/src/types/index.ts:InhibitionMatcher',
+  'frontend/src/types/index.ts:InstalledChart',
+  'frontend/src/types/index.ts:Namespace',
+  'frontend/src/types/index.ts:NodeDetail',
+  'frontend/src/types/index.ts:Pod',
+  'frontend/src/types/index.ts:Project',
+  'frontend/src/types/index.ts:TestStorageResult',
+  'frontend/src/types/index.ts:User',
+  'frontend/src/types/index.ts:Workload',
+]);
+
+// Order-insensitive word key for an identifier: `DrainNodeRequest` and
+// `NodeDrainRequest` collapse to the same key, which is how the frontend's
+// renamed shadow of NodeDrainRequest stayed invisible to a name-equality check.
+function identifierWordKey(name) {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/\s+/)
+    .sort()
+    .join(' ');
+}
+
+// Top-level `components.schemas` keys in the generated file sit at exactly four
+// spaces of indent; nested properties are deeper and quoted.
+function generatedSchemasByWordKey() {
+  const source = read(path.join(repoRoot, GENERATED_TYPES_FILE));
+  const byWordKey = new Map();
+  for (const match of source.matchAll(/^ {4}([A-Za-z][A-Za-z0-9_]*):/gm)) {
+    const key = identifierWordKey(match[1]);
+    byWordKey.set(key, [...(byWordKey.get(key) ?? []), match[1]]);
+  }
+  return byWordKey;
+}
+
+// A declaration that derives from the generated module is the fix, not the
+// defect — but the window this is read from has to stop at the END of the
+// declaration. Reading a fixed number of characters ahead lets a hand-written
+// shape be excused by whatever derived alias happens to sit on the next line,
+// which is a false negative on exactly the declaration the gate exists to find.
+//
+// `interface` can only derive via `extends` on its header line, so one line is
+// the whole window. A `type` alias runs to the first `;` outside any brace,
+// bracket or paren — the semicolons inside `{ a: string; b: number }` are not
+// it — with a new top-level declaration as a backstop.
+const NEXT_TOP_LEVEL_DECL = /^(?:export|import|interface|type|function|const|let|var|class|enum|declare|async)\b/;
+
+function declarationText(source, index) {
+  const lines = source.slice(index).split(/\r?\n/);
+  if (/^[ \t]*(?:export\s+)?interface\b/.test(lines[0])) return lines[0];
+  const out = [];
+  let depth = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (i > 0 && depth <= 0 && NEXT_TOP_LEVEL_DECL.test(lines[i])) break;
+    out.push(lines[i]);
+    for (const ch of lines[i]) {
+      if (ch === '{' || ch === '[' || ch === '(') depth += 1;
+      else if (ch === '}' || ch === ']' || ch === ')') depth -= 1;
+    }
+    if (depth <= 0 && /;\s*$/.test(lines[i])) break;
+  }
+  return out.join('\n');
+}
+
+function generatedSchemaShadowTypes(files) {
+  const byWordKey = generatedSchemasByWordKey();
+  // A stale extraction regex would silently pass every file, so treat an empty
+  // schema index the same way routeScopedFiles treats a stale path filter.
+  gateFileCounts.set('generatedSchemaShadowTypes/schemas', byWordKey.size);
+
+  const findings = [];
+  const live = new Set();
+  for (const file of files) {
+    const r = rel(file);
+    if (r === GENERATED_TYPES_FILE) continue;
+    const source = stripImportsPreservingLines(read(file));
+    for (const match of source.matchAll(
+      /^[ \t]*(?:export\s+)?(?:interface|type)\s+([A-Za-z][A-Za-z0-9_]*)\b/gm,
+    )) {
+      const schemas = byWordKey.get(identifierWordKey(match[1]));
+      if (!schemas) continue;
+      if (/\bOpenAPIComponents\b/.test(declarationText(source, match.index))) continue;
+      const key = `${r}:${match[1]}`;
+      live.add(key);
+      if (SHADOWED_GENERATED_SCHEMAS.has(key)) continue;
+      findings.push({
+        file: r,
+        line: source.slice(0, match.index).split(/\r?\n/).length,
+        detail:
+          `${match[1]} re-declares OpenAPI schema ${schemas.join('/')} — derive it from ` +
+          `@/types/openapi.generated instead of maintaining the shape twice`,
+      });
+    }
+  }
+  for (const key of [...SHADOWED_GENERATED_SCHEMAS].sort()) {
+    if (live.has(key)) continue;
+    const [file, name] = key.split(':');
+    findings.push({
+      file,
+      line: 0,
+      detail: `${name} no longer shadows a generated schema — drop it from SHADOWED_GENERATED_SCHEMAS`,
+    });
+  }
+  return findings;
+}
+
 function duplicateFrontendApiShapeTypes(files) {
   const groups = new Map();
   for (const file of files) {
-    if (rel(file) === 'frontend/src/types/openapi.generated.ts') continue;
+    if (rel(file) === GENERATED_TYPES_FILE) continue;
     const source = stripImportsPreservingLines(read(file));
     for (const match of source.matchAll(
       /^\s*(?:export\s+)?(?:interface|type)\s+([A-Za-z][A-Za-z0-9_]*(?:Request|Response|WriteRequest))\b/gm,
@@ -389,6 +549,7 @@ function renderMarkdown(inventory) {
     inventory.directToastCallSites.length +
     inventory.localResponseShapes.length +
     inventory.duplicateFrontendApiShapeTypes.length +
+    inventory.generatedSchemaShadowTypes.length +
     inventory.localStatusBadgeComponents.length +
     inventory.rawTableTagCallSites.length +
     inventory.rawOverlayCallSites.length +
@@ -397,6 +558,7 @@ function renderMarkdown(inventory) {
   const duplicateCandidateCount =
     inventory.localResponseShapes.length +
     inventory.duplicateFrontendApiShapeTypes.length +
+    inventory.generatedSchemaShadowTypes.length +
     inventory.localStatusBadgeComponents.length +
     inventory.rawTableTagCallSites.length +
     inventory.rawOverlayCallSites.length +
@@ -433,6 +595,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 - Direct \`sonner\` imports or \`toast.*\` calls outside \`frontend/src/lib/toast.ts\`: ${inventory.directToastCallSites.length === 0 ? 'pass' : 'fail'}
 - Page-local API \`ResponseShape\` types in app routes: ${inventory.localResponseShapes.length === 0 ? 'pass' : 'fail'}
 - Duplicate frontend API shape type names ending in \`Request\`, \`WriteRequest\`, or \`Response\`: ${inventory.duplicateFrontendApiShapeTypes.length === 0 ? 'pass' : 'fail'}
+- Frontend types re-declaring an OpenAPI schema generated into \`${GENERATED_TYPES_FILE}\`, beyond the recorded debt list: ${inventory.generatedSchemaShadowTypes.length === 0 ? 'pass' : 'fail'}
 - Local generic \`StatusBadge\` components outside the shared UI component: ${inventory.localStatusBadgeComponents.length === 0 ? 'pass' : 'fail'}
 - Raw native table tags outside \`frontend/src/components/ui/table.tsx\`: ${inventory.rawTableTagCallSites.length === 0 ? 'pass' : 'fail'}
 - Raw overlay roots/backdrops outside \`frontend/src/components/ui/overlay-shell.tsx\`: ${inventory.rawOverlayCallSites.length === 0 ? 'pass' : 'fail'}
@@ -481,6 +644,11 @@ Owner: frontend/API. Target abstraction: one exported API shape per endpoint fam
 
 ${bulletList(inventory.duplicateFrontendApiShapeTypes, (item) =>
   `\`${item.name}\` in ${item.rows.map((row) => `[\`${row.file}:${row.line}\`](${row.file}:${row.line})`).join(', ')}`,
+)}
+Owner: frontend/API. Target abstraction: derive wire shapes from \`@/types/openapi.generated\`. Anything listed here is beyond \`SHADOWED_GENERATED_SCHEMAS\` in \`scripts/code-health-inventory.mjs\` and fails the gate; the recorded debt itself is tracked in that set.
+
+${bulletList(inventory.generatedSchemaShadowTypes, (item) =>
+  `${location(item)} - ${item.detail}`,
 )}
 Owner: frontend/platform. Target abstraction: shared \`components/ui/status-badge.tsx\` for generic statuses; domain-specific badges must use domain-specific names.
 
@@ -570,6 +738,7 @@ function buildInventory() {
     directToastCallSites: directToastCallSites(feFiles),
     localResponseShapes: localResponseShapes(feFiles),
     duplicateFrontendApiShapeTypes: duplicateFrontendApiShapeTypes(feFiles),
+    generatedSchemaShadowTypes: generatedSchemaShadowTypes(feFiles),
     localStatusBadgeComponents: localStatusBadgeComponents(feFiles),
     rawTableTagCallSites: rawTableTagCallSites(feFiles),
     rawOverlayCallSites: rawOverlayCallSites(feFiles),
@@ -606,6 +775,7 @@ if (args.has('--check')) {
     ...inventory.directToastCallSites.map((item) => `direct toast call: ${item.file}:${item.line}`),
     ...inventory.localResponseShapes.map((item) => `local ResponseShape: ${item.file}:${item.line}`),
     ...inventory.duplicateFrontendApiShapeTypes.map((item) => `duplicate frontend API shape: ${item.name}`),
+    ...inventory.generatedSchemaShadowTypes.map((item) => `generated schema shadow: ${item.file}:${item.line}`),
     ...inventory.localStatusBadgeComponents.map((item) => `local StatusBadge: ${item.file}:${item.line}`),
     ...inventory.rawTableTagCallSites.map((item) => `raw table tag: ${item.file}:${item.line}`),
     ...inventory.rawOverlayCallSites.map((item) => `raw overlay: ${item.file}:${item.line}`),

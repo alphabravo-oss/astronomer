@@ -295,7 +295,7 @@ func TestStateSubscriberGatekeeperConstraintDiscovery(t *testing.T) {
 	defer setStateSubscriberCRDTunables(50*time.Millisecond, 2*time.Second)()
 
 	client := fake.NewClientset()
-	client.Fake.Resources = []*metav1.APIResourceList{
+	client.Resources = []*metav1.APIResourceList{
 		{
 			GroupVersion: gatekeeperConstraintsGV,
 			APIResources: []metav1.APIResource{

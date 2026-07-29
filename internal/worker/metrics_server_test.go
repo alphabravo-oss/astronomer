@@ -34,7 +34,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get /healthz: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("healthy /healthz = %d, want 200", resp.StatusCode)
 		}
@@ -47,7 +47,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get /healthz: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("redis-down /healthz = %d, want 503", resp.StatusCode)
 		}
@@ -66,7 +66,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get /healthz: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("redis-down /healthz = %d, want 503", resp.StatusCode)
 		}

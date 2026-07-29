@@ -149,6 +149,7 @@ func clusterGroupToResponse(g sqlc.ClusterGroup) ClusterGroupResponse {
 }
 
 // CreateClusterGroupRequest is the POST body shape.
+// openapi:request CreateClusterGroupRequest
 type CreateClusterGroupRequest struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug,omitempty"`
@@ -159,6 +160,7 @@ type CreateClusterGroupRequest struct {
 }
 
 // UpdateClusterGroupRequest is the PUT body shape.
+// openapi:request UpdateClusterGroupRequest
 type UpdateClusterGroupRequest struct {
 	Name        string `json:"name"`
 	Slug        string `json:"slug,omitempty"`
@@ -169,6 +171,7 @@ type UpdateClusterGroupRequest struct {
 }
 
 // MoveClustersRequest is the POST /{id}/move/ body shape.
+// openapi:request MoveClustersRequest
 type MoveClustersRequest struct {
 	ClusterIDs []string `json:"cluster_ids" validate:"required,min=1"`
 }

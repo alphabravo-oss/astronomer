@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -45,16 +44,6 @@ import (
 // the HMAC checks out, so a leaked signing key can't be used to forge
 // effectively-permanent URLs.
 const maxSignedManifestTTL = 30 * time.Minute
-
-// rfc1123ClusterName matches the same naming rules Rancher applies to imported
-// cluster CRDs: lowercase letters/digits/hyphens, start+end alphanumeric,
-// 1–63 chars. Mirrors k8s.io/apimachinery/pkg/util/validation.IsDNS1123Label.
-var rfc1123ClusterName = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
-
-// validClusterName enforces the RFC-1123 label rules.
-func validClusterName(s string) bool {
-	return rfc1123ClusterName.MatchString(s)
-}
 
 // clusterScopeQuerier is the OPTIONAL capability a ClusterQuerier may provide
 // to serve a scope-filtered list page. Kept off ClusterQuerier on purpose: only
@@ -944,6 +933,9 @@ func pluralSuffix(n int) string {
 // --- Request / Response types ---
 
 // CreateClusterRequest represents the request body for creating a cluster.
+// openapi:request CreateClusterRequest
+// openapi:request-allow labels  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow annotations  DEBT: accepted and persisted (carries astronomer.io/agent-privilege-profile at adoption); undocumented
 type CreateClusterRequest struct {
 	Name         string          `json:"name" validate:"required,rfc1123"`
 	DisplayName  string          `json:"display_name"`
@@ -959,6 +951,7 @@ type CreateClusterRequest struct {
 }
 
 // UpdateClusterRequest represents the request body for updating a cluster.
+// openapi:request UpdateClusterRequest
 type UpdateClusterRequest struct {
 	DisplayName string          `json:"display_name"`
 	Description string          `json:"description"`
@@ -969,6 +962,7 @@ type UpdateClusterRequest struct {
 }
 
 // UpdateRegistryConfigRequest represents the request body for upserting registry config.
+// openapi:request UpdateRegistryConfigRequest
 type UpdateRegistryConfigRequest struct {
 	PrivateRegistryUrl string `json:"private_registry_url"`
 	RegistryUsername   string `json:"registry_username"`

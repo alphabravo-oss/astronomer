@@ -1011,18 +1011,9 @@ func phaseTombstoneCluster(ctx context.Context, deps ClusterDecommissionDeps, ro
 	}, nil
 }
 
-// pgxErrNoRows returns the canonical pgx "no rows" sentinel. Declared as a
-// helper so the test fake can detect it without taking a pgx import in the
-// reconciler's public API. We can't reference pgx.ErrNoRows directly here
-// without an extra import; instead we string-match in errors.Is fallback
-// since the production driver returns wrapped errors that all match
-// "no rows in result set". The helper returns a static sentinel so the
-// errors.Is shortcut still works for hand-rolled fakes that return the same
-// sentinel.
-func pgxErrNoRows() error {
-	return errNoRows
-}
-
+// errNoRows is the canonical "no rows in result set" sentinel the hand-rolled
+// test fakes return, so errors.Is matches it the same way it matches the
+// production driver's wrapped pgx.ErrNoRows.
 var errNoRows = errors.New("no rows in result set")
 
 // ---- audit helper conformance --------------------------------------------

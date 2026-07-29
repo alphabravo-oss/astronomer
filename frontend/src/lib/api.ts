@@ -8,6 +8,22 @@ import { API_BASE, wsBase } from '@/lib/env';
 // TEST-03: product code imports OpenAPI-generated schemas (not test-only).
 export type AgentFleetItemOpenAPI = OpenAPIComponents['schemas']['AgentFleetItem'];
 
+/**
+ * Restates required-ness on a schema type generated from `docs/openapi.yaml`.
+ *
+ * The generator marks a property optional unless its schema carries a
+ * `required` list, and most of ours do not — so aliasing such a schema straight
+ * through would push `| undefined` into every consumer. That cost is why the
+ * shapes below used to be re-typed by hand, and hand-typing is exactly how
+ * `NodeDrainRequest` grew a `force` field the UI could not see.
+ *
+ * `RequireKeys` keeps the field NAMES, TYPES and enum members sourced from the
+ * spec — `K extends keyof T`, so a renamed or deleted field is a compile error
+ * right here — while asserting the required-ness the handler actually
+ * guarantees. Use it instead of re-declaring the shape.
+ */
+type RequireKeys<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: Exclude<T[P], undefined> };
+
 const API_BASE_URL = API_BASE;
 const CSRF_COOKIE = 'astronomer_csrf';
 const CSRF_HEADER = 'X-CSRF-Token';
@@ -237,15 +253,8 @@ export async function createStreamTicket(streamType: StreamTicketType, clusterId
   return res.data.data;
 }
 
-export type FeatureFlagKey =
-  | 'feature.catalog'
-  | 'feature.projects'
-  | 'feature.monitoring'
-  | 'feature.argocd'
-  | 'feature.security'
-  | 'feature.backups';
-
-export type FeatureFlags = Partial<Record<FeatureFlagKey, boolean>>;
+export type FeatureFlags = OpenAPIComponents['schemas']['FeatureFlags'];
+export type FeatureFlagKey = keyof FeatureFlags;
 
 export async function getFeatureFlags(): Promise<FeatureFlags> {
   const res = await api.get<APIResponse<FeatureFlags>>('/settings/features');
@@ -339,38 +348,20 @@ export async function registerCluster(clusterId: string) {
 }
 
 // ─── Cluster-registration wizard (sprint 22 / migration 078) ──────────
-// Mirror of the backend's registration.Status / Step shapes.
+// The wizard always renders a fully-populated record, so the fields the
+// handler always writes are re-required; everything else comes from the spec.
 
-export interface RegistrationStep {
-  id: string;
-  step_name: string;
-  label: string;
-  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
-  progress_pct: number;
-  detail?: Record<string, unknown>;
-  started_at?: string | null;
-  completed_at?: string | null;
-  error_message?: string;
-  step_order: number;
-  created_at: string;
-}
+export type RegistrationStep = RequireKeys<
+  OpenAPIComponents['schemas']['RegistrationStep'],
+  'id' | 'step_name' | 'label' | 'status' | 'progress_pct' | 'step_order' | 'created_at'
+>;
 
-export type RegistrationPhase =
-  | 'created'
-  | 'awaiting_agent'
-  | 'connected'
-  | 'provisioning'
-  | 'ready'
-  | 'failed';
+export type RegistrationPhase = NonNullable<OpenAPIComponents['schemas']['RegistrationStatus']['phase']>;
 
-export interface RegistrationStatus {
-  cluster_id: string;
-  phase: RegistrationPhase;
-  install_baseline?: boolean | null;
-  started_at?: string | null;
-  completed_at?: string | null;
-  steps: RegistrationStep[];
-}
+export type RegistrationStatus = Omit<
+  RequireKeys<OpenAPIComponents['schemas']['RegistrationStatus'], 'cluster_id' | 'phase' | 'steps'>,
+  'steps'
+> & { steps: RegistrationStep[] };
 
 export async function getRegistrationStatus(clusterId: string): Promise<RegistrationStatus> {
   const res = await api.get<APIResponse<RegistrationStatus>>(`/clusters/${clusterId}/registration/status`);
@@ -484,28 +475,14 @@ export async function getNodeDetail(clusterId: string, nodeName: string) {
   return res.data.data;
 }
 
-export interface DrainNodeRequest {
-  ignore_daemonsets?: boolean;
-  delete_empty_dir_data?: boolean;
-  grace_period_seconds?: number;
-  dry_run?: boolean;
-}
-
-export interface DrainNodePodRef {
-  namespace: string;
-  name: string;
-  reason?: string;
-}
-
-export interface DrainNodeResponse {
-  node: string;
-  status: 'dry_run' | 'draining' | 'drained' | 'blocked' | 'partial' | string;
-  message: string;
-  evicted: DrainNodePodRef[];
-  skipped: DrainNodePodRef[];
-  failed: DrainNodePodRef[];
-  blockers?: string[];
-}
+// The spec names these NodeDrain*; the UI kept the DrainNode* spelling, so the
+// aliases are renames of the generated types, not re-declarations of them.
+export type DrainNodeRequest = OpenAPIComponents['schemas']['NodeDrainRequest'];
+export type DrainNodePodRef = RequireKeys<OpenAPIComponents['schemas']['NodeDrainPodRef'], 'namespace' | 'name'>;
+export type DrainNodeResponse = Omit<
+  RequireKeys<OpenAPIComponents['schemas']['NodeDrainResponse'], 'node' | 'status' | 'message' | 'evicted' | 'skipped' | 'failed'>,
+  'evicted' | 'skipped' | 'failed'
+> & { evicted: DrainNodePodRef[]; skipped: DrainNodePodRef[]; failed: DrainNodePodRef[] };
 
 export async function cordonNode(clusterId: string, nodeName: string) {
   const res = await api.post<APIResponse<{ node: string; status: string }>>(
@@ -526,25 +503,12 @@ export async function drainNode(clusterId: string, nodeName: string, data: Drain
   return res.data.data;
 }
 
-export interface NodeKeyValueRequest {
-  key: string;
-  value: string;
-}
-
-export interface NodeKeyRequest {
-  key: string;
-}
-
-export interface NodeTaintRequest {
-  key: string;
-  value?: string;
-  effect: 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute' | string;
-}
-
-export interface NodeTaintRemoveRequest {
-  key: string;
-  effect?: 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute' | string;
-}
+export type NodeKeyValueRequest = OpenAPIComponents['schemas']['NodeKeyValueRequest'];
+export type NodeKeyRequest = OpenAPIComponents['schemas']['NodeKeyRequest'];
+// `effect` is a closed enum in the spec and in the Kubernetes API; the previous
+// hand-written `| string` widening defeated it.
+export type NodeTaintRequest = OpenAPIComponents['schemas']['NodeTaintRequest'];
+export type NodeTaintRemoveRequest = OpenAPIComponents['schemas']['NodeTaintRemoveRequest'];
 
 function nodeActionPath(clusterId: string, nodeName: string, action: string) {
   return `/nodes/${encodeURIComponent(clusterId)}/${encodeURIComponent(nodeName)}/${action}`;

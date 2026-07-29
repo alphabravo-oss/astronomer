@@ -239,7 +239,9 @@ func TestFullCleanup_DeletesExactlyManagedSet(t *testing.T) {
 	idxDep := indexOf(dels, "deployments/astronomer-agent")
 	idxSys := indexOf(dels, "namespaces/astronomer-system")
 	idxCRB := indexOf(dels, "clusterrolebindings/astronomer-agent")
-	if idxDep < 0 || idxSys < 0 || idxCRB < 0 || !(idxDep < idxSys && idxSys < idxCRB) {
+	orderedDepNamespaceCRB := idxDep >= 0 && idxSys >= 0 && idxCRB >= 0 &&
+		idxDep < idxSys && idxSys < idxCRB
+	if !orderedDepNamespaceCRB {
 		t.Errorf("expected order deployment(%d) < astronomer-system(%d) < agent-clusterrolebinding(%d): %v", idxDep, idxSys, idxCRB, dels)
 	}
 	// Every credential Secret is deleted before the agent Deployment, with the

@@ -414,6 +414,7 @@ func (h *AuthHandler) effectiveLockoutPolicy() (int, time.Duration) {
 }
 
 // LoginRequest represents the login request body.
+// openapi:request LoginRequest
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`

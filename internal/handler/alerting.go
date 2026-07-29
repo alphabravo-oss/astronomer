@@ -253,6 +253,7 @@ type InhibitionMatcher struct {
 }
 
 // InhibitionRequest is the create/update body for an inhibition rule (P-03).
+// openapi:request InhibitionRequest
 type InhibitionRequest struct {
 	Name           string              `json:"name" validate:"required"`
 	SourceMatchers []InhibitionMatcher `json:"source_matchers"`

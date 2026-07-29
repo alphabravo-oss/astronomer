@@ -18,6 +18,10 @@ DATABASE_URL ?= postgres://astronomer:astronomer@localhost:5433/astronomer?sslmo
 SQLC_VERSION ?= v1.31.1
 SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
+# Pinned golangci-lint — mirrors the sqlc pinned-tool pattern. Kept in sync with
+# the default in scripts/check-go-lint.sh, which is what CI actually invokes.
+GOLANGCI_LINT_VERSION ?= v2.12.2
+
 # Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
 OAPI_CODEGEN_VERSION ?= v2.5.0
 OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
@@ -85,8 +89,8 @@ build: ## Build all binaries to bin/
 test: ## Run tests with race detector
 	go test -race -count=1 ./...
 
-lint: ## Run golangci-lint
-	golangci-lint run ./...
+lint: ## Run the pinned golangci-lint — the same gate scripts/verify-enterprise.sh backend runs
+	GOLANGCI_LINT_VERSION=$(GOLANGCI_LINT_VERSION) ./scripts/check-go-lint.sh
 
 check-migrations: ## Lint *.up.sql migrations for unsafe ADD COLUMN NOT NULL patterns (T30)
 	./scripts/check-migrations.sh

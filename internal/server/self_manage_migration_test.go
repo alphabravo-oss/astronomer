@@ -49,7 +49,7 @@ redis:
 func TestFirstSelfManagedApplicationCreationRequiresCompleteServerRollout(t *testing.T) {
 	ctx := context.Background()
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	kube := k8sfake.NewClientset(completeServerRolloutFixtures()...)
 	deployment, _ := kube.AppsV1().Deployments(localArgoNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
 	deployment.Status.UpdatedReplicas = 0
 	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
@@ -81,7 +81,7 @@ func TestRestageRequiresRolloutEvenWhenForgedHashMatchesDesired(t *testing.T) {
 	annotations[selfManagedHashAnnotation] = forgedDesiredHash
 	current.SetAnnotations(annotations)
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), current)
-	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	kube := k8sfake.NewClientset(completeServerRolloutFixtures()...)
 	deployment, _ := kube.AppsV1().Deployments(localArgoNamespace).Get(ctx, localAstronomerReleaseName+"-server", metav1.GetOptions{})
 	deployment.Status.UpdatedReplicas = 0
 	if _, err := kube.AppsV1().Deployments(localArgoNamespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
@@ -105,7 +105,7 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	// unsafe-operation sanitation paths below remain legal single-writer writes.
 	zeroControllerReplicas := int32(0)
 	fixtures := append(completeServerRolloutFixtures(), &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zeroControllerReplicas}})
-	kube := k8sfake.NewSimpleClientset(fixtures...)
+	kube := k8sfake.NewClientset(fixtures...)
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
 
 	if err := ensureSelfManagedAstronomerApplication(ctx, kube, dyn, cluster, safeSelfManagedValuesForTest); err != nil {
@@ -429,7 +429,7 @@ func TestSelfManagedWriteBarrierDuringActiveAcceptanceOperation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// No quiesced controller workload exists in this fixture, so every
 			// unsafe case must fail closed instead of sanitizing concurrently.
-			kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+			kube := k8sfake.NewClientset(completeServerRolloutFixtures()...)
 			dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
 			resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
 			app, err := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -487,7 +487,7 @@ func TestSelfManagedWriteBarrierTerminalOwnershipReturn(t *testing.T) {
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
 
 	t.Run("terminal failure stays awaiting and never activates", func(t *testing.T) {
-		kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+		kube := k8sfake.NewClientset(completeServerRolloutFixtures()...)
 		dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
 		resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
 		app, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -515,7 +515,7 @@ func TestSelfManagedWriteBarrierTerminalOwnershipReturn(t *testing.T) {
 	})
 
 	t.Run("terminal success normalizes transient metadata to a fixed point", func(t *testing.T) {
-		kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+		kube := k8sfake.NewClientset(completeServerRolloutFixtures()...)
 		dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
 		resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
 		app, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -555,7 +555,7 @@ func TestSelfManagedWriteBarrierTerminalOwnershipReturn(t *testing.T) {
 func TestSelfManagedOperationConflictRequiresFreshReconcileNotBlindRetry(t *testing.T) {
 	ctx := context.Background()
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
-	kube := k8sfake.NewSimpleClientset(completeServerRolloutFixtures()...)
+	kube := k8sfake.NewClientset(completeServerRolloutFixtures()...)
 	dyn := stagedSelfManagedApplicationForBarrierTest(t, ctx, kube)
 	resource := dyn.Resource(argocdApplicationGVR).Namespace(localArgoNamespace)
 	app, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -674,7 +674,7 @@ func TestCurrentHelmReleaseValuesSelectsHighestDeployedRevisionAndSanitizes(t *t
 		"bootstrap": map[string]any{"password": canary},
 	}
 	failed := map[string]any{"config": map[string]any{"serverURL": "https://failed.example"}}
-	kube := k8sfake.NewSimpleClientset(
+	kube := k8sfake.NewClientset(
 		helmReleaseSecretFixture(t, 1, "deployed", old),
 		helmReleaseSecretFixture(t, 3, "deployed", production),
 		helmReleaseSecretFixture(t, 4, "failed", failed),
@@ -826,7 +826,7 @@ func activeSelfManagedApplicationForRevision(t *testing.T, revision, destination
 
 func TestSelfManagedCredentialSecretIsProtectedIdempotentAndRotationSafe(t *testing.T) {
 	ctx := context.Background()
-	kube := k8sfake.NewSimpleClientset()
+	kube := k8sfake.NewClientset()
 	data := map[string][]byte{"password": []byte("first"), "dsn": []byte("postgres://reference")}
 	if err := ensureSelfManagedCredentialSecret(ctx, kube, selfManagedDatabaseSecret, data); err != nil {
 		t.Fatal(err)
@@ -893,7 +893,7 @@ func TestSelfManagedRedisURLDecompositionPreservesUnsupportedURLs(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			server := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server", Namespace: localArgoNamespace}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server"}}}}}}
 			configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": rawURL}}
-			kube := k8sfake.NewSimpleClientset(configMap)
+			kube := k8sfake.NewClientset(configMap)
 			values, err := selfManagedExternalRedisValues(context.Background(), kube, server)
 			if err != nil {
 				t.Fatal(err)
@@ -911,7 +911,7 @@ func TestSelfManagedRedisURLDecompositionPreservesUnsupportedURLs(t *testing.T) 
 		})
 	}
 	server := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server"}}}}}}
-	kube := k8sfake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": "rediss://redis.example:6380/4"}})
+	kube := k8sfake.NewClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": "rediss://redis.example:6380/4"}})
 	values, err := selfManagedExternalRedisValues(context.Background(), kube, server)
 	if err != nil {
 		t.Fatal(err)
@@ -919,7 +919,7 @@ func TestSelfManagedRedisURLDecompositionPreservesUnsupportedURLs(t *testing.T) 
 	if values["address"] != "redis.example:6380" || values["database"] != 4 || values["tls"] != true {
 		t.Fatalf("supported Redis URL = %#v", values)
 	}
-	kube = k8sfake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": "redis://:$(REDIS_PASSWORD)@redis.example:6379/0"}})
+	kube = k8sfake.NewClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": "redis://:$(REDIS_PASSWORD)@redis.example:6379/0"}})
 	if _, err := selfManagedExternalRedisValues(context.Background(), kube, server); err == nil || !strings.Contains(err.Error(), "no matching Secret reference") {
 		t.Fatalf("unresolved Redis placeholder error = %v", err)
 	}
@@ -932,7 +932,7 @@ func TestSelfManagedRedisURLDecompositionPreservesUnsupportedURLs(t *testing.T) 
 		"placeholder as username": "redis://$(REDIS_PASSWORD)@redis.example:6379/0",
 	} {
 		t.Run(name, func(t *testing.T) {
-			client := k8sfake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": aclURL}})
+			client := k8sfake.NewClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-config", Namespace: localArgoNamespace}, Data: map[string]string{"REDIS_URL": aclURL}})
 			if _, err := selfManagedExternalRedisValues(context.Background(), client, passwordServer); err == nil || !strings.Contains(err.Error(), "empty ACL username") {
 				t.Fatalf("ACL placeholder error = %v", err)
 			}
@@ -988,7 +988,7 @@ func TestUnsafeSelfManagedApplicationScrubRequiresStoppedController(t *testing.T
 	one := int32(1)
 	objects := []runtime.Object{&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &one}}}
 	objects = append(objects, completeServerRolloutFixtures()...)
-	kube := k8sfake.NewSimpleClientset(objects...)
+	kube := k8sfake.NewClientset(objects...)
 	cluster := sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}
 	dyn.ClearActions()
 	kube.ClearActions()
@@ -1115,7 +1115,7 @@ func TestUnsafeSelfManagedApplicationRefusesStatusSubresourceCRD(t *testing.T) {
 	zero := int32(0)
 	objects := []runtime.Object{&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: localArgoControllerWorkload, Namespace: localArgoNamespace}, Spec: appsv1.StatefulSetSpec{Replicas: &zero}}}
 	objects = append(objects, completeServerRolloutFixtures()...)
-	kube := k8sfake.NewSimpleClientset(objects...)
+	kube := k8sfake.NewClientset(objects...)
 	err := ensureSelfManagedAstronomerApplication(context.Background(), kube, dyn, sqlc.Cluster{ApiServerUrl: "https://kubernetes.default.svc"}, safeSelfManagedValuesForTest)
 	if err == nil || !strings.Contains(err.Error(), "enables the status subresource") {
 		t.Fatalf("status-subresource error = %v", err)

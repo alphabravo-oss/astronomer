@@ -79,7 +79,7 @@ func TestLoggingMutatingRoutesDenyZeroGrantViewer(t *testing.T) {
 	t.Run("test_output", func(t *testing.T) {
 		// Seed an output so TestOutput reaches the authz check (not a 404).
 		q := newLoggingFakeQuerier()
-		out, err := q.CreateLoggingOutput(nil, sqlc.CreateLoggingOutputParams{
+		out, err := q.CreateLoggingOutput(context.Background(), sqlc.CreateLoggingOutputParams{
 			Name:          "viewer-test",
 			OutputType:    "stdout",
 			Configuration: []byte(`{}`),

@@ -191,6 +191,7 @@ type RestoreResponse struct {
 }
 
 // ScheduleRequest is the create/update body for cron-driven snapshots.
+// openapi:request SnapshotScheduleRequest
 type ScheduleRequest struct {
 	Name         string       `json:"name"`
 	CronSchedule string       `json:"cron_schedule"`
@@ -450,6 +451,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// openapi:request SnapshotCreateRequest
 	var req struct {
 		SnapshotSpec
 		Source     string `json:"source,omitempty"`
@@ -514,8 +516,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		out := snapshotToResponse(row)
 		out.LastPollError = err.Error()
 		h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
-		h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
-	recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
+		recordAudit(r, h.queries, "cluster.snapshot.created", "cluster_snapshot", row.ID.String(), cluster.Name, map[string]any{
 			"cluster_id":  clusterID.String(),
 			"velero_name": row.VeleroName,
 			"crd_error":   err.Error(),
@@ -593,6 +594,7 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// openapi:request SnapshotRestoreRequest
 	var req struct {
 		TargetClusterID string      `json:"target_cluster_id"`
 		Namespace       string      `json:"velero_namespace"`
@@ -688,8 +690,7 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		out := restoreToResponse(row)
 		out.LastPollError = err.Error()
 		h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
-		h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
-	recordAudit(r, h.queries, "cluster.snapshot.restore_requested", "cluster_restore", row.ID.String(), target.Name, map[string]any{
+		recordAudit(r, h.queries, "cluster.snapshot.restore_requested", "cluster_restore", row.ID.String(), target.Name, map[string]any{
 			"cluster_id":       targetID.String(),
 			"snapshot_id":      snapshotID.String(),
 			"snapshot_cluster": clusterID.String(),

@@ -107,7 +107,8 @@ func ValidateURL(raw string, allowLoopbackHTTP bool) error {
 	if u.Scheme != strings.ToLower(u.Scheme) || u.Host != strings.ToLower(u.Host) {
 		return fmt.Errorf("scheme and host must be lowercase")
 	}
-	if u.Scheme != "https" && !(allowLoopbackHTTP && u.Scheme == "http" && isLoopback(u.Hostname())) {
+	loopbackHTTP := allowLoopbackHTTP && u.Scheme == "http" && isLoopback(u.Hostname())
+	if u.Scheme != "https" && !loopbackHTTP {
 		return fmt.Errorf("must use https")
 	}
 	if strings.HasSuffix(u.Hostname(), ".") {

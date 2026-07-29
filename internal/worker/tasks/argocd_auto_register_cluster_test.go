@@ -926,7 +926,7 @@ func TestArgoCDAutoRegisterLocalStaleAgentVersionLabelStillRepairs(t *testing.T)
 		}},
 	}
 	k8s := k8sfake.NewClientset(localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(staleCluster, nil)))
-	k8s.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	k8s.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() != "token" {
 			return false, nil, nil
 		}
@@ -1108,7 +1108,7 @@ func TestArgoCDAutoRegisterLocalExpiringTokenStillRepairs(t *testing.T) {
 	secret := localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(cluster, nil))
 	secret.Data["config"] = bearerTokenSecretConfig(t, time.Now().Add(20*time.Hour))
 	k8s := k8sfake.NewClientset(secret)
-	k8s.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	k8s.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() != "token" {
 			return false, nil, nil
 		}
@@ -1196,7 +1196,7 @@ func TestArgoCDAutoRegisterLocalNewInstanceStillRegisters(t *testing.T) {
 		}},
 	}
 	k8s := k8sfake.NewClientset(localClusterSecretWithLabels("astronomer-local-cluster", managedClusterArgoLabelsForProjects(cluster, nil)))
-	k8s.Fake.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	k8s.PrependReactor("create", "serviceaccounts", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() != "token" {
 			return false, nil, nil
 		}

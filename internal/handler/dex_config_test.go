@@ -345,7 +345,7 @@ func (f *fakeDexQuerier) RestoreDexSSOForGeneration(_ context.Context, arg sqlc.
 	row.IsEnabled = true
 	f.ssoByProv["dex"] = row
 	f.settings.SagaPreviousSsoEnabled = false
-	return sqlc.RestoreDexSSOForGenerationRow{ID: row.ID, Provider: row.Provider, IsEnabled: row.IsEnabled, DisplayName: row.DisplayName, Config: row.Config, ClientID: row.ClientID, ClientSecretEncrypted: row.ClientSecretEncrypted, AllowedOrganizations: row.AllowedOrganizations, AllowedDomains: row.AllowedDomains, AutoCreateUsers: row.AutoCreateUsers, DefaultGlobalRoleID: row.DefaultGlobalRoleID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, MigratedToDexAt: row.MigratedToDexAt}, nil
+	return sqlc.RestoreDexSSOForGenerationRow(row), nil
 }
 
 func (f *fakeDexQuerier) MarkDexRuntimeApplied(_ context.Context, arg sqlc.MarkDexRuntimeAppliedParams) (sqlc.DexSetting, error) {
@@ -436,7 +436,7 @@ func (f *fakeDexQuerier) EnableDexSSOForGeneration(_ context.Context, arg sqlc.E
 	row.UpdatedAt = time.Now().UTC()
 	f.ssoByProv["dex"] = row
 	f.settings.SagaPreviousSsoEnabled = false
-	return sqlc.EnableDexSSOForGenerationRow{ID: row.ID, Provider: row.Provider, IsEnabled: row.IsEnabled, DisplayName: row.DisplayName, Config: row.Config, ClientID: row.ClientID, ClientSecretEncrypted: row.ClientSecretEncrypted, AllowedOrganizations: row.AllowedOrganizations, AllowedDomains: row.AllowedDomains, AutoCreateUsers: row.AutoCreateUsers, DefaultGlobalRoleID: row.DefaultGlobalRoleID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, MigratedToDexAt: row.MigratedToDexAt}, nil
+	return sqlc.EnableDexSSOForGenerationRow(row), nil
 }
 
 func (f *fakeDexQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {

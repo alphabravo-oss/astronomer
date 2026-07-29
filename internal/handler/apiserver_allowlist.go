@@ -169,6 +169,7 @@ type AllowlistResponse struct {
 }
 
 // AllowlistUpdateRequest is the PUT body.
+// openapi:request AllowlistUpdateRequest
 type AllowlistUpdateRequest struct {
 	CIDRs []string `json:"cidrs"`
 	Mode  string   `json:"mode"`

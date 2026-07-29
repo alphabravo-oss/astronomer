@@ -19,7 +19,7 @@ usage() {
 Usage: scripts/verify-enterprise.sh [all|backend|frontend|helm|api-contract]
 
 Scopes:
-  backend      migrations, sqlc drift, Go build/vet/tests/race, API contracts
+  backend      migrations, sqlc drift, Go build/vet/lint/tests/race, API contracts
   frontend     code health, lint, types, units, production build, npm audit
   helm         locked dependencies, lint, dev/prod renders, chart contracts
   api-contract focused API/OpenAPI/generated/embed/route/error-code contracts
@@ -28,7 +28,8 @@ Scopes:
 Prerequisites:
   - Run `npm ci` in frontend/ before frontend, api-contract, or all.
   - Install the Go, Node.js, npm, Helm, Python 3, and sqlc prerequisites
-    documented in .github/workflows/README.md.
+    documented in .github/workflows/README.md. golangci-lint needs no install:
+    scripts/check-go-lint.sh `go run`s a pinned version.
 
 Logs and rendered manifests are written beneath VERIFY_ARTIFACT_DIR (default:
 ${TMPDIR:-/tmp}/astronomer-verify-enterprise).
@@ -55,6 +56,9 @@ require_frontend_dependencies() {
 verify_contract_artifacts() {
   step "OpenAPI route coverage"
   run_logged openapi-coverage node scripts/openapi-coverage.mjs --check
+
+  step "OpenAPI request-schema fields vs Go request structs"
+  run_logged openapi-request-fields node scripts/openapi-request-fields.mjs --check
 
   step "Generated frontend OpenAPI types"
   run_logged openapi-generated-types node scripts/generate-openapi-types.mjs --check
@@ -123,6 +127,9 @@ verify_backend() {
 
   step "Go vet"
   run_logged go-vet go vet ./...
+
+  step "Go lint (pinned golangci-lint against .golangci.yml)"
+  run_logged go-lint ./scripts/check-go-lint.sh
 
   step "Full Go test suite"
   run_logged go-test go test ./... -count=1

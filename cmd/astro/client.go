@@ -123,7 +123,7 @@ func writeGenericTable(w io.Writer, v any) error {
 
 // writeRowsTable renders a slice of maps as a column-per-key table. Rows
 // that are not maps fall back to a single "value" column.
-func writeRowsTable(w io.Writer, rows []any) error {
+func writeRowsTable(w io.Writer, rows []any) (err error) {
 	if len(rows) == 0 {
 		_, err := fmt.Fprintln(w, "(no results)")
 		return err
@@ -145,7 +145,14 @@ func writeRowsTable(w io.Writer, rows []any) error {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	defer tw.Flush()
+	// tabwriter buffers every row; the whole table only reaches w on Flush, so
+	// a dropped Flush error is the CLI reporting success having printed
+	// nothing. Report it, but never mask an earlier write error.
+	defer func() {
+		if flushErr := tw.Flush(); err == nil {
+			err = flushErr
+		}
+	}()
 
 	if !allMaps {
 		if _, err := fmt.Fprintln(tw, "VALUE"); err != nil {
@@ -188,7 +195,7 @@ func writeRowsTable(w io.Writer, rows []any) error {
 }
 
 // writeKVTable renders a map as a sorted two-column KEY / VALUE table.
-func writeKVTable(w io.Writer, m map[string]any) error {
+func writeKVTable(w io.Writer, m map[string]any) (err error) {
 	if len(m) == 0 {
 		_, err := fmt.Fprintln(w, "(empty)")
 		return err
@@ -200,7 +207,12 @@ func writeKVTable(w io.Writer, m map[string]any) error {
 	sort.Strings(keys)
 
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	defer tw.Flush()
+	// See writeRowsTable: the table is only written to w on Flush.
+	defer func() {
+		if flushErr := tw.Flush(); err == nil {
+			err = flushErr
+		}
+	}()
 	if _, err := fmt.Fprintln(tw, "KEY\tVALUE"); err != nil {
 		return err
 	}

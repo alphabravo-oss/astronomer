@@ -237,6 +237,7 @@ func applicationToResponse(a sqlc.ClusterTemplateApplication, templateName strin
 }
 
 // CreateClusterTemplateRequest is the POST/PUT body shape.
+// openapi:request CreateClusterTemplateRequest
 type CreateClusterTemplateRequest struct {
 	Name        string          `json:"name" validate:"required"`
 	Description string          `json:"description"`
@@ -244,6 +245,7 @@ type CreateClusterTemplateRequest struct {
 }
 
 // ApplyClusterTemplateRequest is the POST /clusters/{id}/template/ body.
+// openapi:request ApplyClusterTemplateRequest
 type ApplyClusterTemplateRequest struct {
 	TemplateID string `json:"template_id" validate:"required"`
 }

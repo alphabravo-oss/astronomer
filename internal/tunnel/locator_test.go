@@ -20,7 +20,7 @@ func newTestLocator(rdb *redis.Client, addr string) *Locator {
 func TestLocatorDelete_CAS_DoesNotClobberNewOwner(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	ctx := context.Background()
 
 	locA := newTestLocator(rdb, "10.0.0.1:8000")
@@ -58,7 +58,7 @@ func TestLocatorDelete_CAS_DoesNotClobberNewOwner(t *testing.T) {
 func TestLocatorRefresh_SupersededDoesNotClobber(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	ctx := context.Background()
 
 	locA := newTestLocator(rdb, "10.0.0.1:8000")
@@ -117,7 +117,7 @@ func TestLocatorRefresh_SupersededDoesNotClobber(t *testing.T) {
 func TestLocatorDelete_CAS_OwnerDeletes(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	ctx := context.Background()
 
 	loc := newTestLocator(rdb, "10.0.0.1:8000")
@@ -142,7 +142,7 @@ func TestLocatorDelete_CAS_OwnerDeletes(t *testing.T) {
 func TestLocatorRefresh_StaleGenerationDoesNotCancelNewLoop(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	ctx := context.Background()
 
 	loc := newTestLocator(rdb, "10.0.0.1:8000")

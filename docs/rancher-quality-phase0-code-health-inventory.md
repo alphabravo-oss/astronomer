@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 352
-- Frontend source lines: 98545
-- Go source files under `internal/` excluding generated sqlc and tests: 429
-- Go source files scanned for sqlc query references excluding generated sqlc: 2059
-- sqlc query declarations: 885
-- Component files scanned: 109
+- Frontend source files: 378
+- Frontend source lines: 104728
+- Go source files under `internal/` excluding generated sqlc and tests: 454
+- Go source files scanned for sqlc query references excluding generated sqlc: 2155
+- sqlc query declarations: 897
+- Component files scanned: 117
 - Helm top-level values scanned: 33
 
 ## Hard Gates
@@ -23,6 +23,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 - Direct `sonner` imports or `toast.*` calls outside `frontend/src/lib/toast.ts`: pass
 - Page-local API `ResponseShape` types in app routes: pass
 - Duplicate frontend API shape type names ending in `Request`, `WriteRequest`, or `Response`: pass
+- Frontend types re-declaring an OpenAPI schema generated into `frontend/src/types/openapi.generated.ts`, beyond the recorded debt list: pass
 - Local generic `StatusBadge` components outside the shared UI component: pass
 - Raw native table tags outside `frontend/src/components/ui/table.tsx`: pass
 - Raw overlay roots/backdrops outside `frontend/src/components/ui/overlay-shell.tsx`: pass
@@ -67,6 +68,10 @@ Owner: frontend/API. Target abstraction: one exported API shape per endpoint fam
 
 - None.
 
+Owner: frontend/API. Target abstraction: derive wire shapes from `@/types/openapi.generated`. Anything listed here is beyond `SHADOWED_GENERATED_SCHEMAS` in `scripts/code-health-inventory.mjs` and fails the gate; the recorded debt itself is tracked in that set.
+
+- None.
+
 Owner: frontend/platform. Target abstraction: shared `components/ui/status-badge.tsx` for generic statuses; domain-specific badges must use domain-specific names.
 
 - None.
@@ -89,12 +94,12 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:1901`](internal/server/routes.go:1901)
-- `copyStringMap` in [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:341`](internal/server/self_manage_credentials.go:341)
-- `decodeRoleRules` in [`internal/handler/rbac.go:971`](internal/handler/rbac.go:971), [`internal/server/middleware/rbac_queries.go:261`](internal/server/middleware/rbac_queries.go:261)
-- `isEmpty` in [`internal/dexconfig/validate.go:503`](internal/dexconfig/validate.go:503), [`internal/notify/render.go:147`](internal/notify/render.go:147)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2079`](internal/server/routes.go:2079)
+- `copyStringMap` in [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
+- `decodeRoleRules` in [`internal/handler/rbac.go:1110`](internal/handler/rbac.go:1110), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
+- `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
-- `requireSuperuser` in [`internal/handler/authorization.go:87`](internal/handler/authorization.go:87), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
+- `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:165`](internal/server/middleware/read_audit.go:165)
 
 ### Dead-Code Candidates

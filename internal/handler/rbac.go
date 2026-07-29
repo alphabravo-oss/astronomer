@@ -151,6 +151,11 @@ func (h *RBACHandler) lookupProjectBindingUserID(ctx context.Context, id uuid.UU
 	return uuid.UUID(b.UserID.Bytes).String()
 }
 
+// openapi:request RBACRoleRequest
+// openapi:request-allow description  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow displayName  camelCase alias the Next.js frontend still sends (resolveDisplayName); display_name is the documented spelling
+// openapi:request-allow permissions  DEBT: legacy column written beside rules; accepted and persisted, undocumented
+// openapi:request-allow scope  DEBT: documented in the body but taken from the route (global-/cluster-/project-roles); never decoded
 type roleRequest struct {
 	Name           string          `json:"name" validate:"required"`
 	DisplayName    string          `json:"display_name"`
@@ -175,6 +180,15 @@ func (req *roleRequest) resolveDisplayName() string {
 	return req.DisplayNameAlt
 }
 
+// openapi:request RBACBindingRequest
+// openapi:request RBACClusterBindingRequest
+// openapi:request RBACProjectBindingRequest
+// openapi:request-allow RBACBindingRequest.cluster_id  one struct decodes all three binding routes; CreateGlobalRoleBinding ignores this key
+// openapi:request-allow RBACBindingRequest.project_id  one struct decodes all three binding routes; CreateGlobalRoleBinding ignores this key
+// openapi:request-allow RBACBindingRequest.namespace  one struct decodes all three binding routes; CreateGlobalRoleBinding ignores this key
+// openapi:request-allow RBACClusterBindingRequest.project_id  one struct decodes all three binding routes; CreateClusterRoleBinding ignores this key
+// openapi:request-allow RBACProjectBindingRequest.cluster_id  one struct decodes all three binding routes; CreateProjectRoleBinding ignores this key
+// openapi:request-allow RBACProjectBindingRequest.namespace  one struct decodes all three binding routes; CreateProjectRoleBinding ignores this key
 type roleBindingRequest struct {
 	UserID    string `json:"user_id"`
 	Group     string `json:"group"`

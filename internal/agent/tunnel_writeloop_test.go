@@ -85,7 +85,7 @@ func newTunnelTestServer(t *testing.T) *tunnelTestServer {
 		if err != nil {
 			return
 		}
-		defer conn.CloseNow()
+		defer func() { _ = conn.CloseNow() }()
 		ctx := r.Context()
 
 		connectFrame, _, err := readFrame(ctx, conn) // CONNECT

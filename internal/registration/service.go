@@ -379,13 +379,11 @@ func (s *Service) writePhase(ctx context.Context, clusterID uuid.UUID, expected,
 			}
 			return sqlc.UpdateClusterRegistrationPhaseRow{}, err
 		}
-		return sqlc.UpdateClusterRegistrationPhaseRow{
-			ID:                      row.ID,
-			RegistrationPhase:       row.RegistrationPhase,
-			RegistrationStartedAt:   row.RegistrationStartedAt,
-			RegistrationCompletedAt: row.RegistrationCompletedAt,
-			InstallBaseline:         row.InstallBaseline,
-		}, nil
+		// Conversion, not a field-by-field literal: the two sqlc row types are
+		// generated from the same RETURNING list, so a conversion breaks loudly
+		// at compile time if a column is added to one and not the other, where
+		// a named literal would silently drop it.
+		return sqlc.UpdateClusterRegistrationPhaseRow(row), nil
 	}
 	return s.q.UpdateClusterRegistrationPhase(ctx, sqlc.UpdateClusterRegistrationPhaseParams{
 		ID:                      clusterID,

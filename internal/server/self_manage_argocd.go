@@ -533,14 +533,6 @@ func selfManagedIngressValues(ingress *networkingv1.Ingress, fallbackHost string
 	return values
 }
 
-func deploymentImages(ctx context.Context, k8s kubernetes.Interface, namespace, name string) (string, int32, string, error) {
-	deploy, err := k8s.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return "", 0, "", err
-	}
-	return deploymentImagesFromDeployment(deploy)
-}
-
 func deploymentImagesFromDeployment(deploy *appsv1.Deployment) (string, int32, string, error) {
 	name := deploy.Name
 	replicas := int32(1)

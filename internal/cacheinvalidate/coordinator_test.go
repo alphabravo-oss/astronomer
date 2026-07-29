@@ -304,7 +304,9 @@ func TestMalformedRedisEpochKeepsCoordinatorUnhealthy(t *testing.T) {
 	for _, value := range []string{"not-an-integer", "1.5", "-1", ""} {
 		t.Run(strconv.Quote(value), func(t *testing.T) {
 			mini, client := newRedis(t)
-			mini.Set(JWTEpochKey, value)
+			if err := mini.Set(JWTEpochKey, value); err != nil {
+				t.Fatalf("seed epoch %q: %v", value, err)
+			}
 			target := &recordingTarget{}
 			c := New(client, target, "pod", 20*time.Millisecond, nil)
 			ctx, cancel := context.WithCancel(context.Background())

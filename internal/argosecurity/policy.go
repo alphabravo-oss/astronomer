@@ -1413,7 +1413,9 @@ func canonicalMarkerString(value string) bool {
 		if r >= 'A' && r <= 'Z' {
 			r += 'a' - 'A'
 		}
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+		isLower := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		if !isLower && !isDigit {
 			continue
 		}
 		state = canonicalMarkerMachine[state].next[canonicalMarkerIndex(byte(r))]

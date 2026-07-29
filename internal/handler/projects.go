@@ -301,7 +301,7 @@ func (h *ProjectHandler) RBACInvalidatorWired() bool {
 	// InvalidateAll() no-ops on the nil receiver. That is exactly the permanent
 	// silent no-op this guard exists to reject, so unwrap the interface and
 	// reject a nil pointer.
-	if v := reflect.ValueOf(inv); v.Kind() == reflect.Ptr && v.IsNil() {
+	if v := reflect.ValueOf(inv); v.Kind() == reflect.Pointer && v.IsNil() {
 		return false
 	}
 	// A cacheless querier cannot flush either — Invalidate/InvalidateAll both
@@ -451,6 +451,15 @@ func projectToResponse(p sqlc.Project) ProjectResponse {
 //
 //   - PodSecurityProfile: omitted ⇒ defaultPodSecurityProfile (baseline).
 //   - ResourceQuota*:     omitted ⇒ unbounded (empty string / 0).
+//
+// openapi:request CreateProjectRequest
+// openapi:request-allow display_name  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow limit_range  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow network_policy_mode  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_cpu_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_memory_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_pod_count  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
 type CreateProjectRequest struct {
 	Name                     string          `json:"name" validate:"required"`
 	DisplayName              string          `json:"display_name"`
@@ -472,6 +481,18 @@ type CreateProjectRequest struct {
 // the new columns can still PUT the project without nuking them. If a field
 // is omitted from the payload, the existing DB value is preserved (the
 // handler loads the row first to copy missing fields through to UpdateProject).
+// openapi:request UpdateProjectRequest
+// openapi:request-allow display_name  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow limit_range  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow network_policy_mode  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_cpu_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_memory_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_pod_count  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow name  DEBT: documented but never decoded here — a spec-following rename is a silent no-op
+// openapi:request-allow resource_quota_cpu  DEBT: the spec spells this field resource_quota_cpu; the decoder reads resource_quota_cpu_limit, so a spec-following quota is dropped
+// openapi:request-allow resource_quota_memory  DEBT: the spec spells this field resource_quota_memory; the decoder reads resource_quota_memory_limit, so a spec-following quota is dropped
+// openapi:request-allow resource_quota_pods  DEBT: the spec spells this field resource_quota_pods; the decoder reads resource_quota_pod_count, so a spec-following quota is dropped
 type UpdateProjectRequest struct {
 	DisplayName              string          `json:"display_name"`
 	Description              string          `json:"description"`
@@ -487,6 +508,13 @@ type UpdateProjectRequest struct {
 
 // UpdateProjectPolicyRequest is the body for PATCH /projects/{id}/policy/.
 // All fields are optional; missing ones leave the existing value in place.
+// openapi:request UpdateProjectPolicyRequest
+// openapi:request-allow resource_quota_cpu_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_memory_limit  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_pod_count  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow resource_quota_cpu  DEBT: the spec spells this field resource_quota_cpu; the decoder reads resource_quota_cpu_limit, so a spec-following quota is dropped
+// openapi:request-allow resource_quota_memory  DEBT: the spec spells this field resource_quota_memory; the decoder reads resource_quota_memory_limit, so a spec-following quota is dropped
+// openapi:request-allow resource_quota_pods  DEBT: the spec spells this field resource_quota_pods; the decoder reads resource_quota_pod_count, so a spec-following quota is dropped
 type UpdateProjectPolicyRequest struct {
 	PodSecurityProfile       *string `json:"pod_security_profile,omitempty"`
 	ResourceQuotaCpuLimit    *string `json:"resource_quota_cpu_limit,omitempty"`
@@ -1381,6 +1409,7 @@ func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 // ProjectNamespaceRequest represents the request body for add/remove namespace.
+// openapi:request ProjectNamespaceRequest
 type ProjectNamespaceRequest struct {
 	Namespace string `json:"namespace"`
 }

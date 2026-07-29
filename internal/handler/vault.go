@@ -173,6 +173,7 @@ type VaultConnectionResponse struct {
 // Any secret field that arrives equal to avault.SentinelEncrypted on PUT
 // is preserved from the stored blob — so a GET → edit → PUT loop
 // doesn't wipe the credentials.
+// openapi:request VaultConnectionRequest
 type VaultConnectionRequest struct {
 	Name          string            `json:"name"`
 	Description   string            `json:"description"`

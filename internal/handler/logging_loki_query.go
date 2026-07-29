@@ -92,7 +92,7 @@ func queryLokiOutput(ctx context.Context, configuration json.RawMessage, req log
 	if err != nil {
 		return nil, fmt.Errorf("loki query: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read loki response: %w", err)

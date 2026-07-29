@@ -59,6 +59,7 @@ type ResourceHandler struct {
 	settingsCache *SettingsCache
 }
 
+// openapi:request NodeDrainRequest
 type drainNodeRequest struct {
 	IgnoreDaemonSets   *bool  `json:"ignore_daemonsets,omitempty"`
 	DeleteEmptyDirData bool   `json:"delete_empty_dir_data,omitempty"`
@@ -87,21 +88,25 @@ type drainNodeResponse struct {
 	Blockers []string          `json:"blockers,omitempty"`
 }
 
+// openapi:request NodeKeyValueRequest
 type nodeKeyValueRequest struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
+// openapi:request NodeKeyRequest
 type nodeKeyRequest struct {
 	Key string `json:"key"`
 }
 
+// openapi:request NodeTaintRequest
 type nodeTaintRequest struct {
 	Key    string `json:"key"`
 	Value  string `json:"value"`
 	Effect string `json:"effect"`
 }
 
+// openapi:request NodeTaintRemoveRequest
 type nodeTaintRemoveRequest struct {
 	Key    string `json:"key"`
 	Effect string `json:"effect"`

@@ -761,7 +761,11 @@ func (tc *TunnelClient) writeQueued(ctx context.Context, msg *protocol.Message) 
 // reaped by the server. Everything with a context should use SendBlocking so
 // backpressure reaches the producer instead of becoming a drop.
 func (tc *TunnelClient) Send(msg *protocol.Message) error {
-	return tc.enqueue(nil, msg, 0)
+	// context.TODO rather than nil: wait == 0 means enqueueClass never selects
+	// on ctx.Done, so the context is unreachable here by construction. Send's
+	// callers are the ones that have no context to offer — see SendBlocking for
+	// the path that does.
+	return tc.enqueue(context.TODO(), msg, 0)
 }
 
 // SendBlocking queues a message, waiting up to sendQueueWait for room. This is
@@ -790,7 +794,9 @@ func (tc *TunnelClient) enqueue(ctx context.Context, msg *protocol.Message, wait
 }
 
 // enqueueClass places msg on the queue for an explicitly chosen class. wait <= 0
-// (or a nil ctx) means try once and give up — the non-blocking Send path.
+// means try once and give up — the non-blocking Send path, whose ctx is never
+// consulted. The nil check below stays as a guard for a future caller that
+// pairs a nil ctx with a positive wait; no current caller does.
 //
 // The class is a parameter rather than always derived from msg.Type because one
 // caller legitimately disagrees with the type's default: shedInbound sends

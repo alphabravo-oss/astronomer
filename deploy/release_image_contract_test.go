@@ -98,7 +98,9 @@ func TestReleasePublishesSixTrueMultiPlatformImages(t *testing.T) {
 	qemuIndex := releaseStepIndex(job.Steps, "docker/setup-qemu-action@v3")
 	buildxIndex := releaseStepIndex(job.Steps, "docker/setup-buildx-action@v3")
 	buildIndex := releaseStepIndex(job.Steps, "docker/build-push-action@v6")
-	if qemuIndex < 0 || buildxIndex < 0 || buildIndex < 0 || !(qemuIndex < buildxIndex && buildxIndex < buildIndex) {
+	orderedQemuBuildxBuild := qemuIndex >= 0 && buildxIndex >= 0 && buildIndex >= 0 &&
+		qemuIndex < buildxIndex && buildxIndex < buildIndex
+	if !orderedQemuBuildxBuild {
 		t.Fatalf("release must configure QEMU, then Buildx, then build-push; indexes qemu=%d buildx=%d build=%d", qemuIndex, buildxIndex, buildIndex)
 	}
 	qemuPlatforms := strings.ReplaceAll(stringValue(job.Steps[qemuIndex].With["platforms"]), " ", "")

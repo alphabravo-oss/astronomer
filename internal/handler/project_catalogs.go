@@ -138,6 +138,12 @@ type CatalogResponse struct {
 // CreateProjectCatalogRequest is the POST body for the create-private path.
 // Mirrors the admin CreateRepoRequest minus is_default (which is a
 // global-only concept).
+// openapi:request CreateProjectCatalogRequest
+// openapi:request-allow username  decoded only so rejectMisplacedCredentials can answer 400; never accepted input, so not documented
+// openapi:request-allow password  decoded only so rejectMisplacedCredentials can answer 400; never accepted input, so not documented
+// openapi:request-allow token  decoded only so rejectMisplacedCredentials can answer 400; never accepted input, so not documented
+// openapi:request-allow repo_type  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
+// openapi:request-allow enabled  DEBT: accepted and persisted by the handler; docs/openapi.yaml never caught up
 type CreateProjectCatalogRequest struct {
 	Name        string          `json:"name"`
 	URL         string          `json:"url"`

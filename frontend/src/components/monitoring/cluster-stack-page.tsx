@@ -11,7 +11,7 @@
  * see the comment on `scope`.
  */
 import { Link } from '@/lib/link';
-import { ArrowLeft, BarChart3, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, BarChart3 } from 'lucide-react';
 
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { PermissionState } from '@/components/ui/empty-state';

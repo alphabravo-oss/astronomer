@@ -148,7 +148,9 @@ func main() {
 		os.Exit(1)
 	}
 	runtimeEnqueuer := asynq.NewClient(runtimeRedisOpt)
-	defer runtimeEnqueuer.Close()
+	// Process-lifetime client: this defer only runs as main returns, where a
+	// close error has no remaining consumer.
+	defer func() { _ = runtimeEnqueuer.Close() }()
 	// P4.9 — Redis-attached events bus so worker-side writes (alert-event
 	// ingestion/resolution, anomaly-baseline recompute) surface on the
 	// server pods' SSE streams. Publish-only: the worker runs no relay and

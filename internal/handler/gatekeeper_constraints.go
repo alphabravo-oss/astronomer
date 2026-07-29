@@ -82,6 +82,7 @@ type ConstraintValidationResponse struct {
 }
 
 // ConstraintYAMLRequest is the create/validate request body.
+// openapi:request ConstraintYAMLRequest
 type ConstraintYAMLRequest struct {
 	YAML string `json:"yaml" validate:"required"`
 }

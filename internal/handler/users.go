@@ -50,6 +50,7 @@ type CreateUserRequest struct {
 }
 
 // UpdateUserRequest represents the request body for updating a user.
+// openapi:request UsersSettingsUpdateUserRequest
 type UpdateUserRequest struct {
 	Email     string `json:"email"`
 	Username  string `json:"username"`

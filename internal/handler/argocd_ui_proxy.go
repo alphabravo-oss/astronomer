@@ -727,7 +727,9 @@ func decodeArgoJSONBody(raw []byte, contentEncoding string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode gzip Argo JSON: %w", err)
 		}
-		defer reader.Close()
+		// The ReadAll below reports any decode failure; the limited read may
+		// stop short of EOF deliberately, so Close has nothing to add.
+		defer func() { _ = reader.Close() }()
 		decoded, err := io.ReadAll(io.LimitReader(reader, maxArgoCDProxyJSONBytes+1))
 		if err != nil {
 			return nil, fmt.Errorf("decode gzip Argo JSON: %w", err)

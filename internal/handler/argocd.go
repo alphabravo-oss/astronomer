@@ -288,6 +288,7 @@ type argocdOperationEnvelope struct {
 // SyncRequest is the JSON body accepted by POST /argocd/apps/{id}/sync/.
 // All fields are optional — an empty body is a "sync at targetRevision,
 // no prune, not a dry run" request.
+// openapi:request ArgoSyncRequest
 type SyncRequest struct {
 	Revision string `json:"revision,omitempty"`
 	Prune    bool   `json:"prune,omitempty"`

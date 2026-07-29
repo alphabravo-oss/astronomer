@@ -41,10 +41,11 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// rfc1123ClusterName mirrors the validClusterName check in the cluster
-// handler. Duplicated here (rather than imported) because internal/gitops
-// is intentionally handler-free — the handler imports gitops, not the
-// reverse.
+// rfc1123ClusterName is the single RFC-1123 label check for cluster names:
+// lowercase letters/digits/hyphens, start+end alphanumeric, 1–63 chars.
+// Mirrors k8s.io/apimachinery/pkg/util/validation.IsDNS1123Label. Lives in
+// internal/gitops (which is intentionally handler-free) because the handler
+// imports gitops, not the reverse.
 var rfc1123ClusterName = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 
 // ValidClusterName enforces the RFC-1123 label rules.

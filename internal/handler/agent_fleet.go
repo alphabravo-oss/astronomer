@@ -260,6 +260,7 @@ type agentUpgradeRecommendation struct {
 	Message        string `json:"message"`
 }
 
+// openapi:request AgentUpgradePlanRequest
 type agentUpgradePlanRequest struct {
 	TargetVersion    string   `json:"target_version"`
 	TargetImage      string   `json:"target_image"`

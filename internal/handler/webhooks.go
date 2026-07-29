@@ -136,6 +136,7 @@ type subscriptionResponse struct {
 // subscriptionRequest is the POST/PUT body. Every field is a pointer so
 // PUT can do partial updates while POST sets explicit defaults at the
 // helper layer.
+// openapi:request WebhookSubscriptionRequest
 type subscriptionRequest struct {
 	Name            *string            `json:"name"`
 	URL             *string            `json:"url"`

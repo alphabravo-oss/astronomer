@@ -20,23 +20,6 @@ func secretRefValues(ref selfManagedSecretRef) map[string]any {
 	return map[string]any{"name": ref.Name, "key": ref.Key}
 }
 
-func referencedSecretNames(values map[string]any) []string {
-	var names []string
-	for key, raw := range values {
-		if strings.HasSuffix(strings.ToLower(key), "secretref") {
-			if ref, ok := raw.(map[string]any); ok {
-				if name, _ := ref["name"].(string); strings.TrimSpace(name) != "" {
-					names = append(names, name)
-				}
-			}
-		}
-		if nested, ok := raw.(map[string]any); ok {
-			names = append(names, referencedSecretNames(nested)...)
-		}
-	}
-	return names
-}
-
 func protectSelfManagedSecret(ctx context.Context, k8s kubernetes.Interface, name string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		secret, err := k8s.CoreV1().Secrets(localAstronomerNamespace).Get(ctx, name, metav1.GetOptions{})

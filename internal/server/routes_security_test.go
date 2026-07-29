@@ -994,7 +994,7 @@ func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
 	var unwired []string
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
-		if field.Type.Kind() != reflect.Ptr {
+		if field.Type.Kind() != reflect.Pointer {
 			continue
 		}
 		elem := field.Type.Elem()

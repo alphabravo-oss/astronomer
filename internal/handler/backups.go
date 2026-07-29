@@ -88,8 +88,8 @@ type BackupHandler struct {
 // NewBackupHandler creates a new backup handler.
 func NewBackupHandler(queries BackupQuerier) *BackupHandler {
 	return &BackupHandler{
-		queries:    queries,
-		log:        slog.Default(),
+		queries: queries,
+		log:     slog.Default(),
 		// SEC-03: S3 connectivity probe dials operator-supplied endpoints;
 		// SafeClient enforces public-IP at dial time (not GuardPublicHost alone).
 		httpClient: httpclient.SafeClient(15 * time.Second),
@@ -312,6 +312,7 @@ func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Reques
 }
 
 // CreateStorageConfigRequest represents the request body for creating a storage config.
+// openapi:request BackupStorageConfigRequest
 type CreateStorageConfigRequest struct {
 	Name            string `json:"name" validate:"required"`
 	StorageType     string `json:"storage_type"`
@@ -616,6 +617,7 @@ func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateBackupRequest represents the request body for creating a backup.
+// openapi:request BackupCreateRequest
 type CreateBackupRequest struct {
 	Name               string          `json:"name" validate:"required"`
 	StorageID          string          `json:"storage_id"`
@@ -781,6 +783,7 @@ func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateScheduleRequest represents the request body for creating a backup schedule.
+// openapi:request BackupScheduleRequest
 type CreateScheduleRequest struct {
 	Name               string   `json:"name" validate:"required"`
 	StorageID          string   `json:"storage_id"`
@@ -1089,6 +1092,7 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 // --- Restore ---
 
 // CreateRestoreRequest represents the request body for creating a restore operation.
+// openapi:request BackupRestoreRequest
 type CreateRestoreRequest struct {
 	IncludedNamespaces []string          `json:"included_namespaces"`
 	NamespaceMapping   map[string]string `json:"namespace_mapping"`

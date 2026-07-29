@@ -185,6 +185,7 @@ func networkPolicyApplicationToResponse(a sqlc.NetworkPolicyApplication, slug st
 }
 
 // CreateNetworkPolicyTemplateRequest is the POST/PUT body.
+// openapi:request CreateNetworkPolicyTemplateRequest
 type CreateNetworkPolicyTemplateRequest struct {
 	Slug         string `json:"slug"`
 	Name         string `json:"name"`
@@ -201,6 +202,7 @@ type CreateNetworkPolicyTemplateRequest struct {
 // ApplyNetworkPolicyRequest is the POST body for creating an
 // application. Accepts EITHER a single namespace OR a list, so the UI
 // can bulk-apply to a multi-namespace selection in one POST.
+// openapi:request ApplyNetworkPolicyRequest
 type ApplyNetworkPolicyRequest struct {
 	TemplateID string   `json:"template_id"`
 	Namespace  string   `json:"namespace,omitempty"`

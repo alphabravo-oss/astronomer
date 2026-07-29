@@ -171,6 +171,7 @@ type ClusterRegistryResponse struct {
 // the PUT handler preserves the stored value; otherwise the new value is
 // written. POST never accepts the sentinel (there's nothing to preserve
 // on a fresh row).
+// openapi:request ClusterRegistryRequest
 type ClusterRegistryRequest struct {
 	PrivateRegistryUrl string   `json:"private_registry_url"`
 	RegistryUsername   string   `json:"registry_username"`
