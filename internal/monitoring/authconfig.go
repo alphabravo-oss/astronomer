@@ -10,8 +10,8 @@
 // monitoring subsystem's operator-config bag, and four separate paths do a
 // read-modify-write on it to update NON-secret keys:
 //
-//   - internal/handler/monitoring.go   updateSharedThanosMetadata
-//   - internal/handler/monitoring.go   updateSharedAlertmanagerMetadata
+//   - internal/handler/monitoring_stack_shared.go   updateSharedThanosMetadata
+//   - internal/handler/monitoring_stack_shared.go   updateSharedAlertmanagerMetadata
 //   - internal/handler/alerting.go     persistSharedAlertingAssetHashes
 //   - internal/worker/tasks/monitoring_reconcile.go  reconcileMonitoringBackend
 //

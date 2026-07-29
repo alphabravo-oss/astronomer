@@ -239,3 +239,102 @@ func TestMonitoringSettingsReadRoutesDenyUnauthenticatedWithoutHandlerAuthz(t *t
 		})
 	}
 }
+
+// clusterMonitoringRoutes are the eight per-cluster monitoring routes from
+// registerClusterRoutes, with the exact per-route verb each is mounted with.
+// The verbs differ from the shared-stack family's (install is create, uninstall
+// is delete), which is part of why the per-cluster handlers are gated by
+// middleware rather than by an in-handler preamble.
+var clusterMonitoringRoutes = []struct {
+	name   string
+	method string
+	path   string
+}{
+	{"config_get", http.MethodGet, "/config/"},
+	{"config_put", http.MethodPut, "/config/"},
+	{"stack_status", http.MethodGet, "/stack/status/"},
+	{"stack_preview", http.MethodPost, "/stack/preview/"},
+	{"stack_install", http.MethodPost, "/stack/install/"},
+	{"stack_upgrade", http.MethodPut, "/stack/upgrade/"},
+	{"stack_replace", http.MethodPost, "/stack/replace/"},
+	{"stack_uninstall", http.MethodDelete, "/stack/uninstall/"},
+}
+
+func newClusterMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.RoleBinding) chi.Router {
+	engine := rbac.NewEngine()
+	querier := routeSecurityRBACQuerier{bindings: bindings}
+	monitoring := handler.NewMonitoringHandler()
+	monitoring.SetAuthorization(engine, querier)
+	clusters := handler.NewClusterHandler(&routeSecurityClusterQuerier{})
+	clusters.SetAuthorization(engine, querier)
+	return NewRouter(&config.Config{}, RouterDependencies{
+		JWT:         jwtMgr,
+		RBACEngine:  engine,
+		RBACQueries: querier,
+		// The /clusters group only exists when Clusters is wired, and the
+		// per-cluster monitoring routes hang off it.
+		Clusters:   clusters,
+		Monitoring: monitoring,
+	})
+}
+
+// TestClusterMonitoringRoutesRequireMonitoringRBAC is the fence for the eight
+// handlers in internal/handler/monitoring_stack_cluster.go, which deliberately
+// carry no in-handler authorization: their entire gate is the requirePermission
+// wrapper mounted per route in routes_clusters.go.
+//
+// Nothing else covers that wrapper. These routes are mounted under the
+// `authenticated` group, so removing requirePermission still leaves an
+// anonymous caller with 401 and TestEveryRouteDeniesUnauthenticatedRequests
+// green; both chi.Walk callbacks in routes_security_test.go discard the
+// middleware chain, and the route-risk registries are static (method, pattern)
+// maps. So this test drives an AUTHENTICATED principal holding every verb on
+// clusters and nothing on monitoring, and requires 403 from all eight — the
+// only assertion in the tree that fails if a wrapper is dropped.
+func TestClusterMonitoringRoutesRequireMonitoringRBAC(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	token, err := jwtMgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	base := "/api/v1/clusters/" + uuid.NewString() + "/monitoring"
+
+	noMonitoringRBAC := newClusterMonitoringAuthzRouter(jwtMgr, routeSecurityBindings(
+		rbac.ResourceClusters, rbac.VerbRead, rbac.VerbList, rbac.VerbCreate, rbac.VerbUpdate, rbac.VerbDelete))
+	withMonitoringRBAC := newClusterMonitoringAuthzRouter(jwtMgr, routeSecurityBindings(
+		rbac.ResourceMonitoring, rbac.VerbRead, rbac.VerbCreate, rbac.VerbUpdate, rbac.VerbDelete))
+
+	for _, tc := range clusterMonitoringRoutes {
+		t.Run(tc.name, func(t *testing.T) {
+			path := base + tc.path
+
+			anonReq := httptest.NewRequest(tc.method, path, nil)
+			anonRec := httptest.NewRecorder()
+			noMonitoringRBAC.ServeHTTP(anonRec, anonReq)
+			if anonRec.Code != http.StatusUnauthorized {
+				t.Fatalf("anonymous %s %s status = %d, want %d; body=%s", tc.method, path, anonRec.Code, http.StatusUnauthorized, anonRec.Body.String())
+			}
+
+			deniedReq := httptest.NewRequest(tc.method, path, nil)
+			deniedReq.Header.Set("Authorization", "Bearer "+token)
+			deniedRec := httptest.NewRecorder()
+			noMonitoringRBAC.ServeHTTP(deniedRec, deniedReq)
+			if deniedRec.Code != http.StatusForbidden {
+				t.Fatalf("authenticated without monitoring RBAC %s %s status = %d, want %d; body=%s", tc.method, path, deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
+			}
+
+			// Positive control: the identical request must get PAST the gate for
+			// a monitoring grant holder, so the 403 above can only have come
+			// from authorization. The handler runs with no store or helm
+			// requester wired, so it answers 2xx/4xx/5xx by endpoint — anything
+			// but 403.
+			allowedReq := httptest.NewRequest(tc.method, path, nil)
+			allowedReq.Header.Set("Authorization", "Bearer "+token)
+			allowedRec := httptest.NewRecorder()
+			withMonitoringRBAC.ServeHTTP(allowedRec, allowedReq)
+			if allowedRec.Code == http.StatusForbidden {
+				t.Fatalf("monitoring grant holder ALSO got 403 on %s %s — this test is not measuring authorization; body=%s", tc.method, path, allowedRec.Body.String())
+			}
+		})
+	}
+}

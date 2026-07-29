@@ -128,6 +128,8 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 		"../handler/monitoring.go": {
 			"UpdateBackendConfig",
 			"UpdateEndpoint",
+		},
+		"../handler/monitoring_stack_shared.go": {
 			"InstallSharedThanosStack",
 			"UpgradeSharedThanosStack",
 			"ReplaceSharedThanosStack",
@@ -136,6 +138,8 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 			"UpgradeSharedAlertmanager",
 			"ReplaceSharedAlertmanager",
 			"UninstallSharedAlertmanager",
+		},
+		"../handler/monitoring_stack_cluster.go": {
 			"UpdateClusterConfig",
 			"InstallStack",
 			"UpgradeStack",
