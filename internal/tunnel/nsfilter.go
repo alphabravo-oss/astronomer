@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -207,6 +208,91 @@ func watchEventAllowed(body []byte, allowed map[string]struct{}) (bool, error) {
 	}
 	_, ok = allowed[ns]
 	return ok, nil
+}
+
+// watchLineMaxBytes caps a single newline-delimited watch event held in a
+// watchLineFilter's reassembly buffer. Watch objects can be large CRDs, so the
+// limit matches the 4 MiB token cap the cross-pod path has always used. It also
+// bounds the buffer: without it a stream that never emits a newline would grow
+// until the replica OOMs.
+const watchLineMaxBytes = 4 * 1024 * 1024
+
+// errWatchLineTooLong signals that an unterminated watch event grew past
+// watchLineMaxBytes. The caller must terminate the stream — continuing would
+// mean silently discarding events, which is the bug this filter exists to fix.
+var errWatchLineTooLong = errors.New("tunnel: watch event exceeds size limit")
+
+// watchLineFilter reassembles newline-delimited Kubernetes watch events from
+// arbitrarily chunked input and drops the ones outside the namespace allow-set
+// (F7-b). The agent emits whatever a single Read returned (16 KiB frames, see
+// k8sStreamChunkSize), and an owner pod's body arrives in TCP-sized reads, so a
+// chunk boundary routinely falls mid-event; filtering a raw chunk would drop
+// every event that straddles one. One filter belongs to one stream — it holds
+// per-stream state and is not safe for concurrent use.
+type watchLineFilter struct {
+	allowed map[string]struct{}
+	buf     []byte
+}
+
+func newWatchLineFilter(allowed map[string]struct{}) *watchLineFilter {
+	return &watchLineFilter{allowed: allowed}
+}
+
+// filter appends chunk to the carry-over buffer and returns the allowed
+// complete events, each newline-terminated, in arrival order. A trailing
+// partial event is retained until a later chunk completes it. Rejected and
+// unparseable events are consumed like any other, so they cannot corrupt the
+// parse of whatever follows them. When the retained partial exceeds
+// watchLineMaxBytes the events decoded so far are still returned, alongside
+// errWatchLineTooLong.
+func (f *watchLineFilter) filter(chunk []byte) ([]byte, error) {
+	f.buf = append(f.buf, chunk...)
+	var out []byte
+	start := 0
+	for {
+		i := bytes.IndexByte(f.buf[start:], '\n')
+		if i < 0 {
+			break
+		}
+		line := f.buf[start : start+i]
+		start += i + 1
+		if !f.keep(line) {
+			continue
+		}
+		out = append(out, line...)
+		out = append(out, '\n')
+	}
+	if start > 0 {
+		// Slide the partial down so the consumed prefix is reused rather than
+		// retained for the life of the watch.
+		f.buf = append(f.buf[:0], f.buf[start:]...)
+	}
+	if len(f.buf) > watchLineMaxBytes {
+		f.buf = nil
+		return out, errWatchLineTooLong
+	}
+	return out, nil
+}
+
+// flush returns the allowed remainder when the stream ends without a trailing
+// newline (mirroring bufio.Scanner's final token) and clears the buffer.
+func (f *watchLineFilter) flush() []byte {
+	line := f.buf
+	f.buf = nil
+	if !f.keep(line) {
+		return nil
+	}
+	return append(line, '\n')
+}
+
+// keep evaluates one complete event. Unparseable events are dropped, matching
+// watchEventAllowed's fail-closed contract for the data plane.
+func (f *watchLineFilter) keep(line []byte) bool {
+	if len(line) == 0 {
+		return false
+	}
+	ok, err := watchEventAllowed(line, f.allowed)
+	return err == nil && ok
 }
 
 // setContentLengthHeader replaces any existing (case-insensitive) Content-Length

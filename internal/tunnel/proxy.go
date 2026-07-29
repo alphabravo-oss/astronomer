@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -316,6 +315,33 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 	w.WriteHeader(statusCode)
 	flusher.Flush()
 
+	// F7-b: when the caller is namespace-restricted, events must be reassembled
+	// across frames before they are filtered — the agent cuts frames wherever
+	// its Read returned, so an event routinely spans two of them. The filter
+	// holds the trailing partial event, so it is per-stream state: it is
+	// created here and lives only as long as this handler.
+	var lineFilter *watchLineFilter
+	if allowed, ok := namespaceFilterFromContext(r.Context()); ok {
+		lineFilter = newWatchLineFilter(allowed)
+	}
+	// flushWatchTail emits a final event that arrived without a trailing
+	// newline. Every exit that means "the upstream stopped sending" must call
+	// it — the end frame AND a torn-down stream — or the agent path silently
+	// drops a complete last event that the cross-pod path
+	// (forwardFilteredOwnerWatch, which flushes on any read termination)
+	// delivers. A cancelled client context deliberately does not: nobody is
+	// left to receive it.
+	flushWatchTail := func() {
+		if lineFilter == nil {
+			return
+		}
+		if rest := lineFilter.flush(); len(rest) > 0 {
+			if _, werr := w.Write(rest); werr == nil {
+				flusher.Flush()
+			}
+		}
+	}
+
 	// Pump frames until end or disconnect. No timeout — this is a long-poll.
 	for {
 		select {
@@ -338,19 +364,34 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 				if err != nil {
 					bodyBytes = []byte(frame.Body)
 				}
-				// F7-b: drop watch events outside the caller's namespace allow-set.
-				if allowed, ok := namespaceFilterFromContext(r.Context()); ok {
-					keep, ferr := watchEventAllowed(bodyBytes, allowed)
-					if ferr != nil || !keep {
-						continue
-					}
+				var tooLong bool
+				if lineFilter != nil {
+					filtered, ferr := lineFilter.filter(bodyBytes)
+					tooLong = errors.Is(ferr, errWatchLineTooLong)
+					bodyBytes = filtered
 				}
-				if _, werr := w.Write(bodyBytes); werr != nil {
-					recordK8sProxyError("watch", "client_write_failed")
+				if len(bodyBytes) > 0 {
+					if _, werr := w.Write(bodyBytes); werr != nil {
+						recordK8sProxyError("watch", "client_write_failed")
+						return
+					}
+					flusher.Flush()
+				}
+				if tooLong {
+					// Terminating is the observable failure: dropping the
+					// oversized event silently would be the very data loss
+					// this reassembly exists to prevent.
+					p.log.Warn("watch event exceeds reassembly limit, terminating stream",
+						slog.String("cluster_id", clusterID),
+						slog.Int("limit_bytes", watchLineMaxBytes),
+					)
+					recordK8sProxyError("watch", "watch_event_too_large")
 					return
 				}
-				flusher.Flush()
 			case protocol.K8sStreamFrameEnd:
+				// A final event without a trailing newline is still an event;
+				// mirror bufio.Scanner's last token.
+				flushWatchTail()
 				return
 			case protocol.K8sStreamFrameHeader:
 				// Already sent — ignore late header frames.
@@ -362,6 +403,9 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 				)
 			}
 		case <-stream.DoneCh:
+			// Tunnel dropped or the stream was torn down without an end frame:
+			// the upstream is finished either way, so the tail is still owed.
+			flushWatchTail()
 			return
 		case <-r.Context().Done():
 			return
@@ -638,7 +682,9 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 // forwardFilteredOwnerWatch streams a cross-pod watch response while dropping
 // events outside the namespace allow-set (F7-b). Kubernetes watch bodies are
 // newline-delimited JSON objects; each complete line is evaluated with
-// watchEventAllowed. Returns false only when headers cannot be written.
+// watchEventAllowed via a watchLineFilter, so an event split across reads is
+// reassembled before it is filtered. Returns false only when headers cannot be
+// written.
 func (p *ProxyHandler) forwardFilteredOwnerWatch(w http.ResponseWriter, resp *http.Response, allowed map[string]struct{}) bool {
 	for k, v := range resp.Header {
 		if len(v) == 0 || !k8sProxyResponseHeaderAllowed(k) {
@@ -660,26 +706,40 @@ func (p *ProxyHandler) forwardFilteredOwnerWatch(w http.ResponseWriter, resp *ht
 		}
 		return true
 	}
-	scanner := bufio.NewScanner(resp.Body)
-	// Watch events can be large CRD objects; raise the default 64KiB token limit.
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
+	// Reassembly is shared with the agent path (consumeStreamingResponse) so the
+	// two cannot drift: reads land mid-event, so only complete lines are
+	// filtered and the trailing partial is carried to the next read.
+	lineFilter := newWatchLineFilter(allowed)
+	buf := make([]byte, 32*1024)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			out, ferr := lineFilter.filter(buf[:n])
+			if len(out) > 0 {
+				if _, werr := w.Write(out); werr != nil {
+					return true
+				}
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
+			if errors.Is(ferr, errWatchLineTooLong) {
+				p.log.Warn("watch event exceeds reassembly limit, terminating cross-pod watch",
+					slog.Int("limit_bytes", watchLineMaxBytes),
+				)
+				recordK8sProxyError("watch", "watch_event_too_large")
+				return true
+			}
 		}
-		keep, err := watchEventAllowed(line, allowed)
-		if err != nil || !keep {
-			continue
-		}
-		if _, werr := w.Write(append(line, '\n')); werr != nil {
+		if rerr != nil {
+			if rest := lineFilter.flush(); len(rest) > 0 {
+				if _, werr := w.Write(rest); werr == nil && flusher != nil {
+					flusher.Flush()
+				}
+			}
 			return true
 		}
-		if flusher != nil {
-			flusher.Flush()
-		}
 	}
-	return true
 }
 
 // forwardFilteredOwnerResponse buffers the owner pod's response, filters the
