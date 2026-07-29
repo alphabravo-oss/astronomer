@@ -299,6 +299,17 @@ func TestRBAC_NamespaceScopedBindingDeniesWrongOrMissingNamespace(t *testing.T) 
 	}
 }
 
+// TestRBAC_NamespaceScopedBindingFromQueryParam covers the generic-resource list
+// route, whose handler (ResourceHandler.ListGenericResources) builds its
+// upstream path from the same ?namespace=. That route is mounted on
+// RequireQueryNamespacePermission, so a namespace-scoped binding is admitted for
+// its own namespace.
+//
+// This test used to assert the same 200 through plain RequirePermission. That
+// was the bypass: RequirePermission fronts routes whose handler ignores the
+// query (or reads the namespace out of the request body), so honouring it there
+// let a namespace-narrowed caller authorize any request by naming their own
+// namespace. The second half below pins the new refusal.
 func TestRBAC_NamespaceScopedBindingFromQueryParam(t *testing.T) {
 	clusterID := uuid.New()
 	engine := rbac.NewEngine()
@@ -311,21 +322,25 @@ func TestRBAC_NamespaceScopedBindingFromQueryParam(t *testing.T) {
 		}},
 	}}}
 
-	mw := RequirePermission(engine, querier, rbac.ResourceConfigMaps, rbac.VerbList)
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/resources/generic/configmaps?namespace=payments", clusterID), nil)
-	req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
-		ID: uuid.New().String(), Email: "operator@test.com",
-	}))
-	req = setupChiRequest(req, map[string]string{"cluster_id": clusterID.String()})
+	newReq := func() *http.Request {
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/resources/generic/configmaps?namespace=payments", clusterID), nil)
+		req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+			ID: uuid.New().String(), Email: "operator@test.com",
+		}))
+		return setupChiRequest(req, map[string]string{"cluster_id": clusterID.String()})
+	}
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	RequireQueryNamespacePermission(engine, querier, rbac.ResourceConfigMaps, rbac.VerbList)(ok).ServeHTTP(rr, newReq())
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("query-scoped gate: expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	RequirePermission(engine, querier, rbac.ResourceConfigMaps, rbac.VerbList)(ok).ServeHTTP(rr, newReq())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("plain gate must not accept a query-supplied namespace: got %d body=%s", rr.Code, rr.Body.String())
 	}
 }
 

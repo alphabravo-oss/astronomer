@@ -134,6 +134,7 @@ func TestAddNamespace_TxRollsBackOnSidecarFailure(t *testing.T) {
 
 	h := NewProjectHandler(q)
 	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
 
 	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "payments"})
 	req = patchURLParam(req, "id", id.String())
@@ -163,6 +164,7 @@ func TestAddNamespace_TxCommitsBothHalves(t *testing.T) {
 	store := newFakeProjectTxStore(p)
 	h := NewProjectHandler(q)
 	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
 
 	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "payments"})
 	req = patchURLParam(req, "id", id.String())
@@ -195,6 +197,7 @@ func TestNamespaceMutations_InvalidateRBACCache(t *testing.T) {
 	h := NewProjectHandler(q)
 	h.SetRunTx(store.runTx())
 	h.SetRBACInvalidator(inv)
+	grantClusterNamespaceAssignment(h, clusterID)
 
 	addReq := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "payments"})
 	addReq = patchURLParam(addReq, "id", id.String())

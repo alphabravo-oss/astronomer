@@ -53,7 +53,7 @@ missing SCIM, MFA, namespace bindings, or SSA.
 | MFA / TOTP | `internal/handler/totp.go` |
 | Password policy | `internal/auth/password_policy.go` + platform settings keys |
 | Session absolute TTL | `session.timeout_minutes` → JWT mint (not idle logout) |
-| Namespace-scoped bindings + authoring | RBAC handlers + UI; flag `namespace_scoped_rbac_enabled` **default false** |
+| Namespace-scoped bindings + authoring | RBAC handlers + UI; project→namespace assignment on the project detail page (requires `clusters:update` on the project's cluster, not `projects:update` — assigning a namespace widens what the project's own members reach); reserved namespaces (`kube-system`, `kube-public`, `kube-node-lease`, `default`, the astronomer-owned set) are refused outright; flag `namespace_scoped_rbac_enabled` **default true** |
 | F7-b ns-filtered raw-proxy watch | Middleware admits list+watch with allow-set; tunnel filters list + watch frames |
 | Server-side apply from UI | `frontend/src/lib/api.ts` `k8sApplyYaml` |
 | Live resource watches (typed pods + SSE) | pods watch + events stream |
@@ -64,7 +64,7 @@ missing SCIM, MFA, namespace bindings, or SSA.
 ## Residual gaps (honest)
 
 1. **Explorer form density** vs Rancher Steve (YAML-first; partial structured forms).
-2. **`namespace_scoped_rbac_enabled` default remains OFF** until product sign-off after F7-b soak.
+2. ~~**`namespace_scoped_rbac_enabled` default remains OFF**~~ — promoted to ON. F7-b watch filtering now reassembles whole NDJSON events on both the agent and cross-pod paths, and project→namespace assignment ships in the UI, so a project binding is no longer inert. `NAMESPACE_SCOPED_RBAC_ENABLED=false` reverts.
 3. **Dual tunnel cutover** incomplete — remotedialer is experimental and existing-durable-identity-only; see dual-tunnel matrix.
 4. **Measured scale baseline** empty — see `docs/scale-baseline.md` (blocked row when no live plane).
 5. Non-Loki log query backends may still return 501.

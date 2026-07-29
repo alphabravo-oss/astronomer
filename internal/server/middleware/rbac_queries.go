@@ -19,9 +19,8 @@ type userBindingsQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]sqlc.ListUserBindingsWithRolesRow, error)
 	// ListProjectNamespaces resolves the (cluster_id, namespace) rows a project
-	// owns. Used only when namespace-scoped RBAC reads are enabled: each project
-	// binding is expanded into synthetic namespace-scoped cluster bindings so the
-	// pure engine matches them per-cluster.
+	// owns. Every project binding is expanded into synthetic namespace-scoped
+	// cluster bindings so the pure engine matches them per-cluster.
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
 }
 
@@ -33,12 +32,6 @@ type userBindingsQuerier interface {
 type SQLCRBACQuerier struct {
 	queries userBindingsQuerier
 	cache   *RBACCache
-	// namespaceScoping toggles project→namespace binding expansion in
-	// GetUserBindings. Default false keeps behavior byte-identical: project
-	// bindings are emitted exactly as before and grant nothing on cluster
-	// resource routes. Set via SetNamespaceScoping / the WithNamespaceScoping
-	// constructor from the namespace_scoped_rbac_enabled config flag.
-	namespaceScoping bool
 }
 
 // NewSQLCRBACQuerier builds the querier with a default cache (15s TTL,
@@ -49,30 +42,6 @@ func NewSQLCRBACQuerier(queries *sqlc.Queries) *SQLCRBACQuerier {
 		return nil
 	}
 	return &SQLCRBACQuerier{queries: queries, cache: NewRBACCache()}
-}
-
-// NewSQLCRBACQuerierWithNamespaceScoping is like NewSQLCRBACQuerier but sets the
-// project→namespace expansion flag at construction time. Kept as a separate
-// constructor so the existing NewSQLCRBACQuerier callers stay untouched.
-func NewSQLCRBACQuerierWithNamespaceScoping(queries *sqlc.Queries, namespaceScoping bool) *SQLCRBACQuerier {
-	q := NewSQLCRBACQuerier(queries)
-	if q != nil {
-		q.namespaceScoping = namespaceScoping
-	}
-	return q
-}
-
-// SetNamespaceScoping toggles project→namespace binding expansion. Safe on nil
-// receivers. Flipping it invalidates any already-cached bindings so the next
-// lookup rebuilds them with the new expansion behavior.
-func (q *SQLCRBACQuerier) SetNamespaceScoping(enabled bool) {
-	if q == nil {
-		return
-	}
-	q.namespaceScoping = enabled
-	if q.cache != nil {
-		q.cache.InvalidateAll()
-	}
 }
 
 // NewSQLCRBACQuerierWithCache lets callers (tests, future tuning knobs) pass
@@ -189,20 +158,19 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 		results = append(results, binding)
 	}
 
-	// Namespace-scoped reads (flag-gated): expand every project binding into
-	// synthetic namespace-scoped CLUSTER bindings, one per (cluster_id,
-	// namespace) row the project owns. The pure engine then matches them
-	// per-cluster unchanged — this is what makes a project member's cluster-read
-	// resolve to exactly their project's namespaces. The original project
-	// binding is kept so project-scoped routes keep working. When the flag is
-	// off this block is skipped entirely and behavior is byte-identical.
-	if q.namespaceScoping {
-		expanded, err := q.expandProjectBindings(ctx, userID, results)
-		if err != nil {
-			return nil, err
-		}
-		results = expanded
+	// Expand every project binding into synthetic namespace-scoped CLUSTER
+	// bindings, one per (cluster_id, namespace) row the project owns. The pure
+	// engine then matches them per-cluster unchanged — this is what makes a
+	// project member's cluster-read resolve to exactly their project's
+	// namespaces. The original project binding is kept so project-scoped routes
+	// keep working. Unconditional: a project binding that resolves to nothing is
+	// the Rancher-parity bug, not a safety property, and a project with no
+	// mapped namespaces still contributes nothing.
+	expanded, err := q.expandProjectBindings(ctx, userID, results)
+	if err != nil {
+		return nil, err
 	}
+	results = expanded
 
 	if q.cache != nil {
 		q.cache.Put(userID, results)
@@ -239,6 +207,15 @@ func (q *SQLCRBACQuerier) expandProjectBindings(ctx context.Context, userID stri
 			nsCache[b.ProjectID] = rows
 		}
 		for _, row := range rows {
+			// A synthetic binding with an empty Namespace is a CLUSTER-WIDE
+			// grant: AuthorizedNamespaces returns (true, nil) for it
+			// (internal/rbac/engine.go), and an empty ClusterID makes it global.
+			// project_namespaces.namespace is only NOT NULL, not non-empty, so
+			// skip rather than widen — a project can never expand past the
+			// (cluster, namespace) pairs it actually owns.
+			if row.Namespace == "" || row.ClusterID == uuid.Nil {
+				continue
+			}
 			synthetic = append(synthetic, rbac.RoleBinding{
 				UserID:    userID,
 				Group:     b.Group,

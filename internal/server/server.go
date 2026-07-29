@@ -225,6 +225,13 @@ func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencie
 	if deps.Encryptor == nil {
 		errs = append(errs, "encryptor is not wired")
 	}
+	// project_namespaces feeds the synthetic namespace-scoped bindings, so a
+	// project handler with no RBAC cache invalidator turns every
+	// remove-namespace into a revoke that does not take effect until the cache
+	// entry expires. Fail the boot instead.
+	if deps.Projects != nil && !deps.Projects.RBACInvalidatorWired() {
+		errs = append(errs, "project handler RBAC cache invalidator is not wired")
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("production security wiring invalid: %s", strings.Join(errs, "; "))
 	}
@@ -506,7 +513,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// /pods/watch/ SSE endpoint.
 	workloadHandler.SetPodWatcher(requester)
 	rbacEngine := rbac.NewEngine()
-	rbacQuerier := appmiddleware.NewSQLCRBACQuerierWithNamespaceScoping(queries, cfg.NamespaceScopedRBACEnabled)
+	// Project bindings always expand to their (cluster, namespace) pairs — that
+	// expansion is what makes a project-owner/project-member grant mean anything
+	// on cluster resources, and it is not gated on a flag.
+	rbacQuerier := appmiddleware.NewSQLCRBACQuerier(queries)
 	monitoringHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	argocdHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	toolHandler.SetAuthorization(rbacEngine, rbacQuerier)
@@ -522,6 +532,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// (below via deps.NamespaceScopedRBAC): the gate admits scoped users, the
 	// handler filters their results. Enabling one without the other would leak.
 	workloadHandler.SetNamespaceScopedRBAC(cfg.NamespaceScopedRBACEnabled)
+	warnInertProjectBindings(ctx, queries, cfg.NamespaceScopedRBACEnabled, logger)
 	// Fail-fast on a bad REDIS_URL — the old silent localhost fallback was
 	// a production footgun. Returning an error
 	// surfaces the misconfig at process start instead of letting every
@@ -566,6 +577,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	projectHandler.SetTaskOutbox(queries)
 	projectHandler.SetK8sRequester(requester)
 	projectHandler.SetLogger(logger)
+	// MUST be set: project_namespaces feeds the synthetic namespace-scoped
+	// bindings, so an add/remove-namespace that does not flush this cache leaves
+	// a revoked namespace authorizing reads until the entry expires on its own.
+	projectHandler.SetRBACInvalidator(rbacQuerier)
 	// Atomic namespace add/remove: row-lock the project and write the JSONB
 	// array + project_namespaces sidecar in one transaction, so a mid-write
 	// failure can't desync them. Pool-backed; unit tests wire their own runner.

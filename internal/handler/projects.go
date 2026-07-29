@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -271,12 +273,43 @@ func (h *ProjectHandler) SetRunTx(runTx projectRunTxFunc) {
 
 // SetRBACInvalidator wires the cache-fronted RBAC binding querier so
 // AddNamespace / RemoveNamespace can flush the namespace-scoped authorization
-// cache after a membership change. Optional + nil-safe.
+// cache after a membership change. Nil-safe, but see RBACInvalidatorWired:
+// leaving it unset is a revocation hole, not a feature toggle.
 func (h *ProjectHandler) SetRBACInvalidator(bindings middleware.RBACQuerier) {
 	if h == nil {
 		return
 	}
 	h.rbacBindings = bindings
+}
+
+// RBACInvalidatorWired reports whether invalidateRBACCache can actually flush
+// anything. Without it the post-add/remove-namespace flush is a silent no-op and
+// a namespace removed from a project keeps authorizing reads until the cache
+// entry expires on its own — so production startup validation rejects a server
+// wired this way rather than shipping stale authorization.
+func (h *ProjectHandler) RBACInvalidatorWired() bool {
+	if h == nil || h.rbacBindings == nil {
+		return false
+	}
+	inv, ok := h.rbacBindings.(middleware.RBACCacheInvalidator)
+	if !ok {
+		return false
+	}
+	// A typed nil satisfies the interface: middleware.NewSQLCRBACQuerierWithCache
+	// returns a nil *SQLCRBACQuerier when its queries argument is nil, and
+	// boxing that into RBACQuerier makes h.rbacBindings != nil while
+	// InvalidateAll() no-ops on the nil receiver. That is exactly the permanent
+	// silent no-op this guard exists to reject, so unwrap the interface and
+	// reject a nil pointer.
+	if v := reflect.ValueOf(inv); v.Kind() == reflect.Ptr && v.IsNil() {
+		return false
+	}
+	// A cacheless querier cannot flush either — Invalidate/InvalidateAll both
+	// return at their `q.cache == nil` guard.
+	if c, ok := inv.(interface{ Cache() *middleware.RBACCache }); ok && c.Cache() == nil {
+		return false
+	}
+	return true
 }
 
 // invalidateRBACCache flushes the whole RBAC binding cache. Called after a
@@ -561,6 +594,18 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Namespaces == nil {
 		req.Namespaces = json.RawMessage(`[]`)
 	}
+	// Create seeds project_namespaces from this list (below), so it is a
+	// namespace-claim path exactly like AddNamespace and gets the same two
+	// guards. The cluster-authority check only fires when the body actually
+	// names namespaces: creating an empty project stays a projects:create act.
+	if seeded := decodeNamespaceList(req.Namespaces); len(seeded) > 0 {
+		if !h.rejectReservedNamespaces(w, r, seeded...) {
+			return
+		}
+		if !h.authorizeNamespaceAssignment(w, r, clusterID) {
+			return
+		}
+	}
 	if req.ResourceQuota == nil {
 		req.ResourceQuota = json.RawMessage(`{}`)
 	}
@@ -680,9 +725,10 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Namespaces == nil {
-		req.Namespaces = json.RawMessage(`[]`)
-	}
+	// req.Namespaces is deliberately NOT defaulted to `[]` here: the field is
+	// absent on every policy-only PATCH, and treating absent as "clear" would
+	// silently unassign the project's whole namespace set. It is filled from
+	// the existing row below once that row is loaded.
 	if req.ResourceQuota == nil {
 		req.ResourceQuota = json.RawMessage(`{}`)
 	}
@@ -700,6 +746,41 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
+	}
+
+	// Namespace membership diff. Update is the SECOND door onto the same
+	// escalation and revocation surfaces as AddNamespace/RemoveNamespace:
+	//   - additions expand every member's synthetic namespace-scoped cluster
+	//     bindings, so they need the same cluster authority and the same
+	//     reserved-namespace denylist;
+	//   - removals used to drop the namespace from the JSONB while leaving the
+	//     project_namespaces sidecar row in place. That sidecar is what
+	//     expandProjectBindings reads, and the reconciler re-applies rows rather
+	//     than pruning them, so the revoked namespace kept minting bindings
+	//     forever — a permanent revocation hole, not a TTL one.
+	// Both are reconciled here, and the RBAC cache is flushed after the write
+	// exactly as AddNamespace/RemoveNamespace do.
+	previousNamespaces := decodeNamespaceList(existing.Namespaces)
+	if req.Namespaces == nil {
+		encoded, merr := json.Marshal(previousNamespaces)
+		if merr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
+			return
+		}
+		req.Namespaces = encoded
+	}
+	nextNamespaces := decodeNamespaceList(req.Namespaces)
+	added, removed := diffNamespaceLists(previousNamespaces, nextNamespaces)
+	if len(added) > 0 {
+		// Only ADDITIONS need cluster authority, mirroring
+		// AddNamespace/RemoveNamespace: shedding a namespace narrows the
+		// project's grants and stays a project-owner action.
+		if !h.rejectReservedNamespaces(w, r, added...) {
+			return
+		}
+		if !h.authorizeNamespaceAssignment(w, r, existing.ClusterID) {
+			return
+		}
 	}
 	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
@@ -768,8 +849,65 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	for _, ns := range decodeNamespaceList(project.Namespaces) {
 		h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, ns)
 	}
+	// Prune the sidecar rows for namespaces this Update dropped. Without this
+	// the row survives and expandProjectBindings keeps minting a synthetic
+	// namespace-scoped cluster binding for it forever — nothing converges it,
+	// because the reconciler re-applies project_namespaces rows and never
+	// deletes them.
+	for _, ns := range removed {
+		h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, ns)
+		if h.queries != nil {
+			if derr := h.queries.DeleteProjectNamespace(r.Context(), sqlc.DeleteProjectNamespaceParams{
+				ProjectID: project.ID,
+				ClusterID: project.ClusterID,
+				Namespace: ns,
+			}); derr != nil {
+				h.logger().Warn("failed to prune project namespace on update",
+					"project_id", project.ID.String(), "namespace", ns, "error", derr)
+			}
+		}
+	}
+	if len(added) > 0 || len(removed) > 0 {
+		// Membership changed: flush the RBAC binding cache so the grant or the
+		// revocation takes effect on the next request, not after the TTL.
+		h.invalidateRBACCache()
+	}
 
 	RespondJSON(w, http.StatusOK, projectToResponse(project))
+}
+
+// diffNamespaceLists returns the namespaces present only in next (added) and
+// only in previous (removed), preserving input order and de-duplicating.
+func diffNamespaceLists(previous, next []string) (added, removed []string) {
+	prevSet := make(map[string]struct{}, len(previous))
+	for _, ns := range previous {
+		prevSet[ns] = struct{}{}
+	}
+	nextSet := make(map[string]struct{}, len(next))
+	for _, ns := range next {
+		nextSet[ns] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(next))
+	for _, ns := range next {
+		if _, dup := seen[ns]; dup {
+			continue
+		}
+		seen[ns] = struct{}{}
+		if _, ok := prevSet[ns]; !ok {
+			added = append(added, ns)
+		}
+	}
+	seen = make(map[string]struct{}, len(previous))
+	for _, ns := range previous {
+		if _, dup := seen[ns]; dup {
+			continue
+		}
+		seen[ns] = struct{}{}
+		if _, ok := nextSet[ns]; !ok {
+			removed = append(removed, ns)
+		}
+	}
+	return added, removed
 }
 
 func projectUpdateBlockedByOwnership(ctx context.Context, q any, id uuid.UUID) (string, error) {
@@ -1131,6 +1269,13 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
+	// The FK cascade (migration 021) drops this project's project_namespaces
+	// and project_role_bindings rows, so the DB converges — but the RBAC
+	// binding cache does not, and every member would keep the project's
+	// synthetic namespace-scoped cluster bindings (read/exec on the namespaces
+	// this handler just enqueued for cleanup) until their entry expires.
+	// Same flush AddNamespace/RemoveNamespace do.
+	h.invalidateRBACCache()
 	h.recordProjectAudit(r, "project.delete", project, map[string]any{"clusterId": project.ClusterID.String()})
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1240,6 +1385,75 @@ type ProjectNamespaceRequest struct {
 	Namespace string `json:"namespace"`
 }
 
+// reservedProjectNamespaces are namespaces no project may ever claim.
+//
+// SECURITY — this is the second half of the namespace-claim guard, and it is
+// deliberately independent of RBAC. A project's namespaces are expanded into
+// synthetic namespace-scoped CLUSTER bindings for every member of that project
+// (see expandProjectBindings in internal/server/middleware), so claiming a
+// namespace hands the project's ENTIRE rule set to its members inside it. The
+// shipped project templates include pods:[exec, proxy] (project-owner,
+// project-member) and secrets:[create, read, update, delete, list]
+// (secret-manager). A project that could claim kube-system would therefore
+// convert "member of a project" into "exec into any control-plane pod and read
+// its ServiceAccount token" — i.e. cluster-admin. The astronomer-owned
+// namespaces are listed for the same reason: they hold the agent's own
+// credentials.
+//
+// Enforced on BOTH write paths (AddNamespace and the Update namespace diff) so
+// a mis-granted verb still cannot reach the escalation.
+var reservedProjectNamespaces = func() map[string]struct{} {
+	set := map[string]struct{}{
+		"kube-system":     {},
+		"kube-public":     {},
+		"kube-node-lease": {},
+		"default":         {},
+	}
+	for _, ns := range agenttemplate.AstronomerOwnedNamespaces {
+		set[ns] = struct{}{}
+	}
+	return set
+}()
+
+// isReservedProjectNamespace reports whether ns is on the hard denylist above.
+func isReservedProjectNamespace(ns string) bool {
+	_, ok := reservedProjectNamespaces[strings.ToLower(strings.TrimSpace(ns))]
+	return ok
+}
+
+// rejectReservedNamespaces writes a 403 and returns false when any candidate is
+// reserved. Callers pass only namespaces they are about to ADD.
+func (h *ProjectHandler) rejectReservedNamespaces(w http.ResponseWriter, r *http.Request, candidates ...string) bool {
+	for _, ns := range candidates {
+		if isReservedProjectNamespace(ns) {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+				"Namespace '"+ns+"' is reserved by the platform and cannot be assigned to a project.")
+			return false
+		}
+	}
+	return true
+}
+
+// authorizeNamespaceAssignment gates project→namespace membership on authority
+// over the CLUSTER, not over the project.
+//
+// SECURITY: the route gate for add-namespace / PUT-project is projects:update,
+// which the shipped project-owner and namespace-operator templates both grant
+// at PROJECT scope. Assigning a namespace is not a project-scoped act, though —
+// it moves a cluster resource under a grant the caller already holds, so
+// gating it on the project is self-service privilege expansion: the caller
+// picks the namespace their own bindings will expand into. Requiring
+// clusters:update at the project's cluster means only a cluster- or
+// platform-scoped principal (cluster-owner, cluster-operator, platform-admin,
+// superuser) can widen a project's footprint.
+//
+// RemoveNamespace deliberately does NOT go through here: shedding a namespace
+// only narrows the project's grants, and forcing a cluster admin into that loop
+// would leave project owners unable to de-escalate their own project.
+func (h *ProjectHandler) authorizeNamespaceAssignment(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID) bool {
+	return h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate)
+}
+
 // AddNamespace handles POST /api/v1/projects/{id}/add-namespace/.
 //
 // On success this writes the namespace into both the legacy projects.namespaces
@@ -1264,10 +1478,18 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
 		return
 	}
+	if !h.rejectReservedNamespaces(w, r, req.Namespace) {
+		return
+	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		return
+	}
+	// Authority over the NAMESPACE (via its cluster), not over the project —
+	// see authorizeNamespaceAssignment.
+	if !h.authorizeNamespaceAssignment(w, r, project.ClusterID) {
 		return
 	}
 

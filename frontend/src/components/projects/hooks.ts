@@ -76,6 +76,52 @@ export function useUpdateProjectPolicy(projectId: string) {
   });
 }
 
+// ============================================================
+// Project namespace membership
+// ============================================================
+
+/**
+ * A project's namespaces are what its role bindings actually resolve to: a
+ * `project-owner` / `project-member` grant expands to one namespace-scoped
+ * cluster binding per assigned namespace. Assigning is therefore an
+ * authorization change — which is why the server requires cluster authority for
+ * it, and why both mutations invalidate the project detail and the project list.
+ *
+ * They deliberately do NOT invalidate the current user's effective permissions:
+ * the change alters what the project's MEMBERS can reach, and the caller (a
+ * cluster admin) is generally not one of them. The server flushes its own RBAC
+ * binding cache on the same write, so members pick it up on their next request.
+ */
+export function useAddProjectNamespace(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (namespace: string) => api.addProjectNamespace(projectId, namespace),
+    onSuccess: (_data, namespace) => {
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.all });
+      toastSuccess(`Namespace ${namespace} added to project`);
+    },
+    onError: (err: Error) => {
+      toastApiError('Failed to add namespace', err);
+    },
+  });
+}
+
+export function useRemoveProjectNamespace(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (namespace: string) => api.removeProjectNamespace(projectId, namespace),
+    onSuccess: (_data, namespace) => {
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.all });
+      toastSuccess(`Namespace ${namespace} removed from project`);
+    },
+    onError: (err: Error) => {
+      toastApiError('Failed to remove namespace', err);
+    },
+  });
+}
+
 export function useProjectQuotaUsage(projectId: string) {
   return useQuery({
     queryKey: projectDetailKeys.quotaUsage(projectId),
@@ -281,6 +327,16 @@ type RoleHolder = Parameters<typeof can>[0];
  */
 export function canEditProject(user: RoleHolder): boolean {
   return can(user, 'projects', 'update');
+}
+
+/**
+ * Assigning a namespace to a project is gated on authority over the CLUSTER, not
+ * the project — see ProjectHandler.authorizeNamespaceAssignment. Mirroring that
+ * here keeps the Add/Remove controls off a project-owner's screen instead of
+ * showing them a control that always 403s.
+ */
+export function canAssignProjectNamespaces(user: RoleHolder): boolean {
+  return can(user, 'clusters', 'update');
 }
 
 export function canReadClusterTemplates(user: RoleHolder): boolean {

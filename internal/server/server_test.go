@@ -3,17 +3,23 @@ package server
 import (
 	"bytes"
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func testServer(t *testing.T) http.Handler {
@@ -208,14 +214,121 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncryptor(valid): %v", err)
 	}
-	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, RouterDependencies{
+	valid := RouterDependencies{
 		JWT:         auth.MustNewJWTManager("production-jwt-signing-key", 60),
 		AuthQueries: productionSecurityAuthQuerier{},
 		RBACEngine:  rbac.NewEngine(),
 		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
 		Encryptor:   enc,
-	}); err != nil {
+	}
+	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, valid); err != nil {
 		t.Fatalf("valid production wiring rejected: %v", err)
+	}
+
+	// A project handler that was never given an RBAC cache invalidator makes
+	// AddNamespace/RemoveNamespace's cache flush a silent no-op, so a revoked
+	// namespace keeps authorizing reads. That must fail the boot, not ship.
+	unwired := valid
+	unwired.Projects = handler.NewProjectHandler(nil)
+	err = validateProductionSecurityWiring(&config.Config{Env: "production"}, unwired)
+	if err == nil || !strings.Contains(err.Error(), "RBAC cache invalidator") {
+		t.Fatalf("unwired project RBAC invalidator accepted: %v", err)
+	}
+
+	// A TYPED NIL must be rejected too. NewSQLCRBACQuerierWithCache returns a
+	// nil *SQLCRBACQuerier when queries==nil; boxed into the interface it is
+	// non-nil and satisfies RBACCacheInvalidator, but InvalidateAll() returns at
+	// its nil-receiver guard — the exact permanent no-op this check exists to
+	// catch. Same for a querier built without a cache.
+	for name, inv := range map[string]appmiddleware.RBACQuerier{
+		"typed nil querier": appmiddleware.NewSQLCRBACQuerierWithCache(nil, appmiddleware.NewRBACCache()),
+		"cacheless querier": appmiddleware.NewSQLCRBACQuerierWithCache(stubProjectBindingsQuerier{}, nil),
+	} {
+		t.Run(name+" rejected", func(t *testing.T) {
+			deps := valid
+			p := handler.NewProjectHandler(nil)
+			p.SetRBACInvalidator(inv)
+			deps.Projects = p
+			err := validateProductionSecurityWiring(&config.Config{Env: "production"}, deps)
+			if err == nil || !strings.Contains(err.Error(), "RBAC cache invalidator") {
+				t.Fatalf("%s accepted as a working invalidator: %v", name, err)
+			}
+		})
+	}
+
+	// The positive arm must use an invalidator that can actually flush: a real
+	// querier over a real cache. Prove that behaviourally before asserting the
+	// boot check accepts it, so the check can never be satisfied by something
+	// that flushes nothing.
+	cache := appmiddleware.NewRBACCache()
+	realQuerier := appmiddleware.NewSQLCRBACQuerierWithCache(stubProjectBindingsQuerier{}, cache)
+	cache.Put("11111111-1111-1111-1111-111111111111", nil)
+	realQuerier.InvalidateAll()
+	if _, ok := cache.Get("11111111-1111-1111-1111-111111111111"); ok {
+		t.Fatal("probe invalidator did not flush the cache; the positive arm below would be vacuous")
+	}
+
+	wired := valid
+	projects := handler.NewProjectHandler(nil)
+	projects.SetRBACInvalidator(realQuerier)
+	wired.Projects = projects
+	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, wired); err != nil {
+		t.Fatalf("wired project RBAC invalidator rejected: %v", err)
+	}
+}
+
+// stubProjectBindingsQuerier satisfies middleware's (unexported) binding-querier
+// interface so tests can build a real *SQLCRBACQuerier without a Postgres.
+type stubProjectBindingsQuerier struct{}
+
+func (stubProjectBindingsQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
+	return sqlc.User{ID: id}, nil
+}
+
+func (stubProjectBindingsQuerier) ListUserBindingsWithRoles(context.Context, pgtype.UUID) ([]sqlc.ListUserBindingsWithRolesRow, error) {
+	return nil, nil
+}
+
+func (stubProjectBindingsQuerier) ListProjectNamespaces(context.Context, uuid.UUID) ([]sqlc.ProjectNamespace, error) {
+	return nil, nil
+}
+
+// TestServerWiresProjectRBACInvalidator is the regression guard for the wiring
+// itself, not for the validator. NewApp needs a live Postgres, so this asserts
+// against the source: NewApp must contain a projectHandler.SetRBACInvalidator
+// call alongside the other Set* calls.
+//
+// Dropping that line is silent in every non-production environment (the boot
+// validator short-circuits outside Env=production), and its effect —
+// remove-namespace leaving the revoked access working — is invisible until a
+// tenant notices. It has been dropped once already, which is why this exists.
+func TestServerWiresProjectRBACInvalidator(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "server.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse server.go: %v", err)
+	}
+	found := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "SetRBACInvalidator" {
+			return true
+		}
+		recv, ok := sel.X.(*ast.Ident)
+		if !ok || recv.Name != "projectHandler" {
+			return true
+		}
+		found = true
+		return false
+	})
+	if !found {
+		t.Fatal("internal/server/server.go no longer calls projectHandler.SetRBACInvalidator: " +
+			"add/remove-namespace's RBAC cache flush is a silent no-op without it, so a namespace " +
+			"revoked from a project keeps authorizing reads until the cache TTL expires")
 	}
 }
 

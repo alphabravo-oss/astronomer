@@ -37,6 +37,34 @@ export interface ProjectPolicy {
 
 export type ProjectPolicyPatch = Partial<ProjectPolicy>;
 
+// ----- Namespace membership -----
+
+/**
+ * Assign a namespace to a project. The backend writes the project's namespaces
+ * JSONB and the `project_namespaces` sidecar in one transaction, then flushes
+ * the RBAC binding cache — so the project's members gain read access to that
+ * namespace's workloads on the next request, not after a cache TTL.
+ *
+ * 409 means the namespace is already in this project or is owned by another
+ * project on the same cluster (one namespace, one project).
+ */
+export async function addProjectNamespace(projectId: string, namespace: string) {
+  const res = await api.post<APIResponse<import('@/types').Project>>(
+    `/projects/${projectId}/add-namespace`,
+    { namespace },
+  );
+  return res.data.data;
+}
+
+/** Unassign a namespace. Revokes the project members' access to it. */
+export async function removeProjectNamespace(projectId: string, namespace: string) {
+  const res = await api.post<APIResponse<import('@/types').Project>>(
+    `/projects/${projectId}/remove-namespace`,
+    { namespace },
+  );
+  return res.data.data;
+}
+
 /** Per-(cluster, namespace) live ResourceQuota.status.used vs hard. */
 export interface ProjectQuotaUsageRow {
   clusterId: string;

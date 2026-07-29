@@ -109,9 +109,11 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 		r.Group(func(r chi.Router) {
 			r.Use(mutationWriteScope)
 			r.Use(idem)
-			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbList)).
+			r.With(requireNamedResourceListPermission(deps.RBACEngine, deps.RBACQueries)).
 				Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/", deps.Resources.ListNamedResources)
-			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbCreate)).
+			// Create is gated on the BODY's metadata.namespace, not the URL —
+			// see requireNamedResourceCreatePermission.
+			r.With(requireNamedResourceCreatePermission(deps.RBACEngine, deps.RBACQueries)).
 				Post("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/", deps.Resources.CreateNamedResource)
 			r.With(requireNamedResourcePermission(deps.RBACEngine, deps.RBACQueries, "resource_type", rbac.VerbDelete)).
 				Delete("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/{namespace}/{name}/", deps.Resources.DeleteNamedResource)

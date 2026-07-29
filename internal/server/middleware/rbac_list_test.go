@@ -86,9 +86,9 @@ func TestRequireListPermission_GateBehaviour(t *testing.T) {
 	}
 }
 
-// TestGetUserBindings_ProjectExpansion covers item 1: with the flag on, a project
-// binding is expanded into synthetic namespace-scoped cluster bindings, and the
-// pure engine then grants a cluster read scoped to the project's namespaces.
+// TestGetUserBindings_ProjectExpansion covers item 1: a project binding is
+// expanded into synthetic namespace-scoped cluster bindings, and the pure engine
+// then grants a cluster read scoped to the project's namespaces.
 func TestGetUserBindings_ProjectExpansion(t *testing.T) {
 	userID := uuid.New()
 	projectID := uuid.New()
@@ -112,7 +112,6 @@ func TestGetUserBindings_ProjectExpansion(t *testing.T) {
 	t.Cleanup(func() { delete(projectNamespacesForTest, projectID.String()) })
 
 	q := NewSQLCRBACQuerierWithCache(fake, nil)
-	q.SetNamespaceScoping(true)
 
 	bindings, err := q.GetUserBindings(context.Background(), userID.String())
 	if err != nil {
@@ -138,17 +137,20 @@ func TestGetUserBindings_ProjectExpansion(t *testing.T) {
 		}
 	}
 
-	// With the flag OFF the same rows must NOT expand — project binding grants
-	// nothing on the cluster read (regression guard for byte-identical off-path).
-	qOff := NewSQLCRBACQuerierWithCache(fake, nil)
-	offBindings, err := qOff.GetUserBindings(context.Background(), userID.String())
+	// Expansion is not configurable: a second querier built the plain way, with
+	// nothing switched on, resolves the identical namespace set. This replaces
+	// the former "with the flag off the same rows must NOT expand" assertion,
+	// which encoded the parity bug (a project binding granting nothing).
+	qPlain := NewSQLCRBACQuerierWithCache(fake, nil)
+	plainBindings, err := qPlain.GetUserBindings(context.Background(), userID.String())
 	if err != nil {
-		t.Fatalf("GetUserBindings (off): %v", err)
+		t.Fatalf("GetUserBindings (plain): %v", err)
 	}
-	if len(offBindings) != 1 {
-		t.Fatalf("flag-off binding count = %d, want 1 (no expansion)", len(offBindings))
+	if len(plainBindings) != len(bindings) {
+		t.Fatalf("unconfigured binding count = %d, want %d", len(plainBindings), len(bindings))
 	}
-	if allOff, _ := engine.AuthorizedNamespaces(offBindings, rbac.ResourcePods, rbac.VerbList, clusterID); allOff {
-		t.Fatal("flag-off project binding must not grant cluster-wide access")
+	allPlain, plainNames := engine.AuthorizedNamespaces(plainBindings, rbac.ResourcePods, rbac.VerbList, clusterID)
+	if allPlain || len(plainNames) != 2 {
+		t.Fatalf("unconfigured expansion = (all=%v, %v), want exactly team-a + team-b", allPlain, plainNames)
 	}
 }

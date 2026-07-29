@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -1188,6 +1190,21 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 	return appmiddleware.RequirePermission(engine, querier, resource, verb)
 }
 
+// requireQueryNamespacePermission is requirePermission for a route whose
+// handler narrows its own upstream query to ?namespace=. Gate namespace ==
+// handler namespace, so naming one can only shrink the result set. Everything
+// else must use requirePermission, which ignores the query and therefore fails
+// closed for a namespace-narrowed caller. See
+// appmiddleware.RequireQueryNamespacePermission.
+func requireQueryNamespacePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+	return appmiddleware.RequireQueryNamespacePermission(engine, querier, resource, verb)
+}
+
 // requireCollectionPermission gates a top-level collection route (GET
 // /clusters/, GET /projects/), admitting callers whose grant is cluster- or
 // project-scoped instead of global. The handler behind it filters the page —
@@ -1796,15 +1813,23 @@ func requireServiceProxyPermission(engine *rbac.Engine, querier appmiddleware.RB
 	}
 }
 
+// requireGenericResourceListPermission gates the generic list route.
+// ResourceHandler.ListGenericResources builds its upstream path from the same
+// ?namespace=, so the query-scoped gate is the honest one here.
 func requireGenericResourceListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbList)
-			requirePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
+			requireQueryNamespacePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
 		})
 	}
 }
 
+// requireNamedResourcePermission gates the typed resource routes on the
+// resource implied by the {resource_type}/{type} route param. The namespace
+// comes from the route only: the named GET/PUT/DELETE forms carry {namespace},
+// and the collection forms are cluster-wide unless mounted through
+// requireNamedResourceListPermission / requireNamedResourceCreatePermission.
 func requireNamedResourcePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, routeParam string, requestedVerb rbac.Verb) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1812,6 +1837,79 @@ func requireNamedResourcePermission(engine *rbac.Engine, querier appmiddleware.R
 			requirePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
 		})
 	}
+}
+
+// requireNamedResourceListPermission gates
+// GET /clusters/{cluster_id}/resources/{resource_type}/, whose handler
+// (ResourceHandler.ListNamedResources) builds /api/v1/namespaces/<ns>/<type>
+// from the same ?namespace=. Gate namespace == handler namespace.
+func requireNamedResourceListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbList)
+			requireQueryNamespacePermission(engine, querier, resource, verb)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+// createBodyMaxBytes caps how much of a create body the namespace gate below
+// will buffer. Namespaced manifests posted through this route are small; a
+// larger body is refused outright rather than authorized on a partial parse.
+const createBodyMaxBytes = 1 << 20
+
+// requireNamedResourceCreatePermission gates
+// POST /clusters/{cluster_id}/resources/{resource_type}/ on the namespace
+// inside the REQUEST BODY.
+//
+// SECURITY: ResourceHandler.CreateNamedResource derives its target namespace
+// from metadata.namespace (resourceNamespace(body)), never from the URL. Gating
+// that route on a URL-supplied namespace authorized one namespace while the
+// handler wrote to another — a project member holding services/ingresses in
+// their own namespace could create an Ingress (hostname + TLS hijack) or a
+// NetworkPolicy (tenant DoS) anywhere on the cluster. So the gate parses the
+// same field the handler will use. A body that names no namespace is refused:
+// the upstream path would then be cluster-wide/implicit, which no
+// namespace-narrowed grant covers.
+func requireNamedResourceCreatePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(io.LimitReader(r.Body, createBodyMaxBytes+1))
+			if err != nil || len(body) > createBodyMaxBytes {
+				writeRouteAuthError(w, http.StatusRequestEntityTooLarge, "invalid_body", "Request body is too large")
+				return
+			}
+			// Hand the handler back an identical, re-readable body.
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = int64(len(body))
+
+			namespace := k8sManifestNamespace(body)
+			if namespace == "" {
+				writeRouteAuthError(w, http.StatusBadRequest, "invalid_body", "metadata.namespace is required")
+				return
+			}
+			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbCreate)
+			appmiddleware.RequirePermissionForNamespace(engine, querier, resource, verb,
+				func(*http.Request) string { return namespace })(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+// k8sManifestNamespace pulls metadata.namespace out of a JSON manifest. It
+// mirrors handler.resourceNamespace; a body that does not parse yields "" and
+// the caller refuses the request.
+func k8sManifestNamespace(body []byte) string {
+	var payload struct {
+		Metadata struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.Metadata.Namespace)
 }
 
 func namedResourcePermission(resourceType string, requestedVerb rbac.Verb) (rbac.Resource, rbac.Verb) {

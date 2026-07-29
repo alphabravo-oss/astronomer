@@ -75,9 +75,10 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
 		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=true not resolved into cfg.NamespaceScopedRBACEnabled")
 	}
 
-	// All three are opt-in and default OFF when unset. namespace_scoped_rbac
-	// stays opt-in per plan 009 / DIR-04 (promotion deferred until the
-	// namespace-binding authoring UI ships).
+	// native_rbac and control_plane_snapshots stay opt-in.
+	// namespace_scoped_rbac is no longer one of them: it defaults ON now that
+	// the project→namespace authoring surface and the watch reassembly it was
+	// deferred on have both shipped.
 	t.Setenv("NATIVE_RBAC_ENABLED", "")
 	t.Setenv("CONTROL_PLANE_SNAPSHOTS_ENABLED", "")
 	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "")
@@ -88,33 +89,34 @@ func TestFeatureFlagEnvBinding(t *testing.T) {
 	if def.NativeRBACEnabled || def.ControlPlaneSnapshotsEnabled {
 		t.Fatal("native_rbac / control_plane_snapshots must default OFF when env is unset")
 	}
-	if def.NamespaceScopedRBACEnabled {
-		t.Fatal("namespace_scoped_rbac_enabled must default OFF (opt-in, plan 009)")
+	if !def.NamespaceScopedRBACEnabled {
+		t.Fatal("namespace_scoped_rbac_enabled must default ON")
 	}
 }
 
-// TestNamespaceScopedRBACEnabledOptIn guards the DIR-04 flag: the authorization
-// filter is OFF by default (opt-in) and an operator enables it explicitly via
-// NAMESPACE_SCOPED_RBAC_ENABLED=true.
-func TestNamespaceScopedRBACEnabledOptIn(t *testing.T) {
-	// Default (unset) → OFF.
+// TestNamespaceScopedRBACEnabledDefaultsOn pins the promoted default: the
+// authorization filter is ON unless an operator explicitly turns it off. It
+// replaces TestNamespaceScopedRBACEnabledOptIn, which asserted the pre-parity
+// default where a project-scoped grant resolved to nothing.
+func TestNamespaceScopedRBACEnabledDefaultsOn(t *testing.T) {
+	// Default (unset) → ON.
 	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "")
-	off, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if off.NamespaceScopedRBACEnabled {
-		t.Fatal("namespace_scoped_rbac_enabled must default OFF")
-	}
-
-	// Explicit opt-in → ON.
-	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "true")
 	on, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if !on.NamespaceScopedRBACEnabled {
-		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=true must turn the filter ON")
+		t.Fatal("namespace_scoped_rbac_enabled must default ON")
+	}
+
+	// Explicit opt-out → OFF, so a deployment can revert without a rebuild.
+	t.Setenv("NAMESPACE_SCOPED_RBAC_ENABLED", "false")
+	off, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if off.NamespaceScopedRBACEnabled {
+		t.Fatal("NAMESPACE_SCOPED_RBAC_ENABLED=false must turn the filter OFF")
 	}
 }
 

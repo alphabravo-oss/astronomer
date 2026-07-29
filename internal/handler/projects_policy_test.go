@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -155,11 +156,47 @@ func (q *policyTestQuerier) GetClusterRegistryConfig(context.Context, uuid.UUID)
 func (q *policyTestQuerier) GetDefaultPodSecurityTemplate(context.Context) (sqlc.PodSecurityTemplate, error) {
 	return sqlc.PodSecurityTemplate{}, errors.New("no rows in result set")
 }
+
+// UpsertProjectNamespace / DeleteProjectNamespace maintain nsRows for real
+// (they used to be no-ops) so tests can assert that a namespace dropped from a
+// project actually loses its project_namespaces row — that row is what
+// expandProjectBindings reads, so a stale one is a permanent grant.
 func (q *policyTestQuerier) UpsertProjectNamespace(_ context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error) {
-	return sqlc.ProjectNamespace{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace}, nil
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	row := sqlc.ProjectNamespace{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace}
+	for _, existing := range q.nsRows {
+		if existing.ProjectID == row.ProjectID && existing.ClusterID == row.ClusterID && existing.Namespace == row.Namespace {
+			return row, nil
+		}
+	}
+	q.nsRows = append(q.nsRows, row)
+	return row, nil
 }
-func (q *policyTestQuerier) DeleteProjectNamespace(context.Context, sqlc.DeleteProjectNamespaceParams) error {
+func (q *policyTestQuerier) DeleteProjectNamespace(_ context.Context, arg sqlc.DeleteProjectNamespaceParams) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	kept := q.nsRows[:0:0]
+	for _, existing := range q.nsRows {
+		if existing.ProjectID == arg.ProjectID && existing.ClusterID == arg.ClusterID && existing.Namespace == arg.Namespace {
+			continue
+		}
+		kept = append(kept, existing)
+	}
+	q.nsRows = kept
 	return nil
+}
+
+// hasProjectNamespaceRow reports whether the sidecar still carries ns.
+func (q *policyTestQuerier) hasProjectNamespaceRow(ns string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, row := range q.nsRows {
+		if row.Namespace == ns {
+			return true
+		}
+	}
+	return false
 }
 func (q *policyTestQuerier) ListProjectNamespaces(_ context.Context, _ uuid.UUID) ([]sqlc.ProjectNamespace, error) {
 	q.mu.Lock()
@@ -219,6 +256,36 @@ func authedProjectRequest(t *testing.T, method, path string, callerID uuid.UUID,
 	}))
 }
 
+// grantClusterNamespaceAssignment wires the handler's authorization support
+// with a cluster-scoped clusters:update grant on clusterID.
+//
+// Assigning a namespace to a project requires authority over the CLUSTER, not
+// the project (ProjectHandler.authorizeNamespaceAssignment), because a project's
+// namespaces expand into synthetic namespace-scoped cluster bindings for every
+// member. Tests that exercise Create-with-namespaces / AddNamespace / a
+// namespace-changing Update must therefore hand the caller that grant.
+func grantClusterNamespaceAssignment(h *ProjectHandler, clusterID uuid.UUID) {
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: []rbac.RoleBinding{{
+		Scope:     "cluster",
+		ClusterID: clusterID.String(),
+		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceClusters), Verbs: []string{string(rbac.VerbUpdate)}}},
+	}}})
+}
+
+// grantProjectOwnerOnly wires authorization for a caller who holds the shipped
+// project-owner rule set on a project and nothing at cluster scope — the
+// principal the self-service namespace-claim escalation used.
+func grantProjectOwnerOnly(h *ProjectHandler, projectID uuid.UUID) {
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: []rbac.RoleBinding{{
+		Scope:     "project",
+		ProjectID: projectID.String(),
+		RoleRules: []rbac.Rule{
+			{Resource: "projects", Verbs: []string{"read", "list", "update"}},
+			{Resource: "pods", Verbs: []string{"read", "list", "watch", "logs", "exec", "proxy"}},
+		},
+	}}})
+}
+
 func assertProjectAudit(t *testing.T, rows []sqlc.CreateAuditLogV1Params, action, resourceID, resourceName string) {
 	t.Helper()
 	if len(rows) != 1 {
@@ -241,6 +308,10 @@ func TestProjectMutationsAreAudited(t *testing.T) {
 	h := NewProjectHandler(q)
 	callerID := uuid.New()
 	clusterID := uuid.New()
+	// Every mutation below claims or moves namespaces, which now requires
+	// cluster authority (authorizeNamespaceAssignment). The caller is given
+	// clusters:update on this cluster; the audit assertions are unchanged.
+	grantClusterNamespaceAssignment(h, clusterID)
 
 	createReq := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/", callerID, map[string]any{
 		"name":                "team-a",

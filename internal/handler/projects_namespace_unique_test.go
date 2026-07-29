@@ -36,6 +36,7 @@ func TestAddNamespace_CrossProjectUniqueViolationIs409(t *testing.T) {
 
 	h := NewProjectHandler(q)
 	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
 
 	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "shared-ns"})
 	req = patchURLParam(req, "id", id.String())
@@ -68,6 +69,7 @@ func TestAddNamespace_NonUniqueTxErrorStays500(t *testing.T) {
 
 	h := NewProjectHandler(q)
 	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
 
 	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "shared-ns"})
 	req = patchURLParam(req, "id", id.String())

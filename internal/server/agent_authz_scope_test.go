@@ -70,10 +70,13 @@ func typedMutationCases(clusterID string) []typedMutationCase {
 			rbacRule: rule(rbac.ResourceNodes, rbac.VerbManage),
 		},
 		{
-			name:     "resource create",
-			method:   http.MethodPost,
-			path:     "/api/v1/clusters/" + clusterID + "/resources/services/",
-			body:     `{}`,
+			name:   "resource create",
+			method: http.MethodPost,
+			path:   "/api/v1/clusters/" + clusterID + "/resources/services/",
+			// The create gate now authorizes metadata.namespace out of the body
+			// (requireNamedResourceCreatePermission), so the body has to carry
+			// one or the request 400s before the scope/RBAC checks it is testing.
+			body:     `{"metadata":{"name":"svc","namespace":"default"}}`,
 			rbacRule: rule(rbac.ResourceServices, rbac.VerbCreate),
 		},
 	}

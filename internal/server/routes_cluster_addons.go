@@ -206,9 +206,13 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 	if deps.ClusterResources != nil {
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/ingress-classes/", deps.ClusterResources.ListIngressClasses)
 		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/gateway-classes/", deps.ClusterResources.ListGatewayClasses)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/network-policies/", deps.ClusterResources.ListNetworkPolicies)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/resource-quotas/", deps.ClusterResources.ListResourceQuotas)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/limit-ranges/", deps.ClusterResources.ListLimitRanges)
+		// These three narrow their own query to ?namespace= when it is set
+		// (ListMirrored*ByNamespace), so the gate is evaluated against the same
+		// value — naming a namespace can only shrink the page. The two
+		// *-classes routes above are cluster-scoped and ignore it.
+		r.With(requireQueryNamespacePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/network-policies/", deps.ClusterResources.ListNetworkPolicies)
+		r.With(requireQueryNamespacePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/resource-quotas/", deps.ClusterResources.ListResourceQuotas)
+		r.With(requireQueryNamespacePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/limit-ranges/", deps.ClusterResources.ListLimitRanges)
 	}
 
 }

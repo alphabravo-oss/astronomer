@@ -2,14 +2,17 @@ import { createFileRoute } from '@tanstack/react-router';
 /**
  * Project detail Overview tab — the bare /projects/[id] route.
  *
- * Surfaces the project's clusters, namespaces, and members in read-only
- * cards. The new Policy / Cloud Credentials / Quota tabs (siblings under
- * the same `[id]/layout.tsx`) handle the editable surfaces.
+ * Surfaces the project's clusters, namespaces, and members. Namespace
+ * assignment is editable here (it is the project's tenancy boundary — see
+ * ProjectNamespacesCard); the Policy / Cloud Credentials / Quota tabs handle
+ * the rest of the editable surfaces.
  */
 import { Link } from '@/lib/link';
 import { useParams } from '@/lib/navigation';
 import { Loader2, Users, Server, Layers } from 'lucide-react';
-import { useProject } from '@/lib/hooks';
+import { useProject, useCurrentUser } from '@/lib/hooks';
+import { canAssignProjectNamespaces } from '@/components/projects/hooks';
+import { ProjectNamespacesCard } from '@/components/projects/namespaces-card';
 import { formatRelativeTime } from '@/lib/utils';
 import { WidgetGrid } from '@/components/dashboards/widget-grid';
 import { renderForProject } from '@/lib/api/dashboards';
@@ -18,6 +21,8 @@ function ProjectOverviewPage() {
   const params = useParams();
   const id = params.id as string;
   const { data: project, isLoading } = useProject(id);
+  const { data: user } = useCurrentUser();
+  const canEdit = canAssignProjectNamespaces(user);
 
   if (isLoading) {
     return (
@@ -44,6 +49,14 @@ function ProjectOverviewPage() {
         <SummaryCard icon={Server} label="Clusters" value={(project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1} />
         <SummaryCard icon={Layers} label="Namespaces" value={project.namespaces?.length ?? 0} />
         <SummaryCard icon={Users} label="Members" value={project.members?.length ?? 0} />
+
+        <div className="md:col-span-3">
+          <ProjectNamespacesCard
+            projectId={project.id}
+            namespaces={project.namespaces ?? []}
+            canEdit={canEdit}
+          />
+        </div>
 
         <div className="md:col-span-3 rounded-xl border border-border bg-card p-5 space-y-2">
           <h3 className="text-sm font-medium text-foreground">Identifiers</h3>
