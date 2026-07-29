@@ -121,6 +121,12 @@ const globalNavGroups: NavGroup[] = [
     label: 'Observability',
     items: [
       { label: 'Monitoring', href: '/dashboard/monitoring', icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
+      // Shared Thanos / Alertmanager lifecycle. It lives under the settings URL
+      // because the API does (/settings/monitoring/...), but it is surfaced
+      // here rather than only on the settings hub: the hub is superuser-only,
+      // while these endpoints authorize on monitoring:read/update, so a
+      // monitoring admin who is not a superuser would otherwise never find it.
+      { label: 'Monitoring Stacks', href: '/dashboard/settings/monitoring', icon: Layers, permission: { resource: 'monitoring', verb: 'read' }, featureFlag: 'feature.monitoring' },
       { label: 'Alerting', href: '/dashboard/alerting', icon: Bell, permission: { resource: 'alerts', verb: 'read' } },
       { label: 'Logging', href: '/dashboard/logging', icon: ScrollText, permission: { resource: 'logging', verb: 'read' } },
     ],
@@ -207,6 +213,11 @@ function getClusterNavGroups(clusterId: string, opts: { isLocal?: boolean } = {}
         { label: 'Events', href: `${base}/events`, icon: Activity },
         { label: 'Tools', href: `${base}/tools`, icon: Wrench },
         { label: 'Apps', href: `${base}/apps`, icon: Package },
+        // Lifecycle for this cluster's kube-prometheus-stack (install /
+        // upgrade / replace / uninstall). Gated on monitoring:read, which is
+        // what the status + preview routes require; the mutating controls on
+        // the page gate themselves on create/update/delete.
+        { label: 'Monitoring Stack', href: `${base}/monitoring-stack`, icon: BarChart3, permission: { resource: 'monitoring', verb: 'read' as const } },
         // Promoted from the overview badge pill to a first-class destination.
         // Reads mesh CRs over the k8s proxy, so it works for local + remote.
         { label: 'Service Mesh', href: `${base}/service-mesh`, icon: Waypoints },

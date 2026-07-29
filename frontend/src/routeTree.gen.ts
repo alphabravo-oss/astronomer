@@ -46,6 +46,7 @@ import { Route as DashboardSettingsPlatformIndexRouteImport } from './routes/das
 import { Route as DashboardSettingsOperationsIndexRouteImport } from './routes/dashboard/settings/operations/index'
 import { Route as DashboardSettingsNetworkPoliciesIndexRouteImport } from './routes/dashboard/settings/network-policies/index'
 import { Route as DashboardSettingsNativeRbacIndexRouteImport } from './routes/dashboard/settings/native-rbac/index'
+import { Route as DashboardSettingsMonitoringIndexRouteImport } from './routes/dashboard/settings/monitoring/index'
 import { Route as DashboardSettingsGroupMappingsIndexRouteImport } from './routes/dashboard/settings/group-mappings/index'
 import { Route as DashboardSettingsGitopsIndexRouteImport } from './routes/dashboard/settings/gitops/index'
 import { Route as DashboardSettingsGeneralIndexRouteImport } from './routes/dashboard/settings/general/index'
@@ -94,6 +95,7 @@ import { Route as DashboardClustersIdResourcesIndexRouteImport } from './routes/
 import { Route as DashboardClustersIdRegistriesIndexRouteImport } from './routes/dashboard/clusters/$id/registries/index'
 import { Route as DashboardClustersIdNetworkPoliciesIndexRouteImport } from './routes/dashboard/clusters/$id/network-policies/index'
 import { Route as DashboardClustersIdNetworkAccessIndexRouteImport } from './routes/dashboard/clusters/$id/network-access/index'
+import { Route as DashboardClustersIdMonitoringStackIndexRouteImport } from './routes/dashboard/clusters/$id/monitoring-stack/index'
 import { Route as DashboardClustersIdImageScansIndexRouteImport } from './routes/dashboard/clusters/$id/image-scans/index'
 import { Route as DashboardClustersIdGatekeeperIndexRouteImport } from './routes/dashboard/clusters/$id/gatekeeper/index'
 import { Route as DashboardClustersIdCustomResourcesIndexRouteImport } from './routes/dashboard/clusters/$id/custom-resources/index'
@@ -321,6 +323,12 @@ const DashboardSettingsNativeRbacIndexRoute =
   DashboardSettingsNativeRbacIndexRouteImport.update({
     id: '/settings/native-rbac/',
     path: '/settings/native-rbac/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardSettingsMonitoringIndexRoute =
+  DashboardSettingsMonitoringIndexRouteImport.update({
+    id: '/settings/monitoring/',
+    path: '/settings/monitoring/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardSettingsGroupMappingsIndexRoute =
@@ -610,6 +618,12 @@ const DashboardClustersIdNetworkAccessIndexRoute =
     path: '/network-access/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
+const DashboardClustersIdMonitoringStackIndexRoute =
+  DashboardClustersIdMonitoringStackIndexRouteImport.update({
+    id: '/monitoring-stack/',
+    path: '/monitoring-stack/',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
 const DashboardClustersIdImageScansIndexRoute =
   DashboardClustersIdImageScansIndexRouteImport.update({
     id: '/image-scans/',
@@ -812,6 +826,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/general/': typeof DashboardSettingsGeneralIndexRoute
   '/dashboard/settings/gitops/': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings/': typeof DashboardSettingsGroupMappingsIndexRoute
+  '/dashboard/settings/monitoring/': typeof DashboardSettingsMonitoringIndexRoute
   '/dashboard/settings/native-rbac/': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies/': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations/': typeof DashboardSettingsOperationsIndexRoute
@@ -839,6 +854,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
   '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/monitoring-stack/': typeof DashboardClustersIdMonitoringStackIndexRoute
   '/dashboard/clusters/$id/network-access/': typeof DashboardClustersIdNetworkAccessIndexRoute
   '/dashboard/clusters/$id/network-policies/': typeof DashboardClustersIdNetworkPoliciesIndexRoute
   '/dashboard/clusters/$id/registries/': typeof DashboardClustersIdRegistriesIndexRoute
@@ -922,6 +938,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings/general': typeof DashboardSettingsGeneralIndexRoute
   '/dashboard/settings/gitops': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings': typeof DashboardSettingsGroupMappingsIndexRoute
+  '/dashboard/settings/monitoring': typeof DashboardSettingsMonitoringIndexRoute
   '/dashboard/settings/native-rbac': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations': typeof DashboardSettingsOperationsIndexRoute
@@ -949,6 +966,7 @@ export interface FileRoutesByTo {
   '/dashboard/clusters/$id/custom-resources': typeof DashboardClustersIdCustomResourcesIndexRoute
   '/dashboard/clusters/$id/gatekeeper': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/monitoring-stack': typeof DashboardClustersIdMonitoringStackIndexRoute
   '/dashboard/clusters/$id/network-access': typeof DashboardClustersIdNetworkAccessIndexRoute
   '/dashboard/clusters/$id/network-policies': typeof DashboardClustersIdNetworkPoliciesIndexRoute
   '/dashboard/clusters/$id/registries': typeof DashboardClustersIdRegistriesIndexRoute
@@ -1036,6 +1054,7 @@ export interface FileRoutesById {
   '/dashboard/settings/general/': typeof DashboardSettingsGeneralIndexRoute
   '/dashboard/settings/gitops/': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings/': typeof DashboardSettingsGroupMappingsIndexRoute
+  '/dashboard/settings/monitoring/': typeof DashboardSettingsMonitoringIndexRoute
   '/dashboard/settings/native-rbac/': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies/': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations/': typeof DashboardSettingsOperationsIndexRoute
@@ -1063,6 +1082,7 @@ export interface FileRoutesById {
   '/dashboard/clusters/$id/custom-resources/': typeof DashboardClustersIdCustomResourcesIndexRoute
   '/dashboard/clusters/$id/gatekeeper/': typeof DashboardClustersIdGatekeeperIndexRoute
   '/dashboard/clusters/$id/image-scans/': typeof DashboardClustersIdImageScansIndexRoute
+  '/dashboard/clusters/$id/monitoring-stack/': typeof DashboardClustersIdMonitoringStackIndexRoute
   '/dashboard/clusters/$id/network-access/': typeof DashboardClustersIdNetworkAccessIndexRoute
   '/dashboard/clusters/$id/network-policies/': typeof DashboardClustersIdNetworkPoliciesIndexRoute
   '/dashboard/clusters/$id/registries/': typeof DashboardClustersIdRegistriesIndexRoute
@@ -1151,6 +1171,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/general/'
     | '/dashboard/settings/gitops/'
     | '/dashboard/settings/group-mappings/'
+    | '/dashboard/settings/monitoring/'
     | '/dashboard/settings/native-rbac/'
     | '/dashboard/settings/network-policies/'
     | '/dashboard/settings/operations/'
@@ -1178,6 +1199,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/custom-resources/'
     | '/dashboard/clusters/$id/gatekeeper/'
     | '/dashboard/clusters/$id/image-scans/'
+    | '/dashboard/clusters/$id/monitoring-stack/'
     | '/dashboard/clusters/$id/network-access/'
     | '/dashboard/clusters/$id/network-policies/'
     | '/dashboard/clusters/$id/registries/'
@@ -1261,6 +1283,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/general'
     | '/dashboard/settings/gitops'
     | '/dashboard/settings/group-mappings'
+    | '/dashboard/settings/monitoring'
     | '/dashboard/settings/native-rbac'
     | '/dashboard/settings/network-policies'
     | '/dashboard/settings/operations'
@@ -1288,6 +1311,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/custom-resources'
     | '/dashboard/clusters/$id/gatekeeper'
     | '/dashboard/clusters/$id/image-scans'
+    | '/dashboard/clusters/$id/monitoring-stack'
     | '/dashboard/clusters/$id/network-access'
     | '/dashboard/clusters/$id/network-policies'
     | '/dashboard/clusters/$id/registries'
@@ -1374,6 +1398,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/general/'
     | '/dashboard/settings/gitops/'
     | '/dashboard/settings/group-mappings/'
+    | '/dashboard/settings/monitoring/'
     | '/dashboard/settings/native-rbac/'
     | '/dashboard/settings/network-policies/'
     | '/dashboard/settings/operations/'
@@ -1401,6 +1426,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/custom-resources/'
     | '/dashboard/clusters/$id/gatekeeper/'
     | '/dashboard/clusters/$id/image-scans/'
+    | '/dashboard/clusters/$id/monitoring-stack/'
     | '/dashboard/clusters/$id/network-access/'
     | '/dashboard/clusters/$id/network-policies/'
     | '/dashboard/clusters/$id/registries/'
@@ -1711,6 +1737,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/native-rbac'
       fullPath: '/dashboard/settings/native-rbac/'
       preLoaderRoute: typeof DashboardSettingsNativeRbacIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/settings/monitoring/': {
+      id: '/dashboard/settings/monitoring/'
+      path: '/settings/monitoring'
+      fullPath: '/dashboard/settings/monitoring/'
+      preLoaderRoute: typeof DashboardSettingsMonitoringIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/settings/group-mappings/': {
@@ -2049,6 +2082,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardClustersIdNetworkAccessIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
+    '/dashboard/clusters/$id/monitoring-stack/': {
+      id: '/dashboard/clusters/$id/monitoring-stack/'
+      path: '/monitoring-stack'
+      fullPath: '/dashboard/clusters/$id/monitoring-stack/'
+      preLoaderRoute: typeof DashboardClustersIdMonitoringStackIndexRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
     '/dashboard/clusters/$id/image-scans/': {
       id: '/dashboard/clusters/$id/image-scans/'
       path: '/image-scans'
@@ -2245,6 +2285,7 @@ interface DashboardClustersIdRouteRouteChildren {
   DashboardClustersIdCustomResourcesIndexRoute: typeof DashboardClustersIdCustomResourcesIndexRoute
   DashboardClustersIdGatekeeperIndexRoute: typeof DashboardClustersIdGatekeeperIndexRoute
   DashboardClustersIdImageScansIndexRoute: typeof DashboardClustersIdImageScansIndexRoute
+  DashboardClustersIdMonitoringStackIndexRoute: typeof DashboardClustersIdMonitoringStackIndexRoute
   DashboardClustersIdNetworkAccessIndexRoute: typeof DashboardClustersIdNetworkAccessIndexRoute
   DashboardClustersIdNetworkPoliciesIndexRoute: typeof DashboardClustersIdNetworkPoliciesIndexRoute
   DashboardClustersIdRegistriesIndexRoute: typeof DashboardClustersIdRegistriesIndexRoute
@@ -2280,6 +2321,8 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
       DashboardClustersIdGatekeeperIndexRoute,
     DashboardClustersIdImageScansIndexRoute:
       DashboardClustersIdImageScansIndexRoute,
+    DashboardClustersIdMonitoringStackIndexRoute:
+      DashboardClustersIdMonitoringStackIndexRoute,
     DashboardClustersIdNetworkAccessIndexRoute:
       DashboardClustersIdNetworkAccessIndexRoute,
     DashboardClustersIdNetworkPoliciesIndexRoute:
@@ -2378,6 +2421,7 @@ interface DashboardRouteRouteChildren {
   DashboardSettingsGeneralIndexRoute: typeof DashboardSettingsGeneralIndexRoute
   DashboardSettingsGitopsIndexRoute: typeof DashboardSettingsGitopsIndexRoute
   DashboardSettingsGroupMappingsIndexRoute: typeof DashboardSettingsGroupMappingsIndexRoute
+  DashboardSettingsMonitoringIndexRoute: typeof DashboardSettingsMonitoringIndexRoute
   DashboardSettingsNativeRbacIndexRoute: typeof DashboardSettingsNativeRbacIndexRoute
   DashboardSettingsNetworkPoliciesIndexRoute: typeof DashboardSettingsNetworkPoliciesIndexRoute
   DashboardSettingsOperationsIndexRoute: typeof DashboardSettingsOperationsIndexRoute
@@ -2460,6 +2504,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardSettingsGitopsIndexRoute: DashboardSettingsGitopsIndexRoute,
   DashboardSettingsGroupMappingsIndexRoute:
     DashboardSettingsGroupMappingsIndexRoute,
+  DashboardSettingsMonitoringIndexRoute: DashboardSettingsMonitoringIndexRoute,
   DashboardSettingsNativeRbacIndexRoute: DashboardSettingsNativeRbacIndexRoute,
   DashboardSettingsNetworkPoliciesIndexRoute:
     DashboardSettingsNetworkPoliciesIndexRoute,

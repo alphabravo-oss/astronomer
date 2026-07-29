@@ -227,6 +227,26 @@ export const queryKeys = {
     operationsAll: ['logging', 'operations'] as const,
     operation: (id: string) => ['logging', 'operations', 'detail', id] as const,
   },
+  // Monitoring-stack LIFECYCLE (install/upgrade/replace/uninstall) across the
+  // three families. Distinct from the `clusters.metrics*` keys, which cache the
+  // metrics this stack produces once it exists.
+  monitoringStack: {
+    all: ['monitoring-stack'] as const,
+    // Per-family status. `family` is the target discriminant
+    // ('cluster:<id>' | 'thanos' | 'alertmanager') so the two shared stacks and
+    // every cluster stack get their own cache entry.
+    status: (family: string) => ['monitoring-stack', 'status', family] as const,
+    // Params are part of the key so the per-target adopt query (limit 5,
+    // filtered by targetType/targetKey) and a future full operations list
+    // don't clobber one another — same reasoning as argocd.operationList.
+    operations: (params?: Record<string, unknown>) =>
+      ['monitoring-stack', 'operations', params] as const,
+    // Two-element prefix matching every `operations(params)` list variant and
+    // the `operation(id)` detail rows at once — used when an operation settles
+    // and by retry, exactly like logging.operationsAll.
+    operationsAll: ['monitoring-stack', 'operations'] as const,
+    operation: (id: string) => ['monitoring-stack', 'operations', 'detail', id] as const,
+  },
   clusterGroups: {
     all: ['cluster-groups'] as const,
   },

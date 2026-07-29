@@ -32,6 +32,7 @@ import {
   Activity,
   Puzzle,
   Radio,
+  BarChart3,
 } from 'lucide-react';
 
 interface SettingsCard {
@@ -143,6 +144,12 @@ const CARDS: SettingsCard[] = [
     title: 'SIEM forwarders',
     description: 'Stream audit + platform events to syslog / Splunk HEC / NDJSON-HTTPS.',
     icon: Radio,
+  },
+  {
+    href: '/dashboard/settings/monitoring',
+    title: 'Monitoring stacks',
+    description: 'Shared Thanos + Alertmanager: install, upgrade, replace, uninstall.',
+    icon: BarChart3,
   },
   {
     href: '/dashboard/settings/network-policies',

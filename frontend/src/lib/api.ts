@@ -33,6 +33,22 @@ function csrfHeaders(): Record<string, string> {
 }
 
 /**
+ * The three monitoring-stack preview endpoints, whose bodies carry a rendered
+ * Helm values map that must survive verbatim — see the response interceptor.
+ *
+ *   POST /clusters/{id}/monitoring/stack/preview/
+ *   POST /settings/monitoring/thanos/preview/
+ *   POST /settings/monitoring/alertmanager/preview/
+ *
+ * Exported for the round-trip test in src/lib/__tests__/api-camelize.test.ts.
+ */
+const MONITORING_PREVIEW_PATH = /\/monitoring\/(?:stack|thanos|alertmanager)\/preview\/?(?:\?|$)/;
+
+export function isMonitoringPreviewPath(url: string | undefined): boolean {
+  return !!url && MONITORING_PREVIEW_PATH.test(url);
+}
+
+/**
  * Configured Axios instance for all API communication
  */
 const api: AxiosInstance = axios.create({
@@ -88,6 +104,21 @@ api.interceptors.response.use(
     // them to camelCase silently corrupts snake_case keys when the user edits
     // YAML and PUTs it back, and the dry-run diff hides the change.
     if (response.config?.url?.includes('/k8s/')) {
+      return response;
+    }
+    // Same reasoning for the monitoring-stack PREVIEW endpoints: their `values`
+    // is a rendered Helm values map, i.e. upstream chart configuration whose
+    // keys are data, not our wire format. Camelizing it produces YAML the
+    // server will never apply, while the `desiredSpecHash` shown beside it is
+    // computed over the un-mangled map — so the dialog would contradict itself.
+    // Two of the three families provably break: shared Alertmanager renders
+    // `resolve_timeout` / `group_by` / `group_wait` / `group_interval` /
+    // `repeat_interval` / `webhook_configs` / `email_configs` / `send_resolved`
+    // (internal/handler/monitoring_stack_shared.go:822-868), and the per-cluster
+    // preview keys prometheusSpec.externalLabels by req.ClusterLabel, which
+    // defaults to the literal `cluster_id`
+    // (internal/handler/monitoring_stack_cluster.go:416-418, :450).
+    if (isMonitoringPreviewPath(response.config?.url)) {
       return response;
     }
     // Don't camelize binary / non-JSON payloads.
