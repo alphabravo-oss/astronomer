@@ -6,25 +6,6 @@
  * Apps, because that is where an operator managing this cluster looks for
  * "what is installed on it and how do I change that".
  *
- * ⚠ THIS PAGE IS BLOCKED ON A ONE-LINE BACKEND FIX, and says so on screen.
- *
- * All six per-cluster handlers read `chi.URLParam(r, "cluster_id")` —
- * internal/handler/monitoring_stack_cluster.go:265 (UninstallStack), :315
- * (GetStackStatus) and :393 (monitoringStackPayload, backing preview / install /
- * upgrade / replace) — but every route is mounted as
- * `/{id}/monitoring/stack/...` at internal/server/routes_clusters.go:83-88 and
- * no enclosing pattern declares `{cluster_id}`. The param is therefore always
- * empty in production: status / install / upgrade / replace / uninstall answer
- * >= 400 and preview 200s with an empty `clusterId`.
- *
- * That defect is PINNED, deliberately, by
- * internal/handler/monitoring_stack_test.go:410-465
- * (TestClusterStackClusterIDParamIsUnroutable) — it passes today, and it fails
- * the moment the fix lands, which is the signal to delete the notice below.
- * The fix is `chi.URLParam(r, "id")` at those three sites. No Go was in scope
- * for this change, so the page names the problem rather than presenting
- * controls that look like they work. The shared-stack page is unaffected.
- *
  * PERMISSION SCOPE. Despite living under /clusters/{id}, these routes are
  * evaluated at GLOBAL scope by the server, so the decisions below are too —
  * see the comment on `scope`.
@@ -110,34 +91,6 @@ export function ClusterMonitoringStackPage({ clusterId }: { clusterId: string })
         <PermissionState title="Monitoring access required" permission="monitoring:read" />
       ) : (
         <div className="space-y-4">
-          {/*
-            Delete this notice together with the header comment when
-            TestClusterStackClusterIDParamIsUnroutable
-            (internal/handler/monitoring_stack_test.go:410-465) starts failing —
-            that is the signal the `chi.URLParam(r, "id")` fix has landed.
-          */}
-          <div
-            role="alert"
-            data-testid="cluster-stack-routing-blocked"
-            className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error/10 px-3 py-2 text-xs text-status-error"
-          >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="min-w-0 space-y-1">
-              <p className="font-medium">
-                Per-cluster monitoring stack endpoints are not reachable on this server yet.
-              </p>
-              <p>
-                The six handlers behind this page look the cluster up under a route parameter the
-                router never binds, so status, install, upgrade, replace and uninstall answer an
-                error and preview renders without a cluster. The controls below are shown so the
-                page is reviewable, but they will not succeed until the backend fix ships. Use{' '}
-                <Link href="/dashboard/settings/monitoring" className="underline">
-                  Shared monitoring stacks
-                </Link>{' '}
-                — Thanos and Alertmanager are unaffected.
-              </p>
-            </div>
-          </div>
 
           <StackLifecyclePanel
             target={target}

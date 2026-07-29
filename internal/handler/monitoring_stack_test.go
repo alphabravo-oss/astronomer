@@ -284,12 +284,8 @@ var (
 //
 // The URL params mirror production exactly: `id` and nothing else. Every route
 // is mounted as `/{id}/monitoring/...` (route_table.golden lines 52, 263-264,
-// 526-528, 646-647) and no enclosing pattern declares `{cluster_id}`. Six of
-// these eight handlers nevertheless read chi.URLParam(r, "cluster_id") — see
-// TestClusterStackClusterIDParamIsUnroutable — so they run with an empty cluster
-// id. That is a real bug, and these cases reproduce the real request shape
-// rather than papering over it: the authorization assertions below hold either
-// way, because requirePermission runs before the handler.
+// 526-528, 646-647) and no enclosing pattern declares `{cluster_id}`, which is
+// why every handler must read `id`.
 func clusterStackCases() []stackLifecycleCase {
 	base := "/api/v1/clusters/" + stackTestClusterID + "/monitoring"
 	params := map[string]string{"id": stackTestClusterID}
@@ -321,23 +317,6 @@ func clusterStackCases() []stackLifecycleCase {
 			invoke: func(h *MonitoringHandler) http.HandlerFunc { return h.UninstallStack },
 			audit:  "monitoring.stack.uninstall", details: clusterAuditDetailKeys},
 	}
-}
-
-// clusterStackCasesWithRoutableClusterID adds the `cluster_id` URL param that
-// GetStackStatus, UninstallStack and monitoringStackPayload read but that no
-// registered route supplies. It exists solely so the audit-contract test can
-// reach the tail of those handlers; nothing that asserts authorization may use
-// it, because it fabricates a request shape the router cannot produce.
-func clusterStackCasesWithRoutableClusterID() []stackLifecycleCase {
-	cases := clusterStackCases()
-	for i := range cases {
-		params := map[string]string{"cluster_id": stackTestClusterID}
-		for k, v := range cases[i].params {
-			params[k] = v
-		}
-		cases[i].params = params
-	}
-	return cases
 }
 
 // --- the gate ----------------------------------------------------------------
@@ -407,25 +386,25 @@ func TestClusterStackLifecycleDeniesCallerWithoutMonitoringPermission(t *testing
 
 // --- the routing defect these cases must not paper over ------------------------
 
-// TestClusterStackClusterIDParamIsUnroutable pins a PRE-EXISTING defect that this
-// refactor deliberately does not fix, so that a green suite stops concealing
-// it. UninstallStack, GetStackStatus and monitoringStackPayload (backing
-// preview/install/upgrade/replace) read chi.URLParam(r, "cluster_id"), but
-// every route is mounted as `/{id}/monitoring/...` in
-// internal/server/routes_clusters.go and no enclosing pattern declares
-// `{cluster_id}`. The param is therefore always empty in production and these
-// six endpoints cannot resolve their cluster: install/upgrade/replace fail on
-// uuid.Parse(""), uninstall and status answer 400.
+// TestClusterStackResolvesClusterIDFromTheRoutedParam is the inverse of a test
+// that used to pin the opposite. UninstallStack, GetStackStatus and
+// monitoringStackPayload (backing preview/install/upgrade/replace) read
+// chi.URLParam(r, "cluster_id") while every route is mounted as
+// `/{id}/monitoring/...`, so the param was always empty and all six per-cluster
+// endpoints ran with no cluster: install/upgrade/replace failed on
+// uuid.Parse(""), uninstall and status answered 400, and preview quietly
+// returned a body naming no cluster. No route anywhere declared `{cluster_id}`,
+// so these endpoints had never worked.
 //
-// The one-line fix is chi.URLParam(r, "id") at all three sites, plus a decision
-// on whether monitoring bindings should be cluster-scopable (RequirePermission
-// also reads `cluster_id` and only falls back to `id` for ResourceClusters, so
-// these per-cluster routes are evaluated as a GLOBAL monitoring check today).
-// Both are out of scope here and tracked as a follow-up; when they land, this
-// test is the thing that tells you to delete it and to drop
-// clusterStackCasesWithRoutableClusterID.
-func TestClusterStackClusterIDParamIsUnroutable(t *testing.T) {
-	// Only the two handlers that read `id` can resolve the cluster.
+// This asserts the routed param actually reaches every handler. It fails if the
+// mismatch is reintroduced at any of the three sites.
+//
+// STILL OPEN, deliberately not fixed here: requirePermission also reads
+// `cluster_id` and only falls back to `id` for ResourceClusters, so these
+// per-cluster routes are still evaluated as a GLOBAL monitoring check. Making
+// monitoring bindings cluster-scopable changes who can reach these endpoints and
+// is a scoping decision, not a routing fix.
+func TestClusterStackResolvesClusterIDFromTheRoutedParam(t *testing.T) {
 	byName := map[string]stackLifecycleCase{}
 	for _, tc := range clusterStackCases() {
 		byName[tc.name] = tc
@@ -439,15 +418,14 @@ func TestClusterStackClusterIDParamIsUnroutable(t *testing.T) {
 			h, _ := newStackLifecycleHandler(t)
 			rec := httptest.NewRecorder()
 			tc.invoke(h)(rec, tc.request())
-			if rec.Code < 400 {
-				t.Fatalf("status = %d: the {id}/{cluster_id} routing mismatch appears to be FIXED. "+
-					"Delete this test and clusterStackCasesWithRoutableClusterID, and drop the "+
-					"pre-staging note on TestStackLifecycleAuditEventsUnchanged.", rec.Code)
+			if rec.Code >= 400 {
+				t.Fatalf("status = %d (%s): the handler could not resolve the cluster from the routed {id} param",
+					rec.Code, rec.Body.String())
 			}
 		})
 	}
 
-	// Preview is the quiet one: it answers 200 and simply names no cluster.
+	// Preview was the quiet one: it answered 200 and simply named no cluster.
 	t.Run("preview", func(t *testing.T) {
 		h, _ := newStackLifecycleHandler(t)
 		rec := httptest.NewRecorder()
@@ -460,8 +438,8 @@ func TestClusterStackClusterIDParamIsUnroutable(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode preview body: %v (%s)", err, rec.Body.String())
 		}
-		if body.Data.ClusterID != "" {
-			t.Fatalf("clusterId = %q, want empty: the routing mismatch appears to be FIXED, see the note above", body.Data.ClusterID)
+		if body.Data.ClusterID != stackTestClusterID {
+			t.Fatalf("clusterId = %q, want %q", body.Data.ClusterID, stackTestClusterID)
 		}
 	})
 }
@@ -476,15 +454,11 @@ func TestClusterStackClusterIDParamIsUnroutable(t *testing.T) {
 // per endpoint rather than left to the build gate, which only checks that SOME
 // audit call is reachable.
 //
-// The per-cluster cases are driven with an extra `cluster_id` URL param that no
-// route produces (see TestClusterStackClusterIDParamIsUnroutable). That is stated
-// rather than hidden: four of these subtests pin the audit vocabulary of a code
-// path production cannot currently reach, and they are pre-staged for the
-// one-line routing fix. They are deliberately NOT skipped — the audit action
-// names are a wire contract that must survive this refactor whether or not the
-// routing bug is fixed first, and a skipped test pins nothing.
+// The per-cluster cases now use the real routed request shape; they previously
+// needed a fabricated `cluster_id` param because the handlers read one no route
+// supplied. See TestClusterStackResolvesClusterIDFromTheRoutedParam.
 func TestStackLifecycleAuditEventsUnchanged(t *testing.T) {
-	all := append(append(sharedThanosCases(), sharedAlertmanagerCases()...), clusterStackCasesWithRoutableClusterID()...)
+	all := append(append(sharedThanosCases(), sharedAlertmanagerCases()...), clusterStackCases()...)
 	for _, tc := range all {
 		if tc.audit == "" {
 			continue

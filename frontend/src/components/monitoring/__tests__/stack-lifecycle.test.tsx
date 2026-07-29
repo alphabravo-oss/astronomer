@@ -472,17 +472,6 @@ describe('per-cluster monitoring stack page', () => {
     expect(screen.queryByTestId('stack-panel-cluster')).not.toBeInTheDocument();
   });
 
-  it('says on screen that the per-cluster endpoints are not routable yet', async () => {
-    // internal/handler/monitoring_stack_test.go:410-465 pins the defect; this
-    // asserts the page admits it instead of presenting working-looking controls.
-    // Delete both when the chi.URLParam(r, "id") fix lands.
-    grant(['read', 'create', 'update', 'delete']);
-    statusPerTarget({ cluster: { status: 'not_configured' } });
-    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, { wrapper: Wrapper });
-
-    const notice = await screen.findByTestId('cluster-stack-routing-blocked');
-    expect(notice).toHaveTextContent(/not reachable on this server yet/i);
-  });
 });
 
 describe('shared monitoring stacks page', () => {

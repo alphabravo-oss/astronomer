@@ -262,7 +262,7 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "helm requester not configured")
 		return
 	}
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterID := chi.URLParam(r, "id")
 	cfg, _, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -312,7 +312,7 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterID := chi.URLParam(r, "id")
 	cfg, ok, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -390,7 +390,7 @@ func clusterMonitoringConfigResponse(cfg sqlc.ClusterMonitoringConfig) map[strin
 }
 
 func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request) (string, MonitoringStackRequest, map[string]any, error) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterID := chi.URLParam(r, "id")
 	var req MonitoringStackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
 		return "", MonitoringStackRequest{}, nil, fmt.Errorf("invalid JSON body")
