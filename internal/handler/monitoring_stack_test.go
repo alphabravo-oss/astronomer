@@ -399,11 +399,15 @@ func TestClusterStackLifecycleDeniesCallerWithoutMonitoringPermission(t *testing
 // This asserts the routed param actually reaches every handler. It fails if the
 // mismatch is reintroduced at any of the three sites.
 //
-// STILL OPEN, deliberately not fixed here: requirePermission also reads
-// `cluster_id` and only falls back to `id` for ResourceClusters, so these
-// per-cluster routes are still evaluated as a GLOBAL monitoring check. Making
-// monitoring bindings cluster-scopable changes who can reach these endpoints and
-// is a scoping decision, not a routing fix.
+// NOW CLOSED, and this is where the follow-up landed: requirePermission read
+// `cluster_id` too and only fell back to `id` for ResourceClusters, so these
+// per-cluster routes were also evaluated as a GLOBAL monitoring check.
+// appmiddleware.ClusterScopeFromIDParam, mounted on the whole /clusters subtree
+// by registerClusterRoutes, now supplies the routed cluster as the permission
+// scope. The scope contract is pinned in
+// internal/server/routes_monitoring_scope_test.go (all four directions) and
+// internal/server/routes_clusters_scope_test.go (that the declaration reaches
+// these routes and nothing whose {id} is not a cluster).
 func TestClusterStackResolvesClusterIDFromTheRoutedParam(t *testing.T) {
 	byName := map[string]stackLifecycleCase{}
 	for _, tc := range clusterStackCases() {

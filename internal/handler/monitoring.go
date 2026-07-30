@@ -544,7 +544,93 @@ func redactSensitiveMap(data map[string]any) {
 	}
 }
 
-func (h *MonitoringHandler) objectStoreSecretSpec(ctx context.Context, storageConfigID, overrideName, defaultName string) (objectStoreSecretSpec, error) {
+// storageConfigAuthorizer approves — or refuses — a caller's reference to one
+// backup_storage_configs row. objectStoreSecretSpec calls it after loading the
+// row and BEFORE reading anything out of it.
+//
+// It exists because storageConfigId arrives in the REQUEST BODY and names a
+// global object: GetBackupStorageConfigByID takes an id and nothing else, and
+// the row it returns carries live S3 access/secret keys that this file writes
+// verbatim into a Secret in a namespace of the caller's cluster. The backups
+// API gates the same rows on rbac.ResourceBackups and never surfaces their raw
+// keys at all (backups.go storageResponse). While the per-cluster monitoring
+// routes were evaluated as a GLOBAL check, "the caller reached this code" was
+// itself proof of a fleet-wide grant; now that a single-cluster tenant can
+// reach them, the reference needs its own authorization.
+type storageConfigAuthorizer func(sqlc.BackupStorageConfig) error
+
+// errStorageConfigForbidden / errStorageConfigAuthzFailed are the two outcomes
+// a storageConfigAuthorizer can produce that must NOT be reported as a bad
+// request body. respondStackPayloadError maps them to 403 / 500.
+var (
+	errStorageConfigForbidden   = errors.New("you do not have permission to use this object storage configuration")
+	errStorageConfigAuthzFailed = errors.New("failed to retrieve user permissions")
+)
+
+// clusterStorageConfigAuthorizer is the guard for a PER-CLUSTER stack install
+// on clusterID. A reference is allowed when any of the following holds:
+//
+//  1. the config belongs to the routed cluster (cluster_id == clusterID) — it
+//     is that cluster's own object and the caller already holds a monitoring
+//     write on it to be here at all;
+//  2. the caller holds backups:read at the config's OWN scope — the same rule
+//     authorizeBackup applies to every other read of that row;
+//  3. the caller holds a fleet-wide monitoring grant at routeVerb — i.e. they
+//     could have reached this exact handler back when its gate was a global
+//     check. This clause is pre-fix parity and nothing more, which is why it
+//     takes the ROUTE's verb rather than any monitoring verb: a Monitoring
+//     Admin installing against the fleet's default (unscoped) storage config
+//     must keep working, but a global monitoring:read holder must not gain the
+//     install path they never had.
+//
+// Anything else — most importantly a single-cluster tenant naming a global or
+// a neighbouring tenant's config — is refused.
+func (h *MonitoringHandler) clusterStorageConfigAuthorizer(ctx context.Context, clusterID uuid.UUID, routeVerb rbac.Verb) storageConfigAuthorizer {
+	return func(cfg sqlc.BackupStorageConfig) error {
+		bindings, restricted, err := h.authz.bindingsForContext(ctx)
+		if err != nil {
+			return errStorageConfigAuthzFailed
+		}
+		if !restricted {
+			return nil
+		}
+		if cfg.ClusterID.Valid {
+			if uuid.UUID(cfg.ClusterID.Bytes) == clusterID {
+				return nil
+			}
+			if h.authz.allowsCluster(bindings, uuid.UUID(cfg.ClusterID.Bytes), rbac.ResourceBackups, rbac.VerbRead) {
+				return nil
+			}
+		} else if h.authz.allowsGlobal(bindings, rbac.ResourceBackups, rbac.VerbRead) {
+			return nil
+		}
+		if h.authz.allowsGlobal(bindings, rbac.ResourceMonitoring, routeVerb) {
+			return nil
+		}
+		return errStorageConfigForbidden
+	}
+}
+
+// respondStackPayloadError maps a monitoringStackPayload failure to a status.
+// Everything it returns is a complaint about the request body EXCEPT the two
+// storage-config authorization outcomes: answering those 400 would tell the
+// caller their body was malformed and invite them to retry it.
+func respondStackPayloadError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, errStorageConfigForbidden):
+		// The canonical wording every other permission denial uses, not the
+		// sentinel's text: the response must not say which of the authorizer's
+		// clauses the caller failed, or whether the id they guessed resolved to
+		// a row at all.
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	case errors.Is(err, errStorageConfigAuthzFailed):
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+	default:
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+	}
+}
+
+func (h *MonitoringHandler) objectStoreSecretSpec(ctx context.Context, storageConfigID, overrideName, defaultName string, authorize storageConfigAuthorizer) (objectStoreSecretSpec, error) {
 	if h.queries == nil {
 		return objectStoreSecretSpec{}, fmt.Errorf("monitoring store not configured")
 	}
@@ -556,12 +642,18 @@ func (h *MonitoringHandler) objectStoreSecretSpec(ctx context.Context, storageCo
 	if err != nil {
 		return objectStoreSecretSpec{}, fmt.Errorf("backup storage config not found")
 	}
+	// Before any field of the row is read, including into an error message.
+	if authorize != nil {
+		if err := authorize(storageCfg); err != nil {
+			return objectStoreSecretSpec{}, err
+		}
+	}
 	if storageCfg.Bucket == "" {
 		return objectStoreSecretSpec{}, fmt.Errorf("storage config bucket is required")
 	}
-	content, err := buildObjstoreConfigYAML(storageCfg)
+	content, err := h.buildObjstoreConfigYAML(storageCfg)
 	if err != nil {
-		return objectStoreSecretSpec{}, fmt.Errorf("failed to build object storage config")
+		return objectStoreSecretSpec{}, fmt.Errorf("failed to build object storage config: %w", err)
 	}
 	name := defaultString(overrideName, defaultName)
 	return objectStoreSecretSpec{
@@ -572,15 +664,49 @@ func (h *MonitoringHandler) objectStoreSecretSpec(ctx context.Context, storageCo
 	}, nil
 }
 
-func buildObjstoreConfigYAML(storageCfg sqlc.BackupStorageConfig) (string, error) {
+// storageCredentials returns the S3 access/secret pair for a backup storage
+// config.
+//
+// It is not simply cfg.AccessKey/cfg.SecretKey: since the credential-at-rest
+// change those columns are deliberately BLANKED whenever the encrypted column
+// is populated (legacyBackupCredentialColumns in backups.go), so reading them
+// directly yields "" on every deployment that has an encryptor — and the stack
+// was then installed with an empty-credential objstore secret and no error
+// anywhere. Fail loudly instead when the row is sealed and we cannot open it.
+func (h *MonitoringHandler) storageCredentials(cfg sqlc.BackupStorageConfig) (string, string, error) {
+	if cfg.EncryptedCredentials == "" {
+		return cfg.AccessKey, cfg.SecretKey, nil
+	}
+	if h == nil || h.encryptor == nil {
+		return "", "", fmt.Errorf("object storage credentials are encrypted but no encryption key is configured")
+	}
+	plaintext, err := h.encryptor.Decrypt(cfg.EncryptedCredentials)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to decrypt object storage credentials")
+	}
+	var creds struct {
+		AccessKey string `json:"access_key"`
+		SecretKey string `json:"secret_key"`
+	}
+	if err := json.Unmarshal([]byte(plaintext), &creds); err != nil {
+		return "", "", fmt.Errorf("object storage credentials are malformed")
+	}
+	return creds.AccessKey, creds.SecretKey, nil
+}
+
+func (h *MonitoringHandler) buildObjstoreConfigYAML(storageCfg sqlc.BackupStorageConfig) (string, error) {
+	accessKey, secretKey, err := h.storageCredentials(storageCfg)
+	if err != nil {
+		return "", err
+	}
 	objstoreConfig := map[string]any{
 		"type": "S3",
 		"config": map[string]any{
 			"bucket":     storageCfg.Bucket,
 			"endpoint":   storageCfg.EndpointUrl,
 			"region":     storageCfg.Region,
-			"access_key": storageCfg.AccessKey,
-			"secret_key": storageCfg.SecretKey,
+			"access_key": accessKey,
+			"secret_key": secretKey,
 		},
 	}
 	if storageCfg.Prefix != "" {
@@ -681,7 +807,14 @@ func (h *MonitoringHandler) applyMonitoringStack(ctx context.Context, clusterID 
 		return nil, fmt.Errorf("helm requester not configured")
 	}
 	if req.StorageConfigID != "" {
-		secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-thanos-objstore")
+		// nil authorizer, deliberately: this runs in the operation executor,
+		// which has no HTTP caller and no bindings to check. The reference was
+		// authorized when the operation was ENQUEUED — monitoringStackPayload
+		// runs clusterStorageConfigAuthorizer against the same
+		// req.StorageConfigID before enqueueClusterStackOperation persists it
+		// into the envelope this re-reads. Adding a check here would evaluate
+		// an empty binding set and fail every install.
+		secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-thanos-objstore", nil)
 		if err != nil {
 			return nil, err
 		}

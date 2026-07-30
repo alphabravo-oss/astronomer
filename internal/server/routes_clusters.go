@@ -3,6 +3,7 @@ package server
 import (
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -15,6 +16,17 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 
 	if deps.Clusters != nil {
 		r.Route("/clusters", func(r chi.Router) {
+			// Every {id} below is a CLUSTER id. Say so, once, for the whole
+			// subtree: the permission gates cannot infer it, and the ones that
+			// check a resource other than clusters — GET /{id}/health/ and the
+			// eight /{id}/monitoring/... routes, all rbac.ResourceMonitoring —
+			// were otherwise evaluated at uuid.Nil, i.e. as a GLOBAL check, which
+			// refused a caller whose monitoring grant is scoped to this very
+			// cluster. A global monitoring grant reached every cluster before
+			// this line and still does — that is what global means; see
+			// appmiddleware.ClusterScopeFromIDParam. Must precede the route
+			// registrations below (chi rejects Use after Handle).
+			r.Use(appmiddleware.ClusterScopeFromIDParam)
 			// Collection gate: cluster-scoped callers are admitted and the
 			// handler filters the page to their clusters. See
 			// RequireCollectionPermission.

@@ -528,7 +528,12 @@ func (h *MonitoringHandler) sharedThanosPayload(ctx context.Context, r *http.Req
 	if err != nil {
 		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("default monitoring backend is not configured")
 	}
-	secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-objstore")
+	// nil authorizer, deliberately: sharedStackLifecycle's preamble has already
+	// required a FLEET-WIDE monitoring grant (authorizeGlobalAction against
+	// uuid.Nil) to reach this payload builder, which is a strictly higher bar
+	// than clusterStorageConfigAuthorizer's most permissive clause, and the
+	// secret lands on the management cluster rather than a tenant's.
+	secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-objstore", nil)
 	if err != nil {
 		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, err
 	}

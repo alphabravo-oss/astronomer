@@ -1275,6 +1275,29 @@ func requireAnyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier
 	}
 }
 
+// permissionScopeIDs is the SECOND scope resolver in this codebase and its rule
+// is knowingly different from the first. Read appmiddleware.permissionScope
+// (internal/server/middleware/rbac.go) before touching either.
+//
+// The difference: permissionScope only falls back to a bare {id} when the route
+// subtree declared that {id} names a cluster (ClusterScopeFromIDParam) or the
+// gated resource is clusters/projects. This one falls back UNCONDITIONALLY and
+// binds the same {id} as BOTH the cluster and the project scope. Its callers —
+// requireAnyPermission, requireK8sProxyPermission and the workloads gate in
+// routes_resources_workloads.go — sit on routes where {id} is sometimes neither:
+// /admin/alerting/inhibitions/{id}/ binds an inhibition id as a cluster AND a
+// project, and /clusters/{id}/v2/pods/ binds the cluster uuid as a project id
+// too.
+//
+// TODO(authz-scope-resolvers): collapse this onto permissionScope, passing the
+// gated resource (or a nil resource meaning "infer nothing"). It is left as-is
+// deliberately rather than silently: the rule is WRONG but it fails CLOSED at
+// every live call site, because rbac.bindingApplies only matches a project
+// binding whose ProjectID equals the bound value, and no project id equals a
+// cluster or inhibition uuid — the ids come from different tables. A collision
+// there is the exploit, and unifying the two resolvers is what removes it. The
+// same divergence between two resolvers one file apart is how the monitoring
+// scope bug survived from 016fdbb to 686b794.
 func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
 	var clusterID, projectID uuid.UUID
 	clusterParam := chi.URLParam(r, "cluster_id")

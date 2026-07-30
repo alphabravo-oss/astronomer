@@ -15,6 +15,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // The per-cluster monitoring stack: everything under /clusters/{id}/monitoring.
@@ -28,6 +29,15 @@ import (
 // know (install is VerbCreate, uninstall is VerbDelete, where the shared family
 // uses VerbUpdate for both). Adding a second in-handler check would either be
 // redundant or quietly narrow the gate.
+//
+// THE ONE IN-HANDLER CHECK, and why it is not a preamble: the route gate
+// authorizes the caller against the ROUTED CLUSTER, which is everything these
+// handlers touch except one field. storageConfigId arrives in the request body
+// and names a row in backup_storage_configs — a different resource
+// (rbac.ResourceBackups), possibly a different cluster's, whose live S3 keys the
+// install writes into a Secret here. Only monitoringStackPayload knows that
+// reference exists, so clusterStorageConfigAuthorizer is applied there, at the
+// dereference. See monitoring.go.
 //
 // That is also why this family is not a third instantiation of
 // sharedStackLifecycle: an instantiation with no resource to check would need
@@ -153,9 +163,9 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 }
 
 func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbRead)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		respondStackPayloadError(w, r, err)
 		return
 	}
 	cfg, ok, _ := h.loadStackConfig(r.Context(), clusterID)
@@ -174,9 +184,9 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbCreate)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		respondStackPayloadError(w, r, err)
 		return
 	}
 	if err := h.persistStackConfig(r.Context(), clusterID, req, "installing"); err != nil {
@@ -196,9 +206,9 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbUpdate)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		respondStackPayloadError(w, r, err)
 		return
 	}
 	cfg, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
@@ -232,9 +242,9 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r)
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbUpdate)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		respondStackPayloadError(w, r, err)
 		return
 	}
 	if _, _, loadErr := h.loadStackConfig(r.Context(), clusterID); loadErr != nil {
@@ -389,7 +399,13 @@ func clusterMonitoringConfigResponse(cfg sqlc.ClusterMonitoringConfig) map[strin
 	}
 }
 
-func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request) (string, MonitoringStackRequest, map[string]any, error) {
+// monitoringStackPayload decodes and defaults a per-cluster stack request.
+// routeVerb is the verb the ROUTE this was called from gates on
+// (routes_clusters.go: preview read, install create, upgrade/replace update).
+// It is not decoration: clusterStorageConfigAuthorizer uses it to reproduce
+// exactly which callers could dereference a fleet-wide storage config back when
+// these routes were a global check.
+func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request, routeVerb rbac.Verb) (string, MonitoringStackRequest, map[string]any, error) {
 	clusterID := chi.URLParam(r, "id")
 	var req MonitoringStackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
@@ -471,7 +487,18 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		},
 	}
 	if enableSidecar && req.StorageConfigID != "" {
-		secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-thanos-objstore")
+		// storageConfigId is a body-supplied reference to a GLOBAL object whose
+		// S3 keys end up in a Secret on this cluster, so it carries its own
+		// authorization — the route gate only established that the caller may
+		// write monitoring HERE. See clusterStorageConfigAuthorizer; callers of
+		// this function must route its error through respondStackPayloadError
+		// so a refusal is a 403 and not a 400.
+		routedCluster, parseErr := uuid.Parse(clusterID)
+		if parseErr != nil {
+			return "", MonitoringStackRequest{}, nil, fmt.Errorf("invalid cluster ID")
+		}
+		authorize := h.clusterStorageConfigAuthorizer(ctx, routedCluster, routeVerb)
+		secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-thanos-objstore", authorize)
 		if err != nil {
 			return "", MonitoringStackRequest{}, nil, err
 		}

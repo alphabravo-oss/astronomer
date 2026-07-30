@@ -31,10 +31,127 @@ type RBACCacheInvalidator interface {
 
 // RequirePermission creates middleware that checks if the authenticated user
 // has the required permission (resource + verb) at the appropriate scope.
-// Scope is determined from URL params: {cluster_id} and {project_id}; the
-// namespace comes from a route param only (see namespaceContext).
+// Scope is determined from URL params: {cluster_id} and {project_id} (see
+// permissionScope for the bare-{id} rule); the namespace comes from a route
+// param only (see namespaceContext).
 func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	return RequirePermissionForNamespace(engine, querier, resource, verb, namespaceContext)
+}
+
+// scopeContextKey is an unexported type for scope-declaration context keys.
+type scopeContextKey string
+
+// idParamIsClusterKey marks a route subtree in which the chi param {id} names a
+// CLUSTER. Set by ClusterScopeFromIDParam, read by permissionScope.
+const idParamIsClusterKey scopeContextKey = "id_param_is_cluster"
+
+// ClusterScopeFromIDParam declares that, everywhere inside the route subtree it
+// is mounted on, the chi URL param {id} names a CLUSTER — so a permission gate
+// on one of those routes must be evaluated at THAT cluster's scope, whatever
+// resource the gate happens to check.
+//
+// Mount it with r.Use at the top of the subtree (registerClusterRoutes does);
+// it needs no URL params of its own, so it is safe on a chi.Route group whose
+// params are not bound until the inner route matches.
+//
+// WHY THIS EXISTS. permissionScope has to decide whether a bare {id} is a
+// cluster id, and it cannot ask the router. Its only signal used to be the
+// RESOURCE being gated: fall back to {id} for rbac.ResourceClusters, and for
+// rbac.ResourceProjects. That is a proxy for the real fact, and the proxy is
+// wrong for any route under /clusters/{id} that gates on something else. Every
+// such route today gates on rbac.ResourceMonitoring: GET /{id}/health/, the
+// eight /{id}/monitoring/... config and stack-lifecycle routes, and the
+// /{id}/metrics/ pair that routes_monitoring.go shadows with a {cluster_id}
+// registration on the parent router. Every one of them resolved to uuid.Nil,
+// i.e. a GLOBAL monitoring check, which refused a caller whose monitoring
+// grant is scoped to exactly that cluster (Cluster Owner, Cluster Operator,
+// Cluster Viewer, Cluster Member, Service Mesh Operator) on their OWN cluster:
+// rbac.bindingApplies will not match a cluster-scoped binding against the nil
+// scope. That is the whole of what this declaration changes.
+//
+// WHAT IT DELIBERATELY DOES NOT CHANGE. A GLOBAL monitoring grant still reaches
+// every cluster's monitoring routes, exactly as it did before. That is the
+// intended meaning of a global binding, not a hole this closes:
+// rbac.bindingApplies (internal/rbac/engine.go) returns true for a binding with
+// no cluster and no project at ANY scope, monitoring-admin.yaml is declared
+// `scope: global` and "across the fleet", and every ResourceClusters route
+// behaves the same way. TestClusterMonitoringRoutesStillAdmitGlobalBinding
+// (internal/server/routes_monitoring_scope_test.go) passes with and without
+// this declaration on purpose — it is the fence that keeps fleet-wide
+// operators working, not evidence of a fix. Constraining a global grant to a
+// cluster list is a change to the BINDING MODEL and belongs nowhere near a
+// scope resolver.
+//
+// The declaration is additive: it only ever supplies a cluster id where the
+// resource-based fallback left uuid.Nil, so mounting it can widen a check from
+// global to cluster-scoped but can never take a scope away. Routes outside the
+// subtree are untouched, which matters for the shared, genuinely fleet-wide
+// /settings/monitoring/* family — those authorize in-handler against
+// uuid.Nil (authorizeGlobalAction) and must keep global semantics, so a
+// cluster-scoped grant must not reach them.
+func ClusterScopeFromIDParam(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), idParamIsClusterKey, true)))
+	})
+}
+
+// permissionScope resolves the (cluster, project) scope a permission gate is
+// evaluated at, from the request's route params.
+//
+// {cluster_id} and {project_id} are unambiguous. A bare {id} is not: it names a
+// cluster under /clusters/{id}, a project under /projects/{id}, and some
+// unrelated object almost everywhere else (/rbac/global-roles/{id},
+// /monitoring/endpoints/{id}, /audit/{id}, /users/{id}, /cluster-groups/{id},
+// ...). Binding one of THOSE into a cluster scope would be nonsense, so the
+// fallback is conditional on either
+//
+//   - the subtree having declared it (ClusterScopeFromIDParam), which is the
+//     accurate signal and the one /clusters/{id} uses; or
+//   - the gated resource being clusters/projects, which is the older
+//     inference and stays because it also covers the handful of cluster and
+//     project routes registered OUTSIDE those subtrees —
+//     /clusters/{id}/gatekeeper/constraints/*, /clusters/{id}/v2/pods/,
+//     /dashboards/clusters/{id}/ and /projects/{id}/default-vault-connection/.
+//
+// A gate on a route that satisfies neither resolves to uuid.Nil and is a global
+// check, which is what a route with no scope in its URL should be.
+//
+// THERE IS A SECOND RESOLVER, and it does not follow this rule:
+// server.permissionScopeIDs (internal/server/routes.go), used by
+// requireAnyPermission, requireK8sProxyPermission and the workloads list gate,
+// falls back to a bare {id} unconditionally and binds it as both the cluster
+// and the project scope. It fails closed today for the reasons written at its
+// definition. Any change here should be mirrored there, or better, should
+// finish collapsing the two.
+func permissionScope(r *http.Request, resource rbac.Resource) (uuid.UUID, uuid.UUID) {
+	var clusterID, projectID uuid.UUID
+	clusterParam := chi.URLParam(r, "cluster_id")
+	if clusterParam == "" && (idParamNamesCluster(r) || resource == rbac.ResourceClusters) {
+		clusterParam = chi.URLParam(r, "id")
+	}
+	if clusterParam != "" {
+		if parsed, err := uuid.Parse(clusterParam); err == nil {
+			clusterID = parsed
+		}
+	}
+	projectParam := chi.URLParam(r, "project_id")
+	if projectParam == "" && resource == rbac.ResourceProjects {
+		projectParam = chi.URLParam(r, "id")
+	}
+	if projectParam != "" {
+		if parsed, err := uuid.Parse(projectParam); err == nil {
+			projectID = parsed
+		}
+	}
+	return clusterID, projectID
+}
+
+func idParamNamesCluster(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	declared, _ := r.Context().Value(idParamIsClusterKey).(bool)
+	return declared
 }
 
 // RequireQueryNamespacePermission is RequirePermission for a route whose
@@ -88,27 +205,7 @@ func RequirePermissionForNamespace(engine *rbac.Engine, querier RBACQuerier, res
 				return
 			}
 
-			var clusterID, projectID uuid.UUID
-			clusterParam := chi.URLParam(r, "cluster_id")
-			if clusterParam == "" && resource == rbac.ResourceClusters {
-				clusterParam = chi.URLParam(r, "id")
-			}
-			if cid := clusterParam; cid != "" {
-				parsed, err := uuid.Parse(cid)
-				if err == nil {
-					clusterID = parsed
-				}
-			}
-			projectParam := chi.URLParam(r, "project_id")
-			if projectParam == "" && resource == rbac.ResourceProjects {
-				projectParam = chi.URLParam(r, "id")
-			}
-			if pid := projectParam; pid != "" {
-				parsed, err := uuid.Parse(pid)
-				if err == nil {
-					projectID = parsed
-				}
-			}
+			clusterID, projectID := permissionScope(r, resource)
 			namespace := resolveNamespace(r)
 
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
@@ -171,27 +268,7 @@ func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rb
 				return
 			}
 
-			var clusterID, projectID uuid.UUID
-			clusterParam := chi.URLParam(r, "cluster_id")
-			if clusterParam == "" && resource == rbac.ResourceClusters {
-				clusterParam = chi.URLParam(r, "id")
-			}
-			if cid := clusterParam; cid != "" {
-				parsed, err := uuid.Parse(cid)
-				if err == nil {
-					clusterID = parsed
-				}
-			}
-			projectParam := chi.URLParam(r, "project_id")
-			if projectParam == "" && resource == rbac.ResourceProjects {
-				projectParam = chi.URLParam(r, "id")
-			}
-			if pid := projectParam; pid != "" {
-				parsed, err := uuid.Parse(pid)
-				if err == nil {
-					projectID = parsed
-				}
-			}
+			clusterID, projectID := permissionScope(r, resource)
 			namespace := namespaceContextWithQuery(r)
 
 			allowed := engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace)
