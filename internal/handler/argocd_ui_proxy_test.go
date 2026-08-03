@@ -187,6 +187,52 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 	}
 }
 
+func TestNewArgoStreamSanitizerRedactsEachFrameAndPreservesNDJSON(t *testing.T) {
+	// Two watch events; the second carries a credential that must be redacted
+	// exactly as the buffered path would.
+	in := `{"result":{"type":"ADDED","application":{"metadata":{"name":"keep-me"}}}}` + "\n" +
+		`{"result":{"application":{"spec":{"source":{"clientSecret":"` + argoProxyCanary + `"}}}}}` + "\n"
+	out, err := io.ReadAll(newArgoStreamSanitizer(io.NopCloser(strings.NewReader(in))))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if bytes.Contains(out, []byte(argoProxyCanary)) {
+		t.Fatalf("credential leaked through the stream sanitizer: %s", out)
+	}
+	lines := bytes.Split(bytes.TrimRight(out, "\n"), []byte("\n"))
+	if len(lines) != 2 {
+		t.Fatalf("want 2 NDJSON frames, got %d: %s", len(lines), out)
+	}
+	for i, l := range lines {
+		var v any
+		if err := json.Unmarshal(l, &v); err != nil {
+			t.Fatalf("frame %d is not valid JSON: %s", i, l)
+		}
+	}
+	// Non-credential data survives (only secrets are stripped).
+	if !bytes.Contains(lines[0], []byte("keep-me")) {
+		t.Fatalf("non-secret data was dropped: %s", lines[0])
+	}
+}
+
+func TestNewArgoStreamSanitizerSkipsBlankKeepaliveLines(t *testing.T) {
+	in := "\n" + `{"result":{"application":{"metadata":{"name":"x"}}}}` + "\n" + "\n"
+	out, err := io.ReadAll(newArgoStreamSanitizer(io.NopCloser(strings.NewReader(in))))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if got := bytes.Count(bytes.TrimRight(out, "\n"), []byte("\n")); got != 0 {
+		t.Fatalf("blank lines not collapsed, got extra newlines: %q", out)
+	}
+}
+
+func TestNewArgoStreamSanitizerTearsDownOnMalformedFrame(t *testing.T) {
+	// A frame that isn't JSON must fail the stream, never forward raw bytes.
+	if _, err := io.ReadAll(newArgoStreamSanitizer(io.NopCloser(strings.NewReader("{not json}\n")))); err == nil {
+		t.Fatal("expected the stream to tear down on a malformed frame")
+	}
+}
+
 func TestSanitizeArgoCDUIResponseHeadersIsCaseInsensitiveAndDefaultDeny(t *testing.T) {
 	resp := &http.Response{Header: http.Header{
 		"cAcHe-CoNtRoL":  []string{"private", "no-store"},

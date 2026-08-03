@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -192,9 +193,11 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 		}
 		// Strip Accept-Encoding for HTML navigations so the upstream
 		// returns plaintext we can rewrite (`<base href>` substitution
-		// + SPA index fallback for 404s). Asset / API responses keep
-		// the client's encoding preferences and pass through unchanged.
-		if wantsHTMLNav(req) {
+		// + SPA index fallback for 404s). Also strip it for watch streams
+		// so the per-frame stream sanitizer scans plaintext NDJSON rather
+		// than an incrementally-compressed body. Other asset / API responses
+		// keep the client's encoding preferences and pass through unchanged.
+		if wantsHTMLNav(req) || isArgoStreamPath(req.URL.Path) {
 			req.Header.Del("Accept-Encoding")
 		}
 
@@ -255,6 +258,24 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 			return fmt.Errorf("Argo API protocol upgrades are not admitted by the redaction policy")
 		}
 		if isAPI && isJSONMediaType(ct) {
+			// ArgoCD watch endpoints (/api/v1/stream/*) return newline-delimited
+			// JSON — one event per line — and never terminate, so the buffering
+			// sanitizer below would read forever and hang (that is exactly why
+			// they used to be rejected). Wrap the body in a per-frame sanitizer
+			// that runs each event through the same SanitizeJSON and forwards it
+			// incrementally, so the live UI works without buffering an unbounded
+			// stream or leaking an un-redacted frame.
+			if isArgoStreamPath(path) {
+				resp.Body = newArgoStreamSanitizer(resp.Body)
+				resp.ContentLength = -1
+				resp.Header.Del("Content-Length")
+				resp.Header.Del("Content-Encoding")
+				resp.Header.Del("ETag")
+				resp.Header.Del("Content-MD5")
+				resp.Header.Del("Digest")
+				sanitizeArgoCDUIResponseHeaders(resp)
+				return nil
+			}
 			if err := sanitizeArgoCDAPIJSONResponse(resp); err != nil {
 				return err
 			}
@@ -672,6 +693,50 @@ func validateArgoCDProxyMutationRequest(r *http.Request) (int, error) {
 		return http.StatusBadRequest, err
 	}
 	return 0, nil
+}
+
+// isArgoStreamPath reports whether the request targets an ArgoCD watch endpoint
+// (/argocd/api/v1/stream/*). These stream newline-delimited JSON events and
+// never terminate, so they need the per-frame sanitizer rather than the
+// buffering one.
+func isArgoStreamPath(path string) bool {
+	return strings.Contains(path, "/api/v1/stream/")
+}
+
+// newArgoStreamSanitizer wraps an ArgoCD watch stream so each newline-delimited
+// JSON event is redacted through the same SanitizeJSON used for buffered
+// responses and forwarded incrementally. Each frame is bounded to the same size
+// limit as a buffered body, so a single oversized (or newline-less) event can't
+// be accumulated without limit. A frame that fails to decode/sanitize tears the
+// stream down rather than forwarding un-redacted bytes.
+func newArgoStreamSanitizer(upstream io.ReadCloser) io.ReadCloser {
+	pr, pw := io.Pipe()
+	go func() {
+		defer func() { _ = upstream.Close() }()
+		scanner := bufio.NewScanner(upstream)
+		// Bound each frame to the buffered-response limit; ErrTooLong on overflow.
+		scanner.Buffer(make([]byte, 0, 64*1024), maxArgoCDProxyJSONBytes)
+		for scanner.Scan() {
+			frame := scanner.Bytes()
+			if len(bytes.TrimSpace(frame)) == 0 {
+				continue
+			}
+			sanitized, err := argosecurity.SanitizeJSON(frame)
+			if err != nil {
+				_ = pw.CloseWithError(fmt.Errorf("sanitize Argo stream frame: %w", err))
+				return
+			}
+			if _, err := pw.Write(append(sanitized, '\n')); err != nil {
+				return // client disconnected
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			_ = pw.CloseWithError(fmt.Errorf("read Argo stream: %w", err))
+			return
+		}
+		_ = pw.Close()
+	}()
+	return pr
 }
 
 func sanitizeArgoCDAPIJSONResponse(resp *http.Response) error {
