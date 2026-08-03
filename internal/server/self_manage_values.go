@@ -339,14 +339,22 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 			"email":             strutil.FirstNonBlankTrimmed(os.Getenv("ASTRONOMER_BOOTSTRAP_EMAIL"), "admin@astronomer.local"),
 		},
 		"postgres": map[string]any{
-			"bundled":  map[string]any{"enabled": postgresBundled},
-			"external": map[string]any{"dsnSecretRef": secretRefValues(databaseRef)},
+			"bundled": map[string]any{"enabled": postgresBundled},
 		},
 		"redis": redisValues,
 		"dex":   dexValues,
 	}
 	if postgresBundled {
 		discovered["postgres"].(map[string]any)["passwordSecretRef"] = secretRefValues(postgresPasswordRef)
+	} else {
+		// External DB only. Setting external.dsnSecretRef while postgres is
+		// bundled makes the chart render the migrate init container's
+		// DATABASE_URL as a secretKeyRef, but the live bundled object uses a
+		// configMapKeyRef. Argo's strategic-merge patch then stacks BOTH keyRefs
+		// into one env valueFrom ("may not have more than one field specified")
+		// and the self-managed Application can never sync. So point at the DSN
+		// secret only when the server actually consumes it (external DB).
+		discovered["postgres"].(map[string]any)["external"] = map[string]any{"dsnSecretRef": secretRefValues(databaseRef)}
 	}
 	deepMergeSelfManagedValues(values, discovered)
 	deepMergeSelfManagedValues(values, runtimeOverlay)
