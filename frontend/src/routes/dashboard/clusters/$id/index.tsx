@@ -616,19 +616,25 @@ function AgentAccessChip({ cluster }: { cluster: Cluster }) {
 }
 
 function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
-  const { isAdmin, label, detail } = agentAccessSummary(cluster);
-  // Everything except admin is now carried by the header chip. Admin keeps the
-  // full panel: it is the one posture with a caveat worth spelling out and a
-  // matrix worth linking.
-  if (!isAdmin) return null;
-  const tone = 'border-status-warning/30 bg-status-warning/10 text-status-warning';
+  const { isAdmin, isLocal, profile, label, detail } = agentAccessSummary(cluster);
+  const isViewer = !isLocal && profile === 'viewer';
+  // Admin and viewer are the two postures with a consequence worth spelling out:
+  // admin is a security caveat (near/at cluster-admin, break-glass), viewer is a
+  // capability caveat (read-only → Astronomer can't install baseline monitoring
+  // or tools). Operator and the management cluster are self-explanatory and stay
+  // on the header chip only.
+  if (!isAdmin && !isViewer) return null;
+  const tone = isAdmin
+    ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+    : 'border-status-info/30 bg-status-info/10 text-status-info';
+  const iconTone = isAdmin ? 'text-status-warning' : 'text-status-info';
 
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3 min-w-0">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-            <ShieldAlert className={`h-4 w-4 ${isAdmin ? 'text-status-warning' : 'text-muted-foreground'}`} />
+            <ShieldAlert className={`h-4 w-4 ${iconTone}`} />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -638,11 +644,18 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-            {isAdmin ? (
+            {isAdmin && (
               <p className="mt-1 text-xs text-status-warning">
                 Full-admin agent access should be reserved for compatibility or break-glass workflows.
               </p>
-            ) : null}
+            )}
+            {isViewer && (
+              <p className="mt-1 text-xs text-status-info">
+                Read-only: Astronomer can&apos;t install baseline monitoring (kube-state-metrics, node-exporter) or
+                tools on this cluster, so metrics dashboards stay empty. Re-adopt the cluster as Admin to enable
+                monitoring and management.
+              </p>
+            )}
           </div>
         </div>
         <Link

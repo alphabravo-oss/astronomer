@@ -53,8 +53,11 @@ function RegisterClusterWizardPage() {
         });
         // Record the operator's choice. The backend keeps install_baseline
         // NULL until this call so it can distinguish "hasn't decided" from
-        // "opted out".
-        await setRegistrationOptions(cluster.id, value.installBaseline);
+        // "opted out". A viewer agent is read-only and physically can't deploy
+        // the baseline, so force it off — the UI disables the checkbox under
+        // viewer, this guards the submit value too.
+        const installBaseline = value.privilegeProfile === 'viewer' ? false : value.installBaseline;
+        await setRegistrationOptions(cluster.id, installBaseline);
         router.push(`/dashboard/clusters/register/${cluster.id}/connect`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -65,7 +68,9 @@ function RegisterClusterWizardPage() {
 
   const name = useStore(form.store, (s) => s.values.name);
   const submitting = useStore(form.store, (s) => s.isSubmitting);
+  const privilegeProfile = useStore(form.store, (s) => s.values.privilegeProfile);
   const nameTaken = name.length > 0 && existingNames.has(name);
+  const isViewer = privilegeProfile === 'viewer';
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -209,17 +214,41 @@ function RegisterClusterWizardPage() {
             can actually do is then governed by their Astronomer RBAC. (Finer-grained operator / namespace-scoped profiles
             are available via the API.)
           </p>
+          {isViewer ? (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-status-warning">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+              <span>
+                Read-only: Astronomer <span className="font-medium">cannot install baseline monitoring</span>{' '}
+                (kube-state-metrics, node-exporter, etc.) on a viewer cluster. You&apos;ll get inventory, logs, and
+                health — but no metrics dashboards until you re-adopt as Admin.
+              </span>
+            </p>
+          ) : (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-status-success">
+              <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+              <span>Astronomer can install and manage baseline monitoring and tools on this cluster.</span>
+            </p>
+          )}
         </Field>
 
-        <label className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors">
+        <label
+          className={`flex items-start gap-3 p-4 rounded-lg border border-border transition-colors ${
+            isViewer
+              ? 'bg-muted/10 opacity-60 cursor-not-allowed'
+              : 'bg-muted/20 cursor-pointer hover:bg-muted/30'
+          }`}
+        >
           <form.Field name="installBaseline">
             {(field) => (
               <input
                 type="checkbox"
-                checked={field.state.value}
+                // A viewer agent can't deploy — force unchecked and disabled so the
+                // read-only + install-baseline contradiction can't be submitted.
+                checked={isViewer ? false : field.state.value}
+                disabled={isViewer}
                 onChange={(e) => field.handleChange(e.target.checked)}
                 onBlur={field.handleBlur}
-                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-ring"
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed"
               />
             )}
           </form.Field>
@@ -233,6 +262,11 @@ function RegisterClusterWizardPage() {
               kube-state-metrics, prometheus-node-exporter, fluent-bit, ingress-nginx, cert-manager, and Gatekeeper.
               Leave unchecked for a bare cluster — you can install these later from the Cluster Tools tab.
             </p>
+            {isViewer && (
+              <p className="mt-1.5 text-xs font-medium text-status-warning">
+                Unavailable under Viewer — a read-only agent can&apos;t deploy. Choose Admin above to enable.
+              </p>
+            )}
           </div>
         </label>
 
