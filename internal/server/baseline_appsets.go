@@ -78,6 +78,10 @@ type baselineApplicationSetComponent struct {
 	// the kube-API agent already serves resources/logs/exec tool-free, so these
 	// are value-adds the operator turns on from the cluster Tools view.
 	DefaultEnabled bool
+	// RequiresClusterRBAC narrows this component's generator to admin-profile
+	// clusters (see baseline.Component.RequiresClusterRBAC). The operator agent
+	// SA cannot create cluster-scoped RBAC, which such a component's chart needs.
+	RequiresClusterRBAC bool
 }
 
 type baselineSyncPhase string
@@ -165,8 +169,9 @@ func baselineApplicationSetComponentsFromRegistry() []baselineApplicationSetComp
 			RepoURL:            c.RepoURL,
 			ChartVersion:       c.ChartVersion,
 			Namespace:          c.Namespace,
-			ValuesYAML:         c.ValuesYAML,
-			SyncPhase:          baselineSyncPhaseWorkloads,
+			ValuesYAML:          c.ValuesYAML,
+			SyncPhase:           baselineSyncPhaseWorkloads,
+			RequiresClusterRBAC: c.RequiresClusterRBAC,
 		})
 	}
 	return out
@@ -459,11 +464,20 @@ func baselineApplicationSetObject(component baselineApplicationSetComponent, exc
 	// so they never get a baseline App that would just sit failing — instead of
 	// opaque Argo 403s. The profile label is always stamped on the cluster Secret
 	// by argolabels.ManagedClusterLabels.
+	// Components that create cluster-scoped RBAC (ksm) narrow to admin only: the
+	// operator agent SA is read-only on ClusterRole/ClusterRoleBinding, so an
+	// operator cluster would install the namespaced bits but leave the
+	// cluster-scoped ones permanently OutOfSync. Everything else stays
+	// operator+admin.
+	profileValues := []any{"operator", "admin"}
+	if component.RequiresClusterRBAC {
+		profileValues = []any{"admin"}
+	}
 	matchExpressions := []any{
 		map[string]any{
 			"key":      argoCDAgentProfileLabelKey,
 			"operator": "In",
-			"values":   []any{"operator", "admin"},
+			"values":   profileValues,
 		},
 	}
 	// H7 leave_local: append a cluster-id NotIn only when the operator recorded

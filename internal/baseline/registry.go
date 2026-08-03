@@ -58,6 +58,16 @@ type Component struct {
 	// by default and are auto-delivered as baseline ApplicationSets. Everything
 	// else is opt-in via the tool_operations path.
 	DefaultEnabled bool
+	// RequiresClusterRBAC marks a component whose chart creates cluster-scoped
+	// RBAC (ClusterRole/ClusterRoleBinding). ArgoCD applies the baseline through
+	// the managed cluster's AGENT SA, and the `operator` profile is read-only on
+	// cluster-scoped RBAC (get/list/watch) — only `admin` can create it. So a
+	// RequiresClusterRBAC component targeted at an operator cluster would install
+	// its namespaced bits but leave the ClusterRole/Binding permanently
+	// OutOfSync. The baseline ApplicationSet narrows such components to `admin`
+	// only (node-exporter and the rest stay operator+admin). ponytail: set it
+	// wherever it's verified true; kube-state-metrics is the one confirmed case.
+	RequiresClusterRBAC bool
 }
 
 // DeliveryPath returns the lifecycle path the component is delivered through.
@@ -88,6 +98,10 @@ var Registry = []Component{
 		ChartVersion:       "8.0.0",
 		ValuesYAML:         "metricLabelsAllowlist:\n  - pods=[*]\n  - deployments=[*]\n",
 		DefaultEnabled:     true,
+		// ksm ships a cluster-scoped ClusterRole+ClusterRoleBinding so it can read
+		// every namespace — the operator agent SA can't create those, so scope
+		// this component to admin-profile clusters only.
+		RequiresClusterRBAC: true,
 	},
 	{
 		Slug:               "prometheus-node-exporter",

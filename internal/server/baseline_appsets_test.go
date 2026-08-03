@@ -273,18 +273,36 @@ func findMatchExpr(exprs []any, key string) map[string]any {
 	return nil
 }
 
-// assertProfilePreflight asserts the M9 profile filter is always present:
-// In [operator, admin] on the agent-profile label.
-func assertProfilePreflight(t *testing.T, exprs []any) {
+// assertProfilePreflight asserts the M9 profile filter is present: an In on the
+// agent-profile label. want defaults to [operator, admin]; components that
+// create cluster-scoped RBAC (kube-state-metrics) narrow to [admin] only.
+func assertProfilePreflight(t *testing.T, exprs []any, want ...string) {
 	t.Helper()
+	if len(want) == 0 {
+		want = []string{"operator", "admin"}
+	}
 	prof := findMatchExpr(exprs, argoCDAgentProfileLabelKey)
 	if prof == nil || prof["operator"] != "In" {
 		t.Fatalf("expected an In matchExpression on %s (M9 profile pre-flight), got %v", argoCDAgentProfileLabelKey, exprs)
 	}
 	vals := prof["values"].([]any)
-	if len(vals) != 2 || vals[0] != "operator" || vals[1] != "admin" {
-		t.Fatalf("profile In values = %v, want [operator admin]", vals)
+	if len(vals) != len(want) {
+		t.Fatalf("profile In values = %v, want %v", vals, want)
 	}
+	for i, w := range want {
+		if vals[i] != w {
+			t.Fatalf("profile In values = %v, want %v", vals, want)
+		}
+	}
+}
+
+// expectedProfilesFor maps an appset name to its expected profile In-values:
+// kube-state-metrics is admin-only (RequiresClusterRBAC), the rest operator+admin.
+func expectedProfilesFor(appSetName string) []string {
+	if appSetName == "astronomer-baseline-kube-state-metrics" {
+		return []string{"admin"}
+	}
+	return []string{"operator", "admin"}
 }
 
 // TestEnsureBaselineApplicationSetsAdminPushUnbroken is constraint #1: with pull
@@ -321,7 +339,7 @@ func TestEnsureBaselineApplicationSetsAdminPushUnbroken(t *testing.T) {
 		// clusters still match → admin-push unbroken). With no leave_local
 		// decisions there is NO additional cluster-id NotIn expression.
 		exprs := selectorMatchExpressions(t, appSet)
-		assertProfilePreflight(t, exprs)
+		assertProfilePreflight(t, exprs, expectedProfilesFor(name)...)
 		if findMatchExpr(exprs, argoCDClusterIDLabelKey) != nil {
 			t.Fatalf("%s must have NO cluster-id NotIn when no leave_local decisions exist, got %v", name, exprs)
 		}
@@ -354,8 +372,8 @@ func TestEnsureBaselineApplicationSetsExcludesLeaveLocal(t *testing.T) {
 		t.Fatal("kube-state-metrics appset missing")
 	}
 	exprs := selectorMatchExpressions(t, ksm)
-	// ksm: profile pre-flight (M9) + the leave_local cluster-id NotIn (H7).
-	assertProfilePreflight(t, exprs)
+	// ksm: profile pre-flight (M9, admin-only) + the leave_local cluster-id NotIn (H7).
+	assertProfilePreflight(t, exprs, "admin")
 	expr := findMatchExpr(exprs, argoCDClusterIDLabelKey)
 	if expr == nil || expr["operator"] != "NotIn" {
 		t.Fatalf("ksm missing cluster-id NotIn matchExpression, got %v", exprs)
@@ -403,7 +421,7 @@ func TestEnsureBaselineApplicationSetsIncludesAdoptAndReplace(t *testing.T) {
 		}
 		// adopt/replace are not leave_local → profile pre-flight only, no NotIn.
 		exprs := selectorMatchExpressions(t, appSet)
-		assertProfilePreflight(t, exprs)
+		assertProfilePreflight(t, exprs, expectedProfilesFor(name)...)
 		if findMatchExpr(exprs, argoCDClusterIDLabelKey) != nil {
 			t.Fatalf("%s adopt/replace must NOT add a cluster-id NotIn, got %v", name, exprs)
 		}
@@ -455,7 +473,7 @@ func TestEnsureBaselineApplicationSetsProfilePreflight(t *testing.T) {
 		if appSet == nil {
 			t.Fatalf("%s not created", name)
 		}
-		assertProfilePreflight(t, selectorMatchExpressions(t, appSet))
+		assertProfilePreflight(t, selectorMatchExpressions(t, appSet), expectedProfilesFor(name)...)
 	}
 }
 
