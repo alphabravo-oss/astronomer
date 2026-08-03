@@ -57,12 +57,24 @@ func TestRegistrationWizard_FailedStepTransitionsToFailed(t *testing.T) {
 // TestRegistrationWizard_IllegalTransitionsRejected checks that
 // out-of-order events return ErrIllegalTransition rather than silently
 // no-op'ing — the API layer surfaces these as 409 Conflict.
+// TestRegistrationWizard_CreatedAdvancesOnAgentConnect covers the
+// bootstrap/kubectl-apply attach path: the agent's first CONNECT_ACK
+// arrives while phase is still `created` (no wizard confirm click was
+// ever POSTed), so `created` must advance straight to `connected`.
+// Without this edge those clusters freeze at `created` despite live
+// heartbeats.
+func TestRegistrationWizard_CreatedAdvancesOnAgentConnect(t *testing.T) {
+	got, err := Transition(PhaseCreated, EventAgentConnected, false)
+	if err != nil || got != PhaseConnected {
+		t.Fatalf("created+agent_connected: want connected, got %s (err=%v)", got, err)
+	}
+}
+
 func TestRegistrationWizard_IllegalTransitionsRejected(t *testing.T) {
 	for _, c := range []struct {
 		from Phase
 		ev   Event
 	}{
-		{PhaseCreated, EventAgentConnected},        // skipping confirm
 		{PhaseCreated, EventTemplateApplying},      // template before agent
 		{PhaseAwaitingAgent, EventTemplateApplied}, // template before connect
 		{PhaseReady, EventConfirm},                 // re-confirming a ready cluster

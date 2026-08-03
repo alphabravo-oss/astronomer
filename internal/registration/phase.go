@@ -11,11 +11,11 @@
 //
 //	  created
 //	     |  POST /confirm/  (operator clicks "I've run it")
-//	     v
-//	awaiting_agent
-//	     |  first agent.connected heartbeat
-//	     v
-//	  connected
+//	     v                          \
+//	awaiting_agent                   \ first agent.connected heartbeat
+//	     |  first agent.connected      (bootstrap/kubectl-apply attach
+//	     v                              skips the wizard confirm click)
+//	  connected  <------------------- /
 //	     |
 //	     +-- install_baseline=false ---> ready
 //	     |
@@ -93,8 +93,20 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 
 	switch current {
 	case PhaseCreated:
-		if ev == EventConfirm {
+		switch ev {
+		case EventConfirm:
 			return PhaseAwaitingAgent, nil
+		case EventAgentConnected:
+			// Agent-attached clusters skip the wizard's confirm click: a raw
+			// `kubectl apply` of the agent manifest (or a bootstrap seed) never
+			// POSTs /confirm, so the agent's first CONNECT_ACK lands while the
+			// phase is still `created`. The live handshake is itself proof the
+			// agent is up — stronger than the operator clicking "I ran it" — so
+			// advance straight to `connected`. Without this edge these clusters
+			// freeze at `created` forever despite healthy heartbeats, and the
+			// NULL-baseline → ready hop in OnAgentConnected never gets a chance
+			// to run.
+			return PhaseConnected, nil
 		}
 	case PhaseAwaitingAgent:
 		if ev == EventAgentConnected {
