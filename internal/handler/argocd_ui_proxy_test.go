@@ -163,8 +163,13 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 	if rr.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("expected Cache-Control to be preserved")
 	}
-	if rr.Header().Get("Content-Security-Policy") != "default-src 'self'" {
-		t.Fatalf("expected Content-Security-Policy to be preserved")
+	// Content-Security-Policy (and X-Frame-Options) are deliberately NOT
+	// preserved from upstream Argo: the SecurityHeaders middleware sets an
+	// Argo-compatible CSP for /argocd/* itself, and preserving Argo's too would
+	// emit a second, conflicting header that re-breaks the UI (browsers enforce
+	// the intersection).
+	if got := rr.Header().Get("Content-Security-Policy"); got != "" {
+		t.Fatalf("expected upstream Content-Security-Policy to be stripped, got %q", got)
 	}
 	cookies := rr.Result().Cookies()
 	if len(cookies) != 1 {

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -21,6 +22,48 @@ func TestSecurityHeadersAddsBrowserHardeningHeaders(t *testing.T) {
 	assertHeader(t, rec, "X-Frame-Options", "DENY")
 	assertHeader(t, rec, "Content-Security-Policy", defaultContentSecurityPolicy)
 	assertHeader(t, rec, "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+}
+
+func TestSecurityHeadersArgoCDPathAllowsInlineScripts(t *testing.T) {
+	for _, path := range []string{"/argocd", "/argocd/", "/argocd/applications", "/argocd/main.abc.js"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})).ServeHTTP(rec, req)
+		csp := rec.Header().Get("Content-Security-Policy")
+		if csp != argocdContentSecurityPolicy {
+			t.Fatalf("%s CSP = %q, want argocd policy", path, csp)
+		}
+		// The whole point: inline scripts must be permitted for the Argo UI, and
+		// the strict default must NOT be the one applied.
+		if !containsDirective(csp, "script-src 'self' 'unsafe-inline'") {
+			t.Fatalf("%s CSP missing inline script-src: %q", path, csp)
+		}
+		if csp == defaultContentSecurityPolicy {
+			t.Fatalf("%s must not get the strict default CSP", path)
+		}
+		if got := rec.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+			t.Fatalf("%s X-Frame-Options = %q, want SAMEORIGIN", path, got)
+		}
+	}
+	// A path that merely starts with the substring but isn't the argo prefix
+	// stays strict.
+	req := httptest.NewRequest(http.MethodGet, "/argocdxyz", nil)
+	rec := httptest.NewRecorder()
+	SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {})).ServeHTTP(rec, req)
+	if rec.Header().Get("Content-Security-Policy") != defaultContentSecurityPolicy {
+		t.Fatalf("/argocdxyz should get the strict default CSP")
+	}
+}
+
+func containsDirective(csp, directive string) bool {
+	for _, d := range strings.Split(csp, ";") {
+		if strings.TrimSpace(d) == directive {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSecurityHeadersOmitsHSTSForPlainHTTP(t *testing.T) {

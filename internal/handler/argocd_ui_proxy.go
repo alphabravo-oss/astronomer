@@ -408,10 +408,17 @@ func argoCDUIResponseHeaderAllowed(name string) bool {
 	lower := strings.ToLower(strings.TrimSpace(name))
 	switch lower {
 	case "accept-ranges", "cache-control", "content-disposition", "content-language", "content-length", "content-type",
-		"content-security-policy", "content-security-policy-report-only", "cross-origin-embedder-policy",
+		"cross-origin-embedder-policy",
 		"cross-origin-opener-policy", "cross-origin-resource-policy", "date", "expires", "last-modified",
 		"permissions-policy", "pragma", "referrer-policy", "retry-after", "strict-transport-security", "vary",
-		"x-content-type-options", "x-frame-options":
+		"x-content-type-options":
+		// content-security-policy / content-security-policy-report-only and
+		// x-frame-options are deliberately NOT preserved from upstream Argo: the
+		// SecurityHeaders middleware sets an ArgoCD-compatible CSP (script-src
+		// allows inline) + X-Frame-Options for /argocd/* itself. Preserving Argo's
+		// too produced a SECOND, conflicting header — browsers enforce the
+		// intersection, so Argo's inline bootstrap script was blocked and the UI
+		// never loaded.
 		return true
 	default:
 		// Default deny: Argo and intermediary upgrades can introduce new
