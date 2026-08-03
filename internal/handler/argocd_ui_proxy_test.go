@@ -70,6 +70,56 @@ func TestArgoCDUIProxy_ForwardsPathUnchanged(t *testing.T) {
 	}
 }
 
+// TestArgoCDUIProxyStripsAcceptEncodingUpstream guards the gzip-corruption bug:
+// the browser sends Accept-Encoding: gzip, the upstream compresses a pass-through
+// asset, but sanitizeArgoCDUIResponseHeaders drops Content-Encoding from every
+// response — so the browser received gzip bytes with no Content-Encoding header
+// and failed to parse them ("Invalid or unexpected token", blank UI). The proxy
+// must strip Accept-Encoding upstream so responses are always plaintext. (curl
+// never sends Accept-Encoding by default, which is why this survived curl tests.)
+func TestArgoCDUIProxyStripsAcceptEncodingUpstream(t *testing.T) {
+	const jsBody = "console.log('argo-ui-boot')"
+	// Upstream compresses when it's asked to (as real ArgoCD does), simulating a
+	// pass-through asset. The invariant: whatever the client asked for, it must
+	// never receive gzip bytes WITHOUT a Content-Encoding header — that was the
+	// bug (blank UI, "Invalid or unexpected token"). Stripping Accept-Encoding
+	// upstream lets Go's Transport transparently (de)compress, so the proxy
+	// always forwards plaintext.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			_, _ = gz.Write([]byte(jsBody))
+			_ = gz.Close()
+			return
+		}
+		_, _ = w.Write([]byte(jsBody))
+	}))
+	defer upstream.Close()
+
+	proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+	if err != nil {
+		t.Fatalf("NewArgoCDUIProxy: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/argocd/main.abc123.js", nil)
+	req.Header.Set("Accept-Encoding", "gzip, br, zstd") // the browser always does this
+	rr := httptest.NewRecorder()
+	proxy.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.Bytes()
+	if rr.Header().Get("Content-Encoding") == "" && len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
+		t.Fatalf("client received gzip bytes (1f8b) with NO Content-Encoding header — the corruption bug")
+	}
+	if !bytes.Contains(body, []byte(jsBody)) {
+		t.Fatalf("client did not receive decodable JS; got %d bytes: %q", len(body), body[:min(len(body), 32)])
+	}
+}
+
 // TestArgoCDUIProxy_BadGatewayOnUpstreamFailure ensures we fail closed when
 // the upstream is unreachable rather than panicking or hanging.
 func TestArgoCDUIProxy_BadGatewayOnUpstreamFailure(t *testing.T) {

@@ -191,15 +191,17 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 		if req.Header.Get("X-Forwarded-Host") == "" && req.Header.Get("X-Original-Host") != "" {
 			req.Header.Set("X-Forwarded-Host", req.Header.Get("X-Original-Host"))
 		}
-		// Strip Accept-Encoding for HTML navigations so the upstream
-		// returns plaintext we can rewrite (`<base href>` substitution
-		// + SPA index fallback for 404s). Also strip it for watch streams
-		// so the per-frame stream sanitizer scans plaintext NDJSON rather
-		// than an incrementally-compressed body. Other asset / API responses
-		// keep the client's encoding preferences and pass through unchanged.
-		if wantsHTMLNav(req) || isArgoStreamPath(req.URL.Path) {
-			req.Header.Del("Accept-Encoding")
-		}
+		// Always strip Accept-Encoding so the upstream returns plaintext. The
+		// proxy rewrites HTML (`<base href>` + SPA 404 fallback), sanitizes JSON,
+		// and per-frame sanitizes watch streams — all of which need plaintext —
+		// and sanitizeArgoCDUIResponseHeaders drops Content-Encoding from every
+		// response via its header allow-list. If the upstream compressed a
+		// response we then forwarded (e.g. an asset passed through unmodified),
+		// the browser would receive gzip/br bytes with NO Content-Encoding header
+		// and fail to parse them ("Invalid or unexpected token" on main.js /
+		// extensions.js — the whole UI stays blank). Forcing plaintext keeps the
+		// body and headers consistent for sanitized and pass-through alike.
+		req.Header.Del("Accept-Encoding")
 
 		// Single sign-on: inject the upstream argocd.token cookie unless the
 		// client already presented one. Without this the user lands on
