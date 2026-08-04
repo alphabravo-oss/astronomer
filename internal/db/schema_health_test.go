@@ -35,24 +35,6 @@ func TestIsUndefinedTable(t *testing.T) {
 	}
 }
 
-func TestIndexOf(t *testing.T) {
-	cases := []struct {
-		hay, needle string
-		want        int
-	}{
-		{"hello world", "world", 6},
-		{"hello", "", 0},
-		{"abc", "xyz", -1},
-		{"short", "longer-than-haystack", -1},
-		{"prefix", "pre", 0},
-	}
-	for _, c := range cases {
-		if got := indexOf(c.hay, c.needle); got != c.want {
-			t.Errorf("indexOf(%q,%q)=%d want %d", c.hay, c.needle, got, c.want)
-		}
-	}
-}
-
 func TestSchemaHealth_NilPool(t *testing.T) {
 	var d *DB
 	if err := d.SchemaHealth(context.Background()); err == nil {

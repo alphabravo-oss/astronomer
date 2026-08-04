@@ -270,11 +270,13 @@ func NewArgoCDUIProxy(targetURL string, log *slog.Logger) (*ArgoCDUIProxy, error
 			if isArgoStreamPath(path) {
 				resp.Body = newArgoStreamSanitizer(resp.Body)
 				resp.ContentLength = -1
+				// Drop the upstream Content-Length so the stale fixed length
+				// can't survive onto the now-unbounded stream (Content-Length is
+				// allow-listed, so it would otherwise be copied through).
+				// Content-Encoding/ETag/Content-MD5/Digest are NOT allow-listed
+				// and sanitizeArgoCDUIResponseHeaders rebuilds the header set from
+				// that allow-list, so they're dropped there — no need to Del them.
 				resp.Header.Del("Content-Length")
-				resp.Header.Del("Content-Encoding")
-				resp.Header.Del("ETag")
-				resp.Header.Del("Content-MD5")
-				resp.Header.Del("Digest")
 				sanitizeArgoCDUIResponseHeaders(resp)
 				return nil
 			}

@@ -197,5 +197,8 @@ var errProviderNotImplemented = fmt.Errorf("provider not implemented in v1")
 // not-implemented sentinel. Used by the reconciler to special-case the
 // scaffolded providers.
 func ErrProviderNotImplemented(err error) bool {
+	// Substring match (not errors.Is): scaffolded providers surface this via
+	// wrapped/reformatted errors whose chain no longer carries the sentinel, so
+	// errors.Is misses them — see TestReconciler_HandlesProviderNotImplemented.
 	return err != nil && strings.Contains(err.Error(), "provider not implemented")
 }

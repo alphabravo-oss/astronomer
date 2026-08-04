@@ -695,9 +695,3 @@ func (b *Bus) Subscribe(ctx context.Context) <-chan Event {
 	return s.ch
 }
 
-// MarshalJSON exists so callers can send events as bytes without re-encoding.
-// Useful for SSE writers that need a stable JSON shape.
-func (e Event) MarshalJSON() ([]byte, error) {
-	type alias Event
-	return json.Marshal(alias(e))
-}

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/exaring/otelpgx"
@@ -213,37 +214,12 @@ func isUndefinedTable(err error) bool {
 		return false
 	}
 	s := err.Error()
-	return containsAny(s, []string{"SQLSTATE 42P01", "undefined_table", `relation "schema_migrations" does not exist`})
-}
-
-func containsAny(haystack string, needles []string) bool {
-	for _, n := range needles {
-		if n == "" {
-			continue
-		}
-		if indexOf(haystack, n) >= 0 {
+	for _, n := range []string{"SQLSTATE 42P01", "undefined_table", `relation "schema_migrations" does not exist`} {
+		if strings.Contains(s, n) {
 			return true
 		}
 	}
 	return false
-}
-
-// indexOf is a tiny helper so we don't pull strings into this file just
-// for one call site. Returns -1 when needle is absent.
-func indexOf(haystack, needle string) int {
-	hl, nl := len(haystack), len(needle)
-	if nl == 0 || nl > hl {
-		if nl == 0 {
-			return 0
-		}
-		return -1
-	}
-	for i := 0; i+nl <= hl; i++ {
-		if haystack[i:i+nl] == needle {
-			return i
-		}
-	}
-	return -1
 }
 
 // PoolWaitingForConn reports whether callers are currently queueing on

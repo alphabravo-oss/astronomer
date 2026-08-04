@@ -226,13 +226,6 @@ func joinErrors(errs []string) string {
 	return out
 }
 
-// meshDetectInterval is the periodic cadence registered with the
-// asynq scheduler. Exported so the scheduler-wiring file can read
-// the same constant.
-const meshDetectInterval = 5 * time.Minute
-
-var _ = meshDetectInterval // reserved for the scheduler wiring
-
 // meshDetectSweepDeadline caps the whole fan-out; meshDetectPerClusterTimeout
 // caps a single cluster's tunnel detection. The aggregate deadline is well
 // under the 5m cadence so a stuck sweep is abandoned before the next tick, and
@@ -242,12 +235,3 @@ const (
 	meshDetectPerClusterTimeout = 20 * time.Second
 )
 
-// ensureClusterRow guarantees a placeholder row exists for the
-// cluster before the first detection runs. The current upsert path
-// already covers this, so the function is a no-op; it's reserved as
-// an attachment point for the cluster_register handler if a future
-// sprint wants the "Service mesh: pending detection" badge to appear
-// the instant a cluster lands.
-func ensureClusterRow(_ context.Context, _ uuid.UUID) error { //nolint:unused
-	return nil
-}

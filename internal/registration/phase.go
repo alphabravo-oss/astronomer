@@ -32,6 +32,7 @@ package registration
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Phase is the registration state. Mirrors the CHECK constraint on
@@ -197,7 +198,7 @@ func StepLabel(stepName string) string {
 	// `tool_installed:<slug>` shape. Split off the suffix so the label
 	// stays generic ("Installing tool: trivy-operator") rather than
 	// requiring a per-tool lookup.
-	if prefix, suffix, ok := splitColon(stepName); ok {
+	if prefix, suffix, ok := strings.Cut(stepName, ":"); ok {
 		switch prefix {
 		case "tool_installing":
 			return "Installing tool: " + suffix
@@ -240,11 +241,3 @@ func StepLabel(stepName string) string {
 	return stepName
 }
 
-func splitColon(s string) (prefix, suffix string, ok bool) {
-	for i := 0; i < len(s); i++ {
-		if s[i] == ':' {
-			return s[:i], s[i+1:], true
-		}
-	}
-	return "", "", false
-}

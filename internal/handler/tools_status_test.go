@@ -18,8 +18,8 @@ func TestToolStatusFromInstalledNormalizesHelmStatuses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := toolStatusFromInstalled(tt.in); got != tt.want {
-				t.Fatalf("toolStatusFromInstalled(%q) = %q, want %q", tt.in, got, tt.want)
+			if got := normalizeToolStatus(tt.in); got != tt.want {
+				t.Fatalf("normalizeToolStatus(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}

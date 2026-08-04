@@ -699,7 +699,7 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 			"error":        nil,
 		}
 		if item, ok := bySlug[tool.Slug]; ok {
-			status["status"] = toolStatusFromInstalled(item.Status)
+			status["status"] = normalizeToolStatus(item.Status)
 			status["release_name"] = item.ReleaseName
 			status["namespace"] = item.Namespace
 			if item.PresetUsed.Valid {
@@ -1119,15 +1119,6 @@ func normalizeToolStatus(status string) string {
 		return "upgrading"
 	case "pending_uninstall", "pending-uninstall":
 		return "uninstalling"
-	default:
-		return status
-	}
-}
-
-func toolStatusFromInstalled(status string) string {
-	switch status {
-	case "deployed", "pending", "pending_install", "pending-install", "pending_upgrade", "pending-upgrade", "pending_uninstall", "pending-uninstall":
-		return normalizeToolStatus(status)
 	default:
 		return status
 	}

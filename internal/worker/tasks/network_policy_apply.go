@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -455,14 +454,3 @@ func checkNetworkPolicyDrift(ctx context.Context, deps NetworkPolicyApplyDeps, r
 	return false, nil
 }
 
-// applyTimestampForRow is unused but reserved for future per-row
-// staleness gating — exposed so the test surface stays consistent if
-// the drift check later considers row.UpdatedAt + cooldown.
-var _ = applyTimestampForRow
-
-func applyTimestampForRow(row sqlc.NetworkPolicyApplication) time.Time {
-	if row.LastAppliedAt.Valid {
-		return row.LastAppliedAt.Time
-	}
-	return row.UpdatedAt
-}

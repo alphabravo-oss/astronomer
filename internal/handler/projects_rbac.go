@@ -47,7 +47,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -188,6 +187,3 @@ func userDisplayName(u sqlc.User) string {
 	return u.ID.String()
 }
 
-// (silence unused — context import is here in case future revisions
-// need it; keeping the import slot prevents tedious adds/removes.)
-var _ = context.Background

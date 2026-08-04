@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -345,10 +344,3 @@ func deleteCloudCredentialSecret(ctx context.Context, clusterID, namespace, secr
 	return nil
 }
 
-// cloudCredentialMaterializationLeaseTTL bounds how long one worker
-// holds the sweep so a crashed worker doesn't strand the queue until
-// the next 30m tick. Mirrors driftReconcileLeaseTTL in the cluster
-// registry path.
-const cloudCredentialMaterializationLeaseTTL = 5 * time.Minute
-
-var _ = cloudCredentialMaterializationLeaseTTL // reserved for future per-row lease use
