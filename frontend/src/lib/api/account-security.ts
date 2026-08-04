@@ -12,28 +12,11 @@
 
 import axios, { AxiosError } from 'axios';
 import api from '../api';
+import { camelizeKeys } from '@/lib/camelize';
 import type { APIResponse, User } from '@/types';
 import { API_BASE } from '@/lib/env';
 
 const API_BASE_URL = API_BASE;
-
-// Local camelization for the rare bypass-the-interceptor calls in this file
-// (login challenge handling, password-reset endpoints). Mirrors the helper
-// in lib/api.ts so callers get the same camelCase keys they get elsewhere.
-function snakeToCamel(s: string): string {
-  return s.replace(/_([a-z0-9])/g, (_, ch) => ch.toUpperCase());
-}
-function camelize<T = unknown>(value: T): T {
-  if (Array.isArray(value)) return value.map(camelize) as unknown as T;
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[snakeToCamel(k)] = camelize(v);
-    }
-    return out as unknown as T;
-  }
-  return value;
-}
 
 // ============================================================
 // TOTP
@@ -149,7 +132,7 @@ export async function loginWithCredentialsChallengeAware(
       { email, password },
       { headers: { 'Content-Type': 'application/json' }, withCredentials: true },
     );
-    const raw = camelize(res.data) as { data?: VerifiedLogin } | VerifiedLogin;
+    const raw = camelizeKeys(res.data) as { data?: VerifiedLogin } | VerifiedLogin;
     const body = ('data' in raw && raw.data ? raw.data : (raw as VerifiedLogin));
     return { kind: 'ok', token: body.token, refresh: body.refresh, user: body.user };
   } catch (err) {

@@ -328,3 +328,48 @@ export function formatK8sVersion(version: string | null | undefined): string {
   if (!v) return '—';
   return /^v/i.test(v) ? v : `v${v}`;
 }
+
+/**
+ * Capitalize the first character of a string (leaving the rest untouched).
+ */
+export function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Trigger a browser download of `content` as `filename`.
+ *
+ * `content` may be a ready `Blob` or any `BlobPart` (string, ArrayBuffer, …);
+ * in the latter case it is wrapped into a `Blob` with the optional `mime` type.
+ */
+export function downloadBlob(content: Blob | BlobPart, filename: string, mime?: string): void {
+  const blob = content instanceof Blob ? content : new Blob([content], mime ? { type: mime } : undefined);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Map an ArgoCD sync-operation status to the status vocabulary the shared
+ * StatusBadge / statusColor helpers understand.
+ */
+export function mapOperationStatus(s: string): string {
+  switch (s) {
+    case 'completed':
+      return 'healthy';
+    case 'running':
+      return 'progressing';
+    case 'pending':
+      return 'connecting';
+    case 'failed':
+    case 'superseded':
+      return 'error';
+    default:
+      return 'unknown';
+  }
+}

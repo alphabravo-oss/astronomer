@@ -225,7 +225,7 @@ func runCloudCredentialApply(ctx context.Context, credentialID, clusterID uuid.U
 // so we don't try to mark it applied/failed; the metric label captures
 // the outcome instead.
 func runCloudCredentialDelete(ctx context.Context, clusterID uuid.UUID, namespace, secretName, provider string) error {
-	if err := deleteCloudCredentialSecret(ctx, clusterID.String(), namespace, secretName); err != nil {
+	if err := deleteIfExists(ctx, cloudCredentialDeps.Requester, clusterID.String(), fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName)); err != nil {
 		cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("delete", provider, "failure")...).Inc()
 		return err
 	}
@@ -322,24 +322,6 @@ func applyCloudCredentialSecret(ctx context.Context, clusterID, namespace, secre
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("apply secret status=%d body=%s", resp.StatusCode, string(resp.Body))
-	}
-	return nil
-}
-
-// deleteCloudCredentialSecret removes the Secret from the namespace.
-// 404 is success — the desired post-state is "the Secret is absent".
-func deleteCloudCredentialSecret(ctx context.Context, clusterID, namespace, secretName string) error {
-	resp, err := cloudCredentialDeps.Requester.Do(ctx, clusterID, http.MethodDelete, fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName), nil, map[string]string{
-		"Accept": "application/json",
-	})
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return nil
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("delete secret status=%d body=%s", resp.StatusCode, string(resp.Body))
 	}
 	return nil
 }

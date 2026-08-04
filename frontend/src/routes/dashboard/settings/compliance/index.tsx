@@ -15,7 +15,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toastError, toastInfo, toastSuccess } from '@/lib/toast';
-import { cn, formatBytes, formatRelativeTime } from '@/lib/utils';
+import { cn, formatBytes, formatRelativeTime, downloadBlob } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
   downloadComplianceExportBlob,
@@ -32,17 +32,6 @@ function thirtyDaysAgoIso() {
   const d = new Date();
   d.setDate(d.getDate() - 30);
   return d.toISOString().slice(0, 10);
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 function StatusPill({ status }: { status: ComplianceExportSummary['status'] }) {

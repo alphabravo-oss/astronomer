@@ -168,8 +168,6 @@ function ClusterDetailPage() {
     }
   };
 
-  const handleDownloadKubeconfig = downloadKubeconfigFile;
-
   const handleDirectAccessDownload = async () => {
     setKubeconfigMenuOpen(false);
     if (cluster?.directAccessEnabled) {
@@ -250,7 +248,7 @@ function ClusterDetailPage() {
         <div className="flex items-center gap-2">
           <div ref={kubeconfigMenuRef} className="relative inline-flex">
             <button
-              onClick={handleDownloadKubeconfig}
+              onClick={downloadKubeconfigFile}
               disabled={generateKubeconfig.isPending}
               className="inline-flex items-center gap-2 h-9 pl-4 pr-3 rounded-l-lg border border-border
                 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent

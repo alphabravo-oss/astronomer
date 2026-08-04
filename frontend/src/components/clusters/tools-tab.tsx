@@ -3,28 +3,22 @@
 import { Link } from '@/lib/link';
 import { useState } from 'react';
 import { useTools, useClusterToolsStatus, useInstallTool, useUninstallTool, useAdoptTool } from '@/lib/hooks';
-import { usePermissionDecision } from '@/lib/permission-hooks';
-import type { PermissionDecision } from '@/lib/permissions';
+import {
+  usePermissionDecision,
+  permissionDeniedReason,
+  toastPermissionDenied,
+} from '@/lib/permission-hooks';
 import { ToolCard } from '@/components/clusters/tool-card';
 import { ToolInstallModal } from '@/components/clusters/tool-install-modal';
 import { ToolInstallProgress } from '@/components/clusters/tool-install-progress';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { ClusterTool } from '@/types';
 import { Loader2, Wrench, Sparkles } from 'lucide-react';
-import { toastWarning } from '@/lib/toast';
 
 interface ToolsTabProps {
   clusterId: string;
   clusterEnvironment: string;
   clusterStatus?: string;
-}
-
-function permissionDeniedReason(decision: PermissionDecision): string {
-  return decision.disabledReason || decision.reason;
-}
-
-function toastPermissionDenied(decision: PermissionDecision) {
-  toastWarning(permissionDeniedReason(decision));
 }
 
 export function ToolsTab({ clusterId, clusterEnvironment, clusterStatus }: ToolsTabProps) {

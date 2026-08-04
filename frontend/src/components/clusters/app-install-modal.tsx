@@ -45,6 +45,7 @@ import {
 } from '@/lib/api/cluster-detail';
 import { upgradeInstalledChart } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
+import { permissionDeniedReason } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
 
 type Mode =
@@ -86,10 +87,6 @@ const HAS_CRDS = new Set([
   'argocd',
   'argo-cd',
 ]);
-
-function permissionDeniedReason(decision: PermissionDecision): string {
-  return decision.disabledReason || decision.reason;
-}
 
 export function AppInstallModal({ clusterId, mode, onClose, submitDecision }: AppInstallModalProps) {
   const qc = useQueryClient();

@@ -75,7 +75,7 @@ import { AddRepoDialog } from '@/components/argocd/add-repo-dialog';
 import { RegisterManagedClusterDialog } from '@/components/argocd/register-managed-cluster-dialog';
 import { SyncWindowsDialog } from '@/components/argocd/sync-windows-dialog';
 import { flattenArgoApp, shortRepo } from '@/components/argocd/argo-utils';
-import { formatRelativeTime } from '@/lib/utils';
+import { capitalize, formatRelativeTime, mapOperationStatus } from '@/lib/utils';
 import type {
   ArgoApplicationSet,
   ArgoHealthStatus,
@@ -445,7 +445,7 @@ function OverviewTab({
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <StatusBadge status={mapOperationStatus(op.status)} label={titleCase(op.status)} />
+                  <StatusBadge status={mapOperationStatus(op.status)} label={capitalize(op.status)} />
                   <span className="text-xs text-muted-foreground">
                     {op.startedAt ? formatRelativeTime(op.startedAt) : '—'}
                   </span>
@@ -1415,7 +1415,7 @@ function OperationsTab({ instanceId: _instanceId }: { instanceId: string }) {
     {
       key: 'status',
       header: 'Status',
-      accessor: (row) => <StatusBadge status={mapOperationStatus(row.status)} label={titleCase(row.status)} />,
+      accessor: (row) => <StatusBadge status={mapOperationStatus(row.status)} label={capitalize(row.status)} />,
       sortAccessor: (row) => row.status,
     },
     {
@@ -1458,26 +1458,6 @@ function OperationsTab({ instanceId: _instanceId }: { instanceId: string }) {
       emptyMessage="No reconciler activity yet."
     />
   );
-}
-
-function mapOperationStatus(s: string): string {
-  switch (s) {
-    case 'completed':
-      return 'healthy';
-    case 'running':
-      return 'progressing';
-    case 'pending':
-      return 'connecting';
-    case 'failed':
-    case 'superseded':
-      return 'error';
-    default:
-      return 'unknown';
-  }
-}
-
-function titleCase(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export const Route = createFileRoute('/dashboard/argocd/$instanceId/')({

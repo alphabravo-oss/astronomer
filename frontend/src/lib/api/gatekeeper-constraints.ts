@@ -14,16 +14,8 @@
  * Re-exported from ../api.ts via `export * from './api/gatekeeper-constraints'`.
  */
 import api from '@/lib/api';
-import type { GatekeeperConstraint, ConstraintValidateResult } from '@/types';
-
-// Defensive unwrap: the validate/apply endpoints may respond either
-// `{ data: {...} }` (RespondJSON) or the bare object (RespondJSONUnwrapped).
-function unwrap<T>(payload: T | { data: T }): T {
-  if (payload && typeof payload === 'object' && 'data' in (payload as { data?: T })) {
-    return (payload as { data: T }).data;
-  }
-  return payload as T;
-}
+import { unwrapData } from '@/lib/api/errors';
+import type { APIResponse, GatekeeperConstraint, ConstraintValidateResult } from '@/types';
 
 export async function listGatekeeperConstraints(
   clusterId: string,
@@ -38,22 +30,24 @@ export async function validateGatekeeperConstraint(
   clusterId: string,
   yaml: string,
 ): Promise<ConstraintValidateResult> {
-  const res = await api.post<ConstraintValidateResult | { data: ConstraintValidateResult }>(
+  // Defensive unwrap: the validate/apply endpoints may respond either
+  // `{ data: {...} }` (RespondJSON) or the bare object (RespondJSONUnwrapped).
+  const res = await api.post<APIResponse<ConstraintValidateResult>>(
     `/clusters/${clusterId}/gatekeeper/constraints/validate/`,
     { yaml },
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function applyGatekeeperConstraint(
   clusterId: string,
   yaml: string,
 ): Promise<ConstraintValidateResult> {
-  const res = await api.post<ConstraintValidateResult | { data: ConstraintValidateResult }>(
+  const res = await api.post<APIResponse<ConstraintValidateResult>>(
     `/clusters/${clusterId}/gatekeeper/constraints/`,
     { yaml },
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function deleteGatekeeperConstraint(

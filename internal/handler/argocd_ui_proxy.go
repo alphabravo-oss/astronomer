@@ -67,6 +67,17 @@ type ArgoCDUIProxy struct {
 	cachedExp time.Time
 }
 
+// argoCDProxyContentSecurityPolicy is the CSP this proxy stamps on every
+// /argocd response. Argo's SPA ships an inline bootstrap <script> (theme init +
+// webpack runtime), so script-src MUST allow 'unsafe-inline' or the UI renders
+// blank ("Invalid or unexpected token"). Every other directive stays as strict
+// as the first-party default; frame-ancestors 'self' (paired with
+// X-Frame-Options SAMEORIGIN) lets the app self-frame. The proxy owns this
+// header end-to-end: it overwrites both upstream Argo's CSP and the generic
+// default the SecurityHeaders middleware fills in, so exactly one CSP reaches
+// the browser.
+const argoCDProxyContentSecurityPolicy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:"
+
 // argocdTokenCacheTTL caps how long a decrypted upstream session token is
 // reused across requests. Short enough that a token rotation propagates
 // within a minute; long enough that a busy dashboard isn't decrypting on
@@ -420,6 +431,12 @@ func sanitizeArgoCDUIResponseHeaders(resp *http.Response) {
 		}
 	}
 	resp.Header = safeHeaders
+	// The proxy owns the framing + script policy for the embedded ArgoCD UI.
+	// Set (not Add) so any upstream Argo CSP/X-Frame-Options that survived the
+	// allow-list is OVERWRITTEN — the browser must see exactly one of each, and
+	// exactly the inline-friendly value the SPA needs.
+	resp.Header.Set("Content-Security-Policy", argoCDProxyContentSecurityPolicy)
+	resp.Header.Set("X-Frame-Options", "SAMEORIGIN")
 	for _, cookie := range cookies {
 		if !argoCDUIResponseCookieAllowed(cookie.Name) {
 			continue
@@ -432,18 +449,19 @@ func sanitizeArgoCDUIResponseHeaders(resp *http.Response) {
 func argoCDUIResponseHeaderAllowed(name string) bool {
 	lower := strings.ToLower(strings.TrimSpace(name))
 	switch lower {
-	case "accept-ranges", "cache-control", "content-disposition", "content-language", "content-length", "content-type",
+	case "accept-ranges", "cache-control", "content-disposition", "content-language", "content-length", "content-security-policy", "content-type",
 		"cross-origin-embedder-policy",
 		"cross-origin-opener-policy", "cross-origin-resource-policy", "date", "expires", "last-modified",
 		"permissions-policy", "pragma", "referrer-policy", "retry-after", "strict-transport-security", "vary",
-		"x-content-type-options":
-		// content-security-policy / content-security-policy-report-only and
-		// x-frame-options are deliberately NOT preserved from upstream Argo: the
-		// SecurityHeaders middleware sets an ArgoCD-compatible CSP (script-src
-		// allows inline) + X-Frame-Options for /argocd/* itself. Preserving Argo's
-		// too produced a SECOND, conflicting header — browsers enforce the
-		// intersection, so Argo's inline bootstrap script was blocked and the UI
-		// never loaded.
+		"x-content-type-options", "x-frame-options":
+		// content-security-policy and x-frame-options are allow-listed so the
+		// proxy's OWN values (set in sanitizeArgoCDUIResponseHeaders) survive and
+		// reach the browser. The proxy generates them — it does not preserve
+		// upstream Argo's: sanitizeArgoCDUIResponseHeaders Sets (overwrites) both
+		// after rebuilding this header set, so any upstream Argo CSP is replaced,
+		// not appended. That guarantees exactly ONE CSP / X-Frame-Options header
+		// (the inline-friendly one the SPA needs). content-security-policy-report-only
+		// stays denied — Argo doesn't need it and it would leak upstream policy.
 		return true
 	default:
 		// Default deny: Argo and intermediary upgrades can introduce new
@@ -575,6 +593,17 @@ func (p *ArgoCDUIProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.log.Warn("argocd UI proxy rejected unsafe mutation", "method", r.Method, "path", safeArgoCDProxyPath(r.URL.Path), "reason", argosecurity.SanitizeString(err.Error()))
 		return
 	}
+	// This proxy OWNS the Content-Security-Policy + X-Frame-Options for /argocd
+	// responses (Argo's SPA needs inline scripts and self-framing). The
+	// SecurityHeaders middleware ran ahead of us and filled in the generic,
+	// stricter defaults. httputil.ReverseProxy copies the (proxy-set) upstream
+	// response headers onto this ResponseWriter by APPENDING, not replacing, so
+	// leaving the middleware's values in place would yield two conflicting
+	// CSP / X-Frame-Options headers — the browser enforces the intersection and
+	// the UI re-breaks (blank page). Drop them here so the proxy's own values,
+	// added when the response is copied back, are the only ones the client sees.
+	w.Header().Del("Content-Security-Policy")
+	w.Header().Del("X-Frame-Options")
 	// Stash the original public host so the Director can stamp it on
 	// X-Forwarded-Host before clobbering r.Host.
 	if r.Header.Get("X-Original-Host") == "" && r.Host != "" {
@@ -699,12 +728,22 @@ func validateArgoCDProxyMutationRequest(r *http.Request) (int, error) {
 	return 0, nil
 }
 
-// isArgoStreamPath reports whether the request targets an ArgoCD watch endpoint
-// (/argocd/api/v1/stream/*). These stream newline-delimited JSON events and
-// never terminate, so they need the per-frame sanitizer rather than the
-// buffering one.
+// isArgoStreamPath reports whether the request targets an ArgoCD endpoint that
+// returns an unbounded newline-delimited JSON stream rather than a single
+// buffered body. Two families qualify:
+//
+//   - watch endpoints (/api/v1/stream/*), one event object per line; and
+//   - the pod-logs endpoint (/api/v1/applications/{name}/logs, with
+//     follow=true), a gRPC-gateway server-stream that emits one JSON object
+//     per line — frames shaped like {"result":{"content":"...",
+//     "timeStampStr":"...","last":false}} — and never terminates while the
+//     pod keeps logging.
+//
+// Both must route to the per-frame sanitizer: each line is a complete JSON
+// value, so SanitizeJSON runs cleanly per frame, and the buffering sanitizer
+// would otherwise read the never-ending body forever and hang.
 func isArgoStreamPath(path string) bool {
-	return strings.Contains(path, "/api/v1/stream/")
+	return strings.Contains(path, "/api/v1/stream/") || strings.HasSuffix(path, "/logs")
 }
 
 // newArgoStreamSanitizer wraps an ArgoCD watch stream so each newline-delimited

@@ -16,14 +16,8 @@
  * header; admin gating in the UI is layered on top via `useIsSuperuser()`.
  */
 import api from '@/lib/api';
+import { unwrapData } from '@/lib/api/errors';
 import type { APIResponse, PaginatedResponse } from '@/types';
-
-function unwrapData<T>(value: T | APIResponse<T> | null | undefined): T | undefined {
-  if (value && typeof value === 'object' && 'data' in value) {
-    return (value as APIResponse<T>).data;
-  }
-  return value ?? undefined;
-}
 
 interface ItemsEnvelope<T> {
   items?: T[];

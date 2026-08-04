@@ -724,23 +724,8 @@ func (h *ArgoCDHandler) ListAllApps(w http.ResponseWriter, r *http.Request) {
 
 // GetApp handles GET /api/v1/argocd/apps/{id}/.
 func (h *ArgoCDHandler) GetApp(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
-		return
-	}
-
-	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
-		return
-	}
-	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
-		return
-	}
-	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
+	app, _, ok := h.loadApplication(w, r, rbac.VerbRead)
+	if !ok {
 		return
 	}
 
@@ -752,26 +737,11 @@ func (h *ArgoCDHandler) GetApp(w http.ResponseWriter, r *http.Request) {
 // to influence the sync. An empty body is a default sync at the application's
 // targetRevision.
 func (h *ArgoCDHandler) SyncApp(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
+	app, instance, ok := h.loadApplication(w, r, rbac.VerbUpdate)
+	if !ok {
 		return
 	}
-
-	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
-		return
-	}
-	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
-		return
-	}
-	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
-		return
-	}
-	app, ok := h.discoverArgoCDApplication(w, r, instance, app.Name, app.UpstreamUid)
+	app, ok = h.discoverArgoCDApplication(w, r, instance, app.Name, app.UpstreamUid)
 	if !ok {
 		return
 	}
@@ -885,22 +855,8 @@ func (h *ArgoCDHandler) LiveApplications(w http.ResponseWriter, r *http.Request)
 
 // AppHistory handles GET /api/v1/argocd/applications/{id}/history/.
 func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
-		return
-	}
-	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
-		return
-	}
-	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
-		return
-	}
-	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
+	app, instance, ok := h.loadApplication(w, r, rbac.VerbRead)
+	if !ok {
 		return
 	}
 	history, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications/"+app.Name+"/revisions")
@@ -913,22 +869,8 @@ func (h *ArgoCDHandler) AppHistory(w http.ResponseWriter, r *http.Request) {
 
 // AppManifests handles GET /api/v1/argocd/applications/{id}/manifests/.
 func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
-		return
-	}
-	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
-		return
-	}
-	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
-		return
-	}
-	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbRead) {
+	app, instance, ok := h.loadApplication(w, r, rbac.VerbRead)
+	if !ok {
 		return
 	}
 	manifests, err := h.fetchInstanceJSON(r.Context(), instance, "/api/v1/applications/"+app.Name+"/manifests")
@@ -941,22 +883,8 @@ func (h *ArgoCDHandler) AppManifests(w http.ResponseWriter, r *http.Request) {
 
 // RefreshApp handles POST /api/v1/argocd/applications/{id}/refresh/.
 func (h *ArgoCDHandler) RefreshApp(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
-		return
-	}
-	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
-		return
-	}
-	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
-		return
-	}
-	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
+	app, instance, ok := h.loadApplication(w, r, rbac.VerbUpdate)
+	if !ok {
 		return
 	}
 	// A refresh re-evaluates the Application against its destination cluster
@@ -2641,6 +2569,32 @@ func (h *ArgoCDHandler) loadInstance(w http.ResponseWriter, r *http.Request, ver
 		return sqlc.ArgocdInstance{}, false
 	}
 	return instance, true
+}
+
+// loadApplication is the by-application-id counterpart to loadInstance: it
+// resolves the {id} URL param to an ArgoCD application, fetches its owning
+// instance, runs the workload authorization gate at the requested verb, and
+// returns both. On any failure it has already written the response.
+func (h *ArgoCDHandler) loadApplication(w http.ResponseWriter, r *http.Request, verb rbac.Verb) (sqlc.ArgocdApplication, sqlc.ArgocdInstance, bool) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
+		return sqlc.ArgocdApplication{}, sqlc.ArgocdInstance{}, false
+	}
+	app, err := h.queries.GetArgoCDApplicationByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD application not found")
+		return sqlc.ArgocdApplication{}, sqlc.ArgocdInstance{}, false
+	}
+	instance, err := h.queries.GetArgoCDInstanceByID(r.Context(), app.ArgocdInstanceID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "ArgoCD instance not found")
+		return sqlc.ArgocdApplication{}, sqlc.ArgocdInstance{}, false
+	}
+	if !h.authz.authorizeClusterAction(w, r, instance.ClusterID, rbac.ResourceWorkloads, verb) {
+		return sqlc.ArgocdApplication{}, sqlc.ArgocdInstance{}, false
+	}
+	return app, instance, true
 }
 
 // translateClientError maps a typed argocd client error onto an HTTP status

@@ -86,6 +86,10 @@ var Registry = []Component{
 		Namespace:          "astronomer-trivy-system",
 		ApplicationSetName: "astronomer-baseline-trivy",
 		ApplicationPrefix:  "astronomer-trivy",
+		// trivy-operator ships a cluster-scoped ClusterRole+ClusterRoleBinding
+		// (it scans workloads across every namespace) plus its report CRDs — the
+		// operator agent SA can't create those, so scope it to admin only.
+		RequiresClusterRBAC: true,
 	},
 	{
 		Slug:               "kube-state-metrics",
@@ -128,6 +132,10 @@ var Registry = []Component{
 		Namespace:          "astronomer-ingress-nginx",
 		ApplicationSetName: "astronomer-baseline-ingress-nginx",
 		ApplicationPrefix:  "astronomer-ingress-nginx",
+		// ingress-nginx ships a cluster-scoped ClusterRole+ClusterRoleBinding (it
+		// watches Ingress resources across every namespace) plus its admission
+		// ValidatingWebhookConfiguration — cluster-scoped, so scope to admin only.
+		RequiresClusterRBAC: true,
 	},
 	{
 		Slug:               "cert-manager",
@@ -135,6 +143,10 @@ var Registry = []Component{
 		Namespace:          "astronomer-cert-manager",
 		ApplicationSetName: "astronomer-baseline-cert-manager",
 		ApplicationPrefix:  "astronomer-cert-manager",
+		// cert-manager ships cluster-scoped ClusterRoles+ClusterRoleBindings for
+		// its controller/cainjector/webhook plus mutating+validating webhook
+		// configs — the operator agent SA can't create those, so admin only.
+		RequiresClusterRBAC: true,
 	},
 	{
 		Slug:               "gatekeeper",
@@ -142,7 +154,24 @@ var Registry = []Component{
 		Namespace:          "astronomer-gatekeeper-system",
 		ApplicationSetName: "astronomer-baseline-gatekeeper",
 		ApplicationPrefix:  "astronomer-gatekeeper",
+		// gatekeeper ships a cluster-scoped ClusterRole+ClusterRoleBinding plus
+		// mutating+validating admission webhook configs — cluster-scoped, so the
+		// operator agent SA can't create them; scope to admin only.
+		RequiresClusterRBAC: true,
 	},
+}
+
+// ComponentBySlug returns the registry Component with the given slug. The
+// second return is false when no component matches, so callers can distinguish
+// a genuine miss from the zero-value Component (whose RequiresClusterRBAC would
+// otherwise read as false and silently skip the cluster-RBAC pre-flight).
+func ComponentBySlug(slug string) (Component, bool) {
+	for _, c := range Registry {
+		if c.Slug == slug {
+			return c, true
+		}
+	}
+	return Component{}, false
 }
 
 // ApplicationSetComponents returns the components routed to the ArgoCD baseline

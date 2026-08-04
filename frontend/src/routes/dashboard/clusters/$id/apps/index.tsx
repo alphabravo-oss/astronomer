@@ -30,7 +30,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from '@/lib/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDebouncedValue } from '@tanstack/react-pacer';
-import { toastApiError, toastSuccess, toastWarning } from '@/lib/toast';
+import { toastApiError, toastSuccess } from '@/lib/toast';
 import {
   Package,
   Loader2,
@@ -47,7 +47,7 @@ import { Link } from '@/lib/link';
 
 import { queryKeys, useCluster } from '@/lib/hooks';
 import { liveFallback } from '@/lib/live/status-store';
-import { usePermissionDecision } from '@/lib/permission-hooks';
+import { usePermissionDecision, permissionDeniedReason, toastPermissionDenied } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
 import { OverlayShell } from '@/components/ui/overlay-shell';
 import { ActionButton } from '@/components/ui/action-button';
@@ -62,14 +62,6 @@ import {
 import { AppInstallModal, AppUninstallModal } from '@/components/clusters/app-install-modal';
 
 type Section = 'installed' | 'browse' | 'recommended';
-
-function permissionDeniedReason(decision: PermissionDecision): string {
-  return decision.disabledReason || decision.reason;
-}
-
-function toastPermissionDenied(decision: PermissionDecision) {
-  toastWarning(permissionDeniedReason(decision));
-}
 
 // Coarse status → tone mapping. We don't try to enumerate every
 // helm-release state; just bucket into the four colors operators

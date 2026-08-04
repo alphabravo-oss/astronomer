@@ -58,6 +58,7 @@
  *    un-mangled map. Same reasoning as the pre-existing `/k8s/` carve-out.
  */
 import api from '@/lib/api';
+import { unwrapData } from '@/lib/api/errors';
 import type { APIResponse } from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────
@@ -321,13 +322,6 @@ export interface SharedAlertmanagerStatus extends MonitoringStackStatusBase {
 // Envelope helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function unwrap<T>(value: T | APIResponse<T> | null | undefined): T {
-  if (value && typeof value === 'object' && 'data' in (value as Record<string, unknown>)) {
-    return (value as APIResponse<T>).data;
-  }
-  return value as T;
-}
-
 // ─────────────────────────────────────────────────────────────────────
 // Per-cluster stack — /clusters/{id}/monitoring/stack/*
 // (RBAC: read / read / create / update / update / delete, mounted per route
@@ -364,7 +358,7 @@ const clusterBase = (clusterId: string) =>
 
 export async function getClusterStackStatus(clusterId: string): Promise<ClusterStackStatus> {
   const res = await api.get<APIResponse<ClusterStackStatus>>(`${clusterBase(clusterId)}/status/`);
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function previewClusterStack(
@@ -375,7 +369,7 @@ export async function previewClusterStack(
     `${clusterBase(clusterId)}/preview/`,
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function installClusterStack(
@@ -386,7 +380,7 @@ export async function installClusterStack(
     `${clusterBase(clusterId)}/install/`,
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 /** 409s with a replace_required payload when the change is not upgradeable in place. */
@@ -398,7 +392,7 @@ export async function upgradeClusterStack(
     `${clusterBase(clusterId)}/upgrade/`,
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function replaceClusterStack(
@@ -409,7 +403,7 @@ export async function replaceClusterStack(
     `${clusterBase(clusterId)}/replace/`,
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 /** Takes no body: the release to remove comes from the persisted cluster config. */
@@ -417,7 +411,7 @@ export async function uninstallClusterStack(clusterId: string): Promise<Monitori
   const res = await api.delete<APIResponse<MonitoringOperation>>(
     `${clusterBase(clusterId)}/uninstall/`,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -428,7 +422,7 @@ export async function uninstallClusterStack(clusterId: string): Promise<Monitori
 
 export async function getSharedThanosStatus(): Promise<SharedThanosStatus> {
   const res = await api.get<APIResponse<SharedThanosStatus>>('/settings/monitoring/thanos/status/');
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function previewSharedThanos(
@@ -438,7 +432,7 @@ export async function previewSharedThanos(
     '/settings/monitoring/thanos/preview/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function installSharedThanos(
@@ -448,7 +442,7 @@ export async function installSharedThanos(
     '/settings/monitoring/thanos/install/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function upgradeSharedThanos(
@@ -458,7 +452,7 @@ export async function upgradeSharedThanos(
     '/settings/monitoring/thanos/upgrade/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function replaceSharedThanos(
@@ -468,7 +462,7 @@ export async function replaceSharedThanos(
     '/settings/monitoring/thanos/replace/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 /**
@@ -482,7 +476,7 @@ export async function uninstallSharedThanos(clusterId?: string): Promise<Monitor
     '/settings/monitoring/thanos/uninstall/',
     clusterId ? { params: { clusterId } } : undefined,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -493,7 +487,7 @@ export async function getSharedAlertmanagerStatus(): Promise<SharedAlertmanagerS
   const res = await api.get<APIResponse<SharedAlertmanagerStatus>>(
     '/settings/monitoring/alertmanager/status/',
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function previewSharedAlertmanager(
@@ -503,7 +497,7 @@ export async function previewSharedAlertmanager(
     '/settings/monitoring/alertmanager/preview/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function installSharedAlertmanager(
@@ -513,7 +507,7 @@ export async function installSharedAlertmanager(
     '/settings/monitoring/alertmanager/install/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function upgradeSharedAlertmanager(
@@ -523,7 +517,7 @@ export async function upgradeSharedAlertmanager(
     '/settings/monitoring/alertmanager/upgrade/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function replaceSharedAlertmanager(
@@ -533,7 +527,7 @@ export async function replaceSharedAlertmanager(
     '/settings/monitoring/alertmanager/replace/',
     body,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 export async function uninstallSharedAlertmanager(
@@ -543,7 +537,7 @@ export async function uninstallSharedAlertmanager(
     '/settings/monitoring/alertmanager/uninstall/',
     clusterId ? { params: { clusterId } } : undefined,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -576,7 +570,7 @@ export async function listMonitoringOperations(
     '/settings/monitoring/operations/',
     { params },
   );
-  const data = unwrap(res.data);
+  const data = unwrapData(res.data);
   return Array.isArray(data) ? data : [];
 }
 
@@ -585,7 +579,7 @@ export async function getMonitoringOperation(id: string): Promise<MonitoringOper
   const res = await api.get<APIResponse<MonitoringOperation>>(
     `/settings/monitoring/operations/${encodeURIComponent(id)}/`,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 /**
@@ -598,7 +592,7 @@ export async function retryMonitoringOperation(id: string): Promise<MonitoringOp
   const res = await api.post<APIResponse<MonitoringOperation>>(
     `/settings/monitoring/operations/${encodeURIComponent(id)}/retry/`,
   );
-  return unwrap(res.data);
+  return unwrapData(res.data);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -744,7 +738,7 @@ export interface ReplaceRequiredError {
 export function parseReplaceRequiredError(err: unknown): ReplaceRequiredError | null {
   const body = (err as { response?: { status?: number; data?: unknown } })?.response;
   if (!body || body.status !== 409) return null;
-  const payload = unwrap(body.data as Record<string, unknown>) as
+  const payload = unwrapData(body.data as Record<string, unknown>) as
     | {
         error?: string;
         message?: string;

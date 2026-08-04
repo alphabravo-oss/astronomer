@@ -5,6 +5,20 @@ import {
   type PermissionVerb,
 } from '@/lib/permissions';
 import { useAuthStore } from '@/lib/store';
+import { toastWarning } from '@/lib/toast';
+
+/**
+ * Human-readable reason a permission-gated action is blocked. Prefers the
+ * explicit `disabledReason`, falling back to the raw `reason`.
+ */
+export function permissionDeniedReason(decision: PermissionDecision): string {
+  return decision.disabledReason || decision.reason;
+}
+
+/** Surface {@link permissionDeniedReason} as a warning toast. */
+export function toastPermissionDenied(decision: PermissionDecision): void {
+  toastWarning(permissionDeniedReason(decision));
+}
 
 export function usePermissionDecision(
   resource: string,

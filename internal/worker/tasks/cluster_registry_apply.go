@@ -321,7 +321,7 @@ func runUnapply(ctx context.Context, registryID, clusterID uuid.UUID, snapshotSe
 		if err := removeDefaultSAImagePullSecret(ctx, clusterID.String(), ns, snapshotSecret); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		if err := deleteRegistrySecret(ctx, clusterID.String(), ns, snapshotSecret); err != nil && firstErr == nil {
+		if err := deleteIfExists(ctx, clusterRegistryApplyDeps.Requester, clusterID.String(), fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", ns, snapshotSecret)); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -570,24 +570,6 @@ func writeSAImagePullSecrets(ctx context.Context, clusterID, namespace string, n
 	}
 	if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("patch default SA failed: status=%d body=%s", resp.StatusCode, string(resp.Body))
-	}
-	return nil
-}
-
-// deleteRegistrySecret removes the Secret from the namespace. 404 is
-// success — the steady state was already "the Secret isn't there".
-func deleteRegistrySecret(ctx context.Context, clusterID, namespace, secretName string) error {
-	resp, err := clusterRegistryApplyDeps.Requester.Do(ctx, clusterID, http.MethodDelete, fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, secretName), nil, map[string]string{
-		"Accept": "application/json",
-	})
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return nil
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("delete secret status=%d body=%s", resp.StatusCode, string(resp.Body))
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import * as apiClient from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { ModalShell } from '@/components/ui/modal-shell';
 import { Loader2, FileCode2, SlidersHorizontal } from 'lucide-react';
+import { permissionDeniedReason } from '@/lib/permission-hooks';
 import type { PermissionDecision } from '@/lib/permissions';
 import type { ClusterTool, ToolFormField } from '@/types';
 import { toastWarning } from '@/lib/toast';
@@ -79,10 +80,6 @@ function groupFields(fields: ToolFormField[]): Array<[string, ToolFormField[]]> 
   return Array.from(byGroup.entries()).sort(
     (a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99),
   );
-}
-
-function permissionDeniedReason(decision: PermissionDecision): string {
-  return decision.disabledReason || decision.reason;
 }
 
 export function ToolInstallModal({

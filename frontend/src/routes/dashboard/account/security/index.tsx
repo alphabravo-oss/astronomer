@@ -31,7 +31,7 @@ import {
   Check,
   AlertTriangle,
 } from 'lucide-react';
-import { formatRelativeTime, cn } from '@/lib/utils';
+import { formatRelativeTime, cn, downloadBlob } from '@/lib/utils';
 import { useAppForm, useStore } from '@/lib/form';
 import { ModalShell } from '@/components/ui/modal-shell';
 import {
@@ -589,15 +589,7 @@ function RecoveryCodesBlock({
   const codesText = useMemo(() => codes.join('\n'), [codes]);
 
   const download = () => {
-    const blob = new Blob([codesText + '\n'], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'astronomer-recovery-codes.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBlob(codesText + '\n', 'astronomer-recovery-codes.txt', 'text/plain');
   };
 
   const copy = () => {

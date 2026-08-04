@@ -44,7 +44,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SyncStatusBadge, HealthStatusBadge } from '@/components/argocd/sync-status-badge';
 import { SyncAppDialog } from '@/components/argocd/sync-app-dialog';
 import { flattenArgoApp, shortRepo } from '@/components/argocd/argo-utils';
-import { formatRelativeTime } from '@/lib/utils';
+import { capitalize, formatRelativeTime, mapOperationStatus } from '@/lib/utils';
 import type {
   ArgoAppHistoryEntry,
   ArgoLiveApplication,
@@ -427,7 +427,7 @@ function EventsTab({ ops, loading }: { ops: ArgoOperation[]; loading: boolean })
     {
       key: 'status',
       header: 'Status',
-      accessor: (row) => <StatusBadge status={mapOperationStatus(row.status)} label={titleCase(row.status)} />,
+      accessor: (row) => <StatusBadge status={mapOperationStatus(row.status)} label={capitalize(row.status)} />,
     },
     {
       key: 'attempt',
@@ -464,26 +464,6 @@ function EventsTab({ ops, loading }: { ops: ArgoOperation[]; loading: boolean })
       emptyMessage="No sync events for this application yet."
     />
   );
-}
-
-function mapOperationStatus(s: string): string {
-  switch (s) {
-    case 'completed':
-      return 'healthy';
-    case 'running':
-      return 'progressing';
-    case 'pending':
-      return 'connecting';
-    case 'failed':
-    case 'superseded':
-      return 'error';
-    default:
-      return 'unknown';
-  }
-}
-
-function titleCase(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export const Route = createFileRoute('/dashboard/argocd/$instanceId/applications/$appId/')({

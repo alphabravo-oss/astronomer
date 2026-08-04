@@ -48,7 +48,12 @@ import { YamlViewDialog } from '@/components/ui/yaml-view-dialog';
 import { CreateResourceDialog } from '@/components/resources/create-resource-dialog';
 import { ConfigMapFormDialog } from '@/components/resources/configmap-form';
 import { k8sResourcePath, detailHref, kindToResourceType, WORKLOAD_SCALABLE_KINDS } from '@/lib/k8s-paths';
-import { usePermissionDecision, canonicalPermissionResource } from '@/lib/permission-hooks';
+import {
+  usePermissionDecision,
+  canonicalPermissionResource,
+  permissionDeniedReason,
+  toastPermissionDenied,
+} from '@/lib/permission-hooks';
 import { formatBytes, formatCPU, formatRelativeTime, cn } from '@/lib/utils';
 import type { PermissionDecision } from '@/lib/permissions';
 import type {
@@ -805,14 +810,6 @@ function useClusterResourcePermissions(clusterId: string, resourceType: string):
     logs: usePermissionDecision(permissionResource, 'logs', scope),
     manage: usePermissionDecision(permissionResource, 'manage', scope),
   };
-}
-
-function permissionDeniedReason(decision: PermissionDecision): string {
-  return decision.disabledReason || decision.reason;
-}
-
-function toastPermissionDenied(decision: PermissionDecision) {
-  toastWarning(permissionDeniedReason(decision));
 }
 
 function firstDeniedDecision(...decisions: PermissionDecision[]): PermissionDecision | undefined {
@@ -2536,25 +2533,6 @@ function StorageClassesTable({ clusterId }: { clusterId: string }) {
  * Map from our resource page slugs to the k8s-paths resource type keys
  * for generic resources that need YAML view support.
  */
-const genericResourceToK8sType: Record<string, string> = {
-  jobs: 'jobs',
-  cronjobs: 'cronjobs',
-  configmaps: 'configmaps',
-  secrets: 'secrets',
-  hpa: 'hpa',
-  resourcequotas: 'resourcequotas',
-  limitranges: 'limitranges',
-  poddisruptionbudgets: 'poddisruptionbudgets',
-  crds: 'crds',
-  serviceaccounts: 'serviceaccounts',
-  'k8s-clusterroles': 'k8s-clusterroles',
-  'k8s-clusterrolebindings': 'k8s-clusterrolebindings',
-  'k8s-roles': 'k8s-roles',
-  'k8s-rolebindings': 'k8s-rolebindings',
-  endpoints: 'endpoints',
-  replicasets: 'replicasets',
-};
-
 /** Resource types that have a Create button via YAML templates */
 const creatableGenericTypes: Record<string, { templateKey: string; label: string }> = {
   configmaps: { templateKey: 'configmap', label: 'Create ConfigMap' },
@@ -2590,7 +2568,9 @@ function GenericResourceTable({ clusterId, resourceType, title }: { clusterId: s
   const creatableConfig = creatableGenericTypes[resourceType];
 
   const baseColumns = genericColumnMap[resourceType] || configMapColumns;
-  const k8sType = genericResourceToK8sType[resourceType];
+  // GenericResourceTable is only rendered for `resourceType`s in
+  // `genericResourceTypes`, so the k8s type key is always the resourceType itself.
+  const k8sType = resourceType;
   const isDeletable = deletableGenericTypes.has(resourceType);
   const isEditable = editableGenericTypes.has(resourceType);
 

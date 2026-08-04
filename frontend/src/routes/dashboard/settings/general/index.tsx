@@ -6,7 +6,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { CodeBlock } from '@/components/ui/code-block';
 import { OverlayShell } from '@/components/ui/overlay-shell';
-import { formatRelativeTime, formatDate, cn } from '@/lib/utils';
+import { formatRelativeTime, formatDate, cn, downloadBlob } from '@/lib/utils';
 import type { APIToken, AuditLogEntry } from '@/types';
 import {
   Settings,
@@ -843,19 +843,12 @@ function SupportTab() {
       // decode the zip stream.
       const { default: api } = await import('@/lib/api');
       const res = await api.get('/support-bundle', { responseType: 'blob', timeout: 120000 });
-      const blob = new Blob([res.data], { type: 'application/zip' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
       // Server already proposes a filename via Content-Disposition; if axios
       // didn't surface it, fall back to a sane default.
       const disposition = res.headers?.['content-disposition'] || '';
       const match = /filename="([^"]+)"/.exec(disposition);
-      link.download = match?.[1] || `astronomer-support-bundle-${Date.now()}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const filename = match?.[1] || `astronomer-support-bundle-${Date.now()}.zip`;
+      downloadBlob(new Blob([res.data], { type: 'application/zip' }), filename);
       toastSuccess('Support bundle downloaded');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to download support bundle';

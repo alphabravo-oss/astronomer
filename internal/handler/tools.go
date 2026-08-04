@@ -18,6 +18,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/argolabels"
+	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -450,6 +453,17 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 	if msg, ok := h.checkToolScope(r.Context(), tool.Slug, clusterID); !ok {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.WrongClusterScope, msg)
+		return
+	}
+	// Pre-flight the agent privilege profile for components whose chart creates
+	// cluster-scoped RBAC (cert-manager, gatekeeper, ingress-nginx,
+	// trivy-operator). ArgoCD proxies the helm apply through the managed
+	// cluster's own agent SA; on an operator/viewer profile that SA is read-only
+	// on ClusterRole/ClusterRoleBinding, so the install would land its namespaced
+	// bits but leave the cluster-scoped ones permanently OutOfSync. Reject up
+	// front instead of enqueuing an operation that can never converge.
+	if msg, ok := h.checkClusterRBACProfile(r.Context(), tool.Slug, clusterID); !ok {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, msg)
 		return
 	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
@@ -1991,4 +2005,31 @@ func (h *ToolHandler) checkToolScope(ctx context.Context, slug string, clusterID
 		}
 	}
 	return "", true
+}
+
+// checkClusterRBACProfile blocks installing a cluster-RBAC baseline component
+// (one whose chart ships ClusterRole/ClusterRoleBinding, webhooks or CRDs) onto
+// a cluster whose agent runs on a non-admin privilege profile. Such an agent SA
+// is read-only on cluster-scoped RBAC, so the install can never fully converge.
+// Returns ("", true) — allowed — for any component not marked
+// RequiresClusterRBAC, for admin-profile clusters, and (fail-open) when the
+// cluster row can't be loaded, mirroring checkToolScope's tolerance so a
+// transient lookup miss doesn't wrongly block an admin cluster.
+func (h *ToolHandler) checkClusterRBACProfile(ctx context.Context, slug string, clusterID uuid.UUID) (string, bool) {
+	component, ok := baseline.ComponentBySlug(slug)
+	if !ok || !component.RequiresClusterRBAC {
+		return "", true
+	}
+	cluster, err := h.queries.GetClusterByID(ctx, clusterID)
+	if err != nil {
+		return "", true
+	}
+	profile := argolabels.ClusterAgentPrivilegeProfile(cluster.Annotations)
+	if profile == agenttemplate.PrivilegeProfileAdmin {
+		return "", true
+	}
+	return fmt.Sprintf(
+		"%s installs cluster-scoped RBAC (ClusterRole/ClusterRoleBinding and admission webhooks) that this cluster's %q agent cannot create — only an admin-profile agent can. Re-adopt the cluster with the admin privilege profile before installing this tool.",
+		slug, profile,
+	), false
 }

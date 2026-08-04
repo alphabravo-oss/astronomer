@@ -213,13 +213,18 @@ func TestArgoCDUIProxySanitizesResponseHeadersAndCookies(t *testing.T) {
 	if rr.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("expected Cache-Control to be preserved")
 	}
-	// Content-Security-Policy (and X-Frame-Options) are deliberately NOT
-	// preserved from upstream Argo: the SecurityHeaders middleware sets an
-	// Argo-compatible CSP for /argocd/* itself, and preserving Argo's too would
-	// emit a second, conflicting header that re-breaks the UI (browsers enforce
-	// the intersection).
-	if got := rr.Header().Get("Content-Security-Policy"); got != "" {
-		t.Fatalf("expected upstream Content-Security-Policy to be stripped, got %q", got)
+	// The proxy OWNS the Content-Security-Policy + X-Frame-Options for /argocd:
+	// upstream Argo's own CSP is overwritten (not appended) with the single
+	// inline-friendly policy the SPA needs, so exactly one of each reaches the
+	// browser.
+	if got := rr.Header().Values("Content-Security-Policy"); len(got) != 1 || got[0] != argoCDProxyContentSecurityPolicy {
+		t.Fatalf("expected the single proxy CSP, got %v", got)
+	}
+	if !strings.Contains(rr.Header().Get("Content-Security-Policy"), "script-src 'self' 'unsafe-inline'") {
+		t.Fatalf("proxy CSP must allow inline scripts, got %q", rr.Header().Get("Content-Security-Policy"))
+	}
+	if got := rr.Header().Values("X-Frame-Options"); len(got) != 1 || got[0] != "SAMEORIGIN" {
+		t.Fatalf("expected single X-Frame-Options SAMEORIGIN, got %v", got)
 	}
 	cookies := rr.Result().Cookies()
 	if len(cookies) != 1 {
@@ -280,6 +285,73 @@ func TestNewArgoStreamSanitizerTearsDownOnMalformedFrame(t *testing.T) {
 	// A frame that isn't JSON must fail the stream, never forward raw bytes.
 	if _, err := io.ReadAll(newArgoStreamSanitizer(io.NopCloser(strings.NewReader("{not json}\n")))); err == nil {
 		t.Fatal("expected the stream to tear down on a malformed frame")
+	}
+}
+
+func TestIsArgoStreamPathMatchesWatchesAndLogs(t *testing.T) {
+	stream := []string{
+		"/argocd/api/v1/stream/applications",
+		"/argocd/api/v1/stream/applications/demo",
+		"/argocd/api/v1/applications/demo/logs",
+		"/argocd/api/v1/applications/demo/pods/pod-0/logs",
+	}
+	for _, p := range stream {
+		if !isArgoStreamPath(p) {
+			t.Fatalf("isArgoStreamPath(%q) = false, want true (unbounded stream)", p)
+		}
+	}
+	buffered := []string{
+		"/argocd/api/v1/applications",
+		"/argocd/api/v1/applications/demo",
+		"/argocd/api/v1/applications/demo/sync",
+	}
+	for _, p := range buffered {
+		if isArgoStreamPath(p) {
+			t.Fatalf("isArgoStreamPath(%q) = true, want false (buffered response)", p)
+		}
+	}
+}
+
+// TestArgoCDUIProxyStreamsPodLogsWithoutHanging guards the pod-logs fix: the
+// ArgoCD application logs endpoint (GET .../logs?follow=true) is an unbounded
+// newline-delimited JSON stream, so it must route to the per-frame sanitizer.
+// The buffering path would try to parse the whole multi-object body as a single
+// JSON value and fail (502) or hang; the stream path redacts each frame and
+// forwards it. Each frame is a complete JSON object, and the credential in the
+// second frame must be stripped.
+func TestArgoCDUIProxyStreamsPodLogsWithoutHanging(t *testing.T) {
+	frames := `{"result":{"content":"boot ok","timeStampStr":"t0","last":false}}` + "\n" +
+		`{"result":{"content":"password=` + argoProxyCanary + `","timeStampStr":"t1","last":true}}` + "\n"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(frames))
+	}))
+	defer upstream.Close()
+	proxy, err := NewArgoCDUIProxy(upstream.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	proxy.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/argocd/api/v1/applications/demo/logs?follow=true", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.Bytes()
+	if bytes.Contains(body, []byte(argoProxyCanary)) {
+		t.Fatalf("credential leaked through the logs stream: %s", body)
+	}
+	lines := bytes.Split(bytes.TrimRight(body, "\n"), []byte("\n"))
+	if len(lines) != 2 {
+		t.Fatalf("want 2 NDJSON log frames, got %d: %s", len(lines), body)
+	}
+	for i, l := range lines {
+		var v any
+		if err := json.Unmarshal(l, &v); err != nil {
+			t.Fatalf("log frame %d is not valid JSON: %s", i, l)
+		}
+	}
+	if !bytes.Contains(lines[0], []byte("boot ok")) {
+		t.Fatalf("non-secret log content was dropped: %s", lines[0])
 	}
 }
 

@@ -24,7 +24,7 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { OverlayShell } from '@/components/ui/overlay-shell';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { formatRelativeTime, cn } from '@/lib/utils';
+import { capitalize, formatRelativeTime, cn } from '@/lib/utils';
 import type { LoggingOutput, LoggingPipeline, LoggingOutputType, LoggingOperation } from '@/types';
 import {
   FileText,
@@ -72,10 +72,6 @@ function mapLoggingOperationStatus(s: string): string {
     default:
       return 'unknown';
   }
-}
-
-function titleCaseStatus(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function truncate(s: string, max: number): string {
@@ -358,7 +354,7 @@ function LoggingPage() {
       accessor: (row) => (
         <StatusBadge
           status={mapLoggingOperationStatus(row.status)}
-          label={titleCaseStatus(row.status)}
+          label={capitalize(row.status)}
           pulse={row.status === 'running'}
         />
       ),

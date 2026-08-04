@@ -10,7 +10,7 @@ import { createAgentUpgradeOperation, createAgentUpgradePlan, downloadAgentDiagn
 import { queryKeys } from '@/lib/hooks';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { liveFallback } from '@/lib/live/status-store';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import { cn, formatRelativeTime, downloadBlob } from '@/lib/utils';
 import type { AgentDiagnosticsResponse, AgentFleetItem, AgentLifecycleOperation, AgentSelfTestResponse, AgentUpgradeOperationResponse, AgentUpgradePlanResponse } from '@/types';
 
 function AgentFleetPage() {
@@ -240,14 +240,7 @@ function AgentFleetPage() {
           }}
           onDownload={async () => {
             const blob = await downloadAgentDiagnosticsBundle(selectedClusterId);
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `astronomer-agent-diagnostics-${selectedClusterId}.json`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
+            downloadBlob(blob, `astronomer-agent-diagnostics-${selectedClusterId}.json`);
           }}
         />
       )}
