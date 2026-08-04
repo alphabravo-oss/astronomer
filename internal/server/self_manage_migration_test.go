@@ -26,9 +26,37 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/yaml"
 
+	semver "github.com/Masterminds/semver/v3"
 	chartdeploy "github.com/alphabravocompany/astronomer-go/deploy"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+// embeddedSelfManagedChartRevisionForTest is the revision the production build
+// path stamps into the self-manage Application's spec.source.targetRevision
+// (chartdeploy.AstronomerChartRepo().Version()). The acceptance-operation
+// safety contract and the canonical-values path compare an operation's/Application's
+// revision against exactly this embedded revision, so tests must mirror the
+// embedded chart version rather than pinning a stale literal that silently
+// drifts into "unsafe/older" every time the chart is bumped.
+var embeddedSelfManagedChartRevisionForTest = func() string {
+	repo, err := chartdeploy.AstronomerChartRepo()
+	if err != nil {
+		panic(fmt.Sprintf("load embedded astronomer chart repo for test: %v", err))
+	}
+	return repo.Version()
+}()
+
+// newerThanEmbeddedSelfManagedChartRevisionForTest is one patch above the
+// embedded revision within the same major line: a revision the reference-only
+// path must refuse to adopt as a self-manage chart downgrade.
+var newerThanEmbeddedSelfManagedChartRevisionForTest = func() string {
+	version, err := semver.NewVersion(embeddedSelfManagedChartRevisionForTest)
+	if err != nil {
+		panic(fmt.Sprintf("embedded chart version %q is not semantic: %v", embeddedSelfManagedChartRevisionForTest, err))
+	}
+	next := version.IncPatch()
+	return next.String()
+}()
 
 const safeSelfManagedValuesForTest = `
 secrets:
@@ -124,7 +152,7 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if annotations[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting || hash == "" {
 		t.Fatalf("staged metadata = %#v", annotations)
 	}
-	staged.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.3.0", "prune": false}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	staged.Object["operation"] = map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
 	if _, err := resource.Update(ctx, staged, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +222,7 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if pending.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
 		t.Fatal("approval before acceptance sync activated prune")
 	}
-	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": "0.3.0", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
 	if _, err := resource.Update(ctx, pending, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -211,8 +239,8 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 		t.Fatal(err)
 	}
 	for name, completedOperation := range map[string]map[string]any{
-		"completed prune": {"sync": map[string]any{"revision": "0.3.0", "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
-		"completed force": {"sync": map[string]any{"revision": "0.3.0", "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed prune": {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed force": {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -344,7 +372,7 @@ func stagedSelfManagedApplicationForBarrierTest(t *testing.T, ctx context.Contex
 
 func safeSelfManagedAcceptanceOperationForTest() map[string]any {
 	return map[string]any{
-		"sync":        map[string]any{"revision": "0.3.0", "prune": false},
+		"sync":        map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false},
 		"initiatedBy": map[string]any{"username": "operator@example.com"},
 	}
 }
@@ -592,7 +620,7 @@ func successfulSelfManagedAcceptanceStatus(t *testing.T, application *unstructur
 	return map[string]any{
 		"sync":           map[string]any{"status": "Synced", "comparedTo": map[string]any{"source": source, "destination": destination}},
 		"health":         map[string]any{"status": "Healthy"},
-		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": "0.3.0", "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
+		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
 	}
 }
 
@@ -750,7 +778,7 @@ func TestCurrentReferenceOnlyValuesAuthorizesOnlyStrongOlderRevisionAdoption(t *
 			}
 		})
 	}
-	sameRevision := activeSelfManagedApplicationForRevision(t, "0.3.0", destination)
+	sameRevision := activeSelfManagedApplicationForRevision(t, embeddedSelfManagedChartRevisionForTest, destination)
 	source, err = currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), sameRevision), destination)
 	if err != nil || source.AdoptLiveUpgrade || strings.TrimSpace(source.ValuesYAML) == "" {
 		t.Fatalf("same embedded revision was not canonical: source=%#v err=%v", source, err)
@@ -787,7 +815,7 @@ func TestCurrentReferenceOnlyValuesAuthorizesOnlyStrongOlderRevisionAdoption(t *
 			}
 		})
 	}
-	newer := activeSelfManagedApplicationForRevision(t, "0.3.1", destination)
+	newer := activeSelfManagedApplicationForRevision(t, newerThanEmbeddedSelfManagedChartRevisionForTest, destination)
 	if _, err := currentReferenceOnlySelfManagedValues(ctx, dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), newer), destination); err == nil || !strings.Contains(err.Error(), "downgrade") {
 		t.Fatalf("newer revision error = %v", err)
 	}

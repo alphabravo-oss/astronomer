@@ -1387,7 +1387,7 @@ func TestSameRevisionSelfManagedValuesAreStrictlyCanonicalWithoutLiveDiscovery(t
 	if len(client.Actions()) != 0 {
 		t.Fatalf("same-revision build performed Kubernetes discovery: %#v", client.Actions())
 	}
-	application := activeSelfManagedApplicationForRevision(t, "0.3.0", "https://kubernetes.default.svc")
+	application := activeSelfManagedApplicationForRevision(t, embeddedSelfManagedChartRevisionForTest, "https://kubernetes.default.svc")
 	_ = unstructured.SetNestedField(application.Object, canonical, "spec", "source", "helm", "values")
 	spec, _, _ := unstructured.NestedMap(application.Object, "spec")
 	hash, _ := selfManagedSpecHash(spec)
