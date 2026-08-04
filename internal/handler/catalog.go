@@ -1341,6 +1341,13 @@ func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Req
 
 // UpgradeInstalledChart handles PUT /api/v1/catalog/installed/{id}/upgrade/.
 func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Request) {
+	// Defensive no-op for an unwired store: production always injects queries,
+	// but the route-security tests reach here with a nil querier once a caller
+	// clears the scope/RBAC gate. Answer 500 rather than dereferencing nil.
+	if h == nil || h.queries == nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Catalog store not configured")
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installed chart ID")

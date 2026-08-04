@@ -167,6 +167,52 @@ func RequireQueryNamespacePermission(engine *rbac.Engine, querier RBACQuerier, r
 	return RequirePermissionForNamespace(engine, querier, resource, verb, namespaceContextWithQuery)
 }
 
+// authAndBindings runs the preamble shared by every RBAC gate below: it requires
+// an authenticated principal — writing the 401 authentication_required envelope
+// via authError (auth.go) when there is none — and then loads that principal's
+// role bindings, writing a 500 internal_error envelope if the lookup fails. On
+// success it returns the bindings and true; on any failure it has ALREADY written
+// the complete response and returns false, so the caller must simply return
+// without touching w. The control flow (early return on missing user, early
+// return on query error, otherwise proceed with the bindings) is identical to the
+// inline preamble it replaces.
+func authAndBindings(w http.ResponseWriter, r *http.Request, querier RBACQuerier) ([]rbac.RoleBinding, bool) {
+	user, ok := GetAuthenticatedUser(r.Context())
+	if !ok || user == nil {
+		authError(w, "authentication_required", "Authentication is required to access this resource")
+		return nil, false
+	}
+	bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		resp := map[string]interface{}{
+			"error": map[string]string{
+				"code":    "internal_error",
+				"message": "Failed to retrieve user permissions",
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+		return nil, false
+	}
+	return bindings, true
+}
+
+// permissionDenied writes the shared 403 permission_denied envelope every RBAC
+// gate emits when the caller's bindings do not satisfy the required
+// (resource, verb, scope).
+func permissionDenied(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	resp := map[string]interface{}{
+		"error": map[string]string{
+			"code":    "permission_denied",
+			"message": "You do not have permission to perform this action",
+		},
+	}
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 // RequirePermissionForNamespace is RequirePermission with a caller-supplied
 // namespace resolver, for gates whose target namespace is neither a route param
 // nor the query string — notably a create-from-body route, which must be
@@ -177,31 +223,8 @@ func RequirePermissionForNamespace(engine *rbac.Engine, querier RBACQuerier, res
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := GetAuthenticatedUser(r.Context())
-			if !ok || user == nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "authentication_required",
-						"message": "Authentication is required to access this resource",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
-				return
-			}
-
-			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "internal_error",
-						"message": "Failed to retrieve user permissions",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
+			bindings, ok := authAndBindings(w, r, querier)
+			if !ok {
 				return
 			}
 
@@ -209,15 +232,7 @@ func RequirePermissionForNamespace(engine *rbac.Engine, querier RBACQuerier, res
 			namespace := resolveNamespace(r)
 
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "permission_denied",
-						"message": "You do not have permission to perform this action",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
+				permissionDenied(w)
 				return
 			}
 
@@ -240,31 +255,8 @@ func RequirePermissionForNamespace(engine *rbac.Engine, querier RBACQuerier, res
 func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb, namespaceScoped bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := GetAuthenticatedUser(r.Context())
-			if !ok || user == nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "authentication_required",
-						"message": "Authentication is required to access this resource",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
-				return
-			}
-
-			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "internal_error",
-						"message": "Failed to retrieve user permissions",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
+			bindings, ok := authAndBindings(w, r, querier)
+			if !ok {
 				return
 			}
 
@@ -280,15 +272,7 @@ func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rb
 			}
 
 			if !allowed {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "permission_denied",
-						"message": "You do not have permission to perform this action",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
+				permissionDenied(w)
 				return
 			}
 
@@ -311,31 +295,8 @@ func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rb
 func RequireCollectionPermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := GetAuthenticatedUser(r.Context())
-			if !ok || user == nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "authentication_required",
-						"message": "Authentication is required to access this resource",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
-				return
-			}
-
-			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "internal_error",
-						"message": "Failed to retrieve user permissions",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
+			bindings, ok := authAndBindings(w, r, querier)
+			if !ok {
 				return
 			}
 
@@ -350,15 +311,7 @@ func RequireCollectionPermission(engine *rbac.Engine, querier RBACQuerier, resou
 			}
 
 			if !allowed {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				resp := map[string]interface{}{
-					"error": map[string]string{
-						"code":    "permission_denied",
-						"message": "You do not have permission to perform this action",
-					},
-				}
-				_ = json.NewEncoder(w).Encode(resp)
+				permissionDenied(w)
 				return
 			}
 

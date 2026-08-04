@@ -240,6 +240,13 @@ func (h *MonitoringHandler) enqueueSharedAlertmanagerOperation(ctx context.Conte
 }
 
 func (h *MonitoringHandler) enqueueClusterStackOperation(ctx context.Context, userID pgtype.UUID, opType, clusterID string, req MonitoringStackRequest, values map[string]any) (sqlc.MonitoringOperation, error) {
+	// Defensive no-op for an unwired store: production always injects queries,
+	// but the route-security tests reach here with a nil querier once a caller
+	// clears the RBAC gate. Return a clean error so the handler answers 500
+	// rather than dereferencing nil below.
+	if h.queries == nil {
+		return sqlc.MonitoringOperation{}, fmt.Errorf("monitoring store not configured")
+	}
 	rawReq, err := json.Marshal(req)
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err

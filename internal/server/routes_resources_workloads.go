@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -47,26 +46,12 @@ func requireNamespacePickerListPermission(engine *rbac.Engine, querier appmiddle
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := appmiddleware.GetAuthenticatedUser(r.Context())
 			if !ok || user == nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]string{
-						"code":    "authentication_required",
-						"message": "Authentication is required to access this resource",
-					},
-				})
+				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
 				return
 			}
 			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]string{
-						"code":    "internal_error",
-						"message": "Failed to retrieve user permissions",
-					},
-				})
+				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
 				return
 			}
 			clusterID, projectID := permissionScopeIDs(r)
@@ -76,14 +61,7 @@ func requireNamespacePickerListPermission(engine *rbac.Engine, querier appmiddle
 					engine.HasAnyNamespaceAccess(bindings, rbac.ResourcePods, rbac.VerbList, clusterID)
 			}
 			if !allowed {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]string{
-						"code":    "permission_denied",
-						"message": "You do not have permission to perform this action",
-					},
-				})
+				writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
 				return
 			}
 			next.ServeHTTP(w, r)
