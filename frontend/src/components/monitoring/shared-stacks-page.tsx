@@ -18,7 +18,7 @@
  * monitoring:update at GLOBAL scope.
  */
 import { Link } from '@/lib/link';
-import { ArrowLeft, BarChart3 } from 'lucide-react';
+import { ArrowLeft, BarChart3, Database } from 'lucide-react';
 
 import { PageHeader, PageShell } from '@/components/ui/page';
 import { PermissionState } from '@/components/ui/empty-state';
@@ -85,7 +85,7 @@ export function SharedMonitoringStacksPage() {
           </Link>
         }
         title="Shared monitoring stacks"
-        description="Install, upgrade, replace and uninstall the fleet-wide Thanos and Alertmanager releases. Every action is queued and reconciled server-side — the panels below follow it to completion."
+        description="Optional fleet-wide tier: Thanos (long-term metric retention) and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
           <Link
             href="/dashboard/monitoring"
@@ -101,6 +101,15 @@ export function SharedMonitoringStacksPage() {
         <PermissionState title="Monitoring access required" permission="monitoring:read" />
       ) : (
         <div className="space-y-4">
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <Database className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            <p>
+              Object storage is required only for Thanos below — it reads historical blocks from a
+              bucket. To simply collect metrics on a cluster you don&apos;t need a bucket: install the
+              per-cluster Prometheus stack from that cluster&apos;s Monitoring tab, which defaults to
+              in-cluster rolling storage (15-day retention).
+            </p>
+          </div>
           <StackLifecyclePanel
             target={THANOS_TARGET}
             spec={SHARED_THANOS_FAMILY}

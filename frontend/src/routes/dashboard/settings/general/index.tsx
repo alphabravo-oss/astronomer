@@ -22,9 +22,20 @@ import {
   KeyRound,
   LifeBuoy,
   Download,
+  Pencil,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { useAppForm, useStore } from '@/lib/form';
+
+// Read-only key/value row for the settings summary cards.
+function SettingRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground">{value || '—'}</span>
+    </div>
+  );
+}
 
 type TabKey = 'sso' | 'general' | 'tokens' | 'audit' | 'support';
 
@@ -44,6 +55,7 @@ function SettingsPage() {
   const [newTokenForm, setNewTokenForm] = useState({ name: '', description: '', expiresInDays: 30 });
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [showAddSSO, setShowAddSSO] = useState(false);
+  const [showEditGeneral, setShowEditGeneral] = useState(false);
 
   const { data: generalSettings, isLoading: generalLoading } = useGeneralSettings();
   const saveGeneralSettings = useSaveGeneralSettings();
@@ -113,6 +125,7 @@ function SettingsPage() {
     onSubmit: async ({ value }) => {
       try {
         await saveGeneralSettings.mutateAsync(value);
+        setShowEditGeneral(false);
       } catch {
         // Error is handled by the mutation's onError callback
       }
@@ -357,7 +370,7 @@ function SettingsPage() {
           </div>
         )}
 
-        {/* General Settings */}
+        {/* General Settings — read-only summary; Edit opens the form in a modal. */}
         {activeTab === 'general' && (
           <div className="max-w-2xl space-y-6">
             {generalLoading ? (
@@ -365,127 +378,30 @@ function SettingsPage() {
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-foreground">Platform Settings</h3>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Platform Name</label>
-                  <generalForm.Field name="platformName">
-                    {(field) => (
-                      <input
-                        aria-label="Platform Name"
-                        type="text"
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        onBlur={field.handleBlur}
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                          focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    )}
-                  </generalForm.Field>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Agent Heartbeat Interval</label>
-                  <generalForm.Field name="agentHeartbeatInterval">
-                    {(field) => (
-                      <select
-                        aria-label="Agent Heartbeat Interval"
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(Number(e.target.value))}
-                        onBlur={field.handleBlur}
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                          focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value={15}>15 seconds</option>
-                        <option value={30}>30 seconds</option>
-                        <option value={60}>60 seconds</option>
-                      </select>
-                    )}
-                  </generalForm.Field>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Default Session Timeout</label>
-                  <generalForm.Field name="defaultSessionTimeout">
-                    {(field) => (
-                      <select
-                        aria-label="Default Session Timeout"
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(Number(e.target.value))}
-                        onBlur={field.handleBlur}
-                        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
-                          focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value={30}>30 minutes</option>
-                        <option value={60}>1 hour</option>
-                        <option value={480}>8 hours</option>
-                        <option value={1440}>24 hours</option>
-                      </select>
-                    )}
-                  </generalForm.Field>
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+              <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-foreground">Enable Audit Logging</p>
-                    <p className="text-xs text-muted-foreground">Log all API actions for compliance</p>
+                    <h3 className="text-base font-semibold text-foreground">Platform Settings</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Name, heartbeat, session, audit + metrics.</p>
                   </div>
-                  <generalForm.Field name="enableAuditLogging">
-                    {(field) => (
-                      <button
-                        aria-label="Enable Audit Logging"
-                        onClick={() => field.handleChange(!field.state.value)}
-                        onBlur={field.handleBlur}
-                        className={cn(
-                          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                          field.state.value ? 'bg-status-success' : 'bg-muted'
-                        )}
-                      >
-                        <span className={cn(
-                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                          field.state.value ? 'translate-x-6' : 'translate-x-1'
-                        )} />
-                      </button>
-                    )}
-                  </generalForm.Field>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditGeneral(true)}
+                    className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
                 </div>
-
-                <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Metrics Collection</p>
-                    <p className="text-xs text-muted-foreground">Collect and aggregate cluster metrics</p>
-                  </div>
-                  <generalForm.Field name="metricsCollection">
-                    {(field) => (
-                      <button
-                        aria-label="Metrics Collection"
-                        onClick={() => field.handleChange(!field.state.value)}
-                        onBlur={field.handleBlur}
-                        className={cn(
-                          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                          field.state.value ? 'bg-status-success' : 'bg-muted'
-                        )}
-                      >
-                        <span className={cn(
-                          'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                          field.state.value ? 'translate-x-6' : 'translate-x-1'
-                        )} />
-                      </button>
-                    )}
-                  </generalForm.Field>
+                <div className="divide-y divide-border/60">
+                  <SettingRow label="Platform name" value={generalSettings?.platformName ?? 'Astronomer'} />
+                  <SettingRow label="Agent heartbeat" value={`${generalSettings?.agentHeartbeatInterval ?? 30}s`} />
+                  <SettingRow label="Session timeout" value={`${generalSettings?.defaultSessionTimeout ?? 60} min`} />
+                  <SettingRow label="Audit logging" value={(generalSettings?.enableAuditLogging ?? true) ? 'Enabled' : 'Disabled'} />
+                  <SettingRow label="Metrics collection" value={(generalSettings?.metricsCollection ?? true) ? 'Enabled' : 'Disabled'} />
                 </div>
               </div>
             )}
-
-            <button
-              onClick={() => void generalForm.handleSubmit()}
-              disabled={saveGeneralSettings.isPending}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {saveGeneralSettings.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Save Settings
-            </button>
           </div>
         )}
 
@@ -558,6 +474,152 @@ function SettingsPage() {
         {/* Support */}
         {activeTab === 'support' && <SupportTab />}
       </div>
+
+      {/* Edit Platform Settings Modal */}
+      {showEditGeneral && (
+        <OverlayShell onClose={() => setShowEditGeneral(false)}>
+          <div className="relative mx-4 w-full max-w-lg rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground">Platform Settings</h3>
+              <button
+                onClick={() => setShowEditGeneral(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Platform Name</label>
+                <generalForm.Field name="platformName">
+                  {(field) => (
+                    <input
+                      aria-label="Platform Name"
+                      type="text"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
+                </generalForm.Field>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Agent Heartbeat Interval</label>
+                <generalForm.Field name="agentHeartbeatInterval">
+                  {(field) => (
+                    <select
+                      aria-label="Agent Heartbeat Interval"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(Number(e.target.value))}
+                      onBlur={field.handleBlur}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value={15}>15 seconds</option>
+                      <option value={30}>30 seconds</option>
+                      <option value={60}>60 seconds</option>
+                    </select>
+                  )}
+                </generalForm.Field>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Default Session Timeout</label>
+                <generalForm.Field name="defaultSessionTimeout">
+                  {(field) => (
+                    <select
+                      aria-label="Default Session Timeout"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(Number(e.target.value))}
+                      onBlur={field.handleBlur}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
+                        focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>1 hour</option>
+                      <option value={480}>8 hours</option>
+                      <option value={1440}>24 hours</option>
+                    </select>
+                  )}
+                </generalForm.Field>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Enable Audit Logging</p>
+                  <p className="text-xs text-muted-foreground">Log all API actions for compliance</p>
+                </div>
+                <generalForm.Field name="enableAuditLogging">
+                  {(field) => (
+                    <button
+                      aria-label="Enable Audit Logging"
+                      onClick={() => field.handleChange(!field.state.value)}
+                      onBlur={field.handleBlur}
+                      className={cn(
+                        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                        field.state.value ? 'bg-status-success' : 'bg-muted'
+                      )}
+                    >
+                      <span className={cn(
+                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                        field.state.value ? 'translate-x-6' : 'translate-x-1'
+                      )} />
+                    </button>
+                  )}
+                </generalForm.Field>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Metrics Collection</p>
+                  <p className="text-xs text-muted-foreground">Collect and aggregate cluster metrics</p>
+                </div>
+                <generalForm.Field name="metricsCollection">
+                  {(field) => (
+                    <button
+                      aria-label="Metrics Collection"
+                      onClick={() => field.handleChange(!field.state.value)}
+                      onBlur={field.handleBlur}
+                      className={cn(
+                        'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                        field.state.value ? 'bg-status-success' : 'bg-muted'
+                      )}
+                    >
+                      <span className={cn(
+                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                        field.state.value ? 'translate-x-6' : 'translate-x-1'
+                      )} />
+                    </button>
+                  )}
+                </generalForm.Field>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowEditGeneral(false)}
+                className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void generalForm.handleSubmit()}
+                disabled={saveGeneralSettings.isPending}
+                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {saveGeneralSettings.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </OverlayShell>
+      )}
 
       {/* Add SSO Provider Modal */}
       {showAddSSO && (

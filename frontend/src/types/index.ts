@@ -961,6 +961,10 @@ export interface MetricsSeries {
 }
 
 export interface MetricsData {
+  // false when no per-cluster Prometheus/Thanos backend is configured, so the
+  // series below are empty. The scalar /metrics/summary usage still resolves
+  // from metrics-server independently of this flag.
+  available?: boolean;
   cpuUsage: MetricsSeries;
   cpuCapacity: MetricsSeries;
   memoryUsage: MetricsSeries;

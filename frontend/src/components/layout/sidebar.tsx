@@ -408,7 +408,7 @@ function ClusterSwitcher({ clusterId, fallbackName }: { clusterId: string; fallb
         const nextId = e.target.value;
         if (nextId !== clusterId) router.push(`/dashboard/clusters/${nextId}${subRoute}`);
       }}
-      className="w-full h-7 px-2 rounded-md border border-sidebar-border bg-transparent
+      className="w-full h-9 px-2 rounded-md border border-sidebar-border bg-transparent
         text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring
         hover:bg-accent/50 transition-colors cursor-pointer"
       title="Switch cluster"

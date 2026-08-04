@@ -86,6 +86,38 @@ func TestListPipelines_ClusterScopedTotal(t *testing.T) {
 	}
 }
 
+// TestListOutputs_FleetWide covers the dashboard Logging page: GET with NO
+// cluster_id. Before the fix this 400'd ("Invalid cluster ID"); now it lists
+// every cluster's outputs. TestListPipelines_FleetWide is the analogue.
+func TestListOutputs_FleetWide(t *testing.T) {
+	q := newLoggingFakeQuerier()
+	h := NewLoggingHandler(q)
+	seedOutput(t, q, uuid.New())
+	seedOutput(t, q, uuid.New())
+	seedOutput(t, q, uuid.New())
+
+	rec := httptest.NewRecorder()
+	h.ListOutputs(rec, httptest.NewRequest(http.MethodGet, "/api/v1/logging/outputs/", nil))
+	resp := decodePaginated(t, rec) // fails if not 200
+	if resp.Count != 3 {
+		t.Fatalf("fleet-wide outputs total = %d, want 3", resp.Count)
+	}
+}
+
+func TestListPipelines_FleetWide(t *testing.T) {
+	q := newLoggingFakeQuerier()
+	h := NewLoggingHandler(q)
+	seedPipeline(t, q, uuid.New())
+	seedPipeline(t, q, uuid.New())
+
+	rec := httptest.NewRecorder()
+	h.ListPipelines(rec, httptest.NewRequest(http.MethodGet, "/api/v1/logging/pipelines/", nil))
+	resp := decodePaginated(t, rec) // fails if not 200
+	if resp.Count != 2 {
+		t.Fatalf("fleet-wide pipelines total = %d, want 2", resp.Count)
+	}
+}
+
 func seedOutput(t *testing.T, q *loggingFakeQuerier, clusterID uuid.UUID) {
 	t.Helper()
 	if _, err := q.CreateLoggingOutput(context.Background(), sqlc.CreateLoggingOutputParams{

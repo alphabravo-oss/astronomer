@@ -75,6 +75,7 @@ import { AddRepoDialog } from '@/components/argocd/add-repo-dialog';
 import { RegisterManagedClusterDialog } from '@/components/argocd/register-managed-cluster-dialog';
 import { SyncWindowsDialog } from '@/components/argocd/sync-windows-dialog';
 import { flattenArgoApp, shortRepo } from '@/components/argocd/argo-utils';
+import { isBrowserReachable, argoInstanceWebHref } from '@/lib/argocd';
 import { capitalize, formatRelativeTime, mapOperationStatus } from '@/lib/utils';
 import type {
   ArgoApplicationSet,
@@ -91,25 +92,6 @@ import type {
 type TabId = 'overview' | 'apps' | 'projects' | 'appsets' | 'clusters' | 'repos' | 'operations';
 
 const TAB_KEYS = ['overview', 'apps', 'projects', 'appsets', 'clusters', 'repos', 'operations'] as const;
-
-// isBrowserReachable returns false for cluster-internal URLs (`*.svc.cluster.local`,
-// `localhost`, RFC1918 IPs) — those are valid for the in-cluster Astronomer
-// server to reach but a browser can't follow them. Used to swap a clickable
-// link for an explanatory chip.
-function isBrowserReachable(url: string): boolean {
-  if (!url) return false;
-  try {
-    const u = new URL(url);
-    const h = u.hostname;
-    if (h.endsWith('.svc.cluster.local') || h.endsWith('.svc')) return false;
-    if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return false;
-    if (/^10\./.test(h) || /^192\.168\./.test(h)) return false;
-    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(h)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // Overview rollup buckets. Kept in sync with flattenArgoApp's coerced values.
 const SYNC_ROLLUP: ArgoSyncStatus[] = ['Synced', 'OutOfSync', 'Unknown'];
@@ -209,7 +191,7 @@ function InstanceDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <a
-            href="/argocd/applications"
+            href={argoInstanceWebHref(instance.apiUrl)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-accent transition-colors"

@@ -12,10 +12,11 @@ import { createFileRoute } from '@tanstack/react-router';
  *      block. We store the raw map verbatim so any future Dex fields land
  *      without a code change here.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
 import { useAppForm, useStore } from '@/lib/form';
-import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { OverlayShell } from '@/components/ui/overlay-shell';
 import { useClusters } from '@/lib/hooks';
 import { useDexSettings, useUpdateDexSettings, useApplyDexConfig } from '@/components/auth/hooks';
 import type { DexPublicClient } from '@/types';
@@ -28,6 +29,7 @@ function DexSettingsPage() {
 
   const updateMutation = useUpdateDexSettings();
   const applyMutation = useApplyDexConfig();
+  const [editing, setEditing] = useState(false);
 
   // Track form state separately from the query so unsaved edits don't snap
   // back when the cache refetches (we only rebase when the snapshot lands).
@@ -62,10 +64,11 @@ function DexSettingsPage() {
         expiry,
         extra: (settings?.extra as Record<string, unknown>) ?? {},
       });
+      setEditing(false);
     },
   });
-  // Old disabled gate (`!issuer.trim()`), recomputed from form state.
-  const issuer = useStore(form.store, (s) => s.values.issuer);
+  // Read the live form values for the summary + the save gate (`!issuer.trim()`).
+  const values = useStore(form.store, (s) => s.values);
 
   useEffect(() => {
     if (!settings) return;
@@ -144,6 +147,21 @@ function DexSettingsPage() {
           again to verify the Deployment and restore eligible SSO.
         </div>
       )}
+
+      <DexSummary values={values} clusters={clusters} onEdit={() => setEditing(true)} />
+
+      {editing && (
+        <OverlayShell onClose={() => setEditing(false)}>
+          <div className="relative mx-4 my-8 w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-xl border border-border bg-popover shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground">Dex Settings</h3>
+              <button
+                onClick={() => setEditing(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
       {/* Section: Identity */}
       <Section title="Identity" description="Where Dex lives and what it calls itself.">
@@ -247,11 +265,18 @@ function DexSettingsPage() {
         </div>
       </Section>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+        >
+          Cancel
+        </button>
         <button
           type="button"
           onClick={() => void form.handleSubmit()}
-          disabled={updateMutation.isPending || !issuer.trim()}
+          disabled={updateMutation.isPending || !values.issuer.trim()}
           className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground
             text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
         >
@@ -259,6 +284,72 @@ function DexSettingsPage() {
           Save settings
         </button>
       </div>
+          </div>
+        </OverlayShell>
+      )}
+    </div>
+  );
+}
+
+function DexSummary({
+  values,
+  clusters,
+  onEdit,
+}: {
+  values: {
+    issuer: string;
+    clusterId: string;
+    namespace: string;
+    publicClients: DexPublicClient[];
+    idTokenExpiry: string;
+    refreshTokenExpiry: string;
+  };
+  clusters: Array<{ id: string; name: string; displayName?: string }>;
+  onEdit: () => void;
+}) {
+  const configured = !!values.issuer.trim();
+  const clusterName = clusters.find((c) => c.id === values.clusterId)?.displayName
+    || clusters.find((c) => c.id === values.clusterId)?.name
+    || '— none —';
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Current configuration</h2>
+          <p className="text-xs text-muted-foreground mt-1">Issuer, target cluster, public clients, token expiry.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+        >
+          {configured ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {configured ? 'Edit settings' : 'Configure Dex'}
+        </button>
+      </div>
+      {configured ? (
+        <div className="divide-y divide-border/60">
+          <DexRow label="Issuer URL" value={values.issuer} />
+          <DexRow label="Target cluster" value={clusterName} />
+          <DexRow label="Namespace" value={values.namespace} />
+          <DexRow label="Public clients" value={`${values.publicClients.length}`} />
+          <DexRow label="ID token expiry" value={values.idTokenExpiry} />
+          <DexRow label="Refresh token expiry" value={values.refreshTokenExpiry} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Dex is not configured yet. Set the issuer URL, public clients, and token expiry to enable OIDC.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DexRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground font-mono truncate max-w-[60%] text-right">{value || '—'}</span>
     </div>
   );
 }

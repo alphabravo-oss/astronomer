@@ -27,10 +27,13 @@ import {
   AlertTriangle,
   Download,
   FileCode2,
+  Pencil,
+  Plus,
   RefreshCw,
   Replace as ReplaceIcon,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react';
 
 import { ActionButton } from '@/components/ui/action-button';
@@ -113,6 +116,10 @@ export function StackLifecyclePanel({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmUninstall, setConfirmUninstall] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
+  // Progressive disclosure: the config form is hidden until the operator takes an
+  // intentional action ("Install"/"Edit configuration"), so the page never opens
+  // straight onto a bare form.
+  const [editing, setEditing] = useState(false);
   const seedStampRef = useRef<string>('');
 
   // Re-seed from the recorded desired state, but never over an operator's
@@ -256,7 +263,9 @@ export function StackLifecyclePanel({
           </div>
         )}
 
-        {canMutate ? (
+        {/* Config form — revealed only after an intentional Install / Edit action,
+            so the panel never lands on a bare form. */}
+        {editing && canMutate && (
           <div className="space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Desired configuration
@@ -280,7 +289,8 @@ export function StackLifecyclePanel({
               </p>
             )}
           </div>
-        ) : (
+        )}
+        {!canMutate && (
           <p className="text-xs text-muted-foreground">
             You can view this stack and preview its rendered values, but not change it.{' '}
             {denialReason(permissions.update)}
@@ -300,7 +310,29 @@ export function StackLifecyclePanel({
             Preview
           </ActionButton>
 
-          {!installed && canInstall && (
+          {/* Collapsed state: a single intentional entry point into the form. */}
+          {!editing && !installed && canInstall && (
+            <ActionButton
+              size="sm"
+              intent="primary"
+              icon={<Plus className="h-3.5 w-3.5" />}
+              onClick={() => setEditing(true)}
+            >
+              Set up {spec.title}
+            </ActionButton>
+          )}
+          {!editing && installed && canUpdate && (
+            <ActionButton
+              size="sm"
+              icon={<Pencil className="h-3.5 w-3.5" />}
+              onClick={() => setEditing(true)}
+            >
+              Edit configuration
+            </ActionButton>
+          )}
+
+          {/* Expanded state: the real mutating actions + a way back out. */}
+          {editing && !installed && canInstall && (
             <ActionButton
               size="sm"
               intent="primary"
@@ -314,8 +346,7 @@ export function StackLifecyclePanel({
               Install
             </ActionButton>
           )}
-
-          {installed && canUpdate && (
+          {editing && installed && canUpdate && (
             <>
               <ActionButton
                 size="sm"
@@ -339,6 +370,19 @@ export function StackLifecyclePanel({
                 Replace
               </ActionButton>
             </>
+          )}
+          {editing && (
+            <ActionButton
+              size="sm"
+              intent="ghost"
+              icon={<X className="h-3.5 w-3.5" />}
+              onClick={() => {
+                setEditing(false);
+                setDirty(false); // discard edits — the seed effect re-syncs from status
+              }}
+            >
+              Cancel
+            </ActionButton>
           )}
 
           {installed && canUninstall && (

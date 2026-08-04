@@ -1,13 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useClusters, useClusterMetrics, useClusterMetricsSummary, useClusterNodes, useClusterNamespaces } from '@/lib/hooks';
+import { useTabParam } from '@/lib/use-tab-param';
+import { useRollingMetrics } from '@/lib/use-rolling-metrics';
+import { Link } from '@/lib/link';
 import { MetricCard } from '@/components/ui/metric-card';
 import { MetricsChart } from '@/components/monitoring/metrics-chart';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { formatBytes, formatCPU, formatPercentage, cn } from '@/lib/utils';
 import type { ClusterNode, Namespace } from '@/types';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, LineChart, ArrowRight } from 'lucide-react';
 import {
   Cpu,
   MemoryStick,
@@ -19,25 +22,31 @@ import {
 } from 'lucide-react';
 
 function MonitoringPage() {
-  // The global "monitoring" route works against a single cluster, so it
-  // carries its own in-page picker. Cluster context lives in the URL for
-  // every other view, but this page is reachable from a top-level sidebar
-  // link that isn't scoped to a cluster yet — so we default to whichever
-  // cluster the API returns first and let the user switch from here.
-  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  // The global "monitoring" route works against a single cluster via an in-page
+  // picker. Both the selected cluster and the time range are deep-linked into
+  // the URL (?cluster=<id>&range=<r>) so the view is shareable/refresh-stable —
+  // matching how every other filter/tab in the app persists to the URL.
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [timeRange, setTimeRange] = useState('1h');
 
   const { data: clustersData } = useClusters({ pageSize: 100 });
   const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
 
-  // Auto-select first cluster once data arrives so the page is useful on first
-  // navigation without forcing the user to open the picker.
-  useEffect(() => {
-    if (!selectedClusterId && clusters.length > 0) {
-      setSelectedClusterId(clusters[0].id);
-    }
-  }, [selectedClusterId, clusters]);
+  const clusterIds = useMemo(() => clusters.map((c) => c.id), [clusters]);
+  // fallback = first cluster once the list resolves (empty string until then,
+  // which disables the metrics queries below via their `enabled: !!clusterId`).
+  const [selectedClusterId, setSelectedClusterId] = useTabParam(clusterIds, clusters[0]?.id ?? '', 'cluster');
+
+  const timeRanges = [
+    { value: '1h', label: '1H' },
+    { value: '6h', label: '6H' },
+    { value: '24h', label: '24H' },
+    { value: '7d', label: '7D' },
+  ];
+  const [timeRange, setTimeRange] = useTabParam(
+    timeRanges.map((r) => r.value),
+    '1h',
+    'range',
+  );
 
   const selectedCluster = clusters.find((c) => c.id === selectedClusterId) || null;
 
@@ -46,12 +55,11 @@ function MonitoringPage() {
   const { data: nodes, isLoading: nodesLoading, isError: nodesError, refetch: refetchNodes } = useClusterNodes(selectedClusterId || '');
   const { data: namespaces, isLoading: namespacesLoading, isError: namespacesError, refetch: refetchNamespaces } = useClusterNamespaces(selectedClusterId || '');
 
-  const timeRanges = [
-    { value: '1h', label: '1H' },
-    { value: '6h', label: '6H' },
-    { value: '24h', label: '24H' },
-    { value: '7d', label: '7D' },
-  ];
+  // A per-cluster Prometheus/Thanos backend unlocks stored history + disk/network.
+  // Without it we still have live CPU/mem/pods from metrics-server, which we
+  // accumulate into a rolling window so the charts are useful out of the box.
+  const hasProm = metrics?.available === true;
+  const rolling = useRollingMetrics(selectedClusterId || '', summary);
 
   const nodeColumns: Column<ClusterNode>[] = [
     {
@@ -227,8 +235,10 @@ function MonitoringPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Summary Cards — CPU/Mem/Pods come from metrics-server (always live).
+          Disk/Network need node-exporter scraped by Prometheus, so they only
+          appear once the per-cluster stack is installed (hasProm). */}
+      <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-4', hasProm ? 'lg:grid-cols-5' : 'lg:grid-cols-3')}>
         <MetricCard
           title="CPU Usage"
           value={summary ? formatPercentage(summary.cpuPercentage) : '--'}
@@ -243,18 +253,22 @@ function MonitoringPage() {
           subtitle={summary ? `${formatBytes(summary.memoryUsage)} / ${formatBytes(summary.memoryCapacity)}` : undefined}
           icon={<MemoryStick className="h-4 w-4" />}
         />
-        <MetricCard
-          title="Network RX"
-          value={summary ? formatBytes(summary.networkReceive) : '--'}
-          unit="/s"
-          icon={<Network className="h-4 w-4" />}
-        />
-        <MetricCard
-          title="Disk Usage"
-          value={summary ? formatBytes(summary.diskUsage) : '--'}
-          subtitle={summary ? `of ${formatBytes(summary.diskCapacity)}` : undefined}
-          icon={<HardDrive className="h-4 w-4" />}
-        />
+        {hasProm && (
+          <MetricCard
+            title="Network RX"
+            value={summary ? formatBytes(summary.networkReceive) : '--'}
+            unit="/s"
+            icon={<Network className="h-4 w-4" />}
+          />
+        )}
+        {hasProm && (
+          <MetricCard
+            title="Disk Usage"
+            value={summary ? formatBytes(summary.diskUsage) : '--'}
+            subtitle={summary ? `of ${formatBytes(summary.diskCapacity)}` : undefined}
+            icon={<HardDrive className="h-4 w-4" />}
+          />
+        )}
         <MetricCard
           title="Pod Count"
           value={summary ? summary.podCount : '--'}
@@ -264,12 +278,13 @@ function MonitoringPage() {
       </div>
 
       {/* Charts */}
-      {metricsLoading ? (
+      {metricsLoading && !hasProm && rolling.count === 0 ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
           <span className="text-sm text-muted-foreground">Loading metrics...</span>
         </div>
-      ) : metrics ? (
+      ) : hasProm && metrics ? (
+        // Full history + disk/network from the per-cluster Prometheus/Thanos stack.
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <MetricsChart
             title="CPU Usage"
@@ -292,7 +307,37 @@ function MonitoringPage() {
             unit=""
           />
         </div>
-      ) : null}
+      ) : (
+        // No Prometheus backend: draw a live rolling window from the summary poll
+        // (CPU/mem/pods) so the page is useful immediately, and point operators to
+        // the install flow for disk/network + durable long-term history.
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2 text-xs text-muted-foreground">
+              <LineChart className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <p>
+                Live rolling window from metrics-server (CPU, memory, pods; this session only).
+                Install the per-cluster Prometheus stack to add <strong>disk & network</strong> and
+                keep <strong>long-term history</strong>.
+              </p>
+            </div>
+            {selectedCluster && (
+              <Link
+                href={`/dashboard/clusters/${selectedCluster.id}/monitoring-stack`}
+                className="inline-flex flex-shrink-0 items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-accent transition-colors"
+              >
+                Set up monitoring stack
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            )}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <MetricsChart title="CPU Usage (live)" series={[rolling.cpu]} unit="%" />
+            <MetricsChart title="Memory Usage (live)" series={[rolling.mem]} unit="%" />
+            <MetricsChart title="Pod Count (live)" series={[rolling.pods]} unit="" />
+          </div>
+        </div>
+      )}
 
       {/* Node Utilization */}
       <div className="space-y-3">

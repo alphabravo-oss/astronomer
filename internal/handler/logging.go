@@ -277,16 +277,23 @@ type CreateLoggingPipelineRequest struct {
 
 // --- Output endpoints ---
 
-// ListOutputs handles GET /api/v1/clusters/{cluster_id}/logging/outputs/.
+// ListOutputs handles GET /api/v1/logging/outputs/ (fleet-wide, the dashboard
+// Logging page) and the cluster-scoped ?cluster_id= form. No cluster_id means
+// fleet-wide: list every cluster's outputs, then filter per-cluster by the
+// caller's RBAC (mirrors ListOperations). A malformed cluster_id is still 400.
 func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
+	limit := int32(queryLimit(r, 20))
+	offset := int32(queryInt(r, "offset", 0))
+
+	if raw := requestClusterIDParam(r); raw == "" {
+		h.listOutputsFleetWide(w, r, limit, offset)
+		return
+	}
 	clusterID, err := clusterIDFromRequest(r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
-
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryInt(r, "offset", 0))
 
 	outputs, err := h.queries.ListOutputsByCluster(r.Context(), sqlc.ListOutputsByClusterParams{
 		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true},
@@ -487,16 +494,21 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 
 // --- Pipeline endpoints ---
 
-// ListPipelines handles GET /api/v1/clusters/{cluster_id}/logging/pipelines/.
+// ListPipelines handles GET /api/v1/logging/pipelines/ (fleet-wide) and the
+// cluster-scoped ?cluster_id= form — same shape as ListOutputs above.
 func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
+	limit := int32(queryLimit(r, 20))
+	offset := int32(queryInt(r, "offset", 0))
+
+	if raw := requestClusterIDParam(r); raw == "" {
+		h.listPipelinesFleetWide(w, r, limit, offset)
+		return
+	}
 	clusterID, err := clusterIDFromRequest(r)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
-
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryInt(r, "offset", 0))
 
 	pipelines, err := h.queries.ListPipelinesByCluster(r.Context(), sqlc.ListPipelinesByClusterParams{
 		ClusterID: clusterID,
@@ -1870,6 +1882,80 @@ func clusterIDFromRequest(r *http.Request) (uuid.UUID, error) {
 		return uuid.Parse(id)
 	}
 	return uuid.Parse(r.URL.Query().Get("cluster_id"))
+}
+
+// requestClusterIDParam returns the raw cluster_id from URL param or query,
+// or "" when neither is present — the signal to list fleet-wide. Kept separate
+// from clusterIDFromRequest so an empty value (fleet-wide) is distinguishable
+// from a malformed one (400).
+func requestClusterIDParam(r *http.Request) string {
+	if id := chi.URLParam(r, "cluster_id"); id != "" {
+		return id
+	}
+	return r.URL.Query().Get("cluster_id")
+}
+
+// listOutputsFleetWide lists every cluster's outputs, then drops the ones the
+// caller can't read (per-cluster logging RBAC). Total mirrors ListOperations:
+// exact count when unrestricted, page length when RBAC-filtered.
+func (h *LoggingHandler) listOutputsFleetWide(w http.ResponseWriter, r *http.Request, limit, offset int32) {
+	outputs, err := h.queries.ListLoggingOutputs(r.Context(), sqlc.ListLoggingOutputsParams{Limit: limit, Offset: offset})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging outputs")
+		return
+	}
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		return
+	}
+	if !restricted {
+		total, err := h.queries.CountLoggingOutputs(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging outputs")
+			return
+		}
+		RespondPaginated(w, r, outputs, total)
+		return
+	}
+	filtered := outputs[:0]
+	for _, o := range outputs {
+		if o.ClusterID.Valid && h.authz.allowsCluster(bindings, uuid.UUID(o.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbRead) {
+			filtered = append(filtered, o)
+		}
+	}
+	RespondPaginated(w, r, filtered, int64(len(filtered)))
+}
+
+// listPipelinesFleetWide is listOutputsFleetWide for pipelines (ClusterID is
+// non-null here, so no .Valid guard).
+func (h *LoggingHandler) listPipelinesFleetWide(w http.ResponseWriter, r *http.Request, limit, offset int32) {
+	pipelines, err := h.queries.ListLoggingPipelines(r.Context(), sqlc.ListLoggingPipelinesParams{Limit: limit, Offset: offset})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging pipelines")
+		return
+	}
+	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		return
+	}
+	if !restricted {
+		total, err := h.queries.CountLoggingPipelines(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging pipelines")
+			return
+		}
+		RespondPaginated(w, r, pipelines, total)
+		return
+	}
+	filtered := pipelines[:0]
+	for _, p := range pipelines {
+		if h.authz.allowsCluster(bindings, p.ClusterID, rbac.ResourceLogging, rbac.VerbRead) {
+			filtered = append(filtered, p)
+		}
+	}
+	RespondPaginated(w, r, filtered, int64(len(filtered)))
 }
 
 func clusterIDFromRequestOrBody(r *http.Request, raw json.RawMessage) (uuid.UUID, error) {

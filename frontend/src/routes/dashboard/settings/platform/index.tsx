@@ -7,15 +7,17 @@ import { createFileRoute } from '@tanstack/react-router';
  * grouped form-state struct, and on save diff against the original to only
  * push keys that actually changed.
  */
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
 import {
   ArrowLeft,
   Loader2,
+  Pencil,
   Save,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { KeyStatusPanel } from '@/components/settings/key-status-panel';
 import { toastInfo } from '@/lib/toast';
 import { useAppForm } from '@/lib/form';
@@ -186,7 +188,7 @@ function BannerPreview({ text, color }: { text: string; color: PlatformSettingsG
   );
 }
 
-function PlatformSettingsForm() {
+function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const { data: flat, isLoading } = usePlatformSettings();
   const save = useSavePlatformSettings();
 
@@ -204,6 +206,7 @@ function PlatformSettingsForm() {
       }
       try {
         await save.mutateAsync(dirty);
+        onSaved?.();
       } catch {
         // Toast handled by mutation.
       }
@@ -466,7 +469,77 @@ function PlatformSettingsForm() {
   );
 }
 
+function humanTtl(seconds: number): string {
+  return seconds >= 86400
+    ? `${Math.round(seconds / 86400)}d`
+    : seconds >= 3600
+      ? `${Math.round(seconds / 3600)}h`
+      : `${seconds}s`;
+}
+
+function PlatformSummary({ onEdit }: { onEdit: () => void }) {
+  const { data: flat, isLoading } = usePlatformSettings();
+  const g = useMemo<PlatformSettingsGrouped>(() => hydrate(flat ?? []), [flat]);
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-32 rounded-xl border border-border bg-card">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  const features = Object.entries(g.features);
+  const enabled = features.filter(([, on]) => on).length;
+  return (
+    <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Current configuration</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Branding, banners, feature flags, TTLs, telemetry.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit settings
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 divide-y divide-border/60 sm:divide-y-0">
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <span className="text-xs text-muted-foreground">Product name</span>
+          <span className="inline-flex items-center gap-2 text-sm text-foreground">
+            <span className="h-3.5 w-3.5 rounded border border-border" style={{ backgroundColor: g.branding.primaryColor }} />
+            {g.branding.productName}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <span className="text-xs text-muted-foreground">Feature flags</span>
+          <span className="text-sm text-foreground">{enabled}/{features.length} enabled</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <span className="text-xs text-muted-foreground">Token TTL</span>
+          <span className="text-sm text-foreground font-mono">{humanTtl(g.tokens.defaultTtlSeconds)} · max {humanTtl(g.tokens.maxTtlSeconds)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <span className="text-xs text-muted-foreground">Session lifetime</span>
+          <span className="text-sm text-foreground font-mono">{g.session.timeoutMinutes}m</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <span className="text-xs text-muted-foreground">Telemetry</span>
+          <span className="text-sm text-foreground">{g.telemetry.enabled ? 'Enabled' : 'Disabled'}</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 py-1.5">
+          <span className="text-xs text-muted-foreground">Registration TLS</span>
+          <span className="text-sm text-foreground font-mono">{g.registration.tlsMode}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlatformSettingsPage() {
+  const [editing, setEditing] = useState(false);
   return (
     <SettingsAuthGate>
       <div className="max-w-3xl mx-auto space-y-6">
@@ -484,9 +557,19 @@ function PlatformSettingsPage() {
             Branding, banners, feature flags, token TTL, telemetry. Changes apply across the dashboard.
           </p>
         </div>
-        <PlatformSettingsForm />
+        <PlatformSummary onEdit={() => setEditing(true)} />
         <KeyStatusPanel />
       </div>
+      {editing && (
+        <ModalShell
+          title="Platform settings"
+          subtitle="Branding, banners, feature flags, TTLs, telemetry."
+          size="xl"
+          onClose={() => setEditing(false)}
+        >
+          <PlatformSettingsForm onSaved={() => setEditing(false)} />
+        </ModalShell>
+      )}
     </SettingsAuthGate>
   );
 }

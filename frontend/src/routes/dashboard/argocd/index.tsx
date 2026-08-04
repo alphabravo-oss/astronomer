@@ -15,6 +15,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { PageHeader, PageSection, PageShell } from '@/components/ui/page';
 import { useLiveQueryInvalidation } from '@/lib/live/hooks';
 import { RegisterInstanceModal } from '@/components/argocd/register-instance-modal';
+import { isBrowserReachable, argoInstanceWebHref } from '@/lib/argocd';
 import { formatRelativeTime } from '@/lib/utils';
 import { queryKeys } from '@/lib/hooks';
 import { liveFallback } from '@/lib/live/status-store';
@@ -65,18 +66,25 @@ function ArgoCDInstancesPage() {
     {
       key: 'apiUrl',
       header: 'URL',
-      accessor: (row) => (
-        <a
-          href={row.apiUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground"
-        >
-          {row.apiUrl}
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      ),
+      accessor: (row) => {
+        // In-cluster instances (the local self-managed ArgoCD) carry a
+        // *.svc.cluster.local apiUrl the browser can't follow — link to the
+        // same-origin /argocd/ proxy instead so the cell is actually openable.
+        const reachable = isBrowserReachable(row.apiUrl);
+        return (
+          <a
+            href={argoInstanceWebHref(row.apiUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground"
+            title={reachable ? undefined : `In-cluster: ${row.apiUrl} — opens via the /argocd/ proxy`}
+          >
+            {reachable ? row.apiUrl : '/argocd/applications'}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        );
+      },
     },
     {
       key: 'health',

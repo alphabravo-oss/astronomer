@@ -10,11 +10,12 @@ import { createFileRoute } from '@tanstack/react-router';
  */
 import { useEffect, useState } from 'react';
 import { Link } from '@/lib/link';
-import { ArrowLeft, Loader2, Mail, Save, Send } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail, Pencil, Plus, Save, Send } from 'lucide-react';
 import { toastError } from '@/lib/toast';
 import { formatRelativeTime } from '@/lib/utils';
 import { useAppForm } from '@/lib/form';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { ModalShell } from '@/components/ui/modal-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
 import {
@@ -38,7 +39,7 @@ const DEFAULT_CONFIG: SmtpConfig = {
   timeoutSeconds: 30,
 };
 
-function SmtpForm({ initial }: { initial: SmtpConfig }) {
+function SmtpForm({ initial, onSaved }: { initial: SmtpConfig; onSaved?: () => void }) {
   const [testTo, setTestTo] = useState('');
   const update = useUpdateSmtpConfig();
   const testSend = useTestSmtp();
@@ -50,6 +51,7 @@ function SmtpForm({ initial }: { initial: SmtpConfig }) {
         // The sentinel stays in the value; updateSmtpConfig strips it before
         // the PUT (strip-in-mutation, unchanged).
         await update.mutateAsync(value);
+        onSaved?.();
       } catch {
         // Mutation toasts on error.
       }
@@ -74,12 +76,7 @@ function SmtpForm({ initial }: { initial: SmtpConfig }) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-6 space-y-5">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">Server</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Connection + authentication for outbound mail.</p>
-      </div>
-
+    <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="sm:col-span-2">
           <form.AppField name="host">
@@ -288,9 +285,55 @@ function EmailsTable() {
   );
 }
 
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground font-mono truncate">{value || '—'}</span>
+    </div>
+  );
+}
+
+function SmtpSummary({ config, onEdit }: { config: SmtpConfig; onEdit: () => void }) {
+  const configured = !!config.host;
+  return (
+    <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Server</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Connection + authentication for outbound mail.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+        >
+          {configured ? <Pencil className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {configured ? 'Edit configuration' : 'Configure SMTP'}
+        </button>
+      </div>
+      {configured ? (
+        <div className="divide-y divide-border/60">
+          <SummaryRow label="Host" value={`${config.host}:${config.port}`} />
+          <SummaryRow label="Username" value={config.username} />
+          <SummaryRow label="Password" value={config.password ? 'Configured' : 'Not set'} />
+          <SummaryRow label="From" value={config.fromName ? `${config.fromName} <${config.fromAddress}>` : config.fromAddress} />
+          <SummaryRow label="Auth" value={config.authMechanism} />
+          <SummaryRow label="Encryption" value={`${config.encryption}${config.requireTls ? ' · require TLS' : ''}`} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No mail server configured yet. Configure SMTP to enable outbound email and test-sends.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SmtpPageInner() {
   const { data, isLoading } = useSmtpConfig();
   const initial = data ?? DEFAULT_CONFIG;
+  const [editing, setEditing] = useState(false);
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-48">
@@ -300,8 +343,19 @@ function SmtpPageInner() {
   }
   return (
     <div className="space-y-6">
-      <SmtpForm initial={initial} />
+      <SmtpSummary config={initial} onEdit={() => setEditing(true)} />
       <EmailsTable />
+      {editing && (
+        <ModalShell
+          title="SMTP configuration"
+          subtitle="Outbound mail server + test-send."
+          titleIcon={<Mail className="h-4 w-4" />}
+          size="lg"
+          onClose={() => setEditing(false)}
+        >
+          <SmtpForm initial={initial} onSaved={() => setEditing(false)} />
+        </ModalShell>
+      )}
     </div>
   );
 }

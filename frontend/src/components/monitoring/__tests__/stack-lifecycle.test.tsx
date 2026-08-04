@@ -331,6 +331,9 @@ describe.each(FAMILIES)('$name lifecycle screen', (family) => {
     family.renderPage();
 
     const panel = await panelFor(family);
+    // Progressive disclosure: the config form is hidden until an intentional
+    // "Set up …" action reveals it, so click that before filling/installing.
+    fireEvent.click(within(panel).getByRole('button', { name: /^Set up / }));
     family.prepareInstall?.(panel);
 
     const install = within(panel).getByRole('button', { name: 'Install' });
@@ -417,6 +420,8 @@ describe.each(FAMILIES)('$name lifecycle screen', (family) => {
     family.renderPage();
 
     const panel = await panelFor(family);
+    // Reveal the installed stack's actions before reaching Replace.
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Edit configuration' }));
     fireEvent.click(await within(panel).findByRole('button', { name: 'Replace' }));
 
     const confirm = screen.getAllByRole('button', { name: 'Replace' }).at(-1) as HTMLElement;
@@ -487,10 +492,12 @@ describe('shared monitoring stacks page', () => {
     const alertmanager = await screen.findByTestId('stack-panel-alertmanager');
     await waitFor(() => expect(within(thanos).getByText('Healthy')).toBeInTheDocument());
     expect(within(alertmanager).getByText('Not installed')).toBeInTheDocument();
-    // Absent stack: Install, no Upgrade/Uninstall. Installed: the reverse.
-    expect(within(alertmanager).getByRole('button', { name: 'Install' })).toBeInTheDocument();
-    expect(within(thanos).queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
-    expect(within(thanos).getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+    // Progressive disclosure: an absent stack offers a "Set up …" entry point,
+    // an installed one offers "Edit configuration" — the actual Install/Upgrade
+    // buttons live inside the form each reveals.
+    expect(within(alertmanager).getByRole('button', { name: /^Set up / })).toBeInTheDocument();
+    expect(within(thanos).queryByRole('button', { name: /^Set up / })).not.toBeInTheDocument();
+    expect(within(thanos).getByRole('button', { name: 'Edit configuration' })).toBeInTheDocument();
   });
 
   it('shows the whole page as permission-blocked without monitoring:read', async () => {
