@@ -193,6 +193,7 @@ function WidgetsAdminPage() {
     setDeleteWidgetTarget(null);
   };
 
+  const [showAddDS, setShowAddDS] = useState(false);
   const [dsName, setDsName] = useState('');
   const [dsURL, setDsURL] = useState('');
   const [dsBearer, setDsBearer] = useState('');
@@ -204,6 +205,7 @@ function WidgetsAdminPage() {
       setDsName('');
       setDsURL('');
       setDsBearer('');
+      setShowAddDS(false);
     } catch (e) {
       setDsError(e instanceof Error ? e.message : String(e));
     }
@@ -423,7 +425,17 @@ function WidgetsAdminPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Prometheus datasources</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium">Prometheus datasources</h2>
+          {!showAddDS && (
+            <button
+              onClick={() => setShowAddDS(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add datasource
+            </button>
+          )}
+        </div>
         {dsError || datasourcesQuery.isError ? (
           <div className="text-sm text-red-600">
             {dsError ??
@@ -469,23 +481,43 @@ function WidgetsAdminPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              <TableRow className="border-t border-border bg-muted/20">
-                <TableCell className="px-3 py-2">
-                  <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="name" value={dsName} onChange={(e) => setDsName(e.target.value)} />
-                </TableCell>
-                <TableCell className="px-3 py-2">
-                  <input className="bg-background border border-border rounded px-2 py-1 w-full font-mono text-xs" placeholder="https://prom..." value={dsURL} onChange={(e) => setDsURL(e.target.value)} />
-                </TableCell>
-                <TableCell className="px-3 py-2">
-                  <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="Bearer (optional)" value={dsBearer} onChange={(e) => setDsBearer(e.target.value)} />
-                </TableCell>
-                <TableCell className="px-3 py-2 text-muted-foreground text-xs">—</TableCell>
-                <TableCell className="px-3 py-2 text-right">
-                  <button onClick={addDS} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
-                    <Plus className="h-3 w-3" /> Add
-                  </button>
-                </TableCell>
-              </TableRow>
+              {showAddDS && (
+                <TableRow className="border-t border-border bg-muted/20">
+                  <TableCell className="px-3 py-2">
+                    <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="name" value={dsName} onChange={(e) => setDsName(e.target.value)} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <input className="bg-background border border-border rounded px-2 py-1 w-full font-mono text-xs" placeholder="https://prom..." value={dsURL} onChange={(e) => setDsURL(e.target.value)} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <input className="bg-background border border-border rounded px-2 py-1 w-32" placeholder="Bearer (optional)" value={dsBearer} onChange={(e) => setDsBearer(e.target.value)} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-muted-foreground text-xs">—</TableCell>
+                  <TableCell className="px-3 py-2 text-right whitespace-nowrap">
+                    <button onClick={addDS} className="text-xs text-primary hover:underline inline-flex items-center gap-1 mr-2">
+                      <Plus className="h-3 w-3" /> Add
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddDS(false);
+                        setDsName('');
+                        setDsURL('');
+                        setDsBearer('');
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </TableCell>
+                </TableRow>
+              )}
+              {!showAddDS && datasources.length === 0 && (
+                <TableRow className="border-t border-border">
+                  <TableCell colSpan={5} className="px-3 py-4 text-center text-xs text-muted-foreground">
+                    No datasources yet. Use “Add datasource” to connect a Prometheus endpoint.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

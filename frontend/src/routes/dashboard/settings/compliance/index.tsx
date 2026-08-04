@@ -13,10 +13,12 @@ import {
   Download,
   FileArchive,
   Loader2,
+  Plus,
 } from 'lucide-react';
 import { toastError, toastInfo, toastSuccess } from '@/lib/toast';
 import { cn, formatBytes, formatRelativeTime, downloadBlob } from '@/lib/utils';
 import { SettingsAuthGate } from '@/components/settings/auth-gate';
+import { ModalShell } from '@/components/ui/modal-shell';
 import {
   downloadComplianceExportBlob,
   getComplianceExport,
@@ -50,6 +52,7 @@ function StatusPill({ status }: { status: ComplianceExportSummary['status'] }) {
 }
 
 function ComplianceForm() {
+  const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(thirtyDaysAgoIso());
   const [to, setTo] = useState(todayIso());
   const [submitting, setSubmitting] = useState(false);
@@ -88,6 +91,7 @@ function ComplianceForm() {
     setJob(null);
     try {
       const result = await requestComplianceExport({ from, to });
+      setOpen(false);
       if (result.kind === 'blob') {
         downloadBlob(result.blob, result.filename);
         toastSuccess('Export downloaded');
@@ -116,46 +120,73 @@ function ComplianceForm() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+      <div className="rounded-xl border border-border bg-card p-6 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Export range</h2>
+          <h2 className="text-base font-semibold text-foreground">Audit export</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Includes RBAC config, audit log, platform settings, and webhook history for the
-            chosen window. The result is a signed ZIP suitable for compliance archives.
+            Bundles RBAC config, audit log, platform settings, and webhook history for a date
+            window into a signed ZIP suitable for compliance archives.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">From</label>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">To</label>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={submitting}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            Export
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New export
+        </button>
       </div>
+
+      {open && (
+        <ModalShell
+          title="New compliance export"
+          subtitle="Pick the date window to bundle."
+          titleIcon={<FileArchive className="h-4 w-4" />}
+          onClose={() => setOpen(false)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                Export
+              </button>
+            </div>
+          }
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">From</label>
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">To</label>
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+        </ModalShell>
+      )}
 
       {job && (
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
