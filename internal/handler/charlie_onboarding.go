@@ -108,6 +108,7 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 		SigningPublicKeyBase64: request.SigningPublicKey, ConfirmedSigningKeyID: request.ConfirmedSigningKeyID,
 		ConfirmedSigningFingerprint: request.ConfirmedSigningFingerprint,
 		ExpectedDeploymentID:        request.ExpectedDeploymentID, ExpectedRouteID: request.ExpectedRouteID, Now: now,
+		ExpectedMCPURL: "https://astronomer-charlie-mcp.astronomer.svc:7444/mcp",
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Onboarding package verification failed")

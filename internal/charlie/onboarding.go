@@ -26,6 +26,7 @@ type OnboardingConfirmation struct {
 	ConfirmedSigningFingerprint string
 	ExpectedDeploymentID        string
 	ExpectedRouteID             string
+	ExpectedMCPURL              string
 	Now                         time.Time
 }
 
@@ -45,6 +46,8 @@ type OnboardingStatus struct {
 	ProductSlug             string                 `json:"product_slug"`
 	DeploymentID            string                 `json:"deployment_id"`
 	LogicalAgentID          string                 `json:"logical_agent_id"`
+	IntegrationID           string                 `json:"integration_id"`
+	MCPURL                  string                 `json:"mcp_url"`
 	RouteID                 string                 `json:"route_id"`
 	AllowedRouteIDs         []string               `json:"allowed_route_ids"`
 	Schema                  string                 `json:"schema"`
@@ -76,6 +79,7 @@ func (v ValidatedOnboarding) SafeStatus(state string, idempotent bool) Onboardin
 	return OnboardingStatus{
 		PackageID: v.PackageID, ProductID: string(v.Package.ProductId), ProductSlug: v.Package.ProductSlug, DeploymentID: string(v.Package.DeploymentId),
 		LogicalAgentID: string(v.Package.LogicalAgentId), RouteID: string(v.Package.Route.RouteId), AllowedRouteIDs: allowedRoutes,
+		IntegrationID: string(v.Package.Integration.IntegrationId), MCPURL: v.Package.Integration.McpUrl,
 		Schema: v.Package.Schema, CentralAPIVersion: v.Package.CentralApiVersion,
 		CentralTrustFingerprint: v.Package.Central.CertificateSha256, SigningKeyID: string(v.Package.Signing.KeyId),
 		SigningFingerprint: v.Package.Signing.PublicKeySha256, PackageDigest: v.RawDigest,
@@ -111,6 +115,9 @@ func ValidateOnboardingPackage(raw []byte, confirmation OnboardingConfirmation) 
 	}
 	if string(pkg.DeploymentId) != confirmation.ExpectedDeploymentID || string(pkg.Route.RouteId) != confirmation.ExpectedRouteID {
 		return ValidatedOnboarding{}, fmt.Errorf("onboarding deployment and route confirmation do not match")
+	}
+	if confirmation.ExpectedMCPURL == "" || pkg.Integration.McpUrl != confirmation.ExpectedMCPURL || string(pkg.Integration.IntegrationId) == "" {
+		return ValidatedOnboarding{}, fmt.Errorf("onboarding integration and private MCP confirmation do not match")
 	}
 	allowedRoute := false
 	for _, routeID := range pkg.Route.AllowedRouteIds {

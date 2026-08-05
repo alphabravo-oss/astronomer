@@ -1175,6 +1175,9 @@ type OnboardingV1SchemaJson struct {
 	// ExpiresAt corresponds to the JSON schema field "expires_at".
 	ExpiresAt time.Time `json:"expires_at" yaml:"expires_at" mapstructure:"expires_at"`
 
+	// Integration corresponds to the JSON schema field "integration".
+	Integration OnboardingV1SchemaJsonIntegration `json:"integration" yaml:"integration" mapstructure:"integration"`
+
 	// IssuedAt corresponds to the JSON schema field "issued_at".
 	IssuedAt time.Time `json:"issued_at" yaml:"issued_at" mapstructure:"issued_at"`
 
@@ -1321,6 +1324,41 @@ func (j *OnboardingV1SchemaJsonCentral) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
+type OnboardingV1SchemaJsonIntegration struct {
+	// IntegrationId corresponds to the JSON schema field "integration_id".
+	IntegrationId OpaqueId `json:"integration_id" yaml:"integration_id" mapstructure:"integration_id"`
+
+	// McpUrl corresponds to the JSON schema field "mcp_url".
+	McpUrl string `json:"mcp_url" yaml:"mcp_url" mapstructure:"mcp_url"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *OnboardingV1SchemaJsonIntegration) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["integration_id"]; raw != nil && !ok {
+		return fmt.Errorf("field integration_id in OnboardingV1SchemaJsonIntegration: required")
+	}
+	if _, ok := raw["mcp_url"]; raw != nil && !ok {
+		return fmt.Errorf("field mcp_url in OnboardingV1SchemaJsonIntegration: required")
+	}
+	type Plain OnboardingV1SchemaJsonIntegration
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if matched, _ := regexp.MatchString(`^https://`, string(plain.McpUrl)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "McpUrl", `^https://`)
+	}
+	if utf8.RuneCountInString(string(plain.McpUrl)) > 2048 {
+		return fmt.Errorf("field %s length: must be <= %d", "mcp_url", 2048)
+	}
+	*j = OnboardingV1SchemaJsonIntegration(plain)
+	return nil
+}
+
 type OnboardingV1SchemaJsonRoute struct {
 	// AllowedRouteIds corresponds to the JSON schema field "allowed_route_ids".
 	AllowedRouteIds []OpaqueId `json:"allowed_route_ids" yaml:"allowed_route_ids" mapstructure:"allowed_route_ids"`
@@ -1432,6 +1470,9 @@ func (j *OnboardingV1SchemaJson) UnmarshalJSON(value []byte) error {
 	}
 	if _, ok := raw["expires_at"]; raw != nil && !ok {
 		return fmt.Errorf("field expires_at in OnboardingV1SchemaJson: required")
+	}
+	if _, ok := raw["integration"]; raw != nil && !ok {
+		return fmt.Errorf("field integration in OnboardingV1SchemaJson: required")
 	}
 	if _, ok := raw["issued_at"]; raw != nil && !ok {
 		return fmt.Errorf("field issued_at in OnboardingV1SchemaJson: required")

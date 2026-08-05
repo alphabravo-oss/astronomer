@@ -7,7 +7,7 @@
   "required": [
     "schema", "central_api_version", "package_id", "issued_at", "expires_at",
     "organization_id", "product_id", "product_slug", "deployment_id", "environment_id",
-    "tenant_id", "logical_agent_id", "replica_count", "route",
+    "tenant_id", "logical_agent_id", "replica_count", "route", "integration",
     "central", "credentials", "artifact", "signing", "signature"
   ],
   "properties": {
@@ -34,6 +34,15 @@
           "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
           "items": {"$ref": "#/$defs/opaqueId"}
         }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["integration_id", "mcp_url"],
+      "properties": {
+        "integration_id": {"$ref": "#/$defs/opaqueId"},
+        "mcp_url": {"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048}
       }
     },
     "central": {

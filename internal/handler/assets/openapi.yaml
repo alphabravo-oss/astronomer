@@ -85,6 +85,8 @@ components:
         - product_slug
         - deployment_id
         - logical_agent_id
+        - integration_id
+        - mcp_url
         - route_id
         - allowed_route_ids
         - schema
@@ -107,6 +109,8 @@ components:
         deployment_id:
           type: string
         logical_agent_id: {type: string}
+        integration_id: {type: string}
+        mcp_url: {type: string, format: uri}
         route_id:
           type: string
         allowed_route_ids: {type: array, items: {type: string}}

@@ -200,6 +200,14 @@ func (i *AgentInstaller) Install(ctx context.Context, spec AgentInstallSpec) (Ag
 	if err := validateAgentInstallSpec(spec); err != nil {
 		return AgentInstallReceipt{}, err
 	}
+	pkg, err := contract.ParseOnboardingPackage(spec.OnboardingPackage)
+	if err != nil {
+		return AgentInstallReceipt{}, fmt.Errorf("Charlie signed onboarding package is invalid")
+	}
+	expectedMCPURL := fmt.Sprintf("https://%s.%s.svc:%d/mcp", charlieMCPServiceName, i.productNamespace, charlieMCPPort)
+	if pkg.Integration.McpUrl != expectedMCPURL || strings.TrimSpace(string(pkg.Integration.IntegrationId)) == "" {
+		return AgentInstallReceipt{}, fmt.Errorf("Charlie signed integration does not match the private product MCP boundary")
+	}
 	if len(spec.CentralCIDRs) == 0 {
 		cidrs, err := i.resolveCentralCIDRs(ctx, spec.CentralURL)
 		if err != nil {
@@ -534,7 +542,7 @@ func validateAgentInstallSpec(spec AgentInstallSpec) error {
 		return fmt.Errorf("Charlie action signing trust is required")
 	}
 	pkg, err := contract.ParseOnboardingPackage(spec.OnboardingPackage)
-	if err != nil || pkg.ReplicaCount != spec.ReplicaCount || string(pkg.LogicalAgentId) != spec.LogicalAgentID {
+	if err != nil || pkg.ReplicaCount != spec.ReplicaCount || string(pkg.LogicalAgentId) != spec.LogicalAgentID || string(pkg.Integration.IntegrationId) == "" {
 		return fmt.Errorf("Charlie signed onboarding package does not match the agent installation")
 	}
 	slots := make(map[int]string, spec.ReplicaCount)

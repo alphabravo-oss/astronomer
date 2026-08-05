@@ -282,6 +282,17 @@ func TestAgentInstallerRejectsOnboardingReplicaMismatchOrDuplicateSlots(t *testi
 	}
 }
 
+func TestAgentInstallerRejectsSignedMCPBoundaryMismatch(t *testing.T) {
+	installer, _, _, _ := testAgentInstaller(t)
+	spec := testAgentInstallSpec(t)
+	fixture := newOnboardingFixture(t)
+	fixture.object["integration"].(map[string]any)["mcp_url"] = "https://other-product-mcp.astronomer.svc:7444/mcp"
+	spec.OnboardingPackage = fixture.signed(t)
+	if _, err := installer.Install(context.Background(), spec); err == nil {
+		t.Fatal("onboarding package with another product MCP boundary was accepted")
+	}
+}
+
 func TestAgentInstallerPartialFailureRollsBackAndRetrySucceeds(t *testing.T) {
 	installer, kube, _, _ := testAgentInstaller(t)
 	spec := testAgentInstallSpec(t)

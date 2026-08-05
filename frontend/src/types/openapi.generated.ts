@@ -601,6 +601,8 @@ export interface OpenAPIComponents {
           "product_slug": "astronomer";
           "deployment_id": string;
           "logical_agent_id": string;
+          "integration_id": string;
+          "mcp_url": string;
           "route_id": string;
           "allowed_route_ids": string[];
           "schema": "charlie.onboarding/v1";

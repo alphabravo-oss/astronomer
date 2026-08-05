@@ -57,6 +57,7 @@ func newOnboardingFixture(t *testing.T) onboardingFixture {
 		"environment_id": "environment-1", "tenant_id": "tenant-1", "logical_agent_id": "agent-1",
 		"replica_count": 2,
 		"route":         map[string]any{"route_id": "route-1", "allowed_route_ids": []any{"route-1"}},
+		"integration":   map[string]any{"integration_id": "integration-1", "mcp_url": "https://astronomer-charlie-mcp.astronomer.svc:7444/mcp"},
 		"central":       map[string]any{"base_url": "https://charlie.example.test", "ca_bundle_pem": caPEM, "certificate_sha256": hex.EncodeToString(caFingerprint[:])},
 		"credentials": []any{
 			map[string]any{"purpose": "agent_enrollment", "replica_ordinal": 0, "credential": "enrollment-secret-value-00000000001", "expires_at": now.Add(30 * time.Minute).Format(time.RFC3339)},
@@ -72,6 +73,7 @@ func newOnboardingFixture(t *testing.T) onboardingFixture {
 			SigningPublicKeyBase64: base64.RawURLEncoding.EncodeToString(publicKey),
 			ConfirmedSigningKeyID:  "operator-key-1", ConfirmedSigningFingerprint: hex.EncodeToString(keyFingerprint[:]),
 			ExpectedDeploymentID: "deployment-1", ExpectedRouteID: "route-1", Now: now,
+			ExpectedMCPURL: "https://astronomer-charlie-mcp.astronomer.svc:7444/mcp",
 		},
 	}
 }
@@ -146,6 +148,9 @@ func TestValidateOnboardingPackageRejectsInvalidMatrix(t *testing.T) {
 		{name: "wrong fingerprint", mutate: func(f *onboardingFixture) { f.confirmation.ConfirmedSigningFingerprint = string(make([]byte, 64)) }},
 		{name: "unsupported version", mutate: func(f *onboardingFixture) { f.object["central_api_version"] = "charlie/v999" }},
 		{name: "wrong deployment", mutate: func(f *onboardingFixture) { f.confirmation.ExpectedDeploymentID = "different" }},
+		{name: "wrong private MCP endpoint", mutate: func(f *onboardingFixture) {
+			f.object["integration"].(map[string]any)["mcp_url"] = "https://another-product-mcp.astronomer.svc:7444/mcp"
+		}},
 		{name: "route not allowed", mutate: func(f *onboardingFixture) { f.object["route"].(map[string]any)["allowed_route_ids"] = []any{"route-2"} }},
 		{name: "central URL with path", mutate: func(f *onboardingFixture) {
 			f.object["central"].(map[string]any)["base_url"] = "https://charlie.example.test/api"
