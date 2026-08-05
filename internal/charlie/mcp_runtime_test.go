@@ -105,7 +105,7 @@ func mcpRuntimeFixture(t *testing.T) (*MCPRuntime, *mcpRuntimeFakeQueries) {
 	userID := uuid.New()
 	queries := &mcpRuntimeFakeQueries{
 		connection: sqlc.CharlieConnection{
-			ID: uuid.New(), InstallationID: installationID, ProductID: "astronomer", Active: true,
+			ID: uuid.New(), InstallationID: installationID, ProductID: "product-a", ProductSlug: "astronomer", Active: true,
 			OnboardingState: "active", RequestedMode: string(ModeReadOnly), VerifiedMode: string(ModeReadOnly),
 			SigningKeyFingerprint: digestBytes(publicKey),
 		},

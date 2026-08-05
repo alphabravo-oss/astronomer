@@ -14,6 +14,7 @@ export interface CharlieOnboardingInput {
 export interface CharlieOnboardingView {
   packageId: string;
   productId: string;
+  productSlug: "astronomer";
   deploymentId: string;
   logicalAgentId: string;
   routeId: string;
@@ -39,6 +40,7 @@ export interface CharlieOnboardingView {
 export interface CharlieConnectionView {
   connected: boolean;
   productId?: string;
+  productSlug?: string;
   deploymentId?: string;
   routeId?: string;
   centralVersion?: string;

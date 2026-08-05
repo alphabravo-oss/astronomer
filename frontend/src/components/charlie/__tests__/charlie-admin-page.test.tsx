@@ -76,8 +76,9 @@ const CharlieAdminPage = CharlieAdminContent;
 
 const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 const safeReview = {
-  packageId: "11111111-1111-4111-8111-111111111111",
-  productId: "astronomer",
+  packageId: "onboard_11111111111141118111111111111111",
+  productId: "product-astronomer",
+  productSlug: "astronomer" as const,
   deploymentId: "deployment-a",
   logicalAgentId: "agent-a",
   routeId: "route-a",

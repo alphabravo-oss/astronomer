@@ -717,7 +717,7 @@ type Querier interface {
 	GetCharlieAutomationRole(ctx context.Context) (GlobalRole, error)
 	GetCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
 	GetCharlieConnectionByDeploymentID(ctx context.Context, deploymentID string) (CharlieConnection, error)
-	GetCharlieConnectionByPackageID(ctx context.Context, onboardingPackageID uuid.UUID) (CharlieConnection, error)
+	GetCharlieConnectionByPackageID(ctx context.Context, onboardingPackageID string) (CharlieConnection, error)
 	GetCharlieFinding(ctx context.Context, id uuid.UUID) (CharlieFinding, error)
 	GetCharlieFindingByApprovalID(ctx context.Context, approvalID pgtype.Text) (CharlieFinding, error)
 	GetCharlieFindingByCentralID(ctx context.Context, arg GetCharlieFindingByCentralIDParams) (CharlieFinding, error)

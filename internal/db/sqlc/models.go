@@ -611,6 +611,7 @@ type CharlieConnection struct {
 	ID                             uuid.UUID          `json:"id"`
 	InstallationID                 uuid.UUID          `json:"installation_id"`
 	ProductID                      string             `json:"product_id"`
+	ProductSlug                    string             `json:"product_slug"`
 	DeploymentID                   string             `json:"deployment_id"`
 	RouteID                        string             `json:"route_id"`
 	CentralUrl                     string             `json:"central_url"`
@@ -629,7 +630,7 @@ type CharlieConnection struct {
 	McpServiceName                 string             `json:"mcp_service_name"`
 	LocalTrustMaterialEncrypted    string             `json:"local_trust_material_encrypted"`
 	AgentSecretName                string             `json:"agent_secret_name"`
-	OnboardingPackageID            uuid.UUID          `json:"onboarding_package_id"`
+	OnboardingPackageID            string             `json:"onboarding_package_id"`
 	OnboardingPackageDigest        string             `json:"onboarding_package_digest"`
 	OnboardingPackageExpiresAt     time.Time          `json:"onboarding_package_expires_at"`
 	EnrollmentCredentialsExpiresAt time.Time          `json:"enrollment_credentials_expires_at"`

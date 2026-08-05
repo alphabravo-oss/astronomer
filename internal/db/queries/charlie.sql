@@ -207,7 +207,7 @@ SELECT * FROM charlie_connections WHERE deployment_id = $1;
 
 -- name: CreateCharlieConnection :one
 INSERT INTO charlie_connections (
-    installation_id, product_id, deployment_id, route_id, central_url,
+    installation_id, product_id, product_slug, deployment_id, route_id, central_url,
     central_ca_fingerprint, signing_key_id, signing_key_fingerprint,
     onboarding_schema_version, central_api_version, agent_protocol_version,
     chart_version, chart_digest, image_digest, logical_agent_id, replica_count,
@@ -218,7 +218,7 @@ INSERT INTO charlie_connections (
     onboarding_state, agent_secret_hmac, requested_mode, verified_mode,
     disclosure_digest, health_state, active, created_by_id, reconciliation_due_at
 ) VALUES (
-    sqlc.arg(installation_id), 'astronomer', sqlc.arg(deployment_id),
+    sqlc.arg(installation_id), sqlc.arg(product_id), sqlc.arg(product_slug), sqlc.arg(deployment_id),
     sqlc.arg(route_id), sqlc.arg(central_url), sqlc.arg(central_ca_fingerprint),
     sqlc.arg(signing_key_id), sqlc.arg(signing_key_fingerprint),
     sqlc.arg(onboarding_schema_version), sqlc.arg(central_api_version),

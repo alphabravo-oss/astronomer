@@ -81,7 +81,7 @@ func liveAuthorityFixture(mode Mode) (*fakeLiveAuthorityQueries, fakeBindings, *
 	connectionID, sessionID := uuid.New(), uuid.New()
 	principalID, approverID, automationID := uuid.New(), uuid.New(), uuid.New()
 	connection := sqlc.CharlieConnection{
-		ID: connectionID, ProductID: "astronomer", DeploymentID: "deployment-a", Active: true,
+		ID: connectionID, ProductID: "product-a", ProductSlug: "astronomer", DeploymentID: "deployment-a", Active: true,
 		RequestedMode: string(mode), VerifiedMode: string(mode), VerifiedModeRevision: 2,
 		DisclosureDigest: "disclosure-a", FencingEpoch: 7,
 	}

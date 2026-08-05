@@ -232,7 +232,7 @@ func approvalAccessFixture(t *testing.T) (*ApprovalAccessService, *approvalAcces
 	connectionID, sessionID, actorID := uuid.New(), uuid.New(), uuid.New()
 	disclosure := strings.Repeat("b", 64)
 	connection := sqlc.CharlieConnection{
-		ID: connectionID, InstallationID: uuid.New(), ProductID: "astronomer", DeploymentID: "deployment-a", Active: true,
+		ID: connectionID, InstallationID: uuid.New(), ProductID: "product-a", ProductSlug: "astronomer", DeploymentID: "deployment-a", Active: true,
 		RequestedMode: "approval", VerifiedMode: "approval", VerifiedModeRevision: 2,
 		DisclosureDigest: disclosure, FencingEpoch: 7, SigningKeyFingerprint: hex.EncodeToString(keyDigest[:]),
 	}

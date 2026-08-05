@@ -82,6 +82,7 @@ components:
       required:
         - package_id
         - product_id
+        - product_slug
         - deployment_id
         - logical_agent_id
         - route_id
@@ -101,8 +102,8 @@ components:
       properties:
         package_id:
           type: string
-          format: uuid
         product_id: {type: string}
+        product_slug: {type: string, enum: [astronomer]}
         deployment_id:
           type: string
         logical_agent_id: {type: string}
@@ -242,6 +243,7 @@ components:
       properties:
         connected: {type: boolean}
         product_id: {type: string}
+        product_slug: {type: string}
         deployment_id: {type: string}
         route_id: {type: string}
         central_version: {type: string}

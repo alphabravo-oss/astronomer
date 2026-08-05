@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
-	"github.com/google/uuid"
 	"github.com/gowebpki/jcs"
 )
 
@@ -34,7 +33,7 @@ type ValidatedOnboarding struct {
 	Package               contract.OnboardingPackage `json:"-"`
 	RawPackage            json.RawMessage            `json:"-"`
 	RawDigest             string                     `json:"-"`
-	PackageID             uuid.UUID
+	PackageID             string
 	EnrollmentCredentials []string          `json:"-"`
 	ArtifactCredential    string            `json:"-"`
 	SigningPublicKey      ed25519.PublicKey `json:"-"`
@@ -43,6 +42,7 @@ type ValidatedOnboarding struct {
 type OnboardingStatus struct {
 	PackageID               string                 `json:"package_id"`
 	ProductID               string                 `json:"product_id"`
+	ProductSlug             string                 `json:"product_slug"`
 	DeploymentID            string                 `json:"deployment_id"`
 	LogicalAgentID          string                 `json:"logical_agent_id"`
 	RouteID                 string                 `json:"route_id"`
@@ -74,7 +74,7 @@ func (v ValidatedOnboarding) SafeStatus(state string, idempotent bool) Onboardin
 		allowedRoutes[index] = string(routeID)
 	}
 	return OnboardingStatus{
-		PackageID: v.PackageID.String(), ProductID: string(v.Package.ProductId), DeploymentID: string(v.Package.DeploymentId),
+		PackageID: v.PackageID, ProductID: string(v.Package.ProductId), ProductSlug: v.Package.ProductSlug, DeploymentID: string(v.Package.DeploymentId),
 		LogicalAgentID: string(v.Package.LogicalAgentId), RouteID: string(v.Package.Route.RouteId), AllowedRouteIDs: allowedRoutes,
 		Schema: v.Package.Schema, CentralAPIVersion: v.Package.CentralApiVersion,
 		CentralTrustFingerprint: v.Package.Central.CertificateSha256, SigningKeyID: string(v.Package.Signing.KeyId),
@@ -102,11 +102,8 @@ func ValidateOnboardingPackage(raw []byte, confirmation OnboardingConfirmation) 
 	if !pkg.IssuedAt.Before(pkg.ExpiresAt) || !now.Before(pkg.ExpiresAt) || pkg.IssuedAt.After(now.Add(5*time.Minute)) {
 		return ValidatedOnboarding{}, fmt.Errorf("onboarding package is expired or not yet valid")
 	}
-	packageID, err := uuid.Parse(string(pkg.PackageId))
-	if err != nil {
-		return ValidatedOnboarding{}, fmt.Errorf("onboarding package ID must be a UUID")
-	}
-	if string(pkg.ProductId) != "astronomer" {
+	packageID := string(pkg.PackageId)
+	if pkg.ProductSlug != "astronomer" {
 		return ValidatedOnboarding{}, fmt.Errorf("onboarding product must be astronomer")
 	}
 	if pkg.CentralApiVersion != contract.CentralAPISchemaVersion {

@@ -92,7 +92,7 @@ func (tx *fakeOnboardingTx) GetPlatformConfig(context.Context) (sqlc.PlatformCon
 	return sqlc.PlatformConfiguration{InstanceID: tx.installationID}, nil
 }
 
-func (tx *fakeOnboardingTx) GetCharlieConnectionByPackageID(_ context.Context, packageID uuid.UUID) (sqlc.CharlieConnection, error) {
+func (tx *fakeOnboardingTx) GetCharlieConnectionByPackageID(_ context.Context, packageID string) (sqlc.CharlieConnection, error) {
 	if tx.connection != nil && tx.connection.OnboardingPackageID == packageID {
 		return *tx.connection, nil
 	}

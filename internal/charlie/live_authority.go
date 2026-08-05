@@ -229,7 +229,7 @@ func requiredWriteResourceID(arguments map[string]json.RawMessage) (string, erro
 
 func (a *ProductLiveAuthority) loadIdentity(ctx context.Context, action ActionEnvelope) (sqlc.CharlieConnection, sqlc.CharlieSession, sqlc.CharlieDelegation, []rbac.RoleBinding, error) {
 	connection, err := a.queries.GetCharlieConnectionByDeploymentID(ctx, action.DeploymentID)
-	if err != nil || connection.ProductID != "astronomer" {
+	if err != nil || connection.ProductSlug != "astronomer" {
 		return sqlc.CharlieConnection{}, sqlc.CharlieSession{}, sqlc.CharlieDelegation{}, nil, fmt.Errorf("Charlie deployment binding is inactive")
 	}
 	session, err := a.queries.GetCharlieSessionByCentralID(ctx, action.SessionID)

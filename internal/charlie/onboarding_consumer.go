@@ -18,7 +18,7 @@ import (
 
 type OnboardingTransaction interface {
 	GetPlatformConfig(context.Context) (sqlc.PlatformConfiguration, error)
-	GetCharlieConnectionByPackageID(context.Context, uuid.UUID) (sqlc.CharlieConnection, error)
+	GetCharlieConnectionByPackageID(context.Context, string) (sqlc.CharlieConnection, error)
 	CreateCharlieConnection(context.Context, sqlc.CreateCharlieConnectionParams) (sqlc.CharlieConnection, error)
 	AdvanceCharlieOnboardingState(context.Context, sqlc.AdvanceCharlieOnboardingStateParams) (sqlc.CharlieConnection, error)
 	GetUserByUsername(context.Context, string) (sqlc.User, error)
@@ -91,7 +91,7 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		if err != nil {
 			return err
 		}
-		secretName := "charlie-agent-bootstrap-" + strings.ReplaceAll(validated.PackageID.String()[:13], "-", "")
+		secretName := "charlie-agent-bootstrap-" + safeSecretSuffix(validated.PackageID)
 		enrollmentExpiresAt, artifactExpiresAt, expiryErr := onboardingCredentialExpiries(validated.Package)
 		if expiryErr != nil {
 			return expiryErr
@@ -101,7 +101,7 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			return expiryErr
 		}
 		connection, err := tx.CreateCharlieConnection(ctx, sqlc.CreateCharlieConnectionParams{
-			InstallationID: platform.InstanceID, DeploymentID: string(validated.Package.DeploymentId),
+			InstallationID: platform.InstanceID, ProductID: string(validated.Package.ProductId), ProductSlug: validated.Package.ProductSlug, DeploymentID: string(validated.Package.DeploymentId),
 			RouteID: string(validated.Package.Route.RouteId), CentralUrl: validated.Package.Central.BaseUrl,
 			CentralCaFingerprint: validated.Package.Central.CertificateSha256,
 			SigningKeyID:         string(validated.Package.Signing.KeyId), SigningKeyFingerprint: validated.Package.Signing.PublicKeySha256,
@@ -183,6 +183,21 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		return OnboardingStatus{}, err
 	}
 	return result, nil
+}
+
+func safeSecretSuffix(packageID string) string {
+	value := strings.ToLower(packageID)
+	value = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return '-'
+	}, value)
+	value = strings.Trim(value, "-")
+	if len(value) > 40 {
+		value = value[:40]
+	}
+	return value
 }
 
 func onboardingCredentialExpiries(pkg contract.OnboardingPackage) (time.Time, time.Time, error) {

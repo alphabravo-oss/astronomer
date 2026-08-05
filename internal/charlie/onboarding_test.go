@@ -51,9 +51,9 @@ func newOnboardingFixture(t *testing.T) onboardingFixture {
 	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	object := map[string]any{
 		"schema": "charlie.onboarding/v1", "central_api_version": "charlie/v1",
-		"package_id": "9e7ac3d5-b7dd-4a36-9b5a-bb02eabc273b",
+		"package_id": "onboard_9e7ac3d5b7dd4a369b5abb02eabc273b",
 		"issued_at":  now.Add(-time.Minute).Format(time.RFC3339), "expires_at": now.Add(time.Hour).Format(time.RFC3339),
-		"organization_id": "org-1", "product_id": "astronomer", "deployment_id": "deployment-1",
+		"organization_id": "org_1", "product_id": "product_1a8a43aab5b28bf94f330d1bff3a23c4", "product_slug": "astronomer", "deployment_id": "deployment-1",
 		"environment_id": "environment-1", "tenant_id": "tenant-1", "logical_agent_id": "agent-1",
 		"replica_count": 2,
 		"route":         map[string]any{"route_id": "route-1", "allowed_route_ids": []any{"route-1"}},
@@ -102,14 +102,14 @@ func TestValidateOnboardingPackageValidAndContentFree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if validated.PackageID.String() != fixture.object["package_id"] || len(validated.EnrollmentCredentials) != 2 || validated.ArtifactCredential == "" {
+	if validated.PackageID != fixture.object["package_id"] || len(validated.EnrollmentCredentials) != 2 || validated.ArtifactCredential == "" {
 		t.Fatalf("unexpected validated package: %+v", validated)
 	}
 	if !bytes.Equal(validated.RawPackage, raw) {
 		t.Fatal("validated onboarding package did not preserve the exact signed JSON bytes")
 	}
 	status := validated.SafeStatus("validated", false)
-	if status.ProductID != "astronomer" || status.DeploymentID != "deployment-1" || status.LogicalAgentID != "agent-1" ||
+	if status.ProductID != "product_1a8a43aab5b28bf94f330d1bff3a23c4" || status.ProductSlug != "astronomer" || status.DeploymentID != "deployment-1" || status.LogicalAgentID != "agent-1" ||
 		status.CentralAPIVersion != "charlie/v1" || status.ReplicaCount != 2 || len(status.AllowedRouteIDs) != 1 ||
 		status.PackageDigest == "" || status.SigningFingerprint == "" || status.CentralTrustFingerprint == "" ||
 		status.Artifact.ManifestDigest == "" || status.Artifact.ChartDigest == "" {
@@ -142,7 +142,7 @@ func TestValidateOnboardingPackageRejectsInvalidMatrix(t *testing.T) {
 		tamper bool
 	}{
 		{name: "expired", mutate: func(f *onboardingFixture) { f.confirmation.Now = f.now.Add(2 * time.Hour) }},
-		{name: "wrong product", mutate: func(f *onboardingFixture) { f.object["product_id"] = "another-product" }},
+		{name: "wrong product", mutate: func(f *onboardingFixture) { f.object["product_slug"] = "another-product" }},
 		{name: "wrong fingerprint", mutate: func(f *onboardingFixture) { f.confirmation.ConfirmedSigningFingerprint = string(make([]byte, 64)) }},
 		{name: "unsupported version", mutate: func(f *onboardingFixture) { f.object["central_api_version"] = "charlie/v999" }},
 		{name: "wrong deployment", mutate: func(f *onboardingFixture) { f.confirmation.ExpectedDeploymentID = "different" }},

@@ -1190,6 +1190,9 @@ type OnboardingV1SchemaJson struct {
 	// ProductId corresponds to the JSON schema field "product_id".
 	ProductId OpaqueId `json:"product_id" yaml:"product_id" mapstructure:"product_id"`
 
+	// ProductSlug corresponds to the JSON schema field "product_slug".
+	ProductSlug string `json:"product_slug" yaml:"product_slug" mapstructure:"product_slug"`
+
 	// ReplicaCount corresponds to the JSON schema field "replica_count".
 	ReplicaCount int `json:"replica_count" yaml:"replica_count" mapstructure:"replica_count"`
 
@@ -1445,6 +1448,9 @@ func (j *OnboardingV1SchemaJson) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["product_id"]; raw != nil && !ok {
 		return fmt.Errorf("field product_id in OnboardingV1SchemaJson: required")
 	}
+	if _, ok := raw["product_slug"]; raw != nil && !ok {
+		return fmt.Errorf("field product_slug in OnboardingV1SchemaJson: required")
+	}
 	if _, ok := raw["replica_count"]; raw != nil && !ok {
 		return fmt.Errorf("field replica_count in OnboardingV1SchemaJson: required")
 	}
@@ -1476,6 +1482,9 @@ func (j *OnboardingV1SchemaJson) UnmarshalJSON(value []byte) error {
 	}
 	if len(plain.Credentials) > 21 {
 		return fmt.Errorf("field %s length: must be <= %d", "credentials", 21)
+	}
+	if matched, _ := regexp.MatchString(`^[a-z0-9][a-z0-9-]{0,62}$`, string(plain.ProductSlug)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "ProductSlug", `^[a-z0-9][a-z0-9-]{0,62}$`)
 	}
 	if 20 < plain.ReplicaCount {
 		return fmt.Errorf("field %s: must be <= %v", "replica_count", 20)

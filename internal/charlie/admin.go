@@ -26,6 +26,7 @@ var (
 type AdminConnectionView struct {
 	Connected              bool   `json:"connected"`
 	ProductID              string `json:"product_id,omitempty"`
+	ProductSlug            string `json:"product_slug,omitempty"`
 	DeploymentID           string `json:"deployment_id,omitempty"`
 	RouteID                string `json:"route_id,omitempty"`
 	CentralVersion         string `json:"central_version,omitempty"`
@@ -230,7 +231,7 @@ func safeAdminConnection(row sqlc.CharlieConnection) AdminConnectionView {
 	connected := row.OnboardingState == "consumed" || row.OnboardingState == "active"
 	connected = connected && row.HealthState != "disconnected"
 	return AdminConnectionView{
-		Connected: connected, ProductID: row.ProductID, DeploymentID: row.DeploymentID, RouteID: row.RouteID,
+		Connected: connected, ProductID: row.ProductID, ProductSlug: row.ProductSlug, DeploymentID: row.DeploymentID, RouteID: row.RouteID,
 		CentralVersion: row.CentralApiVersion, SigningKeyID: row.SigningKeyID,
 		SigningFingerprint: row.SigningKeyFingerprint, PackageDigest: row.OnboardingPackageDigest,
 		DisclosureDigest:       row.DisclosureDigest,

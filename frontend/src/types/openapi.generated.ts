@@ -446,6 +446,7 @@ export interface OpenAPIComponents {
     CharlieAdminConnection: {
           "connected": boolean;
           "product_id"?: string;
+          "product_slug"?: string;
           "deployment_id"?: string;
           "route_id"?: string;
           "central_version"?: string;
@@ -597,6 +598,7 @@ export interface OpenAPIComponents {
     CharlieOnboardingStatus: {
           "package_id": string;
           "product_id": string;
+          "product_slug": "astronomer";
           "deployment_id": string;
           "logical_agent_id": string;
           "route_id": string;

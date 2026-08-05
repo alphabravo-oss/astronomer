@@ -301,6 +301,11 @@ const (
 	CharlieOnboardingStatusCentralApiVersionCharliev1 CharlieOnboardingStatusCentralApiVersion = "charlie/v1"
 )
 
+// Defines values for CharlieOnboardingStatusProductSlug.
+const (
+	CharlieOnboardingStatusProductSlugAstronomer CharlieOnboardingStatusProductSlug = "astronomer"
+)
+
 // Defines values for CharlieOnboardingStatusSchema.
 const (
 	CharlieOnboardingStatusSchemaCharlieOnboardingv1 CharlieOnboardingStatusSchema = "charlie.onboarding/v1"
@@ -1309,6 +1314,7 @@ type CharlieAdminConnection struct {
 	DisclosureDigest       *string    `json:"disclosure_digest,omitempty"`
 	PackageDigest          *string    `json:"package_digest,omitempty"`
 	ProductId              *string    `json:"product_id,omitempty"`
+	ProductSlug            *string    `json:"product_slug,omitempty"`
 	RouteId                *string    `json:"route_id,omitempty"`
 	SigningFingerprint     *string    `json:"signing_fingerprint,omitempty"`
 	SigningKeyId           *string    `json:"signing_key_id,omitempty"`
@@ -1573,8 +1579,9 @@ type CharlieOnboardingStatus struct {
 	IssuedAt                time.Time                                `json:"issued_at"`
 	LogicalAgentId          string                                   `json:"logical_agent_id"`
 	PackageDigest           string                                   `json:"package_digest"`
-	PackageId               openapi_types.UUID                       `json:"package_id"`
+	PackageId               string                                   `json:"package_id"`
 	ProductId               string                                   `json:"product_id"`
+	ProductSlug             CharlieOnboardingStatusProductSlug       `json:"product_slug"`
 	ReplicaCount            int                                      `json:"replica_count"`
 	RouteId                 string                                   `json:"route_id"`
 	Schema                  CharlieOnboardingStatusSchema            `json:"schema"`
@@ -1585,6 +1592,9 @@ type CharlieOnboardingStatus struct {
 
 // CharlieOnboardingStatusCentralApiVersion defines model for CharlieOnboardingStatus.CentralApiVersion.
 type CharlieOnboardingStatusCentralApiVersion string
+
+// CharlieOnboardingStatusProductSlug defines model for CharlieOnboardingStatus.ProductSlug.
+type CharlieOnboardingStatusProductSlug string
 
 // CharlieOnboardingStatusSchema defines model for CharlieOnboardingStatus.Schema.
 type CharlieOnboardingStatusSchema string
