@@ -174,7 +174,7 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 		rollbacks = append(rollbacks, receipt.Rollback)
 		if c.Installer != nil {
 			disclosureDigest := CapabilityDisclosureDigest()
-			installReceipt, installErr := c.Installer.Install(ctx, AgentInstallSpec{
+			installSpec := AgentInstallSpec{
 				InstallationID: platform.InstanceID, ConnectionID: connection.ID,
 				LogicalAgentID: string(validated.Package.LogicalAgentId), EnvironmentID: string(validated.Package.EnvironmentId), TenantID: string(validated.Package.TenantId),
 				CentralURL: validated.Package.Central.BaseUrl, CentralCAPEM: validated.Package.Central.CaBundlePem,
@@ -184,7 +184,17 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 				SecretPrefix: secretName, DisclosureDigest: disclosureDigest, SecretIntegrityHMAC: receipt.IntegrityHMAC,
 				ActionSigningPublicKey: validated.SigningPublicKey, ActionSigningKeyFingerprint: validated.Package.Signing.PublicKeySha256,
 				Trust: trust,
-			})
+			}
+			// A replacement package revokes the old registry credential before
+			// this transaction begins. Remove owner-bound repository credentials
+			// for earlier package generations before Argo resolves the OCI source,
+			// otherwise it can nondeterministically select a revoked credential.
+			if pruner, ok := c.Installer.(supersededAgentMaterialPruner); ok {
+				if pruneErr := pruner.PruneSupersededRepositories(ctx, installSpec); pruneErr != nil {
+					return failOnboarding("onboarding.repository_prune_failed", pruneErr)
+				}
+			}
+			installReceipt, installErr := c.Installer.Install(ctx, installSpec)
 			if installErr != nil {
 				return failOnboarding("onboarding.agent_install_failed", installErr)
 			}

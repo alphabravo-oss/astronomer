@@ -210,7 +210,7 @@ func signedTestAction(t *testing.T, privateKey ed25519.PrivateKey, capability st
 	action := ActionEnvelope{
 		Version: "charlie-action/v1", DeploymentID: "deployment-a", SessionID: "session-a",
 		TurnID: "turn-a", ActionID: "action-a", Capability: capability,
-		Arguments: canonical, ArgumentDigest: digestBytes(canonical), AuthorizationRef: "opaque-reference",
+		Arguments: canonical, ArgumentDigest: capabilityArgumentDigest(capability, canonical), AuthorizationRef: "opaque-reference",
 		DisclosureDigest: "disclosure-a", ModeRevision: 2, PolicyRevision: 2,
 		FencingEpoch: 7, ExpiresAt: time.Now().Add(time.Minute).UTC(), IdempotencyKey: "action-a",
 	}

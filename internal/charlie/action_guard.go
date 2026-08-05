@@ -419,7 +419,7 @@ func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, m
 		return CapabilityDescriptor{}, nil, DeniedIdempotency
 	}
 	canonical, arguments, err := canonicalArguments(envelope.Arguments)
-	if err != nil || envelope.ArgumentDigest != digestBytes(canonical) {
+	if err != nil || envelope.ArgumentDigest != capabilityArgumentDigest(envelope.Capability, canonical) {
 		return CapabilityDescriptor{}, nil, DeniedIdempotency
 	}
 	signedBytes, err := json.Marshal(envelope.signed())
@@ -460,6 +460,17 @@ func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, m
 		}
 	}
 	return descriptor, arguments, ""
+}
+
+// capabilityArgumentDigest binds the canonical arguments to the exact
+// capability being authorized. This prevents a signed argument payload from
+// being replayed against another tool with a compatible schema.
+func capabilityArgumentDigest(capability string, canonical []byte) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(capability))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write(canonical)
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func canonicalArguments(raw json.RawMessage) ([]byte, map[string]json.RawMessage, error) {
