@@ -55,7 +55,7 @@ SET active = true,
 WHERE charlie_connections.id = $2
   AND charlie_connections.onboarding_state = 'consumed'
   AND charlie_connections.active = false
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 type ActivateCharlieConnectionParams struct {
@@ -117,6 +117,8 @@ func (q *Queries) ActivateCharlieConnection(ctx context.Context, arg ActivateCha
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -176,7 +178,7 @@ SET onboarding_state = $1,
     updated_at = now()
 WHERE id = $5
   AND onboarding_state = $6
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 type AdvanceCharlieOnboardingStateParams struct {
@@ -249,6 +251,8 @@ func (q *Queries) AdvanceCharlieOnboardingState(ctx context.Context, arg Advance
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -1067,7 +1071,7 @@ WHERE id = $1
   AND active = true
   AND emergency_disabled = true
   AND verified_mode = 'disabled'
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 func (q *Queries) ClearCharlieEmergencyDisabled(ctx context.Context, id uuid.UUID) (CharlieConnection, error) {
@@ -1124,6 +1128,8 @@ func (q *Queries) ClearCharlieEmergencyDisabled(ctx context.Context, id uuid.UUI
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -1140,7 +1146,7 @@ WHERE id = $5
   AND active = true
   AND verified_mode_revision = $6
   AND emergency_disabled = false
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 type CompareAndSetCharlieModeParams struct {
@@ -1213,6 +1219,8 @@ func (q *Queries) CompareAndSetCharlieMode(ctx context.Context, arg CompareAndSe
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -1421,7 +1429,7 @@ INSERT INTO charlie_connections (
     installation_id, product_id, product_slug, deployment_id, route_id, central_url,
     central_ca_fingerprint, signing_key_id, signing_key_fingerprint,
     onboarding_schema_version, central_api_version, agent_protocol_version,
-    chart_version, chart_digest, image_digest, logical_agent_id, replica_count,
+    chart_reference, chart_version, chart_digest, image_reference, image_digest, logical_agent_id, replica_count,
     bridge_service_name, mcp_service_name, local_trust_material_encrypted,
     agent_secret_name, onboarding_package_id, onboarding_package_digest,
     onboarding_package_expires_at, enrollment_credentials_expires_at,
@@ -1433,18 +1441,18 @@ INSERT INTO charlie_connections (
     $5, $6, $7,
     $8, $9,
     $10, $11,
-    $12, $13,
-    $14, $15, $16,
-    $17,
-    $18, $19,
+    $12, $13, $14,
+    $15, $16, $17, $18,
+    $19,
     $20, $21,
     $22, $23,
     $24, $25,
     $26, $27,
     $28, $29,
-    'disabled', 'disabled', $30, $31, false,
-    $32, $33
-) RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+    $30, $31,
+    'disabled', 'disabled', $32, $33, false,
+    $34, $35
+) RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 type CreateCharlieConnectionParams struct {
@@ -1460,8 +1468,10 @@ type CreateCharlieConnectionParams struct {
 	OnboardingSchemaVersion        string             `json:"onboarding_schema_version"`
 	CentralApiVersion              string             `json:"central_api_version"`
 	AgentProtocolVersion           string             `json:"agent_protocol_version"`
+	ChartReference                 string             `json:"chart_reference"`
 	ChartVersion                   string             `json:"chart_version"`
 	ChartDigest                    string             `json:"chart_digest"`
+	ImageReference                 string             `json:"image_reference"`
 	ImageDigest                    string             `json:"image_digest"`
 	LogicalAgentID                 string             `json:"logical_agent_id"`
 	ReplicaCount                   int32              `json:"replica_count"`
@@ -1497,8 +1507,10 @@ func (q *Queries) CreateCharlieConnection(ctx context.Context, arg CreateCharlie
 		arg.OnboardingSchemaVersion,
 		arg.CentralApiVersion,
 		arg.AgentProtocolVersion,
+		arg.ChartReference,
 		arg.ChartVersion,
 		arg.ChartDigest,
+		arg.ImageReference,
 		arg.ImageDigest,
 		arg.LogicalAgentID,
 		arg.ReplicaCount,
@@ -1571,6 +1583,8 @@ func (q *Queries) CreateCharlieConnection(ctx context.Context, arg CreateCharlie
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -2000,7 +2014,7 @@ SET active = false,
     health_state = 'disconnected',
     updated_at = now()
 WHERE id = $1 AND active = true
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 func (q *Queries) DisconnectCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error) {
@@ -2057,6 +2071,8 @@ func (q *Queries) DisconnectCharlieConnection(ctx context.Context, id uuid.UUID)
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -2191,7 +2207,7 @@ func (q *Queries) GetActiveCharlieActionApproval(ctx context.Context, arg GetAct
 }
 
 const getActiveCharlieConnection = `-- name: GetActiveCharlieConnection :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at FROM charlie_connections WHERE active = true LIMIT 1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference FROM charlie_connections WHERE active = true LIMIT 1
 `
 
 func (q *Queries) GetActiveCharlieConnection(ctx context.Context) (CharlieConnection, error) {
@@ -2248,6 +2264,8 @@ func (q *Queries) GetActiveCharlieConnection(ctx context.Context) (CharlieConnec
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -2527,7 +2545,7 @@ func (q *Queries) GetCharlieAutomationRole(ctx context.Context) (GlobalRole, err
 }
 
 const getCharlieConnection = `-- name: GetCharlieConnection :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at FROM charlie_connections WHERE id = $1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference FROM charlie_connections WHERE id = $1
 `
 
 func (q *Queries) GetCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error) {
@@ -2584,12 +2602,14 @@ func (q *Queries) GetCharlieConnection(ctx context.Context, id uuid.UUID) (Charl
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
 
 const getCharlieConnectionByDeploymentID = `-- name: GetCharlieConnectionByDeploymentID :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at FROM charlie_connections WHERE deployment_id = $1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference FROM charlie_connections WHERE deployment_id = $1
 `
 
 func (q *Queries) GetCharlieConnectionByDeploymentID(ctx context.Context, deploymentID string) (CharlieConnection, error) {
@@ -2646,12 +2666,14 @@ func (q *Queries) GetCharlieConnectionByDeploymentID(ctx context.Context, deploy
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
 
 const getCharlieConnectionByPackageID = `-- name: GetCharlieConnectionByPackageID :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at FROM charlie_connections WHERE onboarding_package_id = $1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference FROM charlie_connections WHERE onboarding_package_id = $1
 `
 
 func (q *Queries) GetCharlieConnectionByPackageID(ctx context.Context, onboardingPackageID string) (CharlieConnection, error) {
@@ -2708,6 +2730,8 @@ func (q *Queries) GetCharlieConnectionByPackageID(ctx context.Context, onboardin
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -2985,7 +3009,7 @@ func (q *Queries) GetCharlieTriggerRule(ctx context.Context, id uuid.UUID) (Char
 }
 
 const getLatestCharlieConnection = `-- name: GetLatestCharlieConnection :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at FROM charlie_connections ORDER BY created_at DESC, id DESC LIMIT 1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference FROM charlie_connections ORDER BY created_at DESC, id DESC LIMIT 1
 `
 
 func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnection, error) {
@@ -3042,6 +3066,8 @@ func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnec
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -3913,7 +3939,7 @@ SET emergency_disabled = true,
     requested_mode = 'disabled',
     updated_at = now()
 WHERE id = $2 AND active = true
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 type SetCharlieEmergencyDisabledParams struct {
@@ -3975,6 +4001,8 @@ func (q *Queries) SetCharlieEmergencyDisabled(ctx context.Context, arg SetCharli
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }
@@ -4364,7 +4392,7 @@ SET leader_instance_id = $1,
     last_error_code = $5,
     updated_at = now()
 WHERE id = $6 AND active = true
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference
 `
 
 type UpdateCharlieAgentStatusParams struct {
@@ -4437,6 +4465,8 @@ func (q *Queries) UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharli
 		&i.CreatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
 	)
 	return i, err
 }

@@ -346,8 +346,8 @@ func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
 func adminInstallSpec(row sqlc.CharlieConnection) AgentInstallSpec {
 	return AgentInstallSpec{
 		InstallationID: row.InstallationID, ConnectionID: row.ID, LogicalAgentID: row.LogicalAgentID,
-		CentralURL: row.CentralUrl, ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest,
-		ImageDigest: row.ImageDigest, SecretPrefix: row.AgentSecretName, DisclosureDigest: row.DisclosureDigest,
+		CentralURL: row.CentralUrl, ChartReference: row.ChartReference, ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest,
+		ImageReference: row.ImageReference, ImageDigest: row.ImageDigest, SecretPrefix: row.AgentSecretName, DisclosureDigest: row.DisclosureDigest,
 		SecretIntegrityHMAC: row.AgentSecretHmac, ReplicaCount: int(row.ReplicaCount),
 	}
 }
