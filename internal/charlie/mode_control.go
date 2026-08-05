@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -69,39 +70,60 @@ func EffectiveMode(requested, verified Mode, emergency bool) Mode {
 
 func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevision int64, prerequisites ModePrerequisites) (ModeState, error) {
 	if !validMode(desired) || expectedRevision < 0 {
+		logModeTransitionFailure(ctx, "mode.request_invalid")
 		return ModeState{}, fmt.Errorf("Charlie mode request is invalid")
 	}
 	current, err := c.store.LoadModeState(ctx)
 	if err != nil || !current.Active || current.EmergencyDisabled {
+		logModeTransitionFailure(ctx, "mode.integration_inactive")
 		return ModeState{}, fmt.Errorf("Charlie integration is inactive")
 	}
 	if current.Revision != expectedRevision {
+		logModeTransitionFailure(ctx, "mode.local_revision_conflict")
 		return ModeState{}, fmt.Errorf("Charlie mode revision changed")
 	}
 	if desired == ModeAuto && (!prerequisites.DisclosureAcknowledged || !prerequisites.AutomationAllowlistReady || !prerequisites.AutomationIdentityReady) {
+		logModeTransitionFailure(ctx, "mode.auto_prerequisites_incomplete")
 		return ModeState{}, fmt.Errorf("Charlie auto mode prerequisites are incomplete")
 	}
 	requested, err := c.store.SetRequestedMode(ctx, current.ConnectionID, desired, expectedRevision)
 	if err != nil {
+		logModeTransitionFailure(ctx, "mode.local_request_persist_failed")
 		return ModeState{}, fmt.Errorf("persist Charlie requested mode: %w", err)
 	}
 	remote, err := c.bridge.SetMode(ctx, desired, requested.Revision)
 	if err != nil {
 		// The requested/verified intersection prevents authority escalation while
 		// the agent or central is unavailable. A later reconciliation may retry.
+		logModeTransitionFailure(ctx, "mode.remote_readback_unavailable")
 		return requested, fmt.Errorf("Charlie mode readback unavailable")
 	}
 	if remote.ConnectionID != "" && remote.ConnectionID != current.ConnectionID {
+		logModeTransitionFailure(ctx, "mode.remote_installation_changed")
 		return requested, fmt.Errorf("Charlie mode readback installation changed")
 	}
-	if remote.Verified != desired || remote.Revision <= requested.Revision || remote.DisclosureDigest == "" {
+	if remote.Verified != desired {
+		logModeTransitionFailure(ctx, "mode.remote_mode_mismatch")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+	}
+	if remote.Revision <= requested.Revision {
+		logModeTransitionFailure(ctx, "mode.remote_revision_stale")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+	}
+	if remote.DisclosureDigest == "" {
+		logModeTransitionFailure(ctx, "mode.remote_disclosure_missing")
 		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
 	}
 	verified, err := c.store.SetVerifiedMode(ctx, current.ConnectionID, remote.Verified, requested.Revision, remote.Revision, remote.DisclosureDigest)
 	if err != nil {
+		logModeTransitionFailure(ctx, "mode.local_verification_persist_failed")
 		return requested, fmt.Errorf("persist Charlie verified mode: %w", err)
 	}
 	return verified, nil
+}
+
+func logModeTransitionFailure(ctx context.Context, code string) {
+	slog.WarnContext(ctx, "Charlie mode transition failed", slog.String("failure_code", code))
 }
 
 // EmergencyDisable closes the product-local latch first. Failure to contact the
