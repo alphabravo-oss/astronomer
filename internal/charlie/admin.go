@@ -379,7 +379,7 @@ func (s *AdminService) Install(ctx context.Context) (AdminAgentView, error) {
 	if err != nil || !installation.Ready() {
 		return AdminAgentView{}, fmt.Errorf("%w: Charlie agent readiness is incomplete", ErrAdminConflict)
 	}
-	if _, err := s.queries.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: connection.ID, HealthState: "ready"}); err != nil {
+	if err := s.activateConnection(ctx, connection.ID); err != nil {
 		return AdminAgentView{}, ErrAdminConflict
 	}
 	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
@@ -389,6 +389,36 @@ func (s *AdminService) Install(ctx context.Context) (AdminAgentView, error) {
 	}
 	status, err := s.Status(ctx)
 	return status.Agent, err
+}
+
+func (s *AdminService) activateConnection(ctx context.Context, connectionID uuid.UUID) error {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := s.queries.WithTx(tx)
+	locked, err := queries.LockCharlieConnectionActivation(ctx, connectionID)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, id := range locked {
+		if id == connectionID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return pgx.ErrNoRows
+	}
+	if err := queries.DeactivateCharlieConnectionsForReplacement(ctx, connectionID); err != nil {
+		return err
+	}
+	if _, err := queries.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: connectionID, HealthState: "ready"}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *AdminService) ReplacementAction(context.Context, string) (AdminAgentView, error) {

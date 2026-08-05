@@ -448,6 +448,7 @@ type Querier interface {
 	CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error)
 	CreateWorkloadOperation(ctx context.Context, arg CreateWorkloadOperationParams) (WorkloadOperation, error)
 	CreateWorkloadOperationEvent(ctx context.Context, arg CreateWorkloadOperationEventParams) (WorkloadOperationEvent, error)
+	DeactivateCharlieConnectionsForReplacement(ctx context.Context, id uuid.UUID) error
 	DeleteAgentConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteAgentLifecycleOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	// Deletes alert events older than the supplied cutoff. Used by the scheduled
@@ -1702,6 +1703,7 @@ type Querier interface {
 	// Aggregates the per-cluster anomaly_baselines means across clusters
 	// and records which clusters are outliers vs. the fleet.
 	ListXClusterAnomalyBaselines(ctx context.Context) ([]XclusterAnomalyBaseline, error)
+	LockCharlieConnectionActivation(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
 	LockUser(ctx context.Context, arg LockUserParams) error
 	MarkArgoCDOperationCompleted(ctx context.Context, id uuid.UUID) (ArgocdOperation, error)
 	MarkArgoCDOperationFailed(ctx context.Context, arg MarkArgoCDOperationFailedParams) (ArgocdOperation, error)

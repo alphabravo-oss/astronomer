@@ -46,32 +46,15 @@ func (q *Queries) AbortCharlieSession(ctx context.Context, id uuid.UUID) (Charli
 }
 
 const activateCharlieConnection = `-- name: ActivateCharlieConnection :one
-WITH candidate AS (
-    SELECT id
-    FROM charlie_connections
-    WHERE charlie_connections.id = $2
-      AND charlie_connections.onboarding_state = 'consumed'
-      AND charlie_connections.active = false
-    FOR UPDATE
-), deactivated AS (
-    UPDATE charlie_connections
-    SET active = false,
-        requested_mode = 'disabled',
-        verified_mode = 'disabled',
-        health_state = 'inactive',
-        leader_instance_id = '',
-        updated_at = now()
-    WHERE charlie_connections.active = true
-      AND charlie_connections.id <> $2
-      AND EXISTS (SELECT 1 FROM candidate)
-)
 UPDATE charlie_connections
 SET active = true,
     onboarding_state = 'active',
     health_state = $1,
     last_verified_at = now(),
     updated_at = now()
-WHERE charlie_connections.id = (SELECT id FROM candidate)
+WHERE charlie_connections.id = $2
+  AND charlie_connections.onboarding_state = 'consumed'
+  AND charlie_connections.active = false
 RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at
 `
 
@@ -1965,6 +1948,23 @@ func (q *Queries) CreateCharlieTriggerRule(ctx context.Context, arg CreateCharli
 	return i, err
 }
 
+const deactivateCharlieConnectionsForReplacement = `-- name: DeactivateCharlieConnectionsForReplacement :exec
+UPDATE charlie_connections
+SET active = false,
+    requested_mode = 'disabled',
+    verified_mode = 'disabled',
+    health_state = 'inactive',
+    leader_instance_id = '',
+    updated_at = now()
+WHERE active = true
+  AND id <> $1
+`
+
+func (q *Queries) DeactivateCharlieConnectionsForReplacement(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deactivateCharlieConnectionsForReplacement, id)
+	return err
+}
+
 const deleteCharlieFindingMetadataBefore = `-- name: DeleteCharlieFindingMetadataBefore :execrows
 DELETE FROM charlie_findings
 WHERE status IN ('dismissed', 'resolved', 'expired')
@@ -3507,6 +3507,34 @@ func (q *Queries) ListEnabledCharlieTriggerRules(ctx context.Context, connection
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockCharlieConnectionActivation = `-- name: LockCharlieConnectionActivation :many
+SELECT id
+FROM charlie_connections
+WHERE active = true OR id = $1
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) LockCharlieConnectionActivation(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockCharlieConnectionActivation, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

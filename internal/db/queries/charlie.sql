@@ -250,33 +250,34 @@ WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: ActivateCharlieConnection :one
-WITH candidate AS (
-    SELECT id
-    FROM charlie_connections
-    WHERE charlie_connections.id = sqlc.arg(id)
-      AND charlie_connections.onboarding_state = 'consumed'
-      AND charlie_connections.active = false
-    FOR UPDATE
-), deactivated AS (
-    UPDATE charlie_connections
-    SET active = false,
-        requested_mode = 'disabled',
-        verified_mode = 'disabled',
-        health_state = 'inactive',
-        leader_instance_id = '',
-        updated_at = now()
-    WHERE charlie_connections.active = true
-      AND charlie_connections.id <> sqlc.arg(id)
-      AND EXISTS (SELECT 1 FROM candidate)
-)
 UPDATE charlie_connections
 SET active = true,
     onboarding_state = 'active',
     health_state = sqlc.arg(health_state),
     last_verified_at = now(),
     updated_at = now()
-WHERE charlie_connections.id = (SELECT id FROM candidate)
+WHERE charlie_connections.id = sqlc.arg(id)
+  AND charlie_connections.onboarding_state = 'consumed'
+  AND charlie_connections.active = false
 RETURNING *;
+
+-- name: LockCharlieConnectionActivation :many
+SELECT id
+FROM charlie_connections
+WHERE active = true OR id = sqlc.arg(id)
+ORDER BY id
+FOR UPDATE;
+
+-- name: DeactivateCharlieConnectionsForReplacement :exec
+UPDATE charlie_connections
+SET active = false,
+    requested_mode = 'disabled',
+    verified_mode = 'disabled',
+    health_state = 'inactive',
+    leader_instance_id = '',
+    updated_at = now()
+WHERE active = true
+  AND id <> sqlc.arg(id);
 
 -- name: CompareAndSetCharlieMode :one
 UPDATE charlie_connections
