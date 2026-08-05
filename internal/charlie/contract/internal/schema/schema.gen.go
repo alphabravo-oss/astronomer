@@ -127,6 +127,7 @@ const BlockCodeReadOnly BlockCode = "read_only"
 const BlockCodeSafetyBudgetExceeded BlockCode = "safety_budget_exceeded"
 const BlockCodeScopeDenied BlockCode = "scope_denied"
 const BlockCodeStaleLeadership BlockCode = "stale_leadership"
+const BlockCodeVerificationFailed BlockCode = "verification_failed"
 
 var enumValues_BlockCode = []interface{}{
 	"capability_destructive",
@@ -146,6 +147,7 @@ var enumValues_BlockCode = []interface{}{
 	"precondition_failed",
 	"circuit_breaker_open",
 	"central_unavailable",
+	"verification_failed",
 	"no_safe_action",
 }
 

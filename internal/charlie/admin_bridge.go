@@ -2,8 +2,14 @@ package charlie
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -19,6 +25,7 @@ type AdminBridgeStatus struct {
 	RouteID, ArtifactVersion                                    string
 	Epoch, ReplicaCount, ReplicaOrdinal                         int64
 	ProductEnabled, DeploymentEnabled, EffectiveEnabled         bool
+	AutoAllowlist                                               []string
 }
 
 type adminBridgeStatusReader interface {
@@ -87,6 +94,7 @@ func adminBridgeStatus(status contract.BridgeStatus) AdminBridgeStatus {
 		EffectiveMode: string(status.EffectiveMode), RouteID: string(status.RouteId), ArtifactVersion: status.ArtifactVersion,
 		Epoch: status.Epoch, ReplicaCount: int64(status.ReplicaCount), ReplicaOrdinal: int64(status.ReplicaOrdinal),
 		ProductEnabled: status.ProductEnabled, DeploymentEnabled: status.DeploymentEnabled, EffectiveEnabled: status.EffectiveEnabled,
+		AutoAllowlist: append([]string(nil), status.AutoAllowlist...),
 	}
 }
 
@@ -202,6 +210,57 @@ func (b *managedAgentLifecycleBridge) SettleStreams(ctx context.Context) error {
 	return b.StopTriggerDispatch(ctx)
 }
 
-func (*managedAgentLifecycleBridge) VerifyCredentialRevoked(context.Context, string, string) error {
-	return fmt.Errorf("Charlie credential revocation confirmation is unavailable")
+func (b *managedAgentLifecycleBridge) RevokeCredentialPackage(ctx context.Context, target CredentialRevocationTarget) error {
+	runtime, publicKey, signingKeyID, replicas, err := b.revocationContext(ctx, target)
+	if err != nil {
+		return err
+	}
+	request := contract.CredentialRevocationRequest{
+		RequestId: contract.OpaqueId(target.RequestID), Reason: contract.CredentialRevocationProductDisconnect,
+		ExpectedDeploymentId: contract.OpaqueId(target.DeploymentID), ExpectedPackageId: contract.OpaqueId(target.PackageID),
+		ExpectedIntegrationId: contract.OpaqueId(target.IntegrationID),
+	}
+	var raw json.RawMessage
+	if err := runtime.DoJSON(ctx, http.MethodPost, "/lifecycle/credentials/revocation", target.RequestID, request, &raw); err != nil {
+		return err
+	}
+	_, err = contract.VerifyCredentialRevocationReceipt(raw, publicKey, target.RequestID, target.DeploymentID, target.PackageID, target.IntegrationID, signingKeyID, replicas, false)
+	return err
+}
+
+func (b *managedAgentLifecycleBridge) VerifyCredentialPackageRevoked(ctx context.Context, target CredentialRevocationTarget) error {
+	runtime, publicKey, signingKeyID, replicas, err := b.revocationContext(ctx, target)
+	if err != nil {
+		return err
+	}
+	var raw json.RawMessage
+	path := "/lifecycle/credentials/revocation?request_id=" + url.QueryEscape(target.RequestID)
+	if err := runtime.DoJSON(ctx, http.MethodGet, path, "", nil, &raw); err != nil {
+		return err
+	}
+	_, err = contract.VerifyCredentialRevocationReceipt(raw, publicKey, target.RequestID, target.DeploymentID, target.PackageID, target.IntegrationID, signingKeyID, replicas, true)
+	return err
+}
+
+func (b *managedAgentLifecycleBridge) revocationContext(ctx context.Context, target CredentialRevocationTarget) (*contract.Runtime, ed25519.PublicKey, string, int, error) {
+	if b == nil || b.bridge == nil || target.RequestID == "" || target.DeploymentID == "" || target.PackageID == "" || target.IntegrationID == "" {
+		return nil, nil, "", 0, fmt.Errorf("Charlie credential revocation binding is incomplete")
+	}
+	connection, configured := b.bridge.configurationConnection(ctx)
+	if !configured || connection.DeploymentID != target.DeploymentID || connection.OnboardingPackageID != target.PackageID || connection.SigningKeyID == "" {
+		return nil, nil, "", 0, fmt.Errorf("Charlie credential revocation binding does not match onboarding")
+	}
+	publicKey, err := os.ReadFile(b.bridge.config.SigningKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return nil, nil, "", 0, fmt.Errorf("Charlie credential revocation signing trust is unavailable")
+	}
+	digest := sha256.Sum256(publicKey)
+	if hex.EncodeToString(digest[:]) != strings.ToLower(connection.SigningKeyFingerprint) {
+		return nil, nil, "", 0, fmt.Errorf("Charlie credential revocation signing trust does not match onboarding")
+	}
+	runtimeBridge, err := b.bridge.configurationRuntimeBridge(ctx)
+	if err != nil {
+		return nil, nil, "", 0, err
+	}
+	return runtimeBridge.runtime, ed25519.PublicKey(publicKey), connection.SigningKeyID, int(connection.ReplicaCount), nil
 }

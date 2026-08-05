@@ -57,6 +57,42 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/ModeResponse"}
         default: {$ref: "#/components/responses/Error"}
+  /lifecycle/credentials/revocation:
+    get:
+      operationId: getBridgeCredentialRevocation
+      x-charlie-availability: always
+      parameters:
+        - name: request_id
+          in: query
+          required: true
+          schema: {$ref: "#/components/schemas/OpaqueId"}
+      responses:
+        "200":
+          description: Signed, content-free status for an idempotent integration credential revocation
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CredentialRevocationReceipt"}
+        default: {$ref: "#/components/responses/Error"}
+    post:
+      operationId: revokeBridgeCredentials
+      x-charlie-availability: always
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {$ref: "#/components/schemas/OpaqueId"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CredentialRevocationRequest"}
+      responses:
+        "200":
+          description: Signed, content-free per-credential revocation receipt
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CredentialRevocationReceipt"}
+        default: {$ref: "#/components/responses/Error"}
     put:
       operationId: setBridgeMode
       x-charlie-availability: always
@@ -383,6 +419,7 @@ components:
         - lease_expires_at
         - integration_revision
         - disclosure_digest
+        - auto_allowlist
         - effective_mode
         - route_id
         - artifact_version
@@ -401,6 +438,11 @@ components:
         lease_expires_at: {type: string, format: date-time}
         integration_revision: {$ref: "#/components/schemas/OpaqueId"}
         disclosure_digest: {type: string, pattern: "^(?:|sha256:[a-f0-9]{64})$", description: Empty only while no reviewed disclosure is active.}
+        auto_allowlist:
+          type: array
+          maxItems: 256
+          uniqueItems: true
+          items: {type: string, pattern: "^[a-z][a-z0-9_.:-]{0,127}$"}
         effective_mode: {$ref: "#/components/schemas/Mode"}
         route_id: {$ref: "#/components/schemas/OpaqueId"}
         artifact_version: {type: string, minLength: 1, maxLength: 128}
@@ -431,6 +473,45 @@ components:
       properties:
         mode: {$ref: "#/components/schemas/Mode"}
         integration_revision: {$ref: "#/components/schemas/OpaqueId"}
+    CredentialRevocationRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id, reason, expected_deployment_id, expected_package_id, expected_integration_id]
+      properties:
+        request_id: {$ref: "#/components/schemas/OpaqueId"}
+        reason: {type: string, enum: [product_disconnect]}
+        expected_deployment_id: {$ref: "#/components/schemas/OpaqueId"}
+        expected_package_id: {$ref: "#/components/schemas/OpaqueId"}
+        expected_integration_id: {$ref: "#/components/schemas/OpaqueId"}
+    CredentialRevocationStatus:
+      type: object
+      additionalProperties: false
+      required: [purpose, state]
+      properties:
+        purpose: {type: string, enum: [agent_enrollment, artifact_pull, product_client, product_agent]}
+        replica_ordinal: {type: integer, minimum: 0, maximum: 19}
+        state: {type: string, enum: [pending_revocation, revoked]}
+        revoked_at: {type: string, format: date-time}
+    CredentialRevocationReceipt:
+      type: object
+      additionalProperties: false
+      required: [schema, request_id, deployment_id, package_id, integration_id, state, complete, revoked_at, credentials, signing_key_id, signature]
+      properties:
+        schema: {type: string, enum: [charlie.credential-revocation/v1]}
+        request_id: {$ref: "#/components/schemas/OpaqueId"}
+        deployment_id: {$ref: "#/components/schemas/OpaqueId"}
+        package_id: {$ref: "#/components/schemas/OpaqueId"}
+        integration_id: {$ref: "#/components/schemas/OpaqueId"}
+        state: {type: string, enum: [pending_caller_revocation, revoked]}
+        complete: {type: boolean}
+        revoked_at: {type: string, format: date-time}
+        credentials:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: "#/components/schemas/CredentialRevocationStatus"}
+        signing_key_id: {$ref: "#/components/schemas/OpaqueId"}
+        signature: {type: string, pattern: "^[A-Za-z0-9_-]{86}$"}
     CreateSession:
       type: object
       additionalProperties: false
@@ -664,4 +745,4 @@ components:
           additionalProperties: {type: string, maxLength: 256}
     BlockCode:
       type: string
-      enum: [capability_destructive, product_disabled, deployment_disabled, stale_leadership, disclosure_drift, product_rbac_denied, scope_denied, read_only, non_auto_eligible, approval_required, approval_expired, approval_rejected, allowlist_denied, safety_budget_exceeded, precondition_failed, circuit_breaker_open, central_unavailable, no_safe_action]
+      enum: [capability_destructive, product_disabled, deployment_disabled, stale_leadership, disclosure_drift, product_rbac_denied, scope_denied, read_only, non_auto_eligible, approval_required, approval_expired, approval_rejected, allowlist_denied, safety_budget_exceeded, precondition_failed, circuit_breaker_open, central_unavailable, verification_failed, no_safe_action]

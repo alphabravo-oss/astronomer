@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ type CharlieSessionCreator interface {
 
 type CharlieSessionAccess interface {
 	ListPrivate(context.Context, uuid.UUID, int32, int32) ([]sqlc.CharlieSession, error)
+	CurrentMode(context.Context, uuid.UUID) (charlie.Mode, error)
 	Get(context.Context, uuid.UUID, uuid.UUID) (charlie.SessionView, error)
 	History(context.Context, uuid.UUID, uuid.UUID, string, int) (json.RawMessage, error)
 	Message(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (json.RawMessage, error)
@@ -73,6 +75,9 @@ type charlieSessionMetadata struct {
 	State                string    `json:"state"`
 	Visibility           string    `json:"visibility"`
 	CentralRevision      int64     `json:"central_revision"`
+	Source               string    `json:"source"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 func safeSessionMetadata(session sqlc.CharlieSession) charlieSessionMetadata {
@@ -80,6 +85,7 @@ func safeSessionMetadata(session sqlc.CharlieSession) charlieSessionMetadata {
 		ID: session.ID, ClientSessionID: session.ClientSessionID, Intent: session.Intent,
 		ResourceScopeSummary: session.ResourceScopeSummary, State: session.State,
 		Visibility: session.Visibility, CentralRevision: session.CentralRevision,
+		Source: session.Source, CreatedAt: session.CreatedAt, UpdatedAt: session.UpdatedAt,
 	}
 }
 
@@ -138,11 +144,16 @@ func (h *CharlieSessionHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie session access is denied")
 		return
 	}
+	mode, err := h.access.CurrentMode(r.Context(), mustUserID(actor))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie mode access is denied")
+		return
+	}
 	result := make([]charlieSessionMetadata, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, safeSessionMetadata(row))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"sessions": result})
+	RespondJSON(w, http.StatusOK, map[string]any{"sessions": result, "mode": mode})
 }
 
 func (h *CharlieSessionHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +188,11 @@ func (h *CharlieSessionHandler) History(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie history access is denied")
 		return
 	}
+	history, err = safeCharlieBrowserJSON(history)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie history response is invalid")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(history)
@@ -199,6 +215,11 @@ func (h *CharlieSessionHandler) Message(w http.ResponseWriter, r *http.Request) 
 	receipt, err := h.access.Message(r.Context(), mustUserID(actor), sessionID, messageID, request.Message)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie message is unavailable")
+		return
+	}
+	receipt, err = safeCharlieBrowserJSON(receipt)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie message response is invalid")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -328,13 +349,83 @@ func writeCharlieSSE(w io.Writer, event charliecontract.Event) error {
 	if _, err := fmt.Fprintf(w, "event: %s\n", eventName); err != nil {
 		return err
 	}
-	for _, line := range strings.Split(string(event.Data), "\n") {
+	safeData, err := safeCharlieBrowserJSON(event.Data)
+	if err != nil {
+		return fmt.Errorf("invalid Charlie event data")
+	}
+	for _, line := range strings.Split(string(safeData), "\n") {
 		if _, err := fmt.Fprintf(w, "data: %s\n", line); err != nil {
 			return err
 		}
 	}
-	_, err := io.WriteString(w, "\n")
+	_, err = io.WriteString(w, "\n")
 	return err
+}
+
+// safeCharlieBrowserJSON converts exact tool arguments into a server-produced
+// display summary containing field names only. Exact values remain in Charlie
+// and in the signed product action envelope; they never cross the browser API.
+func safeCharlieBrowserJSON(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return json.RawMessage(`null`), nil
+	}
+	var value any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("Charlie browser response contains trailing JSON")
+	}
+	value = summarizeCharlieToolArguments(value)
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
+}
+
+func summarizeCharlieToolArguments(value any) any {
+	switch current := value.(type) {
+	case []any:
+		for index := range current {
+			current[index] = summarizeCharlieToolArguments(current[index])
+		}
+		return current
+	case map[string]any:
+		clean := make(map[string]any, len(current)+1)
+		fields := make([]string, 0, 20)
+		hadArguments := false
+		for key, item := range current {
+			normalized := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(key)), "_", "")
+			if normalized == "arguments" || normalized == "exactarguments" {
+				hadArguments = true
+				if object, ok := item.(map[string]any); ok {
+					for field := range object {
+						if len(fields) == 20 {
+							break
+						}
+						if len(field) <= 64 && !strings.ContainsAny(field, "\r\n") {
+							fields = append(fields, field)
+						}
+					}
+				}
+				continue
+			}
+			if normalized == "argumentsummary" {
+				continue
+			}
+			clean[key] = summarizeCharlieToolArguments(item)
+		}
+		if hadArguments {
+			slices.Sort(fields)
+			clean["argument_summary"] = fields
+		}
+		return clean
+	default:
+		return value
+	}
 }
 
 func browserCharlieActor(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, bool) {

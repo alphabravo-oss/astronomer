@@ -91,7 +91,7 @@
         "scope_denied", "read_only", "non_auto_eligible",
         "approval_required", "approval_expired", "approval_rejected",
         "allowlist_denied", "safety_budget_exceeded", "precondition_failed",
-        "circuit_breaker_open", "central_unavailable", "no_safe_action"
+        "circuit_breaker_open", "central_unavailable", "verification_failed", "no_safe_action"
       ]
     }
   }

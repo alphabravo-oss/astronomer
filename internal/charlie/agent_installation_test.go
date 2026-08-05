@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -26,9 +27,11 @@ import (
 )
 
 type fakeAgentBridge struct {
-	calls      []string
-	status     AgentBridgeStatus
-	revokeFail bool
+	calls              []string
+	status             AgentBridgeStatus
+	revokeRequestFail  bool
+	revokeReadbackFail bool
+	revocationTargets  []CredentialRevocationTarget
 }
 
 func (b *fakeAgentBridge) Status(context.Context) (AgentBridgeStatus, error) {
@@ -55,10 +58,19 @@ func (b *fakeAgentBridge) SettleStreams(context.Context) error {
 	b.calls = append(b.calls, "settle-streams")
 	return nil
 }
-func (b *fakeAgentBridge) VerifyCredentialRevoked(context.Context, string, string) error {
-	b.calls = append(b.calls, "credential-revoked")
-	if b.revokeFail {
-		return errors.New("still valid")
+func (b *fakeAgentBridge) RevokeCredentialPackage(_ context.Context, target CredentialRevocationTarget) error {
+	b.revocationTargets = append(b.revocationTargets, target)
+	b.calls = append(b.calls, "revoke-package:"+target.PackageID)
+	if b.revokeRequestFail {
+		return errors.New("central revocation unavailable")
+	}
+	return nil
+}
+func (b *fakeAgentBridge) VerifyCredentialPackageRevoked(_ context.Context, target CredentialRevocationTarget) error {
+	b.revocationTargets = append(b.revocationTargets, target)
+	b.calls = append(b.calls, "verify-package-revoked:"+target.PackageID)
+	if b.revokeReadbackFail {
+		return errors.New("central revocation is ambiguous")
 	}
 	return nil
 }
@@ -122,7 +134,7 @@ func testAgentInstallSpec(t *testing.T) AgentInstallSpec {
 	}
 	onboarding := newOnboardingFixture(t).signed(t)
 	return AgentInstallSpec{
-		InstallationID: installationID, ConnectionID: uuid.New(), LogicalAgentID: "agent-1",
+		InstallationID: installationID, ConnectionID: uuid.New(), LogicalAgentID: "agent-1", DeploymentID: "deployment-1", OnboardingPackageID: "onboard_9e7ac3d5b7dd4a369b5abb02eabc273b",
 		EnvironmentID: "production", TenantID: "tenant-1", CentralURL: "https://charlie.example.test",
 		CentralCAPEM: "central-ca-fixture", ChartReference: "oci://charlie.example.test/charlie/agent-chart",
 		ChartVersion: "1.0.0", ChartDigest: digest,
@@ -280,6 +292,18 @@ func TestAgentInstallerRejectsOnboardingReplicaMismatchOrDuplicateSlots(t *testi
 	if _, err := installer.Install(context.Background(), duplicate); err == nil {
 		t.Fatal("onboarding package with duplicate replica slots accepted")
 	}
+
+	wrongPackage := testAgentInstallSpec(t)
+	wrongPackage.OnboardingPackageID = "onboard_wrong"
+	if _, err := installer.Install(context.Background(), wrongPackage); err == nil {
+		t.Fatal("onboarding package with a different persisted package binding accepted")
+	}
+
+	wrongDeployment := testAgentInstallSpec(t)
+	wrongDeployment.DeploymentID = "deployment-wrong"
+	if _, err := installer.Install(context.Background(), wrongDeployment); err == nil {
+		t.Fatal("onboarding package with a different persisted deployment binding accepted")
+	}
 }
 
 func TestAgentInstallerRejectsSignedMCPBoundaryMismatch(t *testing.T) {
@@ -318,8 +342,8 @@ func TestAgentInstallerPartialFailureRollsBackAndRetrySucceeds(t *testing.T) {
 	}
 }
 
-func TestAgentInstallerUpgradeRollbackRotationAndDrift(t *testing.T) {
-	installer, kube, bridge, _ := testAgentInstaller(t)
+func TestAgentInstallerUpgradeRollbackReplacementPackageAndDrift(t *testing.T) {
+	installer, kube, _, _ := testAgentInstaller(t)
 	current := testAgentInstallSpec(t)
 	receipt, err := installer.Install(context.Background(), current)
 	if err != nil {
@@ -375,16 +399,16 @@ func TestAgentInstallerUpgradeRollbackRotationAndDrift(t *testing.T) {
 	rotated.OnboardingPackage = rotatedFixture.signed(t)
 	rotated.ArtifactCredential = "rotated-artifact-secret-value-00001"
 	rotated.SecretIntegrityHMAC = strings.Repeat("c", 64)
-	if _, err := installer.RotateCredentials(context.Background(), current, rotated, map[string]string{"agent_enrollment": "old-enrollment", "artifact_pull": "old-artifact"}); err != nil {
+	// Charlie replacement-package issuance atomically revokes the prior
+	// generation. Astronomer's only v1 rotation path is to validate and install
+	// that signed replacement, then prune superseded owner-bound material.
+	if _, err := installer.Install(context.Background(), rotated); err != nil {
 		t.Fatal(err)
-	}
-	if bridge.calls[len(bridge.calls)-1] != "credential-revoked" {
-		t.Fatal("rotation did not verify old credential revocation")
 	}
 	rotatedApplication, _ := appResource.Get(context.Background(), receipt.Names.Application, metav1.GetOptions{})
 	rotatedValues, _, _ := unstructured.NestedString(rotatedApplication.Object, "spec", "source", "helm", "values")
 	if rotatedValues == previousValues {
-		t.Fatal("credential rotation did not change keyed rollout checksums")
+		t.Fatal("replacement package did not change keyed rollout checksums")
 	}
 	for _, rawDigest := range []string{digestBytes([]byte("rotated-enrollment-secret-value-00001")), digestBytes([]byte(rotated.ArtifactCredential))} {
 		if strings.Contains(rotatedValues, rawDigest) {
@@ -462,8 +486,111 @@ func TestAgentInstallerReadinessUninstallDisconnectAndReconnect(t *testing.T) {
 	if err := installer.Disconnect(context.Background(), spec, "disconnect:"+spec.InstallationID.String()); err != nil {
 		t.Fatal(err)
 	}
+	wantRevocation := []string{
+		"disable", "stop-triggers", "settle-streams",
+		"revoke-package:" + spec.OnboardingPackageID,
+		"verify-package-revoked:" + spec.OnboardingPackageID,
+	}
+	if got := bridge.calls[len(bridge.calls)-len(wantRevocation):]; !reflect.DeepEqual(got, wantRevocation) {
+		t.Fatalf("disconnect revocation order=%v want=%v", got, wantRevocation)
+	}
+	if len(bridge.revocationTargets) != 2 || bridge.revocationTargets[0] != bridge.revocationTargets[1] {
+		t.Fatalf("disconnect POST/readback bindings differ: %+v", bridge.revocationTargets)
+	}
+	target := bridge.revocationTargets[0]
+	if target.RequestID == "" || target.DeploymentID != "deployment-1" || target.PackageID != spec.OnboardingPackageID || target.IntegrationID != "integration-1" {
+		t.Fatalf("disconnect revocation binding=%+v", target)
+	}
 	if metadata.events[len(metadata.events)-1] != "disconnected" {
 		t.Fatalf("disconnect not recorded distinctly: %v", metadata.events)
+	}
+}
+
+func TestAgentInstallerDisconnectFailsClosedUntilCredentialRevocationReadback(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		configure    func(*fakeAgentBridge)
+		wantLastCall string
+	}{
+		{
+			name: "revocation request ambiguous",
+			configure: func(bridge *fakeAgentBridge) {
+				bridge.revokeRequestFail = true
+				bridge.revokeReadbackFail = true
+			},
+			wantLastCall: "verify-package-revoked:",
+		},
+		{
+			name: "revocation readback ambiguous",
+			configure: func(bridge *fakeAgentBridge) {
+				bridge.revokeReadbackFail = true
+			},
+			wantLastCall: "verify-package-revoked:",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			installer, kube, bridge, metadata := testAgentInstaller(t)
+			spec := testAgentInstallSpec(t)
+			receipt, err := installer.Install(context.Background(), spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Create(context.Background(), &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: receipt.Names.Bootstrap, Namespace: DefaultCharlieAgentNamespace, Labels: managedLabels(spec.InstallationID)},
+			}, metav1.CreateOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			test.configure(bridge)
+			err = installer.Disconnect(context.Background(), spec, "disconnect:"+spec.InstallationID.String())
+			if err == nil {
+				t.Fatal("disconnect succeeded without confirmed central credential revocation")
+			}
+			if len(metadata.events) != 0 {
+				t.Fatalf("ambiguous disconnect changed metadata: %v", metadata.events)
+			}
+			if got := bridge.calls[len(bridge.calls)-1]; got != test.wantLastCall+spec.OnboardingPackageID {
+				t.Fatalf("last lifecycle call=%q want=%q", got, test.wantLastCall+spec.OnboardingPackageID)
+			}
+			if _, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.Bootstrap, metav1.GetOptions{}); err != nil {
+				t.Fatalf("ambiguous disconnect deleted local credential material: %v", err)
+			}
+			if _, err := installer.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace("astronomer").Get(context.Background(), receipt.Names.Application, metav1.GetOptions{}); err != nil {
+				t.Fatalf("ambiguous disconnect deleted Argo desired state: %v", err)
+			}
+			firstTarget := bridge.revocationTargets[0]
+			bridge.revokeRequestFail = false
+			bridge.revokeReadbackFail = false
+			if err := installer.Disconnect(context.Background(), spec, "disconnect:"+spec.InstallationID.String()); err != nil {
+				t.Fatalf("safe disconnect retry failed: %v", err)
+			}
+			for _, target := range bridge.revocationTargets[1:] {
+				if target != firstTarget {
+					t.Fatalf("disconnect retry changed idempotent revocation binding: first=%+v retry=%+v", firstTarget, target)
+				}
+			}
+			if len(metadata.events) != 1 || metadata.events[0] != "disconnected" {
+				t.Fatalf("successful retry metadata=%v", metadata.events)
+			}
+		})
+	}
+}
+
+func TestAgentInstallerDisconnectResumesCleanupFromFinalReceiptAfterCallerRevoked(t *testing.T) {
+	installer, _, bridge, metadata := testAgentInstaller(t)
+	spec := testAgentInstallSpec(t)
+	if _, err := installer.Install(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	bridge.revokeRequestFail = true
+	if err := installer.Disconnect(context.Background(), spec, "disconnect:"+spec.InstallationID.String()); err != nil {
+		t.Fatalf("disconnect did not resume from signed final revocation readback: %v", err)
+	}
+	want := []string{"revoke-package:" + spec.OnboardingPackageID, "verify-package-revoked:" + spec.OnboardingPackageID}
+	if got := bridge.calls[len(bridge.calls)-2:]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("completed revocation retry calls=%v want=%v", got, want)
+	}
+	if len(metadata.events) != 1 || metadata.events[0] != "disconnected" {
+		t.Fatalf("completed revocation retry metadata=%v", metadata.events)
 	}
 }
 

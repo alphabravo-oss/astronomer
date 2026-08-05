@@ -1,30 +1,22 @@
-import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  boundedToolArguments,
   CharlieLifecycleNotice,
   CharlieMessageParts,
 } from "../message-parts";
+import { decideCharlieApproval } from "@/lib/api/charlie";
 import { useAuthStore } from "@/lib/store";
 import type { User } from "@/types";
+
+vi.mock("@/lib/api/charlie", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/charlie")>()),
+  decideCharlieApproval: vi.fn(),
+}));
 
 describe("Charlie message safety and states", () => {
   afterEach(() =>
     useAuthStore.setState({ user: null, isAuthenticated: false }),
   );
-  it("redacts sensitive tool arguments and bounds values", () => {
-    expect(
-      boundedToolArguments({
-        token: "abc",
-        name: "x".repeat(300),
-        nested: { password: "nope" },
-      }),
-    ).toEqual({
-      token: "[redacted]",
-      name: "x".repeat(200),
-      nested: { password: "[redacted]" },
-    });
-  });
   it.each([
     "reconnecting",
     "retrying",
@@ -33,17 +25,22 @@ describe("Charlie message safety and states", () => {
     "agent_failover",
     "policy_denied",
     "expired",
+    "waiting_approval",
+    "mcp_denied",
+    "auto_blocked",
+    "verification_failed",
+    "emergency_stopped",
   ])("renders %s lifecycle state", (state) => {
     const { unmount } = render(<CharlieLifecycleNotice state={state} />);
     expect(
       screen.getByText(
-        /Reconnecting|Retrying|Partial response|central unavailable|Agent failover|Denied by product policy|Session expired/,
+        /Reconnecting|Retrying|Partial response|central unavailable|Agent failover|Denied by product policy|Session expired|Waiting for exact approval|MCP request denied|Automatic action blocked|Verification failed|Emergency stop active/,
       ),
     ).toBeInTheDocument();
     unmount();
   });
-  it("renders retrieval, sanitized citations, and complete tool metadata", () => {
-    render(
+  it("renders retrieval and server-produced tool summaries without argument values", () => {
+    const view = render(
       <CharlieMessageParts
         message={{
           id: "m",
@@ -64,7 +61,7 @@ describe("Charlie message safety and states", () => {
               capability: "inspect",
               effect: "read",
               risk: "low",
-              arguments: { secret: "x" },
+              argumentSummary: ["namespace", "secret"],
               state: "complete",
               result: "done",
               auditCorrelationId: "audit-1",
@@ -76,6 +73,8 @@ describe("Charlie message safety and states", () => {
     expect(screen.getByText("2 documents")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Docs" })).toBeNull();
     expect(screen.getByText("inspect")).toBeInTheDocument();
+    expect(screen.getByText("namespace, secret")).toBeInTheDocument();
+    expect(view.container.textContent).not.toContain("tool-secret-canary");
   });
   it("never renders approval controls without server eligibility", () => {
     useAuthStore.setState({
@@ -126,7 +125,7 @@ describe("Charlie message safety and states", () => {
     expect(screen.queryByRole("button", { name: /Approve exact/ })).toBeNull();
     expect(screen.getByText(/Requires charlie:approve/)).toBeInTheDocument();
   });
-  it("shows exact decision controls only for eligible approvers", () => {
+  it("requires a separate confirmation and carries rationale", async () => {
     useAuthStore.setState({
       user: { id: "u", isSuperuser: true } as unknown as User,
       isAuthenticated: true,
@@ -145,15 +144,27 @@ describe("Charlie message safety and states", () => {
             capability: "restart",
             target: "cluster/a",
             risk: "medium",
+            effect: "restart one deployment",
+            requiredPermission: "deployments:update",
           },
         }}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: "Approve exact Charlie action" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Deny exact Charlie action" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("restart one deployment")).toBeInTheDocument();
+    expect(screen.getByText("deployments:update")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Rationale for Restart"), {
+      target: { value: "Health checks are failing" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review approval" }));
+    expect(screen.getByText("Approve exact Charlie action")).toBeInTheDocument();
+    expect(decideCharlieApproval).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve exact action" }));
+    await waitFor(() =>
+      expect(decideCharlieApproval).toHaveBeenCalledWith(
+        "a",
+        "approve",
+        "Health checks are failing",
+      ),
+    );
   });
 });

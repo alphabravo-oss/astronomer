@@ -140,35 +140,55 @@ func (c *Client) CloseIdleConnections() {
 
 // Generated Product Bridge model aliases keep consumers out of internal/wire.
 type (
-	Action                   = bridgewire.Action
-	ActivationRequest        = bridgewire.ActivationRequest
-	Approval                 = bridgewire.Approval
-	ApprovalDecision         = bridgewire.ApprovalDecision
-	ApprovalDecisionDecision = bridgewire.ApprovalDecisionDecision
-	ApprovalManifest         = bridgewire.ApprovalManifest
-	ApprovalManifestResource = bridgewire.ApprovalManifestResource
-	BridgeStatus             = bridgewire.BridgeStatus
-	CreateInvestigation      = bridgewire.CreateInvestigation
-	CreateMessage            = bridgewire.CreateMessage
-	CreateSession            = bridgewire.CreateSession
-	CreateSessionActorType   = bridgewire.CreateSessionActorType
-	ErrorEnvelope            = bridgewire.ErrorEnvelope
-	FindingEnvelope          = bridgewire.FindingEnvelope
-	FindingSummary           = bridgewire.FindingSummary
-	FindingTransition        = bridgewire.FindingTransition
-	Health                   = bridgewire.Health
-	HistoryItem              = bridgewire.HistoryItem
-	InvestigationReceipt     = bridgewire.InvestigationReceipt
-	IdempotentCommand        = bridgewire.IdempotentCommand
-	Mode                     = bridgewire.Mode
-	ModeRequest              = bridgewire.ModeRequest
-	ModeResponse             = bridgewire.ModeResponse
-	OpaqueId                 = bridgewire.OpaqueId
-	ResourceReference        = bridgewire.ResourceReference
-	Session                  = bridgewire.Session
-	SessionState             = bridgewire.SessionState
-	TurnReceipt              = bridgewire.TurnReceipt
-	UntrustedContext         = bridgewire.UntrustedContext
+	Action                            = bridgewire.Action
+	ActivationRequest                 = bridgewire.ActivationRequest
+	Approval                          = bridgewire.Approval
+	ApprovalDecision                  = bridgewire.ApprovalDecision
+	ApprovalDecisionDecision          = bridgewire.ApprovalDecisionDecision
+	ApprovalManifest                  = bridgewire.ApprovalManifest
+	ApprovalManifestResource          = bridgewire.ApprovalManifestResource
+	BridgeStatus                      = bridgewire.BridgeStatus
+	CreateInvestigation               = bridgewire.CreateInvestigation
+	CreateMessage                     = bridgewire.CreateMessage
+	CreateSession                     = bridgewire.CreateSession
+	CreateSessionActorType            = bridgewire.CreateSessionActorType
+	CredentialRevocationReceipt       = bridgewire.CredentialRevocationReceipt
+	CredentialRevocationReceiptState  = bridgewire.CredentialRevocationReceiptState
+	CredentialRevocationRequest       = bridgewire.CredentialRevocationRequest
+	CredentialRevocationRequestReason = bridgewire.CredentialRevocationRequestReason
+	CredentialRevocationStatus        = bridgewire.CredentialRevocationStatus
+	CredentialRevocationStatusPurpose = bridgewire.CredentialRevocationStatusPurpose
+	CredentialRevocationStatusState   = bridgewire.CredentialRevocationStatusState
+	ErrorEnvelope                     = bridgewire.ErrorEnvelope
+	FindingEnvelope                   = bridgewire.FindingEnvelope
+	FindingSummary                    = bridgewire.FindingSummary
+	FindingTransition                 = bridgewire.FindingTransition
+	Health                            = bridgewire.Health
+	HistoryItem                       = bridgewire.HistoryItem
+	InvestigationReceipt              = bridgewire.InvestigationReceipt
+	IdempotentCommand                 = bridgewire.IdempotentCommand
+	Mode                              = bridgewire.Mode
+	ModeRequest                       = bridgewire.ModeRequest
+	ModeResponse                      = bridgewire.ModeResponse
+	OpaqueId                          = bridgewire.OpaqueId
+	ResourceReference                 = bridgewire.ResourceReference
+	Session                           = bridgewire.Session
+	SessionState                      = bridgewire.SessionState
+	TurnReceipt                       = bridgewire.TurnReceipt
+	UntrustedContext                  = bridgewire.UntrustedContext
+)
+
+const (
+	CredentialRevocationSchemaV1               = bridgewire.CredentialRevocationReceiptSchemaCharlieCredentialRevocationv1
+	CredentialRevocationPending                = bridgewire.CredentialRevocationReceiptStatePendingCallerRevocation
+	CredentialRevocationComplete               = bridgewire.CredentialRevocationReceiptStateRevoked
+	CredentialRevocationProductDisconnect      = bridgewire.CredentialRevocationRequestReasonProductDisconnect
+	CredentialStatePending                     = bridgewire.CredentialRevocationStatusStatePendingRevocation
+	CredentialStateRevoked                     = bridgewire.CredentialRevocationStatusStateRevoked
+	RevocationCredentialPurposeAgentEnrollment = bridgewire.CredentialRevocationStatusPurposeAgentEnrollment
+	RevocationCredentialPurposeArtifactPull    = bridgewire.CredentialRevocationStatusPurposeArtifactPull
+	RevocationCredentialPurposeProductAgent    = bridgewire.CredentialRevocationStatusPurposeProductAgent
+	RevocationCredentialPurposeProductClient   = bridgewire.CredentialRevocationStatusPurposeProductClient
 )
 
 type HistoryPage struct {

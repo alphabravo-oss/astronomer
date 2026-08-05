@@ -22,6 +22,7 @@ type ModePrerequisites struct {
 	DisclosureAcknowledged   bool
 	AutomationAllowlistReady bool
 	AutomationIdentityReady  bool
+	AutomationTargetReady    bool
 }
 
 type ModeStore interface {
@@ -82,7 +83,7 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		logModeTransitionFailure(ctx, "mode.local_revision_conflict")
 		return ModeState{}, fmt.Errorf("Charlie mode revision changed")
 	}
-	if desired == ModeAuto && (!prerequisites.DisclosureAcknowledged || !prerequisites.AutomationAllowlistReady || !prerequisites.AutomationIdentityReady) {
+	if desired == ModeAuto && (!prerequisites.DisclosureAcknowledged || !prerequisites.AutomationAllowlistReady || !prerequisites.AutomationIdentityReady || !prerequisites.AutomationTargetReady) {
 		logModeTransitionFailure(ctx, "mode.auto_prerequisites_incomplete")
 		return ModeState{}, fmt.Errorf("Charlie auto mode prerequisites are incomplete")
 	}

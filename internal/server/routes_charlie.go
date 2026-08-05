@@ -35,6 +35,7 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 		r.With(admin, manage, adminLimited).Post("/admin/charlie/agent/uninstall/", deps.CharlieAdmin.Uninstall)
 		r.With(admin, manage, adminLimited).Patch("/admin/charlie/mode/", deps.CharlieAdmin.Mode)
 		r.With(gate, admin, manage, adminLimited).Get("/admin/charlie/trigger-rules/", deps.CharlieAdmin.ListTriggers)
+		r.With(gate, admin, manage, adminLimited).Put("/admin/charlie/action-policies/{capability}/", deps.CharlieAdmin.UpdateActionPolicy)
 		r.With(gate, admin, manage, adminLimited).Post("/admin/charlie/trigger-rules/", deps.CharlieAdmin.CreateTrigger)
 		r.With(gate, admin, manage, adminLimited).Patch("/admin/charlie/trigger-rules/{rule_id}/", deps.CharlieAdmin.UpdateTrigger)
 		r.With(gate, admin, manage, adminLimited).Delete("/admin/charlie/trigger-rules/{rule_id}/", deps.CharlieAdmin.DeleteTrigger)

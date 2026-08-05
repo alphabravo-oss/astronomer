@@ -71,6 +71,24 @@ type SessionAccessService struct {
 	now        func() time.Time
 }
 
+// CurrentMode returns only the effective product authority mode after the same
+// live user and connection checks used by the session list. It intentionally
+// exposes no central policy, disclosure, or credential material.
+func (s *SessionAccessService) CurrentMode(ctx context.Context, actorID uuid.UUID) (Mode, error) {
+	if err := s.guardActive(); err != nil || actorID == uuid.Nil {
+		return ModeDisabled, fmt.Errorf("Charlie mode is unavailable")
+	}
+	allowed, err := s.authorizer.CanUseCharlie(ctx, actorID)
+	if err != nil || !allowed {
+		return ModeDisabled, fmt.Errorf("Charlie mode access is denied")
+	}
+	connection, err := s.queries.GetActiveCharlieConnection(ctx)
+	if err != nil || !connection.Active {
+		return ModeDisabled, fmt.Errorf("Charlie connection is inactive")
+	}
+	return EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled), nil
+}
+
 func NewSessionAccessService(queries sessionAccessQueries, authorizer SessionAccessAuthorizer, bridge SessionContentBridge, auditor SessionLifecycleAuditor, active func() bool) (*SessionAccessService, error) {
 	if queries == nil || authorizer == nil || bridge == nil || auditor == nil || active == nil {
 		return nil, fmt.Errorf("Charlie session access requires local state, live authorization, bridge, audit, and activation")

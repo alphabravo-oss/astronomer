@@ -27,6 +27,9 @@ export type CharlieSession = {
     | "failed";
   visibility: "private" | "incident";
   centralRevision: number;
+  source: "user" | "event";
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export interface CharlieContextOption extends CharlieResource {
@@ -44,7 +47,8 @@ export interface CharlieToolRun {
   capability: string;
   effect: string;
   risk: string;
-  arguments: Record<string, unknown>;
+  /** Server-produced field-name-only summary. Exact argument values never reach the browser. */
+  argumentSummary?: string[];
   state: string;
   result?: string;
   auditCorrelationId?: string;
@@ -57,6 +61,8 @@ export interface CharlieApproval {
   capability: string;
   target: string;
   risk: string;
+  effect?: string;
+  requiredPermission?: string;
   expiresAt?: string;
   reason?: string;
 }
@@ -84,6 +90,11 @@ export interface CharlieFinding {
   confidence?: number;
   reasonNoAction?: string;
   summary: string;
+  sessionId?: string;
+  source?: string;
+  repeatCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
   evidence?: Array<{
     label: string;
     summary: string;
@@ -122,6 +133,11 @@ type CharlieWireSession = {
   visibility: CharlieSession["visibility"];
   centralRevision?: number;
   central_revision?: number;
+  source?: CharlieSession["source"];
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
 };
 
 interface CharlieCentralFinding {
@@ -168,6 +184,15 @@ interface CharlieFindingWire {
   proposedAction?: CharlieProposedActionWire;
   proposed_action?: CharlieProposedActionWire;
   detail?: { finding?: CharlieCentralFinding };
+  sessionId?: string;
+  session_id?: string;
+  source?: string;
+  repeatCount?: number;
+  repeat_count?: number;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
 }
 
 function mapCharlieSession(value: CharlieWireSession): CharlieSession {
@@ -180,6 +205,9 @@ function mapCharlieSession(value: CharlieWireSession): CharlieSession {
     state: value.state,
     visibility: value.visibility,
     centralRevision: value.centralRevision ?? value.central_revision ?? 0,
+    source: value.source ?? (value.visibility === "incident" ? "event" : "user"),
+    createdAt: value.createdAt ?? value.created_at,
+    updatedAt: value.updatedAt ?? value.updated_at,
   };
 }
 
@@ -245,6 +273,11 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     confidence: central.confidence,
     reasonNoAction: value.reasonNoAction ?? value.reason_no_action,
     summary: value.summary || central.diagnosis || "",
+    sessionId: value.sessionId ?? value.session_id,
+    source: value.source,
+    repeatCount: value.repeatCount ?? value.repeat_count ?? 1,
+    createdAt: value.createdAt ?? value.created_at,
+    updatedAt: value.updatedAt ?? value.updated_at,
     evidence: (central.evidenceSummary ?? central.evidence_summary ?? []).map(
       (summary: string, index: number) => ({
         label: `Evidence ${index + 1}`,
@@ -256,9 +289,19 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
   };
 }
 
-export async function listCharlieSessions(): Promise<CharlieSession[]> {
+export async function getCharlieOverview(): Promise<{
+  sessions: CharlieSession[];
+  mode: "disabled" | "read_only" | "approval" | "auto";
+}> {
   const { data } = await api.get("/charlie/sessions/");
-  return (data.sessions ?? data.data?.sessions ?? []).map(mapCharlieSession);
+  const value = data.data ?? data;
+  return {
+    sessions: (value.sessions ?? []).map(mapCharlieSession),
+    mode: value.mode ?? "disabled",
+  };
+}
+export async function listCharlieSessions(): Promise<CharlieSession[]> {
+  return (await getCharlieOverview()).sessions;
 }
 export async function createCharlieSession(input: {
   clientSessionId: string;
@@ -378,9 +421,22 @@ export async function listCharlieApprovals(): Promise<CharlieApproval[]> {
 export async function decideCharlieApproval(
   id: string,
   decision: "approve" | "deny",
+  rationale = "",
 ) {
-  await api.post(`/charlie/approvals/${encodeURIComponent(id)}/decision/`, {
-    request_id: crypto.randomUUID(),
-    decision,
-  });
+  try {
+    await api.post(`/charlie/approvals/${encodeURIComponent(id)}/decision/`, {
+      request_id: crypto.randomUUID(),
+      decision,
+      rationale: rationale.trim().slice(0, 512),
+    });
+  } catch (error) {
+    const status = (error as { response?: { status?: number } }).response?.status;
+    if (status === 409) {
+      throw new Error("This exact approval is stale or was already decided. Refresh before trying again.");
+    }
+    if (status === 403) {
+      throw new Error("Approval eligibility or target permission changed. No action was authorized.");
+    }
+    throw new Error("Charlie could not confirm the decision. No action was authorized.");
+  }
 }

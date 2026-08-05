@@ -23,6 +23,7 @@ type ManagedBridgeConfig struct {
 	Certificate    string
 	PrivateKey     string
 	ServerCA       string
+	SigningKey     string
 }
 
 // ManagedBridge is a dormant-by-default proxy to the fixed cluster-local
@@ -46,7 +47,7 @@ type ManagedBridge struct {
 }
 
 func NewManagedBridge(config ManagedBridgeConfig, features featureReader, queries activeConnectionReader) (*ManagedBridge, error) {
-	if strings.TrimSpace(config.AgentNamespace) == "" || strings.TrimSpace(config.Certificate) == "" || strings.TrimSpace(config.PrivateKey) == "" || strings.TrimSpace(config.ServerCA) == "" || features == nil || queries == nil {
+	if strings.TrimSpace(config.AgentNamespace) == "" || strings.TrimSpace(config.Certificate) == "" || strings.TrimSpace(config.PrivateKey) == "" || strings.TrimSpace(config.ServerCA) == "" || strings.TrimSpace(config.SigningKey) == "" || features == nil || queries == nil {
 		return nil, fmt.Errorf("Charlie Product Bridge configuration is incomplete")
 	}
 	return &ManagedBridge{config: config, features: features, queries: queries}, nil
@@ -207,7 +208,7 @@ func loadBridgeTLS(config ManagedBridgeConfig) (*tls.Config, error) {
 
 func bridgeMaterialDigest(config ManagedBridgeConfig) (string, error) {
 	hash := sha256.New()
-	for _, path := range []string{config.Certificate, config.PrivateKey, config.ServerCA} {
+	for _, path := range []string{config.Certificate, config.PrivateKey, config.ServerCA, config.SigningKey} {
 		value, err := os.ReadFile(path)
 		if err != nil {
 			return "", err

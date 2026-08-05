@@ -12,6 +12,7 @@ import type * as apiClient from './api';
 export const queryKeys = {
   charlie: {
     sessions: ['charlie', 'sessions'] as const,
+    overview: ['charlie', 'overview'] as const,
     history: (id?: string | null) => ['charlie', 'history', id] as const,
     contextSearch: (query: string) => ['charlie', 'context-search', query] as const,
     findings: ['charlie', 'findings'] as const,

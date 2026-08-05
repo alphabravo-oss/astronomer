@@ -2,8 +2,10 @@ package charlie
 
 import (
 	"context"
+	"crypto/ed25519"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -16,7 +18,7 @@ func TestManagedBridgeCreatesNoTransportUntilRuntimeIsLiveAndDropsItOnDisable(t 
 	connection := sqlc.CharlieConnection{ID: uuid.New(), InstallationID: installationID, Active: true, OnboardingState: "active", RequestedMode: "read_only", VerifiedMode: "read_only"}
 	features := gateFeature(false)
 	connections := &mutableBridgeConnection{row: connection}
-	bridge, err := NewManagedBridge(ManagedBridgeConfig{AgentNamespace: "astronomer-charlie", Certificate: "/does/not/exist", PrivateKey: "/does/not/exist", ServerCA: "/does/not/exist"}, features, connections)
+	bridge, err := NewManagedBridge(ManagedBridgeConfig{AgentNamespace: "astronomer-charlie", Certificate: "/does/not/exist", PrivateKey: "/does/not/exist", ServerCA: "/does/not/exist", SigningKey: "/does/not/exist"}, features, connections)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,8 +33,8 @@ func TestManagedBridgeCreatesNoTransportUntilRuntimeIsLiveAndDropsItOnDisable(t 
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	paths := ManagedBridgeConfig{AgentNamespace: "astronomer-charlie", Certificate: filepath.Join(dir, "tls.crt"), PrivateKey: filepath.Join(dir, "tls.key"), ServerCA: filepath.Join(dir, "ca.crt")}
-	for path, content := range map[string]string{paths.Certificate: trust.Public.BridgeClientCertificate, paths.PrivateKey: trust.Astronomer.BridgeClientPrivateKey, paths.ServerCA: trust.Public.CACertificatePEM} {
+	paths := ManagedBridgeConfig{AgentNamespace: "astronomer-charlie", Certificate: filepath.Join(dir, "tls.crt"), PrivateKey: filepath.Join(dir, "tls.key"), ServerCA: filepath.Join(dir, "ca.crt"), SigningKey: filepath.Join(dir, "signing.pub")}
+	for path, content := range map[string]string{paths.Certificate: trust.Public.BridgeClientCertificate, paths.PrivateKey: trust.Astronomer.BridgeClientPrivateKey, paths.ServerCA: trust.Public.CACertificatePEM, paths.SigningKey: strings.Repeat("k", ed25519.PublicKeySize)} {
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -51,6 +53,10 @@ func TestManagedBridgeCreatesNoTransportUntilRuntimeIsLiveAndDropsItOnDisable(t 
 type mutableBridgeConnection struct{ row sqlc.CharlieConnection }
 
 func (m *mutableBridgeConnection) GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
+	return m.row, nil
+}
+
+func (m *mutableBridgeConnection) GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
 	return m.row, nil
 }
 

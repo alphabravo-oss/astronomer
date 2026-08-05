@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +21,7 @@ type charlieApprovalAccessFake struct {
 	request   uuid.UUID
 	decision  string
 	rationale string
+	err       error
 }
 
 func (f *charlieApprovalAccessFake) List(_ context.Context, actor uuid.UUID) ([]charlie.ApprovalView, error) {
@@ -29,6 +31,9 @@ func (f *charlieApprovalAccessFake) List(_ context.Context, actor uuid.UUID) ([]
 
 func (f *charlieApprovalAccessFake) Decide(_ context.Context, actor uuid.UUID, approval string, request uuid.UUID, decision, rationale string) (charlie.ApprovalView, error) {
 	f.actor, f.approval, f.request, f.decision, f.rationale = actor, approval, request, decision, rationale
+	if f.err != nil {
+		return charlie.ApprovalView{}, f.err
+	}
 	view := f.views[0]
 	view.State = map[string]string{"approve": "approved", "reject": "denied"}[decision]
 	return view, nil
@@ -45,6 +50,7 @@ func TestCharlieApprovalListReturnsNoAuthorityMaterial(t *testing.T) {
 	access := &charlieApprovalAccessFake{views: []charlie.ApprovalView{{
 		ID: "approval-a", Title: "Approve bounded retry", State: "pending", Eligible: true,
 		Capability: "astronomer.queue.retry_task", Target: "management_component:task-a", Risk: "medium",
+		Effect: "retry one failed task", RequiredPermission: "management_components:astronomer.queue.retry_task",
 		ExpiresAt: time.Date(2026, 8, 5, 10, 5, 0, 0, time.UTC),
 	}}}
 	recorder := httptest.NewRecorder()
@@ -55,6 +61,11 @@ func TestCharlieApprovalListReturnsNoAuthorityMaterial(t *testing.T) {
 	for _, prohibited := range []string{"manifest", "signature", "argument_digest", "authorization_ref", "disclosure_digest"} {
 		if strings.Contains(recorder.Body.String(), prohibited) {
 			t.Fatalf("approval response exposed %q: %s", prohibited, recorder.Body.String())
+		}
+	}
+	for _, required := range []string{"retry one failed task", "management_components:astronomer.queue.retry_task"} {
+		if !strings.Contains(recorder.Body.String(), required) {
+			t.Fatalf("approval response omitted %q: %s", required, recorder.Body.String())
 		}
 	}
 }
@@ -86,5 +97,15 @@ func TestCharlieApprovalEndpointsRejectAPITokenAuthentication(t *testing.T) {
 	NewCharlieApprovalHandler(access).List(recorder, authenticatedCharlieRequest(http.MethodGet, "/", "", actor, "api_token"))
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("API token approval access status=%d", recorder.Code)
+	}
+}
+
+func TestCharlieApprovalStaleDecisionReturnsConflict(t *testing.T) {
+	access := &charlieApprovalAccessFake{err: errors.New("approval is stale and no longer pending")}
+	request := withApprovalParam(authenticatedCharlieRequest(http.MethodPost, "/", `{"request_id":"`+uuid.NewString()+`","decision":"approve"}`, uuid.New(), "jwt"), "approval-a")
+	recorder := httptest.NewRecorder()
+	NewCharlieApprovalHandler(access).Decide(recorder, request)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("stale approval status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

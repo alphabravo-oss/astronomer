@@ -603,6 +603,30 @@ SELECT * FROM charlie_automation_policies
 WHERE connection_id = sqlc.arg(connection_id)
   AND capability = sqlc.arg(capability);
 
+-- name: ListCharlieAutomationPolicies :many
+SELECT * FROM charlie_automation_policies
+WHERE connection_id = sqlc.arg(connection_id)
+ORDER BY capability;
+
+-- name: UpsertCharlieAutomationPolicy :one
+INSERT INTO charlie_automation_policies (
+    connection_id, capability, enabled, max_actions_per_incident,
+    max_actions_per_window, budget_window_seconds, cooldown_seconds
+) VALUES (
+    sqlc.arg(connection_id), sqlc.arg(capability), sqlc.arg(enabled),
+    sqlc.arg(max_actions_per_incident), sqlc.arg(max_actions_per_window),
+    sqlc.arg(budget_window_seconds), sqlc.arg(cooldown_seconds)
+)
+ON CONFLICT (connection_id, capability) DO UPDATE SET
+    enabled = EXCLUDED.enabled,
+    max_actions_per_incident = EXCLUDED.max_actions_per_incident,
+    max_actions_per_window = EXCLUDED.max_actions_per_window,
+    budget_window_seconds = EXCLUDED.budget_window_seconds,
+    cooldown_seconds = EXCLUDED.cooldown_seconds,
+    revision = charlie_automation_policies.revision + 1,
+    updated_at = now()
+RETURNING *;
+
 -- name: GetCharlieActionSafetySnapshot :one
 WITH current_receipt AS (
     SELECT current.id, current.created_at FROM charlie_action_receipts current

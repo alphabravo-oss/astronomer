@@ -119,6 +119,32 @@ const (
 	BackupControllerStatusHealthHealthy  BackupControllerStatusHealth = "healthy"
 )
 
+// Defines values for CharlieAdminActionPolicyCentralState.
+const (
+	CharlieAdminActionPolicyCentralStateUnavailable CharlieAdminActionPolicyCentralState = "unavailable"
+	CharlieAdminActionPolicyCentralStateVerified    CharlieAdminActionPolicyCentralState = "verified"
+)
+
+// Defines values for CharlieAdminActionPolicyCircuitState.
+const (
+	CharlieAdminActionPolicyCircuitStateClosed  CharlieAdminActionPolicyCircuitState = "closed"
+	CharlieAdminActionPolicyCircuitStateOpen    CharlieAdminActionPolicyCircuitState = "open"
+	CharlieAdminActionPolicyCircuitStateUnknown CharlieAdminActionPolicyCircuitState = "unknown"
+)
+
+// Defines values for CharlieAdminActionPolicyEffect.
+const (
+	CharlieAdminActionPolicyEffectWrite CharlieAdminActionPolicyEffect = "write"
+)
+
+// Defines values for CharlieAdminActionPolicyRisk.
+const (
+	CharlieAdminActionPolicyRiskCritical CharlieAdminActionPolicyRisk = "critical"
+	CharlieAdminActionPolicyRiskHigh     CharlieAdminActionPolicyRisk = "high"
+	CharlieAdminActionPolicyRiskLow      CharlieAdminActionPolicyRisk = "low"
+	CharlieAdminActionPolicyRiskMedium   CharlieAdminActionPolicyRisk = "medium"
+)
+
 // Defines values for CharlieAdminAgentApplicationState.
 const (
 	CharlieAdminAgentApplicationStateDegraded     CharlieAdminAgentApplicationState = "degraded"
@@ -1257,6 +1283,47 @@ type CharlieAdminAccess struct {
 	EffectivePermissions []CharlieAdminPermission `json:"effective_permissions"`
 }
 
+// CharlieAdminActionPolicy defines model for CharlieAdminActionPolicy.
+type CharlieAdminActionPolicy struct {
+	AutoEligible          bool                                 `json:"auto_eligible"`
+	BudgetWindowSeconds   int32                                `json:"budget_window_seconds"`
+	Capability            string                               `json:"capability"`
+	CentralAllowlisted    bool                                 `json:"central_allowlisted"`
+	CentralState          CharlieAdminActionPolicyCentralState `json:"central_state"`
+	CircuitState          CharlieAdminActionPolicyCircuitState `json:"circuit_state"`
+	CooldownSeconds       int32                                `json:"cooldown_seconds"`
+	Effect                CharlieAdminActionPolicyEffect       `json:"effect"`
+	Enabled               bool                                 `json:"enabled"`
+	MaxActionsPerIncident int32                                `json:"max_actions_per_incident"`
+	MaxActionsPerWindow   int32                                `json:"max_actions_per_window"`
+	Preconditions         []string                             `json:"preconditions"`
+	Revision              int64                                `json:"revision"`
+	Risk                  CharlieAdminActionPolicyRisk         `json:"risk"`
+	ScopeSummary          string                               `json:"scope_summary"`
+	Verification          string                               `json:"verification"`
+}
+
+// CharlieAdminActionPolicyCentralState defines model for CharlieAdminActionPolicy.CentralState.
+type CharlieAdminActionPolicyCentralState string
+
+// CharlieAdminActionPolicyCircuitState defines model for CharlieAdminActionPolicy.CircuitState.
+type CharlieAdminActionPolicyCircuitState string
+
+// CharlieAdminActionPolicyEffect defines model for CharlieAdminActionPolicy.Effect.
+type CharlieAdminActionPolicyEffect string
+
+// CharlieAdminActionPolicyRisk defines model for CharlieAdminActionPolicy.Risk.
+type CharlieAdminActionPolicyRisk string
+
+// CharlieAdminActionPolicyInput defines model for CharlieAdminActionPolicyInput.
+type CharlieAdminActionPolicyInput struct {
+	BudgetWindowSeconds   int32 `json:"budget_window_seconds"`
+	CooldownSeconds       int32 `json:"cooldown_seconds"`
+	Enabled               bool  `json:"enabled"`
+	MaxActionsPerIncident int32 `json:"max_actions_per_incident"`
+	MaxActionsPerWindow   int32 `json:"max_actions_per_window"`
+}
+
 // CharlieAdminActionRequest defines model for CharlieAdminActionRequest.
 type CharlieAdminActionRequest struct {
 	Confirmation string `json:"confirmation"`
@@ -1298,11 +1365,22 @@ type CharlieAdminAgentReplicaRole string
 // CharlieAdminAgentReplicaState defines model for CharlieAdminAgentReplica.State.
 type CharlieAdminAgentReplicaState string
 
+// CharlieAdminAutoReadiness defines model for CharlieAdminAutoReadiness.
+type CharlieAdminAutoReadiness struct {
+	Blockers []struct {
+		Code       string `json:"code"`
+		Message    string `json:"message"`
+		NextAction string `json:"next_action"`
+	} `json:"blockers"`
+	Ready bool `json:"ready"`
+}
+
 // CharlieAdminAutomation defines model for CharlieAdminAutomation.
 type CharlieAdminAutomation struct {
-	DefaultsRevision       int64                     `json:"defaults_revision"`
-	Rules                  []CharlieAdminTriggerRule `json:"rules"`
-	ServiceIdentityEnabled bool                      `json:"service_identity_enabled"`
+	ActionPolicies         []CharlieAdminActionPolicy `json:"action_policies"`
+	DefaultsRevision       int64                      `json:"defaults_revision"`
+	Rules                  []CharlieAdminTriggerRule  `json:"rules"`
+	ServiceIdentityEnabled bool                       `json:"service_identity_enabled"`
 }
 
 // CharlieAdminConnection defines model for CharlieAdminConnection.
@@ -1348,6 +1426,7 @@ type CharlieAdminDiagnosticsOverall string
 type CharlieAdminMode struct {
 	AcknowledgedDisclosureDigest *string                       `json:"acknowledged_disclosure_digest,omitempty"`
 	Authoritative                CharlieAdminModeAuthoritative `json:"authoritative"`
+	AutoReadiness                CharlieAdminAutoReadiness     `json:"auto_readiness"`
 	DisablePending               *bool                         `json:"disable_pending,omitempty"`
 	DisclosureDigest             *string                       `json:"disclosure_digest,omitempty"`
 	Effects                      []string                      `json:"effects"`
@@ -1576,8 +1655,10 @@ type CharlieOnboardingStatus struct {
 	DeploymentId            string                                   `json:"deployment_id"`
 	ExpiresAt               time.Time                                `json:"expires_at"`
 	Idempotent              bool                                     `json:"idempotent"`
+	IntegrationId           string                                   `json:"integration_id"`
 	IssuedAt                time.Time                                `json:"issued_at"`
 	LogicalAgentId          string                                   `json:"logical_agent_id"`
+	McpUrl                  string                                   `json:"mcp_url"`
 	PackageDigest           string                                   `json:"package_digest"`
 	PackageId               string                                   `json:"package_id"`
 	ProductId               string                                   `json:"product_id"`
@@ -4524,6 +4605,9 @@ type PutApiV1AdminAlertingInhibitionsIdJSONRequestBody = InhibitionRequest
 
 // AdminCharlieAccessUpdateJSONRequestBody defines body for AdminCharlieAccessUpdate for application/json ContentType.
 type AdminCharlieAccessUpdateJSONRequestBody = CharlieAccessRequest
+
+// AdminCharlieActionPolicyUpdateJSONRequestBody defines body for AdminCharlieActionPolicyUpdate for application/json ContentType.
+type AdminCharlieActionPolicyUpdateJSONRequestBody = CharlieAdminActionPolicyInput
 
 // AdminCharlieAgentUninstallJSONRequestBody defines body for AdminCharlieAgentUninstall for application/json ContentType.
 type AdminCharlieAgentUninstallJSONRequestBody = CharlieAdminActionRequest
@@ -9792,6 +9876,11 @@ type ClientInterface interface {
 
 	AdminCharlieAccessUpdate(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminCharlieActionPolicyUpdateWithBody request with any body
+	AdminCharlieActionPolicyUpdateWithBody(ctx context.Context, capability string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieActionPolicyUpdate(ctx context.Context, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminCharlieAgentInstall request
 	AdminCharlieAgentInstall(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -11698,6 +11787,30 @@ func (c *Client) AdminCharlieAccessUpdateWithBody(ctx context.Context, contentTy
 
 func (c *Client) AdminCharlieAccessUpdate(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieAccessUpdateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieActionPolicyUpdateWithBody(ctx context.Context, capability string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieActionPolicyUpdateRequestWithBody(c.Server, capability, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieActionPolicyUpdate(ctx context.Context, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieActionPolicyUpdateRequest(c.Server, capability, body)
 	if err != nil {
 		return nil, err
 	}
@@ -19712,6 +19825,53 @@ func NewAdminCharlieAccessUpdateRequestWithBody(server string, contentType strin
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/admin/charlie/access/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieActionPolicyUpdateRequest calls the generic AdminCharlieActionPolicyUpdate builder with application/json body
+func NewAdminCharlieActionPolicyUpdateRequest(server string, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieActionPolicyUpdateRequestWithBody(server, capability, "application/json", bodyReader)
+}
+
+// NewAdminCharlieActionPolicyUpdateRequestWithBody generates requests for AdminCharlieActionPolicyUpdate with any type of body
+func NewAdminCharlieActionPolicyUpdateRequestWithBody(server string, capability string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "capability", runtime.ParamLocationPath, capability)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/action-policies/%s/", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -41477,6 +41637,11 @@ type ClientWithResponsesInterface interface {
 
 	AdminCharlieAccessUpdateWithResponse(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAccessUpdateResponse, error)
 
+	// AdminCharlieActionPolicyUpdateWithBodyWithResponse request with any body
+	AdminCharlieActionPolicyUpdateWithBodyWithResponse(ctx context.Context, capability string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieActionPolicyUpdateResponse, error)
+
+	AdminCharlieActionPolicyUpdateWithResponse(ctx context.Context, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieActionPolicyUpdateResponse, error)
+
 	// AdminCharlieAgentInstallWithResponse request
 	AdminCharlieAgentInstallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentInstallResponse, error)
 
@@ -43486,6 +43651,33 @@ func (r AdminCharlieAccessUpdateResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminCharlieAccessUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieActionPolicyUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminActionPolicy
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieActionPolicyUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieActionPolicyUpdateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -56295,6 +56487,23 @@ func (c *ClientWithResponses) AdminCharlieAccessUpdateWithResponse(ctx context.C
 	return ParseAdminCharlieAccessUpdateResponse(rsp)
 }
 
+// AdminCharlieActionPolicyUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieActionPolicyUpdateResponse
+func (c *ClientWithResponses) AdminCharlieActionPolicyUpdateWithBodyWithResponse(ctx context.Context, capability string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieActionPolicyUpdateResponse, error) {
+	rsp, err := c.AdminCharlieActionPolicyUpdateWithBody(ctx, capability, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieActionPolicyUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieActionPolicyUpdateWithResponse(ctx context.Context, capability string, body AdminCharlieActionPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieActionPolicyUpdateResponse, error) {
+	rsp, err := c.AdminCharlieActionPolicyUpdate(ctx, capability, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieActionPolicyUpdateResponse(rsp)
+}
+
 // AdminCharlieAgentInstallWithResponse request returning *AdminCharlieAgentInstallResponse
 func (c *ClientWithResponses) AdminCharlieAgentInstallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentInstallResponse, error) {
 	rsp, err := c.AdminCharlieAgentInstall(ctx, reqEditors...)
@@ -62151,6 +62360,67 @@ func ParseAdminCharlieAccessUpdateResponse(rsp *http.Response) (*AdminCharlieAcc
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest CharlieAdminAccess
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieActionPolicyUpdateResponse parses an HTTP response from a AdminCharlieActionPolicyUpdateWithResponse call
+func ParseAdminCharlieActionPolicyUpdateResponse(rsp *http.Response) (*AdminCharlieActionPolicyUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieActionPolicyUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminActionPolicy
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  abortCharlieSession,
   createCharlieSession,
+  getCharlieOverview,
   getCharlieHistory,
   sendCharlieMessage,
   subscribeCharlieSessionEvents,
@@ -10,7 +12,9 @@ import {
 import { CharlieShell } from "../charlie-shell";
 
 vi.mock("@/lib/api/charlie", () => ({
+  abortCharlieSession: vi.fn(),
   createCharlieSession: vi.fn(),
+  getCharlieOverview: vi.fn(),
   getCharlieHistory: vi.fn(),
   searchCharlieContext: vi.fn().mockResolvedValue([
     { type: "alert", id: "active", requiredVerb: "read", label: "Alerts", summary: "Current authorized alert scope" },
@@ -38,6 +42,16 @@ vi.mock("@/lib/link", () => ({
 }));
 
 describe("Charlie global shell accessibility", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getCharlieOverview).mockResolvedValue({
+      sessions: [],
+      mode: "read_only",
+    });
+    vi.mocked(getCharlieHistory).mockResolvedValue([]);
+    vi.mocked(subscribeCharlieSessionEvents).mockReturnValue(() => undefined);
+  });
+
   it("opens with the non-command-palette shortcut, exposes route context, and closes with Escape", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -83,6 +97,7 @@ describe("Charlie global shell accessibility", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(launcher).toHaveFocus();
+    expect(abortCharlieSession).not.toHaveBeenCalled();
   });
 
   it("uses the new session intent as the first turn without sending it twice", async () => {
@@ -108,5 +123,63 @@ describe("Charlie global shell accessibility", () => {
     fireEvent.change(composer, { target: { value: "Now check tunnel health" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sendCharlieMessage).toHaveBeenCalledWith("session-1", "Now check tunnel health"));
+  });
+
+  it("restores the latest authorized private user session and displays its effective mode", async () => {
+    vi.mocked(getCharlieOverview).mockResolvedValue({
+      mode: "approval",
+      sessions: [
+        {
+          id: "incident-event",
+          visibility: "incident",
+          source: "event",
+          state: "active",
+        },
+        {
+          id: "private-user",
+          visibility: "private",
+          source: "user",
+          state: "active",
+        },
+      ] as never,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <CharlieShell><main>Dashboard</main></CharlieShell>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByLabelText("Current Charlie mode: approval")).toBeInTheDocument();
+    await waitFor(() => expect(getCharlieHistory).toHaveBeenCalledWith("private-user"));
+    expect(subscribeCharlieSessionEvents).toHaveBeenCalledWith(
+      "private-user",
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it("aborts only after explicit typed confirmation", async () => {
+    vi.mocked(getCharlieOverview).mockResolvedValue({
+      mode: "read_only",
+      sessions: [{ id: "private-user", visibility: "private", source: "user", state: "active" }] as never,
+    });
+    vi.mocked(abortCharlieSession).mockResolvedValue(undefined);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <CharlieShell><main>Dashboard</main></CharlieShell>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abort turn" }));
+    const confirm = screen.getByRole("button", { name: "Abort session" });
+    expect(confirm).toBeDisabled();
+    expect(abortCharlieSession).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByPlaceholderText("ABORT CHARLIE SESSION"), {
+      target: { value: "ABORT CHARLIE SESSION" },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(abortCharlieSession).toHaveBeenCalledWith("private-user"));
   });
 });

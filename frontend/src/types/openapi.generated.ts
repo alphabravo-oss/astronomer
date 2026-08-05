@@ -413,6 +413,31 @@ export interface OpenAPIComponents {
           "effective_permissions": OpenAPIComponents['schemas']['CharlieAdminPermission'][];
           "automation_grants": OpenAPIComponents['schemas']['CharlieAdminPermission'][];
         };
+    CharlieAdminActionPolicy: {
+          "capability": string;
+          "effect": "write";
+          "risk": "low" | "medium" | "high" | "critical";
+          "auto_eligible": boolean;
+          "central_allowlisted": boolean;
+          "central_state": "verified" | "unavailable";
+          "enabled": boolean;
+          "revision": number;
+          "max_actions_per_incident": number;
+          "max_actions_per_window": number;
+          "budget_window_seconds": number;
+          "cooldown_seconds": number;
+          "scope_summary": string;
+          "preconditions": string[];
+          "verification": string;
+          "circuit_state": "closed" | "open" | "unknown";
+        };
+    CharlieAdminActionPolicyInput: {
+          "enabled": boolean;
+          "max_actions_per_incident": number;
+          "max_actions_per_window": number;
+          "budget_window_seconds": number;
+          "cooldown_seconds": number;
+        };
     CharlieAdminActionRequest: {
           "confirmation": string;
         };
@@ -438,8 +463,17 @@ export interface OpenAPIComponents {
           "last_heartbeat_at"?: string;
           "version"?: string;
         };
+    CharlieAdminAutoReadiness: {
+          "ready": boolean;
+          "blockers": Array<{
+            "code": string;
+            "message": string;
+            "next_action": string;
+          }>;
+        };
     CharlieAdminAutomation: {
           "rules": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'][];
+          "action_policies": OpenAPIComponents['schemas']['CharlieAdminActionPolicy'][];
           "defaults_revision": number;
           "service_identity_enabled": boolean;
         };
@@ -479,6 +513,7 @@ export interface OpenAPIComponents {
           "disclosure_digest"?: string;
           "acknowledged_disclosure_digest"?: string;
           "effects": string[];
+          "auto_readiness": OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
         };
     CharlieAdminPermission: {
           "permission": string;
@@ -1908,9 +1943,12 @@ export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperati
 export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
 export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];
 export type CharlieAdminAccess = OpenAPIComponents['schemas']['CharlieAdminAccess'];
+export type CharlieAdminActionPolicy = OpenAPIComponents['schemas']['CharlieAdminActionPolicy'];
+export type CharlieAdminActionPolicyInput = OpenAPIComponents['schemas']['CharlieAdminActionPolicyInput'];
 export type CharlieAdminActionRequest = OpenAPIComponents['schemas']['CharlieAdminActionRequest'];
 export type CharlieAdminAgent = OpenAPIComponents['schemas']['CharlieAdminAgent'];
 export type CharlieAdminAgentReplica = OpenAPIComponents['schemas']['CharlieAdminAgentReplica'];
+export type CharlieAdminAutoReadiness = OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
 export type CharlieAdminAutomation = OpenAPIComponents['schemas']['CharlieAdminAutomation'];
 export type CharlieAdminConnection = OpenAPIComponents['schemas']['CharlieAdminConnection'];
 export type CharlieAdminDiagnosticCheck = OpenAPIComponents['schemas']['CharlieAdminDiagnosticCheck'];

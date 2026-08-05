@@ -3171,6 +3171,44 @@ func (q *Queries) ListCharlieApprovalCandidateSessions(ctx context.Context) ([]C
 	return items, nil
 }
 
+const listCharlieAutomationPolicies = `-- name: ListCharlieAutomationPolicies :many
+SELECT id, connection_id, capability, enabled, max_actions_per_incident, max_actions_per_window, budget_window_seconds, cooldown_seconds, revision, created_at, updated_at FROM charlie_automation_policies
+WHERE connection_id = $1
+ORDER BY capability
+`
+
+func (q *Queries) ListCharlieAutomationPolicies(ctx context.Context, connectionID uuid.UUID) ([]CharlieAutomationPolicy, error) {
+	rows, err := q.db.Query(ctx, listCharlieAutomationPolicies, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieAutomationPolicy{}
+	for rows.Next() {
+		var i CharlieAutomationPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectionID,
+			&i.Capability,
+			&i.Enabled,
+			&i.MaxActionsPerIncident,
+			&i.MaxActionsPerWindow,
+			&i.BudgetWindowSeconds,
+			&i.CooldownSeconds,
+			&i.Revision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCharlieFindingResources = `-- name: ListCharlieFindingResources :many
 SELECT finding_id, resource_type, resource_id, required_verb, created_at FROM charlie_finding_resources WHERE finding_id = $1 ORDER BY resource_type, resource_id, required_verb
 `
@@ -4797,6 +4835,63 @@ func (q *Queries) UpsertCharlieApprovalFinding(ctx context.Context, arg UpsertCh
 		&i.ResolvedByID,
 		&i.ResolvedAt,
 		&i.AlertEventID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertCharlieAutomationPolicy = `-- name: UpsertCharlieAutomationPolicy :one
+INSERT INTO charlie_automation_policies (
+    connection_id, capability, enabled, max_actions_per_incident,
+    max_actions_per_window, budget_window_seconds, cooldown_seconds
+) VALUES (
+    $1, $2, $3,
+    $4, $5,
+    $6, $7
+)
+ON CONFLICT (connection_id, capability) DO UPDATE SET
+    enabled = EXCLUDED.enabled,
+    max_actions_per_incident = EXCLUDED.max_actions_per_incident,
+    max_actions_per_window = EXCLUDED.max_actions_per_window,
+    budget_window_seconds = EXCLUDED.budget_window_seconds,
+    cooldown_seconds = EXCLUDED.cooldown_seconds,
+    revision = charlie_automation_policies.revision + 1,
+    updated_at = now()
+RETURNING id, connection_id, capability, enabled, max_actions_per_incident, max_actions_per_window, budget_window_seconds, cooldown_seconds, revision, created_at, updated_at
+`
+
+type UpsertCharlieAutomationPolicyParams struct {
+	ConnectionID          uuid.UUID `json:"connection_id"`
+	Capability            string    `json:"capability"`
+	Enabled               bool      `json:"enabled"`
+	MaxActionsPerIncident int32     `json:"max_actions_per_incident"`
+	MaxActionsPerWindow   int32     `json:"max_actions_per_window"`
+	BudgetWindowSeconds   int32     `json:"budget_window_seconds"`
+	CooldownSeconds       int32     `json:"cooldown_seconds"`
+}
+
+func (q *Queries) UpsertCharlieAutomationPolicy(ctx context.Context, arg UpsertCharlieAutomationPolicyParams) (CharlieAutomationPolicy, error) {
+	row := q.db.QueryRow(ctx, upsertCharlieAutomationPolicy,
+		arg.ConnectionID,
+		arg.Capability,
+		arg.Enabled,
+		arg.MaxActionsPerIncident,
+		arg.MaxActionsPerWindow,
+		arg.BudgetWindowSeconds,
+		arg.CooldownSeconds,
+	)
+	var i CharlieAutomationPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.Capability,
+		&i.Enabled,
+		&i.MaxActionsPerIncident,
+		&i.MaxActionsPerWindow,
+		&i.BudgetWindowSeconds,
+		&i.CooldownSeconds,
+		&i.Revision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

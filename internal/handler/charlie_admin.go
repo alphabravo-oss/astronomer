@@ -22,6 +22,7 @@ type CharlieAdminBackend interface {
 	UpdateMode(context.Context, charlie.Mode, int64, bool, uuid.UUID) (charlie.AdminModeView, error)
 	AcknowledgeDisclosure(context.Context, string) (charlie.AdminModeView, error)
 	Automation(context.Context) (charlie.AdminAutomationView, error)
+	UpdateActionPolicy(context.Context, string, charlie.AdminActionPolicyInput) (charlie.AdminActionPolicy, error)
 	CreateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
 	UpdateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
 	DeleteTrigger(context.Context, uuid.UUID) error
@@ -197,6 +198,28 @@ func (h *CharlieAdminHandler) ListTriggers(w http.ResponseWriter, r *http.Reques
 		h.respondError(w, r, err)
 		return
 	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) UpdateActionPolicy(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	capability := strings.TrimSpace(chi.URLParam(r, "capability"))
+	var request charlie.AdminActionPolicyInput
+	if capability == "" || !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	view, err := h.backend.UpdateActionPolicy(r.Context(), capability, request)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.action_policy.update", "charlie_action_policy", view.Capability, view.Capability, map[string]any{
+		"enabled": view.Enabled, "revision": view.Revision,
+		"max_actions_per_incident": view.MaxActionsPerIncident, "max_actions_per_window": view.MaxActionsPerWindow,
+		"budget_window_seconds": view.BudgetWindowSeconds, "cooldown_seconds": view.CooldownSeconds,
+	})
 	RespondJSON(w, http.StatusOK, view)
 }
 

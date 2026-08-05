@@ -167,6 +167,26 @@ func TestPrivateSessionOwnerIsolationAndLiveRecheck(t *testing.T) {
 	}
 }
 
+func TestCurrentModeUsesLiveUserAndEffectiveConnectionAuthority(t *testing.T) {
+	actor := uuid.New()
+	queries, _ := readyPrivateAccess(actor)
+	queries.connection.RequestedMode = string(ModeAuto)
+	queries.connection.VerifiedMode = string(ModeApproval)
+	authorizer := &sessionAuthorizerFake{use: true}
+	service, err := NewSessionAccessService(queries, authorizer, &contentBridgeFake{}, &sessionAuditFake{}, func() bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	mode, err := service.CurrentMode(context.Background(), actor)
+	if err != nil || mode != ModeApproval {
+		t.Fatalf("mode=%q err=%v", mode, err)
+	}
+	authorizer.use = false
+	if _, err := service.CurrentMode(context.Background(), actor); err == nil {
+		t.Fatal("revoked Charlie access still disclosed the current mode")
+	}
+}
+
 func TestIncidentSessionChecksAffectedResourcesEveryCall(t *testing.T) {
 	actor := uuid.New()
 	queries, sessionID := readyPrivateAccess(uuid.New())

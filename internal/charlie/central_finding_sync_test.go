@@ -277,3 +277,12 @@ func TestCentralFindingSummaryRejectsContentAndDisplayUsesNoCentralCanary(t *tes
 		t.Fatal("central content canary reached locally persisted display metadata")
 	}
 }
+
+func TestCentralFindingAcceptsExactVerificationFailureBlock(t *testing.T) {
+	if !validCentralFindingBlockCode("verification_failed") {
+		t.Fatal("signed post-verification failure cannot become an actionable product finding")
+	}
+	if validCentralFindingBlockCode("post_verification_failed_with_details") {
+		t.Fatal("unbounded verification failure code was accepted")
+	}
+}

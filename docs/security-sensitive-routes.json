@@ -3575,6 +3575,19 @@
     "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestBrowserCookieMutatingRoutesRequireCSRF"]
   },
   {
+    "id": "charlie-admin-action-policy-update",
+    "route": "/api/v1/admin/charlie/action-policies/{capability}/",
+    "sample_path": "/api/v1/admin/charlie/action-policies/astronomer.queue.retry_task/",
+    "method": "PUT",
+    "expected_unauthenticated_status": 401,
+    "surface": "configure one bounded product-local Charlie automation action policy",
+    "auth": "browser JWT only; feature.charlie opt-in gate; exact capability must remain independently allowlisted by Charlie",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.action_policy.update with capability, bounded budgets, and state only; no task payloads or credentials",
+    "tests": ["TestHighRiskRoutesDenyUnauthenticatedRequests", "TestBrowserCookieMutatingRoutesRequireCSRF"]
+  },
+  {
     "id": "charlie-admin-trigger-list",
     "route": "/api/v1/admin/charlie/trigger-rules/",
     "sample_path": "/api/v1/admin/charlie/trigger-rules/",

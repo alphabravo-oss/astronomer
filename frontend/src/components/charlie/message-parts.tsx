@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { SafeMarkdown, safeLink } from "./safe-markdown";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { can } from "@/lib/permissions";
 import { useAuthStore } from "@/lib/store";
 import {
@@ -18,36 +19,6 @@ import {
   type CharlieMessage,
   type CharlieToolRun,
 } from "@/lib/api/charlie";
-
-const sensitiveKey =
-  /(secret|token|password|private.?key|credential|certificate|authorization|cookie)/i;
-export function boundedToolArguments(
-  value: Record<string, unknown>,
-): Record<string, unknown> {
-  const visit = (input: unknown, depth: number): unknown => {
-    if (depth > 2) return "[bounded]";
-    if (typeof input === "string") return input.slice(0, 200);
-    if (
-      typeof input === "number" ||
-      typeof input === "boolean" ||
-      input == null
-    )
-      return input;
-    if (Array.isArray(input))
-      return input.slice(0, 10).map((v) => visit(v, depth + 1));
-    if (typeof input === "object")
-      return Object.fromEntries(
-        Object.entries(input as Record<string, unknown>)
-          .slice(0, 20)
-          .map(([k, v]) => [
-            k,
-            sensitiveKey.test(k) ? "[redacted]" : visit(v, depth + 1),
-          ]),
-      );
-    return String(input).slice(0, 200);
-  };
-  return visit(value, 0) as Record<string, unknown>;
-}
 
 export function CharlieLifecycleNotice({ state }: { state?: string }) {
   const states: Record<
@@ -94,6 +65,51 @@ export function CharlieLifecycleNotice({ state }: { state?: string }) {
       title: "Session expired",
       description: "Start a new session to refresh authorization and context.",
       tone: "text-muted-foreground",
+    },
+    waiting_approval: {
+      title: "Waiting for exact approval",
+      description: "No action runs until an eligible operator confirms this exact bounded request.",
+      tone: "text-status-warning",
+    },
+    mcp_denied: {
+      title: "MCP request denied",
+      description: "Astronomer rejected the requested tool at the private product boundary.",
+      tone: "text-status-error",
+    },
+    disabled: {
+      title: "Charlie disabled",
+      description: "New Charlie sessions and work are disabled for this installation.",
+      tone: "text-muted-foreground",
+    },
+    read_only_finding: {
+      title: "Read-only finding",
+      description: "Charlie produced a diagnosis and safe checks, but no write can run.",
+      tone: "text-status-warning",
+    },
+    approval_required: {
+      title: "Approval required",
+      description: "Review the exact capability, effect, target, and permission before deciding.",
+      tone: "text-status-warning",
+    },
+    auto_blocked: {
+      title: "Automatic action blocked",
+      description: "An Astronomer policy, scope, budget, or safety control prevented execution.",
+      tone: "text-status-error",
+    },
+    destructive_denied: {
+      title: "Destructive action denied",
+      description: "Destructive and irreversible operations are unavailable in every Charlie mode.",
+      tone: "text-status-error",
+    },
+    verification_failed: {
+      title: "Verification failed",
+      description: "The bounded action did not satisfy its postcondition. Further incident work is stopped.",
+      tone: "text-status-error",
+    },
+    emergency_stopped: {
+      title: "Emergency stop active",
+      description: "Product authority is locally closed while central state is reconciled.",
+      tone: "text-status-error",
     },
   };
   const current = state ? states[state] : undefined;
@@ -191,7 +207,10 @@ function ToolCard({ tool }: { tool: CharlieToolRun }) {
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <Wrench className="h-4 w-4" />
         <b className="flex-1">{tool.capability.slice(0, 128)}</b>
-        <StatusBadge status={tool.state} />
+        <StatusBadge
+          status={tool.state === "complete" ? "succeeded" : tool.state}
+          label={tool.state}
+        />
       </summary>
       <dl className="mt-2 grid grid-cols-2 gap-2">
         <div>
@@ -203,10 +222,12 @@ function ToolCard({ tool }: { tool: CharlieToolRun }) {
           <dd>{tool.risk.slice(0, 120)}</dd>
         </div>
       </dl>
-      <p className="mt-2 text-muted-foreground">Bounded arguments</p>
-      <pre className="mt-1 max-h-36 overflow-auto rounded bg-muted p-2 text-[11px]">
-        {JSON.stringify(boundedToolArguments(tool.arguments), null, 2)}
-      </pre>
+      <p className="mt-2 text-muted-foreground">Argument fields</p>
+      <p className="mt-1 rounded bg-muted p-2 text-[11px]">
+        {tool.argumentSummary?.length
+          ? tool.argumentSummary.slice(0, 20).join(", ")
+          : "No display-safe argument fields were provided."}
+      </p>
       {tool.result && (
         <div className="mt-2">
           <p className="text-muted-foreground">Result summary</p>
@@ -235,12 +256,15 @@ function ApprovalCard({
   const user = useAuthStore((s) => s.user);
   const permitted = can(user, "charlie", "approve");
   const [pending, setPending] = useState<"approve" | "deny">();
+  const [confirm, setConfirm] = useState<"approve" | "deny">();
+  const [rationale, setRationale] = useState("");
   const [error, setError] = useState("");
   const decide = async (decision: "approve" | "deny") => {
     setError("");
     setPending(decision);
     try {
-      await decideCharlieApproval(approval.id, decision);
+      await decideCharlieApproval(approval.id, decision, rationale);
+      setConfirm(undefined);
       onChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Decision failed");
@@ -264,6 +288,14 @@ function ApprovalCard({
           <dd>{approval.capability.slice(0, 128)}</dd>
         </div>
         <div>
+          <dt className="text-muted-foreground">Effect</dt>
+          <dd>{approval.effect ?? "bounded write"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Required permission</dt>
+          <dd>{approval.requiredPermission ?? "Exact target permission"}</dd>
+        </div>
+        <div>
           <dt className="text-muted-foreground">Target</dt>
           <dd>{approval.target.slice(0, 200)}</dd>
         </div>
@@ -279,31 +311,44 @@ function ApprovalCard({
         )}
       </dl>
       {approval.eligible && approval.state === "pending" && permitted ? (
-        <div className="mt-3 flex gap-2">
-          <button
-            disabled={!!pending}
-            onClick={() => void decide("approve")}
-            className="rounded bg-primary px-3 py-2 text-primary-foreground"
-          >
-            {pending === "approve" ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-            <span className="sr-only">Approve exact Charlie action</span>
-          </button>
-          <button
-            disabled={!!pending}
-            onClick={() => void decide("deny")}
-            className="rounded border px-3 py-2"
-          >
-            {pending === "deny" ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Clock className="h-4 w-4" />
-            )}
-            <span className="sr-only">Deny exact Charlie action</span>
-          </button>
+        <div className="mt-3 space-y-2">
+          <label className="block">
+            <span className="text-muted-foreground">Rationale (optional, 512 characters)</span>
+            <textarea
+              aria-label={`Rationale for ${approval.title}`}
+              value={rationale}
+              maxLength={512}
+              rows={2}
+              onChange={(event) => setRationale(event.target.value)}
+              className="mt-1 w-full rounded border bg-background p-2"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button
+              disabled={!!pending}
+              onClick={() => setConfirm("approve")}
+              className="rounded bg-primary px-3 py-2 text-primary-foreground"
+            >
+              {pending === "approve" ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              <span>Review approval</span>
+            </button>
+            <button
+              disabled={!!pending}
+              onClick={() => setConfirm("deny")}
+              className="rounded border px-3 py-2"
+            >
+              {pending === "deny" ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Clock className="h-4 w-4" />
+              )}
+              <span>Review denial</span>
+            </button>
+          </div>
         </div>
       ) : (
         <p className="mt-2 text-muted-foreground">
@@ -320,6 +365,20 @@ function ApprovalCard({
           {error}
         </p>
       )}
+      <ConfirmDialog
+        open={!!confirm}
+        onClose={() => setConfirm(undefined)}
+        onConfirm={() => confirm && void decide(confirm)}
+        title={
+          confirm === "approve"
+            ? "Approve exact Charlie action"
+            : "Deny exact Charlie action"
+        }
+        description={`${approval.capability} on ${approval.target}. This decision applies only to the displayed bounded action${rationale.trim() ? " and records your rationale" : ""}.`}
+        confirmText={confirm === "approve" ? "Approve exact action" : "Deny exact action"}
+        loading={!!pending}
+        variant={confirm === "deny" ? "destructive" : undefined}
+      />
     </section>
   );
 }

@@ -115,10 +115,11 @@ drift, emergency-disable and rotate local trust.
 2. Verify package signature, confirmed public-key fingerprint, deployment and
    route binding, expiration, immutable chart/image digests, replica count, and
    one unique enrollment slot per ordinal.
-3. Rotation must create new material, roll every replica safely, verify bridge
-   and MCP identity, then revoke the prior credential. A failed verification
-   leaves old authority in place or disables locally; it must not partially
-   broaden trust.
+3. Charlie v1 rotates enrollment and artifact credentials only by issuing a
+   signed replacement package. Charlie atomically revokes the prior generation;
+   Astronomer validates and installs the replacement, verifies bridge/MCP
+   identity and readiness, then prunes superseded owner-bound material. There
+   is no separate Astronomer-side credential-rotation RPC.
 4. Replayed or ordinal-mismatched enrollment is an incident. Revoke/replace the
    package and inspect Charlie's enrollment audit without exposing token data.
 

@@ -291,7 +291,7 @@ components:
     CharlieAdminMode:
       type: object
       additionalProperties: false
-      required: [requested, authoritative, revision, emergency_disabled, effects]
+      required: [requested, authoritative, revision, emergency_disabled, effects, auto_readiness]
       properties:
         requested: {type: string, enum: [disabled, read_only, approval, auto]}
         authoritative: {type: string, enum: [disabled, read_only, approval, auto]}
@@ -301,6 +301,24 @@ components:
         disclosure_digest: {type: string}
         acknowledged_disclosure_digest: {type: string}
         effects: {type: array, items: {type: string}}
+        auto_readiness: {$ref: '#/components/schemas/CharlieAdminAutoReadiness'}
+    CharlieAdminAutoReadiness:
+      type: object
+      additionalProperties: false
+      required: [ready, blockers]
+      properties:
+        ready: {type: boolean}
+        blockers:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, message, next_action]
+            properties:
+              code: {type: string, maxLength: 64}
+              message: {type: string, maxLength: 512}
+              next_action: {type: string, maxLength: 512}
     CharlieAdminStatus:
       type: object
       additionalProperties: false
@@ -348,11 +366,43 @@ components:
     CharlieAdminAutomation:
       type: object
       additionalProperties: false
-      required: [rules, defaults_revision, service_identity_enabled]
+      required: [rules, action_policies, defaults_revision, service_identity_enabled]
       properties:
         rules: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}
+        action_policies: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/CharlieAdminActionPolicy'}}
         defaults_revision: {type: integer, format: int64, minimum: 0}
         service_identity_enabled: {type: boolean}
+    CharlieAdminActionPolicy:
+      type: object
+      additionalProperties: false
+      required: [capability, effect, risk, auto_eligible, central_allowlisted, central_state, enabled, revision, max_actions_per_incident, max_actions_per_window, budget_window_seconds, cooldown_seconds, scope_summary, preconditions, verification, circuit_state]
+      properties:
+        capability: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}
+        effect: {type: string, enum: [write]}
+        risk: {type: string, enum: [low, medium, high, critical]}
+        auto_eligible: {type: boolean}
+        central_allowlisted: {type: boolean}
+        central_state: {type: string, enum: [verified, unavailable]}
+        enabled: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 0}
+        max_actions_per_incident: {type: integer, format: int32, minimum: 1, maximum: 100}
+        max_actions_per_window: {type: integer, format: int32, minimum: 1, maximum: 100}
+        budget_window_seconds: {type: integer, format: int32, minimum: 60, maximum: 86400}
+        cooldown_seconds: {type: integer, format: int32, minimum: 30, maximum: 604800}
+        scope_summary: {type: string, maxLength: 512}
+        preconditions: {type: array, maxItems: 16, items: {type: string, maxLength: 512}}
+        verification: {type: string, maxLength: 512}
+        circuit_state: {type: string, enum: [closed, open, unknown]}
+    CharlieAdminActionPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [enabled, max_actions_per_incident, max_actions_per_window, budget_window_seconds, cooldown_seconds]
+      properties:
+        enabled: {type: boolean}
+        max_actions_per_incident: {type: integer, format: int32, minimum: 1, maximum: 100}
+        max_actions_per_window: {type: integer, format: int32, minimum: 1, maximum: 100}
+        budget_window_seconds: {type: integer, format: int32, minimum: 60, maximum: 86400}
+        cooldown_seconds: {type: integer, format: int32, minimum: 30, maximum: 604800}
     CharlieAdminTriggerEvent:
       type: object
       additionalProperties: false
@@ -18289,6 +18339,23 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {description: Trigger-rule state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/action-policies/{capability}/:
+    put:
+      operationId: adminCharlieActionPolicyUpdate
+      summary: Configure one bounded product-local Charlie automation policy
+      description: Enabling a local policy requires the exact auto-eligible capability to be present in Charlie's independently reviewed central allowlist. This endpoint cannot add to that central allowlist.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: capability, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionPolicyInput'}}}}
+      responses:
+        '200': {description: Current safe action policy., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionPolicy'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Capability is not auto eligible, centrally allowlisted, or policy bounds are invalid., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/charlie/trigger-events/:
     get:
       operationId: adminCharlieTriggerEventsList

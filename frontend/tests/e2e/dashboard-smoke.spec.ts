@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 import { CSRF_COOKIE, SESSION_COOKIE, seedAuth } from './helpers/auth';
 
@@ -188,6 +189,47 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === '/activity' || path === '/alerting/events' || path === '/tools') {
       return route.fulfill({ json: apiResponse([]) });
+    }
+    if (path === '/charlie/sessions' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({
+          mode: 'approval',
+          sessions: [{
+            id: 'session-private-user',
+            clientSessionId: 'client-session-private-user',
+            intent: 'Inspect alert health',
+            resourceScopeSummary: 'alert:active',
+            state: 'active',
+            visibility: 'private',
+            centralRevision: 3,
+            source: 'user',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }],
+        }),
+      });
+    }
+    if (path === '/charlie/sessions/session-private-user/history' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({ messages: [{
+          id: 'message-charlie', role: 'assistant', content: 'The selected alert is under investigation.',
+          tools: [{
+            id: 'tool-read', capability: 'astronomer.alert.inspect', effect: 'read alert state',
+            risk: 'low', argumentSummary: ['alert_id'], state: 'complete', result: 'Alert remains active.',
+          }],
+        }] }),
+      });
+    }
+    if (path === '/charlie/findings' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({ items: [{
+          id: 'f-1', title: 'Bounded finding', severity: 'high', state: 'open',
+          source: 'alert', repeatCount: 2, sessionId: 'session-private-user',
+          createdAt: new Date(Date.now() - 60_000).toISOString(), updatedAt: new Date().toISOString(),
+          affectedResource: { type: 'installation', id: 'cluster-1', requiredVerb: 'read' },
+          summary: 'Review the selected installation.',
+        }] }),
+      });
     }
     if (path === '/charlie/findings/f-1') {
       return route.fulfill({
@@ -399,4 +441,32 @@ test('Charlie hub and administration deep links survive refresh and history', as
   await expect(page.getByRole('tab', { name: 'diagnostics' })).toHaveAttribute('aria-selected', 'true');
   await page.goBack();
   await expect(page.getByRole('tab', { name: 'access' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  await page.goto('/dashboard/alerting');
+  await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Charlie' });
+  await expect(drawer).toBeVisible();
+  await expect(page.getByLabel('Current Charlie mode: approval')).toBeVisible();
+  await page.getByText('astronomer.alert.inspect').click();
+  await expect(page.getByText('alert_id')).toBeVisible();
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  const drawerBox = await drawer.boundingBox();
+  expect(drawerBox).not.toBeNull();
+  expect(drawerBox!.width).toBeLessThanOrEqual(viewportWidth);
+  expect(await drawer.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  const drawerA11y = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+  expect(drawerA11y.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
+
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await page.goto('/dashboard/charlie?tab=findings&status=open&severity=high&source=alert');
+  await expect(page.getByRole('dialog', { name: 'Charlie' })).toHaveCount(0);
+  await expect(page.getByText('Bounded finding')).toBeVisible();
+  await expect(page.getByText('2 occurrences')).toBeVisible();
+  await expect.poll(() => page.locator('main > div').evaluate((element) => getComputedStyle(element).opacity)).toBe('1');
+  const hubA11y = await new AxeBuilder({ page }).include('main').analyze();
+  expect(hubA11y.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
 });

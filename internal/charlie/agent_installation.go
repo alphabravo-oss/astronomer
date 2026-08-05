@@ -45,7 +45,9 @@ type AgentResourceNames struct {
 
 type AgentInstallSpec struct {
 	InstallationID, ConnectionID              uuid.UUID
-	LogicalAgentID, EnvironmentID, TenantID   string
+	LogicalAgentID, DeploymentID              string
+	EnvironmentID, TenantID                   string
+	OnboardingPackageID                       string
 	CentralURL                                string
 	CentralCAPEM                              string `json:"-"`
 	ChartReference, ChartVersion, ChartDigest string
@@ -78,6 +80,13 @@ type AgentBridgeStatus struct {
 	AgentProtocolVersion, BridgeProtocolVersion string
 }
 
+// CredentialRevocationTarget is the product-owned binding for Charlie's
+// two-phase disconnect protocol. RequestID is deterministic so retrying an
+// ambiguous POST/GET cannot create a second revocation operation.
+type CredentialRevocationTarget struct {
+	RequestID, DeploymentID, PackageID, IntegrationID string
+}
+
 type AgentBridgeLifecycle interface {
 	Status(context.Context) (AgentBridgeStatus, error)
 	CentralHealth(context.Context) error
@@ -85,7 +94,8 @@ type AgentBridgeLifecycle interface {
 	Disable(context.Context) error
 	StopTriggerDispatch(context.Context) error
 	SettleStreams(context.Context) error
-	VerifyCredentialRevoked(context.Context, string, string) error
+	RevokeCredentialPackage(context.Context, CredentialRevocationTarget) error
+	VerifyCredentialPackageRevoked(context.Context, CredentialRevocationTarget) error
 }
 
 type AgentMetadataLifecycle interface {
@@ -292,27 +302,6 @@ func (i *AgentInstaller) Rollback(ctx context.Context, current, previous AgentIn
 		return AgentInstallReceipt{}, fmt.Errorf("Charlie rollback cannot change installation, logical agent, or local trust identities")
 	}
 	return i.Install(ctx, previous)
-}
-
-func (i *AgentInstaller) RotateCredentials(ctx context.Context, current, rotated AgentInstallSpec, oldFingerprints map[string]string) (AgentInstallReceipt, error) {
-	if !sameStableAgent(current, rotated) || strings.TrimSpace(oldFingerprints["agent_enrollment"]) == "" || strings.TrimSpace(oldFingerprints["artifact_pull"]) == "" {
-		return AgentInstallReceipt{}, fmt.Errorf("Charlie credential rotation request is invalid")
-	}
-	receipt, err := i.Install(ctx, rotated)
-	if err != nil {
-		return AgentInstallReceipt{}, err
-	}
-	if i.bridge == nil {
-		_ = receipt.Rollback(ctx)
-		return AgentInstallReceipt{}, fmt.Errorf("Charlie bridge is required to verify credential revocation")
-	}
-	for _, purpose := range []string{"agent_enrollment", "artifact_pull"} {
-		if err := i.bridge.VerifyCredentialRevoked(ctx, purpose, oldFingerprints[purpose]); err != nil {
-			_ = receipt.Rollback(ctx)
-			return AgentInstallReceipt{}, fmt.Errorf("verify old Charlie credential revocation: %w", err)
-		}
-	}
-	return receipt, nil
 }
 
 type AgentInstallationStatus struct {
@@ -538,13 +527,63 @@ func (i *AgentInstaller) uninstallResources(ctx context.Context, spec AgentInsta
 }
 
 func (i *AgentInstaller) Disconnect(ctx context.Context, spec AgentInstallSpec, confirmation string) error {
-	if confirmation != "disconnect:"+spec.InstallationID.String() || i.metadata == nil {
+	if confirmation != "disconnect:"+spec.InstallationID.String() || i.metadata == nil || i.bridge == nil || strings.TrimSpace(spec.OnboardingPackageID) == "" {
 		return fmt.Errorf("Charlie disconnect requires exact destructive confirmation")
 	}
-	if err := i.uninstallResources(ctx, spec); err != nil {
+	// Unlike reversible uninstall, disconnect must revoke the durable central
+	// credential tree and confirm that state by an independent readback before
+	// deleting any local workload, trust material, or connection metadata. An
+	// ambiguous response therefore leaves local resources intact for safe retry.
+	if err := i.bridge.Disable(ctx); err != nil {
+		return fmt.Errorf("disable Charlie before disconnect: %w", err)
+	}
+	for _, step := range []func(context.Context) error{i.bridge.StopTriggerDispatch, i.bridge.SettleStreams} {
+		if err := step(ctx); err != nil {
+			return err
+		}
+	}
+	target, err := i.credentialRevocationTarget(ctx, spec)
+	if err != nil {
+		return err
+	}
+	if revokeErr := i.bridge.RevokeCredentialPackage(ctx, target); revokeErr != nil {
+		// A prior attempt may already have completed central revocation and then
+		// failed during local cleanup. Its caller credential can replay only the
+		// exact final GET, so a POST authentication failure must fall through to
+		// signed readback before deciding whether cleanup is safe to resume.
+		if verifyErr := i.bridge.VerifyCredentialPackageRevoked(ctx, target); verifyErr != nil {
+			return fmt.Errorf("revoke Charlie credential package: %v; verify final revocation: %w", revokeErr, verifyErr)
+		}
+	} else if err := i.bridge.VerifyCredentialPackageRevoked(ctx, target); err != nil {
+		return fmt.Errorf("verify Charlie credential package revocation: %w", err)
+	}
+	names := agentResourceNames(spec, i.agentNamespace)
+	if err := i.deleteApplication(ctx, names.Application, spec.InstallationID); err != nil {
+		return err
+	}
+	if err := i.deleteOwnedResources(ctx, names, spec.InstallationID); err != nil {
 		return err
 	}
 	return i.metadata.MarkDisconnected(ctx, spec.ConnectionID)
+}
+
+func (i *AgentInstaller) credentialRevocationTarget(ctx context.Context, spec AgentInstallSpec) (CredentialRevocationTarget, error) {
+	names := agentResourceNames(spec, i.agentNamespace)
+	secret, err := i.kube.CoreV1().Secrets(i.agentNamespace).Get(ctx, names.Enrollment, metav1.GetOptions{})
+	if err != nil || secret.Labels[installationOwnerLabel] != spec.InstallationID.String() {
+		return CredentialRevocationTarget{}, fmt.Errorf("Charlie signed onboarding identity is unavailable")
+	}
+	pkg, err := contract.ParseOnboardingPackage(secret.Data["onboarding-package.json"])
+	if err != nil || string(pkg.PackageId) != spec.OnboardingPackageID ||
+		(strings.TrimSpace(spec.DeploymentID) != "" && string(pkg.DeploymentId) != spec.DeploymentID) ||
+		strings.TrimSpace(string(pkg.Integration.IntegrationId)) == "" {
+		return CredentialRevocationTarget{}, fmt.Errorf("Charlie credential revocation identity does not match signed onboarding")
+	}
+	requestID := uuid.NewSHA1(spec.InstallationID, []byte("charlie-disconnect:"+spec.OnboardingPackageID)).String()
+	return CredentialRevocationTarget{
+		RequestID: requestID, DeploymentID: string(pkg.DeploymentId), PackageID: string(pkg.PackageId),
+		IntegrationID: string(pkg.Integration.IntegrationId),
+	}, nil
 }
 
 func (i *AgentInstaller) Reconnect(ctx context.Context, spec AgentInstallSpec) (AgentInstallReceipt, error) {
@@ -564,6 +603,7 @@ func (i *AgentInstaller) Reconnect(ctx context.Context, spec AgentInstallSpec) (
 
 func validateAgentInstallSpec(spec AgentInstallSpec) error {
 	if spec.InstallationID == uuid.Nil || spec.ConnectionID == uuid.Nil || strings.TrimSpace(spec.LogicalAgentID) == "" ||
+		strings.TrimSpace(spec.DeploymentID) == "" || strings.TrimSpace(spec.OnboardingPackageID) == "" ||
 		len(spec.OnboardingPackage) == 0 || spec.ReplicaCount < 2 || spec.ReplicaCount > 20 || strings.TrimSpace(spec.ArtifactCredential) == "" ||
 		strings.TrimSpace(spec.CentralCAPEM) == "" || strings.TrimSpace(spec.Trust.Agent.BridgeServerPrivateKey) == "" ||
 		strings.TrimSpace(spec.Trust.Agent.MCPClientPrivateKey) == "" || strings.TrimSpace(spec.Trust.Astronomer.BridgeClientPrivateKey) == "" ||
@@ -600,7 +640,8 @@ func validateAgentInstallSpec(spec AgentInstallSpec) error {
 		return fmt.Errorf("Charlie action signing trust is required")
 	}
 	pkg, err := contract.ParseOnboardingPackage(spec.OnboardingPackage)
-	if err != nil || pkg.ReplicaCount != spec.ReplicaCount || string(pkg.LogicalAgentId) != spec.LogicalAgentID || string(pkg.Integration.IntegrationId) == "" {
+	if err != nil || pkg.ReplicaCount != spec.ReplicaCount || string(pkg.LogicalAgentId) != spec.LogicalAgentID ||
+		string(pkg.DeploymentId) != spec.DeploymentID || string(pkg.PackageId) != spec.OnboardingPackageID || string(pkg.Integration.IntegrationId) == "" {
 		return fmt.Errorf("Charlie signed onboarding package does not match the agent installation")
 	}
 	slots := make(map[int]string, spec.ReplicaCount)

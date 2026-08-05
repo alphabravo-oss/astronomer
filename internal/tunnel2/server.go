@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"github.com/rancher/remotedialer"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth"
 )
@@ -284,7 +286,11 @@ func (s *RemoteServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // which matches http.Transport.DialContext exactly.
 func (s *RemoteServer) DialerFor(clusterID string) remotedialer.Dialer {
-	return s.server.Dialer(clusterID)
+	dialer := s.server.Dialer(clusterID)
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		downstreamboundary.Record(downstreamboundary.EntrypointRemoteDialer, downstreamboundary.OperationKubernetes)
+		return dialer(ctx, network, address)
+	}
 }
 
 // HasSession reports whether the named cluster currently has a live tunnel.

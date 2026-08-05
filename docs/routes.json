@@ -36,6 +36,10 @@
     "pattern": "/api/v1/admin/charlie/access"
   },
   {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/charlie/action-policies/{capability}"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/admin/charlie/agent/install"
   },

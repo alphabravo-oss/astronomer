@@ -25,6 +25,14 @@ type charlieAdminFake struct {
 	retryEvent     charlie.AdminTriggerEventView
 	retrySource    uuid.UUID
 	retryRequest   uuid.UUID
+	actionPolicy   charlie.AdminActionPolicy
+	policyName     string
+	policyInput    charlie.AdminActionPolicyInput
+}
+
+func (f *charlieAdminFake) UpdateActionPolicy(_ context.Context, name string, input charlie.AdminActionPolicyInput) (charlie.AdminActionPolicy, error) {
+	f.policyName, f.policyInput = name, input
+	return f.actionPolicy, nil
 }
 
 func (f *charlieAdminFake) ListTriggerEvents(context.Context, string, int32, int32) ([]charlie.AdminTriggerEventView, error) {
@@ -97,6 +105,20 @@ func TestCharlieAdminEmergencyDisableIsExplicit(t *testing.T) {
 	handler.Mode(recorder, authenticatedCharlieRequest(http.MethodPatch, "/", `{"mode":"disabled","revision":7,"emergency_disable":true}`, uuid.New(), "jwt"))
 	if recorder.Code != http.StatusOK || fake.modeInput != charlie.ModeDisabled || !fake.emergency {
 		t.Fatalf("emergency mode = %d input=%q emergency=%v body=%s", recorder.Code, fake.modeInput, fake.emergency, recorder.Body.String())
+	}
+}
+
+func TestCharlieAdminActionPolicyUsesBoundedStructuredInput(t *testing.T) {
+	fake := &charlieAdminFake{actionPolicy: charlie.AdminActionPolicy{Capability: "astronomer.queue.retry_task", Enabled: true, Revision: 2}}
+	handler := NewCharlieAdminHandler(fake, nil)
+	recorder := httptest.NewRecorder()
+	request := authenticatedCharlieRequest(http.MethodPut, "/", `{"enabled":true,"max_actions_per_incident":1,"max_actions_per_window":2,"budget_window_seconds":900,"cooldown_seconds":300}`, uuid.New(), "jwt")
+	route := chi.NewRouteContext()
+	route.URLParams.Add("capability", "astronomer.queue.retry_task")
+	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, route))
+	handler.UpdateActionPolicy(recorder, request)
+	if recorder.Code != http.StatusOK || fake.policyName != "astronomer.queue.retry_task" || !fake.policyInput.Enabled || fake.policyInput.MaxActionsPerWindow != 2 {
+		t.Fatalf("action policy = %d name=%q input=%+v body=%s", recorder.Code, fake.policyName, fake.policyInput, recorder.Body.String())
 	}
 }
 

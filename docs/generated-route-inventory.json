@@ -88,6 +88,302 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/access/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "preview Charlie automation identity access and effective role templates",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "not applicable: GET",
+    "audit": "read-only authorization metadata; no credentials",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-admin-access-read"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/admin/charlie/access/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "enable or disable the dedicated Charlie automation service identity",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.access.update with enabled state only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-access-update"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/admin/charlie/action-policies/{capability}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "configure one bounded product-local Charlie automation action policy",
+    "auth": "browser JWT only; feature.charlie opt-in gate; exact capability must remain independently allowlisted by Charlie",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.action_policy.update with capability, bounded budgets, and state only; no task payloads or credentials",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-action-policy-update"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/agent/install/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "install the Charlie product agent from verified onboarding state",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.agent.install; no package or credential content",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-agent-install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/agent/rollback/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "request a Charlie product-agent replacement rollback",
+    "auth": "browser JWT only; feature.charlie opt-in gate; new signed replacement package required",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.agent.rollback after accepted replacement only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-agent-rollback"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/agent/rotate/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "request Charlie product-agent credential replacement",
+    "auth": "browser JWT only; feature.charlie opt-in gate; new signed replacement package required",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.agent.rotate after accepted replacement only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-agent-rotate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/agent/uninstall/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "emergency-disable Charlie and uninstall the product agent",
+    "auth": "browser JWT only; remains available while feature.charlie is disabled; exact confirmation phrase",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.agent.uninstall with content-free confirmation status",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-agent-uninstall"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/agent/upgrade/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "request a Charlie product-agent replacement upgrade",
+    "auth": "browser JWT only; feature.charlie opt-in gate; new signed replacement package required",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.agent.upgrade after accepted replacement only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-agent-upgrade"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/diagnostics/run/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "run bounded redacted Charlie connectivity and policy diagnostics",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.diagnostics.run with overall result only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-diagnostics"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/disconnect/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "emergency-disable Charlie and remove the local connection",
+    "auth": "browser JWT only; remains available while feature.charlie is disabled; exact confirmation phrase",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.disconnect with content-free confirmation status",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-disconnect"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/admin/charlie/mode/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "change Charlie authority mode, emergency-disable automation, or acknowledge the active disclosure",
+    "auth": "browser JWT only; emergency disable remains available while feature.charlie is disabled; other changes require the feature; optimistic mode revision",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mode, emergency-disable, or disclosure-acknowledgement metadata without secrets",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-mode"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/onboarding/consume/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "transactional Charlie onboarding package consumption",
+    "auth": "bearer/session auth; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "request metadata and content-free status only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-onboarding-consume"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/onboarding/validate/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "local Charlie onboarding package verification",
+    "auth": "bearer/session auth; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "request metadata only; package and credential content excluded",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-onboarding-validate"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/status/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "Charlie connection, agent, mode, automation, access, and diagnostic readiness metadata",
+    "auth": "browser JWT only; remains available for safe inspection while feature.charlie is disabled",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "not applicable: GET",
+    "audit": "read-only aggregate; secrets, credential material, and conversation content excluded",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-admin-status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/trigger-events/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "list UI-safe Charlie trigger lifecycle metadata without summaries, fingerprints, sessions, origins, or task payloads",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "not applicable: GET",
+    "audit": "read-only bounded lifecycle metadata",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-admin-trigger-event-list"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/trigger-events/{event_id}/retry/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "create one idempotent retry attempt for an immutable dead-letter Charlie trigger event",
+    "auth": "browser JWT only; feature.charlie opt-in gate; UUID request id",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.trigger.retry with source and retry event identifiers only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-trigger-event-retry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/trigger-rules/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "Charlie automation trigger-rule inventory and suppression state",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "not applicable: GET",
+    "audit": "read-only configuration metadata",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-admin-trigger-list"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/trigger-rules/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "create a bounded Charlie automation trigger rule",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.trigger.create with rule identity only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-trigger-create"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/admin/charlie/trigger-rules/{rule_id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "delete one Charlie automation trigger rule",
+    "auth": "browser JWT only; feature.charlie opt-in gate; exact confirmation phrase",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.trigger.delete with rule identity and content-free confirmation status",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-trigger-delete"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/admin/charlie/trigger-rules/{rule_id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "update or suppress one Charlie automation trigger rule",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.trigger.update with rule identity and state only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-trigger-update"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/admin/network-policy-templates/",
     "handler_owner": "handler.NetworkPolicyHandler",
     "surface": "administrative API",
@@ -879,7 +1175,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "POST",
@@ -895,7 +1191,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -924,7 +1220,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -966,7 +1262,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "DELETE",
@@ -982,7 +1278,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1011,7 +1307,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1040,7 +1336,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "DELETE",
@@ -1056,7 +1352,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "PATCH",
@@ -1072,7 +1368,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "POST",
@@ -1088,7 +1384,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1117,7 +1413,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "DELETE",
@@ -1133,7 +1429,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1175,7 +1471,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "DELETE",
@@ -1191,7 +1487,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "POST",
@@ -1207,7 +1503,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1262,7 +1558,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "DELETE",
@@ -1278,7 +1574,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "PATCH",
@@ -1294,7 +1590,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "DELETE",
@@ -1310,7 +1606,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1339,7 +1635,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "POST",
@@ -1355,7 +1651,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -1397,7 +1693,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router: each mutator resolves the owning instance and calls authorizeClusterAction against that cluster (clusters:update for instance/registration lifecycle, workloads/argocd verbs for application and sync operations), so authorization is bound to the cluster the instance actually manages."
+    "risk_reason": "The /argocd subtree is feature-gated and authorized inside the handler rather than at the router, in two hops. First the owning instance is resolved and authorizeClusterAction runs against the cluster that instance RUNS ON (clusters:update for instance lifecycle, workloads/argocd verbs for application and sync operations). Second, every operation that acts on a cluster other than the instance's is authorized against THAT cluster: application create/patch/delete/sync/refresh resolve spec.destination through argocd_managed_clusters and require workloads:\u003cverb\u003e on the destination cluster, ApplicationSet creation AND deletion require it on every cluster the generator selector matches (deletion cascades to the generated Applications, which carry a resources-finalizer, so it removes the delivered workloads fleet-wide), and the register/refresh-labels/unregister routes require clusters:update on the cluster_id in the URL. A destination that resolves to no known cluster is denied."
   },
   {
     "method": "GET",
@@ -2298,6 +2594,237 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "catalog-repository-test-connection"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/approvals/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "bounded display metadata for exact signed Charlie action proposals",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read to reach the route; each candidate independently requires live session, account, charlie:approve, and target authorization before eligibility",
+    "csrf": "not applicable: GET",
+    "audit": "read-only display metadata; manifests, signatures, argument digests, evidence, and authorization references excluded",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-approval-list"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/approvals/{approval_id}/decision/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "approve or reject one exact signed Charlie action manifest",
+    "auth": "browser JWT only; feature and live connection gates; idempotent request UUID",
+    "rbac": "charlie:approve plus live session, account, and underlying target permission rechecked before each decision",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "durable approval lifecycle metadata and verified manifest digest; rationale content stored only as a digest",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-approval-decision"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/context/search/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "bounded product-owned resource context search for Charlie chat disclosure",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live product authorization for each returned resource",
+    "csrf": "not applicable: GET",
+    "audit": "read-only resource metadata; no secrets or resource contents",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-context-search"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/findings/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "bounded actionable Charlie finding summaries",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live authorization for every affected resource",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only finding read audit",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-finding-list"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/findings/{finding_id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "live-authorized Charlie finding evidence proxy",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live authorization for every affected resource",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only finding read audit; evidence remains in Charlie",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-finding-detail"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/findings/{finding_id}/acknowledge/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "acknowledge one actionable Charlie finding",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:update plus live authorization for every affected resource",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "durable metadata-only finding lifecycle audit and event",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-finding-acknowledge"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/findings/{finding_id}/dismiss/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "dismiss one actionable Charlie finding",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:update plus live authorization for every affected resource",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "durable metadata-only finding lifecycle audit and event",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-finding-dismiss"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/findings/{finding_id}/resolve/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "resolve one actionable Charlie finding",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:update plus live authorization for every affected resource",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "durable metadata-only finding lifecycle audit and event",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-finding-resolve"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/operations/{operation_id}",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "metadata-only status for one Charlie action receipt",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus receipt owner and live resource authorization",
+    "csrf": "not applicable: GET",
+    "audit": "read-only action state; arguments, evidence, and credentials excluded",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-operation-status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/sessions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "private Charlie conversation metadata list",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live owner/resource authorization",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only session lifecycle audit; no conversation content",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-session-list"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/sessions/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "create a live-authorized Charlie conversation",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:create plus live read authorization for every disclosed resource",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "metadata-only session lifecycle audit; no prompt or evidence",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-session-create"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/sessions/{session_id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "Charlie conversation detail proxy",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live owner/resource authorization",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only read audit; central content is not persisted",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-session-detail"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/sessions/{session_id}/abort/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "revoke and abort a Charlie conversation",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:create plus live owner/resource authorization",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "content-free abort/revocation metadata",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-session-abort"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/sessions/{session_id}/events/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "live Charlie session event stream",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live owner/resource authorization before and during streaming",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only stream lifecycle; event content is not persisted locally",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-session-events"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/sessions/{session_id}/history/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "bounded Charlie conversation history proxy",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus live owner/resource authorization",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only read audit; history remains in Charlie",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-session-history"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/sessions/{session_id}/messages/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "send one idempotent Charlie conversation turn",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:create plus live owner/resource authorization",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "content-free accepted-turn metadata only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-session-message"
   },
   {
     "method": "GET",
@@ -9367,7 +9894,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9381,7 +9908,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9395,7 +9922,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9409,7 +9936,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9423,7 +9950,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9437,7 +9964,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9451,7 +9978,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9465,7 +9992,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9479,7 +10006,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "not applicable for GET navigation; Argo API mutations remain behind authenticated proxy",
     "audit": "route should add explicit Argo UI access audit in a future hardening pass",
     "tests": [
@@ -9493,7 +10020,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9507,7 +10034,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9521,7 +10048,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9535,7 +10062,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9549,7 +10076,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9563,7 +10090,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9577,7 +10104,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9591,7 +10118,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [
@@ -9605,7 +10132,7 @@
     "handler_owner": "internal/handler.ArgoCDUIProxy",
     "surface": "browser reverse proxy to built-in Argo CD UI/API paths",
     "auth": "Astronomer bearer token or astronomer_session cookie",
-    "rbac": "front-door authenticated user; Argo upstream token injection is controlled server-side",
+    "rbac": "ArgoCDAuthz: reads need argocd:read at the local cluster scope; mutations need clusters:update at GLOBAL scope, because a proxied request never names the destination cluster the action targets",
     "csrf": "Argo API mutations must stay behind authenticated proxy; explicit CSRF review remains open",
     "audit": "route should add explicit Argo UI/API access audit in a future hardening pass",
     "tests": [

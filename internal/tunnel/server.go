@@ -46,6 +46,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth"
@@ -788,6 +789,9 @@ func (h *Hub) GetAgent(clusterID string) *AgentConnection {
 // SendToAgent sends a message to a specific agent.
 // Returns an error if the agent is not connected or the send buffer is full.
 func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
+	if operation, ok := downstreamOperation(msg); ok {
+		downstreamboundary.Record(downstreamboundary.EntrypointTunnelMessage, operation)
+	}
 	agent := h.agents.Get(clusterID)
 	if agent == nil {
 		return fmt.Errorf("agent for cluster %q not connected", clusterID)
@@ -963,6 +967,9 @@ func (h *Hub) SendDecommission(ctx context.Context, clusterID string, payload pr
 func (h *Hub) BroadcastToAll(msg *protocol.Message) {
 	agents := h.agents.Snapshot()
 	for _, agent := range agents {
+		if operation, ok := downstreamOperation(msg); ok {
+			downstreamboundary.Record(downstreamboundary.EntrypointTunnelBroadcast, operation)
+		}
 		select {
 		case agent.sendCh <- msg:
 		default:
@@ -970,6 +977,30 @@ func (h *Hub) BroadcastToAll(msg *protocol.Message) {
 				slog.String("cluster_id", agent.ClusterID),
 			)
 		}
+	}
+}
+
+func downstreamOperation(msg *protocol.Message) (downstreamboundary.Operation, bool) {
+	if msg == nil {
+		return 0, false
+	}
+	switch msg.Type {
+	case protocol.MsgK8sRequest, protocol.MsgK8sStreamRequest, protocol.MsgK8sStreamStop:
+		return downstreamboundary.OperationKubernetes, true
+	case protocol.MsgHelmInstall, protocol.MsgHelmUpgrade, protocol.MsgHelmUninstall, protocol.MsgHelmRollback, protocol.MsgHelmStatus, protocol.MsgHelmHistory:
+		return downstreamboundary.OperationHelm, true
+	case protocol.MsgExecStart, protocol.MsgExecInput, protocol.MsgExecResize, protocol.MsgExecEnd:
+		return downstreamboundary.OperationExec, true
+	case protocol.MsgLogStart, protocol.MsgLogStop:
+		return downstreamboundary.OperationLogs, true
+	case protocol.MsgServiceProxyRequest, protocol.MsgProxyRequest:
+		return downstreamboundary.OperationServiceProxy, true
+	case protocol.MsgRBACSyncRequest:
+		return downstreamboundary.OperationRBAC, true
+	case protocol.MsgDecommission, protocol.MsgAgentUpgrade, protocol.MsgDesiredStateRequest:
+		return downstreamboundary.OperationAgentCommand, true
+	default:
+		return 0, false
 	}
 }
 

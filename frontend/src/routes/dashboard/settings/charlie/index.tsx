@@ -74,6 +74,7 @@ import {
   runCharlieAgentAction,
   uninstallCharlieAgent,
   updateCharlieAutomation,
+  updateCharlieActionPolicy,
   updateCharlieMode,
   validateCharlieOnboarding,
   type CharlieAutomationView,
@@ -865,6 +866,7 @@ export function ModeTab() {
                 disabled={
                   m.authoritative === mode ||
                   (needsAck && mode !== "disabled") ||
+                  (mode === "auto" && m.autoReadiness?.ready === false) ||
                   change.isPending
                 }
                 onClick={() => setNext(mode)}
@@ -889,6 +891,39 @@ export function ModeTab() {
             non-disabled authority mode.
           </p>
         )}
+        <div className="rounded-lg border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Automatic-action readiness</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Charlie can enter auto only when every product-side safety
+                prerequisite is currently satisfied.
+              </p>
+            </div>
+            <StatusBadge
+              status={m.autoReadiness?.ready ? "healthy" : "degraded"}
+              label={m.autoReadiness?.ready ? "Ready" : "Blocked"}
+            />
+          </div>
+          {m.autoReadiness?.blockers?.length ? (
+            <ul className="mt-3 space-y-2">
+              {m.autoReadiness.blockers.map((blocker) => (
+                <li key={blocker.code} className="rounded-md bg-muted p-3 text-xs">
+                  <p className="font-medium">{blocker.message}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Next action: {blocker.nextAction}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {m.autoReadiness
+                ? "No product-side readiness blockers are active."
+                : "This Charlie version did not publish structured auto-readiness data."}
+            </p>
+          )}
+        </div>
         <dl className="grid grid-cols-2 gap-4">
           <Meta label="Requested" value={m.requested} />
           <Meta label="Authoritative" value={m.authoritative} />
@@ -1003,6 +1038,7 @@ export function AutomationTab() {
   const [draft, setDraft] = useState<CharlieAutomationView>();
   const [deleteRule, setDeleteRule] = useState<CharlieTriggerRule>();
   const [retryEvent, setRetryEvent] = useState<CharlieTriggerEvent>();
+  const [policyError, setPolicyError] = useState("");
   useEffect(() => {
     if (q.data) setDraft(structuredClone(q.data));
   }, [q.data]);
@@ -1016,6 +1052,34 @@ export function AutomationTab() {
       toastSuccess("Charlie automation configuration saved");
     },
     onError: (e) => toastApiError("Automation save failed", e),
+  });
+  const savePolicy = useMutation({
+    mutationFn: updateCharlieActionPolicy,
+    onMutate: () => setPolicyError(""),
+    onSuccess: (policy) => {
+      const replacePolicy = (value: CharlieAutomationView | undefined) =>
+        value && {
+          ...value,
+          actionPolicies: value.actionPolicies.map((candidate) =>
+            candidate.capability === policy.capability ? policy : candidate,
+          ),
+        };
+      setDraft((value) => replacePolicy(value));
+      qc.setQueryData<CharlieAutomationView>(
+        queryKeys.charlie.adminAutomation,
+        replacePolicy,
+      );
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminMode });
+      toastSuccess(`Action policy saved: ${policy.capability}`);
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Astronomer could not confirm the action-policy update.";
+      setPolicyError(message);
+      toastApiError("Action-policy update failed", error);
+    },
   });
   const remove = useMutation({
     mutationFn: deleteCharlieAutomationRule,
@@ -1065,6 +1129,20 @@ export function AutomationTab() {
           rules: v.rules.map((r, i) => (i === index ? { ...r, ...patch } : r)),
         },
     );
+  const updatePolicy = (
+    index: number,
+    patch: Partial<CharlieAutomationView["actionPolicies"][number]>,
+  ) =>
+    setDraft((value) =>
+      value
+        ? {
+            ...value,
+            actionPolicies: value.actionPolicies.map((policy, candidate) =>
+              candidate === index ? { ...policy, ...patch } : policy,
+            ),
+          }
+        : value,
+    );
   const issues = automationValidationIssues(draft);
   return (
     <div className="space-y-4">
@@ -1085,6 +1163,110 @@ export function AutomationTab() {
         <p className="text-xs text-muted-foreground">
           Defaults revision {draft.defaultsRevision}
         </p>
+      </Section>
+      <Section
+        title="Automatic-action policies"
+        description="The exact intersection of Charlie's central capability allowlist and Astronomer's local budgets and safety controls. This view never includes action arguments or authority references."
+      >
+        {draft.actionPolicies.length ? (
+          <div className="space-y-3">
+            {draft.actionPolicies.map((policy, policyIndex) => {
+              const mayEnable =
+                policy.centralState === "verified" &&
+                policy.centralAllowlisted &&
+                policy.autoEligible;
+              const original = q.data?.actionPolicies.find(
+                (candidate) => candidate.capability === policy.capability,
+              );
+              const changed =
+                !!original &&
+                ([
+                  "enabled",
+                  "maxActionsPerIncident",
+                  "maxActionsPerWindow",
+                  "budgetWindowSeconds",
+                  "cooldownSeconds",
+                ] as const).some((field) => original[field] !== policy[field]);
+              const valuesValid =
+                policy.maxActionsPerIncident >= 1 &&
+                policy.maxActionsPerIncident <= 100 &&
+                policy.maxActionsPerWindow >= 1 &&
+                policy.maxActionsPerWindow <= 100 &&
+                policy.budgetWindowSeconds >= 60 &&
+                policy.budgetWindowSeconds <= 86400 &&
+                policy.cooldownSeconds >= 30 &&
+                policy.cooldownSeconds <= 604800;
+              return (
+              <article key={policy.capability} className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-mono text-sm font-medium">{policy.capability}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{policy.effect}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusBadge status={policy.enabled ? "healthy" : "disabled"} label={policy.enabled ? "Enabled" : "Disabled"} />
+                    <StatusBadge status={policy.centralState === "verified" ? "healthy" : "unavailable"} label={`Central: ${policy.centralState}`} />
+                    <StatusBadge status={policy.circuitState} label={`Circuit: ${policy.circuitState}`} />
+                  </div>
+                </div>
+                <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <Meta label="Risk" value={policy.risk} />
+                  <Meta label="Auto eligible" value={policy.autoEligible ? "Yes" : "No"} />
+                  <Meta label="Central allowlisted" value={policy.centralAllowlisted ? "Yes" : "No"} />
+                  <Meta label="Revision" value={policy.revision} />
+                </dl>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <NumberField label="Max actions per incident" value={policy.maxActionsPerIncident} min={1} max={100} set={(value) => updatePolicy(policyIndex, { maxActionsPerIncident: value })} />
+                  <NumberField label="Max actions per window" value={policy.maxActionsPerWindow} min={1} max={100} set={(value) => updatePolicy(policyIndex, { maxActionsPerWindow: value })} />
+                  <NumberField label="Budget window seconds" value={policy.budgetWindowSeconds} min={60} max={86400} set={(value) => updatePolicy(policyIndex, { budgetWindowSeconds: value })} />
+                  <NumberField label="Cooldown seconds" value={policy.cooldownSeconds} min={30} max={604800} set={(value) => updatePolicy(policyIndex, { cooldownSeconds: value })} />
+                </div>
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    aria-label={`Enable ${policy.capability}`}
+                    checked={policy.enabled}
+                    disabled={!policy.enabled && !mayEnable}
+                    onChange={(event) => updatePolicy(policyIndex, { enabled: event.target.checked })}
+                  />
+                  Enable bounded automatic action
+                </label>
+                {!mayEnable && !policy.enabled && (
+                  <p className="mt-2 text-xs text-status-warning">
+                    Enabling is unavailable until Charlie central is verified,
+                    centrally allowlists this capability, and marks it auto eligible.
+                  </p>
+                )}
+                <p className="mt-3 text-xs"><span className="font-medium">Scope:</span> {policy.scopeSummary}</p>
+                <p className="mt-2 text-xs"><span className="font-medium">Verification:</span> {policy.verification}</p>
+                <div className="mt-2 text-xs">
+                  <span className="font-medium">Preconditions:</span>{" "}
+                  {policy.preconditions.length ? policy.preconditions.join("; ") : "None published"}
+                </div>
+                <button
+                  type="button"
+                  className={`${primary} mt-3`}
+                  disabled={!changed || !valuesValid || savePolicy.isPending}
+                  onClick={() => savePolicy.mutate(policy)}
+                >
+                  <Save className="h-4 w-4" />
+                  Save action policy
+                </button>
+              </article>
+              );
+            })}
+            {policyError && (
+              <p role="alert" className="rounded-lg border border-status-error/30 p-3 text-sm text-status-error">
+                {policyError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No bounded automatic-action policy was published. Astronomer will
+            not imply automatic authority.
+          </p>
+        )}
       </Section>
       {draft.rules.map((r, i) => (
         <Section
@@ -1507,6 +1689,11 @@ export function DiagnosticsTab() {
               {check.expiresAt && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Expires {formatRelativeTime(check.expiresAt)}
+                </p>
+              )}
+              {check.nextAction && (
+                <p className="mt-2 rounded-md bg-muted p-2 text-xs">
+                  Next action: {check.nextAction}
                 </p>
               )}
             </article>

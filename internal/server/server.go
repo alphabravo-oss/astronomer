@@ -1341,7 +1341,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		var bridgeErr error
 		managedCharlieBridge, bridgeErr = charlie.NewManagedBridge(charlie.ManagedBridgeConfig{
 			AgentNamespace: agentNamespace, Certificate: cfg.CharlieBridgeTLSCertFile,
-			PrivateKey: cfg.CharlieBridgeTLSKeyFile, ServerCA: cfg.CharlieBridgeCAFile,
+			PrivateKey: cfg.CharlieBridgeTLSKeyFile, ServerCA: cfg.CharlieBridgeCAFile, SigningKey: cfg.CharlieMCPActionSigningKeyFile,
 		}, charlieFeatures, queries)
 		if bridgeErr != nil {
 			database.Close()

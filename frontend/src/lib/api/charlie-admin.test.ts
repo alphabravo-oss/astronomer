@@ -6,6 +6,7 @@ vi.mock("@/lib/api", () => ({
 import {
   listCharlieTriggerEvents,
   retryCharlieTriggerEvent,
+  updateCharlieActionPolicy,
   updateCharlieAutomation,
   validateCharlieOnboarding,
 } from "./charlie-admin";
@@ -56,6 +57,7 @@ describe("Charlie admin wire boundary", () => {
     await updateCharlieAutomation({
       defaultsRevision: 3,
       serviceIdentityEnabled: true,
+      actionPolicies: [],
       rules: [
         {
           id: "r",
@@ -111,5 +113,41 @@ describe("Charlie admin wire boundary", () => {
       "/admin/charlie/trigger-events/event%2Fa/retry/",
       { request_id: expect.stringMatching(/^[0-9a-f-]{36}$/) },
     );
+  });
+  it("updates only the bounded local action-policy controls", async () => {
+    mockedApi.put.mockResolvedValue({
+      data: { data: { capability: "astronomer.queue.retry_task", enabled: true } },
+    });
+    await updateCharlieActionPolicy({
+      capability: "astronomer.queue.retry_task",
+      enabled: true,
+      maxActionsPerIncident: 1,
+      maxActionsPerWindow: 3,
+      budgetWindowSeconds: 3600,
+      cooldownSeconds: 60,
+    });
+    expect(mockedApi.put).toHaveBeenCalledWith(
+      "/admin/charlie/action-policies/astronomer.queue.retry_task/",
+      {
+        enabled: true,
+        max_actions_per_incident: 1,
+        max_actions_per_window: 3,
+        budget_window_seconds: 3600,
+        cooldown_seconds: 60,
+      },
+    );
+  });
+  it("surfaces action-policy conflicts without implying a save", async () => {
+    mockedApi.put.mockRejectedValue({ response: { status: 409 } });
+    await expect(
+      updateCharlieActionPolicy({
+        capability: "astronomer.queue.retry_task",
+        enabled: true,
+        maxActionsPerIncident: 1,
+        maxActionsPerWindow: 3,
+        budgetWindowSeconds: 3600,
+        cooldownSeconds: 60,
+      }),
+    ).rejects.toThrow(/conflicts with current central allowlisting/i);
   });
 });

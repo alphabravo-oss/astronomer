@@ -81,6 +81,7 @@ func TestCharlieAdminRoutesRejectNonAdminWithoutManagePermission(t *testing.T) {
 		{http.MethodPost, "/api/v1/admin/charlie/agent/uninstall/"},
 		{http.MethodPatch, "/api/v1/admin/charlie/mode/"},
 		{http.MethodGet, "/api/v1/admin/charlie/trigger-rules/"},
+		{http.MethodPut, "/api/v1/admin/charlie/action-policies/astronomer.queue.retry_task/"},
 		{http.MethodPost, "/api/v1/admin/charlie/trigger-rules/"},
 		{http.MethodPatch, "/api/v1/admin/charlie/trigger-rules/" + ruleID + "/"},
 		{http.MethodDelete, "/api/v1/admin/charlie/trigger-rules/" + ruleID + "/"},

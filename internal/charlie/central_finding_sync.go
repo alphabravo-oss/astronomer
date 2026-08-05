@@ -272,7 +272,7 @@ func validCentralFindingBlockCode(value string) bool {
 		"capability_destructive", "central_unavailable", "circuit_breaker_open", "deployment_disabled",
 		"disclosure_drift", "no_safe_action", "non_auto_eligible", "precondition_failed",
 		"product_disabled", "product_rbac_denied", "read_only", "safety_budget_exceeded",
-		"scope_denied", "stale_leadership":
+		"scope_denied", "stale_leadership", "verification_failed":
 		return true
 	default:
 		return false

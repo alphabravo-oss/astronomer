@@ -81,6 +81,14 @@ export interface CharlieModeView {
   disclosureDigest?: string;
   acknowledgedDisclosureDigest?: string;
   effects: string[];
+  autoReadiness?: {
+    ready: boolean;
+    blockers: Array<{
+      code: string;
+      message: string;
+      nextAction: string;
+    }>;
+  };
 }
 export interface CharlieTriggerRule {
   id: string;
@@ -102,9 +110,37 @@ export interface CharlieTriggerRule {
 }
 export interface CharlieAutomationView {
   rules: CharlieTriggerRule[];
+  actionPolicies: CharlieActionPolicy[];
   defaultsRevision: number;
   serviceIdentityEnabled: boolean;
 }
+export interface CharlieActionPolicy {
+  capability: string;
+  effect: string;
+  risk: string;
+  autoEligible: boolean;
+  centralAllowlisted: boolean;
+  centralState: "verified" | "unavailable" | string;
+  enabled: boolean;
+  revision: number;
+  maxActionsPerIncident: number;
+  maxActionsPerWindow: number;
+  budgetWindowSeconds: number;
+  cooldownSeconds: number;
+  scopeSummary: string;
+  preconditions: string[];
+  verification: string;
+  circuitState: string;
+}
+export type CharlieActionPolicyInput = Pick<
+  CharlieActionPolicy,
+  | "capability"
+  | "enabled"
+  | "maxActionsPerIncident"
+  | "maxActionsPerWindow"
+  | "budgetWindowSeconds"
+  | "cooldownSeconds"
+>;
 export type CharlieTriggerEventState =
   | "pending"
   | "dispatching"
@@ -157,6 +193,7 @@ export interface CharlieDiagnosticCheck {
   label: string;
   state: HealthState;
   summary: string;
+  nextAction?: string;
   checkedAt?: string;
   expiresAt?: string;
 }
@@ -268,8 +305,17 @@ export async function getCharlieAutomation(): Promise<CharlieAutomationView> {
         serviceIdentityEnabled?: boolean;
     }
   >(data);
-  if (value && !Array.isArray(value) && 'rules' in value && Array.isArray(value.rules)) return value;
-  if (value && !Array.isArray(value) && 'items' in value && Array.isArray(value.items)) return {rules:value.items,defaultsRevision:value.defaultsRevision??0,serviceIdentityEnabled:value.serviceIdentityEnabled??false};
+  if (value && !Array.isArray(value) && 'rules' in value && Array.isArray(value.rules)) {
+    return { ...value, actionPolicies: value.actionPolicies ?? [] };
+  }
+  if (value && !Array.isArray(value) && 'items' in value && Array.isArray(value.items)) {
+    return {
+      rules: value.items,
+      actionPolicies: [],
+      defaultsRevision: value.defaultsRevision ?? 0,
+      serviceIdentityEnabled: value.serviceIdentityEnabled ?? false,
+    };
+  }
   throw new Error('Charlie trigger-rule response is unavailable');
 }
 export async function updateCharlieAutomation(
@@ -289,6 +335,37 @@ export async function updateCharlieAutomation(
     automation_service_identity_enabled: input.serviceIdentityEnabled,
   });
   return getCharlieAutomation();
+}
+
+export async function updateCharlieActionPolicy(
+  input: CharlieActionPolicyInput,
+): Promise<CharlieActionPolicy> {
+  try {
+    const { data } = await api.put(
+      `/admin/charlie/action-policies/${encodeURIComponent(input.capability)}/`,
+      {
+        enabled: input.enabled,
+        max_actions_per_incident: input.maxActionsPerIncident,
+        max_actions_per_window: input.maxActionsPerWindow,
+        budget_window_seconds: input.budgetWindowSeconds,
+        cooldown_seconds: input.cooldownSeconds,
+      },
+    );
+    return payload(data);
+  } catch (error) {
+    const status = (error as { response?: { status?: number } }).response?.status;
+    if (status === 409) {
+      throw new Error(
+        "This action policy conflicts with current central allowlisting or bounded budget rules. Refresh before trying again.",
+      );
+    }
+    if (status === 503) {
+      throw new Error(
+        "Charlie central verification is unavailable. The policy remains fail-closed.",
+      );
+    }
+    throw new Error("Astronomer could not confirm the action-policy update.");
+  }
 }
 
 function triggerRuleWire(rule: CharlieTriggerRule) {

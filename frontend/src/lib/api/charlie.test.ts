@@ -96,13 +96,20 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("sends a fresh idempotency key with an approval decision", async () => {
     mockedApi.post.mockResolvedValue({ data: {} });
-    await decideCharlieApproval("approval/a", "approve");
+    await decideCharlieApproval("approval/a", "approve", "bounded rationale");
     expect(mockedApi.post).toHaveBeenCalledWith(
       "/charlie/approvals/approval%2Fa/decision/",
       expect.objectContaining({
         request_id: expect.any(String),
         decision: "approve",
+        rationale: "bounded rationale",
       }),
+    );
+  });
+  it("turns stale approval conflicts into a precise safe error", async () => {
+    mockedApi.post.mockRejectedValue({ response: { status: 409 } });
+    await expect(decideCharlieApproval("a", "approve")).rejects.toThrow(
+      /stale or was already decided/i,
     );
   });
 });

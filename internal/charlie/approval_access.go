@@ -60,15 +60,17 @@ type ApprovalLifecycleAuditor interface {
 // signed manifest, signature, argument digest, disclosure digest, and
 // authorization reference never cross Astronomer's browser API boundary.
 type ApprovalView struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	State      string    `json:"state"`
-	Eligible   bool      `json:"eligible"`
-	Capability string    `json:"capability"`
-	Target     string    `json:"target"`
-	Risk       string    `json:"risk"`
-	ExpiresAt  time.Time `json:"expiresAt"`
-	Reason     string    `json:"reason,omitempty"`
+	ID                 string    `json:"id"`
+	Title              string    `json:"title"`
+	State              string    `json:"state"`
+	Eligible           bool      `json:"eligible"`
+	Capability         string    `json:"capability"`
+	Target             string    `json:"target"`
+	Risk               string    `json:"risk"`
+	Effect             string    `json:"effect"`
+	RequiredPermission string    `json:"required_permission"`
+	ExpiresAt          time.Time `json:"expiresAt"`
+	Reason             string    `json:"reason,omitempty"`
 }
 
 type verifiedApproval struct {
@@ -421,12 +423,13 @@ func approvalView(item verifiedApproval) ApprovalView {
 		ID: string(item.approval.ApprovalId), Title: "Approve " + item.descriptor.Name,
 		State: mapApprovalState(string(item.approval.State)), Eligible: item.eligible,
 		Capability: item.descriptor.Name, Target: strings.Join(targets, ", "), Risk: item.descriptor.Risk,
+		Effect: string(item.descriptor.Effect), RequiredPermission: item.descriptor.RBACResource + ":" + item.descriptor.RBACVerb,
 		ExpiresAt: item.approval.ExpiresAt.UTC(), Reason: item.reason,
 	}
 }
 
 func localApprovalView(row sqlc.CharlieActionApproval) ApprovalView {
-	return ApprovalView{ID: row.ApprovalID, Title: "Charlie action decision", State: mapApprovalState(row.State), Eligible: false, Capability: row.Capability, Target: "exact signed target", Risk: "bounded", ExpiresAt: row.ExpiresAt.UTC(), Reason: "This exact action has already been " + mapApprovalState(row.State) + "."}
+	return ApprovalView{ID: row.ApprovalID, Title: "Charlie action decision", State: mapApprovalState(row.State), Eligible: false, Capability: row.Capability, Target: "exact signed target", Risk: "bounded", Effect: "write", RequiredPermission: "Exact target permission", ExpiresAt: row.ExpiresAt.UTC(), Reason: "This exact action has already been " + mapApprovalState(row.State) + "."}
 }
 
 func mapApprovalState(state string) string {

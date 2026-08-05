@@ -82,6 +82,7 @@ const (
 	BlockCodeSafetyBudgetExceeded  BlockCode = "safety_budget_exceeded"
 	BlockCodeScopeDenied           BlockCode = "scope_denied"
 	BlockCodeStaleLeadership       BlockCode = "stale_leadership"
+	BlockCodeVerificationFailed    BlockCode = "verification_failed"
 )
 
 // Defines values for BridgeStatusCentralHealth.
@@ -95,6 +96,36 @@ const (
 const (
 	CreateSessionActorTypeService CreateSessionActorType = "service"
 	CreateSessionActorTypeUser    CreateSessionActorType = "user"
+)
+
+// Defines values for CredentialRevocationReceiptSchema.
+const (
+	CredentialRevocationReceiptSchemaCharlieCredentialRevocationv1 CredentialRevocationReceiptSchema = "charlie.credential-revocation/v1"
+)
+
+// Defines values for CredentialRevocationReceiptState.
+const (
+	CredentialRevocationReceiptStatePendingCallerRevocation CredentialRevocationReceiptState = "pending_caller_revocation"
+	CredentialRevocationReceiptStateRevoked                 CredentialRevocationReceiptState = "revoked"
+)
+
+// Defines values for CredentialRevocationRequestReason.
+const (
+	CredentialRevocationRequestReasonProductDisconnect CredentialRevocationRequestReason = "product_disconnect"
+)
+
+// Defines values for CredentialRevocationStatusPurpose.
+const (
+	CredentialRevocationStatusPurposeAgentEnrollment CredentialRevocationStatusPurpose = "agent_enrollment"
+	CredentialRevocationStatusPurposeArtifactPull    CredentialRevocationStatusPurpose = "artifact_pull"
+	CredentialRevocationStatusPurposeProductAgent    CredentialRevocationStatusPurpose = "product_agent"
+	CredentialRevocationStatusPurposeProductClient   CredentialRevocationStatusPurpose = "product_client"
+)
+
+// Defines values for CredentialRevocationStatusState.
+const (
+	CredentialRevocationStatusStatePendingRevocation CredentialRevocationStatusState = "pending_revocation"
+	CredentialRevocationStatusStateRevoked           CredentialRevocationStatusState = "revoked"
 )
 
 // Defines values for ErrorEnvelopeCode.
@@ -129,6 +160,7 @@ const (
 	FindingBlockCodeSafetyBudgetExceeded  FindingBlockCode = "safety_budget_exceeded"
 	FindingBlockCodeScopeDenied           FindingBlockCode = "scope_denied"
 	FindingBlockCodeStaleLeadership       FindingBlockCode = "stale_leadership"
+	FindingBlockCodeVerificationFailed    FindingBlockCode = "verification_failed"
 )
 
 // Defines values for FindingFindingSeverity.
@@ -299,6 +331,7 @@ type BlockCode string
 // BridgeStatus defines model for BridgeStatus.
 type BridgeStatus struct {
 	ArtifactVersion   string                    `json:"artifact_version"`
+	AutoAllowlist     []string                  `json:"auto_allowlist"`
 	CentralHealth     BridgeStatusCentralHealth `json:"central_health"`
 	DeploymentEnabled bool                      `json:"deployment_enabled"`
 	DeploymentId      OpaqueId                  `json:"deployment_id"`
@@ -364,6 +397,53 @@ type CreateSession struct {
 
 // CreateSessionActorType defines model for CreateSession.Actor.Type.
 type CreateSessionActorType string
+
+// CredentialRevocationReceipt defines model for CredentialRevocationReceipt.
+type CredentialRevocationReceipt struct {
+	Complete      bool                              `json:"complete"`
+	Credentials   []CredentialRevocationStatus      `json:"credentials"`
+	DeploymentId  OpaqueId                          `json:"deployment_id"`
+	IntegrationId OpaqueId                          `json:"integration_id"`
+	PackageId     OpaqueId                          `json:"package_id"`
+	RequestId     OpaqueId                          `json:"request_id"`
+	RevokedAt     time.Time                         `json:"revoked_at"`
+	Schema        CredentialRevocationReceiptSchema `json:"schema"`
+	Signature     string                            `json:"signature"`
+	SigningKeyId  OpaqueId                          `json:"signing_key_id"`
+	State         CredentialRevocationReceiptState  `json:"state"`
+}
+
+// CredentialRevocationReceiptSchema defines model for CredentialRevocationReceipt.Schema.
+type CredentialRevocationReceiptSchema string
+
+// CredentialRevocationReceiptState defines model for CredentialRevocationReceipt.State.
+type CredentialRevocationReceiptState string
+
+// CredentialRevocationRequest defines model for CredentialRevocationRequest.
+type CredentialRevocationRequest struct {
+	ExpectedDeploymentId  OpaqueId                          `json:"expected_deployment_id"`
+	ExpectedIntegrationId OpaqueId                          `json:"expected_integration_id"`
+	ExpectedPackageId     OpaqueId                          `json:"expected_package_id"`
+	Reason                CredentialRevocationRequestReason `json:"reason"`
+	RequestId             OpaqueId                          `json:"request_id"`
+}
+
+// CredentialRevocationRequestReason defines model for CredentialRevocationRequest.Reason.
+type CredentialRevocationRequestReason string
+
+// CredentialRevocationStatus defines model for CredentialRevocationStatus.
+type CredentialRevocationStatus struct {
+	Purpose        CredentialRevocationStatusPurpose `json:"purpose"`
+	ReplicaOrdinal *int                              `json:"replica_ordinal,omitempty"`
+	RevokedAt      *time.Time                        `json:"revoked_at,omitempty"`
+	State          CredentialRevocationStatusState   `json:"state"`
+}
+
+// CredentialRevocationStatusPurpose defines model for CredentialRevocationStatus.Purpose.
+type CredentialRevocationStatusPurpose string
+
+// CredentialRevocationStatusState defines model for CredentialRevocationStatus.State.
+type CredentialRevocationStatusState string
 
 // ErrorEnvelope defines model for ErrorEnvelope.
 type ErrorEnvelope struct {
@@ -605,6 +685,16 @@ type CreateBridgeInvestigationParams struct {
 	XCharlieAuthorizationRef AuthorizationRef `json:"X-Charlie-Authorization-Ref"`
 }
 
+// GetBridgeCredentialRevocationParams defines parameters for GetBridgeCredentialRevocation.
+type GetBridgeCredentialRevocationParams struct {
+	RequestId OpaqueId `form:"request_id" json:"request_id"`
+}
+
+// RevokeBridgeCredentialsParams defines parameters for RevokeBridgeCredentials.
+type RevokeBridgeCredentialsParams struct {
+	IdempotencyKey OpaqueId `json:"Idempotency-Key"`
+}
+
 // ListBridgeSessionsParams defines parameters for ListBridgeSessions.
 type ListBridgeSessionsParams struct {
 	// XCharlieAuthorizationRef Opaque live product authorization reference; the deployment credential never substitutes for end-user authority.
@@ -667,6 +757,9 @@ type TransitionBridgeFindingJSONRequestBody = FindingTransition
 
 // CreateBridgeInvestigationJSONRequestBody defines body for CreateBridgeInvestigation for application/json ContentType.
 type CreateBridgeInvestigationJSONRequestBody = CreateInvestigation
+
+// RevokeBridgeCredentialsJSONRequestBody defines body for RevokeBridgeCredentials for application/json ContentType.
+type RevokeBridgeCredentialsJSONRequestBody = CredentialRevocationRequest
 
 // SetBridgeModeJSONRequestBody defines body for SetBridgeMode for application/json ContentType.
 type SetBridgeModeJSONRequestBody = ModeRequest
@@ -788,13 +881,21 @@ type ClientInterface interface {
 
 	CreateBridgeInvestigation(ctx context.Context, params *CreateBridgeInvestigationParams, body CreateBridgeInvestigationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetBridgeMode request
-	GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetBridgeCredentialRevocation request
+	GetBridgeCredentialRevocation(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokeBridgeCredentialsWithBody request with any body
+	RevokeBridgeCredentialsWithBody(ctx context.Context, params *RevokeBridgeCredentialsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RevokeBridgeCredentials(ctx context.Context, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SetBridgeModeWithBody request with any body
 	SetBridgeModeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SetBridgeMode(ctx context.Context, body SetBridgeModeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetBridgeMode request
+	GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListBridgeSessions request
 	ListBridgeSessions(ctx context.Context, params *ListBridgeSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -986,8 +1087,32 @@ func (c *Client) CreateBridgeInvestigation(ctx context.Context, params *CreateBr
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBridgeModeRequest(c.Server)
+func (c *Client) GetBridgeCredentialRevocation(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBridgeCredentialRevocationRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevokeBridgeCredentialsWithBody(ctx context.Context, params *RevokeBridgeCredentialsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeBridgeCredentialsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevokeBridgeCredentials(ctx context.Context, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeBridgeCredentialsRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1012,6 +1137,18 @@ func (c *Client) SetBridgeModeWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) SetBridgeMode(ctx context.Context, body SetBridgeModeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSetBridgeModeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBridgeModeRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -1591,8 +1728,8 @@ func NewCreateBridgeInvestigationRequestWithBody(server string, params *CreateBr
 	return req, nil
 }
 
-// NewGetBridgeModeRequest generates requests for GetBridgeMode
-func NewGetBridgeModeRequest(server string) (*http.Request, error) {
+// NewGetBridgeCredentialRevocationRequest generates requests for GetBridgeCredentialRevocation
+func NewGetBridgeCredentialRevocationRequest(server string, params *GetBridgeCredentialRevocationParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -1600,7 +1737,7 @@ func NewGetBridgeModeRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/mode")
+	operationPath := fmt.Sprintf("/lifecycle/credentials/revocation")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1610,9 +1747,80 @@ func NewGetBridgeModeRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "request_id", runtime.ParamLocationQuery, params.RequestId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRevokeBridgeCredentialsRequest calls the generic RevokeBridgeCredentials builder with application/json body
+func NewRevokeBridgeCredentialsRequest(server string, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRevokeBridgeCredentialsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRevokeBridgeCredentialsRequestWithBody generates requests for RevokeBridgeCredentials with any type of body
+func NewRevokeBridgeCredentialsRequestWithBody(server string, params *RevokeBridgeCredentialsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/lifecycle/credentials/revocation")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -1638,7 +1846,7 @@ func NewSetBridgeModeRequestWithBody(server string, contentType string, body io.
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/mode")
+	operationPath := fmt.Sprintf("/lifecycle/credentials/revocation")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1654,6 +1862,33 @@ func NewSetBridgeModeRequestWithBody(server string, contentType string, body io.
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetBridgeModeRequest generates requests for GetBridgeMode
+func NewGetBridgeModeRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/mode")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2202,13 +2437,21 @@ type ClientWithResponsesInterface interface {
 
 	CreateBridgeInvestigationWithResponse(ctx context.Context, params *CreateBridgeInvestigationParams, body CreateBridgeInvestigationJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateBridgeInvestigationResponse, error)
 
-	// GetBridgeModeWithResponse request
-	GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error)
+	// GetBridgeCredentialRevocationWithResponse request
+	GetBridgeCredentialRevocationWithResponse(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*GetBridgeCredentialRevocationResponse, error)
+
+	// RevokeBridgeCredentialsWithBodyWithResponse request with any body
+	RevokeBridgeCredentialsWithBodyWithResponse(ctx context.Context, params *RevokeBridgeCredentialsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevokeBridgeCredentialsResponse, error)
+
+	RevokeBridgeCredentialsWithResponse(ctx context.Context, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*RevokeBridgeCredentialsResponse, error)
 
 	// SetBridgeModeWithBodyWithResponse request with any body
 	SetBridgeModeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetBridgeModeResponse, error)
 
 	SetBridgeModeWithResponse(ctx context.Context, body SetBridgeModeJSONRequestBody, reqEditors ...RequestEditorFn) (*SetBridgeModeResponse, error)
+
+	// GetBridgeModeWithResponse request
+	GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error)
 
 	// ListBridgeSessionsWithResponse request
 	ListBridgeSessionsWithResponse(ctx context.Context, params *ListBridgeSessionsParams, reqEditors ...RequestEditorFn) (*ListBridgeSessionsResponse, error)
@@ -2454,15 +2697,15 @@ func (r CreateBridgeInvestigationResponse) StatusCode() int {
 	return 0
 }
 
-type GetBridgeModeResponse struct {
+type GetBridgeCredentialRevocationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *ModeResponse
+	JSON200      *CredentialRevocationReceipt
 	JSONDefault  *Error
 }
 
 // Status returns HTTPResponse.Status
-func (r GetBridgeModeResponse) Status() string {
+func (r GetBridgeCredentialRevocationResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2470,7 +2713,30 @@ func (r GetBridgeModeResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetBridgeModeResponse) StatusCode() int {
+func (r GetBridgeCredentialRevocationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RevokeBridgeCredentialsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CredentialRevocationReceipt
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokeBridgeCredentialsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokeBridgeCredentialsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2494,6 +2760,29 @@ func (r SetBridgeModeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r SetBridgeModeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetBridgeModeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ModeResponse
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBridgeModeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBridgeModeResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2821,13 +3110,30 @@ func (c *ClientWithResponses) CreateBridgeInvestigationWithResponse(ctx context.
 	return ParseCreateBridgeInvestigationResponse(rsp)
 }
 
-// GetBridgeModeWithResponse request returning *GetBridgeModeResponse
-func (c *ClientWithResponses) GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error) {
-	rsp, err := c.GetBridgeMode(ctx, reqEditors...)
+// GetBridgeCredentialRevocationWithResponse request returning *GetBridgeCredentialRevocationResponse
+func (c *ClientWithResponses) GetBridgeCredentialRevocationWithResponse(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*GetBridgeCredentialRevocationResponse, error) {
+	rsp, err := c.GetBridgeCredentialRevocation(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetBridgeModeResponse(rsp)
+	return ParseGetBridgeCredentialRevocationResponse(rsp)
+}
+
+// RevokeBridgeCredentialsWithBodyWithResponse request with arbitrary body returning *RevokeBridgeCredentialsResponse
+func (c *ClientWithResponses) RevokeBridgeCredentialsWithBodyWithResponse(ctx context.Context, params *RevokeBridgeCredentialsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevokeBridgeCredentialsResponse, error) {
+	rsp, err := c.RevokeBridgeCredentialsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeBridgeCredentialsResponse(rsp)
+}
+
+func (c *ClientWithResponses) RevokeBridgeCredentialsWithResponse(ctx context.Context, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*RevokeBridgeCredentialsResponse, error) {
+	rsp, err := c.RevokeBridgeCredentials(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeBridgeCredentialsResponse(rsp)
 }
 
 // SetBridgeModeWithBodyWithResponse request with arbitrary body returning *SetBridgeModeResponse
@@ -2845,6 +3151,15 @@ func (c *ClientWithResponses) SetBridgeModeWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseSetBridgeModeResponse(rsp)
+}
+
+// GetBridgeModeWithResponse request returning *GetBridgeModeResponse
+func (c *ClientWithResponses) GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error) {
+	rsp, err := c.GetBridgeMode(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBridgeModeResponse(rsp)
 }
 
 // ListBridgeSessionsWithResponse request returning *ListBridgeSessionsResponse
@@ -3252,22 +3567,55 @@ func ParseCreateBridgeInvestigationResponse(rsp *http.Response) (*CreateBridgeIn
 	return response, nil
 }
 
-// ParseGetBridgeModeResponse parses an HTTP response from a GetBridgeModeWithResponse call
-func ParseGetBridgeModeResponse(rsp *http.Response) (*GetBridgeModeResponse, error) {
+// ParseGetBridgeCredentialRevocationResponse parses an HTTP response from a GetBridgeCredentialRevocationWithResponse call
+func ParseGetBridgeCredentialRevocationResponse(rsp *http.Response) (*GetBridgeCredentialRevocationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetBridgeModeResponse{
+	response := &GetBridgeCredentialRevocationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ModeResponse
+		var dest CredentialRevocationReceipt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevokeBridgeCredentialsResponse parses an HTTP response from a RevokeBridgeCredentialsWithResponse call
+func ParseRevokeBridgeCredentialsResponse(rsp *http.Response) (*RevokeBridgeCredentialsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokeBridgeCredentialsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CredentialRevocationReceipt
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -3294,6 +3642,39 @@ func ParseSetBridgeModeResponse(rsp *http.Response) (*SetBridgeModeResponse, err
 	}
 
 	response := &SetBridgeModeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ModeResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetBridgeModeResponse parses an HTTP response from a GetBridgeModeWithResponse call
+func ParseGetBridgeModeResponse(rsp *http.Response) (*GetBridgeModeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBridgeModeResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

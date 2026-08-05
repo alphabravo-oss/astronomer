@@ -15,9 +15,11 @@ import {
   Search,
   Send,
   Sparkles,
+  StopCircle,
   X,
 } from "lucide-react";
 import { DrawerShell } from "@/components/ui/drawer-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Link } from "@/lib/link";
 import { usePathname } from "@/lib/navigation";
@@ -27,7 +29,9 @@ import { contextForRoute } from "./context-registry";
 import { SafeMarkdown } from "./safe-markdown";
 import { CharlieMessageParts } from "./message-parts";
 import {
+  abortCharlieSession,
   createCharlieSession,
+  getCharlieOverview,
   getCharlieHistory,
   searchCharlieContext,
   sendCharlieMessage,
@@ -182,6 +186,24 @@ function CharlieDrawer() {
   const [text, setText] = useState("");
   const [local, setLocal] = useState<CharlieMessage[]>([]);
   const [streamUnavailable, setStreamUnavailable] = useState(false);
+  const [restoreAttempted, setRestoreAttempted] = useState(false);
+  const [confirmAbort, setConfirmAbort] = useState(false);
+  const overview = useQuery({
+    queryKey: queryKeys.charlie.overview,
+    queryFn: getCharlieOverview,
+    retry: false,
+  });
+  useEffect(() => {
+    if (restoreAttempted || overview.isLoading) return;
+    setRestoreAttempted(true);
+    const latest = overview.data?.sessions.find(
+      (session) =>
+        session.visibility === "private" &&
+        session.source === "user" &&
+        !["aborted", "failed"].includes(session.state),
+    );
+    if (latest) setSessionId(latest.id);
+  }, [overview.data, overview.isLoading, restoreAttempted]);
   const history = useQuery({
     queryKey: queryKeys.charlie.history(sessionId),
     queryFn: () => getCharlieHistory(sessionId!),
@@ -230,14 +252,55 @@ function CharlieDrawer() {
     onSuccess: (id) =>
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.history(id) }),
   });
+  const abort = useMutation({
+    mutationFn: () => abortCharlieSession(sessionId!),
+    onSuccess: () => {
+      setConfirmAbort(false);
+      setLocal([]);
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.sessions });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.history(sessionId) });
+    },
+  });
   const messages = [...local, ...(history.data ?? [])].filter(
     (m, i, a) => a.findIndex((x) => x.id === m.id) === i,
   );
   return (
     <DrawerShell
       title="Charlie"
-      subtitle="AI assistance within your authorized Astronomer scope"
+      subtitle={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>AI assistance within your authorized Astronomer scope</span>
+          <span className="rounded-full border px-2 py-0.5 font-medium" aria-label={`Current Charlie mode: ${overview.data?.mode ?? "unknown"}`}>
+            {(overview.data?.mode ?? "unknown").replace("_", " ")}
+          </span>
+        </span>
+      }
       onClose={() => setOpen(false)}
+      actions={
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setRestoreAttempted(true);
+              setSessionId(undefined);
+              setLocal([]);
+            }}
+            className="rounded-md border px-2 py-1 text-xs"
+          >
+            New chat
+          </button>
+          {sessionId && (
+            <button
+              type="button"
+              onClick={() => setConfirmAbort(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-status-error/40 px-2 py-1 text-xs text-status-error"
+            >
+              <StopCircle className="h-3 w-3" /> Abort turn
+            </button>
+          )}
+        </div>
+      }
       panelClassName="max-w-xl max-sm:max-w-none"
       bodyClassName="flex flex-col gap-4"
     >
@@ -264,7 +327,9 @@ function CharlieDrawer() {
             </button>
           </span>
         ))}
-        <ContextPicker />
+        <div role="listitem">
+          <ContextPicker />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
         Only the identifiers shown above are attached. Logs, metrics, audit
@@ -344,6 +409,16 @@ function CharlieDrawer() {
           </div>
         </div>
       )}
+      {abort.isSuccess && (
+        <p role="status" className="rounded-md border p-2 text-xs">
+          This Charlie session was aborted. Its authority has been revoked.
+        </p>
+      )}
+      {abort.isError && (
+        <p role="alert" className="rounded-md border border-status-error/40 p-2 text-xs text-status-error">
+          Abort is pending or could not be confirmed. The product-side session remains locally closed.
+        </p>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -386,6 +461,17 @@ function CharlieDrawer() {
           </button>
         </div>
       </form>
+      <ConfirmDialog
+        open={confirmAbort}
+        onClose={() => setConfirmAbort(false)}
+        onConfirm={() => abort.mutate()}
+        title="Abort this Charlie session"
+        description="Abort revokes this session's product authority. Closing the drawer alone never aborts work."
+        confirmText="Abort session"
+        confirmValue="ABORT CHARLIE SESSION"
+        variant="destructive"
+        loading={abort.isPending}
+      />
     </DrawerShell>
   );
 }

@@ -236,8 +236,9 @@ func TestModeRequestRetriesPendingLocalRequestWithoutAdvancingRevision(t *testin
 func TestAutoModeRequiresAllReviewedPrerequisites(t *testing.T) {
 	for name, prerequisites := range map[string]ModePrerequisites{
 		"none":         {},
-		"no_allowlist": {DisclosureAcknowledged: true, AutomationIdentityReady: true},
-		"no_identity":  {DisclosureAcknowledged: true, AutomationAllowlistReady: true},
+		"no_allowlist": {DisclosureAcknowledged: true, AutomationIdentityReady: true, AutomationTargetReady: true},
+		"no_identity":  {DisclosureAcknowledged: true, AutomationAllowlistReady: true, AutomationTargetReady: true},
+		"no_target":    {DisclosureAcknowledged: true, AutomationAllowlistReady: true, AutomationIdentityReady: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := &fakeModeStore{state: activeModeState()}
@@ -254,7 +255,7 @@ func TestRemoteFailureCannotEscalateVerifiedMode(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{error: errors.New("unavailable")}
 	controller, _ := NewModeController(store, bridge)
-	state, err := controller.Request(context.Background(), ModeAuto, 4, ModePrerequisites{true, true, true})
+	state, err := controller.Request(context.Background(), ModeAuto, 4, ModePrerequisites{DisclosureAcknowledged: true, AutomationAllowlistReady: true, AutomationIdentityReady: true, AutomationTargetReady: true})
 	if err == nil {
 		t.Fatal("remote failure was hidden")
 	}

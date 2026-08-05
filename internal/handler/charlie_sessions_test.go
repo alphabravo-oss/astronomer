@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,6 +33,10 @@ type charlieAccessFake struct {
 	message                 uuid.UUID
 	messageBody             string
 	result                  json.RawMessage
+}
+
+func (f *charlieAccessFake) CurrentMode(context.Context, uuid.UUID) (charlie.Mode, error) {
+	return charlie.ModeReadOnly, nil
 }
 
 func (f *charlieAccessFake) ListPrivate(context.Context, uuid.UUID, int32, int32) ([]sqlc.CharlieSession, error) {
@@ -137,8 +142,15 @@ func TestCharlieMessageForwardsStableIDsAndContentOnlyToBridgeService(t *testing
 	if recorder.Code != http.StatusAccepted || access.actor != actor || access.session != sessionID || access.message != messageID || access.messageBody != "check readiness" {
 		t.Fatalf("message was not proxied exactly: status=%d access=%#v", recorder.Code, access)
 	}
-	if recorder.Body.String() != string(access.result) {
-		t.Fatalf("turn receipt changed: %s", recorder.Body.String())
+	var got, want any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode turn receipt: %v", err)
+	}
+	if err := json.Unmarshal(access.result, &want); err != nil {
+		t.Fatalf("decode expected turn receipt: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("turn receipt changed: got=%#v want=%#v", got, want)
 	}
 }
 
@@ -171,5 +183,34 @@ func TestCharlieSessionEventsRejectsCursorInjection(t *testing.T) {
 	NewCharlieSessionHandler(&charlieCreatorFake{}, &charlieAccessFake{}).Events(recorder, request)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestSafeCharlieBrowserJSONReplacesAllToolArgumentValues(t *testing.T) {
+	secret := "browser-tool-secret-canary"
+	raw := json.RawMessage(`{"messages":[{"tools":[{"arguments":{"token":"` + secret + `","namespace":"prod"},"argument_summary":["` + secret + `"]},{"exactArguments":{"password":"` + secret + `"}}]}]}`)
+	safe, err := safeCharlieBrowserJSON(raw)
+	if err != nil {
+		t.Fatalf("sanitize Charlie JSON: %v", err)
+	}
+	if strings.Contains(string(safe), secret) || strings.Contains(string(safe), `"arguments"`) || strings.Contains(string(safe), `"exactArguments"`) {
+		t.Fatalf("browser response retained exact tool data: %s", safe)
+	}
+	for _, field := range []string{`"argument_summary":["namespace","token"]`, `"argument_summary":["password"]`} {
+		if !strings.Contains(string(safe), field) {
+			t.Fatalf("browser response missing safe field summary %s: %s", field, safe)
+		}
+	}
+}
+
+func TestCharlieHistorySanitizesToolArgumentsBeforeBrowserResponse(t *testing.T) {
+	secret := "history-tool-secret-canary"
+	access := &charlieAccessFake{result: json.RawMessage(`{"messages":[{"tools":[{"arguments":{"credential":"` + secret + `"}}]}]}`)}
+	handler := NewCharlieSessionHandler(&charlieCreatorFake{}, access)
+	request := withSessionParam(authenticatedCharlieRequest(http.MethodGet, "/", "", uuid.New(), "jwt"), uuid.New())
+	recorder := httptest.NewRecorder()
+	handler.History(recorder, request)
+	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), secret) || !strings.Contains(recorder.Body.String(), `"argument_summary":["credential"]`) {
+		t.Fatalf("unsafe history response: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

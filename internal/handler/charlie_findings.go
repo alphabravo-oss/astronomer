@@ -121,7 +121,11 @@ func safeCharlieFinding(view charlie.FindingView, includeDetail bool) map[string
 	item := map[string]any{
 		"id": row.ID, "title": row.Title, "severity": severity, "state": row.Status,
 		"summary": row.Summary, "reason_no_action": row.ExecutionBlockCode,
-		"repeat_count": row.RepeatCount, "updated_at": row.UpdatedAt,
+		"repeat_count": row.RepeatCount, "source": row.Source,
+		"created_at": row.CreatedAt, "updated_at": row.UpdatedAt,
+	}
+	if row.SessionID.Valid {
+		item["session_id"] = uuid.UUID(row.SessionID.Bytes)
 	}
 	if len(view.Resources) > 0 {
 		resource := view.Resources[0]

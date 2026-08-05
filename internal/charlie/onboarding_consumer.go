@@ -176,8 +176,9 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			disclosureDigest := CapabilityDisclosureDigest()
 			installSpec := AgentInstallSpec{
 				InstallationID: platform.InstanceID, ConnectionID: connection.ID,
-				LogicalAgentID: string(validated.Package.LogicalAgentId), EnvironmentID: string(validated.Package.EnvironmentId), TenantID: string(validated.Package.TenantId),
-				CentralURL: validated.Package.Central.BaseUrl, CentralCAPEM: validated.Package.Central.CaBundlePem,
+				LogicalAgentID: string(validated.Package.LogicalAgentId), DeploymentID: string(validated.Package.DeploymentId), EnvironmentID: string(validated.Package.EnvironmentId), TenantID: string(validated.Package.TenantId),
+				OnboardingPackageID: validated.PackageID,
+				CentralURL:          validated.Package.Central.BaseUrl, CentralCAPEM: validated.Package.Central.CaBundlePem,
 				ChartReference: validated.Package.Artifact.Chart, ChartVersion: contract.AgentChartVersion, ChartDigest: validated.Package.Artifact.ChartDigest,
 				ImageReference: validated.Package.Artifact.Image, ImageDigest: validated.Package.Artifact.ManifestDigest,
 				OnboardingPackage: validated.RawPackage, ReplicaCount: validated.Package.ReplicaCount, ArtifactCredential: validated.ArtifactCredential,

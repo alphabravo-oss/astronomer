@@ -650,6 +650,7 @@ POST /scim/v2/Groups
 POST /scim/v2/Users
 PUT /api/v1/admin/alerting/inhibitions/{id}
 PUT /api/v1/admin/charlie/access
+PUT /api/v1/admin/charlie/action-policies/{capability}
 PUT /api/v1/admin/dashboard-widgets/{id}
 PUT /api/v1/admin/gitops-sources/{id}
 PUT /api/v1/admin/network-policy-templates/{id}

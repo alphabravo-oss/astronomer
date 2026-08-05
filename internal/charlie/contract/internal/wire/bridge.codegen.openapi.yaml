@@ -222,6 +222,7 @@ components:
                 - precondition_failed
                 - circuit_breaker_open
                 - central_unavailable
+                - verification_failed
                 - no_safe_action
             type: string
         BridgeStatus:
@@ -231,6 +232,13 @@ components:
                     maxLength: 128
                     minLength: 1
                     type: string
+                auto_allowlist:
+                    items:
+                        pattern: ^[a-z][a-z0-9_.:-]{0,127}$
+                        type: string
+                    maxItems: 256
+                    type: array
+                    uniqueItems: true
                 central_health:
                     enum:
                         - healthy
@@ -289,6 +297,7 @@ components:
                 - lease_expires_at
                 - integration_revision
                 - disclosure_digest
+                - auto_allowlist
                 - effective_mode
                 - route_id
                 - artifact_version
@@ -392,6 +401,103 @@ components:
                 - context
                 - resources
             type: object
+        CredentialRevocationReceipt:
+            additionalProperties: false
+            properties:
+                complete:
+                    type: boolean
+                credentials:
+                    items:
+                        $ref: '#/components/schemas/CredentialRevocationStatus'
+                    maxItems: 64
+                    minItems: 1
+                    type: array
+                deployment_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                integration_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                package_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                revoked_at:
+                    format: date-time
+                    type: string
+                schema:
+                    enum:
+                        - charlie.credential-revocation/v1
+                    type: string
+                signature:
+                    pattern: ^[A-Za-z0-9_-]{86}$
+                    type: string
+                signing_key_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                state:
+                    enum:
+                        - pending_caller_revocation
+                        - revoked
+                    type: string
+            required:
+                - schema
+                - request_id
+                - deployment_id
+                - package_id
+                - integration_id
+                - state
+                - complete
+                - revoked_at
+                - credentials
+                - signing_key_id
+                - signature
+            type: object
+        CredentialRevocationRequest:
+            additionalProperties: false
+            properties:
+                expected_deployment_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                expected_integration_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                expected_package_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                reason:
+                    enum:
+                        - product_disconnect
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - request_id
+                - reason
+                - expected_deployment_id
+                - expected_package_id
+                - expected_integration_id
+            type: object
+        CredentialRevocationStatus:
+            additionalProperties: false
+            properties:
+                purpose:
+                    enum:
+                        - agent_enrollment
+                        - artifact_pull
+                        - product_client
+                        - product_agent
+                    type: string
+                replica_ordinal:
+                    maximum: 19
+                    minimum: 0
+                    type: integer
+                revoked_at:
+                    format: date-time
+                    type: string
+                state:
+                    enum:
+                        - pending_revocation
+                        - revoked
+                    type: string
+            required:
+                - purpose
+                - state
+            type: object
         ErrorEnvelope:
             additionalProperties: false
             properties:
@@ -445,6 +551,7 @@ components:
                 - precondition_failed
                 - circuit_breaker_open
                 - central_unavailable
+                - verification_failed
                 - no_safe_action
             type: string
         FindingEnvelope:
@@ -1084,16 +1191,46 @@ paths:
                     description: Investigation accepted
                 default:
                     $ref: '#/components/responses/Error'
-    /mode:
+    /lifecycle/credentials/revocation:
         get:
-            operationId: getBridgeMode
+            operationId: getBridgeCredentialRevocation
+            parameters:
+                - in: query
+                  name: request_id
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/OpaqueId'
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ModeResponse'
-                    description: Current mode
+                                $ref: '#/components/schemas/CredentialRevocationReceipt'
+                    description: Signed, content-free status for an idempotent integration credential revocation
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+        post:
+            operationId: revokeBridgeCredentials
+            parameters:
+                - in: header
+                  name: Idempotency-Key
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/OpaqueId'
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CredentialRevocationRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CredentialRevocationReceipt'
+                    description: Signed, content-free per-credential revocation receipt
                 default:
                     $ref: '#/components/responses/Error'
             x-charlie-availability: always
@@ -1105,6 +1242,19 @@ paths:
                         schema:
                             $ref: '#/components/schemas/ModeRequest'
                 required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ModeResponse'
+                    description: Current mode
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+    /mode:
+        get:
+            operationId: getBridgeMode
             responses:
                 "200":
                     content:

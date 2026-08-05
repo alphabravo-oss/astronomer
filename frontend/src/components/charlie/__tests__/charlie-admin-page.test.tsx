@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   runCharlieAgentAction: vi.fn(),
   uninstallCharlieAgent: vi.fn(),
   updateCharlieAutomation: vi.fn(),
+  updateCharlieActionPolicy: vi.fn(),
   updateCharlieMode: vi.fn(),
   validateCharlieOnboarding: vi.fn(),
 }));
@@ -158,6 +159,14 @@ beforeEach(() => {
   api.getCharlieAutomation.mockResolvedValue({
     defaultsRevision: 3,
     serviceIdentityEnabled: true,
+    actionPolicies: [{
+      capability: "astronomer.queue.retry_task", effect: "retry one failed task", risk: "low",
+      autoEligible: true, centralAllowlisted: true, centralState: "verified", enabled: true, revision: 2,
+      maxActionsPerIncident: 1, maxActionsPerWindow: 3, budgetWindowSeconds: 3600,
+      cooldownSeconds: 60, scopeSummary: "exact session resource ID",
+      preconditions: ["task is retryable"], verification: "task reaches a terminal state",
+      circuitState: "closed",
+    }],
     rules: [{
       id: "rule-a", name: "Agent flap", enabled: true, sourceType: "agent",
       severities: ["high"], scopes: ["production"], cooldownSeconds: 1800,
@@ -170,6 +179,24 @@ beforeEach(() => {
   api.listCharlieTriggerEvents.mockResolvedValue([]);
   api.getCharlieDiagnostics.mockResolvedValue({ overall: "healthy", checks: [], correlationId: "correlation-a" });
   api.validateCharlieOnboarding.mockResolvedValue(safeReview);
+  api.updateCharlieActionPolicy.mockImplementation(async (policy) => ({
+    capability: policy.capability,
+    effect: "retry one failed task",
+    risk: "low",
+    autoEligible: true,
+    centralAllowlisted: true,
+    centralState: "verified",
+    enabled: policy.enabled,
+    revision: 3,
+    maxActionsPerIncident: policy.maxActionsPerIncident,
+    maxActionsPerWindow: policy.maxActionsPerWindow,
+    budgetWindowSeconds: policy.budgetWindowSeconds,
+    cooldownSeconds: policy.cooldownSeconds,
+    scopeSummary: "exact session resource ID",
+    preconditions: ["task is retryable"],
+    verification: "task reaches a terminal state",
+    circuitState: "closed",
+  }));
 });
 
 afterEach(cleanup);
@@ -276,12 +303,58 @@ describe("Charlie administration acceptance", () => {
 
   it("exposes all automation policy fields and validates new rules before save", async () => {
     renderWithClient(<AutomationTab />);
-    expect(await screen.findByLabelText("Rule name")).toHaveValue("Agent flap");
+    expect(await screen.findByText("astronomer.queue.retry_task")).toBeInTheDocument();
+    expect(screen.getByText("exact session resource ID")).toBeInTheDocument();
+    expect(screen.getByText(/task reaches a terminal state/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Max actions per window"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save action policy" }));
+    await waitFor(() =>
+      expect(api.updateCharlieActionPolicy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          capability: "astronomer.queue.retry_task",
+          maxActionsPerWindow: 4,
+        }),
+        expect.anything(),
+      ),
+    );
+    expect(screen.getByLabelText("Rule name")).toHaveValue("Agent flap");
     expect(screen.getByLabelText("Severities (comma separated)")).toHaveValue("high");
     expect(screen.getByLabelText("Fleet threshold %")).toHaveAttribute("max", "100");
     fireEvent.click(screen.getByRole("button", { name: "Add trigger rule" }));
     expect(screen.getByRole("alert")).toHaveTextContent("needs a name");
     expect(screen.getByRole("button", { name: "Save automation" })).toBeDisabled();
+  });
+
+  it("fails closed when central action-policy verification is unavailable", async () => {
+    api.getCharlieAutomation.mockResolvedValue({
+      defaultsRevision: 3,
+      serviceIdentityEnabled: true,
+      rules: [],
+      actionPolicies: [{
+        capability: "astronomer.queue.retry_task", effect: "retry one failed task", risk: "low",
+        autoEligible: true, centralAllowlisted: false, centralState: "unavailable", enabled: false, revision: 2,
+        maxActionsPerIncident: 1, maxActionsPerWindow: 3, budgetWindowSeconds: 3600,
+        cooldownSeconds: 60, scopeSummary: "exact session resource ID", preconditions: [],
+        verification: "task reaches a terminal state", circuitState: "unknown",
+      }],
+    });
+    renderWithClient(<AutomationTab />);
+    expect(await screen.findByLabelText("Enable astronomer.queue.retry_task")).toBeDisabled();
+    expect(screen.getByText(/until Charlie central is verified/i)).toBeInTheDocument();
+  });
+
+  it("shows action-policy conflicts without claiming the change was saved", async () => {
+    api.updateCharlieActionPolicy.mockRejectedValue(
+      new Error("This action policy conflicts with current central allowlisting or bounded budget rules."),
+    );
+    renderWithClient(<AutomationTab />);
+    fireEvent.change(await screen.findByLabelText("Max actions per window"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save action policy" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/conflicts with current central allowlisting/i);
   });
 
   it("shows only bounded dead-letter metadata and requires typed retry confirmation", async () => {

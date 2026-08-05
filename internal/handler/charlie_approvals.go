@@ -67,8 +67,22 @@ func (h *CharlieApprovalHandler) Decide(w http.ResponseWriter, r *http.Request) 
 	}
 	view, err := h.access.Decide(r.Context(), mustUserID(actor), approvalID, requestID, decision, request.Rationale)
 	if err != nil {
+		if charlieApprovalConflict(err) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "This exact Charlie approval is stale or was already decided; no action was authorized")
+			return
+		}
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie approval was not accepted; no action was authorized")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"approval": view})
+}
+
+func charlieApprovalConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "stale") || strings.Contains(message, "not pending") ||
+		strings.Contains(message, "already") || strings.Contains(message, "expired") ||
+		strings.Contains(message, "conflict")
 }

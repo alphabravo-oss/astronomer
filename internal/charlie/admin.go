@@ -65,14 +65,26 @@ type AdminAgentReplicaView struct {
 }
 
 type AdminModeView struct {
-	Requested                    Mode     `json:"requested"`
-	Authoritative                Mode     `json:"authoritative"`
-	Revision                     int64    `json:"revision"`
-	EmergencyDisabled            bool     `json:"emergency_disabled"`
-	DisablePending               bool     `json:"disable_pending,omitempty"`
-	DisclosureDigest             string   `json:"disclosure_digest,omitempty"`
-	AcknowledgedDisclosureDigest string   `json:"acknowledged_disclosure_digest,omitempty"`
-	Effects                      []string `json:"effects"`
+	Requested                    Mode               `json:"requested"`
+	Authoritative                Mode               `json:"authoritative"`
+	Revision                     int64              `json:"revision"`
+	EmergencyDisabled            bool               `json:"emergency_disabled"`
+	DisablePending               bool               `json:"disable_pending,omitempty"`
+	DisclosureDigest             string             `json:"disclosure_digest,omitempty"`
+	AcknowledgedDisclosureDigest string             `json:"acknowledged_disclosure_digest,omitempty"`
+	Effects                      []string           `json:"effects"`
+	AutoReadiness                AdminAutoReadiness `json:"auto_readiness"`
+}
+
+type AdminAutoReadiness struct {
+	Ready    bool                        `json:"ready"`
+	Blockers []AdminAutoReadinessBlocker `json:"blockers"`
+}
+
+type AdminAutoReadinessBlocker struct {
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	NextAction string `json:"next_action"`
 }
 
 type AdminStatusView struct {
@@ -102,9 +114,44 @@ type AdminTriggerRule struct {
 }
 
 type AdminAutomationView struct {
-	Rules                  []AdminTriggerRule `json:"rules"`
-	DefaultsRevision       int64              `json:"defaults_revision"`
-	ServiceIdentityEnabled bool               `json:"service_identity_enabled"`
+	Rules                  []AdminTriggerRule  `json:"rules"`
+	ActionPolicies         []AdminActionPolicy `json:"action_policies"`
+	DefaultsRevision       int64               `json:"defaults_revision"`
+	ServiceIdentityEnabled bool                `json:"service_identity_enabled"`
+}
+
+// AdminActionPolicy is the safe, operator-facing intersection of Charlie's
+// central capability allowlist and Astronomer's durable local safety budget.
+// It deliberately omits target selectors, arguments, credentials, and
+// authority references.
+type AdminActionPolicy struct {
+	Capability            string   `json:"capability"`
+	Effect                string   `json:"effect"`
+	Risk                  string   `json:"risk"`
+	AutoEligible          bool     `json:"auto_eligible"`
+	CentralAllowlisted    bool     `json:"central_allowlisted"`
+	CentralState          string   `json:"central_state"`
+	Enabled               bool     `json:"enabled"`
+	Revision              int64    `json:"revision"`
+	MaxActionsPerIncident int32    `json:"max_actions_per_incident"`
+	MaxActionsPerWindow   int32    `json:"max_actions_per_window"`
+	BudgetWindowSeconds   int32    `json:"budget_window_seconds"`
+	CooldownSeconds       int32    `json:"cooldown_seconds"`
+	ScopeSummary          string   `json:"scope_summary"`
+	Preconditions         []string `json:"preconditions"`
+	Verification          string   `json:"verification"`
+	CircuitState          string   `json:"circuit_state"`
+}
+
+// AdminActionPolicyInput is intentionally limited to product-local policy.
+// The central allowlist is reviewed and changed in Charlie, independently.
+// openapi:request CharlieAdminActionPolicyInput
+type AdminActionPolicyInput struct {
+	Enabled               bool  `json:"enabled"`
+	MaxActionsPerIncident int32 `json:"max_actions_per_incident"`
+	MaxActionsPerWindow   int32 `json:"max_actions_per_window"`
+	BudgetWindowSeconds   int32 `json:"budget_window_seconds"`
+	CooldownSeconds       int32 `json:"cooldown_seconds"`
 }
 
 type AdminPermission struct {
@@ -119,12 +166,13 @@ type AdminAccessView struct {
 }
 
 type AdminDiagnosticCheck struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	State     string `json:"state"`
-	Summary   string `json:"summary"`
-	CheckedAt string `json:"checked_at,omitempty"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	State      string `json:"state"`
+	Summary    string `json:"summary"`
+	NextAction string `json:"next_action"`
+	CheckedAt  string `json:"checked_at,omitempty"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
 }
 
 type AdminDiagnosticsView struct {
@@ -248,6 +296,7 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 			applyBridgeStatus(&view, bridgeStatus)
 		}
 	}
+	view.Mode = s.enrichMode(ctx, view.Mode)
 	return view, nil
 }
 
@@ -255,7 +304,9 @@ func emptyAdminStatus() AdminStatusView {
 	return AdminStatusView{
 		Connection: AdminConnectionView{},
 		Agent:      AdminAgentView{ApplicationState: "not_installed", StandbyReplicas: []string{}, Replicas: []AdminAgentReplicaView{}},
-		Mode:       AdminModeView{Requested: ModeDisabled, Authoritative: ModeDisabled, Effects: modeEffects(ModeDisabled)},
+		Mode: AdminModeView{Requested: ModeDisabled, Authoritative: ModeDisabled, Effects: modeEffects(ModeDisabled), AutoReadiness: AdminAutoReadiness{Blockers: []AdminAutoReadinessBlocker{{
+			Code: "allowlist_unreviewed", Message: "Charlie is not connected or active.", NextAction: "Connect Charlie and review its MCP disclosure before configuring automation.",
+		}}}},
 	}
 }
 
@@ -301,8 +352,39 @@ func safeAdminMode(row sqlc.CharlieConnection) AdminModeView {
 		Revision: row.VerifiedModeRevision, EmergencyDisabled: row.EmergencyDisabled,
 		DisablePending:   requested == ModeDisabled && verified != ModeDisabled,
 		DisclosureDigest: row.DisclosureDigest, AcknowledgedDisclosureDigest: row.AcknowledgedDisclosureDigest,
-		Effects: modeEffects(EffectiveMode(requested, verified, row.EmergencyDisabled)),
+		Effects: modeEffects(EffectiveMode(requested, verified, row.EmergencyDisabled)), AutoReadiness: AdminAutoReadiness{Blockers: []AdminAutoReadinessBlocker{}},
 	}
+}
+
+func (s *AdminService) enrichMode(ctx context.Context, view AdminModeView) AdminModeView {
+	prerequisites, err := s.modePrerequisites(ctx)
+	view.AutoReadiness = adminAutoReadiness(prerequisites, err)
+	return view
+}
+
+func adminAutoReadiness(prerequisites ModePrerequisites, err error) AdminAutoReadiness {
+	result := AdminAutoReadiness{Blockers: []AdminAutoReadinessBlocker{}}
+	add := func(code, message, next string) {
+		result.Blockers = append(result.Blockers, AdminAutoReadinessBlocker{Code: code, Message: message, NextAction: next})
+	}
+	if err != nil {
+		add("allowlist_unreviewed", "Automation readiness could not be verified.", "Keep Charlie in read-only or approval mode and rerun diagnostics.")
+		return result
+	}
+	if !prerequisites.DisclosureAcknowledged {
+		add("disclosure_unacknowledged", "The current MCP capability disclosure is not acknowledged.", "Rediscover the MCP catalog and acknowledge its exact disclosure digest.")
+	}
+	if !prerequisites.AutomationIdentityReady {
+		add("automation_identity_unconfigured", "The dedicated Charlie automation service identity is disabled.", "Enable the service identity only after reviewing its exact product permissions.")
+	}
+	if !prerequisites.AutomationAllowlistReady {
+		add("allowlist_unreviewed", "Charlie has no centrally reviewed auto-eligible capability for this integration revision.", "Review and allowlist an exact capability in Charlie; an empty allowlist can never enable automation.")
+	}
+	if !prerequisites.AutomationTargetReady {
+		add("target_grants_missing", "The automation identity has no exact global target permission from the auto-eligible catalog.", "Grant one reviewed resource and verb; wildcard and scoped grants do not qualify.")
+	}
+	result.Ready = len(result.Blockers) == 0
+	return result
 }
 
 func modeEffects(mode Mode) []string {
@@ -375,8 +457,9 @@ func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
 
 func adminInstallSpec(row sqlc.CharlieConnection) AgentInstallSpec {
 	return AgentInstallSpec{
-		InstallationID: row.InstallationID, ConnectionID: row.ID, LogicalAgentID: row.LogicalAgentID,
-		CentralURL: row.CentralUrl, ChartReference: row.ChartReference, ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest,
+		InstallationID: row.InstallationID, ConnectionID: row.ID, LogicalAgentID: row.LogicalAgentID, DeploymentID: row.DeploymentID,
+		OnboardingPackageID: row.OnboardingPackageID,
+		CentralURL:          row.CentralUrl, ChartReference: row.ChartReference, ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest,
 		ImageReference: row.ImageReference, ImageDigest: row.ImageDigest, SecretPrefix: row.AgentSecretName, DisclosureDigest: row.DisclosureDigest,
 		SecretIntegrityHMAC: row.AgentSecretHmac, ReplicaCount: int(row.ReplicaCount),
 	}
@@ -541,6 +624,7 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 		return AdminModeView{}, loadErr
 	}
 	view := safeAdminMode(connection)
+	view = s.enrichMode(ctx, view)
 	if remotePending {
 		view.DisablePending = true
 	}
@@ -560,7 +644,7 @@ func (s *AdminService) AcknowledgeDisclosure(ctx context.Context, digest string)
 	if err != nil {
 		return AdminModeView{}, err
 	}
-	return safeAdminMode(connection), nil
+	return s.enrichMode(ctx, safeAdminMode(connection)), nil
 }
 
 func (s *AdminService) modePrerequisites(ctx context.Context) (ModePrerequisites, error) {
@@ -572,11 +656,27 @@ func (s *AdminService) modePrerequisites(ctx context.Context) (ModePrerequisites
 	if err != nil {
 		return ModePrerequisites{}, err
 	}
-	return ModePrerequisites{
-		DisclosureAcknowledged:   connection.DisclosureDigest != "" && connection.AcknowledgedDisclosureDigest == connection.DisclosureDigest,
-		AutomationIdentityReady:  enabled,
-		AutomationAllowlistReady: grants,
-	}, nil
+	prerequisites := ModePrerequisites{
+		DisclosureAcknowledged:  connection.DisclosureDigest != "" && connection.AcknowledgedDisclosureDigest == connection.DisclosureDigest,
+		AutomationIdentityReady: enabled,
+		AutomationTargetReady:   grants,
+	}
+	if s.bridge == nil {
+		return prerequisites, ErrAdminUnavailable
+	}
+	status, err := s.bridge.AdminStatus(ctx)
+	if err != nil {
+		return prerequisites, err
+	}
+	for _, capability := range status.AutoAllowlist {
+		for _, descriptor := range WriteCapabilityCatalog() {
+			if capability == descriptor.Name && descriptor.AutoEligible {
+				prerequisites.AutomationAllowlistReady = true
+				return prerequisites, nil
+			}
+		}
+	}
+	return prerequisites, nil
 }
 
 func (s *AdminService) Automation(ctx context.Context) (AdminAutomationView, error) {
@@ -596,7 +696,113 @@ func (s *AdminService) Automation(ctx context.Context) (AdminAutomationView, err
 	for _, rule := range rules {
 		items = append(items, safeAdminTrigger(rule))
 	}
-	return AdminAutomationView{Rules: items, DefaultsRevision: 1, ServiceIdentityEnabled: identityEnabled}, nil
+	policies, err := s.actionPolicies(ctx, connection.ID)
+	if err != nil {
+		return AdminAutomationView{}, err
+	}
+	return AdminAutomationView{Rules: items, ActionPolicies: policies, DefaultsRevision: 1, ServiceIdentityEnabled: identityEnabled}, nil
+}
+
+func (s *AdminService) actionPolicies(ctx context.Context, connectionID uuid.UUID) ([]AdminActionPolicy, error) {
+	rows, err := s.queries.ListCharlieAutomationPolicies(ctx, connectionID)
+	if err != nil {
+		return nil, ErrAdminUnavailable
+	}
+	configured := make(map[string]sqlc.CharlieAutomationPolicy, len(rows))
+	for _, row := range rows {
+		configured[row.Capability] = row
+	}
+	central, centralState := map[string]struct{}{}, "unavailable"
+	if s.bridge != nil {
+		status, statusErr := s.bridge.AdminStatus(ctx)
+		if statusErr == nil {
+			centralState = "verified"
+			for _, capability := range status.AutoAllowlist {
+				central[capability] = struct{}{}
+			}
+		}
+	}
+	result := []AdminActionPolicy{}
+	for _, descriptor := range WriteCapabilityCatalog() {
+		if !descriptor.AutoEligible {
+			continue
+		}
+		policy := AdminActionPolicy{
+			Capability: descriptor.Name, Effect: string(descriptor.Effect), Risk: descriptor.Risk,
+			AutoEligible: true, CentralState: centralState, MaxActionsPerIncident: 1, MaxActionsPerWindow: 1,
+			BudgetWindowSeconds: 1800, CooldownSeconds: 1800,
+			ScopeSummary:  "live RBAC plus the exact session resource ID",
+			Preconditions: []string{"current disclosure and integration revision", "live product RBAC", "exact resource scope", "healthy safety budget and cooldown"},
+			Verification:  "the product adapter must verify the bounded result before success is recorded",
+			CircuitState:  "unknown",
+		}
+		_, policy.CentralAllowlisted = central[descriptor.Name]
+		if row, ok := configured[descriptor.Name]; ok {
+			policy.Enabled, policy.Revision = row.Enabled, row.Revision
+			policy.MaxActionsPerIncident, policy.MaxActionsPerWindow = row.MaxActionsPerIncident, row.MaxActionsPerWindow
+			policy.BudgetWindowSeconds, policy.CooldownSeconds = row.BudgetWindowSeconds, row.CooldownSeconds
+		}
+		result = append(result, policy)
+	}
+	return result, nil
+}
+
+func (s *AdminService) UpdateActionPolicy(ctx context.Context, capability string, input AdminActionPolicyInput) (AdminActionPolicy, error) {
+	capability = strings.TrimSpace(capability)
+	var descriptor *CapabilityDescriptor
+	for _, candidate := range WriteCapabilityCatalog() {
+		if candidate.Name == capability && candidate.AutoEligible {
+			copy := candidate
+			descriptor = &copy
+			break
+		}
+	}
+	if descriptor == nil || input.MaxActionsPerIncident < 1 || input.MaxActionsPerIncident > 100 ||
+		input.MaxActionsPerWindow < 1 || input.MaxActionsPerWindow > 100 ||
+		input.BudgetWindowSeconds < 60 || input.BudgetWindowSeconds > 86400 ||
+		input.CooldownSeconds < 30 || input.CooldownSeconds > 604800 {
+		return AdminActionPolicy{}, ErrAdminConflict
+	}
+	connection, err := s.connection(ctx)
+	if err != nil {
+		return AdminActionPolicy{}, err
+	}
+	if input.Enabled {
+		if s.bridge == nil {
+			return AdminActionPolicy{}, ErrAdminConflict
+		}
+		status, statusErr := s.bridge.AdminStatus(ctx)
+		if statusErr != nil {
+			return AdminActionPolicy{}, ErrAdminUnavailable
+		}
+		centrallyAllowed := false
+		for _, allowed := range status.AutoAllowlist {
+			if allowed == capability {
+				centrallyAllowed = true
+				break
+			}
+		}
+		if !centrallyAllowed {
+			return AdminActionPolicy{}, ErrAdminConflict
+		}
+	}
+	if _, err = s.queries.UpsertCharlieAutomationPolicy(ctx, sqlc.UpsertCharlieAutomationPolicyParams{
+		ConnectionID: connection.ID, Capability: capability, Enabled: input.Enabled,
+		MaxActionsPerIncident: input.MaxActionsPerIncident, MaxActionsPerWindow: input.MaxActionsPerWindow,
+		BudgetWindowSeconds: input.BudgetWindowSeconds, CooldownSeconds: input.CooldownSeconds,
+	}); err != nil {
+		return AdminActionPolicy{}, ErrAdminUnavailable
+	}
+	policies, err := s.actionPolicies(ctx, connection.ID)
+	if err != nil {
+		return AdminActionPolicy{}, err
+	}
+	for _, policy := range policies {
+		if policy.Capability == capability {
+			return policy, nil
+		}
+	}
+	return AdminActionPolicy{}, ErrAdminConflict
 }
 
 func (s *AdminService) ListTriggerEvents(ctx context.Context, state string, offset, limit int32) ([]AdminTriggerEventView, error) {
@@ -900,7 +1106,7 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 	checked := now.Format(time.RFC3339)
 	checks := []AdminDiagnosticCheck{}
 	add := func(id, label, state, summary string) {
-		checks = append(checks, AdminDiagnosticCheck{ID: id, Label: label, State: state, Summary: summary, CheckedAt: checked})
+		checks = append(checks, AdminDiagnosticCheck{ID: id, Label: label, State: state, Summary: summary, NextAction: diagnosticNextAction(id, state), CheckedAt: checked})
 	}
 	connection, connectionErr := s.connection(ctx)
 	if connectionErr != nil {
@@ -966,17 +1172,7 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 		artifactState = "degraded"
 	}
 	add("oci_artifacts", "OCI chart and image", artifactState, "Argo application and immutable artifact status are checked locally and through the agent.")
-	credentialState := "unknown"
-	credentialSummary := "Credential expiry is not exposed by the current agent status contract."
-	if connection.LastRotatedAt.Valid {
-		expiry := connection.LastRotatedAt.Time.Add(90 * 24 * time.Hour)
-		credentialSummary = "Last local rotation implies expiry no later than " + expiry.UTC().Format(time.RFC3339) + "."
-		if expiry.After(now.Add(7 * 24 * time.Hour)) {
-			credentialState = "healthy"
-		} else {
-			credentialState = "degraded"
-		}
-	}
+	credentialState, credentialSummary := credentialExpiryDiagnostic(connection, now)
 	add("credential_expiry", "Certificate and credential expiry", credentialState, credentialSummary)
 	overall := "healthy"
 	for _, check := range checks {
@@ -989,6 +1185,55 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 		}
 	}
 	return AdminDiagnosticsView{Overall: overall, Checks: checks, CorrelationID: correlationID}, nil
+}
+
+func diagnosticNextAction(id, state string) string {
+	if state == "healthy" {
+		return "No operator action is required."
+	}
+	actions := map[string]string{
+		"local_config":        "Verify the signed onboarding package and local Charlie configuration, then rerun diagnostics.",
+		"product_bridge_mtls": "Check the Charlie agent pods and Product Bridge Service/TLS trust, then rerun diagnostics.",
+		"agent_primary":       "Inspect the Argo application and agent StatefulSet; restore at least one ready replica.",
+		"agent_standby":       "Restore the configured standby replica before enabling approval or automation.",
+		"central_via_agent":   "Check agent egress to the configured Charlie endpoint; do not add direct server egress.",
+		"leader_epoch":        "Confirm one elected agent leader and a current fencing epoch before permitting writes.",
+		"route_rag":           "Verify the Charlie route and product-version knowledge release from Charlie administration.",
+		"mcp_tls_discovery":   "Rediscover the MCP catalog and acknowledge the exact new disclosure digest.",
+		"oci_artifacts":       "Reconcile the Argo application using the immutable chart and image digests from Charlie OCI.",
+		"credential_expiry":   "Rotate the Charlie agent credentials and certificates before they expire, then verify the new status.",
+	}
+	if action := actions[id]; action != "" {
+		return action
+	}
+	return "Keep Charlie in read-only or disabled mode and rerun diagnostics after correcting this boundary."
+}
+
+// credentialExpiryDiagnostic uses the exact signed onboarding expiries already
+// persisted with the connection. Inferring a nominal lifetime from the last
+// rotation time hides short-lived artifact credentials and reports "unknown"
+// immediately after a valid first install.
+func credentialExpiryDiagnostic(connection sqlc.CharlieConnection, now time.Time) (string, string) {
+	certificate := connection.CertificateExpiresAt.UTC()
+	artifact := connection.ArtifactCredentialExpiresAt.UTC()
+	if certificate.IsZero() || artifact.IsZero() {
+		return "unknown", "Exact certificate or artifact credential expiry metadata is unavailable."
+	}
+	earliest := certificate
+	kind := "certificate"
+	if artifact.Before(earliest) {
+		earliest = artifact
+		kind = "artifact credential"
+	}
+	state := "healthy"
+	if !earliest.After(now.UTC().Add(7 * 24 * time.Hour)) {
+		state = "degraded"
+	}
+	condition := "expires"
+	if !earliest.After(now.UTC()) {
+		condition = "expired"
+	}
+	return state, fmt.Sprintf("The earliest active %s %s at %s.", kind, condition, earliest.Format(time.RFC3339))
 }
 
 func normalizeDigest(value string) string {

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import type { KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { EmptyState, StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SafeMarkdown, safeLink } from "@/components/charlie/safe-markdown";
 import { CharlieMessageParts } from "@/components/charlie/message-parts";
 import { useRouter, useSearchParams } from "@/lib/navigation";
@@ -23,6 +24,7 @@ import {
   listCharlieFindings,
   listCharlieSessions,
   transitionCharlieFinding,
+  type CharlieApproval,
 } from "@/lib/api/charlie";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -67,7 +69,7 @@ function CharlieHub() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Charlie</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-foreground/70">
           Conversations, investigations, findings, and explicitly authorized
           actions.
         </p>
@@ -92,7 +94,7 @@ function CharlieHub() {
               "min-h-11 border-b-2 px-4 py-2 text-sm capitalize transition-colors motion-reduce:transition-none",
               tab === t
                 ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground",
+                : "border-transparent text-foreground/70",
             )}
           >
             {t}
@@ -115,12 +117,16 @@ function CharlieHub() {
           <Investigations
             selected={params.get("incident")}
             onSelect={(id) => set({ incident: id })}
+            params={params}
+            set={set}
           />
         )}
         {tab === "findings" && (
           <Findings
             selected={params.get("finding")}
             onSelect={(id) => set({ finding: id })}
+            params={params}
+            set={set}
           />
         )}
         {tab === "approvals" && (
@@ -129,6 +135,45 @@ function CharlieHub() {
       </div>
     </div>
   );
+}
+
+function FilterField({
+  label,
+  value,
+  onChange,
+  options,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options?: string[];
+  type?: "text" | "date";
+}) {
+  return (
+    <label className="min-w-36 space-y-1 text-xs">
+      <span className="text-foreground/70">{label}</span>
+      {options ? (
+        <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded border bg-background px-2">
+          <option value="">All</option>
+          {options.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
+        </select>
+      ) : (
+        <input type={type} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded border bg-background px-2" />
+      )}
+    </label>
+  );
+}
+
+function resourceHref(type: string, id: string): string {
+  switch (type) {
+    case "installation": return `/dashboard/clusters/${encodeURIComponent(id)}`;
+    case "agent_connection_record": return `/dashboard/agents?connection=${encodeURIComponent(id)}`;
+    case "alert": return `/dashboard/alerting?alert=${encodeURIComponent(id)}`;
+    case "backup": return `/dashboard/backups?backup=${encodeURIComponent(id)}`;
+    case "self_management_application": return "/dashboard/settings/gitops";
+    default: return `/dashboard/search?q=${encodeURIComponent(id)}`;
+  }
 }
 
 function QueryFailure({ label, retry }: { label: string; retry?: () => void }) {
@@ -207,23 +252,55 @@ function Conversations({
 function Investigations({
   selected,
   onSelect,
+  params,
+  set,
 }: {
   selected: string | null;
   onSelect: (id: string) => void;
+  params: URLSearchParams;
+  set: (updates: Record<string, string | undefined>) => void;
 }) {
   const q = useQuery({
     queryKey: queryKeys.charlie.sessions,
     queryFn: listCharlieSessions,
     retry: false,
   });
+  const findings = useQuery({
+    queryKey: queryKeys.charlie.findings,
+    queryFn: listCharlieFindings,
+    retry: false,
+  });
   if (q.isError)
     return (
       <QueryFailure label="Investigations" retry={() => void q.refetch()} />
     );
-  const rows = q.data?.filter((s) => s.visibility === "incident") ?? [];
+  const status = params.get("status") ?? "";
+  const severity = params.get("severity") ?? "";
+  const cluster = params.get("cluster") ?? "";
+  const source = params.get("source") ?? "";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  const rows = (q.data?.filter((s) => s.visibility === "incident") ?? [])
+    .map((session) => ({ session, finding: findings.data?.find((finding) => finding.sessionId === session.id) }))
+    .filter(({ session, finding }) =>
+      (!status || session.state === status) &&
+      (!severity || finding?.severity === severity) &&
+      (!cluster || finding?.affectedResource.id.toLowerCase().includes(cluster.toLowerCase())) &&
+      (!source || session.source === source || finding?.source === source) &&
+      (!from || !session.createdAt || session.createdAt >= from) &&
+      (!to || !session.createdAt || session.createdAt.slice(0, 10) <= to));
+  const detail = rows.find(({ session }) => session.id === selected);
   return rows.length ? (
-    <div className="space-y-2">
-      {rows.map((s) => (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3 rounded-lg border p-3" aria-label="Investigation filters">
+        <FilterField label="Investigation status" value={status} options={["active", "waiting_approval", "completed", "failed", "aborted"]} onChange={(value) => set({ status: value || undefined })} />
+        <FilterField label="Investigation severity" value={severity} options={["medium", "warning", "high", "critical"]} onChange={(value) => set({ severity: value || undefined })} />
+        <FilterField label="Agent connection record" value={cluster} onChange={(value) => set({ cluster: value || undefined })} />
+        <FilterField label="Investigation source" value={source} options={["event", "user"]} onChange={(value) => set({ source: value || undefined })} />
+        <FilterField type="date" label="From date" value={from} onChange={(value) => set({ from: value || undefined })} />
+        <FilterField type="date" label="To date" value={to} onChange={(value) => set({ to: value || undefined })} />
+      </div>
+      {rows.map(({ session: s, finding }) => (
         <button
           key={s.id}
           onClick={() => onSelect(s.id)}
@@ -233,11 +310,29 @@ function Investigations({
           )}
         >
           <b>{s.intent}</b>
-          <span className="ml-2 text-xs text-muted-foreground">
+          <span className="ml-2 text-xs text-foreground/70">
             {s.resourceScopeSummary}
           </span>
+          {finding && <span className="ml-2"><StatusBadge status={finding.severity} /></span>}
         </button>
       ))}
+      {detail && (
+        <section className="rounded-lg border p-4" aria-label="Investigation detail">
+          <h2 className="font-medium">{detail.session.intent}</h2>
+          {detail.finding && (
+            <>
+              <Link className="mt-2 inline-block text-sm text-primary underline" href={resourceHref(detail.finding.affectedResource.type, detail.finding.affectedResource.id)}>
+                Open originating {detail.finding.affectedResource.type.replaceAll("_", " ")}
+              </Link>
+              <p className="mt-3 text-sm">Repeated {detail.finding.repeatCount ?? 1} time{(detail.finding.repeatCount ?? 1) === 1 ? "" : "s"}.</p>
+              <ol className="mt-2 border-l pl-4 text-xs text-foreground/70" aria-label="Investigation timeline">
+                {detail.finding.createdAt && <li>First observed {new Date(detail.finding.createdAt).toLocaleString()}</li>}
+                {detail.finding.updatedAt && <li>Last observed {new Date(detail.finding.updatedAt).toLocaleString()}</li>}
+              </ol>
+            </>
+          )}
+        </section>
+      )}
     </div>
   ) : (
     <EmptyState
@@ -250,9 +345,13 @@ function Investigations({
 function Findings({
   selected,
   onSelect,
+  params,
+  set,
 }: {
   selected: string | null;
   onSelect: (id: string) => void;
+  params: URLSearchParams;
+  set: (updates: Record<string, string | undefined>) => void;
 }) {
   const qc = useQueryClient();
   const user = useAuthStore((state) => state.user);
@@ -280,10 +379,35 @@ function Findings({
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.findings }),
   });
   if (q.isError) return <QueryFailure label="Findings" />;
+  const status = params.get("status") ?? "";
+  const severity = params.get("severity") ?? "";
+  const source = params.get("source") ?? "";
+  const resource = params.get("resource") ?? "";
+  const block = params.get("block") ?? "";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  const rows = q.data?.filter((finding) =>
+    (!status || finding.state === status) &&
+    (!severity || finding.severity === severity) &&
+    (!source || finding.source === source) &&
+    (!resource || `${finding.affectedResource.type}:${finding.affectedResource.id}`.toLowerCase().includes(resource.toLowerCase())) &&
+    (!block || finding.reasonNoAction === block) &&
+    (!from || !finding.updatedAt || finding.updatedAt >= from) &&
+    (!to || !finding.updatedAt || finding.updatedAt.slice(0, 10) <= to));
   return (
-    <div className="grid gap-4 md:grid-cols-[20rem_1fr]">
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3 rounded-lg border p-3" aria-label="Finding filters">
+        <FilterField label="Finding status" value={status} options={["open", "acknowledged", "dismissed", "resolved", "expired"]} onChange={(value) => set({ status: value || undefined })} />
+        <FilterField label="Finding severity" value={severity} options={["medium", "warning", "high", "critical"]} onChange={(value) => set({ severity: value || undefined })} />
+        <FilterField label="Finding source" value={source} onChange={(value) => set({ source: value || undefined })} />
+        <FilterField label="Affected resource" value={resource} onChange={(value) => set({ resource: value || undefined })} />
+        <FilterField label="Execution block" value={block} onChange={(value) => set({ block: value || undefined })} />
+        <FilterField type="date" label="Finding from date" value={from} onChange={(value) => set({ from: value || undefined })} />
+        <FilterField type="date" label="Finding to date" value={to} onChange={(value) => set({ to: value || undefined })} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-[20rem_1fr]">
       <div className="space-y-2">
-        {q.data?.map((f) => (
+        {rows?.map((f) => (
           <button
             key={f.id}
             onClick={() => onSelect(f.id)}
@@ -294,11 +418,12 @@ function Findings({
           >
             <div className="flex justify-between">
               <b className="text-sm">{f.title}</b>
-              <StatusBadge status={f.severity} />
+              <StatusBadge status={f.severity === "high" ? "error" : f.severity} label={f.severity} />
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-foreground/70">
               {f.affectedResource.type}: {f.affectedResource.id}
             </p>
+            <p className="text-xs text-foreground/70">{f.repeatCount ?? 1} occurrence{(f.repeatCount ?? 1) === 1 ? "" : "s"}</p>
           </button>
         ))}
       </div>
@@ -346,7 +471,7 @@ function Findings({
                         className="rounded border p-3 text-sm"
                       >
                         <b>{e.label.slice(0, 160)}</b>
-                        <p className="mt-1 text-muted-foreground">
+                        <p className="mt-1 text-foreground/70">
                           {e.summary.slice(0, 500)}
                         </p>
                         {href && (
@@ -456,7 +581,7 @@ function Findings({
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-foreground/70">
                   Requires charlie:read to update finding lifecycle.
                 </p>
               )}
@@ -470,6 +595,7 @@ function Findings({
           )
         )}
       </div>
+      </div>
     </div>
   );
 }
@@ -477,16 +603,20 @@ function Approvals({ selected }: { selected: string | null }) {
   const qc = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const canApprove = can(user, "charlie", "approve");
+  const [rationales, setRationales] = useState<Record<string, string>>({});
+  const [confirm, setConfirm] = useState<{ approval: CharlieApproval; decision: "approve" | "deny" }>();
   const q = useQuery({
     queryKey: queryKeys.charlie.approvals,
     queryFn: listCharlieApprovals,
     retry: false,
   });
   const decide = useMutation({
-    mutationFn: ({ id, d }: { id: string; d: "approve" | "deny" }) =>
-      decideCharlieApproval(id, d),
-    onSuccess: () =>
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.approvals }),
+    mutationFn: ({ id, d, rationale }: { id: string; d: "approve" | "deny"; rationale: string }) =>
+      decideCharlieApproval(id, d, rationale),
+    onSuccess: () => {
+      setConfirm(undefined);
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.approvals });
+    },
   });
   if (q.isError)
     return <QueryFailure label="Approvals" retry={() => void q.refetch()} />;
@@ -508,23 +638,35 @@ function Approvals({ selected }: { selected: string | null }) {
           <p className="mt-2 text-sm">
             {a.capability} on {a.target} · risk {a.risk}
           </p>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+            <div><dt className="text-foreground/70">Effect</dt><dd>{a.effect ?? "bounded write"}</dd></div>
+            <div><dt className="text-foreground/70">Required permission</dt><dd>{a.requiredPermission ?? "Exact target permission"}</dd></div>
+            <div><dt className="text-foreground/70">Expiry</dt><dd>{a.expiresAt ? new Date(a.expiresAt).toLocaleString() : "Not provided"}</dd></div>
+            <div><dt className="text-foreground/70">Eligibility</dt><dd>{a.eligible ? "Confirmed" : a.reason ?? "Not eligible"}</dd></div>
+          </dl>
           {a.eligible && a.state === "pending" && canApprove ? (
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 space-y-2">
+              <label className="block text-xs">
+                <span className="text-foreground/70">Rationale (optional)</span>
+                <textarea aria-label={`Rationale for ${a.title}`} maxLength={512} rows={2} value={rationales[a.id] ?? ""} onChange={(event) => setRationales((current) => ({ ...current, [a.id]: event.target.value }))} className="mt-1 w-full rounded border bg-background p-2" />
+              </label>
+              <div className="flex gap-2">
               <button
-                onClick={() => decide.mutate({ id: a.id, d: "approve" })}
+                onClick={() => setConfirm({ approval: a, decision: "approve" })}
                 className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground"
               >
-                Approve
+                Review approval
               </button>
               <button
-                onClick={() => decide.mutate({ id: a.id, d: "deny" })}
+                onClick={() => setConfirm({ approval: a, decision: "deny" })}
                 className="rounded border px-3 py-2 text-sm"
               >
-                Deny
+                Review denial
               </button>
+              </div>
             </div>
           ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-foreground/70">
               {!a.eligible
                 ? "Charlie did not confirm server-side eligibility."
                 : !canApprove
@@ -543,9 +685,19 @@ function Approvals({ selected }: { selected: string | null }) {
       )}
       {decide.isError && (
         <p role="alert" className="text-sm text-status-error">
-          The decision was not accepted. No action was executed.
+          {decide.error instanceof Error ? decide.error.message : "The decision was not accepted. No action was executed."}
         </p>
       )}
+      <ConfirmDialog
+        open={!!confirm}
+        onClose={() => setConfirm(undefined)}
+        onConfirm={() => confirm && decide.mutate({ id: confirm.approval.id, d: confirm.decision, rationale: rationales[confirm.approval.id] ?? "" })}
+        title={confirm?.decision === "approve" ? "Approve exact Charlie action" : "Deny exact Charlie action"}
+        description={confirm ? `${confirm.approval.capability} on ${confirm.approval.target}. No broader action is authorized.` : ""}
+        confirmText={confirm?.decision === "approve" ? "Approve exact action" : "Deny exact action"}
+        variant={confirm?.decision === "deny" ? "destructive" : undefined}
+        loading={decide.isPending}
+      />
     </div>
   );
 }
