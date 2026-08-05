@@ -24,3 +24,12 @@ func TestAgentEnrollmentReadinessIsIndependentFromExecutionActivation(t *testing
 		})
 	}
 }
+
+func TestModeStateUsesCharliesSignedIntegrationRevision(t *testing.T) {
+	state := modeStateFromBridge(AdminBridgeStatus{
+		EffectiveMode: "read_only", ProductEnabled: true, IntegrationRevision: "16", DisclosureDigest: "digest-a",
+	}, 2)
+	if state.Revision != 16 || state.Verified != ModeReadOnly || state.DisclosureDigest != "digest-a" {
+		t.Fatalf("central authority revision was not preserved: %+v", state)
+	}
+}

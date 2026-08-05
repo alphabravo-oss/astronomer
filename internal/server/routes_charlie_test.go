@@ -23,6 +23,32 @@ func (charlieEnabledSettings) GetPlatformSetting(_ context.Context, key string) 
 	return sqlc.PlatformSetting{Key: key, Value: json.RawMessage("true")}, nil
 }
 
+func TestAPIRequestTimeoutExemptsOnlyCharlieEventStreams(t *testing.T) {
+	handler := apiRequestTimeout(time.Second)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hasDeadline := r.Context().Deadline()
+		_ = json.NewEncoder(w).Encode(map[string]bool{"deadline": hasDeadline})
+	}))
+	for _, test := range []struct {
+		method, path string
+		deadline     bool
+	}{
+		{http.MethodGet, "/api/v1/charlie/sessions/session-a/events/", false},
+		{http.MethodGet, "/api/v1/charlie/sessions/session-a/history/", true},
+		{http.MethodPost, "/api/v1/charlie/sessions/session-a/events/", true},
+		{http.MethodGet, "/api/v1/clusters/", true},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(test.method, test.path, nil))
+		var response map[string]bool
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response["deadline"] != test.deadline {
+			t.Fatalf("%s %s deadline=%v, want %v", test.method, test.path, response["deadline"], test.deadline)
+		}
+	}
+}
+
 func TestCharlieAdminRoutesRejectNonAdminWithoutManagePermission(t *testing.T) {
 	jwt := auth.MustNewJWTManager("charlie-route-security-test-secret", 60)
 	token, err := jwt.GenerateAccessToken(uuid.New())

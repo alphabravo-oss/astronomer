@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
@@ -118,6 +119,12 @@ func modeStateFromBridge(status AdminBridgeStatus, revision int64) ModeState {
 	mode := Mode(status.EffectiveMode)
 	if !status.ProductEnabled || !validMode(mode) {
 		mode = ModeDisabled
+	}
+	// Charlie's integration revision is the authority revision signed into
+	// every action envelope. It may advance for catalog/disclosure changes as
+	// well as mode changes, so a product-local +1 counter is not equivalent.
+	if remoteRevision, err := strconv.ParseInt(strings.TrimSpace(status.IntegrationRevision), 10, 64); err == nil && remoteRevision > 0 {
+		revision = remoteRevision
 	}
 	return ModeState{Requested: mode, Verified: mode, Revision: revision, DisclosureDigest: status.DisclosureDigest, Active: status.ProductEnabled}
 }

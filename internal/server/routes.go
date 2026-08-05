@@ -359,6 +359,21 @@ type RouterDependencies struct {
 	SCIMTokenAdmin *handler.SCIMTokenAdminHandler
 }
 
+func apiRequestTimeout(duration time.Duration) func(http.Handler) http.Handler {
+	bounded := chimiddleware.Timeout(duration)
+	return func(next http.Handler) http.Handler {
+		timed := bounded(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimSuffix(r.URL.Path, "/")
+			if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v1/charlie/sessions/") && strings.HasSuffix(path, "/events") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timed.ServeHTTP(w, r)
+		})
+	}
+}
+
 type ArgoCDClusterProxyTokenQuerier interface {
 	GetArgoCDClusterProxyTokenByHash(ctx context.Context, tokenHash string) (sqlc.ArgocdClusterProxyToken, error)
 	TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error
@@ -496,9 +511,10 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
-		// REST-only timeout — does NOT apply to WS routes registered at the
-		// top level (see r.Get("/api/v1/ws/...") below).
-		r.Use(chimiddleware.Timeout(30 * time.Second))
+		// REST-only timeout. Charlie's authenticated event stream is explicitly
+		// exempt because chi's timeout writer cannot expose http.Flusher and
+		// would both break SSE and terminate healthy turns at 30 seconds.
+		r.Use(apiRequestTimeout(30 * time.Second))
 		// /bootstrap/ and /bootstrap/complete/ were removed when the server
 		// switched to the Rancher-style admin-on-first-boot model: the
 		// startup hook in cmd/server/main.go (auth.EnsureBootstrapAdmin)
