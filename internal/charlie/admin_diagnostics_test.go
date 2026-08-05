@@ -94,3 +94,25 @@ func TestDiagnosticNextActionIsFixedAndSafe(t *testing.T) {
 		t.Fatalf("healthy next action=%q", got)
 	}
 }
+
+func TestInactiveDiagnosticsAreExplicitAndNetworkQuiesced(t *testing.T) {
+	checks := inactiveDiagnosticChecks()
+	if len(checks) != 9 {
+		t.Fatalf("inactive diagnostics count=%d, want every remote/runtime check", len(checks))
+	}
+	seen := map[string]bool{}
+	for _, check := range checks {
+		if check.ID == "" || check.Label == "" || seen[check.ID] {
+			t.Fatalf("invalid or duplicate inactive diagnostic: %+v", check)
+		}
+		seen[check.ID] = true
+		if !strings.Contains(check.Summary, "no product-agent or central request") {
+			t.Fatalf("inactive diagnostic does not disclose network-quiesced behavior: %+v", check)
+		}
+	}
+	for _, required := range []string{"product_bridge_mtls", "agent_primary", "agent_standby", "central_via_agent", "leader_epoch", "route_rag", "mcp_tls_discovery", "oci_artifacts", "credential_expiry"} {
+		if !seen[required] {
+			t.Fatalf("missing inactive diagnostic %q", required)
+		}
+	}
+}

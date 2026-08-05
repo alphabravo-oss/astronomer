@@ -302,6 +302,25 @@ func TestApprovalAccessApprovesExactSignedActionOnce(t *testing.T) {
 	}
 }
 
+func TestApprovalAccessAcceptsExactApprovalUnderAutomationCeiling(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	store.connection.RequestedMode = string(ModeAuto)
+	store.connection.VerifiedMode = string(ModeAuto)
+	view, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", "human decision under automation ceiling")
+	if err != nil || view.State != "approved" || store.approval.State != "approved" || bridge.decides != 1 {
+		t.Fatalf("automation-ceiling approval = %+v, local=%s calls=%d err=%v", view, store.approval.State, bridge.decides, err)
+	}
+}
+
+func TestApprovalAccessRejectsApprovalBelowApprovalRequiredCeiling(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	store.connection.RequestedMode = string(ModeReadOnly)
+	store.connection.VerifiedMode = string(ModeReadOnly)
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", ""); err == nil || store.created != 0 || bridge.decides != 0 {
+		t.Fatalf("read-only approval reached authority: created=%d calls=%d err=%v", store.created, bridge.decides, err)
+	}
+}
+
 func TestApprovalAccessFailsClosedOnBridgeFailureAndMutation(t *testing.T) {
 	service, store, bridge, actorID := approvalAccessFixture(t)
 	bridge.fail = true

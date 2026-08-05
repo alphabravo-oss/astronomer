@@ -50,6 +50,14 @@ type FindingAlertPublisher interface {
 	PublishCharlieFinding(context.Context, FindingAlert) error
 }
 
+// BlockedFindingRecorder is the durable product-local boundary used by the
+// action guard. Implementations must commit the finding and its resource scope
+// before publishing an alert; a model response or in-memory recommendation is
+// never sufficient evidence that an operator can act on the finding.
+type BlockedFindingRecorder interface {
+	RecordBlocked(context.Context, FindingInput) (DurableFinding, error)
+}
+
 type FindingService struct {
 	store     FindingStore
 	publisher FindingAlertPublisher

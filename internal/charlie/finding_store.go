@@ -9,6 +9,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -51,7 +52,11 @@ func (s *DBFindingStore) UpsertBlockedFinding(ctx context.Context, input Finding
 	}
 	now := s.now().UTC()
 	row, err := s.queries.UpsertCharlieFinding(ctx, sqlc.UpsertCharlieFindingParams{
-		ConnectionID: connection.ID, CharlieFindingID: "local-" + fingerprint[:32],
+		// charlie_finding_id is globally unique for the connection while the
+		// partial fingerprint index deduplicates only active findings. A unique
+		// lifecycle suffix lets a resolved/dismissed/expired diagnosis recur as a
+		// new active finding without colliding with its retained history.
+		ConnectionID: connection.ID, CharlieFindingID: "local-" + fingerprint[:24] + "-" + strings.ReplaceAll(uuid.NewString(), "-", ""),
 		SessionID: pgtype.UUID{}, Source: "system", Severity: input.Severity,
 		EffectiveMode: string(input.Mode), ExecutionBlockCode: string(recommendation.ExecutionBlockCode),
 		DedupeFingerprint: fingerprint,

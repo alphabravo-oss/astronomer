@@ -609,11 +609,22 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 	if emergency {
 		state, err = s.mode.EmergencyDisable(ctx, actor.String())
 	} else {
-		prerequisites, prerequisitesErr := s.modePrerequisites(ctx)
-		if prerequisitesErr != nil {
-			return AdminModeView{}, prerequisitesErr
+		connection, connectionErr := s.connection(ctx)
+		if connectionErr != nil {
+			return AdminModeView{}, connectionErr
 		}
-		state, err = s.mode.Request(ctx, desired, revision, prerequisites)
+		if connection.EmergencyDisabled {
+			if desired != ModeDisabled || revision != connection.VerifiedModeRevision {
+				return AdminModeView{}, fmt.Errorf("%w: clear emergency disable with the exact disabled revision before requesting authority", ErrAdminConflict)
+			}
+			state, err = s.mode.ClearEmergencyDisable(ctx, actor.String())
+		} else {
+			prerequisites, prerequisitesErr := s.modePrerequisites(ctx)
+			if prerequisitesErr != nil {
+				return AdminModeView{}, prerequisitesErr
+			}
+			state, err = s.mode.Request(ctx, desired, revision, prerequisites)
+		}
 	}
 	remotePending := emergency && state.EmergencyDisabled && err != nil && strings.Contains(err.Error(), "remote confirmation is pending")
 	if err != nil && !remotePending {
@@ -1117,6 +1128,17 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 		return AdminDiagnosticsView{Overall: "unavailable", Checks: checks, CorrelationID: correlationID}, nil
 	}
 	add("local_config", "Local database and configuration", "healthy", "Local Charlie metadata is readable and contains no runtime credentials in this response.")
+	if !connection.Active || connection.EmergencyDisabled || EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled) == ModeDisabled {
+		// The disabled diagnostics path is network-quiesced. It remains available
+		// as a local status surface but must not initiate a request to the product
+		// agent, its bridge, Charlie central, or the Kubernetes installer. An
+		// enabled connection's separate signed control heartbeat is not a
+		// diagnostics request and is governed by the runtime lifecycle gate.
+		for _, check := range inactiveDiagnosticChecks() {
+			add(check.ID, check.Label, "inactive", check.Summary)
+		}
+		return AdminDiagnosticsView{Overall: "inactive", Checks: checks, CorrelationID: correlationID}, nil
+	}
 	bridgeStatus, bridgeErr := AdminBridgeStatus{}, ErrAdminUnavailable
 	if s.bridge != nil {
 		bridgeStatus, bridgeErr = s.bridge.AdminStatus(ctx)
@@ -1187,9 +1209,27 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 	return AdminDiagnosticsView{Overall: overall, Checks: checks, CorrelationID: correlationID}, nil
 }
 
+func inactiveDiagnosticChecks() []AdminDiagnosticCheck {
+	const summary = "Not run while Charlie is disabled; no product-agent or central request was made."
+	return []AdminDiagnosticCheck{
+		{ID: "product_bridge_mtls", Label: "Product Bridge mTLS", Summary: summary},
+		{ID: "agent_primary", Label: "Agent primary replica", Summary: summary},
+		{ID: "agent_standby", Label: "Agent standby replica", Summary: summary},
+		{ID: "central_via_agent", Label: "Central through agent", Summary: summary},
+		{ID: "leader_epoch", Label: "Leader and fencing epoch", Summary: summary},
+		{ID: "route_rag", Label: "Route and RAG readiness", Summary: summary},
+		{ID: "mcp_tls_discovery", Label: "MCP TLS and discovery digest", Summary: summary},
+		{ID: "oci_artifacts", Label: "OCI chart and image", Summary: summary},
+		{ID: "credential_expiry", Label: "Certificate and credential expiry", Summary: summary},
+	}
+}
+
 func diagnosticNextAction(id, state string) string {
 	if state == "healthy" {
 		return "No operator action is required."
+	}
+	if state == "inactive" {
+		return "Enable Charlie explicitly before running connectivity diagnostics; no request is sent while disabled."
 	}
 	actions := map[string]string{
 		"local_config":        "Verify the signed onboarding package and local Charlie configuration, then rerun diagnostics.",

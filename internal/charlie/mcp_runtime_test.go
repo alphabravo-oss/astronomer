@@ -23,6 +23,12 @@ type mcpRuntimeFakeQueries struct {
 	role       sqlc.GlobalRole
 }
 
+type mcpRuntimeFindingRecorder struct{}
+
+func (mcpRuntimeFindingRecorder) RecordBlocked(context.Context, FindingInput) (DurableFinding, error) {
+	return DurableFinding{}, nil
+}
+
 func (f *mcpRuntimeFakeQueries) CreateAuditLogV1(context.Context, sqlc.CreateAuditLogV1Params) error {
 	return nil
 }
@@ -119,7 +125,7 @@ func mcpRuntimeFixture(t *testing.T) (*MCPRuntime, *mcpRuntimeFakeQueries) {
 			PrivateKey: filepath.Join(directory, "tls.key"), ClientCA: filepath.Join(directory, "ca.crt"),
 		},
 		ActionSigningKeyFile: filepath.Join(directory, "action.key"), LeaseOwner: "server-test",
-		ReceiptCipher: receiptTestCipher{},
+		ReceiptCipher: receiptTestCipher{}, FindingRecorder: mcpRuntimeFindingRecorder{},
 	}, gateFeature(true), queries, bindings, DenyAutoSafety{}, UnavailableCapabilityExecutor{}, nil)
 	if err != nil {
 		t.Fatal(err)

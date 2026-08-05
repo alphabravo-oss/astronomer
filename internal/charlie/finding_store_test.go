@@ -2,6 +2,7 @@ package charlie
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ type findingStoreFake struct {
 	prior       sqlc.CharlieFinding
 	priorErr    error
 	upsert      sqlc.UpsertCharlieFindingParams
+	upserts     []sqlc.UpsertCharlieFindingParams
 	row         sqlc.CharlieFinding
 	resource    sqlc.AddCharlieFindingResourceParams
 	resourceErr error
@@ -33,6 +35,7 @@ func (f *findingStoreFake) GetActiveCharlieFindingByFingerprint(context.Context,
 }
 func (f *findingStoreFake) UpsertCharlieFinding(_ context.Context, p sqlc.UpsertCharlieFindingParams) (sqlc.CharlieFinding, error) {
 	f.upsert = p
+	f.upserts = append(f.upserts, p)
 	return f.row, nil
 }
 
@@ -89,5 +92,33 @@ func TestDBFindingStoreInactiveConnectionCreatesNothing(t *testing.T) {
 	_, err := store.UpsertBlockedFinding(context.Background(), FindingInput{InstallationID: connection.InstallationID.String()}, FindingRecommendation{}, stableFingerprint("x"))
 	if err == nil || fake.upsert.ConnectionID != uuid.Nil {
 		t.Fatal("emergency-disabled integration persisted a finding")
+	}
+}
+
+func TestDBFindingStoreUsesUniqueLifecycleIDForRecurringClosedDiagnosis(t *testing.T) {
+	connection := readySessionConnection()
+	fingerprint := stableFingerprint("recurring")
+	fake := &findingStoreFake{
+		connection: connection, priorErr: pgx.ErrNoRows,
+		row: sqlc.CharlieFinding{ID: uuid.New(), DedupeFingerprint: fingerprint, Status: "open", RepeatCount: 1, UpdatedAt: time.Now()},
+	}
+	store, _ := NewDBFindingStore(fake)
+	input := FindingInput{InstallationID: connection.InstallationID.String(), ResourceType: "management_component", ResourceID: "server", Severity: "warning", Mode: ModeReadOnly}
+	recommendation := FindingRecommendation{ExecutionBlockCode: DeniedReadOnlyWrite}
+	if _, err := store.UpsertBlockedFinding(context.Background(), input, recommendation, fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a retained closed lifecycle: no active fingerprint row is found,
+	// so the next occurrence must propose a different globally unique central ID.
+	if _, err := store.UpsertBlockedFinding(context.Background(), input, recommendation, fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.upserts) != 2 || fake.upserts[0].CharlieFindingID == fake.upserts[1].CharlieFindingID {
+		t.Fatalf("recurring finding reused globally unique lifecycle ID: %+v", fake.upserts)
+	}
+	for _, value := range fake.upserts {
+		if len(value.CharlieFindingID) > 128 || !strings.HasPrefix(value.CharlieFindingID, "local-"+fingerprint[:24]+"-") {
+			t.Fatalf("invalid local finding lifecycle ID %q", value.CharlieFindingID)
+		}
 	}
 }

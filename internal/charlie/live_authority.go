@@ -101,7 +101,8 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 	if err != nil {
 		return AuthorityInput{}, err
 	}
-	if err := a.requireWriteResource(ctx, session.ID, capability, arguments); err != nil {
+	targetResource, err := a.requireWriteResource(ctx, session.ID, capability, arguments)
+	if err != nil {
 		return AuthorityInput{}, err
 	}
 	clusterID, err := targetCluster(arguments)
@@ -123,9 +124,12 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		Effect: capability.Effect, Destructive: capability.Destructive,
 		DisclosureCurrent: normalizeDigest(connection.DisclosureDigest) != "" && normalizeDigest(connection.DisclosureDigest) == normalizeDigest(action.DisclosureDigest) &&
 			connection.VerifiedModeRevision == action.ModeRevision && action.PolicyRevision == action.ModeRevision,
-		LiveAuthorized: targetAllowed && charlieAllowed,
-		AutoEligible:   capability.AutoEligible,
-		Allowlisted:    safety.Allowlisted, ScopeAllowed: safety.ScopeAllowed && !capability.ManagedTargetAccess,
+		LiveAuthorized:      targetAllowed && charlieAllowed,
+		ApprovalRequested:   action.ApprovalID != "",
+		FindingResourceType: targetResource.ResourceType,
+		FindingResourceID:   targetResource.ResourceID,
+		AutoEligible:        capability.AutoEligible,
+		Allowlisted:         safety.Allowlisted, ScopeAllowed: safety.ScopeAllowed && !capability.ManagedTargetAccess,
 		BudgetAvailable: safety.BudgetAvailable, CooldownClear: safety.CooldownClear,
 		CircuitClosed: safety.CircuitClosed, PreconditionsMet: safety.PreconditionsMet,
 		IdempotencyKeyPresent: action.IdempotencyKey == action.ActionID,
@@ -134,10 +138,10 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		AmbiguousPriorAttempt: safety.AmbiguousPriorAttempt,
 	}
 
-	if mode == ModeAuto {
+	if mode == ModeAuto && !input.ApprovalRequested {
 		input.LiveAuthorized = input.LiveAuthorized && delegation.PrincipalType == "service" && delegation.PrincipalID == a.automationID
 	}
-	if mode == ModeApproval && action.ApprovalID != "" {
+	if (mode == ModeApproval || mode == ModeAuto) && input.ApprovalRequested {
 		approval, approvalErr := a.queries.GetActiveCharlieActionApproval(ctx, sqlc.GetActiveCharlieActionApprovalParams{CharlieActionID: action.ActionID, ApprovalID: action.ApprovalID})
 		if approvalErr == nil && exactApproval(approval, connection, session, action, capability, arguments) {
 			approverBindings, active, bindingErr := a.bindings.CurrentBindings(ctx, approval.ApproverID)
@@ -161,16 +165,20 @@ func (a *ProductLiveAuthority) Commit(ctx context.Context, action ActionEnvelope
 	if err != nil {
 		return err
 	}
-	if err := a.requireWriteResource(ctx, session.ID, capability, arguments); err != nil {
+	if _, err := a.requireWriteResource(ctx, session.ID, capability, arguments); err != nil {
 		return err
 	}
+	approvalPath := facts.Mode == ModeApproval || facts.Mode == ModeAuto && facts.ApprovalRequested
+	commitMode := facts.Mode
+	if approvalPath {
+		commitMode = ModeApproval
+	}
 	if committer, ok := a.safety.(liveWriteSafetyCommitter); ok {
-		if err := committer.CommitWrite(ctx, action, capability, arguments, facts.Mode); err != nil {
+		if err := committer.CommitWrite(ctx, action, capability, arguments, commitMode); err != nil {
 			return err
 		}
 	}
-	switch facts.Mode {
-	case ModeApproval:
+	if approvalPath {
 		if action.ApprovalID == "" {
 			return fmt.Errorf("exact Charlie approval is required")
 		}
@@ -185,6 +193,8 @@ func (a *ProductLiveAuthority) Commit(ctx context.Context, action ActionEnvelope
 			FencingEpoch: action.FencingEpoch, ResourceID: resourceID,
 		})
 		return err
+	}
+	switch facts.Mode {
 	case ModeAuto:
 		if _, ok := a.safety.(liveWriteSafetyCommitter); ok {
 			return nil
@@ -195,24 +205,24 @@ func (a *ProductLiveAuthority) Commit(ctx context.Context, action ActionEnvelope
 	}
 }
 
-func (a *ProductLiveAuthority) requireWriteResource(ctx context.Context, sessionID uuid.UUID, capability CapabilityDescriptor, arguments map[string]json.RawMessage) error {
+func (a *ProductLiveAuthority) requireWriteResource(ctx context.Context, sessionID uuid.UUID, capability CapabilityDescriptor, arguments map[string]json.RawMessage) (sqlc.CharlieSessionResource, error) {
 	if capability.Effect != EffectWrite {
-		return nil
+		return sqlc.CharlieSessionResource{}, nil
 	}
 	resourceID, err := requiredWriteResourceID(arguments)
 	if err != nil {
-		return err
+		return sqlc.CharlieSessionResource{}, err
 	}
 	resources, err := a.queries.ListCharlieSessionResources(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("Charlie session resource scope is unavailable")
+		return sqlc.CharlieSessionResource{}, fmt.Errorf("Charlie session resource scope is unavailable")
 	}
 	for _, resource := range resources {
 		if resource.SessionID == sessionID && resource.ResourceID == resourceID && resource.RequiredVerb == "read" {
-			return nil
+			return resource, nil
 		}
 	}
-	return fmt.Errorf("Charlie write resource is outside the session scope")
+	return sqlc.CharlieSessionResource{}, fmt.Errorf("Charlie write resource is outside the session scope")
 }
 
 func requiredWriteResourceID(arguments map[string]json.RawMessage) (string, error) {

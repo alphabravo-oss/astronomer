@@ -43,8 +43,11 @@ func (f *fakeLiveAuthorityQueries) ListCharlieSessionResources(context.Context, 
 func (f *fakeLiveAuthorityQueries) GetActiveCharlieDelegationByHash(context.Context, string) (sqlc.CharlieDelegation, error) {
 	return f.delegation, f.error
 }
-func (f *fakeLiveAuthorityQueries) GetActiveCharlieActionApproval(context.Context, sqlc.GetActiveCharlieActionApprovalParams) (sqlc.CharlieActionApproval, error) {
-	return f.approval, f.error
+func (f *fakeLiveAuthorityQueries) GetActiveCharlieActionApproval(_ context.Context, arg sqlc.GetActiveCharlieActionApprovalParams) (sqlc.CharlieActionApproval, error) {
+	if f.error != nil || f.approval.CharlieActionID != arg.CharlieActionID || f.approval.ApprovalID != arg.ApprovalID {
+		return sqlc.CharlieActionApproval{}, errors.New("approval not found")
+	}
+	return f.approval, nil
 }
 func (f *fakeLiveAuthorityQueries) ConsumeCharlieActionApproval(_ context.Context, arg sqlc.ConsumeCharlieActionApprovalParams) (sqlc.CharlieActionApproval, error) {
 	if f.error != nil || arg.ArgumentDigest != f.approval.ArgumentDigest || arg.DisclosureDigest != f.approval.DisclosureDigest || arg.ModeRevision != f.approval.ModeRevision || arg.PolicyRevision != f.approval.PolicyRevision || arg.FencingEpoch != f.approval.FencingEpoch || arg.ResourceID != f.approval.ResourceID {
@@ -89,8 +92,11 @@ func liveAuthorityFixture(mode Mode) (*fakeLiveAuthorityQueries, fakeBindings, *
 	delegation := sqlc.CharlieDelegation{SessionID: sessionID, PrincipalID: principalID, PrincipalType: "user", ExpiresAt: time.Now().Add(time.Minute)}
 	action := ActionEnvelope{
 		DeploymentID: "deployment-a", SessionID: "session-a", TurnID: "turn-a", ActionID: "action-a",
-		ArgumentDigest: "arguments-a", AuthorizationRef: "opaque-a", ApprovalID: "approval-a",
+		ArgumentDigest: "arguments-a", AuthorizationRef: "opaque-a",
 		DisclosureDigest: "disclosure-a", ModeRevision: 2, PolicyRevision: 2, FencingEpoch: 7, IdempotencyKey: "action-a",
+	}
+	if mode == ModeApproval {
+		action.ApprovalID = "approval-a"
 	}
 	capability, _ := capabilityByName("astronomer.queue.retry_task")
 	queries := &fakeLiveAuthorityQueries{connection: connection, session: session, delegation: delegation, resources: [][]sqlc.CharlieSessionResource{{{SessionID: sessionID, ResourceType: "management_component", ResourceID: "resource-a", RequiredVerb: "read"}}}}
@@ -152,7 +158,7 @@ func TestProductLiveAuthorityApprovalRequiresApproverAndTargetPermission(t *test
 	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)
 	arguments := liveWriteArguments("resource-a")
 	facts, err := authority.Evaluate(context.Background(), action, capability, arguments)
-	if err != nil || !facts.LiveAuthorized || !facts.ApprovalPresent || !facts.ApprovalExact {
+	if err != nil || !facts.LiveAuthorized || !facts.ApprovalPresent || !facts.ApprovalExact || facts.FindingResourceType != "management_component" || facts.FindingResourceID != "resource-a" {
 		t.Fatalf("exact approval rejected: facts=%+v err=%v", facts, err)
 	}
 	bindings.values[approverID] = []rbac.RoleBinding{{RoleRules: []rbac.Rule{{Resource: "charlie", Verbs: []string{"approve"}}}}}
@@ -176,6 +182,45 @@ func TestProductLiveAuthorityAutoRequiresExactAutomationIdentity(t *testing.T) {
 	facts, err = authority.Evaluate(context.Background(), action, capability, arguments)
 	if err == nil && facts.LiveAuthorized {
 		t.Fatal("different service identity received auto authority")
+	}
+}
+
+func TestProductLiveAuthorityAutomationCeilingPreservesExactApproval(t *testing.T) {
+	queries, bindings, safety, action, capability, automationID, _ := liveAuthorityFixture(ModeAuto)
+	action.ApprovalID = "approval-a"
+	queries.approval.ApprovalID = action.ApprovalID
+	// The user approval path is deliberately not auto-eligible by policy facts;
+	// its authority comes only from the exact approval and live user/approver RBAC.
+	safety.facts.Allowlisted = false
+	safety.facts.ScopeAllowed = false
+	safety.facts.BudgetAvailable = false
+	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)
+	arguments := liveWriteArguments("resource-a")
+	facts, err := authority.Evaluate(context.Background(), action, capability, arguments)
+	if err != nil || !facts.LiveAuthorized || !facts.ApprovalRequested || !facts.ApprovalPresent || !facts.ApprovalExact {
+		t.Fatalf("automation ceiling lost exact approval path: facts=%+v err=%v", facts, err)
+	}
+	if decision := DecideAuthority(facts, time.Now()); !decision.Allowed {
+		t.Fatalf("exact approval under automation ceiling denied: %+v", decision)
+	}
+	if err := authority.Commit(context.Background(), action, capability, arguments, facts); err != nil || queries.consumes != 1 || safety.commits != 0 {
+		t.Fatalf("automation-ceiling approval commit consumed wrong authority: approvals=%d auto=%d err=%v", queries.consumes, safety.commits, err)
+	}
+}
+
+func TestProductLiveAuthorityAutomationInvalidApprovalCannotFallBackToAuto(t *testing.T) {
+	queries, bindings, safety, action, capability, automationID, _ := liveAuthorityFixture(ModeAuto)
+	action.ApprovalID = "approval-missing"
+	queries.delegation.PrincipalID = automationID
+	queries.delegation.PrincipalType = "service"
+	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)
+	facts, err := authority.Evaluate(context.Background(), action, capability, liveWriteArguments("resource-a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := DecideAuthority(facts, time.Now())
+	if decision.Allowed || decision.Code != DeniedApprovalInvalid {
+		t.Fatalf("invalid requested approval fell back to automation: facts=%+v decision=%+v", facts, decision)
 	}
 }
 
@@ -214,6 +259,8 @@ func TestProductLiveAuthorityCommitConsumesApprovalOrAutoBudgetOnce(t *testing.T
 	queries.connection.RequestedMode = string(ModeAuto)
 	queries.connection.VerifiedMode = string(ModeAuto)
 	facts.Mode = ModeAuto
+	facts.ApprovalRequested = false
+	action.ApprovalID = ""
 	if err := authority.Commit(context.Background(), action, capability, arguments, facts); err != nil || safety.commits != 1 {
 		t.Fatalf("auto budget commit failed: %v", err)
 	}

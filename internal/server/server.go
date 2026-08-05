@@ -2017,6 +2017,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		database.Close()
 		return nil, err
 	}
+	charlieFindingStore, err := charlie.NewDBFindingStore(queries)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
+	charlieFindingRecorder, err := charlie.NewFindingService(charlieFindingStore, charlie.NewEventFindingPublisher(bus))
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
 	charlieMCPRuntime, err := charlie.NewMCPRuntime(charlie.MCPRuntimeConfig{
 		Listener: charlie.MCPListenerConfig{
 			Address: cfg.CharlieMCPListenAddress, Certificate: cfg.CharlieMCPTLSCertFile,
@@ -2027,6 +2037,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		ReceiptCipher:        encryptor,
 		WriteFence:           charlieWriteFence,
 		BridgeStatus:         managedCharlieBridge,
+		FindingRecorder:      charlieFindingRecorder,
 	}, charlieFeatures, queries, charlieBindings, charlieSafety, capabilityExecutor, logger)
 	if err != nil {
 		database.Close()

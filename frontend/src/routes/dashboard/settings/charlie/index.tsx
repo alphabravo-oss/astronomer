@@ -815,8 +815,14 @@ const modeHelp: Record<CharlieMode, string> = {
   read_only:
     "Charlie can investigate and explain through authorized reads, but cannot propose executable approvals.",
   approval:
-    "Charlie may propose bounded actions; an eligible authorized user must approve each exact action.",
-  auto: "Charlie may execute only capabilities explicitly allowed by current product policy and disclosure.",
+    "Includes Read only. Charlie may propose bounded actions; an eligible authorized user must approve each exact action.",
+  auto: "Includes Read only and Approval required. Charlie may additionally execute only capabilities explicitly allowed by current product policy and disclosure.",
+};
+const productModeLabel: Record<CharlieMode, string> = {
+  disabled: "Disabled",
+  read_only: "Read only",
+  approval: "Approval required",
+  auto: "Automation",
 };
 export function ModeTab() {
   const qc = useQueryClient();
@@ -834,7 +840,9 @@ export function ModeTab() {
       setNext(undefined);
       qc.setQueryData(queryKeys.charlie.adminMode, v);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
-      toastSuccess(`Charlie authoritative mode: ${v.authoritative}`);
+      toastSuccess(
+        `Charlie authoritative mode: ${productModeLabel[v.authoritative]}`,
+      );
     },
     onError: (e) => toastApiError("Mode change was not confirmed", e),
   });
@@ -902,7 +910,7 @@ export function ModeTab() {
                     : "border-border hover:bg-accent",
                 )}
               >
-                <span className="font-medium">{mode.replace("_", " ")}</span>
+                <span className="font-medium">{productModeLabel[mode]}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {modeHelp[mode]}
                 </span>
@@ -921,7 +929,7 @@ export function ModeTab() {
             <div>
               <p className="text-sm font-medium">Automatic-action readiness</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Charlie can enter auto only when every product-side safety
+                Charlie can enter automation only when every product-side safety
                 prerequisite is currently satisfied.
               </p>
             </div>
@@ -950,8 +958,11 @@ export function ModeTab() {
           )}
         </div>
         <dl className="grid grid-cols-2 gap-4">
-          <Meta label="Requested" value={m.requested} />
-          <Meta label="Authoritative" value={m.authoritative} />
+          <Meta label="Requested" value={productModeLabel[m.requested]} />
+          <Meta
+            label="Authoritative"
+            value={productModeLabel[m.authoritative]}
+          />
           <Meta label="Revision" value={m.revision} />
           <Meta
             label="Emergency disabled"
@@ -1011,7 +1022,9 @@ export function ModeTab() {
         title="Change Charlie mode"
         description={next ? modeHelp[next] : ""}
         confirmText="Change mode"
-        confirmValue={next ? `CHANGE TO ${next.toUpperCase()}` : undefined}
+        confirmValue={
+          next ? `CHANGE TO ${productModeLabel[next].toUpperCase()}` : undefined
+        }
         loading={change.isPending}
       />
       <ConfirmDialog

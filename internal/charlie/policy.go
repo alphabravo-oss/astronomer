@@ -50,14 +50,23 @@ const (
 // context and model output can never set these fields; the MCP guard derives
 // them from the current DB, capability disclosure, live RBAC, and receipt.
 type AuthorityInput struct {
-	FeatureEnabled        bool
-	ConnectionActive      bool
-	EmergencyDisabled     bool
-	Mode                  Mode
-	Effect                Effect
-	Destructive           bool
-	DisclosureCurrent     bool
-	LiveAuthorized        bool
+	FeatureEnabled    bool
+	ConnectionActive  bool
+	EmergencyDisabled bool
+	Mode              Mode
+	Effect            Effect
+	Destructive       bool
+	DisclosureCurrent bool
+	LiveAuthorized    bool
+	// ApprovalRequested distinguishes an explicit exact-approval path from an
+	// automatic path. In automation mode an invalid supplied approval must fail;
+	// it may never fall back to service automation.
+	ApprovalRequested bool
+	// FindingResource is resolved from the exact product-owned session resource
+	// matched by arguments.resource_id. It is display/dedupe scope only and never
+	// grants authority; the finding access layer rechecks current product RBAC.
+	FindingResourceType   string
+	FindingResourceID     string
 	ApprovalPresent       bool
 	ApprovalExact         bool
 	ApprovalExpiresAt     time.Time
@@ -137,6 +146,15 @@ func DecideAuthority(in AuthorityInput, now time.Time) AuthorityDecision {
 			return deny(DeniedApprovalInvalid)
 		}
 	case ModeAuto:
+		// Automation is a cumulative ceiling. An explicitly requested approval
+		// keeps the exact human-approval path; only requests without an approval
+		// may enter the separately authorized automation path.
+		if in.ApprovalRequested {
+			if !in.ApprovalPresent || !in.ApprovalExact || in.ApprovalExpiresAt.IsZero() || !in.ApprovalExpiresAt.After(now) {
+				return deny(DeniedApprovalInvalid)
+			}
+			break
+		}
 		if !in.AutoEligible {
 			return deny(DeniedNotAutoEligible)
 		}

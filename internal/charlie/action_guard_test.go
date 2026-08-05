@@ -77,6 +77,16 @@ type fakeActionAuditor struct {
 	failAt string
 }
 
+type actionFindingRecorder struct {
+	inputs []FindingInput
+	err    error
+}
+
+func (f *actionFindingRecorder) RecordBlocked(_ context.Context, input FindingInput) (DurableFinding, error) {
+	f.inputs = append(f.inputs, input)
+	return DurableFinding{ID: "finding-a", Status: "open"}, f.err
+}
+
 type concurrentAuthority struct{ facts AuthorityInput }
 
 func (a concurrentAuthority) Evaluate(context.Context, ActionEnvelope, CapabilityDescriptor, map[string]json.RawMessage) (AuthorityInput, error) {
@@ -171,6 +181,7 @@ func allowedWriteFacts(mode Mode) AuthorityInput {
 	return AuthorityInput{
 		FeatureEnabled: true, ConnectionActive: true, Mode: mode,
 		Effect: EffectWrite, DisclosureCurrent: true, LiveAuthorized: true,
+		FindingResourceType: "management_component", FindingResourceID: "resource-a",
 		ApprovalPresent: true, ApprovalExact: true, ApprovalExpiresAt: time.Now().Add(time.Minute),
 		AutoEligible: true, Allowlisted: true, ScopeAllowed: true, BudgetAvailable: true,
 		CooldownClear: true, CircuitClosed: true, PreconditionsMet: true,
@@ -232,6 +243,7 @@ func newTestActionGuard(t *testing.T, authority *fakeLiveAuthority, receipts *fa
 	if err != nil {
 		t.Fatal(err)
 	}
+	guard.SetFindingRecorder(&actionFindingRecorder{}, "installation-a")
 	return guard, privateKey
 }
 
@@ -616,11 +628,33 @@ func TestActionGuardReadOnlyWriteCreatesActionableFindingWithoutDispatch(t *test
 	receipts := &fakeReceipts{}
 	executor := &fakeCapabilityExecutor{}
 	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
 	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 
 	result := guard.Execute(context.Background(), action)
 	if result.Code != DeniedReadOnlyWrite || result.Finding == nil || !result.Finding.Actionable || receipts.claimCalls != 0 || executor.calls != 0 {
 		t.Fatalf("read-only boundary failed: %+v", result)
+	}
+	if len(findings.inputs) != 1 {
+		t.Fatalf("read-only denial did not create one durable finding: %+v", findings.inputs)
+	}
+	input := findings.inputs[0]
+	if input.InstallationID != "installation-a" || input.ResourceType != "management_component" || input.ResourceID != "resource-a" || input.Mode != ModeReadOnly || input.Decision.Code != DeniedReadOnlyWrite || input.RecommendedCapability != "astronomer.queue.retry_task" {
+		t.Fatalf("durable finding metadata is not exact and content-free: %+v", input)
+	}
+}
+
+func TestActionGuardDoesNotClaimFindingWhenPersistenceFails(t *testing.T) {
+	facts := allowedWriteFacts(ModeReadOnly)
+	guard, privateKey := newTestActionGuard(t, &fakeLiveAuthority{facts: []AuthorityInput{facts}}, &fakeReceipts{}, &fakeCapabilityExecutor{})
+	findings := &actionFindingRecorder{err: errors.New("database unavailable")}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+
+	result := guard.Execute(context.Background(), action)
+	if result.Code != DeniedReadOnlyWrite || result.Finding != nil || len(findings.inputs) != 1 {
+		t.Fatalf("non-durable finding was presented as actionable: result=%+v inputs=%+v", result, findings.inputs)
 	}
 }
 

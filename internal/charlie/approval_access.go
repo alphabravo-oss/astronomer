@@ -369,7 +369,8 @@ func (s *ApprovalAccessService) verifyCandidate(ctx context.Context, actorID uui
 }
 
 func (s *ApprovalAccessService) verifyManifest(connection sqlc.CharlieConnection, session sqlc.CharlieSession, approval contract.Approval) (string, error) {
-	if !connection.Active || connection.EmergencyDisabled || EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled) != ModeApproval {
+	mode := EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled)
+	if !connection.Active || connection.EmergencyDisabled || (mode != ModeApproval && mode != ModeAuto) {
 		return "", fmt.Errorf("Charlie approval mode or state is inactive")
 	}
 	publicKey, err := os.ReadFile(s.publicKeyFile)

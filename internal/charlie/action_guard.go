@@ -132,6 +132,20 @@ type ActionGuard struct {
 	now        func() time.Time
 	logger     *slog.Logger
 	writeFence *WriteFence
+	findings   BlockedFindingRecorder
+	installID  string
+}
+
+// SetFindingRecorder attaches the durable finding/alert path for policy
+// denials. The production MCP runtime always supplies this dependency. It is a
+// setter so the lower-level guard remains usable in focused cryptographic and
+// catalog tests without a database.
+func (g *ActionGuard) SetFindingRecorder(recorder BlockedFindingRecorder, installationID string) {
+	if g == nil || recorder == nil || strings.TrimSpace(installationID) == "" {
+		return
+	}
+	g.findings = recorder
+	g.installID = strings.TrimSpace(installationID)
 }
 
 func NewActionGuard(publicKey ed25519.PublicKey, authority LiveActionAuthority, receipts ActionReceiptStore, executor CapabilityExecutor, auditor ActionAuditor) (*ActionGuard, error) {
@@ -175,7 +189,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 	}
 	if code != "" {
 		result := denied(code, "Charlie action was rejected before dispatch")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	}
 	operationCtx := ctx
@@ -185,7 +199,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 		operationCtx, releaseWrite, err = g.writeFence.Begin(ctx)
 		if err != nil {
 			result := denied(DeniedEmergencyDisabled, "Charlie write execution is disabled")
-			_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
+			g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
 			return result
 		}
 		defer releaseWrite()
@@ -195,19 +209,18 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 	if err != nil {
 		if descriptor.Effect == EffectWrite && operationCtx.Err() != nil {
 			result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled during authorization")
-			_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
+			g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
 			return result
 		}
 		result := denied(DeniedAuthorization, "Current product authorization could not be verified")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	}
 	observedMode = facts.Mode
 	decision := DecideAuthority(facts, g.now().UTC())
 	if !decision.Allowed {
-		result := denied(decision.Code, "Charlie identified an action that current product policy does not permit")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
-		return result
+		result := actionableDenied(decision.Code, "Charlie identified an action that current product policy does not permit")
+		return g.recordPolicyDenial(ctx, envelope, descriptor, facts, result, "denied")
 	}
 
 	if descriptor.Effect == EffectRead {
@@ -216,32 +229,32 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 
 	if operationCtx.Err() != nil {
 		result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled before receipt claim")
-		_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
 		return result
 	}
 	claim, err := g.receipts.Claim(operationCtx, envelope, descriptor)
 	if err != nil {
 		result := denied(DeniedAmbiguousPriorAttempt, "The action receipt could not be claimed safely")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	}
 	switch claim.Disposition {
 	case ReceiptReplay:
 		claim.Result.Replay = true
-		_ = g.auditor.Record(ctx, "replayed", envelope, descriptor, claim.Result)
+		g.recordAuditOutcome(ctx, "replayed", envelope, descriptor, claim.Result)
 		return claim.Result
 	case ReceiptAmbiguous:
 		result := denied(DeniedAmbiguousPriorAttempt, "A prior attempt has an ambiguous outcome and requires reconciliation")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	case ReceiptConflict:
 		result := denied(DeniedIdempotency, "The action identifier conflicts with different arguments or authority")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	case ReceiptClaimed:
 	default:
 		result := denied(DeniedAmbiguousPriorAttempt, "The action receipt returned an invalid state")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	}
 
@@ -249,41 +262,40 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 	// leadership change while waiting all win immediately before side effect.
 	if operationCtx.Err() != nil {
 		result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled before dispatch")
-		_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-		_ = g.receipts.Transition(ctx, envelope, "fenced", result)
+		g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+		g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 		return result
 	}
 	facts, err = g.authority.Evaluate(operationCtx, envelope, descriptor, arguments)
 	if err != nil {
 		if operationCtx.Err() != nil {
 			result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled before dispatch")
-			_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-			_ = g.receipts.Transition(ctx, envelope, "fenced", result)
+			g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+			g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 			return result
 		}
 		result := denied(DeniedAuthorization, "Current product authorization changed before dispatch")
-		_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-		_ = g.receipts.Transition(ctx, envelope, "blocked", result)
+		g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+		g.recordReceiptOutcome(ctx, envelope, "blocked", result)
 		return result
 	}
 	decision = DecideAuthority(facts, g.now().UTC())
 	if !decision.Allowed {
-		result := denied(decision.Code, "Product policy changed before dispatch")
-		_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-		_ = g.receipts.Transition(ctx, envelope, "blocked", result)
-		return result
+		result := actionableDenied(decision.Code, "Product policy changed before dispatch")
+		g.recordReceiptOutcome(ctx, envelope, "blocked", result)
+		return g.recordPolicyDenial(ctx, envelope, descriptor, facts, result, "fenced")
 	}
 	if operationCtx.Err() != nil {
 		result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled before authorization commit")
-		_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-		_ = g.receipts.Transition(ctx, envelope, "fenced", result)
+		g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+		g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 		return result
 	}
 	if err := g.authority.Commit(operationCtx, envelope, descriptor, arguments, facts); err != nil {
 		if operationCtx.Err() != nil {
 			result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled during authorization commit")
-			_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-			_ = g.receipts.Transition(ctx, envelope, "fenced", result)
+			g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+			g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 			return result
 		}
 		var deferred *ActionDeferredError
@@ -291,7 +303,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 			result := ActionResult{Allowed: true, State: "deferred", Result: deferred.Result()}
 			if auditErr := g.auditor.Record(ctx, "deferred", envelope, descriptor, result); auditErr != nil {
 				result = denied(DeniedAuthorization, "The required deferral audit record could not be persisted")
-				_ = g.receipts.Transition(ctx, envelope, "blocked", result)
+				g.recordReceiptOutcome(ctx, envelope, "blocked", result)
 				return result
 			}
 			if transitionErr := g.receipts.Transition(ctx, envelope, "deferred", result); transitionErr != nil {
@@ -299,29 +311,92 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 			}
 			return result
 		}
-		result := denied(DeniedApprovalInvalid, "The exact approval or automation budget was already consumed or changed")
-		_ = g.auditor.Record(ctx, "denied", envelope, descriptor, result)
-		_ = g.receipts.Transition(ctx, envelope, "blocked", result)
-		return result
+		result := actionableDenied(DeniedApprovalInvalid, "The exact approval or automation budget was already consumed or changed")
+		g.recordReceiptOutcome(ctx, envelope, "blocked", result)
+		return g.recordPolicyDenial(ctx, envelope, descriptor, facts, result, "denied")
 	}
 	if operationCtx.Err() != nil {
 		result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled before side effect")
-		_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-		_ = g.receipts.Transition(ctx, envelope, "fenced", result)
+		g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+		g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 		return result
 	}
 	if err := g.auditor.Record(operationCtx, "approved", envelope, descriptor, ActionResult{Allowed: true, State: "approved"}); err != nil {
 		if operationCtx.Err() != nil {
 			result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled before side effect")
-			_ = g.auditor.Record(ctx, "fenced", envelope, descriptor, result)
-			_ = g.receipts.Transition(ctx, envelope, "fenced", result)
+			g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+			g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 			return result
 		}
 		result := denied(DeniedAuthorization, "The required approval audit record could not be persisted")
-		_ = g.receipts.Transition(ctx, envelope, "blocked", result)
+		g.recordReceiptOutcome(ctx, envelope, "blocked", result)
 		return result
 	}
 	return g.executeAndVerify(operationCtx, envelope, descriptor, arguments, true)
+}
+
+// recordPolicyDenial writes the required action audit and then creates a
+// durable, deduplicated, resource-scoped finding. Both error paths emit only a
+// bounded failure code; arguments, model output, authorization references and
+// remote payloads are never logged. The action remains denied even if either
+// observability dependency is unavailable.
+func (g *ActionGuard) recordPolicyDenial(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, facts AuthorityInput, result ActionResult, phase string) ActionResult {
+	if err := g.auditor.Record(ctx, phase, envelope, descriptor, result); err != nil {
+		g.logPersistenceFailure(ctx, "Charlie action audit persistence failed", "charlie.action_audit_persist_failed")
+	}
+	if result.Finding == nil || !result.Finding.Actionable {
+		return result
+	}
+	if g.findings == nil || g.installID == "" || descriptor.Name == "" || facts.FindingResourceType == "" || facts.FindingResourceID == "" {
+		// Never claim an actionable operator workflow unless the production
+		// recorder and exact product-owned resource scope are present.
+		result.Finding = nil
+		return result
+	}
+	input := blockedActionFindingInput(g.installID, facts.FindingResourceType, facts.FindingResourceID, descriptor.Name, facts.Mode, result.Code)
+	if _, err := g.findings.RecordBlocked(ctx, input); err != nil {
+		g.logPersistenceFailure(ctx, "Charlie blocked-action finding persistence failed", "charlie.finding_persist_failed")
+		result.Finding = nil
+	}
+	return result
+}
+
+func blockedActionFindingInput(installationID, resourceType, resourceID, capability string, mode Mode, code DenialCode) FindingInput {
+	title := "Charlie recommends an operator decision"
+	summary := "Charlie identified a management-plane action that current product policy did not permit."
+	next := "Review the finding and current Charlie permissions before deciding whether to proceed."
+	severity := "warning"
+	switch code {
+	case DeniedReadOnlyWrite:
+		next = "Keep read-only mode, or change to approval-required mode and review the exact proposed action."
+	case DeniedApprovalRequired:
+		next = "Review the exact proposed action and approve or reject it from the Charlie approval queue."
+	case DeniedApprovalInvalid:
+		next = "Refresh the approval queue; the prior approval is expired, changed, or already consumed."
+	case DeniedNotAutoEligible:
+		next = "Use approval-required mode for this action; it is not eligible for unattended execution."
+	case DeniedNotAllowlisted:
+		next = "Review the central allowlist and local action policy, or use approval-required mode."
+	case DeniedBudget, DeniedCooldown, DeniedCircuitOpen:
+		next = "Review the local action budget, cooldown, and circuit state before retrying or approving manually."
+	case DeniedScope, DeniedAuthorization:
+		next = "Review the initiating identity and exact product-owned resource permissions."
+	case DeniedPrecondition, DeniedVerification:
+		next = "Re-read the affected management-plane resource and verify the required safety preconditions."
+	case DeniedStaleFencing, DeniedAmbiguousPriorAttempt, DeniedIdempotency:
+		severity = "high"
+		next = "Do not retry blindly; reconcile the prior action receipt and current leader epoch first."
+	case DeniedDestructive:
+		severity = "high"
+		next = "Use an operator-owned workflow outside Charlie; destructive actions are prohibited."
+	}
+	return FindingInput{
+		InstallationID: installationID, ResourceType: resourceType, ResourceID: resourceID,
+		NormalizedDiagnosis: string(code), RecommendedCapability: capability, Severity: severity, Mode: mode,
+		Decision: AuthorityDecision{Allowed: false, Code: code}, Title: title, Summary: summary,
+		RecommendedAction: next, RiskImpact: "No action was dispatched; the condition may continue until an operator decides or policy changes.",
+		Verification: "Re-read the affected management-plane resource and confirm the finding state after the decision.",
+	}
 }
 
 func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, arguments map[string]json.RawMessage, durable bool) ActionResult {
@@ -331,12 +406,12 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 	if durable {
 		if err := g.auditor.Record(ctx, "dispatched", envelope, descriptor, ActionResult{Allowed: true, State: "dispatched"}); err != nil {
 			result := denied(DeniedAuthorization, "The required dispatch audit record could not be persisted")
-			_ = g.receipts.Transition(ctx, envelope, "blocked", result)
+			g.recordReceiptOutcome(ctx, envelope, "blocked", result)
 			return result
 		}
 		if err := g.receipts.Transition(ctx, envelope, "dispatched", ActionResult{Allowed: true, State: "dispatched"}); err != nil {
 			result := denied(DeniedAmbiguousPriorAttempt, "Dispatch state could not be recorded safely")
-			_ = g.auditor.Record(ctx, "failed", envelope, descriptor, result)
+			g.recordAuditOutcome(ctx, "failed", envelope, descriptor, result)
 			return result
 		}
 		if ctx.Err() != nil {
@@ -356,7 +431,7 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 			result.State = "ambiguous"
 		}
 		if durable {
-			_ = g.receipts.Transition(ctx, envelope, "ambiguous", result)
+			g.recordReceiptOutcome(ctx, envelope, "ambiguous", result)
 		}
 		return result
 	}
@@ -366,7 +441,7 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 			result.State = "ambiguous"
 		}
 		if durable {
-			_ = g.receipts.Transition(ctx, envelope, result.State, result)
+			g.recordReceiptOutcome(ctx, envelope, result.State, result)
 		}
 		return result
 	}
@@ -382,7 +457,7 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 				result.State = "ambiguous"
 			}
 			if durable {
-				_ = g.receipts.Transition(ctx, envelope, result.State, result)
+				g.recordReceiptOutcome(ctx, envelope, result.State, result)
 			}
 			return result
 		}
@@ -390,7 +465,7 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 	result := ActionResult{Allowed: true, State: "succeeded", Result: resultBytes, Verified: verified}
 	if err := g.auditor.Record(ctx, "succeeded", envelope, descriptor, result); err != nil {
 		if durable {
-			_ = g.receipts.Transition(ctx, envelope, "ambiguous", ActionResult{Allowed: true, State: "ambiguous"})
+			g.recordReceiptOutcome(ctx, envelope, "ambiguous", ActionResult{Allowed: true, State: "ambiguous"})
 		}
 		return ActionResult{Allowed: true, State: "ambiguous"}
 	}
@@ -406,9 +481,29 @@ func (g *ActionGuard) recordFenced(ctx context.Context, envelope ActionEnvelope,
 	result := denied(DeniedEmergencyDisabled, summary)
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	_ = g.auditor.Record(persistCtx, "fenced", envelope, descriptor, result)
-	_ = g.receipts.Transition(persistCtx, envelope, "fenced", result)
+	g.recordAuditOutcome(persistCtx, "fenced", envelope, descriptor, result)
+	g.recordReceiptOutcome(persistCtx, envelope, "fenced", result)
 	return result
+}
+
+func (g *ActionGuard) recordAuditOutcome(ctx context.Context, phase string, envelope ActionEnvelope, descriptor CapabilityDescriptor, result ActionResult) {
+	if err := g.auditor.Record(ctx, phase, envelope, descriptor, result); err != nil {
+		g.logPersistenceFailure(ctx, "Charlie action audit persistence failed", "charlie.action_audit_persist_failed")
+	}
+}
+
+func (g *ActionGuard) recordReceiptOutcome(ctx context.Context, envelope ActionEnvelope, state string, result ActionResult) {
+	if err := g.receipts.Transition(ctx, envelope, state, result); err != nil {
+		g.logPersistenceFailure(ctx, "Charlie action receipt persistence failed", "charlie.action_receipt_persist_failed")
+	}
+}
+
+func (g *ActionGuard) logPersistenceFailure(ctx context.Context, message, code string) {
+	logger := g.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.WarnContext(ctx, message, slog.String("failure_code", code))
 }
 
 func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, map[string]json.RawMessage, DenialCode) {
@@ -505,8 +600,12 @@ func digestBytes(value []byte) string {
 }
 
 func denied(code DenialCode, summary string) ActionResult {
+	return ActionResult{Code: code, State: "blocked"}
+}
+
+func actionableDenied(code DenialCode, summary string) ActionResult {
 	finding := BlockedFinding(AuthorityDecision{Code: code}, "Charlie action requires attention", summary, "Review the finding and current product authorization", "Re-read the affected management-plane resource after any approved action")
-	result := ActionResult{Code: code, State: "blocked"}
+	result := denied(code, summary)
 	if finding.Actionable {
 		result.Finding = &finding
 	}

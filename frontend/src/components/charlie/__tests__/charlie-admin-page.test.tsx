@@ -316,12 +316,47 @@ describe("Charlie administration acceptance", () => {
   it("explains every authority mode and blocks elevation until disclosure acknowledgement", async () => {
     renderWithClient(<ModeTab />);
     expect(await screen.findByText("Every write requires exact approval")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /read only/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /^approval Charlie/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /^auto/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^read only/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^approval required/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^automation/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^disabled/i })).toBeEnabled();
+    expect(screen.getAllByText("Approval required").length).toBeGreaterThan(1);
+    expect(screen.queryByText("auto", { exact: true })).toBeNull();
     expect(screen.getByRole("button", { name: "Emergency Disable" })).toBeEnabled();
     expect(screen.getByText(/Review and acknowledge/)).toHaveAttribute("role", "status");
+  });
+
+  it("uses product mode labels while sending stable wire values", async () => {
+    api.getCharlieMode.mockResolvedValue({
+      requested: "read_only",
+      authoritative: "read_only",
+      revision: 4,
+      emergencyDisabled: false,
+      disablePending: false,
+      disclosureDigest: digest("d"),
+      acknowledgedDisclosureDigest: digest("d"),
+      effects: ["Authorized reads only"],
+      autoReadiness: { ready: true, blockers: [] },
+    });
+    api.updateCharlieMode.mockResolvedValue({
+      requested: "auto",
+      authoritative: "auto",
+      revision: 5,
+      emergencyDisabled: false,
+      effects: [],
+    });
+    renderWithClient(<ModeTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /^automation/i }));
+    expect(
+      screen.getAllByText(/Includes Read only and Approval required/i).length,
+    ).toBeGreaterThan(0);
+    fireEvent.change(screen.getByPlaceholderText("CHANGE TO AUTOMATION"), {
+      target: { value: "CHANGE TO AUTOMATION" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Change mode" }));
+    await waitFor(() =>
+      expect(api.updateCharlieMode).toHaveBeenCalledWith("auto", 4),
+    );
   });
 
   it("exposes all automation policy fields and validates new rules before save", async () => {

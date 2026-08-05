@@ -32,6 +32,7 @@ type MCPRuntimeConfig struct {
 	ReceiptCipher        actionReceiptCipher
 	WriteFence           *WriteFence
 	BridgeStatus         adminBridgeStatusReader
+	FindingRecorder      BlockedFindingRecorder
 	PollInterval         time.Duration
 }
 
@@ -62,7 +63,7 @@ func NewMCPRuntime(config MCPRuntimeConfig, features featureReader, queries mcpR
 	}
 	if features == nil || queries == nil || bindings == nil || safety == nil || executor == nil ||
 		config.Listener.Certificate == "" || config.Listener.PrivateKey == "" || config.Listener.ClientCA == "" ||
-		config.ActionSigningKeyFile == "" || config.ReceiptCipher == nil || strings.TrimSpace(config.LeaseOwner) == "" || len(config.LeaseOwner) > 128 {
+		config.ActionSigningKeyFile == "" || config.ReceiptCipher == nil || config.FindingRecorder == nil || strings.TrimSpace(config.LeaseOwner) == "" || len(config.LeaseOwner) > 128 {
 		return nil, fmt.Errorf("Charlie MCP runtime dependencies are incomplete")
 	}
 	if config.PollInterval <= 0 {
@@ -198,6 +199,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	}
 	guard.SetLogger(r.logger)
 	guard.SetWriteFence(r.config.WriteFence)
+	guard.SetFindingRecorder(r.config.FindingRecorder, activation.Connection.InstallationID.String())
 	identities, err := ExpectedLocalIdentityURIs(activation.Connection.InstallationID.String())
 	if err != nil {
 		return err

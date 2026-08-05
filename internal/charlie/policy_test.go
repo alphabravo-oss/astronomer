@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func permittedWrite(now time.Time) AuthorityInput {
+func permittedWrite(_ time.Time) AuthorityInput {
 	return AuthorityInput{
 		FeatureEnabled: true, ConnectionActive: true, Mode: ModeAuto,
 		Effect: EffectWrite, DisclosureCurrent: true, LiveAuthorized: true,
@@ -13,8 +13,17 @@ func permittedWrite(now time.Time) AuthorityInput {
 		BudgetAvailable: true, CooldownClear: true, CircuitClosed: true,
 		PreconditionsMet: true, IdempotencyKeyPresent: true,
 		VerificationDeclared: true, FencingEpoch: 7, CurrentFencingEpoch: 7,
-		ApprovalPresent: true, ApprovalExact: true, ApprovalExpiresAt: now.Add(time.Minute),
 	}
+}
+
+func exactApprovedWrite(now time.Time, mode Mode) AuthorityInput {
+	in := permittedWrite(now)
+	in.Mode = mode
+	in.ApprovalRequested = true
+	in.ApprovalPresent = true
+	in.ApprovalExact = true
+	in.ApprovalExpiresAt = now.Add(time.Minute)
+	return in
 }
 
 func TestDecideAuthorityPermitsOnlyCompleteBoundedCases(t *testing.T) {
@@ -29,8 +38,7 @@ func TestDecideAuthorityPermitsOnlyCompleteBoundedCases(t *testing.T) {
 	if got := DecideAuthority(read, now); !got.Allowed {
 		t.Fatalf("authorized read denied: %+v", got)
 	}
-	approval := write
-	approval.Mode = ModeApproval
+	approval := exactApprovedWrite(now, ModeApproval)
 	if got := DecideAuthority(approval, now); !got.Allowed {
 		t.Fatalf("exact approval denied: %+v", got)
 	}
@@ -136,6 +144,9 @@ func TestDecideAuthorityExhaustiveDenyPrecedenceByMode(t *testing.T) {
 				t.Run(current.name, func(t *testing.T) {
 					in := permittedWrite(now)
 					in.Mode = matrix.mode
+					if matrix.mode == ModeApproval {
+						in = exactApprovedWrite(now, ModeApproval)
+					}
 					// Fail the selected gate and every lower-priority gate at once.
 					// The selected gate must remain the externally visible denial.
 					for _, lower := range matrix.gates[index:] {
@@ -158,12 +169,77 @@ func TestDecideAuthorityApprovalIsExactAndExpiring(t *testing.T) {
 		func(v *AuthorityInput) { v.ApprovalExact = false },
 		func(v *AuthorityInput) { v.ApprovalExpiresAt = now },
 	} {
-		in := permittedWrite(now)
-		in.Mode = ModeApproval
+		in := exactApprovedWrite(now, ModeApproval)
 		mutate(&in)
 		if got := DecideAuthority(in, now); got.Allowed || (got.Code != DeniedApprovalRequired && got.Code != DeniedApprovalInvalid) {
 			t.Fatalf("invalid approval accepted: %+v", got)
 		}
+	}
+}
+
+func TestDecideAuthorityCumulativeModeCeilings(t *testing.T) {
+	now := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
+	read := permittedWrite(now)
+	read.Effect = EffectRead
+	read.AutoEligible = false
+	read.Allowlisted = false
+
+	tests := []struct {
+		name string
+		in   AuthorityInput
+		want DenialCode
+	}{
+		{name: "disabled denies read", in: func() AuthorityInput { v := read; v.Mode = ModeDisabled; return v }(), want: DeniedModeDisabled},
+		{name: "read_only permits read", in: func() AuthorityInput { v := read; v.Mode = ModeReadOnly; return v }()},
+		{name: "read_only denies write", in: func() AuthorityInput { v := permittedWrite(now); v.Mode = ModeReadOnly; return v }(), want: DeniedReadOnlyWrite},
+		{name: "approval_required retains read", in: func() AuthorityInput { v := read; v.Mode = ModeApproval; return v }()},
+		{name: "approval_required requires approval", in: func() AuthorityInput { v := permittedWrite(now); v.Mode = ModeApproval; return v }(), want: DeniedApprovalRequired},
+		{name: "approval_required permits exact approval", in: exactApprovedWrite(now, ModeApproval)},
+		{name: "automation retains read", in: read},
+		{name: "automation permits exact approval without auto eligibility", in: func() AuthorityInput {
+			v := exactApprovedWrite(now, ModeAuto)
+			v.AutoEligible, v.Allowlisted, v.ScopeAllowed = false, false, false
+			v.BudgetAvailable, v.CooldownClear, v.CircuitClosed = false, false, false
+			return v
+		}()},
+		{name: "automation invalid requested approval cannot fall back", in: func() AuthorityInput {
+			v := exactApprovedWrite(now, ModeAuto)
+			v.ApprovalExact = false
+			return v
+		}(), want: DeniedApprovalInvalid},
+		{name: "automation missing requested approval cannot fall back", in: func() AuthorityInput {
+			v := exactApprovedWrite(now, ModeAuto)
+			v.ApprovalPresent = false
+			return v
+		}(), want: DeniedApprovalInvalid},
+		{name: "automation expired requested approval cannot fall back", in: func() AuthorityInput {
+			v := exactApprovedWrite(now, ModeAuto)
+			v.ApprovalExpiresAt = now
+			return v
+		}(), want: DeniedApprovalInvalid},
+		{name: "automation permits separately eligible automatic path", in: permittedWrite(now)},
+		{name: "automation automatic path requires eligibility", in: func() AuthorityInput {
+			v := permittedWrite(now)
+			v.AutoEligible = false
+			return v
+		}(), want: DeniedNotAutoEligible},
+		{name: "unknown mode fails closed", in: func() AuthorityInput {
+			v := permittedWrite(now)
+			v.Mode = Mode("unknown")
+			return v
+		}(), want: DeniedModeDisabled},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := DecideAuthority(test.in, now)
+			if test.want == "" && !got.Allowed {
+				t.Fatalf("decision=%+v, want allowed", got)
+			}
+			if test.want != "" && (got.Allowed || got.Code != test.want) {
+				t.Fatalf("decision=%+v, want denial %s", got, test.want)
+			}
+		})
 	}
 }
 

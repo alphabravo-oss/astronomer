@@ -82,8 +82,10 @@ Astronomer browser
   Charlie central mode, capability effect/risk, live Astronomer RBAC, exact
   management-resource scope, approval state, automation allowlist, and safety
   limits; any denial wins.
-- [x] **A-015** Emit actionable Astronomer alerts/findings when Charlie diagnoses
-  an issue but mode, approval, authorization, or safety policy prevents execution.
+- [x] **A-015** In an active non-disabled integration, emit actionable Astronomer
+  alerts/findings when Charlie diagnoses an issue but mode, approval,
+  authorization, or safety policy prevents execution. Disabled remains inert and
+  creates no new finding or notification work.
 
 ## 2. Current state and plan scope
 
@@ -169,13 +171,22 @@ Facts the implementer must confirm before changing code:
   disconnects, and failed operational workflows.
 - Agent-fleet trigger thresholds are configurable Astronomer rules; Charlie does
   not hardcode the grace period, flap window, fleet percentage, or version policy.
-- `disabled` starts no session, trigger, finding work, central claim, or MCP call;
-  health/configuration status remains available to administrators.
+- A disabled product feature or connection is fully inert: it starts no agent
+  runtime, bridge stream, session, trigger, finding work, central claim,
+  model/RAG request, evidence retrieval, MCP operation, or background retry.
+  Administrators may inspect and change locally persisted configuration/status,
+  but those reads do not contact the agent or Charlie central. An enabled
+  connection at operational wire mode `disabled` is a separate state: it retains
+  only the minimal signed control heartbeat used to enable, rotate, disconnect,
+  or uninstall and permits no intelligence, product-data, or work traffic.
 - `read_only` permits authorized disclosed reads and creates actionable findings;
   it never dispatches a write even if a user asks for one.
-- `approval` requires one exact, expiring user approval plus the approver's live
-  target permission immediately before dispatch.
-- `auto` permits only explicitly reviewed auto-eligible capability/scope pairs
+- `approval_required` (wire value `approval`) cumulatively includes
+  `read_only` and permits one exact, expiring user approval plus the approver's
+  live target permission immediately before dispatch.
+- `automation` (wire value `auto`) cumulatively includes `read_only` and
+  `approval_required`, and additionally permits only explicitly reviewed
+  auto-eligible capability/scope pairs
   under the automation service identity, action budgets, cooldowns, preconditions,
   and circuit breakers. Destructive or irreversible capability disclosures are
   rejected entirely in v1.
@@ -214,14 +225,24 @@ alone grants the underlying management-resource action, and deny always wins.
 
 - [x] The feature gate prevents Charlie route, UI, worker, trigger, finding,
   listener, and installation initialization when unavailable.
-- [x] An installed disabled integration exposes authenticated health,
-  configuration, and MCP catalog discovery only; `tools/call` and all runtime
-  work remain unavailable.
-- [x] `read_only`, `approval`, and `auto` are ceilings over the same live
+- [x] An installed disabled integration rejects sessions, triggers, findings,
+  central work claims, evidence retrieval, MCP calls, and action execution.
+- [ ] A feature- or connection-disabled integration serves administration from
+  local state only, quiesces the agent/listener/bridge, and produces zero Charlie
+  process, listener, timer, DNS, heartbeat, or packet activity. An enabled
+  connection at operational wire mode `disabled` may retain only the minimal
+  authenticated signed control heartbeat and typed enable/rotate/disconnect/
+  uninstall messages; it performs no discovery, model, RAG, evidence, MCP,
+  session, trigger, finding, claim, action, or remote diagnostic traffic.
+- [x] `read_only`, `approval`, and `auto` are hard ceilings over the same live
   Astronomer RBAC/resource-scope checks, never privilege-bearing roles.
+- [x] The higher modes are cumulative: `approval_required` retains all
+  `read_only` behavior, and `automation` retains both read-only and exact
+  user-approval workflows while adding only separately eligible automatic work.
 - [x] Every write is non-destructive, action-ID idempotent, preconditioned,
   bounded, audited, and product-post-verified; missing disclosure fails closed.
-- [x] When execution is not permitted, a material diagnosis becomes a
+- [x] In an active non-disabled mode, when execution is not permitted, a material
+  diagnosis becomes a
   deduplicated actionable finding/alert with evidence, impact, a safe next step,
   verification, exact denial reason, approval link when eligible, and deep link.
 - [x] Finding acknowledgement never counts as action approval, and a mode change
@@ -240,10 +261,27 @@ choose a higher mode.
 | Effective state | Reads | Writes | User-visible outcome |
 | --- | --- | --- | --- |
 | Feature unavailable or false | None | None | Charlie routes and navigation are absent; no agent, listener, trigger, worker, or egress path is initialized. |
-| Installed but `disabled` | Authenticated health/configuration and catalog discovery only | None | Admin status explains what is required to activate Charlie; no chat, investigation, trigger, finding, claim, model, RAG, or MCP call starts. |
+| Feature or connection disabled | Locally persisted administration/configuration only | None | Admin status explains how to enable the connection; no Charlie process, listener, timer, heartbeat, DNS lookup, or packet exists. |
+| Connection enabled; wire mode `disabled` | Signed control heartbeat only; local diagnostics cause no remote request | None | Admin status can enable, rotate, disconnect, or uninstall. All intelligence, product-data, Product MCP, and work traffic is rejected. |
 | `read_only` | Disclosed reads allowed by the initiating user's live Astronomer RBAC and exact resource scope | None | Charlie returns the diagnosis. If remediation is warranted, Astronomer creates a deduplicated actionable finding that explains the blocked write and the safe operator next step. |
-| `approval` | Same as `read_only` | One reversible, disclosed, idempotent action only after an exact unexpired approval and a final live authorization/precondition check | Astronomer displays an approval alert/card with impact, target, evidence, verification, expiry, and approve/reject controls. No response is treated as denial; acknowledgement is not approval. |
-| `auto` | Same as `read_only` | Only an exact centrally allowlisted, product-disclosed, auto-eligible capability/resource pair under the narrow automation identity | Successful actions produce a bounded result and verification record. Any policy, budget, cooldown, precondition, circuit, or verification block produces an actionable finding instead of broader execution. |
+| `approval_required` (`approval`) | Everything allowed by `read_only` | One reversible, disclosed, idempotent action only after an exact unexpired approval and a final live authorization/precondition check | Astronomer displays an approval alert/card with impact, target, evidence, verification, expiry, and approve/reject controls. No response is treated as denial; acknowledgement is not approval. |
+| `automation` (`auto`) | Everything allowed by `read_only` | Everything allowed by `approval_required`, plus an exact centrally allowlisted, product-disclosed, auto-eligible capability/resource pair under the narrow automation identity | Successful automatic actions produce a bounded result and verification record. Work that is not automatic either enters an eligible exact user-decision flow or produces an actionable finding; it never broadens automation authority. |
+
+`approval_required` and `automation` are product-facing names. The v1 bridge and
+database enums remain `approval` and `auto` for contract compatibility. The UI,
+documentation, audit outcome, and tests must use the product-facing meaning and
+must not imply that choosing a higher ceiling grants authority by itself.
+
+```text
+disabled < read_only < approval_required < automation
+effective ceiling = least(requested local ceiling, verified central ceiling,
+                          emergency/local runtime ceiling)
+```
+
+The ordering controls only which workflow may be considered. Every read, exact
+approval, and automatic action must still independently satisfy live identity,
+RBAC, affected-resource scope, disclosure, target, safety, fencing, and
+idempotency checks. A denial at any layer always wins.
 
 Every transition toward more authority requires an explicit administrator action
 and authoritative readback. A stale revision, missing acknowledgement, restart,
@@ -285,10 +323,15 @@ plan, repeat count, and a deep link to the investigation. It contains no prompt,
 chain-of-thought, raw model/tool body, secret, credential, certificate, or
 authorization reference.
 
-In `approval`, the deep link may expose an eligible exact approval card. In
-`read_only`, `disabled`, or a safety/RBAC/allowlist denial, it provides operator
-guidance but no execution control. A finding can be acknowledged, dismissed, or
-resolved without changing authority. Repeated diagnoses update one deduplicated
+In `approval_required`, or in `automation` when a non-automatic action remains
+eligible for exact human approval, the deep link may expose an exact approval
+card. For `read_only`, destructive work, or a safety/RBAC/scope denial that may
+not be overridden, it provides operator guidance but no execution control.
+Every actionable finding offers the decisions valid for its current state:
+acknowledge, dismiss, resolve, review exact approval, or follow bounded manual
+checks. Those decisions are server-authorized and idempotent; acknowledging,
+dismissing, or resolving never changes mode or grants execution authority.
+Repeated diagnoses update one deduplicated
 finding and may feed Astronomer's existing in-product and configured external
 notification channels; notification delivery failure never loses the durable
 finding. Central and product audit records correlate by opaque deployment,
@@ -492,6 +535,18 @@ contract.
   MCP Service and exact product access policy, and retains only owner-bound
   secrets/resume state plus durable audit/history. Re-enable restores the
   captured runtime in disabled/installing mode without restoring authority.
+- [ ] **A1-011** Use one backend-owned connection-runtime gate for feature false
+  and inactive connection. Apply it before constructing or starting the agent
+  runtime, Product Bridge client, SSE stream, MCP listener, scheduler,
+  dispatcher, consumer, retry loop, or central-authority reconciler; individual
+  callers must not infer activation. Apply a second deny-first work-authority
+  gate to operational `disabled`, emergency disabled, and all higher-mode work.
+- [ ] **A1-012** Make feature/connection disable drain writes, stop every Charlie
+  process/listener/timer/socket, and reach zero network activity. For an enabled
+  connection at operational wire mode `disabled`, retain only a signed,
+  replay-protected control heartbeat and typed enable/rotate/disconnect/uninstall
+  control messages. Serve detailed diagnostics locally; restart, reconnect, or
+  central readback must never raise authority or originate intelligence/work.
 
 **Verify**
 
@@ -503,6 +558,11 @@ contract.
   database-write guards, listener/workload teardown, and absence of Charlie
   Service/NetworkPolicy ports prove zero Charlie runtime activation. Secure
   status, emergency-disable, uninstall, and disconnect administration remains.
+- [ ] With the feature/connection disabled, packet capture and process/listener/
+  timer assertions prove zero Charlie runtime or network activity. With an
+  enabled connection in authoritative wire mode `disabled`, prove the signed
+  control heartbeat allowlist is the only traffic and every work counter remains
+  zero while local administration works.
 
 ### Phase A2 — Persistence, secret inventory, and RBAC
 
@@ -729,6 +789,22 @@ contract.
   state rather than reporting completion while a side effect can newly start.
 - [x] **A6-019** Mark destructive/irreversible capabilities non-auto-eligible and
   omit all such v1 operations from discovery.
+- [x] **A6-019a** Derive destructive classification from the product-owned typed
+  catalog and deny it before mode, approval, allowlist, or model-supplied facts
+  are considered; catalog and authority-policy tests pin this precedence.
+- [ ] **A6-019b** Add registration and dispatch invariants that reject a
+  destructive/irreversible descriptor entirely, even when Charlie labels it
+  reversible, supplies an approval, requests `automation`, or spoofs effect,
+  risk, rollback, verification, or idempotency fields.
+- [x] **A6-020** Implement cumulative hard-ceiling evaluation. In
+  `approval_required`, reads and exact user approvals are possible; in
+  `automation`, those same paths remain possible and only a distinct,
+  explicitly auto-eligible service-identity path may execute automatically.
+- [x] **A6-021** Keep the two write authorities unambiguous in `automation`:
+  user delegation plus exact approval can consume only that approval, while the
+  automation service identity can consume only its exact target grant/budget.
+  A user request must never be reclassified as service automation, and a blocked
+  automatic request must never silently become approved.
 
 **Verify**
 
@@ -739,6 +815,11 @@ contract.
 - [x] Concurrent duplicate writes execute the underlying operation exactly once.
 - [x] Adapter-interface and registration tests prove MCP discovery and calls
   have no downstream-agent tunnel dependency or capability.
+- [x] A mode-inclusion matrix proves each higher ceiling preserves every lower
+  read/decision workflow without widening RBAC, target scope, or execution.
+- [ ] Crafted destructive requests fail at catalog registration, discovery,
+  pre-receipt evaluation, and final dispatch in every mode and create no side
+  effect, budget consumption, or reusable approval.
 
 ### Phase A7 — Read capability catalog
 
@@ -1022,6 +1103,15 @@ quota, audit, and task semantics as the normal Astronomer API.
 - [x] **A10-019** Let an authorized user acknowledge/dismiss/resolve a finding or,
   in approval mode, open the exact approval flow; never turn a recommendation
   click into implicit execution.
+- [ ] **A10-020** Render the applicable decision set on every actionable
+  non-execution finding: acknowledge, dismiss, resolve, review exact approval,
+  approve, deny, or follow bounded manual checks. Explain why unavailable
+  decisions are unavailable; do not present destructive or policy-ineligible
+  work as approvable.
+- [ ] **A10-021** In `automation`, distinguish an automatically eligible action,
+  an exact human-decision action, and a non-executable recommendation. The UI
+  must never imply that a blocked automatic action will run, that acknowledging
+  a finding approves it, or that changing mode retries it.
 
 **Verify**
 
@@ -1031,6 +1121,8 @@ quota, audit, and task semantics as the normal Astronomer API.
   pages; context chips match the route resource and never imply downstream access.
 - [x] Deep links survive refresh and browser back/forward.
 - [ ] Accessibility scan has no serious/critical violations.
+- [ ] Frontend tests cover each non-execution reason and assert its legal user
+  decisions, confirmation flow, stale/expired behavior, and zero implicit action.
 
 ### Phase A11 — Administration experience
 
@@ -1072,6 +1164,14 @@ quota, audit, and task semantics as the normal Astronomer API.
   degrade only Charlie features.
 - [x] **A11-011** Require typed confirmation for uninstall, connection replacement,
   and disconnect.
+- [x] **A11-012** Present the cumulative product modes as **Read only**,
+  **Approval required**, and **Automation**, while mapping them to the stable bridge
+  values `read_only`, `approval`, and `auto`. Explain that each is a maximum
+  authority ceiling, show what lower workflows remain available, and never label
+  the selection as a grant.
+- [ ] **A11-013** In disabled state, render connection/configuration from local
+  data and show the agent/runtime/network paths as quiesced. A status-page refresh
+  must not poll Product Bridge or Charlie central until activation is requested.
 
 **Verify**
 
@@ -1079,6 +1179,9 @@ quota, audit, and task semantics as the normal Astronomer API.
 - [x] Non-admin users cannot call admin APIs directly.
 - [x] No read response or DOM text contains onboarding, registry, certificate
   private key, enrollment, or runtime token material.
+- [ ] Administration tests prove disabled status is local-only.
+- [x] Administration tests prove the three product mode labels/effects match the
+  cumulative backend decision matrix while sending only stable wire values.
 
 ### Phase A12 — Durable event-triggered investigations
 
@@ -1186,6 +1289,39 @@ the minimum authorized evidence and correlate, in order:
   alert storms, expire stale recommendations, and reopen on verified recurrence.
 - [x] **A12-028** Publish finding lifecycle to the existing Astronomer alert/event
   bus only after durable local correlation is committed.
+- [ ] **A12-029** Normalize every non-execution outcome into one bounded reason
+  vocabulary, including read-only ceiling, approval required/rejected/expired,
+  non-auto-eligible, allowlist, RBAC, target scope, disclosure drift, budget,
+  cooldown, maintenance window, precondition, circuit breaker, fencing,
+  idempotency conflict, ambiguous prior attempt, failed execution, and failed
+  verification. Unknown reasons fail closed and offer no execution control.
+- [ ] **A12-030** For every material diagnosis in an active non-disabled mode
+  where automatic execution is not allowed, durably create/update one authorized
+  actionable finding and alert. Disabled remains inert and creates no new work.
+  Include the coded block reason, impact, bounded evidence summary, affected
+  resource, safe operator checks, verification plan, repeat/timeline metadata,
+  and exactly the user decisions valid for that state.
+- [ ] **A12-031** Implement the decision workflow for blocked automation: offer
+  exact approve/deny only when the same disclosed reversible action remains
+  eligible for human approval; otherwise offer acknowledge/dismiss/resolve and
+  bounded manual checks. Re-evaluate mode, expiry, RBAC, target scope, and safety
+  at decision time; no finding action implicitly executes or widens authority.
+- [ ] **A12-032** Audit and publish each finding decision as a content-free,
+  idempotent lifecycle transition. Notification delivery retries may not
+  duplicate the finding, approval, decision, or action, and a delivery failure
+  may not lose the durable operator workflow.
+
+**Additional verification for non-execution workflows**
+
+- [ ] A table-driven test covers every A12-029 reason in all applicable modes
+  and asserts the exact finding state, alert eligibility, available decisions,
+  absence/presence of an approval link, and zero implicit side effects.
+- [ ] Multi-user tests prove only currently resource-authorized users receive or
+  open the finding/alert and that permission revocation closes subsequent detail
+  and decision requests.
+- [ ] Decision concurrency/replay tests prove acknowledge, dismiss, resolve,
+  approve, deny, expiry, and notification retry are idempotent and mutually
+  consistent across Astronomer and Charlie.
 
 ### Phase A13 — Observability, audit, security, and operations
 
@@ -1233,6 +1369,29 @@ the minimum authorized evidence and correlate, in order:
   verification, and an incident-wide stop-after-failure rule.
 - [x] **A13-014** Add retention/deletion rules for local finding summaries and
   central detail, plus alert dedupe/cardinality and notification-delivery metrics.
+- [ ] **A13-015** Define a machine-readable audit coverage matrix for connection,
+  onboarding, trust, install/uninstall/upgrade/rollback/rotation, mode and
+  emergency disable, session and visibility, trigger and finding lifecycle,
+  approval decisions, bridge/MCP authorization, action admission/execution/
+  verification/replay, disclosure drift, fencing, and every denial code.
+- [ ] **A13-016** Route every Charlie audit and operational log through one
+  allowlist serializer. Permit only stable event/action names, coded outcomes,
+  bounded enum fields, opaque correlation IDs, safe counts/timings, revisions,
+  and public fingerprints/digests; reject unknown fields rather than applying a
+  best-effort blacklist.
+- [ ] **A13-017** Prohibit prompts, responses, reasoning, evidence, citations,
+  tool arguments/results, resource names, user-entered rationale, raw errors,
+  URLs, authorization references, tokens, credentials, private certificate
+  material, onboarding bodies, Secret data, and model/provider/RAG content from
+  logs, audit, metrics, tracing, events, diagnostics, and support bundles.
+- [ ] **A13-018** Correlate product and Charlie records using opaque installation,
+  deployment, route, session, turn, finding, approval, action, operation, request,
+  and audit IDs without logging their associated content. Document which system
+  owns each record and its retention/deletion behavior.
+- [ ] **A13-019** Make audit persistence a fail-closed precondition for authority
+  changes, approval consumption, and write dispatch. If a required audit record
+  cannot be durably committed, perform no side effect and emit only a bounded
+  local failure metric/log.
 
 **Verify**
 
@@ -1241,6 +1400,13 @@ the minimum authorized evidence and correlate, in order:
 - [x] Server/worker cannot reach central Charlie directly.
 - [x] Only agent pods can reach MCP and only Astronomer server/worker pods can
   reach Product Bridge.
+- [ ] The A13-015 matrix has one success, denial, failure, replay, and redaction
+  assertion for every applicable lifecycle transition and denial code.
+- [ ] Property/fuzz tests inject secret and content sentinels into every inbound,
+  outbound, error, cancellation, timeout, and malformed-response path and prove
+  they are absent from all audit/log/metric/trace/event/diagnostic/support sinks.
+- [ ] Audit-storage failure tests prove no approval is consumed and no write is
+  dispatched without its required durable, content-free audit record.
 - [ ] Every runbook is exercised by a game-day or deterministic test.
 
 ### Phase A14 — Connected and air-gap qualification
@@ -1249,6 +1415,11 @@ the minimum authorized evidence and correlate, in order:
 
 #### Connected qualification against the separate Charlie server
 
+- [x] **A14-000** Provide an operator-started, standalone live qualification
+  hook documented in [charlie-live-qualification-hook.md](charlie-live-qualification-hook.md).
+  Keep it out of production routes; require loopback, TLS 1.3, strong bearer
+  authentication, an explicit live-effects acknowledgement, serialized runs,
+  bounded inputs/outputs, baseline restoration, and honest unsupported results.
 - [x] **A14-001** Configure the Astronomer product, route, versioned docs, and one
   isolated deployment in Charlie administration.
 - [x] **A14-002** Download the signed onboarding package from Charlie.
@@ -1301,8 +1472,44 @@ the minimum authorized evidence and correlate, in order:
   blocked auto, failed precondition, and failed post-verification each produce one
   deduplicated actionable finding with correct alert, deep link, lifecycle, and
   no implicit action.
+- [ ] **A14-016e** For feature false, inactive, authoritative disabled, emergency
+  disabled, and disable-during-work, capture process, queue, listener, DNS, and
+  network activity and prove the integration is fully inert after bounded drain;
+  local administration must remain usable without contacting Charlie.
+- [ ] **A14-016f** Execute the cumulative ceiling matrix: `read_only` reads;
+  `approval_required` retains reads and exact approve/deny; `automation` retains
+  both and adds only service-authorized automatic execution. Prove every lower
+  workflow still works and no higher workflow runs below its ceiling.
+- [ ] **A14-016g** Exercise the complete content-free audit matrix with injected
+  prompt, rationale, evidence, tool, error, credential, and Secret sentinels.
+  Correlate every lifecycle outcome while proving no sentinel reaches any
+  operational sink and audit failure prevents authority consumption/dispatch.
+- [ ] **A14-016h** For every automatic-execution block reason, verify exactly one
+  actionable finding/alert, the correct authorized user decision set, exact
+  approval only when eligible, idempotent decisions, and zero implicit action.
 
 #### Connected qualification evidence — 2026-08-05
+
+##### Agent 1.0.15 approval and actionable-alert addendum
+
+- Charlie commit `690fce010a0ff494d5396d5db4d9b09da7346199` supplied
+  signed agent/chart `1.0.15` artifacts. The replacement used immutable image
+  digest `sha256:9a7760806155454e59e229216fee086853b32a397be0b92f48217fff780eb817`
+  and chart digest
+  `sha256:b01810c1cb8cd33aa2ddd937b8047337366b327fbba79909b075b2bd75e07373`;
+  both agent replicas became ready and Argo reported `Synced/Healthy`.
+- In approval-required mode, session
+  `4b6c4cae-f573-4b5e-9645-40668008a5d0` proposed one exact
+  `astronomer.argocd.self_management_sync` action scoped to
+  `self_management_application:astronomer`. Charlie durably stored pending
+  approval `aappr_75a9e0eff446f0a69b276c716ff7c074`; Astronomer's authorized
+  approval list returned it as eligible and created one resource-scoped
+  `approval_required` finding/alert.
+- The operator explicitly denied that approval. Charlie persisted the approval
+  and action as rejected, Astronomer persisted the exact rejected reservation,
+  and the local finding transitioned to resolved with `approval_rejected`.
+  No approval was consumed and no product action ran. The deployment was then
+  restored to acknowledged `read_only` revision `51`.
 
 ##### Agent 1.0.13 and authority-reconciliation addendum
 
@@ -1403,6 +1610,9 @@ the minimum authorized evidence and correlate, in order:
 - [ ] Closing the drawer does not abort a turn; an explicit Abort action does.
 - [ ] Mobile layout preserves streaming, context, and approvals without
   horizontal overflow.
+- [ ] User-facing mode copy says `read_only`, `approval_required`, or
+  `automation`, describes each as a cumulative hard ceiling, and never exposes
+  the internal `approval`/`auto` values as a promise of authority.
 
 ### Investigations and approvals
 
@@ -1422,6 +1632,9 @@ the minimum authorized evidence and correlate, in order:
 - [ ] Resolved/expired approvals cannot be resubmitted.
 - [ ] Finding actions require live authorization; acknowledge/dismiss/resolve are
   idempotent and “Approve” opens a separate exact-action confirmation.
+- [ ] Every blocked-automation finding shows the coded reason and only valid
+  decisions; exact approval is offered only for a reversible, disclosed,
+  currently eligible action, while all other cases provide safe manual checks.
 
 ### Administration
 
@@ -1437,6 +1650,9 @@ the minimum authorized evidence and correlate, in order:
   the UI distinguishes requested from verified central mode.
 - [ ] Diagnostics state exactly which boundary failed and provide a safe next
   action without exposing secrets.
+- [ ] Disabled administration is local-only and visibly reports the agent,
+  bridge, MCP listener, schedulers, and network paths as quiesced without polling
+  them.
 
 ## 7. Verification commands
 
@@ -1480,8 +1696,11 @@ reviewed schema/version/digest first.
   Secrets, clients, worker registrations, triggers, alerts, or network flows.
 - [ ] Enable only in the development Astronomer installation first.
 - [ ] Start with Charlie `read_only`; run the complete read and isolation suite.
-- [ ] Move to `approval`; exercise approve-once/reject and permission intersection.
-- [ ] Move to `auto` only for individually reviewed capability/scope pairs.
+- [ ] Move to `approval_required` (`approval` on the wire); exercise
+  approve-once/reject and permission intersection.
+- [ ] Move to `automation` (`auto` on the wire) only for individually reviewed
+  capability/scope pairs, then repeat the read and exact-approval suites to prove
+  cumulative behavior.
 - [ ] Keep an immediate mode-disable control that travels through the bridge and
   displays verified central state.
 - [ ] Enforce a local deny immediately when emergency disable is requested, even

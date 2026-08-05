@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -52,6 +53,7 @@ func (a *DBLifecycleAuditor) record(ctx context.Context, action, resourceType st
 	detail["outcome_code"] = outcome
 	encoded, err := json.Marshal(detail)
 	if err != nil || len(encoded) > 2048 {
+		slog.WarnContext(ctx, "Charlie lifecycle audit encoding failed", slog.String("failure_code", "charlie.lifecycle_audit_encode_failed"))
 		return
 	}
 	actor := pgtype.UUID{}
@@ -62,11 +64,16 @@ func (a *DBLifecycleAuditor) record(ctx context.Context, action, resourceType st
 	if action == "charlie.session.message_accepted" || action == "charlie.session.aborted" || resourceType == "charlie_finding" && action != "charlie.finding.list" && action != "charlie.finding.read" {
 		class = "mutation"
 	}
-	_ = a.writer.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
+	if err := a.writer.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
 		Source: "service", UserID: actor, ActorAuthMethod: "charlie_product_authority",
 		Action: action, ResourceType: resourceType, ResourceID: nullableAuditID(resourceID),
 		StatusCode: 200, Detail: encoded, ActionClass: class,
-	})
+	}); err != nil {
+		// The lifecycle API is intentionally fire-and-observe because several
+		// records describe outcomes that have already happened. Never hide a
+		// persistence failure, and never log the event payload or identifiers.
+		slog.WarnContext(ctx, "Charlie lifecycle audit persistence failed", slog.String("failure_code", "charlie.lifecycle_audit_persist_failed"))
+	}
 }
 
 func nullableAuditID(id uuid.UUID) string {
