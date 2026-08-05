@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import {
+  createCharlieSession,
+  getCharlieHistory,
+  sendCharlieMessage,
+  subscribeCharlieSessionEvents,
+} from "@/lib/api/charlie";
 import { CharlieShell } from "../charlie-shell";
 
 vi.mock("@/lib/api/charlie", () => ({
@@ -77,5 +83,28 @@ describe("Charlie global shell accessibility", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(launcher).toHaveFocus();
+  });
+
+  it("uses the new session intent as the first turn without sending it twice", async () => {
+    vi.mocked(createCharlieSession).mockResolvedValue({ id: "session-1" } as never);
+    vi.mocked(getCharlieHistory).mockResolvedValue([]);
+    vi.mocked(sendCharlieMessage).mockResolvedValue({} as never);
+    vi.mocked(subscribeCharlieSessionEvents).mockReturnValue(() => undefined);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <CharlieShell><main>Dashboard</main></CharlieShell>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    fireEvent.change(composer, { target: { value: "Inspect the control plane" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(createCharlieSession).toHaveBeenCalledTimes(1));
+    expect(sendCharlieMessage).not.toHaveBeenCalled();
+
+    fireEvent.change(composer, { target: { value: "Now check tunnel health" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendCharlieMessage).toHaveBeenCalledWith("session-1", "Now check tunnel health"));
   });
 });

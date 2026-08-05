@@ -215,8 +215,11 @@ function CharlieDrawer() {
         });
         id = s.id;
         setSessionId(id);
+      } else {
+        // Charlie executes the initial session intent as the first turn. Do
+        // not enqueue the same user message a second time for a new session.
+        await sendCharlieMessage(id, message);
       }
-      await sendCharlieMessage(id, message);
       return id;
     },
     onMutate: (message) =>
