@@ -106,7 +106,10 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		logModeTransitionFailure(ctx, "mode.remote_mode_mismatch")
 		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
 	}
-	if remote.Revision <= requested.Revision {
+	// The product-local CAS and Charlie can advance to the same revision for a
+	// single transition. Equality is therefore an authoritative confirmation,
+	// while any lower revision is stale and must remain fail-closed.
+	if remote.Revision < requested.Revision {
 		logModeTransitionFailure(ctx, "mode.remote_revision_stale")
 		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
 	}

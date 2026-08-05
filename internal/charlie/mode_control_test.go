@@ -24,7 +24,7 @@ func (f *fakeModeStore) SetRequestedMode(_ context.Context, connectionID string,
 	return f.state, nil
 }
 func (f *fakeModeStore) SetVerifiedMode(_ context.Context, connectionID string, mode Mode, expected, next int64, digest string) (ModeState, error) {
-	if f.error != nil || connectionID != f.state.ConnectionID || expected != f.state.Revision || next <= expected {
+	if f.error != nil || connectionID != f.state.ConnectionID || expected != f.state.Revision || next < expected {
 		return ModeState{}, errors.New("verify CAS failed")
 	}
 	f.state.Verified = mode
@@ -108,6 +108,35 @@ func TestModeRequestRequiresAuthoritativeReadback(t *testing.T) {
 	}
 	if state.Verified != ModeApproval || state.Requested != ModeApproval || state.Revision != 6 || bridge.calls != 1 {
 		t.Fatalf("mode not authoritatively verified: %+v bridge=%d", state, bridge.calls)
+	}
+}
+
+type equalRevisionModeBridge struct{}
+
+func (equalRevisionModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (ModeState, error) {
+	return ModeState{
+		ConnectionID:     "connection-a",
+		Requested:        mode,
+		Verified:         mode,
+		Revision:         revision,
+		DisclosureDigest: "disclosure-a",
+		Active:           true,
+	}, nil
+}
+
+func (equalRevisionModeBridge) Status(context.Context) (ModeState, error) {
+	return ModeState{}, nil
+}
+
+func TestModeRequestAcceptsEqualAuthoritativeRevision(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	controller, _ := NewModeController(store, equalRevisionModeBridge{})
+	state, err := controller.Request(context.Background(), ModeDisabled, 4, ModePrerequisites{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Requested != ModeDisabled || state.Verified != ModeDisabled || state.Revision != 5 {
+		t.Fatalf("equal authoritative revision was not committed: %+v", state)
 	}
 }
 
