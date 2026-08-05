@@ -3,6 +3,7 @@ import api from "@/lib/api";
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 import {
   decideCharlieApproval,
+  getCharlieHistory,
   getCharlieFinding,
   listCharlieFindings,
   listCharlieSessions,
@@ -36,6 +37,40 @@ describe("Charlie browser gateway mapping", () => {
         centralRevision: 2,
       }),
     ]);
+  });
+  it("maps bounded redacted history items into renderable chat messages", async () => {
+    mockedApi.get.mockResolvedValue({
+      data: {
+        data: [
+          {
+            itemId: "user-1",
+            kind: "user_message",
+            redactedContent: "question",
+            createdAt: "2026-08-05T22:19:10Z",
+          },
+          {
+            itemId: "assistant-1",
+            kind: "assistant_message",
+            redactedContent: "answer",
+            createdAt: "2026-08-05T22:19:25Z",
+          },
+          {
+            itemId: "evidence-1",
+            kind: "finding_evidence",
+            redactedContent: "bounded evidence",
+          },
+        ],
+      },
+    });
+
+    await expect(getCharlieHistory("session/a")).resolves.toEqual([
+      expect.objectContaining({ id: "user-1", role: "user", content: "question" }),
+      expect.objectContaining({ id: "assistant-1", role: "assistant", content: "answer" }),
+      expect.objectContaining({ id: "evidence-1", role: "system", content: "bounded evidence" }),
+    ]);
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/charlie/sessions/session%2Fa/history/",
+    );
   });
   it("maps bounded local finding data plus on-demand central detail", async () => {
     mockedApi.get.mockResolvedValue({

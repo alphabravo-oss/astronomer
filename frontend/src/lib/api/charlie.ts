@@ -81,6 +81,15 @@ export interface CharlieMessage {
   approval?: CharlieApproval;
   createdAt?: string;
 }
+type CharlieHistoryItemWire = {
+  item_id?: string;
+  itemId?: string;
+  kind: "user_message" | "assistant_message" | "finding_evidence";
+  redacted_content?: string;
+  redactedContent?: string;
+  created_at?: string;
+  createdAt?: string;
+};
 export interface CharlieFinding {
   id: string;
   title: string;
@@ -327,8 +336,19 @@ export async function getCharlieHistory(id: string): Promise<CharlieMessage[]> {
   const { data } = await api.get(
     `/charlie/sessions/${encodeURIComponent(id)}/history/`,
   );
-  const value = data.messages ?? data.data?.messages ?? data;
-  return Array.isArray(value) ? value : [];
+  const value = data.messages ?? data.data?.messages ?? data.data ?? data;
+  if (!Array.isArray(value)) return [];
+  return (value as CharlieHistoryItemWire[]).map((item) => ({
+    id: item.itemId ?? item.item_id ?? "",
+    role:
+      item.kind === "user_message"
+        ? "user"
+        : item.kind === "assistant_message"
+          ? "assistant"
+          : "system",
+    content: item.redactedContent ?? item.redacted_content ?? "",
+    createdAt: item.createdAt ?? item.created_at,
+  }));
 }
 export async function sendCharlieMessage(id: string, message: string) {
   const { data } = await api.post(
