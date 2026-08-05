@@ -1173,19 +1173,19 @@ the minimum authorized evidence and correlate, in order:
 
 #### Connected qualification against the separate Charlie server
 
-- [ ] **A14-001** Configure the Astronomer product, route, versioned docs, and one
+- [x] **A14-001** Configure the Astronomer product, route, versioned docs, and one
   isolated deployment in Charlie administration.
-- [ ] **A14-002** Download the signed onboarding package from Charlie.
-- [ ] **A14-003** Import it in Astronomer and install only the generic agent.
-- [ ] **A14-004** Pull chart/image exclusively from Charlie OCI.
-- [ ] **A14-005** Block direct server/worker access to Charlie central before
+- [x] **A14-002** Download the signed onboarding package from Charlie.
+- [x] **A14-003** Import it in Astronomer and install only the generic agent.
+- [x] **A14-004** Pull chart/image exclusively from Charlie OCI.
+- [x] **A14-005** Block direct server/worker access to Charlie central before
   functional testing.
-- [ ] **A14-006** Confirm both replicas, one leader, one standby, correct epoch,
+- [x] **A14-006** Confirm both replicas, one leader, one standby, correct epoch,
   compatible versions, and MCP disclosure acknowledgement.
-- [ ] **A14-007** Validate grounded Astronomer-version answers and general
+- [x] **A14-007** Validate grounded Astronomer-version answers and general
   Kubernetes passthrough answers.
 - [ ] **A14-008** Validate visible context chips and authorized on-demand evidence.
-- [ ] **A14-009** Validate read-only read success and write denial.
+- [x] **A14-009** Validate read-only read success and write denial.
 - [ ] **A14-010** Validate approve-once executes once and reject executes never.
 - [ ] **A14-011** Validate auto executes only an explicitly allowlisted,
   service-authorized bounded action.
@@ -1225,6 +1225,39 @@ the minimum authorized evidence and correlate, in order:
   blocked auto, failed precondition, and failed post-verification each produce one
   deduplicated actionable finding with correct alert, deep link, lifecycle, and
   no implicit action.
+
+#### Connected qualification evidence — 2026-08-05
+
+- Charlie central commit `8fc943d` served the separately deployed control plane;
+  Astronomer commit `39df916` served the product integration during live tests.
+  The follow-up documentation-only Astronomer commit is `c63c787`.
+- Signed replacement package `onboard_50551337e5838821aab322059f127b4e`
+  installed agent/chart `1.0.12` from Charlie OCI by immutable image digest
+  `sha256:4c4e268df498cda898dcb59c7421880bf50d0c477d7e7860dc32bbf7e3d9058c`
+  and chart digest
+  `sha256:85cb00256da8debd418edf8c52a9ab12416152cb9b453711dde8ae086cd5fa9b`.
+- Argo reported `Synced/Healthy`; the StatefulSet reported two ready replicas;
+  Charlie reported one fenced leader, one standby, compatible `1.0.12`
+  artifacts, and an acknowledged mode-bound disclosure.
+- Read-only sessions successfully used bounded fleet reads. An attempted
+  `astronomer.queue.retry_task` was denied with `authority.read_only_write` and
+  produced an actionable no-action finding.
+- Approval session `8a7523e9-0681-40ff-8a0e-2b18fc6c1dc8` proposed one exact
+  `astronomer.queue.retry_task`. Approval
+  `aappr_953774e5f042cfcadeaf7d7c653aa2f9` was rejected by the operator; Charlie
+  and Astronomer both persisted `rejected`, the finding resolved with
+  `approval_rejected`, and Astronomer persisted zero execution receipts.
+- Auto activation returned `409` without a separate live target grant even after
+  the automation service identity was enabled. The identity was disabled again;
+  no auto action ran. A future qualification must grant one deliberately bounded
+  target before A14-011 can be checked.
+- Disabled mode retained authenticated admin status but rejected new session
+  creation with `503`. The live deployment was then restored to acknowledged
+  `read_only` revision `33`; automation identity access remains disabled.
+- `make verify`, the full Go and race suites, frontend lint/type-check (warnings
+  only), 749 frontend tests, frontend production build, dependency audit, and
+  Helm lint/render/contracts passed. The explicit live agent-identity acceptance
+  remained skipped because `AGENT_IDENTITY_TEST_CONTEXT` was not set.
 
 #### Internal-Charlie air gap
 
