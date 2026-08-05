@@ -16,6 +16,7 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
 
 # /migrations is the conventional path used by the migrate binary.
 COPY internal/db/migrations /migrations
+RUN chmod 0644 /migrations/*.sql
 
 # The base image entrypoint is /usr/local/bin/migrate, so callers only need
 # to pass migrate-style args (e.g. -database <url> -path /migrations up).
