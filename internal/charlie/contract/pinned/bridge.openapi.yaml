@@ -400,7 +400,7 @@ components:
         epoch: {type: integer, format: int64, minimum: 1}
         lease_expires_at: {type: string, format: date-time}
         integration_revision: {$ref: "#/components/schemas/OpaqueId"}
-        disclosure_digest: {type: string, pattern: "^sha256:[a-f0-9]{64}$"}
+        disclosure_digest: {type: string, pattern: "^(?:|sha256:[a-f0-9]{64})$", description: Empty only while no reviewed disclosure is active.}
         effective_mode: {$ref: "#/components/schemas/Mode"}
         route_id: {$ref: "#/components/schemas/OpaqueId"}
         artifact_version: {type: string, minLength: 1, maxLength: 128}

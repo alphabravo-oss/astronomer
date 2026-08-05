@@ -182,6 +182,14 @@ func (s *AdminService) SetWriteFence(fence *WriteFence) {
 	}
 }
 
+// RunModeReconciler keeps the product-local authority snapshot current with
+// Charlie central while preserving the local mode as an independent ceiling.
+func (s *AdminService) RunModeReconciler(ctx context.Context, interval time.Duration) {
+	if s != nil && s.mode != nil {
+		s.mode.Run(ctx, interval)
+	}
+}
+
 func (s *AdminService) connection(ctx context.Context) (sqlc.CharlieConnection, error) {
 	if s == nil || s.queries == nil {
 		return sqlc.CharlieConnection{}, ErrAdminUnavailable
@@ -197,6 +205,11 @@ func (s *AdminService) connection(ctx context.Context) (sqlc.CharlieConnection, 
 }
 
 func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
+	// Status is also an immediate reconciliation boundary so an administrator
+	// never has to wait for the background interval after a central policy edit.
+	if s != nil && s.mode != nil {
+		_, _ = s.mode.Reconcile(ctx)
+	}
 	connection, err := s.connection(ctx)
 	if errors.Is(err, ErrAdminNotConfigured) {
 		return emptyAdminStatus(), nil

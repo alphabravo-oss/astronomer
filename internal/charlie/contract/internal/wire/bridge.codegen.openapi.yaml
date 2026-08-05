@@ -242,7 +242,8 @@ components:
                 deployment_id:
                     $ref: '#/components/schemas/OpaqueId'
                 disclosure_digest:
-                    pattern: ^sha256:[a-f0-9]{64}$
+                    description: Empty only while no reviewed disclosure is active.
+                    pattern: ^(?:|sha256:[a-f0-9]{64})$
                     type: string
                 effective_enabled:
                     description: True only when both enablement authorities are true.

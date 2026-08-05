@@ -132,6 +132,84 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 	return verified, nil
 }
 
+// Reconcile imports a newer Charlie-authoritative mode snapshot without ever
+// changing the product-local requested ceiling. A central policy or disclosure
+// change can therefore suspend or reduce authority immediately, while a more
+// permissive remote mode remains bounded by EffectiveMode.
+func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
+	current, err := c.store.LoadModeState(ctx)
+	if err != nil {
+		return ModeState{}, fmt.Errorf("load Charlie mode state: %w", err)
+	}
+	if !current.Active || current.EmergencyDisabled {
+		return current, nil
+	}
+	remote, err := c.bridge.Status(ctx)
+	if err != nil {
+		return current, fmt.Errorf("Charlie mode status unavailable")
+	}
+	if remote.ConnectionID != "" && remote.ConnectionID != current.ConnectionID {
+		return current, fmt.Errorf("Charlie mode status installation changed")
+	}
+	if remote.Revision < 1 || remote.Revision < current.Revision {
+		return current, fmt.Errorf("Charlie mode status revision is stale")
+	}
+
+	verified := remote.Verified
+	digest := remote.DisclosureDigest
+	if !remote.Active {
+		// An inactive central integration has no executable disclosure. Never
+		// retain a previously acknowledged digest across that boundary.
+		verified = ModeDisabled
+		digest = ""
+	} else if !validMode(verified) || verified == ModeDisabled || digest == "" {
+		return current, fmt.Errorf("Charlie mode status is incomplete")
+	}
+
+	if remote.Revision == current.Revision {
+		if current.Verified != verified || current.DisclosureDigest != digest {
+			return current, fmt.Errorf("Charlie mode status conflicts at the current revision")
+		}
+		return current, nil
+	}
+
+	reconciled, err := c.store.SetVerifiedMode(ctx, current.ConnectionID, verified, current.Revision, remote.Revision, digest)
+	if err != nil {
+		return current, fmt.Errorf("persist reconciled Charlie mode: %w", err)
+	}
+	return reconciled, nil
+}
+
+// Run periodically reconciles Charlie's signed integration revision into the
+// local least-authority state. Errors never reopen authority and are logged as
+// bounded failure codes without remote payloads or credentials.
+func (c *ModeController) Run(ctx context.Context, interval time.Duration) {
+	if c == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	failures := 0
+	for {
+		if _, err := c.Reconcile(ctx); err != nil {
+			failures++
+			if failures == 1 || failures%20 == 0 {
+				logModeTransitionFailure(ctx, "mode.reconcile_failed")
+			}
+		} else {
+			failures = 0
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 func logModeTransitionFailure(ctx context.Context, code string) {
 	slog.WarnContext(ctx, "Charlie mode transition failed", slog.String("failure_code", code))
 }

@@ -13,6 +13,7 @@ type fakeModeStore struct {
 	emergencyCalls int
 	clearCalls     int
 	requestCalls   int
+	verifyCalls    int
 }
 
 func (f *fakeModeStore) LoadModeState(context.Context) (ModeState, error) { return f.state, f.error }
@@ -26,6 +27,7 @@ func (f *fakeModeStore) SetRequestedMode(_ context.Context, connectionID string,
 	return f.state, nil
 }
 func (f *fakeModeStore) SetVerifiedMode(_ context.Context, connectionID string, mode Mode, expected, next int64, digest string) (ModeState, error) {
+	f.verifyCalls++
 	if f.error != nil || connectionID != f.state.ConnectionID || expected != f.state.Revision || next < expected {
 		return ModeState{}, errors.New("verify CAS failed")
 	}
@@ -33,6 +35,79 @@ func (f *fakeModeStore) SetVerifiedMode(_ context.Context, connectionID string, 
 	f.state.Revision = next
 	f.state.DisclosureDigest = digest
 	return f.state, nil
+}
+
+func TestModeReconcilePersistsNewAuthoritativeSnapshotWithoutRaisingLocalCeiling(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: ModeState{Active: true, Requested: ModeAuto, Verified: ModeAuto, Revision: 9, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridge)
+
+	got, err := controller.Reconcile(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Requested != ModeReadOnly || got.Verified != ModeAuto || got.Revision != 9 || got.DisclosureDigest != "disclosure-b" {
+		t.Fatalf("unexpected reconciled state: %+v", got)
+	}
+	if EffectiveMode(got.Requested, got.Verified, got.EmergencyDisabled) != ModeReadOnly {
+		t.Fatal("remote reconciliation raised the local authority ceiling")
+	}
+}
+
+func TestModeReconcileCentralSuspensionClearsDisclosure(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: ModeState{Active: false, Requested: ModeReadOnly, Verified: ModeReadOnly, Revision: 8, DisclosureDigest: "stale-disclosure"}}
+	controller, _ := NewModeController(store, bridge)
+
+	got, err := controller.Reconcile(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Verified != ModeDisabled || got.DisclosureDigest != "" || got.Requested != ModeReadOnly || got.Revision != 8 {
+		t.Fatalf("central suspension was not imported fail-closed: %+v", got)
+	}
+}
+
+func TestModeReconcileRejectsRevisionDrift(t *testing.T) {
+	for name, remote := range map[string]ModeState{
+		"stale":                  {Active: true, Verified: ModeReadOnly, Revision: 3, DisclosureDigest: "disclosure-a"},
+		"same revision mismatch": {Active: true, Verified: ModeApproval, Revision: 4, DisclosureDigest: "disclosure-b"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeModeStore{state: activeModeState()}
+			controller, _ := NewModeController(store, &fakeModeBridge{state: remote})
+			if _, err := controller.Reconcile(context.Background()); err == nil || store.verifyCalls != 0 {
+				t.Fatal("revision drift was accepted")
+			}
+		})
+	}
+}
+
+func TestModeReconcileDoesNotContactRemoteDuringEmergencyDisable(t *testing.T) {
+	state := activeModeState()
+	state.EmergencyDisabled = true
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{error: errors.New("must not be called")}
+	controller, _ := NewModeController(store, bridge)
+	got, err := controller.Reconcile(context.Background())
+	if err != nil || !got.EmergencyDisabled {
+		t.Fatalf("emergency state was not preserved: state=%+v err=%v", got, err)
+	}
+}
+
+func TestModeReconcilerStopsWithContext(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: activeModeState()}
+	controller, _ := NewModeController(store, bridge)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { controller.Run(ctx, time.Millisecond); close(done) }()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("mode reconciler did not stop")
+	}
 }
 func (f *fakeModeStore) SetEmergencyDisabled(_ context.Context, connectionID, _ string) (ModeState, error) {
 	if f.error != nil || connectionID != f.state.ConnectionID {

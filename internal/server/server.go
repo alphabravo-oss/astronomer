@@ -1326,6 +1326,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		charlieFindingsHandler   *handler.CharlieFindingHandler
 		charlieOperationsHandler *handler.CharlieOperationHandler
 		charlieAdminHandler      *handler.CharlieAdminHandler
+		charlieAdminService      *charlie.AdminService
 		managedCharlieBridge     *charlie.ManagedBridge
 		charlieEventRuntime      *charlie.EventRuntime
 		charlieWriteFence        = charlie.NewDistributedWriteFence(database.Pool())
@@ -1429,6 +1430,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	if adminService, adminErr := charlie.NewAdminService(database.Pool(), adminInstaller, managedCharlieBridge); adminErr != nil {
 		logger.Warn("Charlie administration disabled: local service unavailable")
 	} else {
+		charlieAdminService = adminService
 		adminService.SetWriteFence(charlieWriteFence)
 		charlieAdminHandler = handler.NewCharlieAdminHandler(adminService, queries)
 		charlieAdminHandler.SetSettingsCache(settingsCache)
@@ -2104,6 +2106,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	if charlieEventRuntime != nil {
 		go charlieEventRuntime.Run(reconcileCtx)
+	}
+	if charlieAdminService != nil {
+		go charlieAdminService.RunModeReconciler(reconcileCtx, 10*time.Second)
 	}
 	// Phase B3 — configure the worker-task runtime in this process too, so the
 	// in-process project reconciler (and other server-side cron sweeps that

@@ -27,9 +27,23 @@ func TestAgentEnrollmentReadinessIsIndependentFromExecutionActivation(t *testing
 
 func TestModeStateUsesCharliesSignedIntegrationRevision(t *testing.T) {
 	state := modeStateFromBridge(AdminBridgeStatus{
-		EffectiveMode: "read_only", ProductEnabled: true, IntegrationRevision: "16", DisclosureDigest: "digest-a",
+		EffectiveMode: "read_only", ProductEnabled: true, DeploymentEnabled: true, EffectiveEnabled: true, IntegrationRevision: "16", DisclosureDigest: "digest-a",
 	}, 2)
 	if state.Revision != 16 || state.Verified != ModeReadOnly || state.DisclosureDigest != "digest-a" {
 		t.Fatalf("central authority revision was not preserved: %+v", state)
+	}
+}
+
+func TestModeStateTreatsEitherEnablementBoundaryAsInactive(t *testing.T) {
+	for name, status := range map[string]AdminBridgeStatus{
+		"product disabled":    {EffectiveMode: "read_only", ProductEnabled: false, DeploymentEnabled: true, EffectiveEnabled: false, IntegrationRevision: "17", DisclosureDigest: "stale"},
+		"deployment disabled": {EffectiveMode: "read_only", ProductEnabled: true, DeploymentEnabled: false, EffectiveEnabled: false, IntegrationRevision: "17", DisclosureDigest: "stale"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			state := modeStateFromBridge(status, 0)
+			if state.Active || state.Verified != ModeDisabled {
+				t.Fatalf("inactive boundary retained authority: %+v", state)
+			}
+		})
 	}
 }

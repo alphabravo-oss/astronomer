@@ -117,7 +117,7 @@ func (b *managedModeBridge) Status(ctx context.Context) (ModeState, error) {
 
 func modeStateFromBridge(status AdminBridgeStatus, revision int64) ModeState {
 	mode := Mode(status.EffectiveMode)
-	if !status.ProductEnabled || !validMode(mode) {
+	if !status.EffectiveEnabled || !validMode(mode) {
 		mode = ModeDisabled
 	}
 	// Charlie's integration revision is the authority revision signed into
@@ -126,7 +126,7 @@ func modeStateFromBridge(status AdminBridgeStatus, revision int64) ModeState {
 	if remoteRevision, err := strconv.ParseInt(strings.TrimSpace(status.IntegrationRevision), 10, 64); err == nil && remoteRevision > 0 {
 		revision = remoteRevision
 	}
-	return ModeState{Requested: mode, Verified: mode, Revision: revision, DisclosureDigest: status.DisclosureDigest, Active: status.ProductEnabled}
+	return ModeState{Requested: mode, Verified: mode, Revision: revision, DisclosureDigest: status.DisclosureDigest, Active: status.EffectiveEnabled}
 }
 
 type managedAgentLifecycleBridge struct{ bridge *ManagedBridge }

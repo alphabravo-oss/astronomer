@@ -302,7 +302,9 @@ type BridgeStatus struct {
 	CentralHealth     BridgeStatusCentralHealth `json:"central_health"`
 	DeploymentEnabled bool                      `json:"deployment_enabled"`
 	DeploymentId      OpaqueId                  `json:"deployment_id"`
-	DisclosureDigest  string                    `json:"disclosure_digest"`
+
+	// DisclosureDigest Empty only while no reviewed disclosure is active.
+	DisclosureDigest string `json:"disclosure_digest"`
 
 	// EffectiveEnabled True only when both enablement authorities are true.
 	EffectiveEnabled    bool      `json:"effective_enabled"`
