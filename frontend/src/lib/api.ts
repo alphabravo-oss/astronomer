@@ -2795,3 +2795,8 @@ export * from './api/extensions';
 // operations across the cluster fleet. See lib/api/fleet-operations.ts.
 // ============================================================
 export * from './api/fleet-operations';
+
+// Charlie is an external intelligence service; this module is the typed local
+// gateway boundary and contains no model, RAG, or agent implementation.
+export * from './api/charlie';
+export * from './api/charlie-admin';

@@ -13,17 +13,23 @@ import (
 )
 
 type Querier interface {
+	AbortCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
 	AcknowledgeAlertEvent(ctx context.Context, arg AcknowledgeAlertEventParams) error
 	AcknowledgeControlPlaneAlert(ctx context.Context, arg AcknowledgeControlPlaneAlertParams) (ControlPlaneAlert, error)
+	ActivateCharlieConnection(ctx context.Context, arg ActivateCharlieConnectionParams) (CharlieConnection, error)
 	// Alert Rule Channels (M2M)
 	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
+	AddCharlieFindingResource(ctx context.Context, arg AddCharlieFindingResourceParams) error
+	AddCharlieSessionResource(ctx context.Context, arg AddCharlieSessionResourceParams) error
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
+	AdvanceCharlieOnboardingState(ctx context.Context, arg AdvanceCharlieOnboardingStateParams) (CharlieConnection, error)
 	AggregateClusterVulnerabilities(ctx context.Context, clusterID uuid.UUID) (AggregateClusterVulnerabilitiesRow, error)
 	AggregateFleetVulnerabilities(ctx context.Context) (AggregateFleetVulnerabilitiesRow, error)
 	// Per-cluster critical/high/report_count aggregate for the whole fleet
 	// in one pass. Batched equivalent of AggregateClusterVulnerabilities so
 	// the compliance-posture rollup avoids one query per cluster.
 	AggregateVulnerabilitiesPerCluster(ctx context.Context) ([]AggregateVulnerabilitiesPerClusterRow, error)
+	ApproveCharlieActionApproval(ctx context.Context, id uuid.UUID) (CharlieActionApproval, error)
 	// Atomic archive-then-delete used by the decommission archive_audit phase.
 	//
 	// A single statement so both halves see ONE snapshot: to_archive pins the exact
@@ -48,12 +54,25 @@ type Querier interface {
 	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
 	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
 	BackfillDexPublicClientsEnvelope(ctx context.Context, arg BackfillDexPublicClientsEnvelopeParams) (DexSetting, error)
+	BindCharlieSessionCentralID(ctx context.Context, arg BindCharlieSessionCentralIDParams) (CharlieSession, error)
 	// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
 	// (jsonb_to_recordset) so a whole chart's versions land in one query
 	// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
 	// ingest idempotent against concurrent syncs; RETURNING version yields
 	// exactly the rows that were newly inserted so the caller can count them.
 	BulkCreateHelmChartVersions(ctx context.Context, arg BulkCreateHelmChartVersionsParams) ([]string, error)
+	CharlieAgentConnectionHistory(ctx context.Context, arg CharlieAgentConnectionHistoryParams) ([]AgentConnectionEvent, error)
+	CharlieAgentFleetGet(ctx context.Context, clusterID uuid.UUID) (CharlieAgentFleetGetRow, error)
+	CharlieAgentFleetList(ctx context.Context, arg CharlieAgentFleetListParams) ([]CharlieAgentFleetListRow, error)
+	CharlieAgentFleetSummary(ctx context.Context, staleSeconds int32) (CharlieAgentFleetSummaryRow, error)
+	CharlieAgentReconnectStats(ctx context.Context, arg CharlieAgentReconnectStatsParams) (CharlieAgentReconnectStatsRow, error)
+	CharlieTunnelHealth(ctx context.Context, since time.Time) (CharlieTunnelHealthRow, error)
+	CharlieTunnelRecentErrors(ctx context.Context, arg CharlieTunnelRecentErrorsParams) ([]TunnelLocatorEvent, error)
+	CharlieTunnelReplicaDistribution(ctx context.Context) ([]CharlieTunnelReplicaDistributionRow, error)
+	ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharlieActionReceiptParams) (CharlieActionReceipt, error)
+	ClaimCharlieAmbiguousReceipt(ctx context.Context, arg ClaimCharlieAmbiguousReceiptParams) (CharlieActionReceipt, error)
+	ClaimCharlieTriggerEvent(ctx context.Context, id uuid.UUID) (CharlieTriggerEvent, error)
+	ClaimDueCharlieTriggerEvents(ctx context.Context, batchSize int32) ([]CharlieTriggerEvent, error)
 	// Atomically bump the lease so other workers SKIP this row for the given TTL.
 	// Returns the row only if we acquired the lease (locked_until expired or null).
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimProjectNamespaceReconcileParams) (ProjectNamespace, error)
@@ -62,6 +81,7 @@ type Querier interface {
 	// 10-second upstream client timeout. poll_attempts is charged once at claim
 	// time so replica count cannot accelerate the timeout budget.
 	ClaimRunningArgoCDOperationsForPoll(ctx context.Context, limit int32) ([]ArgocdOperation, error)
+	ClearCharlieEmergencyDisabled(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
 	// Backstop sweep: clear previous_token_hash for rows whose rotation completed
 	// more than the supplied interval ago but whose old hash was never cleared by
 	// a new-token CONNECT (e.g. the agent crashed before reconnecting).
@@ -77,7 +97,9 @@ type Querier interface {
 	// "running" forever even after the apply finished. Called from
 	// OnTemplateApplyStart before the new row is written.
 	CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error
+	CompareAndSetCharlieMode(ctx context.Context, arg CompareAndSetCharlieModeParams) (CharlieConnection, error)
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg CompleteArgoCDOperationWithResultParams) (ArgocdOperation, error)
+	ConsumeCharlieActionApproval(ctx context.Context, arg ConsumeCharlieActionApprovalParams) (CharlieActionApproval, error)
 	// One-shot disarm of the mass-decommission override (E3/H10). The worker
 	// calls this immediately after honoring an armed mass removal so a
 	// leftover arm cannot permit a SECOND accidental bad sync.
@@ -268,6 +290,14 @@ type Querier interface {
 	CreateCISScan(ctx context.Context, arg CreateCISScanParams) (SecurityScanResult, error)
 	CreateCatalogOperation(ctx context.Context, arg CreateCatalogOperationParams) (CatalogOperation, error)
 	CreateCatalogOperationEvent(ctx context.Context, arg CreateCatalogOperationEventParams) (CatalogOperationEvent, error)
+	CreateCharlieActionApproval(ctx context.Context, arg CreateCharlieActionApprovalParams) (CharlieActionApproval, error)
+	CreateCharlieActionDeferral(ctx context.Context, arg CreateCharlieActionDeferralParams) (CharlieActionDeferral, error)
+	CreateCharlieConnection(ctx context.Context, arg CreateCharlieConnectionParams) (CharlieConnection, error)
+	CreateCharlieDelegation(ctx context.Context, arg CreateCharlieDelegationParams) (CharlieDelegation, error)
+	CreateCharlieSession(ctx context.Context, arg CreateCharlieSessionParams) (CharlieSession, error)
+	CreateCharlieTriggerEvent(ctx context.Context, arg CreateCharlieTriggerEventParams) (CharlieTriggerEvent, error)
+	CreateCharlieTriggerEventWithOutbox(ctx context.Context, arg CreateCharlieTriggerEventWithOutboxParams) (CreateCharlieTriggerEventWithOutboxRow, error)
+	CreateCharlieTriggerRule(ctx context.Context, arg CreateCharlieTriggerRuleParams) (CharlieTriggerRule, error)
 	CreateCloudCredential(ctx context.Context, arg CreateCloudCredentialParams) (CloudCredential, error)
 	CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error)
 	// Phase: cluster decommission reconciler.
@@ -452,6 +482,8 @@ type Querier interface {
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
 	DeleteBlessedChartsBySource(ctx context.Context, source string) error
+	DeleteCharlieFindingMetadataBefore(ctx context.Context, before time.Time) (int64, error)
+	DeleteCharlieSessionMetadataBefore(ctx context.Context, before time.Time) (int64, error)
 	DeleteCloudCredential(ctx context.Context, id uuid.UUID) error
 	DeleteCluster(ctx context.Context, id uuid.UUID) error
 	DeleteClusterAgentTokensByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
@@ -611,6 +643,7 @@ type Querier interface {
 	// delivery history; the handler doesn't have to do that explicitly.
 	DeleteWebhookSubscription(ctx context.Context, id uuid.UUID) error
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
+	DisconnectCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
 	// The generation predicate is evaluated in the same statement that enables
 	// the provider. A stale reconcile can therefore never win a check-then-write
 	// race against a newer settings/register mutation.
@@ -619,6 +652,7 @@ type Querier interface {
 	// at least one filter glob. The dispatcher picks rows up in batch
 	// order via the (forwarder_id, id) index.
 	EnqueueSIEMEvent(ctx context.Context, arg EnqueueSIEMEventParams) (SiemForwardQueue, error)
+	EnsureCharlieAutomationBinding(ctx context.Context, arg EnsureCharlieAutomationBindingParams) (GlobalRoleBinding, error)
 	// Idempotently create-or-return the singleton "local" cluster row that
 	// represents the Kubernetes cluster the server itself runs in. Uses a CTE
 	// so the round-trip both inserts (when no local row exists yet) and selects
@@ -626,13 +660,19 @@ type Querier interface {
 	// the ON CONFLICT branch reachable; if the conflicting row was inserted by a
 	// concurrent server replica, the SELECT in the UNION returns it.
 	EnsureLocalCluster(ctx context.Context, arg EnsureLocalClusterParams) (EnsureLocalClusterRow, error)
+	ExpireCharlieFindings(ctx context.Context, asOf pgtype.Timestamptz) (int64, error)
 	FailArgoCDOperationWithResult(ctx context.Context, arg FailArgoCDOperationWithResultParams) (ArgocdOperation, error)
+	FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
 	// API Tokens
 	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
 	// ArgoCD cluster-proxy service tokens. These are not user API tokens:
 	// they are cluster-scoped machine identities used only by built-in ArgoCD
 	// to reach an adopted cluster through Astronomer's tunnel-backed proxy.
 	GetActiveArgoCDClusterProxyTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ArgocdClusterProxyToken, error)
+	GetActiveCharlieActionApproval(ctx context.Context, arg GetActiveCharlieActionApprovalParams) (CharlieActionApproval, error)
+	GetActiveCharlieConnection(ctx context.Context) (CharlieConnection, error)
+	GetActiveCharlieDelegationByHash(ctx context.Context, authorizationHash string) (CharlieDelegation, error)
+	GetActiveCharlieFindingByFingerprint(ctx context.Context, arg GetActiveCharlieFindingByFingerprintParams) (CharlieFinding, error)
 	GetActiveControlPlaneAlert(ctx context.Context, arg GetActiveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	GetActiveControlPlaneSilences(ctx context.Context) ([]ControlPlaneSilence, error)
 	GetActiveSchedules(ctx context.Context) ([]BackupSchedule, error)
@@ -668,6 +708,24 @@ type Querier interface {
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
 	GetBlessedChart(ctx context.Context, arg GetBlessedChartParams) (CatalogBlessedChart, error)
 	GetCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
+	GetCharlieActionApprovalByApprovalID(ctx context.Context, approvalID string) (CharlieActionApproval, error)
+	GetCharlieActionReceipt(ctx context.Context, charlieActionID string) (CharlieActionReceipt, error)
+	GetCharlieActionSafetySnapshot(ctx context.Context, arg GetCharlieActionSafetySnapshotParams) (GetCharlieActionSafetySnapshotRow, error)
+	GetCharlieAutomationPolicy(ctx context.Context, arg GetCharlieAutomationPolicyParams) (CharlieAutomationPolicy, error)
+	// Charlie integration metadata only. Content, raw evidence, model output, tool
+	// arguments/results, and reusable central credentials do not belong here.
+	GetCharlieAutomationRole(ctx context.Context) (GlobalRole, error)
+	GetCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
+	GetCharlieConnectionByDeploymentID(ctx context.Context, deploymentID string) (CharlieConnection, error)
+	GetCharlieConnectionByPackageID(ctx context.Context, onboardingPackageID uuid.UUID) (CharlieConnection, error)
+	GetCharlieFinding(ctx context.Context, id uuid.UUID) (CharlieFinding, error)
+	GetCharlieFindingByApprovalID(ctx context.Context, approvalID pgtype.Text) (CharlieFinding, error)
+	GetCharlieFindingByCentralID(ctx context.Context, arg GetCharlieFindingByCentralIDParams) (CharlieFinding, error)
+	GetCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
+	GetCharlieSessionByCentralID(ctx context.Context, charlieSessionID string) (CharlieSession, error)
+	GetCharlieSessionByClientID(ctx context.Context, arg GetCharlieSessionByClientIDParams) (CharlieSession, error)
+	GetCharlieTriggerEvent(ctx context.Context, id uuid.UUID) (CharlieTriggerEvent, error)
+	GetCharlieTriggerRule(ctx context.Context, id uuid.UUID) (CharlieTriggerRule, error)
 	GetCloudCredentialByID(ctx context.Context, id uuid.UUID) (CloudCredential, error)
 	GetCloudCredentialByProjectAndName(ctx context.Context, arg GetCloudCredentialByProjectAndNameParams) (CloudCredential, error)
 	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error)
@@ -765,6 +823,7 @@ type Querier interface {
 	// The summary endpoint shows ONLY the most recent drill — that's enough
 	// for the "are we current?" question. History uses ListBackupDrillResults.
 	GetLatestBackupDrillResult(ctx context.Context) (BackupDrillResult, error)
+	GetLatestCharlieConnection(ctx context.Context) (CharlieConnection, error)
 	// Orders by the upstream chart's publish time (the `created:` field
 	// in helm index.yaml, persisted to created_at_upstream during ingest)
 	// so the install modal's "default to latest" picks the actual newest
@@ -1094,6 +1153,15 @@ type Querier interface {
 	// Generated sqlc output is the canonical Go API for this surface.
 	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
+	ListCharlieAmbiguousReceipts(ctx context.Context, limit int32) ([]CharlieActionReceipt, error)
+	ListCharlieApprovalCandidateSessions(ctx context.Context) ([]CharlieSession, error)
+	ListCharlieFindingResources(ctx context.Context, findingID uuid.UUID) ([]CharlieFindingResource, error)
+	ListCharlieFindingSyncCandidateSessions(ctx context.Context, connectionID uuid.UUID) ([]CharlieSession, error)
+	ListCharlieFindings(ctx context.Context, arg ListCharlieFindingsParams) ([]CharlieFinding, error)
+	ListCharlieSessionResources(ctx context.Context, sessionID uuid.UUID) ([]CharlieSessionResource, error)
+	ListCharlieSessionsForOwner(ctx context.Context, arg ListCharlieSessionsForOwnerParams) ([]CharlieSession, error)
+	ListCharlieTriggerEventsForAdmin(ctx context.Context, arg ListCharlieTriggerEventsForAdminParams) ([]CharlieTriggerEvent, error)
+	ListCharlieTriggerRules(ctx context.Context, connectionID uuid.UUID) ([]CharlieTriggerRule, error)
 	// Lightweight probe used by the repo-index ingest path to bulk-load the
 	// set of already-known version strings for a chart in a single round
 	// trip, replacing the per-version SELECT probe.
@@ -1249,6 +1317,7 @@ type Querier interface {
 	// link or recovery-code email doesn't appear in the admin UI.
 	ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error)
 	ListEnabledAlertInhibitions(ctx context.Context) ([]AlertInhibition, error)
+	ListEnabledCharlieTriggerRules(ctx context.Context, connectionID uuid.UUID) ([]CharlieTriggerRule, error)
 	ListEnabledDexConnectors(ctx context.Context) ([]DexConnector, error)
 	ListEnabledGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
 	ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error)
@@ -1775,6 +1844,8 @@ type Querier interface {
 	// Bounded by the JWT's natural expiry — once the JWT is unusable, the
 	// row's id_token_hint is moot too.
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
+	RecordAgentConnectionEvent(ctx context.Context, arg RecordAgentConnectionEventParams) (AgentConnectionEvent, error)
+	RecordTunnelLocatorEvent(ctx context.Context, arg RecordTunnelLocatorEventParams) (TunnelLocatorEvent, error)
 	// Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
 	// path: when the agent's WS is live on a SIBLING pod, the owning pod must be
 	// able to claim the row, so the current (wrong) pod sets status back to
@@ -1792,11 +1863,13 @@ type Querier interface {
 	RequeueMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	RequeueToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
 	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
+	ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharlieAutoBudgetParams) (CharlieActionReceipt, error)
 	// Called on a successful login. Also clears any expired lock so the next
 	// failed-attempt cycle starts from a clean state.
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
+	RetryDeadCharlieTriggerEventWithOutbox(ctx context.Context, arg RetryDeadCharlieTriggerEventWithOutboxParams) (RetryDeadCharlieTriggerEventWithOutboxRow, error)
 	// Admin-triggered re-dispatch. Resets the row so the next dispatcher
 	// tick picks it up immediately, regardless of where it was in the
 	// backoff schedule.
@@ -1816,10 +1889,14 @@ type Querier interface {
 	// data-modifying CTE always runs to completion; the returned count is the
 	// number of tokens revoked. $1 is the service username, $2 the token name.
 	RevokeAgentIngestIdentityForCluster(ctx context.Context, arg RevokeAgentIngestIdentityForClusterParams) (int64, error)
+	RevokeCharlieDelegation(ctx context.Context, id uuid.UUID) (int64, error)
+	RevokeCharlieDelegationsForPrincipal(ctx context.Context, principalID uuid.UUID) (int64, error)
+	RevokeCharlieDelegationsForSession(ctx context.Context, sessionID uuid.UUID) (int64, error)
 	// Standalone revocation: the durable token (and any grace token) is denied
 	// from the next CONNECT onward. Clears previous_token_hash so the grace
 	// window can't keep an already-revoked credential alive.
 	RevokeClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	RevokeExpiredCharlieDelegations(ctx context.Context) (int64, error)
 	// JWT session revocation.
 	//
 	// Two layers:
@@ -1845,6 +1922,8 @@ type Querier interface {
 	// freshly-sealed envelope with a re-encryption of the document it read before
 	// the winner stripped it.
 	SealMonitoringBackendAuthConfig(ctx context.Context, arg SealMonitoringBackendAuthConfigParams) error
+	SetCharlieEmergencyDisabled(ctx context.Context, arg SetCharlieEmergencyDisabledParams) (CharlieConnection, error)
+	SetCharlieTriggerRuleEnabled(ctx context.Context, arg SetCharlieTriggerRuleEnabledParams) (CharlieTriggerRule, error)
 	// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
 	// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
 	// when a rotation is already in flight: rotation_pending_at already set (trigger
@@ -1893,6 +1972,7 @@ type Querier interface {
 	// last_error on success is intentional — partial failures during a tick
 	// leave last_error stamped via StampGitOpsSourceError.
 	StampGitOpsSourceSync(ctx context.Context, arg StampGitOpsSourceSyncParams) error
+	SuppressActiveCharlieTriggerEvent(ctx context.Context, arg SuppressActiveCharlieTriggerEventParams) (CharlieTriggerEvent, error)
 	// Cluster tombstone — the final phase of the reconciler. We never hard-delete
 	// the cluster row; setting decommissioned_at preserves the id for audit_archive
 	// referential integrity and lets the UI render historical references.
@@ -1923,6 +2003,11 @@ type Querier interface {
 	// /status endpoint surface this so users can spot "I never logged in
 	// yesterday" anomalies.
 	TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLastUsedParams) error
+	TransitionCharlieActionApproval(ctx context.Context, arg TransitionCharlieActionApprovalParams) (CharlieActionApproval, error)
+	TransitionCharlieActionReceipt(ctx context.Context, arg TransitionCharlieActionReceiptParams) (CharlieActionReceipt, error)
+	TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (CharlieFinding, error)
+	TransitionCharlieFindingForApproval(ctx context.Context, arg TransitionCharlieFindingForApprovalParams) (CharlieFinding, error)
+	TransitionCharlieTriggerEvent(ctx context.Context, arg TransitionCharlieTriggerEventParams) (CharlieTriggerEvent, error)
 	UnassignClusterGroup(ctx context.Context, id uuid.UUID) error
 	UnlockUser(ctx context.Context, id uuid.UUID) error
 	// Best-effort stamp written from the auth middleware on every successful
@@ -1953,6 +2038,9 @@ type Querier interface {
 	UpdateBackupStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
+	UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharlieAgentStatusParams) (CharlieConnection, error)
+	UpdateCharlieSessionCursor(ctx context.Context, arg UpdateCharlieSessionCursorParams) (CharlieSession, error)
+	UpdateCharlieTriggerRule(ctx context.Context, arg UpdateCharlieTriggerRuleParams) (CharlieTriggerRule, error)
 	UpdateCloudCredential(ctx context.Context, arg UpdateCloudCredentialParams) (CloudCredential, error)
 	UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error)
 	UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error)
@@ -2061,10 +2149,13 @@ type Querier interface {
 	// preserving the existing secret when the admin didn't re-supply it
 	// (analogous to smtp_settings password sentinel).
 	UpdateWebhookSubscription(ctx context.Context, arg UpdateWebhookSubscriptionParams) (WebhookSubscription, error)
+	UpsertAgentOperationalStatus(ctx context.Context, arg UpsertAgentOperationalStatusParams) (AgentOperationalStatus, error)
 	UpsertAnomalyBaseline(ctx context.Context, arg UpsertAnomalyBaselineParams) (AnomalyBaseline, error)
 	UpsertApiserverAllowlist(ctx context.Context, arg UpsertApiserverAllowlistParams) (ApiserverAllowlist, error)
 	UpsertArgoCDClusterProxyToken(ctx context.Context, arg UpsertArgoCDClusterProxyTokenParams) (ArgocdClusterProxyToken, error)
 	UpsertAuthoredConstraint(ctx context.Context, arg UpsertAuthoredConstraintParams) (AuthoredConstraint, error)
+	UpsertCharlieApprovalFinding(ctx context.Context, arg UpsertCharlieApprovalFindingParams) (CharlieFinding, error)
+	UpsertCharlieFinding(ctx context.Context, arg UpsertCharlieFindingParams) (CharlieFinding, error)
 	UpsertCloudCredentialMaterialization(ctx context.Context, arg UpsertCloudCredentialMaterializationParams) (CloudCredentialMaterialization, error)
 	UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error)
 	// Match metav1.Condition semantics: when status flips, bump
@@ -2130,6 +2221,7 @@ type Querier interface {
 	// ON CONFLICT lets the first PUT create the row and every subsequent
 	// one update it without a separate INSERT/UPDATE branch.
 	UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettingsParams) (SmtpSetting, error)
+	UpsertSyncedCharlieFinding(ctx context.Context, arg UpsertSyncedCharlieFindingParams) (CharlieFinding, error)
 	// Replace the user's group snapshot on every login. The synced_at
 	// timestamp drives the audit + "stale-claims" detection in the
 	// admin resync endpoint.

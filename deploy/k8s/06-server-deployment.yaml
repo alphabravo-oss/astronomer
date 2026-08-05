@@ -26,6 +26,24 @@ spec:
             - name: http
               containerPort: 8000
           env:
+            - name: CHARLIE_MCP_LISTEN_ADDRESS
+              value: ":7444"
+            - name: CHARLIE_MCP_TLS_CERT_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/tls.crt
+            - name: CHARLIE_MCP_TLS_KEY_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/tls.key
+            - name: CHARLIE_MCP_CLIENT_CA_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/ca.crt
+            - name: CHARLIE_MCP_ACTION_SIGNING_KEY_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/action-signing-public-key
+            - name: CHARLIE_BRIDGE_TLS_CERT_FILE
+              value: /var/run/secrets/astronomer/charlie-bridge/tls.crt
+            - name: CHARLIE_BRIDGE_TLS_KEY_FILE
+              value: /var/run/secrets/astronomer/charlie-bridge/tls.key
+            - name: CHARLIE_BRIDGE_CA_FILE
+              value: /var/run/secrets/astronomer/charlie-bridge/ca.crt
+            - name: CHARLIE_AGENT_NAMESPACE
+              value: astronomer-charlie
             # L19: needed for the cross-pod tunnel locator if this is ever scaled
             # past replicas:1 — without it a multi-replica deployment silently
             # disables cross-pod proxy and non-owning replicas 503.
@@ -57,3 +75,19 @@ spec:
             limits:
               cpu: 1000m
               memory: 1Gi
+          volumeMounts:
+            - name: charlie-mcp-tls
+              mountPath: /var/run/secrets/astronomer/charlie-mcp
+              readOnly: true
+            - name: charlie-bridge-tls
+              mountPath: /var/run/secrets/astronomer/charlie-bridge
+              readOnly: true
+      volumes:
+        - name: charlie-mcp-tls
+          secret:
+            secretName: astronomer-charlie-mcp-tls
+            optional: true
+        - name: charlie-bridge-tls
+          secret:
+            secretName: astronomer-charlie-bridge-client-tls
+            optional: true

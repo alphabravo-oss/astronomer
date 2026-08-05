@@ -98,7 +98,8 @@ const (
 	TypeDispatchDeferred = tasks.DispatchDeferredType
 	// Migration 092: durable Postgres task outbox dispatcher. This is the
 	// retry bridge from committed DB task intents into Redis/Asynq.
-	TypeTaskOutboxDispatch = tasks.TaskOutboxDispatchType
+	TypeTaskOutboxDispatch     = tasks.TaskOutboxDispatchType
+	TypeCharlieTriggerDispatch = tasks.CharlieTriggerDispatchType
 	// Migration 065 / sprint 17: in-browser kubectl shell reaper.
 	// 60s cadence — see internal/worker/tasks/kubectl_session_reap.go.
 	TypeKubectlSessionReap = tasks.KubectlSessionReapType
@@ -225,6 +226,10 @@ func (w *Worker) RegisterTunnelHandlers() {
 	w.mux.HandleFunc(tasks.ClusterGroupMetricsRefreshType, instrumentTask(tasks.ClusterGroupMetricsRefreshType, tasks.HandleClusterGroupMetricsRefresh))
 	w.mux.HandleFunc(tasks.GatekeeperPolicyApplyType, instrumentTask(tasks.GatekeeperPolicyApplyType, tasks.HandleGatekeeperPolicyApply))
 	w.mux.HandleFunc(TypeToolDriftSweep, instrumentTask(TypeToolDriftSweep, tasks.HandleToolDriftSweep))
+	// Charlie trigger dispatch requires the server-owned local Product Bridge,
+	// so it is a server/tunnel-queue task even though it never opens a
+	// downstream cluster tunnel. The standalone worker must never claim it.
+	w.mux.HandleFunc(TypeCharlieTriggerDispatch, instrumentTask(TypeCharlieTriggerDispatch, tasks.HandleCharlieTriggerDispatch))
 	// Decommission (individual + periodic sweep) runs here, not on the
 	// standalone worker, so the managed-side cleanup phase can reach a
 	// connected agent via the hub.

@@ -1,0 +1,180 @@
+package charlie
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+type ModeState struct {
+	ConnectionID      string
+	Active            bool
+	EmergencyDisabled bool
+	Requested         Mode
+	Verified          Mode
+	Revision          int64
+	DisclosureDigest  string
+	UpdatedAt         time.Time
+}
+
+type ModePrerequisites struct {
+	DisclosureAcknowledged   bool
+	AutomationAllowlistReady bool
+	AutomationIdentityReady  bool
+}
+
+type ModeStore interface {
+	LoadModeState(context.Context) (ModeState, error)
+	SetRequestedMode(context.Context, string, Mode, int64) (ModeState, error)
+	SetVerifiedMode(context.Context, string, Mode, int64, int64, string) (ModeState, error)
+	SetEmergencyDisabled(context.Context, string, string) (ModeState, error)
+	ClearEmergencyDisabled(context.Context, string, string) (ModeState, error)
+}
+
+type AgentModeBridge interface {
+	SetMode(context.Context, Mode, int64) (ModeState, error)
+	Status(context.Context) (ModeState, error)
+}
+
+type ModeController struct {
+	store  ModeStore
+	bridge AgentModeBridge
+	writes *WriteFence
+}
+
+func NewModeController(store ModeStore, bridge AgentModeBridge) (*ModeController, error) {
+	if store == nil || bridge == nil {
+		return nil, fmt.Errorf("Charlie mode control requires local state and the product bridge")
+	}
+	return &ModeController{store: store, bridge: bridge, writes: NewWriteFence()}, nil
+}
+
+func (c *ModeController) SetWriteFence(fence *WriteFence) {
+	if c != nil && fence != nil {
+		c.writes = fence
+	}
+}
+
+// EffectiveMode returns the least authority reported by the product-local and
+// Charlie-authoritative states. Drift can only reduce authority.
+func EffectiveMode(requested, verified Mode, emergency bool) Mode {
+	if emergency || !validMode(requested) || !validMode(verified) {
+		return ModeDisabled
+	}
+	if modeRank(requested) < modeRank(verified) {
+		return requested
+	}
+	return verified
+}
+
+func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevision int64, prerequisites ModePrerequisites) (ModeState, error) {
+	if !validMode(desired) || expectedRevision < 0 {
+		return ModeState{}, fmt.Errorf("Charlie mode request is invalid")
+	}
+	current, err := c.store.LoadModeState(ctx)
+	if err != nil || !current.Active || current.EmergencyDisabled {
+		return ModeState{}, fmt.Errorf("Charlie integration is inactive")
+	}
+	if current.Revision != expectedRevision {
+		return ModeState{}, fmt.Errorf("Charlie mode revision changed")
+	}
+	if desired == ModeAuto && (!prerequisites.DisclosureAcknowledged || !prerequisites.AutomationAllowlistReady || !prerequisites.AutomationIdentityReady) {
+		return ModeState{}, fmt.Errorf("Charlie auto mode prerequisites are incomplete")
+	}
+	requested, err := c.store.SetRequestedMode(ctx, current.ConnectionID, desired, expectedRevision)
+	if err != nil {
+		return ModeState{}, fmt.Errorf("persist Charlie requested mode: %w", err)
+	}
+	remote, err := c.bridge.SetMode(ctx, desired, requested.Revision)
+	if err != nil {
+		// The requested/verified intersection prevents authority escalation while
+		// the agent or central is unavailable. A later reconciliation may retry.
+		return requested, fmt.Errorf("Charlie mode readback unavailable")
+	}
+	if remote.ConnectionID != "" && remote.ConnectionID != current.ConnectionID {
+		return requested, fmt.Errorf("Charlie mode readback installation changed")
+	}
+	if remote.Verified != desired || remote.Revision <= requested.Revision || remote.DisclosureDigest == "" {
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
+	}
+	verified, err := c.store.SetVerifiedMode(ctx, current.ConnectionID, remote.Verified, requested.Revision, remote.Revision, remote.DisclosureDigest)
+	if err != nil {
+		return requested, fmt.Errorf("persist Charlie verified mode: %w", err)
+	}
+	return verified, nil
+}
+
+// EmergencyDisable closes the product-local latch first. Failure to contact the
+// agent cannot keep sessions, triggers, findings, approvals, claims, or MCP
+// calls active. Remote disable is attempted only after the local commit.
+func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
+	// Close admission before reading or mutating mode state. Any write that won
+	// the admission race is registered and will be cancelled and drained below;
+	// every later write is rejected.
+	c.writes.Close()
+	current, err := c.store.LoadModeState(ctx)
+	if err != nil {
+		return ModeState{}, fmt.Errorf("Charlie integration is inactive")
+	}
+	if !current.Active {
+		if current.EmergencyDisabled {
+			if _, drainErr := c.writes.CloseAndWait(ctx); drainErr != nil {
+				return current, drainErr
+			}
+			return current, nil
+		}
+		return ModeState{}, fmt.Errorf("Charlie integration is inactive")
+	}
+	disabled, err := c.store.SetEmergencyDisabled(ctx, current.ConnectionID, actorID)
+	if err != nil {
+		return ModeState{}, fmt.Errorf("persist Charlie emergency disable: %w", err)
+	}
+	if _, err := c.writes.CloseAndWait(ctx); err != nil {
+		return disabled, err
+	}
+	_, bridgeErr := c.bridge.SetMode(ctx, ModeDisabled, disabled.Revision)
+	if bridgeErr != nil {
+		return disabled, fmt.Errorf("Charlie is locally disabled; remote confirmation is pending")
+	}
+	return disabled, nil
+}
+
+// ClearEmergencyDisable is intentionally two-step: the agent must already
+// report authoritative disabled mode, then an explicit product-local action may
+// clear the latch. It never restores the prior authority mode.
+func (c *ModeController) ClearEmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
+	current, err := c.store.LoadModeState(ctx)
+	if err != nil || !current.Active || !current.EmergencyDisabled {
+		return ModeState{}, fmt.Errorf("Charlie emergency disable is not active")
+	}
+	remote, err := c.bridge.Status(ctx)
+	if err != nil || EffectiveMode(remote.Requested, remote.Verified, remote.EmergencyDisabled) != ModeDisabled {
+		return current, fmt.Errorf("Charlie agent has not confirmed disabled mode")
+	}
+	cleared, err := c.store.ClearEmergencyDisabled(ctx, current.ConnectionID, actorID)
+	if err != nil {
+		return current, fmt.Errorf("clear Charlie emergency disable: %w", err)
+	}
+	if cleared.Requested != ModeDisabled || cleared.Verified != ModeDisabled {
+		return current, fmt.Errorf("cleared Charlie state attempted to restore authority")
+	}
+	c.writes.Open()
+	return cleared, nil
+}
+
+func validMode(mode Mode) bool {
+	return mode == ModeDisabled || mode == ModeReadOnly || mode == ModeApproval || mode == ModeAuto
+}
+
+func modeRank(mode Mode) int {
+	switch mode {
+	case ModeReadOnly:
+		return 1
+	case ModeApproval:
+		return 2
+	case ModeAuto:
+		return 3
+	default:
+		return 0
+	}
+}

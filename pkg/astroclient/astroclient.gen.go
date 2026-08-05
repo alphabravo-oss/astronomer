@@ -119,6 +119,233 @@ const (
 	BackupControllerStatusHealthHealthy  BackupControllerStatusHealth = "healthy"
 )
 
+// Defines values for CharlieAdminAgentApplicationState.
+const (
+	CharlieAdminAgentApplicationStateDegraded     CharlieAdminAgentApplicationState = "degraded"
+	CharlieAdminAgentApplicationStateDisconnected CharlieAdminAgentApplicationState = "disconnected"
+	CharlieAdminAgentApplicationStateInactive     CharlieAdminAgentApplicationState = "inactive"
+	CharlieAdminAgentApplicationStateInstalling   CharlieAdminAgentApplicationState = "installing"
+	CharlieAdminAgentApplicationStateNotInstalled CharlieAdminAgentApplicationState = "not_installed"
+	CharlieAdminAgentApplicationStateReady        CharlieAdminAgentApplicationState = "ready"
+	CharlieAdminAgentApplicationStateUnavailable  CharlieAdminAgentApplicationState = "unavailable"
+)
+
+// Defines values for CharlieAdminAgentReplicaRole.
+const (
+	CharlieAdminAgentReplicaRoleLeader  CharlieAdminAgentReplicaRole = "leader"
+	CharlieAdminAgentReplicaRoleStandby CharlieAdminAgentReplicaRole = "standby"
+	CharlieAdminAgentReplicaRoleUnknown CharlieAdminAgentReplicaRole = "unknown"
+)
+
+// Defines values for CharlieAdminAgentReplicaState.
+const (
+	CharlieAdminAgentReplicaStateDegraded    CharlieAdminAgentReplicaState = "degraded"
+	CharlieAdminAgentReplicaStateReady       CharlieAdminAgentReplicaState = "ready"
+	CharlieAdminAgentReplicaStateUnavailable CharlieAdminAgentReplicaState = "unavailable"
+	CharlieAdminAgentReplicaStateUnknown     CharlieAdminAgentReplicaState = "unknown"
+)
+
+// Defines values for CharlieAdminDiagnosticCheckState.
+const (
+	CharlieAdminDiagnosticCheckStateDegraded    CharlieAdminDiagnosticCheckState = "degraded"
+	CharlieAdminDiagnosticCheckStateHealthy     CharlieAdminDiagnosticCheckState = "healthy"
+	CharlieAdminDiagnosticCheckStateInactive    CharlieAdminDiagnosticCheckState = "inactive"
+	CharlieAdminDiagnosticCheckStateReady       CharlieAdminDiagnosticCheckState = "ready"
+	CharlieAdminDiagnosticCheckStateUnavailable CharlieAdminDiagnosticCheckState = "unavailable"
+	CharlieAdminDiagnosticCheckStateUnknown     CharlieAdminDiagnosticCheckState = "unknown"
+)
+
+// Defines values for CharlieAdminDiagnosticsOverall.
+const (
+	CharlieAdminDiagnosticsOverallDegraded    CharlieAdminDiagnosticsOverall = "degraded"
+	CharlieAdminDiagnosticsOverallHealthy     CharlieAdminDiagnosticsOverall = "healthy"
+	CharlieAdminDiagnosticsOverallInactive    CharlieAdminDiagnosticsOverall = "inactive"
+	CharlieAdminDiagnosticsOverallReady       CharlieAdminDiagnosticsOverall = "ready"
+	CharlieAdminDiagnosticsOverallUnavailable CharlieAdminDiagnosticsOverall = "unavailable"
+	CharlieAdminDiagnosticsOverallUnknown     CharlieAdminDiagnosticsOverall = "unknown"
+)
+
+// Defines values for CharlieAdminModeAuthoritative.
+const (
+	CharlieAdminModeAuthoritativeApproval CharlieAdminModeAuthoritative = "approval"
+	CharlieAdminModeAuthoritativeAuto     CharlieAdminModeAuthoritative = "auto"
+	CharlieAdminModeAuthoritativeDisabled CharlieAdminModeAuthoritative = "disabled"
+	CharlieAdminModeAuthoritativeReadOnly CharlieAdminModeAuthoritative = "read_only"
+)
+
+// Defines values for CharlieAdminModeRequested.
+const (
+	CharlieAdminModeRequestedApproval CharlieAdminModeRequested = "approval"
+	CharlieAdminModeRequestedAuto     CharlieAdminModeRequested = "auto"
+	CharlieAdminModeRequestedDisabled CharlieAdminModeRequested = "disabled"
+	CharlieAdminModeRequestedReadOnly CharlieAdminModeRequested = "read_only"
+)
+
+// Defines values for CharlieAdminTriggerEventState.
+const (
+	CharlieAdminTriggerEventStateCompleted   CharlieAdminTriggerEventState = "completed"
+	CharlieAdminTriggerEventStateDead        CharlieAdminTriggerEventState = "dead"
+	CharlieAdminTriggerEventStateDispatched  CharlieAdminTriggerEventState = "dispatched"
+	CharlieAdminTriggerEventStateDispatching CharlieAdminTriggerEventState = "dispatching"
+	CharlieAdminTriggerEventStatePending     CharlieAdminTriggerEventState = "pending"
+	CharlieAdminTriggerEventStateRetry       CharlieAdminTriggerEventState = "retry"
+	CharlieAdminTriggerEventStateSuppressed  CharlieAdminTriggerEventState = "suppressed"
+)
+
+// Defines values for CharlieAdminTriggerRuleSeverities.
+const (
+	CharlieAdminTriggerRuleSeveritiesCritical CharlieAdminTriggerRuleSeverities = "critical"
+	CharlieAdminTriggerRuleSeveritiesHigh     CharlieAdminTriggerRuleSeverities = "high"
+	CharlieAdminTriggerRuleSeveritiesInfo     CharlieAdminTriggerRuleSeverities = "info"
+	CharlieAdminTriggerRuleSeveritiesLow      CharlieAdminTriggerRuleSeverities = "low"
+	CharlieAdminTriggerRuleSeveritiesMedium   CharlieAdminTriggerRuleSeverities = "medium"
+)
+
+// Defines values for CharlieApprovalDecisionRequestDecision.
+const (
+	CharlieApprovalDecisionRequestDecisionApprove CharlieApprovalDecisionRequestDecision = "approve"
+	CharlieApprovalDecisionRequestDecisionDeny    CharlieApprovalDecisionRequestDecision = "deny"
+	CharlieApprovalDecisionRequestDecisionReject  CharlieApprovalDecisionRequestDecision = "reject"
+)
+
+// Defines values for CharlieApprovalSummaryState.
+const (
+	CharlieApprovalSummaryStateApproved CharlieApprovalSummaryState = "approved"
+	CharlieApprovalSummaryStateDenied   CharlieApprovalSummaryState = "denied"
+	CharlieApprovalSummaryStateExpired  CharlieApprovalSummaryState = "expired"
+	CharlieApprovalSummaryStatePending  CharlieApprovalSummaryState = "pending"
+)
+
+// Defines values for CharlieContextSearchResultType.
+const (
+	CharlieContextSearchResultTypeAgentConnectionRecord     CharlieContextSearchResultType = "agent_connection_record"
+	CharlieContextSearchResultTypeAgentFleet                CharlieContextSearchResultType = "agent_fleet"
+	CharlieContextSearchResultTypeAlert                     CharlieContextSearchResultType = "alert"
+	CharlieContextSearchResultTypeBackup                    CharlieContextSearchResultType = "backup"
+	CharlieContextSearchResultTypeInstallation              CharlieContextSearchResultType = "installation"
+	CharlieContextSearchResultTypeManagementComponent       CharlieContextSearchResultType = "management_component"
+	CharlieContextSearchResultTypeSelfManagementApplication CharlieContextSearchResultType = "self_management_application"
+	CharlieContextSearchResultTypeTunnel                    CharlieContextSearchResultType = "tunnel"
+)
+
+// Defines values for CharlieFindingDetailProposedActionMode.
+const (
+	CharlieFindingDetailProposedActionModeApproval CharlieFindingDetailProposedActionMode = "approval"
+	CharlieFindingDetailProposedActionModeAuto     CharlieFindingDetailProposedActionMode = "auto"
+	CharlieFindingDetailProposedActionModeReadOnly CharlieFindingDetailProposedActionMode = "read_only"
+)
+
+// Defines values for CharlieFindingDetailSeverity.
+const (
+	CharlieFindingDetailSeverityCritical CharlieFindingDetailSeverity = "critical"
+	CharlieFindingDetailSeverityHigh     CharlieFindingDetailSeverity = "high"
+	CharlieFindingDetailSeverityInfo     CharlieFindingDetailSeverity = "info"
+	CharlieFindingDetailSeverityLow      CharlieFindingDetailSeverity = "low"
+	CharlieFindingDetailSeverityMedium   CharlieFindingDetailSeverity = "medium"
+)
+
+// Defines values for CharlieFindingDetailState.
+const (
+	CharlieFindingDetailStateAcknowledged CharlieFindingDetailState = "acknowledged"
+	CharlieFindingDetailStateDismissed    CharlieFindingDetailState = "dismissed"
+	CharlieFindingDetailStateExpired      CharlieFindingDetailState = "expired"
+	CharlieFindingDetailStateOpen         CharlieFindingDetailState = "open"
+	CharlieFindingDetailStateResolved     CharlieFindingDetailState = "resolved"
+)
+
+// Defines values for CharlieFindingResourceRequiredVerb.
+const (
+	CharlieFindingResourceRequiredVerbRead CharlieFindingResourceRequiredVerb = "read"
+)
+
+// Defines values for CharlieFindingResourceType.
+const (
+	CharlieFindingResourceTypeAgentConnectionRecord     CharlieFindingResourceType = "agent_connection_record"
+	CharlieFindingResourceTypeAgentFleet                CharlieFindingResourceType = "agent_fleet"
+	CharlieFindingResourceTypeAlert                     CharlieFindingResourceType = "alert"
+	CharlieFindingResourceTypeBackup                    CharlieFindingResourceType = "backup"
+	CharlieFindingResourceTypeInstallation              CharlieFindingResourceType = "installation"
+	CharlieFindingResourceTypeManagementComponent       CharlieFindingResourceType = "management_component"
+	CharlieFindingResourceTypeSelfManagementApplication CharlieFindingResourceType = "self_management_application"
+	CharlieFindingResourceTypeTunnel                    CharlieFindingResourceType = "tunnel"
+)
+
+// Defines values for CharlieFindingSummarySeverity.
+const (
+	CharlieFindingSummarySeverityCritical CharlieFindingSummarySeverity = "critical"
+	CharlieFindingSummarySeverityHigh     CharlieFindingSummarySeverity = "high"
+	CharlieFindingSummarySeverityInfo     CharlieFindingSummarySeverity = "info"
+	CharlieFindingSummarySeverityLow      CharlieFindingSummarySeverity = "low"
+	CharlieFindingSummarySeverityMedium   CharlieFindingSummarySeverity = "medium"
+)
+
+// Defines values for CharlieFindingSummaryState.
+const (
+	CharlieFindingSummaryStateAcknowledged CharlieFindingSummaryState = "acknowledged"
+	CharlieFindingSummaryStateDismissed    CharlieFindingSummaryState = "dismissed"
+	CharlieFindingSummaryStateExpired      CharlieFindingSummaryState = "expired"
+	CharlieFindingSummaryStateOpen         CharlieFindingSummaryState = "open"
+	CharlieFindingSummaryStateResolved     CharlieFindingSummaryState = "resolved"
+)
+
+// Defines values for CharlieModeRequestMode.
+const (
+	CharlieModeRequestModeApproval CharlieModeRequestMode = "approval"
+	CharlieModeRequestModeAuto     CharlieModeRequestMode = "auto"
+	CharlieModeRequestModeDisabled CharlieModeRequestMode = "disabled"
+	CharlieModeRequestModeReadOnly CharlieModeRequestMode = "read_only"
+)
+
+// Defines values for CharlieOnboardingStatusCentralApiVersion.
+const (
+	CharlieOnboardingStatusCentralApiVersionCharliev1 CharlieOnboardingStatusCentralApiVersion = "charlie/v1"
+)
+
+// Defines values for CharlieOnboardingStatusSchema.
+const (
+	CharlieOnboardingStatusSchemaCharlieOnboardingv1 CharlieOnboardingStatusSchema = "charlie.onboarding/v1"
+)
+
+// Defines values for CharlieOnboardingStatusState.
+const (
+	CharlieOnboardingStatusStateConsumed  CharlieOnboardingStatusState = "consumed"
+	CharlieOnboardingStatusStateValidated CharlieOnboardingStatusState = "validated"
+)
+
+// Defines values for CharlieOperationStatusEffect.
+const (
+	CharlieOperationStatusEffectRead  CharlieOperationStatusEffect = "read"
+	CharlieOperationStatusEffectWrite CharlieOperationStatusEffect = "write"
+)
+
+// Defines values for CharlieSessionMetadataState.
+const (
+	CharlieSessionMetadataStateAborted         CharlieSessionMetadataState = "aborted"
+	CharlieSessionMetadataStateActive          CharlieSessionMetadataState = "active"
+	CharlieSessionMetadataStateCompleted       CharlieSessionMetadataState = "completed"
+	CharlieSessionMetadataStateCreating        CharlieSessionMetadataState = "creating"
+	CharlieSessionMetadataStateFailed          CharlieSessionMetadataState = "failed"
+	CharlieSessionMetadataStateWaitingApproval CharlieSessionMetadataState = "waiting_approval"
+)
+
+// Defines values for CharlieSessionMetadataVisibility.
+const (
+	CharlieSessionMetadataVisibilityIncident CharlieSessionMetadataVisibility = "incident"
+	CharlieSessionMetadataVisibilityPrivate  CharlieSessionMetadataVisibility = "private"
+)
+
+// Defines values for CharlieSessionResourceType.
+const (
+	CharlieSessionResourceTypeAgentConnectionRecord     CharlieSessionResourceType = "agent_connection_record"
+	CharlieSessionResourceTypeAgentFleet                CharlieSessionResourceType = "agent_fleet"
+	CharlieSessionResourceTypeAlert                     CharlieSessionResourceType = "alert"
+	CharlieSessionResourceTypeBackup                    CharlieSessionResourceType = "backup"
+	CharlieSessionResourceTypeInstallation              CharlieSessionResourceType = "installation"
+	CharlieSessionResourceTypeManagementComponent       CharlieSessionResourceType = "management_component"
+	CharlieSessionResourceTypeSelfManagementApplication CharlieSessionResourceType = "self_management_application"
+	CharlieSessionResourceTypeTunnel                    CharlieSessionResourceType = "tunnel"
+)
+
 // Defines values for ClusterAgentPrivilegeProfile.
 const (
 	ClusterAgentPrivilegeProfileAdmin             ClusterAgentPrivilegeProfile = "admin"
@@ -136,6 +363,13 @@ const (
 	ClusterArgocdBaselineManagedByHelm          ClusterArgocdBaselineManagedBy = "helm"
 	ClusterArgocdBaselineManagedByLocal         ClusterArgocdBaselineManagedBy = "local"
 	ClusterArgocdBaselineManagedByUnknown       ClusterArgocdBaselineManagedBy = "unknown"
+)
+
+// Defines values for ClusterDownstreamImpersonation.
+const (
+	ClusterDownstreamImpersonationAttribute ClusterDownstreamImpersonation = "attribute"
+	ClusterDownstreamImpersonationEnforce   ClusterDownstreamImpersonation = "enforce"
+	ClusterDownstreamImpersonationOff       ClusterDownstreamImpersonation = "off"
 )
 
 // Defines values for ClusterEnvironment.
@@ -333,6 +567,17 @@ const (
 	VaultConnectionRequestAuthMethodToken      VaultConnectionRequestAuthMethod = "token"
 )
 
+// Defines values for AdminCharlieTriggerEventsListParamsState.
+const (
+	AdminCharlieTriggerEventsListParamsStateCompleted   AdminCharlieTriggerEventsListParamsState = "completed"
+	AdminCharlieTriggerEventsListParamsStateDead        AdminCharlieTriggerEventsListParamsState = "dead"
+	AdminCharlieTriggerEventsListParamsStateDispatched  AdminCharlieTriggerEventsListParamsState = "dispatched"
+	AdminCharlieTriggerEventsListParamsStateDispatching AdminCharlieTriggerEventsListParamsState = "dispatching"
+	AdminCharlieTriggerEventsListParamsStatePending     AdminCharlieTriggerEventsListParamsState = "pending"
+	AdminCharlieTriggerEventsListParamsStateRetry       AdminCharlieTriggerEventsListParamsState = "retry"
+	AdminCharlieTriggerEventsListParamsStateSuppressed  AdminCharlieTriggerEventsListParamsState = "suppressed"
+)
+
 // Defines values for AdminSmtpUpdateJSONBodyAuthMechanism.
 const (
 	AdminSmtpUpdateJSONBodyAuthMechanismCramMd5 AdminSmtpUpdateJSONBodyAuthMechanism = "cram-md5"
@@ -365,6 +610,14 @@ const (
 	ExportAuditLogsParamsResultError   ExportAuditLogsParamsResult = "error"
 	ExportAuditLogsParamsResultFailure ExportAuditLogsParamsResult = "failure"
 	ExportAuditLogsParamsResultSuccess ExportAuditLogsParamsResult = "success"
+)
+
+// Defines values for ListCharlieFindingsParamsStatus.
+const (
+	ListCharlieFindingsParamsStatusAcknowledged ListCharlieFindingsParamsStatus = "acknowledged"
+	ListCharlieFindingsParamsStatusDismissed    ListCharlieFindingsParamsStatus = "dismissed"
+	ListCharlieFindingsParamsStatusOpen         ListCharlieFindingsParamsStatus = "open"
+	ListCharlieFindingsParamsStatusResolved     ListCharlieFindingsParamsStatus = "resolved"
 )
 
 // Defines values for ListNamedClusterResourcesParamsResourceType.
@@ -983,6 +1236,420 @@ type CatalogOperationEvent struct {
 	Stage     *string                 `json:"stage,omitempty"`
 }
 
+// CharlieAbortRequest defines model for CharlieAbortRequest.
+type CharlieAbortRequest struct {
+	RequestId openapi_types.UUID `json:"request_id"`
+}
+
+// CharlieAccessRequest defines model for CharlieAccessRequest.
+type CharlieAccessRequest struct {
+	AutomationServiceIdentityEnabled bool `json:"automation_service_identity_enabled"`
+}
+
+// CharlieAdminAccess defines model for CharlieAdminAccess.
+type CharlieAdminAccess struct {
+	AutomationGrants     []CharlieAdminPermission `json:"automation_grants"`
+	EffectivePermissions []CharlieAdminPermission `json:"effective_permissions"`
+}
+
+// CharlieAdminActionRequest defines model for CharlieAdminActionRequest.
+type CharlieAdminActionRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+// CharlieAdminAgent defines model for CharlieAdminAgent.
+type CharlieAdminAgent struct {
+	AgentVersion     *string                           `json:"agent_version,omitempty"`
+	ApplicationState CharlieAdminAgentApplicationState `json:"application_state"`
+	ChartDigest      *string                           `json:"chart_digest,omitempty"`
+	ChartVersion     *string                           `json:"chart_version,omitempty"`
+	DesiredReplicas  int32                             `json:"desired_replicas"`
+	FencingEpoch     *int64                            `json:"fencing_epoch,omitempty"`
+	ImageDigest      *string                           `json:"image_digest,omitempty"`
+	LastHeartbeatAt  *time.Time                        `json:"last_heartbeat_at,omitempty"`
+	LeaderReplica    *string                           `json:"leader_replica,omitempty"`
+	ReadyReplicas    int32                             `json:"ready_replicas"`
+	Replicas         []CharlieAdminAgentReplica        `json:"replicas"`
+	StandbyReplicas  []string                          `json:"standby_replicas"`
+}
+
+// CharlieAdminAgentApplicationState defines model for CharlieAdminAgent.ApplicationState.
+type CharlieAdminAgentApplicationState string
+
+// CharlieAdminAgentReplica defines model for CharlieAdminAgentReplica.
+type CharlieAdminAgentReplica struct {
+	// InstanceId Opaque product-agent instance identifier; never a credential.
+	InstanceId      *string                       `json:"instance_id,omitempty"`
+	LastHeartbeatAt *time.Time                    `json:"last_heartbeat_at,omitempty"`
+	Ordinal         int                           `json:"ordinal"`
+	Role            CharlieAdminAgentReplicaRole  `json:"role"`
+	State           CharlieAdminAgentReplicaState `json:"state"`
+	Version         *string                       `json:"version,omitempty"`
+}
+
+// CharlieAdminAgentReplicaRole defines model for CharlieAdminAgentReplica.Role.
+type CharlieAdminAgentReplicaRole string
+
+// CharlieAdminAgentReplicaState defines model for CharlieAdminAgentReplica.State.
+type CharlieAdminAgentReplicaState string
+
+// CharlieAdminAutomation defines model for CharlieAdminAutomation.
+type CharlieAdminAutomation struct {
+	DefaultsRevision       int64                     `json:"defaults_revision"`
+	Rules                  []CharlieAdminTriggerRule `json:"rules"`
+	ServiceIdentityEnabled bool                      `json:"service_identity_enabled"`
+}
+
+// CharlieAdminConnection defines model for CharlieAdminConnection.
+type CharlieAdminConnection struct {
+	CentralVersion         *string    `json:"central_version,omitempty"`
+	Connected              bool       `json:"connected"`
+	DeploymentId           *string    `json:"deployment_id,omitempty"`
+	DisclosureAcknowledged bool       `json:"disclosure_acknowledged"`
+	DisclosureDigest       *string    `json:"disclosure_digest,omitempty"`
+	PackageDigest          *string    `json:"package_digest,omitempty"`
+	ProductId              *string    `json:"product_id,omitempty"`
+	RouteId                *string    `json:"route_id,omitempty"`
+	SigningFingerprint     *string    `json:"signing_fingerprint,omitempty"`
+	SigningKeyId           *string    `json:"signing_key_id,omitempty"`
+	UpdatedAt              *time.Time `json:"updated_at,omitempty"`
+}
+
+// CharlieAdminDiagnosticCheck defines model for CharlieAdminDiagnosticCheck.
+type CharlieAdminDiagnosticCheck struct {
+	CheckedAt *time.Time                       `json:"checked_at,omitempty"`
+	ExpiresAt *time.Time                       `json:"expires_at,omitempty"`
+	Id        string                           `json:"id"`
+	Label     string                           `json:"label"`
+	State     CharlieAdminDiagnosticCheckState `json:"state"`
+	Summary   string                           `json:"summary"`
+}
+
+// CharlieAdminDiagnosticCheckState defines model for CharlieAdminDiagnosticCheck.State.
+type CharlieAdminDiagnosticCheckState string
+
+// CharlieAdminDiagnostics defines model for CharlieAdminDiagnostics.
+type CharlieAdminDiagnostics struct {
+	Checks        []CharlieAdminDiagnosticCheck  `json:"checks"`
+	CorrelationId *string                        `json:"correlation_id,omitempty"`
+	Overall       CharlieAdminDiagnosticsOverall `json:"overall"`
+}
+
+// CharlieAdminDiagnosticsOverall defines model for CharlieAdminDiagnostics.Overall.
+type CharlieAdminDiagnosticsOverall string
+
+// CharlieAdminMode defines model for CharlieAdminMode.
+type CharlieAdminMode struct {
+	AcknowledgedDisclosureDigest *string                       `json:"acknowledged_disclosure_digest,omitempty"`
+	Authoritative                CharlieAdminModeAuthoritative `json:"authoritative"`
+	DisablePending               *bool                         `json:"disable_pending,omitempty"`
+	DisclosureDigest             *string                       `json:"disclosure_digest,omitempty"`
+	Effects                      []string                      `json:"effects"`
+	EmergencyDisabled            bool                          `json:"emergency_disabled"`
+	Requested                    CharlieAdminModeRequested     `json:"requested"`
+	Revision                     int64                         `json:"revision"`
+}
+
+// CharlieAdminModeAuthoritative defines model for CharlieAdminMode.Authoritative.
+type CharlieAdminModeAuthoritative string
+
+// CharlieAdminModeRequested defines model for CharlieAdminMode.Requested.
+type CharlieAdminModeRequested string
+
+// CharlieAdminPermission defines model for CharlieAdminPermission.
+type CharlieAdminPermission struct {
+	Permission string `json:"permission"`
+	Scope      string `json:"scope"`
+	Source     string `json:"source"`
+}
+
+// CharlieAdminStatus defines model for CharlieAdminStatus.
+type CharlieAdminStatus struct {
+	Agent      CharlieAdminAgent      `json:"agent"`
+	Connection CharlieAdminConnection `json:"connection"`
+	Mode       CharlieAdminMode       `json:"mode"`
+}
+
+// CharlieAdminTriggerEvent UI-safe lifecycle metadata; summary, fingerprint, session, origin, and outbox payload are intentionally omitted.
+type CharlieAdminTriggerEvent struct {
+	AttemptCount    int32                         `json:"attempt_count"`
+	DeadLetteredAt  *time.Time                    `json:"dead_lettered_at,omitempty"`
+	EventType       string                        `json:"event_type"`
+	FirstOccurredAt time.Time                     `json:"first_occurred_at"`
+	Id              openapi_types.UUID            `json:"id"`
+	LastErrorCode   *string                       `json:"last_error_code,omitempty"`
+	LastOccurredAt  time.Time                     `json:"last_occurred_at"`
+	RepeatCount     int32                         `json:"repeat_count"`
+	ResourceId      string                        `json:"resource_id"`
+	ResourceType    string                        `json:"resource_type"`
+	RetryOfEventId  *openapi_types.UUID           `json:"retry_of_event_id,omitempty"`
+	RuleId          openapi_types.UUID            `json:"rule_id"`
+	State           CharlieAdminTriggerEventState `json:"state"`
+	UpdatedAt       time.Time                     `json:"updated_at"`
+}
+
+// CharlieAdminTriggerEventState defines model for CharlieAdminTriggerEvent.State.
+type CharlieAdminTriggerEventState string
+
+// CharlieAdminTriggerRule defines model for CharlieAdminTriggerRule.
+type CharlieAdminTriggerRule struct {
+	CooldownSeconds       int32                               `json:"cooldown_seconds"`
+	DeadLetterEnabled     bool                                `json:"dead_letter_enabled"`
+	Enabled               bool                                `json:"enabled"`
+	FlapCount             int32                               `json:"flap_count"`
+	FlapWindowSeconds     int32                               `json:"flap_window_seconds"`
+	FleetThresholdPercent int32                               `json:"fleet_threshold_percent"`
+	GracePeriodSeconds    int32                               `json:"grace_period_seconds"`
+	Id                    *openapi_types.UUID                 `json:"id,omitempty"`
+	MaximumAttempts       int32                               `json:"maximum_attempts"`
+	MinimumAgentVersion   *string                             `json:"minimum_agent_version,omitempty"`
+	Name                  string                              `json:"name"`
+	Scopes                []string                            `json:"scopes"`
+	ServiceIdentity       *string                             `json:"service_identity,omitempty"`
+	Severities            []CharlieAdminTriggerRuleSeverities `json:"severities"`
+	SourceType            string                              `json:"source_type"`
+	Suppressed            bool                                `json:"suppressed"`
+}
+
+// CharlieAdminTriggerRuleSeverities defines model for CharlieAdminTriggerRule.Severities.
+type CharlieAdminTriggerRuleSeverities string
+
+// CharlieApprovalDecisionRequest defines model for CharlieApprovalDecisionRequest.
+type CharlieApprovalDecisionRequest struct {
+	Decision  CharlieApprovalDecisionRequestDecision `json:"decision"`
+	Rationale *string                                `json:"rationale,omitempty"`
+	RequestId openapi_types.UUID                     `json:"request_id"`
+}
+
+// CharlieApprovalDecisionRequestDecision defines model for CharlieApprovalDecisionRequest.Decision.
+type CharlieApprovalDecisionRequestDecision string
+
+// CharlieApprovalSummary Bounded display metadata only; signed authority material never crosses the browser boundary.
+type CharlieApprovalSummary struct {
+	Capability string                      `json:"capability"`
+	Eligible   bool                        `json:"eligible"`
+	ExpiresAt  time.Time                   `json:"expiresAt"`
+	Id         string                      `json:"id"`
+	Reason     *string                     `json:"reason,omitempty"`
+	Risk       string                      `json:"risk"`
+	State      CharlieApprovalSummaryState `json:"state"`
+	Target     string                      `json:"target"`
+	Title      string                      `json:"title"`
+}
+
+// CharlieApprovalSummaryState defines model for CharlieApprovalSummary.State.
+type CharlieApprovalSummaryState string
+
+// CharlieContextSearchResult defines model for CharlieContextSearchResult.
+type CharlieContextSearchResult struct {
+	Id           string                         `json:"id"`
+	Label        string                         `json:"label"`
+	RequiredVerb string                         `json:"required_verb"`
+	Summary      string                         `json:"summary"`
+	Type         CharlieContextSearchResultType `json:"type"`
+}
+
+// CharlieContextSearchResultType defines model for CharlieContextSearchResult.Type.
+type CharlieContextSearchResultType string
+
+// CharlieFindingDetail defines model for CharlieFindingDetail.
+type CharlieFindingDetail struct {
+	AffectedResource CharlieFindingResource `json:"affected_resource"`
+
+	// Detail On-demand Charlie-managed evidence returned only after current product authorization.
+	Detail         *map[string]interface{} `json:"detail,omitempty"`
+	Id             openapi_types.UUID      `json:"id"`
+	ProposedAction *struct {
+		// ApprovalId Bounded display identifier only; no signed manifest or action arguments are exposed.
+		ApprovalId *string `json:"approval_id,omitempty"`
+
+		// Eligible True only while the linked exact approval remains pending and unexpired; it is never authority by itself.
+		Eligible bool                                   `json:"eligible"`
+		Label    string                                 `json:"label"`
+		Mode     CharlieFindingDetailProposedActionMode `json:"mode"`
+	} `json:"proposed_action,omitempty"`
+	ReasonNoAction      string                       `json:"reason_no_action"`
+	RepeatCount         int                          `json:"repeat_count"`
+	RiskImpact          *string                      `json:"risk_impact,omitempty"`
+	Severity            CharlieFindingDetailSeverity `json:"severity"`
+	State               CharlieFindingDetailState    `json:"state"`
+	Summary             string                       `json:"summary"`
+	Title               string                       `json:"title"`
+	UpdatedAt           time.Time                    `json:"updated_at"`
+	VerificationSummary *string                      `json:"verification_summary,omitempty"`
+}
+
+// CharlieFindingDetailProposedActionMode defines model for CharlieFindingDetail.ProposedAction.Mode.
+type CharlieFindingDetailProposedActionMode string
+
+// CharlieFindingDetailSeverity defines model for CharlieFindingDetail.Severity.
+type CharlieFindingDetailSeverity string
+
+// CharlieFindingDetailState defines model for CharlieFindingDetail.State.
+type CharlieFindingDetailState string
+
+// CharlieFindingResource defines model for CharlieFindingResource.
+type CharlieFindingResource struct {
+	Id           string                             `json:"id"`
+	RequiredVerb CharlieFindingResourceRequiredVerb `json:"required_verb"`
+	Type         CharlieFindingResourceType         `json:"type"`
+}
+
+// CharlieFindingResourceRequiredVerb defines model for CharlieFindingResource.RequiredVerb.
+type CharlieFindingResourceRequiredVerb string
+
+// CharlieFindingResourceType defines model for CharlieFindingResource.Type.
+type CharlieFindingResourceType string
+
+// CharlieFindingSummary defines model for CharlieFindingSummary.
+type CharlieFindingSummary struct {
+	AffectedResource CharlieFindingResource        `json:"affected_resource"`
+	Id               openapi_types.UUID            `json:"id"`
+	ReasonNoAction   string                        `json:"reason_no_action"`
+	RepeatCount      int                           `json:"repeat_count"`
+	Severity         CharlieFindingSummarySeverity `json:"severity"`
+	State            CharlieFindingSummaryState    `json:"state"`
+	Summary          string                        `json:"summary"`
+	Title            string                        `json:"title"`
+	UpdatedAt        time.Time                     `json:"updated_at"`
+}
+
+// CharlieFindingSummarySeverity defines model for CharlieFindingSummary.Severity.
+type CharlieFindingSummarySeverity string
+
+// CharlieFindingSummaryState defines model for CharlieFindingSummary.State.
+type CharlieFindingSummaryState string
+
+// CharlieFindingTransitionRequest defines model for CharlieFindingTransitionRequest.
+type CharlieFindingTransitionRequest struct {
+	RequestId openapi_types.UUID `json:"request_id"`
+}
+
+// CharlieMessageRequest defines model for CharlieMessageRequest.
+type CharlieMessageRequest struct {
+	ClientMessageId openapi_types.UUID `json:"client_message_id"`
+	Message         string             `json:"message"`
+}
+
+// CharlieModeRequest Supply mode and revision together, or acknowledge_disclosure_digest alone.
+type CharlieModeRequest struct {
+	AcknowledgeDisclosureDigest *string                 `json:"acknowledge_disclosure_digest,omitempty"`
+	EmergencyDisable            *bool                   `json:"emergency_disable,omitempty"`
+	Mode                        *CharlieModeRequestMode `json:"mode,omitempty"`
+	Revision                    *int64                  `json:"revision,omitempty"`
+}
+
+// CharlieModeRequestMode defines model for CharlieModeRequest.Mode.
+type CharlieModeRequestMode string
+
+// CharlieOnboardingRequest defines model for CharlieOnboardingRequest.
+type CharlieOnboardingRequest struct {
+	ConfirmedSigningFingerprint string `json:"confirmed_signing_fingerprint"`
+	ConfirmedSigningKeyId       string `json:"confirmed_signing_key_id"`
+	ExpectedDeploymentId        string `json:"expected_deployment_id"`
+	ExpectedRouteId             string `json:"expected_route_id"`
+
+	// Package Signed charlie.onboarding/v1 package; may contain one-time credentials.
+	Package *map[string]interface{} `json:"package,omitempty"`
+
+	// SigningPublicKey Base64url Ed25519 public key confirmed out of band by the operator.
+	SigningPublicKey *string `json:"signing_public_key,omitempty"`
+}
+
+// CharlieOnboardingStatus defines model for CharlieOnboardingStatus.
+type CharlieOnboardingStatus struct {
+	AllowedRouteIds []string `json:"allowed_route_ids"`
+	Artifact        struct {
+		Chart          string `json:"chart"`
+		ChartDigest    string `json:"chart_digest"`
+		Image          string `json:"image"`
+		ManifestDigest string `json:"manifest_digest"`
+	} `json:"artifact"`
+	CentralApiVersion       CharlieOnboardingStatusCentralApiVersion `json:"central_api_version"`
+	CentralTrustFingerprint string                                   `json:"central_trust_fingerprint"`
+	DeploymentId            string                                   `json:"deployment_id"`
+	ExpiresAt               time.Time                                `json:"expires_at"`
+	Idempotent              bool                                     `json:"idempotent"`
+	IssuedAt                time.Time                                `json:"issued_at"`
+	LogicalAgentId          string                                   `json:"logical_agent_id"`
+	PackageDigest           string                                   `json:"package_digest"`
+	PackageId               openapi_types.UUID                       `json:"package_id"`
+	ProductId               string                                   `json:"product_id"`
+	ReplicaCount            int                                      `json:"replica_count"`
+	RouteId                 string                                   `json:"route_id"`
+	Schema                  CharlieOnboardingStatusSchema            `json:"schema"`
+	SigningFingerprint      string                                   `json:"signing_fingerprint"`
+	SigningKeyId            string                                   `json:"signing_key_id"`
+	State                   CharlieOnboardingStatusState             `json:"state"`
+}
+
+// CharlieOnboardingStatusCentralApiVersion defines model for CharlieOnboardingStatus.CentralApiVersion.
+type CharlieOnboardingStatusCentralApiVersion string
+
+// CharlieOnboardingStatusSchema defines model for CharlieOnboardingStatus.Schema.
+type CharlieOnboardingStatusSchema string
+
+// CharlieOnboardingStatusState defines model for CharlieOnboardingStatus.State.
+type CharlieOnboardingStatusState string
+
+// CharlieOperationStatus defines model for CharlieOperationStatus.
+type CharlieOperationStatus struct {
+	Capability   string                       `json:"capability"`
+	CreatedAt    time.Time                    `json:"created_at"`
+	DispatchedAt *time.Time                   `json:"dispatched_at,omitempty"`
+	Effect       CharlieOperationStatusEffect `json:"effect"`
+	OperationId  string                       `json:"operation_id"`
+	ResultStatus string                       `json:"result_status"`
+	State        string                       `json:"state"`
+	UpdatedAt    time.Time                    `json:"updated_at"`
+	VerifiedAt   *time.Time                   `json:"verified_at,omitempty"`
+}
+
+// CharlieOperationStatusEffect defines model for CharlieOperationStatus.Effect.
+type CharlieOperationStatusEffect string
+
+// CharlieSessionCreateRequest defines model for CharlieSessionCreateRequest.
+type CharlieSessionCreateRequest struct {
+	ClientSessionId  openapi_types.UUID        `json:"client_session_id"`
+	CurrentUiContext *string                   `json:"current_ui_context,omitempty"`
+	Intent           string                    `json:"intent"`
+	Resources        *[]CharlieSessionResource `json:"resources,omitempty"`
+	Trigger          *string                   `json:"trigger,omitempty"`
+}
+
+// CharlieSessionMetadata defines model for CharlieSessionMetadata.
+type CharlieSessionMetadata struct {
+	CentralRevision      int64                            `json:"central_revision"`
+	ClientSessionId      openapi_types.UUID               `json:"client_session_id"`
+	Id                   openapi_types.UUID               `json:"id"`
+	Intent               string                           `json:"intent"`
+	ResourceScopeSummary string                           `json:"resource_scope_summary"`
+	State                CharlieSessionMetadataState      `json:"state"`
+	Visibility           CharlieSessionMetadataVisibility `json:"visibility"`
+}
+
+// CharlieSessionMetadataState defines model for CharlieSessionMetadata.State.
+type CharlieSessionMetadataState string
+
+// CharlieSessionMetadataVisibility defines model for CharlieSessionMetadata.Visibility.
+type CharlieSessionMetadataVisibility string
+
+// CharlieSessionResource defines model for CharlieSessionResource.
+type CharlieSessionResource struct {
+	Id           string                     `json:"id"`
+	RequiredVerb string                     `json:"required_verb"`
+	Type         CharlieSessionResourceType `json:"type"`
+}
+
+// CharlieSessionResourceType defines model for CharlieSessionResource.Type.
+type CharlieSessionResourceType string
+
+// CharlieTriggerRetryRequest defines model for CharlieTriggerRetryRequest.
+type CharlieTriggerRetryRequest struct {
+	// RequestId Idempotency key and fresh retry-attempt identifier.
+	RequestId openapi_types.UUID `json:"request_id"`
+}
+
 // CloudCredential Project cloud-provider credential (secret values redacted).
 type CloudCredential struct {
 	CreatedAt            *time.Time                `json:"created_at,omitempty"`
@@ -1042,15 +1709,18 @@ type Cluster struct {
 	DisplayName      *string    `json:"display_name,omitempty"`
 
 	// Distribution vanilla / k3s / openshift / ...
-	Distribution      *string             `json:"distribution,omitempty"`
-	Environment       *ClusterEnvironment `json:"environment,omitempty"`
-	Id                *openapi_types.UUID `json:"id,omitempty"`
-	InstallBaseline   *bool               `json:"install_baseline"`
-	IsLocal           *bool               `json:"is_local,omitempty"`
-	KubernetesVersion *string             `json:"kubernetes_version,omitempty"`
-	Labels            *map[string]string  `json:"labels,omitempty"`
-	LastHeartbeat     *time.Time          `json:"last_heartbeat"`
-	MemoryPercentage  *float32            `json:"memory_percentage,omitempty"`
+	Distribution *string `json:"distribution,omitempty"`
+
+	// DownstreamImpersonation Tri-state downstream-impersonation mode for this cluster (docs/design/downstream-impersonation.md §5), stored in `annotations` under `astronomer.io/downstream-impersonation`. Writable by superusers only, and `enforce` additionally requires the agent to have advertised the impersonation capability. Absent, blank and unrecognized all read as `off`, which is the default and — in Phase 0 — the only mode any code path acts on.
+	DownstreamImpersonation *ClusterDownstreamImpersonation `json:"downstream_impersonation,omitempty"`
+	Environment             *ClusterEnvironment             `json:"environment,omitempty"`
+	Id                      *openapi_types.UUID             `json:"id,omitempty"`
+	InstallBaseline         *bool                           `json:"install_baseline"`
+	IsLocal                 *bool                           `json:"is_local,omitempty"`
+	KubernetesVersion       *string                         `json:"kubernetes_version,omitempty"`
+	Labels                  *map[string]string              `json:"labels,omitempty"`
+	LastHeartbeat           *time.Time                      `json:"last_heartbeat"`
+	MemoryPercentage        *float32                        `json:"memory_percentage,omitempty"`
 
 	// Name RFC-1123 cluster slug
 	Name      *string `json:"name,omitempty"`
@@ -1070,6 +1740,9 @@ type ClusterAgentPrivilegeProfile string
 
 // ClusterArgocdBaselineManagedBy defines model for Cluster.Argocd.BaselineManagedBy.
 type ClusterArgocdBaselineManagedBy string
+
+// ClusterDownstreamImpersonation Tri-state downstream-impersonation mode for this cluster (docs/design/downstream-impersonation.md §5), stored in `annotations` under `astronomer.io/downstream-impersonation`. Writable by superusers only, and `enforce` additionally requires the agent to have advertised the impersonation capability. Absent, blank and unrecognized all read as `off`, which is the default and — in Phase 0 — the only mode any code path acts on.
+type ClusterDownstreamImpersonation string
 
 // ClusterEnvironment defines model for Cluster.Environment.
 type ClusterEnvironment string
@@ -1439,6 +2112,7 @@ type FeatureFlags struct {
 	FeatureArgocd     *bool `json:"feature.argocd,omitempty"`
 	FeatureBackups    *bool `json:"feature.backups,omitempty"`
 	FeatureCatalog    *bool `json:"feature.catalog,omitempty"`
+	FeatureCharlie    *bool `json:"feature.charlie,omitempty"`
 	FeatureMonitoring *bool `json:"feature.monitoring,omitempty"`
 	FeatureProjects   *bool `json:"feature.projects,omitempty"`
 	FeatureSecurity   *bool `json:"feature.security,omitempty"`
@@ -1718,8 +2392,11 @@ type NodeDrainPodRef struct {
 
 // NodeDrainRequest defines model for NodeDrainRequest.
 type NodeDrainRequest struct {
-	DeleteEmptyDirData *bool  `json:"delete_empty_dir_data,omitempty"`
-	DryRun             *bool  `json:"dry_run,omitempty"`
+	DeleteEmptyDirData *bool `json:"delete_empty_dir_data,omitempty"`
+	DryRun             *bool `json:"dry_run,omitempty"`
+
+	// Force Mirrors `kubectl drain --force`: evict standalone pods that have no ownerReferences. Without it such pods are reported as blockers instead, because deleting them is irreversible — no controller exists to recreate them.
+	Force              *bool  `json:"force,omitempty"`
 	GracePeriodSeconds *int64 `json:"grace_period_seconds,omitempty"`
 	IgnoreDaemonsets   *bool  `json:"ignore_daemonsets,omitempty"`
 }
@@ -2679,6 +3356,9 @@ type WorkloadOperationEvent struct {
 	AdditionalProperties map[string]interface{}  `json:"-"`
 }
 
+// BadRequest defines model for BadRequest.
+type BadRequest = Error
+
 // ErrorResponse Standard error envelope.
 type ErrorResponse = ErrorEnvelope
 
@@ -2688,6 +3368,9 @@ type Forbidden = Error
 // NotFound defines model for NotFound.
 type NotFound = Error
 
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = Error
+
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
 
@@ -2695,6 +3378,16 @@ type Unauthorized = Error
 type GetApiV1ActivityParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
+
+// AdminCharlieTriggerEventsListParams defines parameters for AdminCharlieTriggerEventsList.
+type AdminCharlieTriggerEventsListParams struct {
+	State  *AdminCharlieTriggerEventsListParamsState `form:"state,omitempty" json:"state,omitempty"`
+	Offset *int                                      `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int                                      `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// AdminCharlieTriggerEventsListParamsState defines parameters for AdminCharlieTriggerEventsList.
+type AdminCharlieTriggerEventsListParamsState string
 
 // AdminEmailsListParams defines parameters for AdminEmailsList.
 type AdminEmailsListParams struct {
@@ -3122,6 +3815,34 @@ type PutApiV1CatalogRepositoriesIdJSONBody struct {
 	Name        *string                   `json:"name,omitempty"`
 	RepoType    *string                   `json:"repo_type,omitempty"`
 	Url         *string                   `json:"url,omitempty"`
+}
+
+// SearchCharlieContextParams defines parameters for SearchCharlieContext.
+type SearchCharlieContextParams struct {
+	Q     string `form:"q" json:"q"`
+	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListCharlieFindingsParams defines parameters for ListCharlieFindings.
+type ListCharlieFindingsParams struct {
+	Status *ListCharlieFindingsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Offset *int                             `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int                             `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListCharlieFindingsParamsStatus defines parameters for ListCharlieFindings.
+type ListCharlieFindingsParamsStatus string
+
+// ListCharlieSessionsParams defines parameters for ListCharlieSessions.
+type ListCharlieSessionsParams struct {
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetCharlieSessionHistoryParams defines parameters for GetCharlieSessionHistory.
+type GetCharlieSessionHistoryParams struct {
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetApiV1ClusterTemplatesParams defines parameters for GetApiV1ClusterTemplates.
@@ -3791,6 +4512,36 @@ type PostApiV1AdminAlertingInhibitionsJSONRequestBody = InhibitionRequest
 // PutApiV1AdminAlertingInhibitionsIdJSONRequestBody defines body for PutApiV1AdminAlertingInhibitionsId for application/json ContentType.
 type PutApiV1AdminAlertingInhibitionsIdJSONRequestBody = InhibitionRequest
 
+// AdminCharlieAccessUpdateJSONRequestBody defines body for AdminCharlieAccessUpdate for application/json ContentType.
+type AdminCharlieAccessUpdateJSONRequestBody = CharlieAccessRequest
+
+// AdminCharlieAgentUninstallJSONRequestBody defines body for AdminCharlieAgentUninstall for application/json ContentType.
+type AdminCharlieAgentUninstallJSONRequestBody = CharlieAdminActionRequest
+
+// AdminCharlieDisconnectJSONRequestBody defines body for AdminCharlieDisconnect for application/json ContentType.
+type AdminCharlieDisconnectJSONRequestBody = CharlieAdminActionRequest
+
+// AdminCharlieModeUpdateJSONRequestBody defines body for AdminCharlieModeUpdate for application/json ContentType.
+type AdminCharlieModeUpdateJSONRequestBody = CharlieModeRequest
+
+// AdminCharlieOnboardingConsumeJSONRequestBody defines body for AdminCharlieOnboardingConsume for application/json ContentType.
+type AdminCharlieOnboardingConsumeJSONRequestBody = CharlieOnboardingRequest
+
+// AdminCharlieOnboardingValidateJSONRequestBody defines body for AdminCharlieOnboardingValidate for application/json ContentType.
+type AdminCharlieOnboardingValidateJSONRequestBody = CharlieOnboardingRequest
+
+// AdminCharlieTriggerEventRetryJSONRequestBody defines body for AdminCharlieTriggerEventRetry for application/json ContentType.
+type AdminCharlieTriggerEventRetryJSONRequestBody = CharlieTriggerRetryRequest
+
+// AdminCharlieTriggerRuleCreateJSONRequestBody defines body for AdminCharlieTriggerRuleCreate for application/json ContentType.
+type AdminCharlieTriggerRuleCreateJSONRequestBody = CharlieAdminTriggerRule
+
+// AdminCharlieTriggerRuleDeleteJSONRequestBody defines body for AdminCharlieTriggerRuleDelete for application/json ContentType.
+type AdminCharlieTriggerRuleDeleteJSONRequestBody = CharlieAdminActionRequest
+
+// AdminCharlieTriggerRuleUpdateJSONRequestBody defines body for AdminCharlieTriggerRuleUpdate for application/json ContentType.
+type AdminCharlieTriggerRuleUpdateJSONRequestBody = CharlieAdminTriggerRule
+
 // PostApiV1AdminNetworkPolicyTemplatesJSONRequestBody defines body for PostApiV1AdminNetworkPolicyTemplates for application/json ContentType.
 type PostApiV1AdminNetworkPolicyTemplatesJSONRequestBody = CreateNetworkPolicyTemplateRequest
 
@@ -3910,6 +4661,27 @@ type PostApiV1CatalogRepositoriesJSONRequestBody PostApiV1CatalogRepositoriesJSO
 
 // PutApiV1CatalogRepositoriesIdJSONRequestBody defines body for PutApiV1CatalogRepositoriesId for application/json ContentType.
 type PutApiV1CatalogRepositoriesIdJSONRequestBody PutApiV1CatalogRepositoriesIdJSONBody
+
+// DecideCharlieApprovalJSONRequestBody defines body for DecideCharlieApproval for application/json ContentType.
+type DecideCharlieApprovalJSONRequestBody = CharlieApprovalDecisionRequest
+
+// AcknowledgeCharlieFindingJSONRequestBody defines body for AcknowledgeCharlieFinding for application/json ContentType.
+type AcknowledgeCharlieFindingJSONRequestBody = CharlieFindingTransitionRequest
+
+// DismissCharlieFindingJSONRequestBody defines body for DismissCharlieFinding for application/json ContentType.
+type DismissCharlieFindingJSONRequestBody = CharlieFindingTransitionRequest
+
+// ResolveCharlieFindingJSONRequestBody defines body for ResolveCharlieFinding for application/json ContentType.
+type ResolveCharlieFindingJSONRequestBody = CharlieFindingTransitionRequest
+
+// CreateCharlieSessionJSONRequestBody defines body for CreateCharlieSession for application/json ContentType.
+type CreateCharlieSessionJSONRequestBody = CharlieSessionCreateRequest
+
+// AbortCharlieSessionJSONRequestBody defines body for AbortCharlieSession for application/json ContentType.
+type AbortCharlieSessionJSONRequestBody = CharlieAbortRequest
+
+// CreateCharlieSessionMessageJSONRequestBody defines body for CreateCharlieSessionMessage for application/json ContentType.
+type CreateCharlieSessionMessageJSONRequestBody = CharlieMessageRequest
 
 // PostApiV1ClusterGroupsJSONRequestBody defines body for PostApiV1ClusterGroups for application/json ContentType.
 type PostApiV1ClusterGroupsJSONRequestBody = CreateClusterGroupRequest
@@ -9002,6 +9774,83 @@ type ClientInterface interface {
 	// GetApiV1AdminBackupDrill request
 	GetApiV1AdminBackupDrill(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminCharlieAccessGet request
+	AdminCharlieAccessGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAccessUpdateWithBody request with any body
+	AdminCharlieAccessUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieAccessUpdate(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAgentInstall request
+	AdminCharlieAgentInstall(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAgentRollback request
+	AdminCharlieAgentRollback(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAgentRotate request
+	AdminCharlieAgentRotate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAgentUninstallWithBody request with any body
+	AdminCharlieAgentUninstallWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieAgentUninstall(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAgentUpgrade request
+	AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieDiagnosticsRun request
+	AdminCharlieDiagnosticsRun(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieDisconnectWithBody request with any body
+	AdminCharlieDisconnectWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieDisconnect(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieModeUpdateWithBody request with any body
+	AdminCharlieModeUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieModeUpdate(ctx context.Context, body AdminCharlieModeUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieOnboardingConsumeWithBody request with any body
+	AdminCharlieOnboardingConsumeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieOnboardingConsume(ctx context.Context, body AdminCharlieOnboardingConsumeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieOnboardingValidateWithBody request with any body
+	AdminCharlieOnboardingValidateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieOnboardingValidate(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieStatus request
+	AdminCharlieStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieTriggerEventsList request
+	AdminCharlieTriggerEventsList(ctx context.Context, params *AdminCharlieTriggerEventsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieTriggerEventRetryWithBody request with any body
+	AdminCharlieTriggerEventRetryWithBody(ctx context.Context, eventId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieTriggerEventRetry(ctx context.Context, eventId openapi_types.UUID, body AdminCharlieTriggerEventRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieTriggerRulesList request
+	AdminCharlieTriggerRulesList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieTriggerRuleCreateWithBody request with any body
+	AdminCharlieTriggerRuleCreateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieTriggerRuleCreate(ctx context.Context, body AdminCharlieTriggerRuleCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieTriggerRuleDeleteWithBody request with any body
+	AdminCharlieTriggerRuleDeleteWithBody(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieTriggerRuleDelete(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieTriggerRuleUpdateWithBody request with any body
+	AdminCharlieTriggerRuleUpdateWithBody(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieTriggerRuleUpdate(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminEmailsList request
 	AdminEmailsList(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -9465,6 +10314,68 @@ type ClientInterface interface {
 
 	// PostApiV1CatalogRepositoriesIdTestConnection request
 	PostApiV1CatalogRepositoriesIdTestConnection(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCharlieApprovals request
+	ListCharlieApprovals(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DecideCharlieApprovalWithBody request with any body
+	DecideCharlieApprovalWithBody(ctx context.Context, approvalId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DecideCharlieApproval(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchCharlieContext request
+	SearchCharlieContext(ctx context.Context, params *SearchCharlieContextParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCharlieFindings request
+	ListCharlieFindings(ctx context.Context, params *ListCharlieFindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCharlieFinding request
+	GetCharlieFinding(ctx context.Context, findingId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AcknowledgeCharlieFindingWithBody request with any body
+	AcknowledgeCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AcknowledgeCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body AcknowledgeCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DismissCharlieFindingWithBody request with any body
+	DismissCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DismissCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResolveCharlieFindingWithBody request with any body
+	ResolveCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ResolveCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCharlieOperationStatus request
+	GetCharlieOperationStatus(ctx context.Context, operationId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCharlieSessions request
+	ListCharlieSessions(ctx context.Context, params *ListCharlieSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCharlieSessionWithBody request with any body
+	CreateCharlieSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateCharlieSession(ctx context.Context, body CreateCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCharlieSession request
+	GetCharlieSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AbortCharlieSessionWithBody request with any body
+	AbortCharlieSessionWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AbortCharlieSession(ctx context.Context, sessionId openapi_types.UUID, body AbortCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StreamCharlieSessionEvents request
+	StreamCharlieSessionEvents(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCharlieSessionHistory request
+	GetCharlieSessionHistory(ctx context.Context, sessionId openapi_types.UUID, params *GetCharlieSessionHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCharlieSessionMessageWithBody request with any body
+	CreateCharlieSessionMessageWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateCharlieSessionMessage(ctx context.Context, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiV1CloudCredentialsProviders request
 	GetApiV1CloudCredentialsProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10741,6 +11652,354 @@ func (c *Client) PutApiV1AdminAlertingInhibitionsId(ctx context.Context, id open
 
 func (c *Client) GetApiV1AdminBackupDrill(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetApiV1AdminBackupDrillRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAccessGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAccessGetRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAccessUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAccessUpdateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAccessUpdate(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAccessUpdateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAgentInstall(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAgentInstallRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAgentRollback(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAgentRollbackRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAgentRotate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAgentRotateRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAgentUninstallWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAgentUninstallRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAgentUninstall(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAgentUninstallRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAgentUpgradeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieDiagnosticsRun(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieDiagnosticsRunRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieDisconnectWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieDisconnectRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieDisconnect(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieDisconnectRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieModeUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieModeUpdateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieModeUpdate(ctx context.Context, body AdminCharlieModeUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieModeUpdateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieOnboardingConsumeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieOnboardingConsumeRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieOnboardingConsume(ctx context.Context, body AdminCharlieOnboardingConsumeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieOnboardingConsumeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieOnboardingValidateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieOnboardingValidateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieOnboardingValidate(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieOnboardingValidateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerEventsList(ctx context.Context, params *AdminCharlieTriggerEventsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerEventsListRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerEventRetryWithBody(ctx context.Context, eventId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerEventRetryRequestWithBody(c.Server, eventId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerEventRetry(ctx context.Context, eventId openapi_types.UUID, body AdminCharlieTriggerEventRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerEventRetryRequest(c.Server, eventId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRulesList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRulesListRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRuleCreateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRuleCreateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRuleCreate(ctx context.Context, body AdminCharlieTriggerRuleCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRuleCreateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRuleDeleteWithBody(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRuleDeleteRequestWithBody(c.Server, ruleId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRuleDelete(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRuleDeleteRequest(c.Server, ruleId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRuleUpdateWithBody(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRuleUpdateRequestWithBody(c.Server, ruleId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieTriggerRuleUpdate(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieTriggerRuleUpdateRequest(c.Server, ruleId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12757,6 +14016,282 @@ func (c *Client) PostApiV1CatalogRepositoriesIdSync(ctx context.Context, id open
 
 func (c *Client) PostApiV1CatalogRepositoriesIdTestConnection(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostApiV1CatalogRepositoriesIdTestConnectionRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCharlieApprovals(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCharlieApprovalsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DecideCharlieApprovalWithBody(ctx context.Context, approvalId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDecideCharlieApprovalRequestWithBody(c.Server, approvalId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DecideCharlieApproval(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDecideCharlieApprovalRequest(c.Server, approvalId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SearchCharlieContext(ctx context.Context, params *SearchCharlieContextParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchCharlieContextRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCharlieFindings(ctx context.Context, params *ListCharlieFindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCharlieFindingsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCharlieFinding(ctx context.Context, findingId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCharlieFindingRequest(c.Server, findingId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AcknowledgeCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAcknowledgeCharlieFindingRequestWithBody(c.Server, findingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AcknowledgeCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body AcknowledgeCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAcknowledgeCharlieFindingRequest(c.Server, findingId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DismissCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDismissCharlieFindingRequestWithBody(c.Server, findingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DismissCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDismissCharlieFindingRequest(c.Server, findingId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ResolveCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResolveCharlieFindingRequestWithBody(c.Server, findingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ResolveCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResolveCharlieFindingRequest(c.Server, findingId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCharlieOperationStatus(ctx context.Context, operationId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCharlieOperationStatusRequest(c.Server, operationId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCharlieSessions(ctx context.Context, params *ListCharlieSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCharlieSessionsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieSessionRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieSession(ctx context.Context, body CreateCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieSessionRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCharlieSession(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCharlieSessionRequest(c.Server, sessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AbortCharlieSessionWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAbortCharlieSessionRequestWithBody(c.Server, sessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AbortCharlieSession(ctx context.Context, sessionId openapi_types.UUID, body AbortCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAbortCharlieSessionRequest(c.Server, sessionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StreamCharlieSessionEvents(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStreamCharlieSessionEventsRequest(c.Server, sessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCharlieSessionHistory(ctx context.Context, sessionId openapi_types.UUID, params *GetCharlieSessionHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCharlieSessionHistoryRequest(c.Server, sessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieSessionMessageWithBody(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieSessionMessageRequestWithBody(c.Server, sessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCharlieSessionMessage(ctx context.Context, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCharlieSessionMessageRequest(c.Server, sessionId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -18115,6 +19650,724 @@ func NewGetApiV1AdminBackupDrillRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAccessGetRequest generates requests for AdminCharlieAccessGet
+func NewAdminCharlieAccessGetRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/access/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAccessUpdateRequest calls the generic AdminCharlieAccessUpdate builder with application/json body
+func NewAdminCharlieAccessUpdateRequest(server string, body AdminCharlieAccessUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieAccessUpdateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieAccessUpdateRequestWithBody generates requests for AdminCharlieAccessUpdate with any type of body
+func NewAdminCharlieAccessUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/access/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieAgentInstallRequest generates requests for AdminCharlieAgentInstall
+func NewAdminCharlieAgentInstallRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/install/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAgentRollbackRequest generates requests for AdminCharlieAgentRollback
+func NewAdminCharlieAgentRollbackRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/rollback/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAgentRotateRequest generates requests for AdminCharlieAgentRotate
+func NewAdminCharlieAgentRotateRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/rotate/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAgentUninstallRequest calls the generic AdminCharlieAgentUninstall builder with application/json body
+func NewAdminCharlieAgentUninstallRequest(server string, body AdminCharlieAgentUninstallJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieAgentUninstallRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieAgentUninstallRequestWithBody generates requests for AdminCharlieAgentUninstall with any type of body
+func NewAdminCharlieAgentUninstallRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/uninstall/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieAgentUpgradeRequest generates requests for AdminCharlieAgentUpgrade
+func NewAdminCharlieAgentUpgradeRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/agent/upgrade/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieDiagnosticsRunRequest generates requests for AdminCharlieDiagnosticsRun
+func NewAdminCharlieDiagnosticsRunRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/diagnostics/run/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieDisconnectRequest calls the generic AdminCharlieDisconnect builder with application/json body
+func NewAdminCharlieDisconnectRequest(server string, body AdminCharlieDisconnectJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieDisconnectRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieDisconnectRequestWithBody generates requests for AdminCharlieDisconnect with any type of body
+func NewAdminCharlieDisconnectRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/disconnect/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieModeUpdateRequest calls the generic AdminCharlieModeUpdate builder with application/json body
+func NewAdminCharlieModeUpdateRequest(server string, body AdminCharlieModeUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieModeUpdateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieModeUpdateRequestWithBody generates requests for AdminCharlieModeUpdate with any type of body
+func NewAdminCharlieModeUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/mode/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieOnboardingConsumeRequest calls the generic AdminCharlieOnboardingConsume builder with application/json body
+func NewAdminCharlieOnboardingConsumeRequest(server string, body AdminCharlieOnboardingConsumeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieOnboardingConsumeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieOnboardingConsumeRequestWithBody generates requests for AdminCharlieOnboardingConsume with any type of body
+func NewAdminCharlieOnboardingConsumeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/onboarding/consume/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieOnboardingValidateRequest calls the generic AdminCharlieOnboardingValidate builder with application/json body
+func NewAdminCharlieOnboardingValidateRequest(server string, body AdminCharlieOnboardingValidateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieOnboardingValidateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieOnboardingValidateRequestWithBody generates requests for AdminCharlieOnboardingValidate with any type of body
+func NewAdminCharlieOnboardingValidateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/onboarding/validate/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieStatusRequest generates requests for AdminCharlieStatus
+func NewAdminCharlieStatusRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/status/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieTriggerEventsListRequest generates requests for AdminCharlieTriggerEventsList
+func NewAdminCharlieTriggerEventsListRequest(server string, params *AdminCharlieTriggerEventsListParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/trigger-events/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "state", runtime.ParamLocationQuery, *params.State); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieTriggerEventRetryRequest calls the generic AdminCharlieTriggerEventRetry builder with application/json body
+func NewAdminCharlieTriggerEventRetryRequest(server string, eventId openapi_types.UUID, body AdminCharlieTriggerEventRetryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieTriggerEventRetryRequestWithBody(server, eventId, "application/json", bodyReader)
+}
+
+// NewAdminCharlieTriggerEventRetryRequestWithBody generates requests for AdminCharlieTriggerEventRetry with any type of body
+func NewAdminCharlieTriggerEventRetryRequestWithBody(server string, eventId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "event_id", runtime.ParamLocationPath, eventId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/trigger-events/%s/retry/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieTriggerRulesListRequest generates requests for AdminCharlieTriggerRulesList
+func NewAdminCharlieTriggerRulesListRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/trigger-rules/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieTriggerRuleCreateRequest calls the generic AdminCharlieTriggerRuleCreate builder with application/json body
+func NewAdminCharlieTriggerRuleCreateRequest(server string, body AdminCharlieTriggerRuleCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieTriggerRuleCreateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieTriggerRuleCreateRequestWithBody generates requests for AdminCharlieTriggerRuleCreate with any type of body
+func NewAdminCharlieTriggerRuleCreateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/trigger-rules/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieTriggerRuleDeleteRequest calls the generic AdminCharlieTriggerRuleDelete builder with application/json body
+func NewAdminCharlieTriggerRuleDeleteRequest(server string, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleDeleteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieTriggerRuleDeleteRequestWithBody(server, ruleId, "application/json", bodyReader)
+}
+
+// NewAdminCharlieTriggerRuleDeleteRequestWithBody generates requests for AdminCharlieTriggerRuleDelete with any type of body
+func NewAdminCharlieTriggerRuleDeleteRequestWithBody(server string, ruleId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "rule_id", runtime.ParamLocationPath, ruleId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/trigger-rules/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieTriggerRuleUpdateRequest calls the generic AdminCharlieTriggerRuleUpdate builder with application/json body
+func NewAdminCharlieTriggerRuleUpdateRequest(server string, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieTriggerRuleUpdateRequestWithBody(server, ruleId, "application/json", bodyReader)
+}
+
+// NewAdminCharlieTriggerRuleUpdateRequestWithBody generates requests for AdminCharlieTriggerRuleUpdate with any type of body
+func NewAdminCharlieTriggerRuleUpdateRequestWithBody(server string, ruleId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "rule_id", runtime.ParamLocationPath, ruleId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/trigger-rules/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -24106,6 +26359,770 @@ func NewPostApiV1CatalogRepositoriesIdTestConnectionRequest(server string, id op
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewListCharlieApprovalsRequest generates requests for ListCharlieApprovals
+func NewListCharlieApprovalsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/approvals/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDecideCharlieApprovalRequest calls the generic DecideCharlieApproval builder with application/json body
+func NewDecideCharlieApprovalRequest(server string, approvalId string, body DecideCharlieApprovalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDecideCharlieApprovalRequestWithBody(server, approvalId, "application/json", bodyReader)
+}
+
+// NewDecideCharlieApprovalRequestWithBody generates requests for DecideCharlieApproval with any type of body
+func NewDecideCharlieApprovalRequestWithBody(server string, approvalId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "approval_id", runtime.ParamLocationPath, approvalId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/approvals/%s/decision/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewSearchCharlieContextRequest generates requests for SearchCharlieContext
+func NewSearchCharlieContextRequest(server string, params *SearchCharlieContextParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/context/search/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, params.Q); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListCharlieFindingsRequest generates requests for ListCharlieFindings
+func NewListCharlieFindingsRequest(server string, params *ListCharlieFindingsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCharlieFindingRequest generates requests for GetCharlieFinding
+func NewGetCharlieFindingRequest(server string, findingId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAcknowledgeCharlieFindingRequest calls the generic AcknowledgeCharlieFinding builder with application/json body
+func NewAcknowledgeCharlieFindingRequest(server string, findingId openapi_types.UUID, body AcknowledgeCharlieFindingJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAcknowledgeCharlieFindingRequestWithBody(server, findingId, "application/json", bodyReader)
+}
+
+// NewAcknowledgeCharlieFindingRequestWithBody generates requests for AcknowledgeCharlieFinding with any type of body
+func NewAcknowledgeCharlieFindingRequestWithBody(server string, findingId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/acknowledge/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDismissCharlieFindingRequest calls the generic DismissCharlieFinding builder with application/json body
+func NewDismissCharlieFindingRequest(server string, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDismissCharlieFindingRequestWithBody(server, findingId, "application/json", bodyReader)
+}
+
+// NewDismissCharlieFindingRequestWithBody generates requests for DismissCharlieFinding with any type of body
+func NewDismissCharlieFindingRequestWithBody(server string, findingId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/dismiss/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewResolveCharlieFindingRequest calls the generic ResolveCharlieFinding builder with application/json body
+func NewResolveCharlieFindingRequest(server string, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewResolveCharlieFindingRequestWithBody(server, findingId, "application/json", bodyReader)
+}
+
+// NewResolveCharlieFindingRequestWithBody generates requests for ResolveCharlieFinding with any type of body
+func NewResolveCharlieFindingRequestWithBody(server string, findingId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/resolve/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetCharlieOperationStatusRequest generates requests for GetCharlieOperationStatus
+func NewGetCharlieOperationStatusRequest(server string, operationId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "operation_id", runtime.ParamLocationPath, operationId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/operations/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListCharlieSessionsRequest generates requests for ListCharlieSessions
+func NewListCharlieSessionsRequest(server string, params *ListCharlieSessionsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateCharlieSessionRequest calls the generic CreateCharlieSession builder with application/json body
+func NewCreateCharlieSessionRequest(server string, body CreateCharlieSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateCharlieSessionRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateCharlieSessionRequestWithBody generates requests for CreateCharlieSession with any type of body
+func NewCreateCharlieSessionRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetCharlieSessionRequest generates requests for GetCharlieSession
+func NewGetCharlieSessionRequest(server string, sessionId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAbortCharlieSessionRequest calls the generic AbortCharlieSession builder with application/json body
+func NewAbortCharlieSessionRequest(server string, sessionId openapi_types.UUID, body AbortCharlieSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAbortCharlieSessionRequestWithBody(server, sessionId, "application/json", bodyReader)
+}
+
+// NewAbortCharlieSessionRequestWithBody generates requests for AbortCharlieSession with any type of body
+func NewAbortCharlieSessionRequestWithBody(server string, sessionId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/%s/abort/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewStreamCharlieSessionEventsRequest generates requests for StreamCharlieSessionEvents
+func NewStreamCharlieSessionEventsRequest(server string, sessionId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/%s/events/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCharlieSessionHistoryRequest generates requests for GetCharlieSessionHistory
+func NewGetCharlieSessionHistoryRequest(server string, sessionId openapi_types.UUID, params *GetCharlieSessionHistoryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/%s/history/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateCharlieSessionMessageRequest calls the generic CreateCharlieSessionMessage builder with application/json body
+func NewCreateCharlieSessionMessageRequest(server string, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateCharlieSessionMessageRequestWithBody(server, sessionId, "application/json", bodyReader)
+}
+
+// NewCreateCharlieSessionMessageRequestWithBody generates requests for CreateCharlieSessionMessage with any type of body
+func NewCreateCharlieSessionMessageRequestWithBody(server string, sessionId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/sessions/%s/messages/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -38442,6 +41459,83 @@ type ClientWithResponsesInterface interface {
 	// GetApiV1AdminBackupDrillWithResponse request
 	GetApiV1AdminBackupDrillWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1AdminBackupDrillResponse, error)
 
+	// AdminCharlieAccessGetWithResponse request
+	AdminCharlieAccessGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAccessGetResponse, error)
+
+	// AdminCharlieAccessUpdateWithBodyWithResponse request with any body
+	AdminCharlieAccessUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAccessUpdateResponse, error)
+
+	AdminCharlieAccessUpdateWithResponse(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAccessUpdateResponse, error)
+
+	// AdminCharlieAgentInstallWithResponse request
+	AdminCharlieAgentInstallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentInstallResponse, error)
+
+	// AdminCharlieAgentRollbackWithResponse request
+	AdminCharlieAgentRollbackWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRollbackResponse, error)
+
+	// AdminCharlieAgentRotateWithResponse request
+	AdminCharlieAgentRotateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRotateResponse, error)
+
+	// AdminCharlieAgentUninstallWithBodyWithResponse request with any body
+	AdminCharlieAgentUninstallWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error)
+
+	AdminCharlieAgentUninstallWithResponse(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error)
+
+	// AdminCharlieAgentUpgradeWithResponse request
+	AdminCharlieAgentUpgradeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUpgradeResponse, error)
+
+	// AdminCharlieDiagnosticsRunWithResponse request
+	AdminCharlieDiagnosticsRunWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieDiagnosticsRunResponse, error)
+
+	// AdminCharlieDisconnectWithBodyWithResponse request with any body
+	AdminCharlieDisconnectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error)
+
+	AdminCharlieDisconnectWithResponse(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error)
+
+	// AdminCharlieModeUpdateWithBodyWithResponse request with any body
+	AdminCharlieModeUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieModeUpdateResponse, error)
+
+	AdminCharlieModeUpdateWithResponse(ctx context.Context, body AdminCharlieModeUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieModeUpdateResponse, error)
+
+	// AdminCharlieOnboardingConsumeWithBodyWithResponse request with any body
+	AdminCharlieOnboardingConsumeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingConsumeResponse, error)
+
+	AdminCharlieOnboardingConsumeWithResponse(ctx context.Context, body AdminCharlieOnboardingConsumeJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingConsumeResponse, error)
+
+	// AdminCharlieOnboardingValidateWithBodyWithResponse request with any body
+	AdminCharlieOnboardingValidateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingValidateResponse, error)
+
+	AdminCharlieOnboardingValidateWithResponse(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingValidateResponse, error)
+
+	// AdminCharlieStatusWithResponse request
+	AdminCharlieStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieStatusResponse, error)
+
+	// AdminCharlieTriggerEventsListWithResponse request
+	AdminCharlieTriggerEventsListWithResponse(ctx context.Context, params *AdminCharlieTriggerEventsListParams, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerEventsListResponse, error)
+
+	// AdminCharlieTriggerEventRetryWithBodyWithResponse request with any body
+	AdminCharlieTriggerEventRetryWithBodyWithResponse(ctx context.Context, eventId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerEventRetryResponse, error)
+
+	AdminCharlieTriggerEventRetryWithResponse(ctx context.Context, eventId openapi_types.UUID, body AdminCharlieTriggerEventRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerEventRetryResponse, error)
+
+	// AdminCharlieTriggerRulesListWithResponse request
+	AdminCharlieTriggerRulesListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRulesListResponse, error)
+
+	// AdminCharlieTriggerRuleCreateWithBodyWithResponse request with any body
+	AdminCharlieTriggerRuleCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleCreateResponse, error)
+
+	AdminCharlieTriggerRuleCreateWithResponse(ctx context.Context, body AdminCharlieTriggerRuleCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleCreateResponse, error)
+
+	// AdminCharlieTriggerRuleDeleteWithBodyWithResponse request with any body
+	AdminCharlieTriggerRuleDeleteWithBodyWithResponse(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleDeleteResponse, error)
+
+	AdminCharlieTriggerRuleDeleteWithResponse(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleDeleteResponse, error)
+
+	// AdminCharlieTriggerRuleUpdateWithBodyWithResponse request with any body
+	AdminCharlieTriggerRuleUpdateWithBodyWithResponse(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleUpdateResponse, error)
+
+	AdminCharlieTriggerRuleUpdateWithResponse(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleUpdateResponse, error)
+
 	// AdminEmailsListWithResponse request
 	AdminEmailsListWithResponse(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*AdminEmailsListResponse, error)
 
@@ -38905,6 +41999,68 @@ type ClientWithResponsesInterface interface {
 
 	// PostApiV1CatalogRepositoriesIdTestConnectionWithResponse request
 	PostApiV1CatalogRepositoriesIdTestConnectionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostApiV1CatalogRepositoriesIdTestConnectionResponse, error)
+
+	// ListCharlieApprovalsWithResponse request
+	ListCharlieApprovalsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListCharlieApprovalsResponse, error)
+
+	// DecideCharlieApprovalWithBodyWithResponse request with any body
+	DecideCharlieApprovalWithBodyWithResponse(ctx context.Context, approvalId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideCharlieApprovalResponse, error)
+
+	DecideCharlieApprovalWithResponse(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideCharlieApprovalResponse, error)
+
+	// SearchCharlieContextWithResponse request
+	SearchCharlieContextWithResponse(ctx context.Context, params *SearchCharlieContextParams, reqEditors ...RequestEditorFn) (*SearchCharlieContextResponse, error)
+
+	// ListCharlieFindingsWithResponse request
+	ListCharlieFindingsWithResponse(ctx context.Context, params *ListCharlieFindingsParams, reqEditors ...RequestEditorFn) (*ListCharlieFindingsResponse, error)
+
+	// GetCharlieFindingWithResponse request
+	GetCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCharlieFindingResponse, error)
+
+	// AcknowledgeCharlieFindingWithBodyWithResponse request with any body
+	AcknowledgeCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AcknowledgeCharlieFindingResponse, error)
+
+	AcknowledgeCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body AcknowledgeCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*AcknowledgeCharlieFindingResponse, error)
+
+	// DismissCharlieFindingWithBodyWithResponse request with any body
+	DismissCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DismissCharlieFindingResponse, error)
+
+	DismissCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*DismissCharlieFindingResponse, error)
+
+	// ResolveCharlieFindingWithBodyWithResponse request with any body
+	ResolveCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error)
+
+	ResolveCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error)
+
+	// GetCharlieOperationStatusWithResponse request
+	GetCharlieOperationStatusWithResponse(ctx context.Context, operationId string, reqEditors ...RequestEditorFn) (*GetCharlieOperationStatusResponse, error)
+
+	// ListCharlieSessionsWithResponse request
+	ListCharlieSessionsWithResponse(ctx context.Context, params *ListCharlieSessionsParams, reqEditors ...RequestEditorFn) (*ListCharlieSessionsResponse, error)
+
+	// CreateCharlieSessionWithBodyWithResponse request with any body
+	CreateCharlieSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCharlieSessionResponse, error)
+
+	CreateCharlieSessionWithResponse(ctx context.Context, body CreateCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieSessionResponse, error)
+
+	// GetCharlieSessionWithResponse request
+	GetCharlieSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCharlieSessionResponse, error)
+
+	// AbortCharlieSessionWithBodyWithResponse request with any body
+	AbortCharlieSessionWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbortCharlieSessionResponse, error)
+
+	AbortCharlieSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, body AbortCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*AbortCharlieSessionResponse, error)
+
+	// StreamCharlieSessionEventsWithResponse request
+	StreamCharlieSessionEventsWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*StreamCharlieSessionEventsResponse, error)
+
+	// GetCharlieSessionHistoryWithResponse request
+	GetCharlieSessionHistoryWithResponse(ctx context.Context, sessionId openapi_types.UUID, params *GetCharlieSessionHistoryParams, reqEditors ...RequestEditorFn) (*GetCharlieSessionHistoryResponse, error)
+
+	// CreateCharlieSessionMessageWithBodyWithResponse request with any body
+	CreateCharlieSessionMessageWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCharlieSessionMessageResponse, error)
+
+	CreateCharlieSessionMessageWithResponse(ctx context.Context, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieSessionMessageResponse, error)
 
 	// GetApiV1CloudCredentialsProvidersWithResponse request
 	GetApiV1CloudCredentialsProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiV1CloudCredentialsProvidersResponse, error)
@@ -40268,6 +43424,497 @@ func (r GetApiV1AdminBackupDrillResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetApiV1AdminBackupDrillResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAccessGetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAccess
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAccessGetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAccessGetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAccessUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAccess
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAccessUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAccessUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAgentInstallResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAgent
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAgentInstallResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAgentInstallResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAgentRollbackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAgent
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAgentRollbackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAgentRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAgentRotateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAgent
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAgentRotateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAgentRotateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAgentUninstallResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAgentUninstallResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAgentUninstallResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAgentUpgradeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAgent
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAgentUpgradeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAgentUpgradeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieDiagnosticsRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminDiagnostics
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieDiagnosticsRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieDiagnosticsRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieDisconnectResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieDisconnectResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieDisconnectResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieModeUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminMode
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieModeUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieModeUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieOnboardingConsumeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieOnboardingStatus
+	JSON400      *ErrorResponse
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieOnboardingConsumeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieOnboardingConsumeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieOnboardingValidateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieOnboardingStatus
+	JSON400      *ErrorResponse
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieOnboardingValidateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieOnboardingValidateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminStatus
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieTriggerEventsListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Items []CharlieAdminTriggerEvent `json:"items"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieTriggerEventsListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieTriggerEventsListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieTriggerEventRetryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *struct {
+		// Event UI-safe lifecycle metadata; summary, fingerprint, session, origin, and outbox payload are intentionally omitted.
+		Event CharlieAdminTriggerEvent `json:"event"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieTriggerEventRetryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieTriggerEventRetryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieTriggerRulesListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAutomation
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieTriggerRulesListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieTriggerRulesListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieTriggerRuleCreateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *CharlieAdminTriggerRule
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieTriggerRuleCreateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieTriggerRuleCreateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieTriggerRuleDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieTriggerRuleDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieTriggerRuleDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieTriggerRuleUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminTriggerRule
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieTriggerRuleUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieTriggerRuleUpdateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -43832,6 +47479,430 @@ func (r PostApiV1CatalogRepositoriesIdTestConnectionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostApiV1CatalogRepositoriesIdTestConnectionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCharlieApprovalsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Items []CharlieApprovalSummary `json:"items"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCharlieApprovalsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCharlieApprovalsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DecideCharlieApprovalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		// Approval Bounded display metadata only; signed authority material never crosses the browser boundary.
+		Approval CharlieApprovalSummary `json:"approval"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r DecideCharlieApprovalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DecideCharlieApprovalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SearchCharlieContextResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Items []CharlieContextSearchResult `json:"items"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchCharlieContextResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchCharlieContextResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCharlieFindingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Items []CharlieFindingSummary `json:"items"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCharlieFindingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCharlieFindingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCharlieFindingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Finding CharlieFindingDetail `json:"finding"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCharlieFindingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCharlieFindingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AcknowledgeCharlieFindingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Finding CharlieFindingDetail `json:"finding"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r AcknowledgeCharlieFindingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AcknowledgeCharlieFindingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DismissCharlieFindingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Finding CharlieFindingDetail `json:"finding"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r DismissCharlieFindingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DismissCharlieFindingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ResolveCharlieFindingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Finding CharlieFindingDetail `json:"finding"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r ResolveCharlieFindingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResolveCharlieFindingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCharlieOperationStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieOperationStatus
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCharlieOperationStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCharlieOperationStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCharlieSessionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Sessions []CharlieSessionMetadata `json:"sessions"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCharlieSessionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCharlieSessionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateCharlieSessionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *struct {
+		Replayed bool                   `json:"replayed"`
+		Session  CharlieSessionMetadata `json:"session"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCharlieSessionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCharlieSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCharlieSessionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Remote  map[string]interface{} `json:"remote"`
+		Session CharlieSessionMetadata `json:"session"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCharlieSessionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCharlieSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AbortCharlieSessionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AbortCharlieSessionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AbortCharlieSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type StreamCharlieSessionEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r StreamCharlieSessionEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StreamCharlieSessionEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCharlieSessionHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]map[string]interface{}
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCharlieSessionHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCharlieSessionHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateCharlieSessionMessageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *map[string]interface{}
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCharlieSessionMessageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCharlieSessionMessageResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -52188,6 +56259,257 @@ func (c *ClientWithResponses) GetApiV1AdminBackupDrillWithResponse(ctx context.C
 	return ParseGetApiV1AdminBackupDrillResponse(rsp)
 }
 
+// AdminCharlieAccessGetWithResponse request returning *AdminCharlieAccessGetResponse
+func (c *ClientWithResponses) AdminCharlieAccessGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAccessGetResponse, error) {
+	rsp, err := c.AdminCharlieAccessGet(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAccessGetResponse(rsp)
+}
+
+// AdminCharlieAccessUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieAccessUpdateResponse
+func (c *ClientWithResponses) AdminCharlieAccessUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAccessUpdateResponse, error) {
+	rsp, err := c.AdminCharlieAccessUpdateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAccessUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieAccessUpdateWithResponse(ctx context.Context, body AdminCharlieAccessUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAccessUpdateResponse, error) {
+	rsp, err := c.AdminCharlieAccessUpdate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAccessUpdateResponse(rsp)
+}
+
+// AdminCharlieAgentInstallWithResponse request returning *AdminCharlieAgentInstallResponse
+func (c *ClientWithResponses) AdminCharlieAgentInstallWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentInstallResponse, error) {
+	rsp, err := c.AdminCharlieAgentInstall(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAgentInstallResponse(rsp)
+}
+
+// AdminCharlieAgentRollbackWithResponse request returning *AdminCharlieAgentRollbackResponse
+func (c *ClientWithResponses) AdminCharlieAgentRollbackWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRollbackResponse, error) {
+	rsp, err := c.AdminCharlieAgentRollback(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAgentRollbackResponse(rsp)
+}
+
+// AdminCharlieAgentRotateWithResponse request returning *AdminCharlieAgentRotateResponse
+func (c *ClientWithResponses) AdminCharlieAgentRotateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentRotateResponse, error) {
+	rsp, err := c.AdminCharlieAgentRotate(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAgentRotateResponse(rsp)
+}
+
+// AdminCharlieAgentUninstallWithBodyWithResponse request with arbitrary body returning *AdminCharlieAgentUninstallResponse
+func (c *ClientWithResponses) AdminCharlieAgentUninstallWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error) {
+	rsp, err := c.AdminCharlieAgentUninstallWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAgentUninstallResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieAgentUninstallWithResponse(ctx context.Context, body AdminCharlieAgentUninstallJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUninstallResponse, error) {
+	rsp, err := c.AdminCharlieAgentUninstall(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAgentUninstallResponse(rsp)
+}
+
+// AdminCharlieAgentUpgradeWithResponse request returning *AdminCharlieAgentUpgradeResponse
+func (c *ClientWithResponses) AdminCharlieAgentUpgradeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUpgradeResponse, error) {
+	rsp, err := c.AdminCharlieAgentUpgrade(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAgentUpgradeResponse(rsp)
+}
+
+// AdminCharlieDiagnosticsRunWithResponse request returning *AdminCharlieDiagnosticsRunResponse
+func (c *ClientWithResponses) AdminCharlieDiagnosticsRunWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieDiagnosticsRunResponse, error) {
+	rsp, err := c.AdminCharlieDiagnosticsRun(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieDiagnosticsRunResponse(rsp)
+}
+
+// AdminCharlieDisconnectWithBodyWithResponse request with arbitrary body returning *AdminCharlieDisconnectResponse
+func (c *ClientWithResponses) AdminCharlieDisconnectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error) {
+	rsp, err := c.AdminCharlieDisconnectWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieDisconnectResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieDisconnectWithResponse(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error) {
+	rsp, err := c.AdminCharlieDisconnect(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieDisconnectResponse(rsp)
+}
+
+// AdminCharlieModeUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieModeUpdateResponse
+func (c *ClientWithResponses) AdminCharlieModeUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieModeUpdateResponse, error) {
+	rsp, err := c.AdminCharlieModeUpdateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieModeUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieModeUpdateWithResponse(ctx context.Context, body AdminCharlieModeUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieModeUpdateResponse, error) {
+	rsp, err := c.AdminCharlieModeUpdate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieModeUpdateResponse(rsp)
+}
+
+// AdminCharlieOnboardingConsumeWithBodyWithResponse request with arbitrary body returning *AdminCharlieOnboardingConsumeResponse
+func (c *ClientWithResponses) AdminCharlieOnboardingConsumeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingConsumeResponse, error) {
+	rsp, err := c.AdminCharlieOnboardingConsumeWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieOnboardingConsumeResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieOnboardingConsumeWithResponse(ctx context.Context, body AdminCharlieOnboardingConsumeJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingConsumeResponse, error) {
+	rsp, err := c.AdminCharlieOnboardingConsume(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieOnboardingConsumeResponse(rsp)
+}
+
+// AdminCharlieOnboardingValidateWithBodyWithResponse request with arbitrary body returning *AdminCharlieOnboardingValidateResponse
+func (c *ClientWithResponses) AdminCharlieOnboardingValidateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingValidateResponse, error) {
+	rsp, err := c.AdminCharlieOnboardingValidateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieOnboardingValidateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieOnboardingValidateWithResponse(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingValidateResponse, error) {
+	rsp, err := c.AdminCharlieOnboardingValidate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieOnboardingValidateResponse(rsp)
+}
+
+// AdminCharlieStatusWithResponse request returning *AdminCharlieStatusResponse
+func (c *ClientWithResponses) AdminCharlieStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieStatusResponse, error) {
+	rsp, err := c.AdminCharlieStatus(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieStatusResponse(rsp)
+}
+
+// AdminCharlieTriggerEventsListWithResponse request returning *AdminCharlieTriggerEventsListResponse
+func (c *ClientWithResponses) AdminCharlieTriggerEventsListWithResponse(ctx context.Context, params *AdminCharlieTriggerEventsListParams, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerEventsListResponse, error) {
+	rsp, err := c.AdminCharlieTriggerEventsList(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerEventsListResponse(rsp)
+}
+
+// AdminCharlieTriggerEventRetryWithBodyWithResponse request with arbitrary body returning *AdminCharlieTriggerEventRetryResponse
+func (c *ClientWithResponses) AdminCharlieTriggerEventRetryWithBodyWithResponse(ctx context.Context, eventId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerEventRetryResponse, error) {
+	rsp, err := c.AdminCharlieTriggerEventRetryWithBody(ctx, eventId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerEventRetryResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieTriggerEventRetryWithResponse(ctx context.Context, eventId openapi_types.UUID, body AdminCharlieTriggerEventRetryJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerEventRetryResponse, error) {
+	rsp, err := c.AdminCharlieTriggerEventRetry(ctx, eventId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerEventRetryResponse(rsp)
+}
+
+// AdminCharlieTriggerRulesListWithResponse request returning *AdminCharlieTriggerRulesListResponse
+func (c *ClientWithResponses) AdminCharlieTriggerRulesListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRulesListResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRulesList(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRulesListResponse(rsp)
+}
+
+// AdminCharlieTriggerRuleCreateWithBodyWithResponse request with arbitrary body returning *AdminCharlieTriggerRuleCreateResponse
+func (c *ClientWithResponses) AdminCharlieTriggerRuleCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleCreateResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRuleCreateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRuleCreateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieTriggerRuleCreateWithResponse(ctx context.Context, body AdminCharlieTriggerRuleCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleCreateResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRuleCreate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRuleCreateResponse(rsp)
+}
+
+// AdminCharlieTriggerRuleDeleteWithBodyWithResponse request with arbitrary body returning *AdminCharlieTriggerRuleDeleteResponse
+func (c *ClientWithResponses) AdminCharlieTriggerRuleDeleteWithBodyWithResponse(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleDeleteResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRuleDeleteWithBody(ctx, ruleId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRuleDeleteResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieTriggerRuleDeleteWithResponse(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleDeleteResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRuleDelete(ctx, ruleId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRuleDeleteResponse(rsp)
+}
+
+// AdminCharlieTriggerRuleUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieTriggerRuleUpdateResponse
+func (c *ClientWithResponses) AdminCharlieTriggerRuleUpdateWithBodyWithResponse(ctx context.Context, ruleId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleUpdateResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRuleUpdateWithBody(ctx, ruleId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRuleUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieTriggerRuleUpdateWithResponse(ctx context.Context, ruleId openapi_types.UUID, body AdminCharlieTriggerRuleUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieTriggerRuleUpdateResponse, error) {
+	rsp, err := c.AdminCharlieTriggerRuleUpdate(ctx, ruleId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieTriggerRuleUpdateResponse(rsp)
+}
+
 // AdminEmailsListWithResponse request returning *AdminEmailsListResponse
 func (c *ClientWithResponses) AdminEmailsListWithResponse(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*AdminEmailsListResponse, error) {
 	rsp, err := c.AdminEmailsList(ctx, params, reqEditors...)
@@ -53658,6 +57980,206 @@ func (c *ClientWithResponses) PostApiV1CatalogRepositoriesIdTestConnectionWithRe
 		return nil, err
 	}
 	return ParsePostApiV1CatalogRepositoriesIdTestConnectionResponse(rsp)
+}
+
+// ListCharlieApprovalsWithResponse request returning *ListCharlieApprovalsResponse
+func (c *ClientWithResponses) ListCharlieApprovalsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListCharlieApprovalsResponse, error) {
+	rsp, err := c.ListCharlieApprovals(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCharlieApprovalsResponse(rsp)
+}
+
+// DecideCharlieApprovalWithBodyWithResponse request with arbitrary body returning *DecideCharlieApprovalResponse
+func (c *ClientWithResponses) DecideCharlieApprovalWithBodyWithResponse(ctx context.Context, approvalId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DecideCharlieApprovalResponse, error) {
+	rsp, err := c.DecideCharlieApprovalWithBody(ctx, approvalId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDecideCharlieApprovalResponse(rsp)
+}
+
+func (c *ClientWithResponses) DecideCharlieApprovalWithResponse(ctx context.Context, approvalId string, body DecideCharlieApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideCharlieApprovalResponse, error) {
+	rsp, err := c.DecideCharlieApproval(ctx, approvalId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDecideCharlieApprovalResponse(rsp)
+}
+
+// SearchCharlieContextWithResponse request returning *SearchCharlieContextResponse
+func (c *ClientWithResponses) SearchCharlieContextWithResponse(ctx context.Context, params *SearchCharlieContextParams, reqEditors ...RequestEditorFn) (*SearchCharlieContextResponse, error) {
+	rsp, err := c.SearchCharlieContext(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchCharlieContextResponse(rsp)
+}
+
+// ListCharlieFindingsWithResponse request returning *ListCharlieFindingsResponse
+func (c *ClientWithResponses) ListCharlieFindingsWithResponse(ctx context.Context, params *ListCharlieFindingsParams, reqEditors ...RequestEditorFn) (*ListCharlieFindingsResponse, error) {
+	rsp, err := c.ListCharlieFindings(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCharlieFindingsResponse(rsp)
+}
+
+// GetCharlieFindingWithResponse request returning *GetCharlieFindingResponse
+func (c *ClientWithResponses) GetCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCharlieFindingResponse, error) {
+	rsp, err := c.GetCharlieFinding(ctx, findingId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCharlieFindingResponse(rsp)
+}
+
+// AcknowledgeCharlieFindingWithBodyWithResponse request with arbitrary body returning *AcknowledgeCharlieFindingResponse
+func (c *ClientWithResponses) AcknowledgeCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AcknowledgeCharlieFindingResponse, error) {
+	rsp, err := c.AcknowledgeCharlieFindingWithBody(ctx, findingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAcknowledgeCharlieFindingResponse(rsp)
+}
+
+func (c *ClientWithResponses) AcknowledgeCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body AcknowledgeCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*AcknowledgeCharlieFindingResponse, error) {
+	rsp, err := c.AcknowledgeCharlieFinding(ctx, findingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAcknowledgeCharlieFindingResponse(rsp)
+}
+
+// DismissCharlieFindingWithBodyWithResponse request with arbitrary body returning *DismissCharlieFindingResponse
+func (c *ClientWithResponses) DismissCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DismissCharlieFindingResponse, error) {
+	rsp, err := c.DismissCharlieFindingWithBody(ctx, findingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDismissCharlieFindingResponse(rsp)
+}
+
+func (c *ClientWithResponses) DismissCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*DismissCharlieFindingResponse, error) {
+	rsp, err := c.DismissCharlieFinding(ctx, findingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDismissCharlieFindingResponse(rsp)
+}
+
+// ResolveCharlieFindingWithBodyWithResponse request with arbitrary body returning *ResolveCharlieFindingResponse
+func (c *ClientWithResponses) ResolveCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error) {
+	rsp, err := c.ResolveCharlieFindingWithBody(ctx, findingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResolveCharlieFindingResponse(rsp)
+}
+
+func (c *ClientWithResponses) ResolveCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error) {
+	rsp, err := c.ResolveCharlieFinding(ctx, findingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResolveCharlieFindingResponse(rsp)
+}
+
+// GetCharlieOperationStatusWithResponse request returning *GetCharlieOperationStatusResponse
+func (c *ClientWithResponses) GetCharlieOperationStatusWithResponse(ctx context.Context, operationId string, reqEditors ...RequestEditorFn) (*GetCharlieOperationStatusResponse, error) {
+	rsp, err := c.GetCharlieOperationStatus(ctx, operationId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCharlieOperationStatusResponse(rsp)
+}
+
+// ListCharlieSessionsWithResponse request returning *ListCharlieSessionsResponse
+func (c *ClientWithResponses) ListCharlieSessionsWithResponse(ctx context.Context, params *ListCharlieSessionsParams, reqEditors ...RequestEditorFn) (*ListCharlieSessionsResponse, error) {
+	rsp, err := c.ListCharlieSessions(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCharlieSessionsResponse(rsp)
+}
+
+// CreateCharlieSessionWithBodyWithResponse request with arbitrary body returning *CreateCharlieSessionResponse
+func (c *ClientWithResponses) CreateCharlieSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCharlieSessionResponse, error) {
+	rsp, err := c.CreateCharlieSessionWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieSessionResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateCharlieSessionWithResponse(ctx context.Context, body CreateCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieSessionResponse, error) {
+	rsp, err := c.CreateCharlieSession(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieSessionResponse(rsp)
+}
+
+// GetCharlieSessionWithResponse request returning *GetCharlieSessionResponse
+func (c *ClientWithResponses) GetCharlieSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCharlieSessionResponse, error) {
+	rsp, err := c.GetCharlieSession(ctx, sessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCharlieSessionResponse(rsp)
+}
+
+// AbortCharlieSessionWithBodyWithResponse request with arbitrary body returning *AbortCharlieSessionResponse
+func (c *ClientWithResponses) AbortCharlieSessionWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbortCharlieSessionResponse, error) {
+	rsp, err := c.AbortCharlieSessionWithBody(ctx, sessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAbortCharlieSessionResponse(rsp)
+}
+
+func (c *ClientWithResponses) AbortCharlieSessionWithResponse(ctx context.Context, sessionId openapi_types.UUID, body AbortCharlieSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*AbortCharlieSessionResponse, error) {
+	rsp, err := c.AbortCharlieSession(ctx, sessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAbortCharlieSessionResponse(rsp)
+}
+
+// StreamCharlieSessionEventsWithResponse request returning *StreamCharlieSessionEventsResponse
+func (c *ClientWithResponses) StreamCharlieSessionEventsWithResponse(ctx context.Context, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*StreamCharlieSessionEventsResponse, error) {
+	rsp, err := c.StreamCharlieSessionEvents(ctx, sessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStreamCharlieSessionEventsResponse(rsp)
+}
+
+// GetCharlieSessionHistoryWithResponse request returning *GetCharlieSessionHistoryResponse
+func (c *ClientWithResponses) GetCharlieSessionHistoryWithResponse(ctx context.Context, sessionId openapi_types.UUID, params *GetCharlieSessionHistoryParams, reqEditors ...RequestEditorFn) (*GetCharlieSessionHistoryResponse, error) {
+	rsp, err := c.GetCharlieSessionHistory(ctx, sessionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCharlieSessionHistoryResponse(rsp)
+}
+
+// CreateCharlieSessionMessageWithBodyWithResponse request with arbitrary body returning *CreateCharlieSessionMessageResponse
+func (c *ClientWithResponses) CreateCharlieSessionMessageWithBodyWithResponse(ctx context.Context, sessionId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCharlieSessionMessageResponse, error) {
+	rsp, err := c.CreateCharlieSessionMessageWithBody(ctx, sessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieSessionMessageResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateCharlieSessionMessageWithResponse(ctx context.Context, sessionId openapi_types.UUID, body CreateCharlieSessionMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCharlieSessionMessageResponse, error) {
+	rsp, err := c.CreateCharlieSessionMessage(ctx, sessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCharlieSessionMessageResponse(rsp)
 }
 
 // GetApiV1CloudCredentialsProvidersWithResponse request returning *GetApiV1CloudCredentialsProvidersResponse
@@ -57550,6 +62072,981 @@ func ParseGetApiV1AdminBackupDrillResponse(rsp *http.Response) (*GetApiV1AdminBa
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAccessGetResponse parses an HTTP response from a AdminCharlieAccessGetWithResponse call
+func ParseAdminCharlieAccessGetResponse(rsp *http.Response) (*AdminCharlieAccessGetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAccessGetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAccess
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAccessUpdateResponse parses an HTTP response from a AdminCharlieAccessUpdateWithResponse call
+func ParseAdminCharlieAccessUpdateResponse(rsp *http.Response) (*AdminCharlieAccessUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAccessUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAccess
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAgentInstallResponse parses an HTTP response from a AdminCharlieAgentInstallWithResponse call
+func ParseAdminCharlieAgentInstallResponse(rsp *http.Response) (*AdminCharlieAgentInstallResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAgentInstallResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAgent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAgentRollbackResponse parses an HTTP response from a AdminCharlieAgentRollbackWithResponse call
+func ParseAdminCharlieAgentRollbackResponse(rsp *http.Response) (*AdminCharlieAgentRollbackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAgentRollbackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAgent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAgentRotateResponse parses an HTTP response from a AdminCharlieAgentRotateWithResponse call
+func ParseAdminCharlieAgentRotateResponse(rsp *http.Response) (*AdminCharlieAgentRotateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAgentRotateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAgent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAgentUninstallResponse parses an HTTP response from a AdminCharlieAgentUninstallWithResponse call
+func ParseAdminCharlieAgentUninstallResponse(rsp *http.Response) (*AdminCharlieAgentUninstallResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAgentUninstallResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAgentUpgradeResponse parses an HTTP response from a AdminCharlieAgentUpgradeWithResponse call
+func ParseAdminCharlieAgentUpgradeResponse(rsp *http.Response) (*AdminCharlieAgentUpgradeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAgentUpgradeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAgent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieDiagnosticsRunResponse parses an HTTP response from a AdminCharlieDiagnosticsRunWithResponse call
+func ParseAdminCharlieDiagnosticsRunResponse(rsp *http.Response) (*AdminCharlieDiagnosticsRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieDiagnosticsRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminDiagnostics
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieDisconnectResponse parses an HTTP response from a AdminCharlieDisconnectWithResponse call
+func ParseAdminCharlieDisconnectResponse(rsp *http.Response) (*AdminCharlieDisconnectResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieDisconnectResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieModeUpdateResponse parses an HTTP response from a AdminCharlieModeUpdateWithResponse call
+func ParseAdminCharlieModeUpdateResponse(rsp *http.Response) (*AdminCharlieModeUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieModeUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminMode
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieOnboardingConsumeResponse parses an HTTP response from a AdminCharlieOnboardingConsumeWithResponse call
+func ParseAdminCharlieOnboardingConsumeResponse(rsp *http.Response) (*AdminCharlieOnboardingConsumeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieOnboardingConsumeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieOnboardingStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieOnboardingValidateResponse parses an HTTP response from a AdminCharlieOnboardingValidateWithResponse call
+func ParseAdminCharlieOnboardingValidateResponse(rsp *http.Response) (*AdminCharlieOnboardingValidateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieOnboardingValidateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieOnboardingStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieStatusResponse parses an HTTP response from a AdminCharlieStatusWithResponse call
+func ParseAdminCharlieStatusResponse(rsp *http.Response) (*AdminCharlieStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieTriggerEventsListResponse parses an HTTP response from a AdminCharlieTriggerEventsListWithResponse call
+func ParseAdminCharlieTriggerEventsListResponse(rsp *http.Response) (*AdminCharlieTriggerEventsListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieTriggerEventsListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items []CharlieAdminTriggerEvent `json:"items"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieTriggerEventRetryResponse parses an HTTP response from a AdminCharlieTriggerEventRetryWithResponse call
+func ParseAdminCharlieTriggerEventRetryResponse(rsp *http.Response) (*AdminCharlieTriggerEventRetryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieTriggerEventRetryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			// Event UI-safe lifecycle metadata; summary, fingerprint, session, origin, and outbox payload are intentionally omitted.
+			Event CharlieAdminTriggerEvent `json:"event"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieTriggerRulesListResponse parses an HTTP response from a AdminCharlieTriggerRulesListWithResponse call
+func ParseAdminCharlieTriggerRulesListResponse(rsp *http.Response) (*AdminCharlieTriggerRulesListResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieTriggerRulesListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAutomation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieTriggerRuleCreateResponse parses an HTTP response from a AdminCharlieTriggerRuleCreateWithResponse call
+func ParseAdminCharlieTriggerRuleCreateResponse(rsp *http.Response) (*AdminCharlieTriggerRuleCreateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieTriggerRuleCreateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CharlieAdminTriggerRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieTriggerRuleDeleteResponse parses an HTTP response from a AdminCharlieTriggerRuleDeleteWithResponse call
+func ParseAdminCharlieTriggerRuleDeleteResponse(rsp *http.Response) (*AdminCharlieTriggerRuleDeleteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieTriggerRuleDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieTriggerRuleUpdateResponse parses an HTTP response from a AdminCharlieTriggerRuleUpdateWithResponse call
+func ParseAdminCharlieTriggerRuleUpdateResponse(rsp *http.Response) (*AdminCharlieTriggerRuleUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieTriggerRuleUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminTriggerRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -63335,6 +68832,776 @@ func ParsePostApiV1CatalogRepositoriesIdTestConnectionResponse(rsp *http.Respons
 			return nil, err
 		}
 		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCharlieApprovalsResponse parses an HTTP response from a ListCharlieApprovalsWithResponse call
+func ParseListCharlieApprovalsResponse(rsp *http.Response) (*ListCharlieApprovalsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCharlieApprovalsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items []CharlieApprovalSummary `json:"items"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDecideCharlieApprovalResponse parses an HTTP response from a DecideCharlieApprovalWithResponse call
+func ParseDecideCharlieApprovalResponse(rsp *http.Response) (*DecideCharlieApprovalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DecideCharlieApprovalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Approval Bounded display metadata only; signed authority material never crosses the browser boundary.
+			Approval CharlieApprovalSummary `json:"approval"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSearchCharlieContextResponse parses an HTTP response from a SearchCharlieContextWithResponse call
+func ParseSearchCharlieContextResponse(rsp *http.Response) (*SearchCharlieContextResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchCharlieContextResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items []CharlieContextSearchResult `json:"items"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCharlieFindingsResponse parses an HTTP response from a ListCharlieFindingsWithResponse call
+func ParseListCharlieFindingsResponse(rsp *http.Response) (*ListCharlieFindingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCharlieFindingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Items []CharlieFindingSummary `json:"items"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCharlieFindingResponse parses an HTTP response from a GetCharlieFindingWithResponse call
+func ParseGetCharlieFindingResponse(rsp *http.Response) (*GetCharlieFindingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCharlieFindingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAcknowledgeCharlieFindingResponse parses an HTTP response from a AcknowledgeCharlieFindingWithResponse call
+func ParseAcknowledgeCharlieFindingResponse(rsp *http.Response) (*AcknowledgeCharlieFindingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AcknowledgeCharlieFindingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDismissCharlieFindingResponse parses an HTTP response from a DismissCharlieFindingWithResponse call
+func ParseDismissCharlieFindingResponse(rsp *http.Response) (*DismissCharlieFindingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DismissCharlieFindingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseResolveCharlieFindingResponse parses an HTTP response from a ResolveCharlieFindingWithResponse call
+func ParseResolveCharlieFindingResponse(rsp *http.Response) (*ResolveCharlieFindingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResolveCharlieFindingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCharlieOperationStatusResponse parses an HTTP response from a GetCharlieOperationStatusWithResponse call
+func ParseGetCharlieOperationStatusResponse(rsp *http.Response) (*GetCharlieOperationStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCharlieOperationStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieOperationStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCharlieSessionsResponse parses an HTTP response from a ListCharlieSessionsWithResponse call
+func ParseListCharlieSessionsResponse(rsp *http.Response) (*ListCharlieSessionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCharlieSessionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Sessions []CharlieSessionMetadata `json:"sessions"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCharlieSessionResponse parses an HTTP response from a CreateCharlieSessionWithResponse call
+func ParseCreateCharlieSessionResponse(rsp *http.Response) (*CreateCharlieSessionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCharlieSessionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			Replayed bool                   `json:"replayed"`
+			Session  CharlieSessionMetadata `json:"session"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCharlieSessionResponse parses an HTTP response from a GetCharlieSessionWithResponse call
+func ParseGetCharlieSessionResponse(rsp *http.Response) (*GetCharlieSessionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCharlieSessionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Remote  map[string]interface{} `json:"remote"`
+			Session CharlieSessionMetadata `json:"session"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAbortCharlieSessionResponse parses an HTTP response from a AbortCharlieSessionWithResponse call
+func ParseAbortCharlieSessionResponse(rsp *http.Response) (*AbortCharlieSessionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AbortCharlieSessionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStreamCharlieSessionEventsResponse parses an HTTP response from a StreamCharlieSessionEventsWithResponse call
+func ParseStreamCharlieSessionEventsResponse(rsp *http.Response) (*StreamCharlieSessionEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StreamCharlieSessionEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCharlieSessionHistoryResponse parses an HTTP response from a GetCharlieSessionHistoryWithResponse call
+func ParseGetCharlieSessionHistoryResponse(rsp *http.Response) (*GetCharlieSessionHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCharlieSessionHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCharlieSessionMessageResponse parses an HTTP response from a CreateCharlieSessionMessageWithResponse call
+func ParseCreateCharlieSessionMessageResponse(rsp *http.Response) (*CreateCharlieSessionMessageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCharlieSessionMessageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from '@/lib/navigation';
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/lib/theme';
 import {
   Bell,
@@ -21,11 +22,14 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore, useAuthStore } from '@/lib/store';
-import { useClusters, useAlertEvents } from '@/lib/hooks';
+import { useClusters, useAlertEvents, useFeatureFlags } from '@/lib/hooks';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatRelativeTime } from '@/lib/utils';
 import { GlobalSearch } from '@/components/layout/global-search';
 import { logoutCurrentSession } from '@/lib/api/account-security';
+import { listCharlieFindings } from '@/lib/api/charlie';
+import { queryKeys } from '@/lib/query-keys';
+import { selectImportantCharlieFindings } from '@/components/charlie/topbar-findings';
 
 // --- Breadcrumb generation ---
 
@@ -73,6 +77,7 @@ const routeLabels: Record<string, string> = {
   namespaces: 'Namespaces',
   nodes: 'Nodes',
   events: 'Events',
+  charlie: 'Charlie',
 };
 
 function generateBreadcrumbs(pathname: string, clusterMap?: Record<string, string>) {
@@ -122,6 +127,20 @@ export function Topbar() {
   // /dashboard/clusters/{id}/... slug into the human-readable cluster name.
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: alertEvents } = useAlertEvents({ status: 'firing' });
+  const { data: featureFlags } = useFeatureFlags();
+  const { data: charlieFindings } = useQuery({
+    queryKey: queryKeys.charlie.findings,
+    queryFn: listCharlieFindings,
+    enabled: featureFlags?.['feature.charlie'] === true,
+    retry: false,
+    // The findings endpoint performs a bounded, authorization-filtered sync
+    // before returning durable local summaries. Polling while an operator is
+    // signed in makes non-executed diagnoses visible in the existing alert
+    // bell without opening a browser-to-Charlie transport or running anything
+    // while the product feature is disabled.
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
 
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -141,6 +160,9 @@ export function Topbar() {
 
   const firingAlerts = alertEvents?.filter((e) => e.status === 'firing') || [];
   const recentAlerts = (alertEvents || []).slice(0, 5);
+  const actionableCharlieFindings = selectImportantCharlieFindings(charlieFindings || []);
+  const importantFindings = actionableCharlieFindings.slice(0, 5);
+  const notificationCount = firingAlerts.length + actionableCharlieFindings.length;
 
   useEffect(() => {
     setMounted(true);
@@ -225,9 +247,9 @@ export function Topbar() {
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <Bell className="h-4 w-4" />
-            {firingAlerts.length > 0 && (
+            {notificationCount > 0 && (
               <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-status-error text-[10px] font-bold text-white">
-                {firingAlerts.length > 99 ? '99+' : firingAlerts.length}
+                {notificationCount > 99 ? '99+' : notificationCount}
               </span>
             )}
           </button>
@@ -235,7 +257,7 @@ export function Topbar() {
           {notificationOpen && (
             <div className="absolute right-0 top-full mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h4 className="text-sm font-medium text-foreground">Recent Alerts</h4>
+                <h4 className="text-sm font-medium text-foreground">Notifications</h4>
                 {firingAlerts.length > 0 && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-medium">
                     {firingAlerts.length} firing
@@ -244,7 +266,13 @@ export function Topbar() {
               </div>
 
               <div className="max-h-80 overflow-y-auto">
-                {recentAlerts.length === 0 ? (
+                {importantFindings.map((finding) => (
+                  <button key={`charlie:${finding.id}`} onClick={() => { router.push(`/dashboard/charlie?tab=findings&finding=${encodeURIComponent(finding.id)}`); setNotificationOpen(false); }} className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50">
+                    <AlertCircle className={cn('mt-0.5 h-4 w-4 shrink-0', finding.severity === 'critical' ? 'text-status-error' : 'text-status-warning')} />
+                    <span className="min-w-0"><span className="block truncate text-sm font-medium">{finding.title}</span><span className="block truncate text-xs text-muted-foreground">{finding.affectedResource.type}: {finding.affectedResource.id}{finding.confidence == null ? '' : ` · ${Math.round(finding.confidence * 100)}% confidence`}</span>{finding.reasonNoAction&&<span className="block truncate text-xs text-muted-foreground">No action: {finding.reasonNoAction}</span>}</span>
+                  </button>
+                ))}
+                {recentAlerts.length === 0 && importantFindings.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                     No recent alerts
                   </div>

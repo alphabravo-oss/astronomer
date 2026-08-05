@@ -240,6 +240,31 @@ type RouterDependencies struct {
 	// settings, consumed by the FeatureGate middleware below. Optional
 	// — when nil, every feature-gated route falls through as enabled.
 	SettingsCache *handler.SettingsCache
+	// CharlieOnboarding owns the local-only signed package validation and
+	// consumption endpoints. It is nil unless database encryption and the
+	// in-cluster Kubernetes Secret writer are both available.
+	CharlieOnboarding *handler.CharlieOnboardingHandler
+	// CharlieAdmin owns the fail-closed connection, agent, mode, automation,
+	// access-preview, and diagnostics control plane. It never serves runtime
+	// evidence and is absent unless the local database is available.
+	CharlieAdmin *handler.CharlieAdminHandler
+	// CharlieSessions is the browser-only, live-authorized proxy for private
+	// Charlie chat. Nil keeps every route absent when the optional runtime is
+	// not fully wired.
+	CharlieSessions *handler.CharlieSessionHandler
+	// CharlieApprovals is the browser-facing product authority gate for exact,
+	// signed, single-use write approvals.
+	CharlieApprovals *handler.CharlieApprovalHandler
+	// CharlieContext exposes only live-authorized, bounded product resource
+	// identifiers and labels for the explicit chat context picker.
+	CharlieContext *handler.CharlieContextHandler
+	// CharlieFindings exposes bounded local notification summaries and proxies
+	// central detail only after live product authorization. Nil keeps the
+	// optional surface absent.
+	CharlieFindings *handler.CharlieFindingHandler
+	// CharlieOperations exposes bounded durable action-receipt status only
+	// after the same live session authorization used for history and findings.
+	CharlieOperations *handler.CharlieOperationHandler
 	// Quotas owns /api/v1/admin/quota-plans/* CRUD, the
 	// /admin/quota-usage/ fleet snapshot, and the per-tenant
 	// /projects/{id}/quota/ + /auth/me/quota/ readers. Migration 051.
@@ -2168,6 +2193,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerResourcesWorkloadsRoutes(r, deps)
 	registerSecurityRoutes(r, cfg, deps, rateLimit)
 	registerDexRoutes(r, deps)
+	registerCharlieRoutes(r, deps, rateLimit)
 }
 
 // remoteV2PodsHandler is the demonstration endpoint for the new

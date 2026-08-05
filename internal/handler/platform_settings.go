@@ -128,6 +128,7 @@ var settingsRegistry = map[string]settingSpec{
 	"feature.argocd":         {Type: typeBool, Default: true, Description: "ArgoCD GitOps integration tab"},
 	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
 	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
+	"feature.charlie":        {Type: typeBool, Default: false, Description: "Charlie SRE assistant integration"},
 	// New opt-in features — Default FALSE (disabled until an operator enables).
 	// NOTE: the FeatureGate middleware hard-codes a true fallback, so these are
 	// additionally gated server-side (config flag for control-plane snapshots;
@@ -204,7 +205,11 @@ type PlatformSettingsHandler struct {
 	queries PlatformSettingsQuerier
 	// cache is the FeatureGate middleware's cache, shared so that PUT /
 	// DELETE invalidate it. Optional — the handler works without one.
-	cache *SettingsCache
+	cache            *SettingsCache
+	charlieLifecycle interface {
+		Disable(context.Context, string) error
+		Enable(context.Context, string) error
+	}
 }
 
 // NewPlatformSettingsHandler wires the handler. queries may be nil for
@@ -216,6 +221,13 @@ func NewPlatformSettingsHandler(queries PlatformSettingsQuerier) *PlatformSettin
 // SetCache attaches the shared FeatureGate cache so mutations
 // invalidate it. Optional.
 func (h *PlatformSettingsHandler) SetCache(c *SettingsCache) { h.cache = c }
+
+func (h *PlatformSettingsHandler) SetCharlieLifecycle(lifecycle interface {
+	Disable(context.Context, string) error
+	Enable(context.Context, string) error
+}) {
+	h.charlieLifecycle = lifecycle
+}
 
 // settingResponse is the wire shape for a single setting. UpdatedBy is
 // a string pointer because the JSONB column can be NULL (and is, before
@@ -327,11 +339,23 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	// Capture the previous value for the audit trail. ErrNoRows is the
 	// normal "first write" case — record an empty old_value.
 	var oldValueJSON json.RawMessage
+	oldValueExists := false
 	if prev, err := h.queries.GetPlatformSetting(r.Context(), key); err == nil {
 		oldValueJSON = prev.Value
+		oldValueExists = true
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
+	}
+	charlieEnabled := false
+	if key == "feature.charlie" {
+		_ = json.Unmarshal(req.Value, &charlieEnabled)
+		if !charlieEnabled && h.charlieLifecycle != nil {
+			if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
+				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+				return
+			}
+		}
 	}
 
 	row, err := h.queries.UpsertPlatformSetting(r.Context(), sqlc.UpsertPlatformSettingParams{
@@ -347,6 +371,24 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 
 	if h.cache != nil {
 		h.cache.Invalidate(key)
+	}
+	if key == "feature.charlie" && charlieEnabled && h.charlieLifecycle != nil {
+		if err := h.charlieLifecycle.Enable(r.Context(), platformSettingActor(r)); err != nil {
+			// Enabling is atomic from the operator's perspective. If runtime
+			// restoration fails, restore the prior persisted feature value.
+			if oldValueExists {
+				_, _ = h.queries.UpsertPlatformSetting(r.Context(), sqlc.UpsertPlatformSettingParams{
+					Key: key, Value: oldValueJSON, Description: spec.Description, UpdatedBy: currentUserUUID(r),
+				})
+			} else {
+				_ = h.queries.DeletePlatformSetting(r.Context(), key)
+			}
+			if h.cache != nil {
+				h.cache.Invalidate(key)
+			}
+			RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+			return
+		}
 	}
 
 	recordAudit(r, h.queries, "admin.platform_settings.updated", "platform_setting", key, key, map[string]any{
@@ -380,6 +422,12 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 	if prev, err := h.queries.GetPlatformSetting(r.Context(), key); err == nil {
 		oldValueJSON = prev.Value
 	}
+	if key == "feature.charlie" && h.charlieLifecycle != nil {
+		if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
+			RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+			return
+		}
+	}
 	if err := h.queries.DeletePlatformSetting(r.Context(), key); err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
@@ -393,6 +441,14 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 	})
 	// Echo back the default so the SPA doesn't have to refetch.
 	RespondJSON(w, http.StatusOK, buildResponse(key, spec, sqlc.PlatformSetting{}))
+}
+
+func platformSettingActor(r *http.Request) string {
+	id := currentUserUUID(r)
+	if !id.Valid {
+		return "unknown"
+	}
+	return uuid.UUID(id.Bytes).String()
 }
 
 // PublicBranding handles GET /api/v1/settings/branding/. PRE-AUTH —

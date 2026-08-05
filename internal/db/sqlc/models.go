@@ -30,6 +30,21 @@ type AgentConnection struct {
 	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
+type AgentConnectionEvent struct {
+	ID              uuid.UUID       `json:"id"`
+	ClusterID       uuid.UUID       `json:"cluster_id"`
+	ConnectionID    pgtype.UUID     `json:"connection_id"`
+	EventType       string          `json:"event_type"`
+	ReasonCode      string          `json:"reason_code"`
+	AgentID         string          `json:"agent_id"`
+	AgentVersion    string          `json:"agent_version"`
+	ProtocolVersion string          `json:"protocol_version"`
+	ServerReplica   string          `json:"server_replica"`
+	Metadata        json.RawMessage `json:"metadata"`
+	OccurredAt      time.Time       `json:"occurred_at"`
+	CreatedAt       time.Time       `json:"created_at"`
+}
+
 type AgentLifecycleOperation struct {
 	ID             uuid.UUID          `json:"id"`
 	ClusterID      uuid.UUID          `json:"cluster_id"`
@@ -46,6 +61,33 @@ type AgentLifecycleOperation struct {
 	LastError      string             `json:"last_error"`
 	CreatedAt      time.Time          `json:"created_at"`
 	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type AgentOperationalStatus struct {
+	ClusterID                  uuid.UUID          `json:"cluster_id"`
+	AgentID                    string             `json:"agent_id"`
+	InstalledAgentVersion      string             `json:"installed_agent_version"`
+	DesiredAgentVersion        string             `json:"desired_agent_version"`
+	ProtocolVersion            string             `json:"protocol_version"`
+	ProtocolCompatible         pgtype.Bool        `json:"protocol_compatible"`
+	AuthenticationState        string             `json:"authentication_state"`
+	RegistrationState          string             `json:"registration_state"`
+	CredentialState            string             `json:"credential_state"`
+	CredentialExpiresAt        pgtype.Timestamptz `json:"credential_expires_at"`
+	UpgradeState               string             `json:"upgrade_state"`
+	AuditIngestionState        string             `json:"audit_ingestion_state"`
+	MetricsIngestionState      string             `json:"metrics_ingestion_state"`
+	StateIngestionState        string             `json:"state_ingestion_state"`
+	PendingCommandCount        int32              `json:"pending_command_count"`
+	FailedCommandCount         int32              `json:"failed_command_count"`
+	ExpiredCommandCount        int32              `json:"expired_command_count"`
+	DownstreamApiReachable     pgtype.Bool        `json:"downstream_api_reachable"`
+	DownstreamApiReportedAt    pgtype.Timestamptz `json:"downstream_api_reported_at"`
+	OwningServerReplica        string             `json:"owning_server_replica"`
+	LastSuccessfulConnectionAt pgtype.Timestamptz `json:"last_successful_connection_at"`
+	LastStatusAt               time.Time          `json:"last_status_at"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
 }
 
 type AlertEvent struct {
@@ -484,6 +526,258 @@ type CatalogOperationEvent struct {
 	Message     string          `json:"message"`
 	Detail      json.RawMessage `json:"detail"`
 	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type CharlieActionApproval struct {
+	ID               uuid.UUID          `json:"id"`
+	ConnectionID     uuid.UUID          `json:"connection_id"`
+	SessionID        uuid.UUID          `json:"session_id"`
+	ApprovalID       string             `json:"approval_id"`
+	CharlieActionID  string             `json:"charlie_action_id"`
+	TurnID           string             `json:"turn_id"`
+	Capability       string             `json:"capability"`
+	ArgumentDigest   string             `json:"argument_digest"`
+	DisclosureDigest string             `json:"disclosure_digest"`
+	ModeRevision     int64              `json:"mode_revision"`
+	PolicyRevision   int64              `json:"policy_revision"`
+	FencingEpoch     int64              `json:"fencing_epoch"`
+	ManifestDigest   string             `json:"manifest_digest"`
+	ResourceType     string             `json:"resource_type"`
+	ResourceID       string             `json:"resource_id"`
+	ApproverID       uuid.UUID          `json:"approver_id"`
+	RationaleDigest  string             `json:"rationale_digest"`
+	State            string             `json:"state"`
+	ExpiresAt        time.Time          `json:"expires_at"`
+	DispatchedAt     pgtype.Timestamptz `json:"dispatched_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
+type CharlieActionDeferral struct {
+	ID              uuid.UUID `json:"id"`
+	CharlieActionID string    `json:"charlie_action_id"`
+	WindowID        uuid.UUID `json:"window_id"`
+	DeferredUntil   time.Time `json:"deferred_until"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type CharlieActionReceipt struct {
+	ID                    uuid.UUID          `json:"id"`
+	ConnectionID          uuid.UUID          `json:"connection_id"`
+	SessionID             uuid.UUID          `json:"session_id"`
+	CharlieActionID       string             `json:"charlie_action_id"`
+	TurnID                string             `json:"turn_id"`
+	Capability            string             `json:"capability"`
+	Effect                string             `json:"effect"`
+	ArgumentDigest        string             `json:"argument_digest"`
+	ArgumentsEncrypted    string             `json:"arguments_encrypted"`
+	AuthorizationHash     string             `json:"authorization_hash"`
+	ResourceDigest        string             `json:"resource_digest"`
+	FencingEpoch          int64              `json:"fencing_epoch"`
+	ProductIdempotencyKey string             `json:"product_idempotency_key"`
+	State                 string             `json:"state"`
+	Attempt               int32              `json:"attempt"`
+	LeaseOwner            string             `json:"lease_owner"`
+	LeaseExpiresAt        time.Time          `json:"lease_expires_at"`
+	ResultDigest          string             `json:"result_digest"`
+	ResultStatus          string             `json:"result_status"`
+	ResultEncrypted       string             `json:"result_encrypted"`
+	AuditCorrelationID    uuid.UUID          `json:"audit_correlation_id"`
+	DispatchedAt          pgtype.Timestamptz `json:"dispatched_at"`
+	VerifiedAt            pgtype.Timestamptz `json:"verified_at"`
+	AutoBudgetReserved    bool               `json:"auto_budget_reserved"`
+	SafetyPolicyRevision  int64              `json:"safety_policy_revision"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+}
+
+type CharlieAutomationPolicy struct {
+	ID                    uuid.UUID `json:"id"`
+	ConnectionID          uuid.UUID `json:"connection_id"`
+	Capability            string    `json:"capability"`
+	Enabled               bool      `json:"enabled"`
+	MaxActionsPerIncident int32     `json:"max_actions_per_incident"`
+	MaxActionsPerWindow   int32     `json:"max_actions_per_window"`
+	BudgetWindowSeconds   int32     `json:"budget_window_seconds"`
+	CooldownSeconds       int32     `json:"cooldown_seconds"`
+	Revision              int64     `json:"revision"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+type CharlieConnection struct {
+	ID                             uuid.UUID          `json:"id"`
+	InstallationID                 uuid.UUID          `json:"installation_id"`
+	ProductID                      string             `json:"product_id"`
+	DeploymentID                   string             `json:"deployment_id"`
+	RouteID                        string             `json:"route_id"`
+	CentralUrl                     string             `json:"central_url"`
+	CentralCaFingerprint           string             `json:"central_ca_fingerprint"`
+	SigningKeyID                   string             `json:"signing_key_id"`
+	SigningKeyFingerprint          string             `json:"signing_key_fingerprint"`
+	OnboardingSchemaVersion        string             `json:"onboarding_schema_version"`
+	CentralApiVersion              string             `json:"central_api_version"`
+	AgentProtocolVersion           string             `json:"agent_protocol_version"`
+	ChartVersion                   string             `json:"chart_version"`
+	ChartDigest                    string             `json:"chart_digest"`
+	ImageDigest                    string             `json:"image_digest"`
+	LogicalAgentID                 string             `json:"logical_agent_id"`
+	ReplicaCount                   int32              `json:"replica_count"`
+	BridgeServiceName              string             `json:"bridge_service_name"`
+	McpServiceName                 string             `json:"mcp_service_name"`
+	LocalTrustMaterialEncrypted    string             `json:"local_trust_material_encrypted"`
+	AgentSecretName                string             `json:"agent_secret_name"`
+	OnboardingPackageID            uuid.UUID          `json:"onboarding_package_id"`
+	OnboardingPackageDigest        string             `json:"onboarding_package_digest"`
+	OnboardingPackageExpiresAt     time.Time          `json:"onboarding_package_expires_at"`
+	EnrollmentCredentialsExpiresAt time.Time          `json:"enrollment_credentials_expires_at"`
+	ArtifactCredentialExpiresAt    time.Time          `json:"artifact_credential_expires_at"`
+	CertificateExpiresAt           time.Time          `json:"certificate_expires_at"`
+	OnboardingState                string             `json:"onboarding_state"`
+	AgentSecretHmac                string             `json:"agent_secret_hmac"`
+	RequestedMode                  string             `json:"requested_mode"`
+	VerifiedMode                   string             `json:"verified_mode"`
+	VerifiedModeRevision           int64              `json:"verified_mode_revision"`
+	EmergencyDisabled              bool               `json:"emergency_disabled"`
+	EmergencyDisabledByID          pgtype.UUID        `json:"emergency_disabled_by_id"`
+	EmergencyDisabledAt            pgtype.Timestamptz `json:"emergency_disabled_at"`
+	DisclosureDigest               string             `json:"disclosure_digest"`
+	AcknowledgedDisclosureDigest   string             `json:"acknowledged_disclosure_digest"`
+	LeaderInstanceID               string             `json:"leader_instance_id"`
+	FencingEpoch                   int64              `json:"fencing_epoch"`
+	HealthState                    string             `json:"health_state"`
+	Active                         bool               `json:"active"`
+	LastErrorCode                  string             `json:"last_error_code"`
+	LastVerifiedAt                 pgtype.Timestamptz `json:"last_verified_at"`
+	LastConnectedAt                pgtype.Timestamptz `json:"last_connected_at"`
+	LastRotatedAt                  pgtype.Timestamptz `json:"last_rotated_at"`
+	ReconciliationDueAt            pgtype.Timestamptz `json:"reconciliation_due_at"`
+	CreatedByID                    pgtype.UUID        `json:"created_by_id"`
+	CreatedAt                      time.Time          `json:"created_at"`
+	UpdatedAt                      time.Time          `json:"updated_at"`
+}
+
+type CharlieDelegation struct {
+	ID                  uuid.UUID          `json:"id"`
+	SessionID           uuid.UUID          `json:"session_id"`
+	AuthorizationHash   string             `json:"authorization_hash"`
+	AuthorizationPrefix string             `json:"authorization_prefix"`
+	PrincipalType       string             `json:"principal_type"`
+	PrincipalID         uuid.UUID          `json:"principal_id"`
+	IssuedAt            time.Time          `json:"issued_at"`
+	ExpiresAt           time.Time          `json:"expires_at"`
+	RevokedAt           pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt           time.Time          `json:"created_at"`
+}
+
+type CharlieFinding struct {
+	ID                     uuid.UUID          `json:"id"`
+	ConnectionID           uuid.UUID          `json:"connection_id"`
+	CharlieFindingID       string             `json:"charlie_finding_id"`
+	ApprovalID             pgtype.Text        `json:"approval_id"`
+	SessionID              pgtype.UUID        `json:"session_id"`
+	Source                 string             `json:"source"`
+	Severity               string             `json:"severity"`
+	Status                 string             `json:"status"`
+	EffectiveMode          string             `json:"effective_mode"`
+	ExecutionBlockCode     string             `json:"execution_block_code"`
+	DedupeFingerprint      string             `json:"dedupe_fingerprint"`
+	Title                  string             `json:"title"`
+	Summary                string             `json:"summary"`
+	RecommendedActionLabel string             `json:"recommended_action_label"`
+	RiskImpact             string             `json:"risk_impact"`
+	VerificationSummary    string             `json:"verification_summary"`
+	RepeatCount            int32              `json:"repeat_count"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	AcknowledgedByID       pgtype.UUID        `json:"acknowledged_by_id"`
+	AcknowledgedAt         pgtype.Timestamptz `json:"acknowledged_at"`
+	DismissedByID          pgtype.UUID        `json:"dismissed_by_id"`
+	DismissedAt            pgtype.Timestamptz `json:"dismissed_at"`
+	ResolvedByID           pgtype.UUID        `json:"resolved_by_id"`
+	ResolvedAt             pgtype.Timestamptz `json:"resolved_at"`
+	AlertEventID           pgtype.UUID        `json:"alert_event_id"`
+	CreatedAt              time.Time          `json:"created_at"`
+	UpdatedAt              time.Time          `json:"updated_at"`
+}
+
+type CharlieFindingResource struct {
+	FindingID    uuid.UUID `json:"finding_id"`
+	ResourceType string    `json:"resource_type"`
+	ResourceID   string    `json:"resource_id"`
+	RequiredVerb string    `json:"required_verb"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type CharlieSession struct {
+	ID                   uuid.UUID          `json:"id"`
+	ConnectionID         uuid.UUID          `json:"connection_id"`
+	CharlieSessionID     string             `json:"charlie_session_id"`
+	ClientSessionID      uuid.UUID          `json:"client_session_id"`
+	OwnerUserID          pgtype.UUID        `json:"owner_user_id"`
+	Source               string             `json:"source"`
+	Visibility           string             `json:"visibility"`
+	Intent               string             `json:"intent"`
+	ResourceScopeSummary string             `json:"resource_scope_summary"`
+	State                string             `json:"state"`
+	LastEventID          string             `json:"last_event_id"`
+	CentralRevision      int64              `json:"central_revision"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+}
+
+type CharlieSessionResource struct {
+	SessionID    uuid.UUID `json:"session_id"`
+	ResourceType string    `json:"resource_type"`
+	ResourceID   string    `json:"resource_id"`
+	RequiredVerb string    `json:"required_verb"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type CharlieTriggerEvent struct {
+	ID                uuid.UUID          `json:"id"`
+	RuleID            uuid.UUID          `json:"rule_id"`
+	RetryOfEventID    pgtype.UUID        `json:"retry_of_event_id"`
+	Source            string             `json:"source"`
+	EventType         string             `json:"event_type"`
+	ResourceType      string             `json:"resource_type"`
+	ResourceID        string             `json:"resource_id"`
+	Fingerprint       string             `json:"fingerprint"`
+	SummaryMetadata   json.RawMessage    `json:"summary_metadata"`
+	State             string             `json:"state"`
+	SessionID         pgtype.UUID        `json:"session_id"`
+	RepeatCount       int32              `json:"repeat_count"`
+	FirstOccurredAt   time.Time          `json:"first_occurred_at"`
+	LastOccurredAt    time.Time          `json:"last_occurred_at"`
+	OriginResourceRef string             `json:"origin_resource_ref"`
+	OriginEventRef    string             `json:"origin_event_ref"`
+	AttemptCount      int32              `json:"attempt_count"`
+	NextAttemptAt     time.Time          `json:"next_attempt_at"`
+	LastErrorCode     string             `json:"last_error_code"`
+	DeadLetteredAt    pgtype.Timestamptz `json:"dead_lettered_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+}
+
+type CharlieTriggerRule struct {
+	ID                uuid.UUID       `json:"id"`
+	ConnectionID      uuid.UUID       `json:"connection_id"`
+	Name              string          `json:"name"`
+	RuleType          string          `json:"rule_type"`
+	Category          string          `json:"category"`
+	Enabled           bool            `json:"enabled"`
+	MinimumSeverity   string          `json:"minimum_severity"`
+	Selectors         json.RawMessage `json:"selectors"`
+	Thresholds        json.RawMessage `json:"thresholds"`
+	WindowSeconds     int32           `json:"window_seconds"`
+	CooldownSeconds   int32           `json:"cooldown_seconds"`
+	ServiceIdentityID uuid.UUID       `json:"service_identity_id"`
+	ModeCeiling       string          `json:"mode_ceiling"`
+	CreatedByID       pgtype.UUID     `json:"created_by_id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
 }
 
 type ChartCoInstallation struct {
@@ -1956,6 +2250,17 @@ type ToolOperationEvent struct {
 	Message     string          `json:"message"`
 	Detail      json.RawMessage `json:"detail"`
 	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type TunnelLocatorEvent struct {
+	ID            uuid.UUID   `json:"id"`
+	ConnectionID  string      `json:"connection_id"`
+	ClusterID     pgtype.UUID `json:"cluster_id"`
+	EventType     string      `json:"event_type"`
+	ReasonCode    string      `json:"reason_code"`
+	ServerReplica string      `json:"server_replica"`
+	OccurredAt    time.Time   `json:"occurred_at"`
+	CreatedAt     time.Time   `json:"created_at"`
 }
 
 type UiExtension struct {

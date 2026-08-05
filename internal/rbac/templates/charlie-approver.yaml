@@ -1,0 +1,12 @@
+name: charlie-approver
+display_name: Charlie Approver
+description: |
+  Uses Charlie and may approve one exact, expiring proposed action. Approval is
+  not target authority: the user must independently hold the underlying
+  resource permission when Astronomer dispatches the action.
+scope: global
+category: operations
+risk_level: high
+rules:
+  - resource: charlie
+    verbs: [create, read, approve]

@@ -32,6 +32,25 @@ type fakeSupportBundleQuerier struct {
 	audits    []sqlc.CreateAuditLogV1Params
 }
 
+type fakeCharlieSupportBundleQuerier struct {
+	*fakeSupportBundleQuerier
+	connection sqlc.CharlieConnection
+	rules      []sqlc.CharlieTriggerRule
+	findings   []sqlc.CharlieFinding
+}
+
+func (f *fakeCharlieSupportBundleQuerier) GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
+	return f.connection, nil
+}
+
+func (f *fakeCharlieSupportBundleQuerier) ListCharlieTriggerRules(context.Context, uuid.UUID) ([]sqlc.CharlieTriggerRule, error) {
+	return f.rules, nil
+}
+
+func (f *fakeCharlieSupportBundleQuerier) ListCharlieFindings(context.Context, sqlc.ListCharlieFindingsParams) ([]sqlc.CharlieFinding, error) {
+	return f.findings, nil
+}
+
 func (f *fakeSupportBundleQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
 	return []sqlc.Cluster{{
 		ID:                uuid.New(),
@@ -166,6 +185,40 @@ func TestSupportBundleDownloadRedactsSensitiveValues(t *testing.T) {
 	}
 	if len(q.audits) != 1 || q.audits[0].Action != "admin.support_bundle.downloaded" {
 		t.Fatalf("support bundle audit rows = %#v", q.audits)
+	}
+}
+
+func TestSupportBundleCharlieSectionIsLocalMetadataOnly(t *testing.T) {
+	userID := uuid.New()
+	base := &fakeSupportBundleQuerier{user: sqlc.User{ID: userID, Email: "admin@example.com", Username: "admin@example.com", IsActive: true, IsSuperuser: true}}
+	canary := "charlie-private-material-must-not-leak"
+	connectionID := uuid.New()
+	expiresAt := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
+	q := &fakeCharlieSupportBundleQuerier{
+		fakeSupportBundleQuerier: base,
+		connection: sqlc.CharlieConnection{
+			ID: connectionID, Active: true, RequestedMode: "approval", VerifiedMode: "read_only",
+			HealthState: "degraded", OnboardingState: "consumed", AgentProtocolVersion: "1.0.0",
+			ChartVersion: "1.0.0", LeaderInstanceID: "instance-present", FencingEpoch: 4,
+			CentralUrl: canary, LocalTrustMaterialEncrypted: canary, AgentSecretName: canary,
+			AgentSecretHmac: canary, SigningKeyFingerprint: canary,
+			CertificateExpiresAt: expiresAt, EnrollmentCredentialsExpiresAt: expiresAt,
+			ArtifactCredentialExpiresAt: expiresAt, OnboardingPackageExpiresAt: expiresAt,
+		},
+		rules:    []sqlc.CharlieTriggerRule{{Name: "agent_disconnected", Category: "agent_fleet", Enabled: true, MinimumSeverity: "warning", WindowSeconds: 300, CooldownSeconds: 1800, ModeCeiling: "read_only"}},
+		findings: []sqlc.CharlieFinding{{Status: "open", Severity: "high", Title: canary, Summary: canary, CharlieFindingID: canary}},
+	}
+	h := NewSupportBundleHandler(q, nil, "")
+	req := withAuth(httptest.NewRequest(http.MethodGet, "/api/v1/support-bundle/", nil), userID)
+	rec := httptest.NewRecorder()
+	h.Download(rec, req)
+	files := readZipFiles(t, rec.Body.Bytes())
+	status := string(files["charlie-status.json"])
+	if !strings.Contains(status, `"requested_mode": "approval"`) || !strings.Contains(status, `"open:high": 1`) || !strings.Contains(status, expiresAt.Format(time.RFC3339)) {
+		t.Fatalf("Charlie support status missing bounded operational metadata: %s", status)
+	}
+	if strings.Contains(status, canary) || strings.Contains(status, "central_url") || strings.Contains(status, "trust") || strings.Contains(status, "secret") {
+		t.Fatalf("Charlie support status leaked integration material: %s", status)
 	}
 }
 

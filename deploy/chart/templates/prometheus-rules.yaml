@@ -493,4 +493,129 @@ spec:
               OutOfSync. Either reconcile via the Argo CD UI or
               investigate the upstream chart values.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/argocd-drift.md
+
+        # ── Optional Charlie SRE integration ───────────────────────────
+        # Content-free series only. Charlie health is intentionally absent
+        # from Astronomer's core readiness.
+        - alert: AstronomerCharlieBridgeUnavailable
+          expr: |
+            sum(rate(astronomer_charlie_bridge_calls_total{outcome=~"bridge_timeout|bridge_unavailable|bridge_circuit_open"}[5m])) > 0
+            and on() max(astronomer_charlie_activation_state{state="ready"}) == 1
+          for: 5m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie Product Bridge is unavailable"
+            description: |
+              The optional Charlie integration is active, but its private
+              Product Bridge is timing out, unavailable, or circuit-open.
+              Astronomer remains operational; diagnose the local agent and
+              mTLS/network boundary rather than bypassing it to Charlie Central.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieModeDrift
+          expr: astronomer_charlie_mode_drift == 1
+          for: 5m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie requested and verified modes disagree"
+            description: |
+              Astronomer and Charlie report different authority modes. The
+              effective mode remains the less permissive value. Reconcile the
+              same connection and disclosure revision; do not force authority.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieEmergencyDisabled
+          expr: astronomer_charlie_activation_state{state="emergency_disabled"} == 1
+          for: 1m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie integration emergency-disable latch is active"
+            description: |
+              The product-local emergency latch is blocking all Charlie
+              sessions, triggers, bridge traffic, and MCP actions. Require
+              remote disabled confirmation before an explicit local clear.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieTriggerDeadLettered
+          expr: sum(increase(astronomer_charlie_trigger_events_total{outcome="dead"}[15m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie investigation trigger reached dead-letter state"
+            description: |
+              A durable product-owned trigger exhausted its dispatch attempts.
+              Inspect the trigger event and task outbox, correct the bounded
+              cause, and retry only the same idempotent event identifier.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieCertificateExpiring
+          expr: |
+            astronomer_charlie_expiry_seconds{kind="certificate"} < 604800
+            and on() max(astronomer_charlie_activation_state{state=~"installing|inactive|ready"}) == 1
+          for: 5m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie local mTLS certificate expires within seven days"
+            description: |
+              Rotate the product-agent and Astronomer private mTLS trust through
+              the reviewed Charlie rotation workflow before expiry. Do not copy
+              private keys into support bundles or bypass the mTLS boundary.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieEnrollmentExpiring
+          expr: |
+            astronomer_charlie_expiry_seconds{kind="enrollment"} < 900
+            and on() max(astronomer_charlie_activation_state{state="installing"}) == 1
+          for: 1m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie agent enrollment credentials expire within 15 minutes"
+            description: |
+              Finish the current installation immediately or discard it and
+              import a newly signed onboarding package. Expired enrollment
+              credentials must never be extended locally.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieArtifactCredentialExpiring
+          expr: |
+            astronomer_charlie_expiry_seconds{kind="artifact"} < 604800
+            and on() max(astronomer_charlie_activation_state{state=~"installing|inactive|ready"}) == 1
+          for: 5m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie OCI artifact credential expires within seven days"
+            description: |
+              Rotate the reviewed Charlie OCI pull credential before expiry and
+              verify the immutable chart and image digests remain unchanged.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
+
+        - alert: AstronomerCharlieOnboardingPackageExpiring
+          expr: |
+            astronomer_charlie_expiry_seconds{kind="onboarding_package"} < 900
+            and on() max(astronomer_charlie_activation_state{state="installing"}) == 1
+          for: 1m
+          labels:
+            severity: warning
+            component: charlie
+          annotations:
+            summary: "Charlie onboarding package expires within 15 minutes"
+            description: |
+              Complete installation before package expiry or import a new
+              signed package. Astronomer cannot renew or widen Charlie-issued
+              package authority.
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/charlie-integration.md
 {{- end }}

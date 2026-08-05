@@ -44,8 +44,9 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 	"frontend": {context: "frontend", dockerfile: "frontend/Dockerfile", imageName: "astronomer-frontend"},
 }
 
+const releaseVersion = "0.3.5"
+
 func TestReleaseIdentityIsConsistent(t *testing.T) {
-	const releaseVersion = "0.3.0"
 	files := map[string][]string{
 		"chart/Chart.yaml":              {"version: " + releaseVersion, `appVersion: "` + releaseVersion + `"`},
 		"../pkg/version/version.go":     {`Version   = "` + releaseVersion + `"`},
@@ -289,7 +290,7 @@ func TestFrontendVersionIsBakedIntoShippedStaticOutput(t *testing.T) {
 	}
 	dockerfile := string(dockerfileBytes)
 	ordered := []string{
-		"ARG VERSION=0.3.0",
+		"ARG VERSION=" + releaseVersion,
 		"ENV VERSION=$VERSION",
 		"RUN npm run build",
 		`grep -R -F -q -- "${VERSION}" dist`,

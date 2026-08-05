@@ -128,3 +128,15 @@ func TestRewriteTargetsCoverMonitoringBackendAuthConfig(t *testing.T) {
 	t.Fatal("monitoring_backends.auth_config_encrypted is not in rewriteTargets: " +
 		"a key rotation would leave the Thanos/Prometheus/Alertmanager credential encrypted under the retired key")
 }
+
+func TestRewriteTargetsCoverCharlieLocalTrust(t *testing.T) {
+	for _, tg := range rewriteTargets {
+		if tg.table == "charlie_connections" && tg.column == "local_trust_material_encrypted" {
+			if tg.idCol != "id" {
+				t.Fatalf("charlie_connections primary key column is %q, want id", tg.idCol)
+			}
+			return
+		}
+	}
+	t.Fatal("charlie_connections.local_trust_material_encrypted is not in rewriteTargets")
+}

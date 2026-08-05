@@ -1,0 +1,24 @@
+{
+  "schema": "charlie.bridge-service/v1",
+  "service": {
+    "visibility": "private",
+    "kubernetes_type": "ClusterIP",
+    "port": 7443,
+    "protocol": "HTTPS",
+    "base_path": "/bridge/v1",
+    "ingress_allowed": false,
+    "gateway_route_allowed": false
+  },
+  "transport": {
+    "minimum_tls_version": "1.3",
+    "client_certificate_role": "product_bridge_client",
+    "server_certificate_role": "agent_bridge_server",
+    "mutual_tls_required": true
+  },
+  "ownership": {
+    "server": "charlie_agent",
+    "client": "product_integration",
+    "trust_material": "product",
+    "central_reachable": false
+  }
+}

@@ -56,6 +56,9 @@ const (
 	ClassExecLogs APIRateLimitClass = "exec-logs"
 	// ClassHelm covers helm install/upgrade/uninstall write endpoints.
 	ClassHelm APIRateLimitClass = "helm"
+	// ClassCharlieChat bounds browser-to-agent session, history, and message
+	// traffic independently from every core Astronomer API path.
+	ClassCharlieChat APIRateLimitClass = "charlie-chat"
 )
 
 // APIRateLimitConfig is the per-class tunable. Rate is the long-term
@@ -75,6 +78,7 @@ var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
 	ClassArgoCDProxy: {RatePerSecond: 50.0, Burst: 1000},     // ArgoCD discovery/sync bursts (trusted M2M)
 	ClassExecLogs:    {RatePerSecond: 30.0 / 60.0, Burst: 5}, // 30 new sessions/min
 	ClassHelm:        {RatePerSecond: 5.0 / 60.0, Burst: 2},
+	ClassCharlieChat: {RatePerSecond: 30.0 / 60.0, Burst: 10},
 }
 
 // defaultClusterCeilings is the aggregate (all-users-combined) per-cluster
@@ -226,7 +230,7 @@ func (l *apiRateLimiter) allowBucket(mapKey string, cfg APIRateLimitConfig) rate
 	}
 	// Seconds until the bucket refills to full burst from its current level.
 	if missing := cfg.Burst - d.remaining; missing > 0 && cfg.RatePerSecond > 0 {
-		d.reset = rateLimitResetSeconds(time.Duration(float64(missing)/cfg.RatePerSecond * float64(time.Second)))
+		d.reset = rateLimitResetSeconds(time.Duration(float64(missing) / cfg.RatePerSecond * float64(time.Second)))
 	}
 	return d
 }

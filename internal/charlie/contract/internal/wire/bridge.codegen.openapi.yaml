@@ -1,0 +1,1297 @@
+components:
+    parameters:
+        AuthorizationRef:
+            description: Opaque live product authorization reference; the deployment credential never substitutes for end-user authority.
+            in: header
+            name: X-Charlie-Authorization-Ref
+            required: true
+            schema:
+                $ref: '#/components/schemas/OpaqueId'
+        SessionId:
+            in: path
+            name: session_id
+            required: true
+            schema:
+                $ref: '#/components/schemas/OpaqueId'
+    responses:
+        Error:
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorEnvelope'
+            description: Stable bridge error
+    schemas:
+        Action:
+            additionalProperties: false
+            properties:
+                action_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                block_code:
+                    $ref: '#/components/schemas/BlockCode'
+                capability_name:
+                    pattern: ^[a-z][a-z0-9_.-]{0,127}$
+                    type: string
+                effect:
+                    enum:
+                        - read
+                        - write
+                    type: string
+                idempotency_key:
+                    $ref: '#/components/schemas/OpaqueId'
+                state:
+                    enum:
+                        - proposed
+                        - blocked
+                        - approved
+                        - executing
+                        - succeeded
+                        - failed
+                        - ambiguous
+                    type: string
+            required:
+                - action_id
+                - capability_name
+                - effect
+                - state
+                - idempotency_key
+            type: object
+        ActivationRequest:
+            additionalProperties: false
+            properties:
+                expected_revision:
+                    $ref: '#/components/schemas/OpaqueId'
+                product_enabled:
+                    type: boolean
+            required:
+                - product_enabled
+                - expected_revision
+            type: object
+        Approval:
+            additionalProperties: false
+            properties:
+                action_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                approval_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                expires_at:
+                    format: date-time
+                    type: string
+                manifest:
+                    $ref: '#/components/schemas/ApprovalManifest'
+                state:
+                    enum:
+                        - pending
+                        - approved
+                        - rejected
+                        - expired
+                    type: string
+            required:
+                - approval_id
+                - action_id
+                - state
+                - expires_at
+                - manifest
+            type: object
+        ApprovalDecision:
+            additionalProperties: false
+            properties:
+                authorization_ref:
+                    $ref: '#/components/schemas/OpaqueId'
+                decision:
+                    enum:
+                        - approve
+                        - reject
+                    type: string
+                manifest_digest:
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - request_id
+                - decision
+                - authorization_ref
+                - manifest_digest
+            type: object
+        ApprovalManifest:
+            additionalProperties: false
+            properties:
+                action_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                approval_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                argument_digest:
+                    pattern: ^(?:sha256:)?[a-f0-9]{64}$
+                    type: string
+                capability:
+                    pattern: ^[a-z][a-z0-9_.:-]{0,127}$
+                    type: string
+                deployment_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                disclosure_digest:
+                    pattern: ^(?:sha256:)?[a-f0-9]{64}$
+                    type: string
+                effect:
+                    enum:
+                        - write
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                fencing_epoch:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                mode_revision:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                policy_revision:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                resources:
+                    items:
+                        $ref: '#/components/schemas/ApprovalManifestResource'
+                    maxItems: 25
+                    minItems: 1
+                    type: array
+                session_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                signature:
+                    maxLength: 86
+                    minLength: 86
+                    type: string
+                turn_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                version:
+                    enum:
+                        - charlie.approval-manifest/v1
+                    type: string
+            required:
+                - version
+                - deployment_id
+                - session_id
+                - turn_id
+                - approval_id
+                - action_id
+                - capability
+                - effect
+                - argument_digest
+                - disclosure_digest
+                - mode_revision
+                - policy_revision
+                - fencing_epoch
+                - expires_at
+                - resources
+                - signature
+            type: object
+        ApprovalManifestResource:
+            additionalProperties: false
+            properties:
+                id:
+                    $ref: '#/components/schemas/OpaqueId'
+                kind:
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                required_verb:
+                    pattern: ^[a-z][a-z0-9_.:-]{0,127}$
+                    type: string
+            required:
+                - kind
+                - id
+                - required_verb
+            type: object
+        BlockCode:
+            enum:
+                - capability_destructive
+                - product_disabled
+                - deployment_disabled
+                - stale_leadership
+                - disclosure_drift
+                - product_rbac_denied
+                - scope_denied
+                - read_only
+                - non_auto_eligible
+                - approval_required
+                - approval_expired
+                - approval_rejected
+                - allowlist_denied
+                - safety_budget_exceeded
+                - precondition_failed
+                - circuit_breaker_open
+                - central_unavailable
+                - no_safe_action
+            type: string
+        BridgeStatus:
+            additionalProperties: false
+            properties:
+                artifact_version:
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                central_health:
+                    enum:
+                        - healthy
+                        - degraded
+                        - unavailable
+                    type: string
+                deployment_enabled:
+                    type: boolean
+                deployment_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                disclosure_digest:
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                effective_enabled:
+                    description: True only when both enablement authorities are true.
+                    type: boolean
+                effective_mode:
+                    $ref: '#/components/schemas/Mode'
+                epoch:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                instance_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                integration_revision:
+                    $ref: '#/components/schemas/OpaqueId'
+                leader_instance_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                lease_expires_at:
+                    format: date-time
+                    type: string
+                logical_agent_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                product_enabled:
+                    type: boolean
+                replica_count:
+                    maximum: 20
+                    minimum: 1
+                    type: integer
+                replica_ordinal:
+                    maximum: 19
+                    minimum: 0
+                    type: integer
+                route_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - central_health
+                - logical_agent_id
+                - deployment_id
+                - instance_id
+                - replica_ordinal
+                - replica_count
+                - leader_instance_id
+                - epoch
+                - lease_expires_at
+                - integration_revision
+                - disclosure_digest
+                - effective_mode
+                - route_id
+                - artifact_version
+                - product_enabled
+                - deployment_enabled
+                - effective_enabled
+            type: object
+        CreateInvestigation:
+            additionalProperties: false
+            properties:
+                authorization_ref:
+                    $ref: '#/components/schemas/OpaqueId'
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                scope:
+                    $ref: '#/components/schemas/UntrustedContext'
+            required:
+                - request_id
+                - authorization_ref
+                - scope
+            type: object
+        CreateMessage:
+            additionalProperties: false
+            properties:
+                authorization_ref:
+                    $ref: '#/components/schemas/OpaqueId'
+                message:
+                    maxLength: 32768
+                    minLength: 1
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - request_id
+                - authorization_ref
+                - message
+            type: object
+        CreateSession:
+            additionalProperties: false
+            properties:
+                actor:
+                    additionalProperties: false
+                    properties:
+                        display_label:
+                            maxLength: 255
+                            minLength: 1
+                            type: string
+                        id:
+                            $ref: '#/components/schemas/OpaqueId'
+                        type:
+                            enum:
+                                - user
+                                - service
+                            type: string
+                    required:
+                        - id
+                        - type
+                        - display_label
+                    type: object
+                authorization_ref:
+                    $ref: '#/components/schemas/OpaqueId'
+                context:
+                    additionalProperties: false
+                    properties:
+                        data:
+                            $ref: '#/components/schemas/UntrustedContext'
+                        schema:
+                            pattern: ^[a-z][a-z0-9.-]{0,63}/v[1-9][0-9]{0,3}$
+                            type: string
+                    required:
+                        - schema
+                        - data
+                    type: object
+                intent:
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+                objective:
+                    maxLength: 4096
+                    minLength: 1
+                    type: string
+                product_version:
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                resources:
+                    description: Resource IDs must be unique across all kinds.
+                    items:
+                        $ref: '#/components/schemas/ResourceReference'
+                    maxItems: 25
+                    type: array
+            required:
+                - request_id
+                - authorization_ref
+                - actor
+                - intent
+                - objective
+                - product_version
+                - context
+                - resources
+            type: object
+        ErrorEnvelope:
+            additionalProperties: false
+            properties:
+                code:
+                    enum:
+                        - unavailable
+                        - unauthenticated
+                        - forbidden
+                        - conflict
+                        - replay
+                        - stale_leadership
+                        - central_timeout
+                        - protocol_mismatch
+                    type: string
+                details:
+                    additionalProperties:
+                        maxLength: 256
+                        type: string
+                    maxProperties: 16
+                    type: object
+                message:
+                    maxLength: 512
+                    minLength: 1
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                retryable:
+                    type: boolean
+            required:
+                - code
+                - message
+                - request_id
+                - retryable
+            type: object
+        FindingBlockCode:
+            enum:
+                - capability_destructive
+                - product_disabled
+                - deployment_disabled
+                - stale_leadership
+                - disclosure_drift
+                - product_rbac_denied
+                - scope_denied
+                - read_only
+                - non_auto_eligible
+                - approval_required
+                - approval_expired
+                - approval_rejected
+                - allowlist_denied
+                - safety_budget_exceeded
+                - precondition_failed
+                - circuit_breaker_open
+                - central_unavailable
+                - no_safe_action
+            type: string
+        FindingEnvelope:
+            additionalProperties: false
+            properties:
+                finding:
+                    $ref: '#/components/schemas/FindingFinding'
+                lifecycle:
+                    items:
+                        $ref: '#/components/schemas/FindingLifecycleEvent'
+                    maxItems: 100
+                    minItems: 1
+                    type: array
+                schema:
+                    const: charlie.finding/v1
+                    type: string
+                storage:
+                    additionalProperties: false
+                    properties:
+                        encryption_required:
+                            const: true
+                            type: boolean
+                        expires_at:
+                            format: date-time
+                            type: string
+                        retention_days:
+                            maximum: 90
+                            minimum: 1
+                            type: integer
+                    required:
+                        - encryption_required
+                        - retention_days
+                        - expires_at
+                    type: object
+            required:
+                - schema
+                - finding
+                - lifecycle
+                - storage
+            title: FindingEnvelope
+            type: object
+        FindingFinding:
+            additionalProperties: false
+            properties:
+                affected_resources:
+                    items:
+                        $ref: '#/components/schemas/FindingOpaqueId'
+                    maxItems: 25
+                    minItems: 1
+                    type: array
+                    uniqueItems: true
+                block_code:
+                    $ref: '#/components/schemas/FindingBlockCode'
+                confidence:
+                    maximum: 1
+                    minimum: 0
+                    type: number
+                created_at:
+                    format: date-time
+                    type: string
+                deduplication_key:
+                    maxLength: 128
+                    minLength: 16
+                    type: string
+                diagnosis:
+                    maxLength: 4096
+                    minLength: 1
+                    type: string
+                evidence_summary:
+                    items:
+                        maxLength: 8192
+                        minLength: 1
+                        type: string
+                    maxItems: 20
+                    type: array
+                finding_id:
+                    $ref: '#/components/schemas/FindingOpaqueId'
+                investigation_id:
+                    $ref: '#/components/schemas/FindingOpaqueId'
+                operator_checks:
+                    items:
+                        maxLength: 512
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                preconditions:
+                    items:
+                        maxLength: 256
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    type: array
+                recommended_capability:
+                    pattern: ^[a-z][a-z0-9_.-]{0,127}$
+                    type: string
+                risk_impact:
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                rollback:
+                    maxLength: 1024
+                    minLength: 1
+                    type: string
+                session_id:
+                    $ref: '#/components/schemas/FindingOpaqueId'
+                severity:
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                    type: string
+                status:
+                    enum:
+                        - open
+                        - acknowledged
+                        - dismissed
+                        - resolved
+                        - reopened
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+                verification_steps:
+                    items:
+                        maxLength: 512
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+            required:
+                - finding_id
+                - deduplication_key
+                - severity
+                - status
+                - affected_resources
+                - evidence_summary
+                - diagnosis
+                - confidence
+                - block_code
+                - risk_impact
+                - operator_checks
+                - verification_steps
+                - investigation_id
+                - session_id
+                - created_at
+                - updated_at
+            type: object
+        FindingLifecycleEvent:
+            additionalProperties: false
+            properties:
+                actor_ref:
+                    $ref: '#/components/schemas/FindingOpaqueId'
+                event_id:
+                    $ref: '#/components/schemas/FindingOpaqueId'
+                occurred_at:
+                    format: date-time
+                    type: string
+                reason:
+                    maxLength: 512
+                    type: string
+                transition:
+                    enum:
+                        - created
+                        - deduplicated
+                        - acknowledged
+                        - dismissed
+                        - resolved
+                        - reopened
+                    type: string
+            required:
+                - event_id
+                - transition
+                - actor_ref
+                - occurred_at
+            type: object
+        FindingOpaqueId:
+            pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+            type: string
+        FindingSummary:
+            additionalProperties: false
+            properties:
+                block_code:
+                    $ref: '#/components/schemas/BlockCode'
+                deduplication_key:
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                finding_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                investigation_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                repeat_count:
+                    minimum: 1
+                    type: integer
+                session_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                severity:
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                    type: string
+                status:
+                    enum:
+                        - open
+                        - acknowledged
+                        - dismissed
+                        - resolved
+                        - reopened
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - finding_id
+                - session_id
+                - investigation_id
+                - deduplication_key
+                - repeat_count
+                - severity
+                - status
+                - block_code
+                - updated_at
+            type: object
+        FindingTransition:
+            additionalProperties: false
+            properties:
+                actor_ref:
+                    $ref: '#/components/schemas/OpaqueId'
+                reason:
+                    maxLength: 512
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                transition:
+                    enum:
+                        - acknowledge
+                        - dismiss
+                        - resolve
+                        - reopen
+                    type: string
+            required:
+                - request_id
+                - transition
+                - actor_ref
+            type: object
+        Health:
+            additionalProperties: false
+            properties:
+                status:
+                    enum:
+                        - ok
+                        - degraded
+                    type: string
+            required:
+                - status
+            type: object
+        HistoryItem:
+            additionalProperties: false
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                item_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                kind:
+                    enum:
+                        - user_message
+                        - assistant_message
+                        - finding_evidence
+                    type: string
+                redacted_content:
+                    maxLength: 32768
+                    type: string
+            required:
+                - item_id
+                - kind
+                - redacted_content
+                - created_at
+                - expires_at
+            type: object
+        IdempotentCommand:
+            additionalProperties: false
+            properties:
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - request_id
+            type: object
+        InvestigationReceipt:
+            additionalProperties: false
+            properties:
+                accepted_at:
+                    format: date-time
+                    type: string
+                revision:
+                    minimum: 1
+                    type: integer
+                session_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                turn_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - session_id
+                - revision
+                - turn_id
+                - accepted_at
+            type: object
+        Mode:
+            enum:
+                - read_only
+                - approval
+                - auto
+            type: string
+        ModeRequest:
+            additionalProperties: false
+            properties:
+                expected_revision:
+                    $ref: '#/components/schemas/OpaqueId'
+                mode:
+                    $ref: '#/components/schemas/Mode'
+            required:
+                - mode
+                - expected_revision
+            type: object
+        ModeResponse:
+            additionalProperties: false
+            properties:
+                integration_revision:
+                    $ref: '#/components/schemas/OpaqueId'
+                mode:
+                    $ref: '#/components/schemas/Mode'
+            required:
+                - mode
+                - integration_revision
+            type: object
+        OpaqueId:
+            pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+            type: string
+        ResourceReference:
+            additionalProperties: false
+            properties:
+                id:
+                    allOf:
+                        - $ref: '#/components/schemas/OpaqueId'
+                    description: Opaque identity unique across every resource kind in one session.
+                kind:
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                scope:
+                    additionalProperties:
+                        maxLength: 255
+                        type: string
+                    maxProperties: 16
+                    type: object
+                version:
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+            required:
+                - id
+                - kind
+            type: object
+        Session:
+            additionalProperties: false
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                revision:
+                    minimum: 1
+                    type: integer
+                session_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                state:
+                    enum:
+                        - open
+                        - working
+                        - awaiting_approval
+                        - completed
+                        - aborted
+                        - failed
+                    type: string
+            required:
+                - session_id
+                - revision
+                - state
+                - created_at
+                - expires_at
+            type: object
+        TurnReceipt:
+            additionalProperties: false
+            properties:
+                accepted_at:
+                    format: date-time
+                    type: string
+                session_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                turn_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - session_id
+                - turn_id
+                - accepted_at
+            type: object
+        UntrustedContext:
+            additionalProperties: false
+            description: Data only; never an authority or capability selector.
+            properties:
+                attributes:
+                    additionalProperties:
+                        maxLength: 1024
+                        type: string
+                    maxProperties: 32
+                    type: object
+                resource_ids:
+                    items:
+                        $ref: '#/components/schemas/OpaqueId'
+                    maxItems: 25
+                    type: array
+                    uniqueItems: true
+                summary:
+                    maxLength: 8192
+                    type: string
+            type: object
+    securitySchemes:
+        mutualTLS:
+            description: Product-owned local mutual TLS.
+            type: mutualTLS
+info:
+    description: Private, product-neutral API served by the Charlie agent.
+    title: Charlie Product Bridge API
+    version: 1.0.0
+openapi: 3.1.0
+paths:
+    /activation:
+        put:
+            operationId: setProductActivation
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ActivationRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BridgeStatus'
+                    description: Effective integration state
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+    /approvals:
+        get:
+            operationId: listBridgeApprovals
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Approval'
+                                maxItems: 100
+                                type: array
+                    description: Pending approvals
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /approvals/{approval_id}/decision:
+        parameters:
+            - in: path
+              name: approval_id
+              required: true
+              schema:
+                $ref: '#/components/schemas/OpaqueId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+        post:
+            operationId: decideBridgeApproval
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApprovalDecision'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Approval'
+                    description: Approval state
+                default:
+                    $ref: '#/components/responses/Error'
+    /findings:
+        get:
+            operationId: listBridgeFindings
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/FindingSummary'
+                                maxItems: 100
+                                type: array
+                    description: Bounded finding summaries
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /findings/{finding_id}:
+        get:
+            operationId: getBridgeFinding
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FindingEnvelope'
+                    description: Finding envelope
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - in: path
+              name: finding_id
+              required: true
+              schema:
+                $ref: '#/components/schemas/OpaqueId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /findings/{finding_id}/events:
+        get:
+            operationId: listBridgeFindingEvents
+            parameters:
+                - in: header
+                  name: Last-Event-ID
+                  required: false
+                  schema:
+                    $ref: '#/components/schemas/OpaqueId'
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: false
+                                properties:
+                                    data:
+                                        items:
+                                            $ref: '#/components/schemas/FindingLifecycleEvent'
+                                        maxItems: 100
+                                        type: array
+                                    next_event_id:
+                                        $ref: '#/components/schemas/OpaqueId'
+                                required:
+                                    - data
+                                type: object
+                    description: Ordered durable finding lifecycle replay
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - in: path
+              name: finding_id
+              required: true
+              schema:
+                $ref: '#/components/schemas/OpaqueId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /findings/{finding_id}/transitions:
+        parameters:
+            - in: path
+              name: finding_id
+              required: true
+              schema:
+                $ref: '#/components/schemas/OpaqueId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+        post:
+            operationId: transitionBridgeFinding
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FindingTransition'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FindingSummary'
+                    description: Updated finding summary
+                default:
+                    $ref: '#/components/responses/Error'
+    /health:
+        get:
+            operationId: getBridgeHealth
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Health'
+                    description: Process health
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+    /investigations:
+        parameters:
+            - $ref: '#/components/parameters/AuthorizationRef'
+        post:
+            operationId: createBridgeInvestigation
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateInvestigation'
+                required: true
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InvestigationReceipt'
+                    description: Investigation accepted
+                default:
+                    $ref: '#/components/responses/Error'
+    /mode:
+        get:
+            operationId: getBridgeMode
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ModeResponse'
+                    description: Current mode
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+        put:
+            operationId: setBridgeMode
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ModeRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ModeResponse'
+                    description: Current mode
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+    /sessions:
+        get:
+            operationId: listBridgeSessions
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Session'
+                                maxItems: 100
+                                type: array
+                    description: Bounded session summaries
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/AuthorizationRef'
+        post:
+            operationId: createBridgeSession
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSession'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Session'
+                    description: Created session
+                default:
+                    $ref: '#/components/responses/Error'
+    /sessions/{session_id}:
+        get:
+            operationId: getBridgeSession
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Session'
+                    description: Session summary
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/SessionId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /sessions/{session_id}/abort:
+        parameters:
+            - $ref: '#/components/parameters/SessionId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+        post:
+            operationId: abortBridgeSession
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IdempotentCommand'
+                required: true
+            responses:
+                "202":
+                    description: Abort requested
+                default:
+                    $ref: '#/components/responses/Error'
+    /sessions/{session_id}/actions:
+        get:
+            operationId: listBridgeActions
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                items:
+                                    $ref: '#/components/schemas/Action'
+                                maxItems: 100
+                                type: array
+                    description: Action summaries
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/SessionId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /sessions/{session_id}/events:
+        get:
+            operationId: streamBridgeEvents
+            responses:
+                "200":
+                    content:
+                        text/event-stream:
+                            schema:
+                                type: string
+                    description: Server-sent event stream
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/SessionId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /sessions/{session_id}/history:
+        get:
+            operationId: getBridgeHistory
+            parameters:
+                - in: query
+                  name: cursor
+                  required: false
+                  schema:
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                    type: string
+                - in: query
+                  name: limit
+                  required: false
+                  schema:
+                    default: 50
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: false
+                                properties:
+                                    data:
+                                        items:
+                                            $ref: '#/components/schemas/HistoryItem'
+                                        maxItems: 100
+                                        type: array
+                                    next_cursor:
+                                        maxLength: 128
+                                        type: string
+                                required:
+                                    - data
+                                type: object
+                    description: Encrypted-at-rest, retention-bounded session history
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - $ref: '#/components/parameters/SessionId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /sessions/{session_id}/messages:
+        parameters:
+            - $ref: '#/components/parameters/SessionId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+        post:
+            operationId: createBridgeMessage
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateMessage'
+                required: true
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TurnReceipt'
+                    description: Accepted turn
+                default:
+                    $ref: '#/components/responses/Error'
+    /status:
+        get:
+            operationId: getBridgeStatus
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BridgeStatus'
+                    description: Integration and leader status
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+security:
+    - mutualTLS: []
+servers:
+    - url: https://charlie-agent:7443/bridge/v1

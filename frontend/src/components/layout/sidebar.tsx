@@ -52,6 +52,7 @@ import {
   Route,
   Waypoints,
   Rocket,
+  Sparkles,
 } from 'lucide-react';
 import { cn, formatK8sVersion } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/env';
@@ -111,6 +112,7 @@ const globalNavGroups: NavGroup[] = [
     defaultOpen: true,
     items: [
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
+      { label: 'Charlie', href: '/dashboard/charlie', icon: Sparkles, permission: { resource: 'charlie', verb: 'read' }, featureFlag: 'feature.charlie' },
       { label: 'Clusters', href: '/dashboard/clusters', icon: Server, permission: { resource: 'clusters', verb: 'list' } },
       { label: 'Agents', href: '/dashboard/agents', icon: Activity, permission: { resource: 'agents', verb: 'read' } },
       { label: 'Fleet Operations', href: '/dashboard/fleet', icon: Rocket, permission: { resource: 'fleet_operations', verb: 'list' } },

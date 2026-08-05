@@ -11,6 +11,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { WindowManager } from '@/components/window-manager/window-manager';
+import { CharlieShell } from '@/components/charlie/charlie-shell';
 import { ExtensionProvider } from '@/components/extensions/ExtensionProvider';
 import { EmptyState, StatePanel } from '@/components/ui/empty-state';
 import { useAuthStore } from '@/lib/store';
@@ -150,13 +151,8 @@ function DashboardLayout() {
   // arrive so cards / tables tick without paying a refetch on every event.
   useLiveClusterMetricsMerger();
 
-  return (
-    // ExtensionProvider wraps the whole dashboard shell once: it fetches
-    // GET /extensions/mounts/ a single time and exposes the indexed registry to
-    // every <ExtensionSlot> (sidebar nav, dashboard widgets, cluster tabs,
-    // settings pages). Render-agnostic, so a broken extension can't reach here.
-    <ExtensionProvider>
-      <div data-testid="app-shell" className="flex h-screen overflow-hidden bg-background">
+  const appShell = (
+    <div data-testid="app-shell" className="flex h-screen overflow-hidden bg-background">
         <Sidebar />
         <div
           className={cn(
@@ -186,7 +182,16 @@ function DashboardLayout() {
           Renders nothing unless tabs are open.
         */}
         <WindowManager />
-      </div>
+    </div>
+  );
+
+  return (
+    // ExtensionProvider wraps the whole dashboard shell once: it fetches
+    // GET /extensions/mounts/ a single time and exposes the indexed registry.
+    <ExtensionProvider>
+      {featureFlags?.['feature.charlie'] === true
+        ? <CharlieShell>{appShell}</CharlieShell>
+        : appShell}
     </ExtensionProvider>
   );
 }
@@ -199,6 +204,8 @@ const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: '/dashboard/tools', flag: 'feature.catalog' },
   { prefix: '/dashboard/monitoring', flag: 'feature.monitoring' },
   { prefix: '/dashboard/security', flag: 'feature.security' },
+  { prefix: '/dashboard/charlie', flag: 'feature.charlie' },
+  { prefix: '/dashboard/settings/charlie', flag: 'feature.charlie' },
 ];
 
 function disabledFeatureForPath(pathname: string, flags?: FeatureFlags): FeatureFlagKey | null {

@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -41,6 +42,12 @@ import (
 
 type routeSecurityRBACQuerier struct {
 	bindings []rbac.RoleBinding
+}
+
+type routeSecurityCharlieContextSearcher struct{}
+
+func (routeSecurityCharlieContextSearcher) Search(context.Context, uuid.UUID, string, int32) ([]charlie.ContextSearchResult, error) {
+	return []charlie.ContextSearchResult{}, nil
 }
 
 func (q routeSecurityRBACQuerier) GetUserBindings(_ context.Context, _ string) ([]rbac.RoleBinding, error) {
@@ -958,6 +965,13 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		Anomaly:           handler.NewAnomalyHandler(nil),
 		ArgoCD:            handler.NewArgoCDHandler(nil),
 		ChartRatings:      handler.NewChartRatingsHandler(nil),
+		CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil),
+		CharlieAdmin:      handler.NewCharlieAdminHandler(nil, nil),
+		CharlieSessions:   handler.NewCharlieSessionHandler(nil, nil),
+		CharlieFindings:   handler.NewCharlieFindingHandler(nil),
+		CharlieOperations: handler.NewCharlieOperationHandler(nil),
+		CharlieContext:    handler.NewCharlieContextHandler(routeSecurityCharlieContextSearcher{}),
+		CharlieApprovals:  handler.NewCharlieApprovalHandler(nil),
 		ClusterResources:  handler.NewClusterResourcesHandler(nil),
 		Compliance:        handler.NewComplianceHandler(nil, nil),
 		CompliancePosture: handler.NewCompliancePostureHandler(nil, 0),

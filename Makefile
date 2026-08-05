@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vet run verify verify-enterprise sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check \
+.PHONY: help build test lint fmt vet run verify verify-enterprise sqlc sqlc-generate sqlc-check sdk error-codes error-codes-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -138,6 +138,18 @@ sqlc-check: ## Regenerate sqlc and fail if generated files are stale
 
 sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml
+
+charlie-contract-generate: ## Generate the pinned local Product Bridge client
+	cd internal/charlie/contract && go generate ./...
+
+charlie-contract-check: ## Verify Charlie pins and fail on generated-client drift
+	@cd internal/charlie/contract && sha256sum -c checksums.sha256
+	@before=$$(mktemp -d); \
+	trap 'rm -rf "$$before"' EXIT; \
+	cp -R internal/charlie/contract/internal/wire internal/charlie/contract/internal/schema "$$before"/; \
+	$(MAKE) charlie-contract-generate; \
+	diff -ru "$$before/wire" internal/charlie/contract/internal/wire && \
+	diff -ru "$$before/schema" internal/charlie/contract/internal/schema
 
 migrate-up: ## Run all migrations up
 	migrate -database "$(DATABASE_URL)" -path internal/db/migrations up

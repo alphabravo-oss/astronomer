@@ -167,6 +167,7 @@ async function mockApi(page: Page, user = adminUser) {
           'feature.argocd': true,
           'feature.security': true,
           'feature.backups': true,
+          'feature.charlie': true,
         }),
       });
     }
@@ -187,6 +188,23 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === '/activity' || path === '/alerting/events' || path === '/tools') {
       return route.fulfill({ json: apiResponse([]) });
+    }
+    if (path === '/charlie/findings/f-1') {
+      return route.fulfill({
+        json: apiResponse({
+          finding: {
+            id: 'f-1',
+            title: 'Bounded finding',
+            severity: 'high',
+            state: 'open',
+            affectedResource: { type: 'installation', id: 'cluster-1', requiredVerb: 'read' },
+            summary: 'Review the selected installation.',
+            confidence: 0.9,
+            operatorChecks: [],
+            evidence: [],
+          },
+        }),
+      });
     }
     if (path === '/catalog/repositories') {
       return route.fulfill({ json: apiResponse([]) });
@@ -337,4 +355,48 @@ test('settings general form remains usable on responsive viewports', async ({ co
   await page.getByLabel('Default Session Timeout').selectOption('480');
   await page.getByRole('button', { name: /save settings/i }).click();
   await expect(page.getByLabel('Platform Name')).toHaveValue('Astronomer Control Plane');
+});
+
+test('Charlie launcher exposes only bounded route context across product surfaces', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  const cases = [
+    ['/dashboard/clusters/cluster-1', 'Installation'],
+    ['/dashboard/clusters/cluster-1/tools', 'Cluster components'],
+    ['/dashboard/alerting', 'Alerts'],
+    ['/dashboard/agents', 'Agent fleet'],
+    ['/dashboard/backups', 'Backups'],
+    ['/dashboard/settings/gitops', 'GitOps'],
+  ] as const;
+
+  for (const [path, contextLabel] of cases) {
+    await page.goto(path);
+    await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
+    await expect(page.getByRole('dialog', { name: 'Charlie' })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Remove ${contextLabel}` })).toBeVisible();
+    await expect(page.getByText(/Logs, metrics, audit details, and broad resource data are never attached automatically/i)).toBeVisible();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+  }
+});
+
+test('Charlie hub and administration deep links survive refresh and history', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  await page.goto('/dashboard/charlie?tab=findings&filter=open&context=cluster-1&finding=f-1');
+  await expect(page.getByRole('tab', { name: 'findings' })).toHaveAttribute('aria-selected', 'true');
+  await page.reload();
+  await expect(page).toHaveURL(/tab=findings.*filter=open.*context=cluster-1.*finding=f-1/);
+  await page.getByRole('tab', { name: 'approvals' }).click();
+  await expect(page).toHaveURL(/tab=approvals.*filter=open.*context=cluster-1.*finding=f-1/);
+  await page.goBack();
+  await expect(page.getByRole('tab', { name: 'findings' })).toHaveAttribute('aria-selected', 'true');
+
+  await page.goto('/dashboard/settings/charlie?tab=connection');
+  for (const tab of ['connection', 'agent', 'mode', 'automation', 'access', 'diagnostics']) {
+    await page.getByRole('tab', { name: tab }).click();
+    await expect(page).toHaveURL(new RegExp(`tab=${tab}`));
+    await expect(page.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
+  }
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'diagnostics' })).toHaveAttribute('aria-selected', 'true');
+  await page.goBack();
+  await expect(page.getByRole('tab', { name: 'access' })).toHaveAttribute('aria-selected', 'true');
 });

@@ -83,6 +83,22 @@ type Config struct {
 	ServerMetricsAddr             string `mapstructure:"server_metrics_addr"`
 	WorkerMetricsAddr             string `mapstructure:"worker_metrics_addr"`
 
+	// Charlie MCP is a separate, private mTLS listener. The chart mounts these
+	// files from the installation-owned Secret; an empty address leaves the
+	// listener manager completely dormant in local/test processes.
+	CharlieMCPListenAddress        string `mapstructure:"charlie_mcp_listen_address"`
+	CharlieMCPTLSCertFile          string `mapstructure:"charlie_mcp_tls_cert_file"`
+	CharlieMCPTLSKeyFile           string `mapstructure:"charlie_mcp_tls_key_file"`
+	CharlieMCPClientCAFile         string `mapstructure:"charlie_mcp_client_ca_file"`
+	CharlieMCPActionSigningKeyFile string `mapstructure:"charlie_mcp_action_signing_key_file"`
+	// Charlie Product Bridge is the only Astronomer-to-agent runtime transport.
+	// It is fixed to the cluster-local Service and uses a distinct client
+	// identity from the MCP server identity.
+	CharlieBridgeTLSCertFile string `mapstructure:"charlie_bridge_tls_cert_file"`
+	CharlieBridgeTLSKeyFile  string `mapstructure:"charlie_bridge_tls_key_file"`
+	CharlieBridgeCAFile      string `mapstructure:"charlie_bridge_ca_file"`
+	CharlieAgentNamespace    string `mapstructure:"charlie_agent_namespace"`
+
 	// Account-lockout policy (migration 039 / NIST 800-53 AC-7).
 	// LoginFailureThreshold defaults to 5 when zero/negative; the
 	// duration defaults to 15 minutes. Both are chart-tunable via
@@ -248,6 +264,15 @@ func Load() (*Config, error) {
 		"cluster_tombstone_retention_days",
 		"server_metrics_addr",
 		"worker_metrics_addr",
+		"charlie_mcp_listen_address",
+		"charlie_mcp_tls_cert_file",
+		"charlie_mcp_tls_key_file",
+		"charlie_mcp_client_ca_file",
+		"charlie_mcp_action_signing_key_file",
+		"charlie_bridge_tls_cert_file",
+		"charlie_bridge_tls_key_file",
+		"charlie_bridge_ca_file",
+		"charlie_agent_namespace",
 		"login_failure_threshold",
 		"lockout_duration_minutes",
 		"totp_issuer",

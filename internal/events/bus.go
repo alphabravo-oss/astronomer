@@ -146,6 +146,19 @@ const (
 	// therefore superuser-only via the fail-closed drop.
 	TypeAlertingChanged Type = "alerting.changed"
 
+	// TypeCharlieFindingChanged fires only after the bounded local finding
+	// correlation is durable. It intentionally carries no prompt, evidence,
+	// model output, arguments, credentials, or authorization reference.
+	// Findings are management-plane scoped rather than downstream-cluster
+	// scoped, so the generic SSE authorization layer treats them as unscoped
+	// and therefore superuser-only unless a dedicated Charlie stream is used.
+	TypeCharlieFindingChanged Type = "charlie_finding.changed"
+
+	// TypeCharlieInvestigationChanged carries only durable local trigger state
+	// after an outbox transition. It is management-plane scoped and unscoped
+	// events therefore remain superuser-only on the generic SSE stream.
+	TypeCharlieInvestigationChanged Type = "charlie_investigation.changed"
+
 	// TypeSecurityPolicyChanged fires when a cluster security policy row is
 	// written (assign/apply/delete).
 	TypeSecurityPolicyChanged Type = "security_policy.changed"
@@ -694,4 +707,3 @@ func (b *Bus) Subscribe(ctx context.Context) <-chan Event {
 
 	return s.ch
 }
-

@@ -36,6 +36,8 @@ var changedTypeContract = []struct {
 	// domain cannot guarantee a cluster_id (global rules/silences exist);
 	// publishers still pass the entity's cluster_id through when it has one.
 	{"alerting", TypeAlertingChanged, false},
+	{"charlie_finding", TypeCharlieFindingChanged, false},
+	{"charlie_investigation", TypeCharlieInvestigationChanged, false},
 	{"security_policy", TypeSecurityPolicyChanged, true},
 	{"security_scan", TypeSecurityScanChanged, true},
 	{"network_access", TypeNetworkAccessChanged, true},
@@ -101,6 +103,8 @@ func TestChangedTypeConstantsAllInContractTable(t *testing.T) {
 		TypeRegistryChanged,
 		TypeSnapshotChanged,
 		TypeAlertingChanged,
+		TypeCharlieFindingChanged,
+		TypeCharlieInvestigationChanged,
 		TypeSecurityPolicyChanged,
 		TypeSecurityScanChanged,
 		TypeNetworkAccessChanged,

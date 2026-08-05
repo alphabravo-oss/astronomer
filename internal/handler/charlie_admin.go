@@ -1,0 +1,392 @@
+package handler
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+)
+
+type CharlieAdminBackend interface {
+	Status(context.Context) (charlie.AdminStatusView, error)
+	Install(context.Context) (charlie.AdminAgentView, error)
+	ReplacementAction(context.Context, string) (charlie.AdminAgentView, error)
+	Uninstall(context.Context, uuid.UUID) error
+	Disconnect(context.Context, uuid.UUID) error
+	UpdateMode(context.Context, charlie.Mode, int64, bool, uuid.UUID) (charlie.AdminModeView, error)
+	AcknowledgeDisclosure(context.Context, string) (charlie.AdminModeView, error)
+	Automation(context.Context) (charlie.AdminAutomationView, error)
+	CreateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
+	UpdateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
+	DeleteTrigger(context.Context, uuid.UUID) error
+	ListTriggerEvents(context.Context, string, int32, int32) ([]charlie.AdminTriggerEventView, error)
+	RetryTriggerEvent(context.Context, uuid.UUID, uuid.UUID) (charlie.AdminTriggerEventView, error)
+	Access(context.Context) (charlie.AdminAccessView, error)
+	SetAutomationIdentity(context.Context, bool) (charlie.AdminAccessView, error)
+	Diagnostics(context.Context, string) (charlie.AdminDiagnosticsView, error)
+}
+
+type CharlieAdminHandler struct {
+	backend  CharlieAdminBackend
+	audit    any
+	features *SettingsCache
+}
+
+func (h *CharlieAdminHandler) SetSettingsCache(cache *SettingsCache) { h.features = cache }
+
+func NewCharlieAdminHandler(backend CharlieAdminBackend, audit any) *CharlieAdminHandler {
+	return &CharlieAdminHandler{backend: backend, audit: audit}
+}
+
+func (h *CharlieAdminHandler) Status(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	if h.backend == nil {
+		h.respondError(w, r, charlie.ErrAdminUnavailable)
+		return
+	}
+	view, err := h.backend.Status(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+// openapi:request CharlieAdminActionRequest
+type charlieAdminActionRequest struct {
+	Confirmation string `json:"confirmation"`
+}
+
+func (h *CharlieAdminHandler) Install(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	view, err := h.backend.Install(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.agent.install", "charlie_connection", "current", "Charlie", map[string]any{"actor_id": actor.ID})
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) ReplacementAction(action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := h.actor(w, r); !ok {
+			return
+		}
+		view, err := h.backend.ReplacementAction(r.Context(), action)
+		if err != nil {
+			h.respondError(w, r, err)
+			return
+		}
+		recordAudit(r, h.audit, "admin.charlie.agent."+action, "charlie_connection", "current", "Charlie", nil)
+		RespondJSON(w, http.StatusOK, view)
+	}
+}
+
+func (h *CharlieAdminHandler) Uninstall(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	var request charlieAdminActionRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if request.Confirmation != "UNINSTALL CHARLIE" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact uninstall confirmation is required")
+		return
+	}
+	if err := h.backend.Uninstall(r.Context(), mustUserID(actor)); err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.agent.uninstall", "charlie_connection", "current", "Charlie", map[string]any{"confirmation": "matched"})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CharlieAdminHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	var request charlieAdminActionRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if request.Confirmation != "DISCONNECT CHARLIE" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact disconnect confirmation is required")
+		return
+	}
+	if err := h.backend.Disconnect(r.Context(), mustUserID(actor)); err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.disconnect", "charlie_connection", "current", "Charlie", map[string]any{"confirmation": "matched"})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// openapi:request CharlieModeRequest
+type charlieModeRequest struct {
+	Mode                        charlie.Mode `json:"mode"`
+	Revision                    *int64       `json:"revision"`
+	EmergencyDisable            bool         `json:"emergency_disable"`
+	AcknowledgeDisclosureDigest string       `json:"acknowledge_disclosure_digest"`
+}
+
+func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	var request charlieModeRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if !request.EmergencyDisable && h.features != nil && !h.features.BoolValue(r.Context(), "feature.charlie", false) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, "Charlie must be enabled before changing mode or disclosure")
+		return
+	}
+	if request.AcknowledgeDisclosureDigest != "" {
+		if request.Revision != nil || request.Mode != "" || request.EmergencyDisable {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Disclosure acknowledgement must be a separate request")
+			return
+		}
+		view, err := h.backend.AcknowledgeDisclosure(r.Context(), request.AcknowledgeDisclosureDigest)
+		if err != nil {
+			h.respondError(w, r, err)
+			return
+		}
+		recordAudit(r, h.audit, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", "Charlie", map[string]any{"digest": "matched"})
+		RespondJSON(w, http.StatusOK, view)
+		return
+	}
+	if request.Revision == nil || request.Mode == "" || (request.EmergencyDisable && request.Mode != charlie.ModeDisabled) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie mode request is invalid")
+		return
+	}
+	view, err := h.backend.UpdateMode(r.Context(), request.Mode, *request.Revision, request.EmergencyDisable, mustUserID(actor))
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	action := "admin.charlie.mode.update"
+	if request.EmergencyDisable {
+		action = "admin.charlie.mode.emergency_disable"
+	}
+	recordAudit(r, h.audit, action, "charlie_connection", "current", "Charlie", map[string]any{"mode": string(request.Mode), "revision": *request.Revision})
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) ListTriggers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	view, err := h.backend.Automation(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) CreateTrigger(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	var request charlie.AdminTriggerRule
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	view, err := h.backend.CreateTrigger(r.Context(), mustUserID(actor), request)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.trigger.create", "charlie_trigger_rule", view.ID, view.Name, nil)
+	RespondJSON(w, http.StatusCreated, view)
+}
+
+func (h *CharlieAdminHandler) UpdateTrigger(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "rule_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger rule ID")
+		return
+	}
+	var request charlie.AdminTriggerRule
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	view, err := h.backend.UpdateTrigger(r.Context(), id, request)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.trigger.update", "charlie_trigger_rule", view.ID, view.Name, map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed})
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) DeleteTrigger(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "rule_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger rule ID")
+		return
+	}
+	var request charlieAdminActionRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if request.Confirmation != "DELETE TRIGGER" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact trigger deletion confirmation is required")
+		return
+	}
+	if err := h.backend.DeleteTrigger(r.Context(), id); err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.trigger.delete", "charlie_trigger_rule", id.String(), "", map[string]any{"confirmation": "matched"})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CharlieAdminHandler) ListTriggerEvents(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	offset, ok := boundedQueryInt(w, r, "offset", 0, 0, 100000)
+	if !ok {
+		return
+	}
+	limit, ok := boundedQueryInt(w, r, "limit", 20, 1, charlie.MaxAdminTriggerEvents)
+	if !ok {
+		return
+	}
+	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	if state == "" {
+		state = "dead"
+	}
+	items, err := h.backend.ListTriggerEvents(r.Context(), state, int32(offset), int32(limit))
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// openapi:request CharlieTriggerRetryRequest
+type charlieTriggerRetryRequest struct {
+	RequestID string `json:"request_id"`
+}
+
+func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger event ID")
+		return
+	}
+	var request charlieTriggerRetryRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	requestID, err := uuid.Parse(request.RequestID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger retry request")
+		return
+	}
+	view, err := h.backend.RetryTriggerEvent(r.Context(), eventID, requestID)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.trigger.retry", "charlie_trigger_event", view.ID, view.EventType, map[string]any{"retry_of_event_id": eventID.String()})
+	RespondJSON(w, http.StatusAccepted, map[string]any{"event": view})
+}
+
+func (h *CharlieAdminHandler) Access(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	view, err := h.backend.Access(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) UpdateAccess(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	var request charlieAccessRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if request.AutomationServiceIdentityEnabled == nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Automation service identity state is required")
+		return
+	}
+	view, err := h.backend.SetAutomationIdentity(r.Context(), *request.AutomationServiceIdentityEnabled)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.access.update", "charlie_automation_identity", charlie.AutomationUsername, charlie.AutomationUsername, map[string]any{"enabled": *request.AutomationServiceIdentityEnabled})
+	RespondJSON(w, http.StatusOK, view)
+}
+
+// openapi:request CharlieAccessRequest
+type charlieAccessRequest struct {
+	AutomationServiceIdentityEnabled *bool `json:"automation_service_identity_enabled"`
+}
+
+func (h *CharlieAdminHandler) Diagnostics(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	view, err := h.backend.Diagnostics(r.Context(), appmiddleware.GetCorrelationID(r.Context()))
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordAudit(r, h.audit, "admin.charlie.diagnostics.run", "charlie_connection", "current", "Charlie", map[string]any{"overall": view.Overall})
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) actor(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, bool) {
+	if h == nil || h.backend == nil {
+		h.respondError(w, r, charlie.ErrAdminUnavailable)
+		return nil, false
+	}
+	return browserCharlieActor(w, r)
+}
+
+func (h *CharlieAdminHandler) respondError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, charlie.ErrAdminNotConfigured):
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Charlie is not configured")
+	case errors.Is(err, charlie.ErrAdminConflict), errors.Is(err, charlie.ErrReplacementPackageNeeded):
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie administration prerequisites are incomplete or changed")
+	default:
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie administration is unavailable")
+	}
+}

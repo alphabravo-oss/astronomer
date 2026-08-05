@@ -30,6 +30,8 @@ func TestBuiltinRoleCatalogContract(t *testing.T) {
 		{scope: "global", name: "RBAC Administrator", check: expectPermission("rbac", "*")},
 		{scope: "global", name: "Auditor", check: expectPermission("audit_logs", "read")},
 		{scope: "global", name: "Platform Operator", check: expectPermission("agents", "update")},
+		{scope: "global", name: "Charlie Approver", check: expectPermission("charlie", "approve")},
+		{scope: "global", name: "Charlie Automation", check: expectPermission("charlie", "read")},
 		{scope: "global", name: "Security Auditor", check: expectPermission("security", "read")},
 		{scope: "global", name: "Compliance Manager", check: expectPermission("security", "update")},
 		{scope: "global", name: "GitOps Admin", check: expectPermission("argocd", "manage")},
@@ -125,6 +127,7 @@ func loadSeededRoles(t *testing.T) map[string]seededRole {
 		filepath.Join(migrationsDir, "001_initial.up.sql"),
 		filepath.Join(migrationsDir, "032_builtin_role_catalog.up.sql"),
 		filepath.Join(migrationsDir, "098_rancher_grade_role_catalog.up.sql"),
+		filepath.Join(migrationsDir, "147_charlie_agent_integration.up.sql"),
 	}
 
 	roles := make(map[string]seededRole)
