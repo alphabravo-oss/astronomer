@@ -227,6 +227,74 @@ alone grants the underlying management-resource action, and deny always wins.
 - [x] Finding acknowledgement never counts as action approval, and a mode change
   never grants underlying target permission.
 
+### Operational mode and notification contract
+
+Charlie is an isolated subsystem, not ambient Astronomer behavior. The feature
+flag, connection activation, local emergency latch, and verified central mode
+are independent deny-first controls. Enabling the feature only makes the admin
+configuration surface available; it does not install an agent, open egress,
+start background work, or grant a capability. Activating a signed connection
+installs the product agent in `disabled`, and an administrator must explicitly
+choose a higher mode.
+
+| Effective state | Reads | Writes | User-visible outcome |
+| --- | --- | --- | --- |
+| Feature unavailable or false | None | None | Charlie routes and navigation are absent; no agent, listener, trigger, worker, or egress path is initialized. |
+| Installed but `disabled` | Authenticated health/configuration and catalog discovery only | None | Admin status explains what is required to activate Charlie; no chat, investigation, trigger, finding, claim, model, RAG, or MCP call starts. |
+| `read_only` | Disclosed reads allowed by the initiating user's live Astronomer RBAC and exact resource scope | None | Charlie returns the diagnosis. If remediation is warranted, Astronomer creates a deduplicated actionable finding that explains the blocked write and the safe operator next step. |
+| `approval` | Same as `read_only` | One reversible, disclosed, idempotent action only after an exact unexpired approval and a final live authorization/precondition check | Astronomer displays an approval alert/card with impact, target, evidence, verification, expiry, and approve/reject controls. No response is treated as denial; acknowledgement is not approval. |
+| `auto` | Same as `read_only` | Only an exact centrally allowlisted, product-disclosed, auto-eligible capability/resource pair under the narrow automation identity | Successful actions produce a bounded result and verification record. Any policy, budget, cooldown, precondition, circuit, or verification block produces an actionable finding instead of broader execution. |
+
+Every transition toward more authority requires an explicit administrator action
+and authoritative readback. A stale revision, missing acknowledgement, restart,
+agent failover, central outage, or disagreement between local and central state
+can only preserve or reduce authority. Disable and emergency-disable close and
+drain the local write fence before success is reported, abort active turns, stop
+trigger claims, and leave configuration/status as the only reachable surfaces.
+
+#### Destructive-action and confused-deputy protections
+
+- Destructive or irreversible capabilities are rejected when the catalog is
+  compiled and therefore cannot be made available by approval, `auto`, a model
+  request, prompt content, or an Astronomer role.
+- The v1 catalog has no arbitrary shell, command, exec, Kubernetes proxy, raw SQL,
+  generic HTTP, Secret-read, delete, credential-rotation, or downstream-tunnel
+  capability. New effects require a reviewed typed adapter and contract change.
+- Every permitted write names one canonical management-plane resource, declares
+  expected impact and rollback, carries a caller-stable action ID, has bounded
+  arguments and timeout, checks product-owned preconditions, and is post-verified
+  by Astronomer. Unknown or ambiguous outcomes are reconciled, never replayed.
+- Charlie output, retrieved documents, product context, alert text, and tool
+  results are untrusted evidence. They can propose a typed capability but cannot
+  select an undisclosed target, change mode, create RBAC, approve an action, or
+  weaken a budget, cooldown, maintenance window, or circuit breaker.
+- A final live gate immediately before dispatch rechecks feature and connection
+  state, mode revision, disclosure digest, actor/delegation, exact resource RBAC,
+  approval or automation grant, fencing epoch, action reservation, and safety
+  preconditions. Any mismatch denies execution and records a coded reason.
+
+#### Actionable alert contract
+
+Astronomer owns delivery and authorization for Charlie notifications. A central
+finding becomes an Astronomer alert only after it is durably committed and only
+users who can read every affected resource may view it. The bounded notification
+contains severity and impact, affected Astronomer resource links, an evidence
+summary and timestamps, the exact reason Charlie did not act, a recommended safe
+next step, the proposed typed capability and expected impact, the verification
+plan, repeat count, and a deep link to the investigation. It contains no prompt,
+chain-of-thought, raw model/tool body, secret, credential, certificate, or
+authorization reference.
+
+In `approval`, the deep link may expose an eligible exact approval card. In
+`read_only`, `disabled`, or a safety/RBAC/allowlist denial, it provides operator
+guidance but no execution control. A finding can be acknowledged, dismissed, or
+resolved without changing authority. Repeated diagnoses update one deduplicated
+finding and may feed Astronomer's existing in-product and configured external
+notification channels; notification delivery failure never loses the durable
+finding. Central and product audit records correlate by opaque deployment,
+session, finding, approval, and action IDs while logging only coded outcomes,
+counts, timings, and content-safe metadata.
+
 ## 4. Data model and public interfaces
 
 ### 4.1 Migration 147
