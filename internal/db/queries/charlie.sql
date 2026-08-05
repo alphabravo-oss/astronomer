@@ -203,7 +203,7 @@ SELECT * FROM charlie_connections ORDER BY created_at DESC, id DESC LIMIT 1;
 SELECT * FROM charlie_connections WHERE id = $1;
 
 -- name: GetCharlieConnectionByDeploymentID :one
-SELECT * FROM charlie_connections WHERE deployment_id = $1;
+SELECT * FROM charlie_connections WHERE deployment_id = $1 AND active = true;
 
 -- name: CreateCharlieConnection :one
 INSERT INTO charlie_connections (

@@ -2024,6 +2024,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		LeaseOwner:           leaseOwner,
 		ReceiptCipher:        encryptor,
 		WriteFence:           charlieWriteFence,
+		BridgeStatus:         managedCharlieBridge,
 	}, charlieFeatures, queries, charlieBindings, charlieSafety, capabilityExecutor, logger)
 	if err != nil {
 		database.Close()

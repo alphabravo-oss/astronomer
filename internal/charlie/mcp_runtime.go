@@ -31,6 +31,7 @@ type MCPRuntimeConfig struct {
 	LeaseOwner           string
 	ReceiptCipher        actionReceiptCipher
 	WriteFence           *WriteFence
+	BridgeStatus         adminBridgeStatusReader
 	PollInterval         time.Duration
 }
 
@@ -127,6 +128,23 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 			return shutdownErr
 		}
 		return drainErr
+	}
+	// The product agent owns leader election. Mirror its current leader and
+	// fencing epoch into product state before admitting MCP work so a failover
+	// makes every ticket from the former leader stale within one reconcile
+	// interval. A status/read failure leaves the existing guard fail-closed.
+	if r.config.BridgeStatus != nil {
+		status, statusErr := r.config.BridgeStatus.AdminStatus(ctx)
+		if statusErr != nil {
+			return statusErr
+		}
+		if writer, ok := r.queries.(agentStatusWriter); ok {
+			connection, syncErr := syncAgentStatus(ctx, writer, activation.Connection, status, time.Now().UTC())
+			if syncErr != nil {
+				return syncErr
+			}
+			activation.Connection = connection
+		}
 	}
 	if activation.Runnable {
 		r.config.WriteFence.Open()

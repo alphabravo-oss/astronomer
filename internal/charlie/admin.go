@@ -218,6 +218,20 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 	}
 	if s.bridge != nil {
 		if bridgeStatus, statusErr := s.bridge.AdminStatus(ctx); statusErr == nil {
+			if connection.Active {
+				if synced, syncErr := syncAgentStatus(ctx, s.queries, connection, bridgeStatus, s.now().UTC()); syncErr == nil {
+					connection = synced
+					view.Connection = safeAdminConnection(connection)
+					view.Agent = safeAdminAgent(connection)
+					view.Mode = safeAdminMode(connection)
+					if s.installer != nil {
+						installation, installErr := s.installer.Status(ctx, adminInstallSpec(connection))
+						view.Agent.DesiredReplicas = installation.DesiredReplicas
+						view.Agent.ReadyReplicas = installation.ReadyReplicas
+						view.Agent.ApplicationState = installationState(installation, installErr)
+					}
+				}
+			}
 			applyBridgeStatus(&view, bridgeStatus)
 		}
 	}

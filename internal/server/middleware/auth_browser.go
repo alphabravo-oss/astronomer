@@ -151,6 +151,21 @@ func (w *authConvertingWriter) flush() {
 	_ = context.TODO()
 }
 
+// Flush preserves streaming support through browser-or-bearer authentication.
+// Without this method SSE handlers see the wrapper as non-streaming even when
+// the underlying server supports http.Flusher.
+func (w *authConvertingWriter) Flush() {
+	if w.intercept {
+		return
+	}
+	if !w.headersSent {
+		w.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // Unwrap exposes the underlying ResponseWriter so http.ResponseController can
 // reach the original Hijacker for WebSocket upgrades.
 func (w *authConvertingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

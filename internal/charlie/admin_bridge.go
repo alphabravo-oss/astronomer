@@ -20,6 +20,10 @@ type AdminBridgeStatus struct {
 	ProductEnabled, DeploymentEnabled, EffectiveEnabled         bool
 }
 
+type adminBridgeStatusReader interface {
+	AdminStatus(context.Context) (AdminBridgeStatus, error)
+}
+
 func (m *ManagedBridge) AdminStatus(ctx context.Context) (AdminBridgeStatus, error) {
 	bridge, err := m.configurationRuntimeBridge(ctx)
 	if err != nil {
