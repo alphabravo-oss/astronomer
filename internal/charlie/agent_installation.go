@@ -258,6 +258,17 @@ func (i *AgentInstaller) Install(ctx context.Context, spec AgentInstallSpec) (Ag
 	return AgentInstallReceipt{Names: names, Rollback: rollbackAll}, nil
 }
 
+// PrepareNamespace establishes the fixed, restricted product-agent boundary
+// before bootstrap material is written. It is deliberately separate from
+// Install because the bootstrap Secret HMAC is an input to the immutable Argo
+// desired state. Install reconciles the namespace again as an ownership check.
+func (i *AgentInstaller) PrepareNamespace(ctx context.Context, installationID uuid.UUID) (func(context.Context) error, error) {
+	if i == nil || installationID == uuid.Nil {
+		return nil, fmt.Errorf("Charlie agent namespace preparation is unavailable")
+	}
+	return i.reconcileNamespace(ctx, installationID)
+}
+
 func (i *AgentInstaller) Upgrade(ctx context.Context, current, next AgentInstallSpec) (AgentInstallReceipt, error) {
 	if !sameStableAgent(current, next) {
 		return AgentInstallReceipt{}, fmt.Errorf("Charlie upgrade cannot change installation, logical agent, or local trust identities")

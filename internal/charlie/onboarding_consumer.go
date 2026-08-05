@@ -28,11 +28,39 @@ type OnboardingTransaction interface {
 	CreateCharlieTriggerRule(context.Context, sqlc.CreateCharlieTriggerRuleParams) (sqlc.CharlieTriggerRule, error)
 }
 
+type OnboardingInstaller interface {
+	PrepareNamespace(context.Context, uuid.UUID) (func(context.Context) error, error)
+	Install(context.Context, AgentInstallSpec) (AgentInstallReceipt, error)
+}
+
 type OnboardingTransactionStore interface {
 	WithinOnboardingTransaction(context.Context, func(OnboardingTransaction) error) error
 }
 
 type PGOnboardingTransactionStore struct{ Pool *pgxpool.Pool }
+
+type onboardingFailure struct {
+	code  string
+	cause error
+}
+
+func (e *onboardingFailure) Error() string { return "Charlie onboarding failed" }
+func (e *onboardingFailure) Unwrap() error { return e.cause }
+
+func failOnboarding(code string, err error) error {
+	return &onboardingFailure{code: code, cause: err}
+}
+
+// OnboardingFailureCode returns a bounded, credential-free operational code
+// suitable for logs and metrics. Detailed Kubernetes/database errors remain
+// inside the process and are never rendered to an API client or audit payload.
+func OnboardingFailureCode(err error) string {
+	var failure *onboardingFailure
+	if errors.As(err, &failure) {
+		return failure.code
+	}
+	return "onboarding.unknown"
+}
 
 func (s PGOnboardingTransactionStore) WithinOnboardingTransaction(ctx context.Context, callback func(OnboardingTransaction) error) error {
 	if s.Pool == nil {
@@ -50,11 +78,9 @@ func (s PGOnboardingTransactionStore) WithinOnboardingTransaction(ctx context.Co
 }
 
 type OnboardingConsumer struct {
-	Store     OnboardingTransactionStore
-	Secrets   AgentSecretWriter
-	Installer interface {
-		Install(context.Context, AgentInstallSpec) (AgentInstallReceipt, error)
-	}
+	Store           OnboardingTransactionStore
+	Secrets         AgentSecretWriter
+	Installer       OnboardingInstaller
 	Encryptor       *auth.Encryptor
 	BridgeServerDNS string
 	MCPServerDNS    string
@@ -63,7 +89,7 @@ type OnboardingConsumer struct {
 
 func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnboarding, actorID uuid.UUID) (OnboardingStatus, error) {
 	if c == nil || c.Store == nil || c.Secrets == nil || c.Encryptor == nil {
-		return OnboardingStatus{}, fmt.Errorf("Charlie onboarding dependencies are unavailable")
+		return OnboardingStatus{}, failOnboarding("onboarding.dependencies_unavailable", fmt.Errorf("Charlie onboarding dependencies are unavailable"))
 	}
 	now := time.Now().UTC()
 	if c.Now != nil {
@@ -78,27 +104,34 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("look up Charlie onboarding package: %w", err)
+			return failOnboarding("onboarding.package_lookup_failed", err)
 		}
 		platform, err := tx.GetPlatformConfig(ctx)
 		if err != nil {
-			return fmt.Errorf("load Astronomer installation identity: %w", err)
+			return failOnboarding("onboarding.installation_identity_failed", err)
 		}
 		trust, err := GenerateLocalTrust(c.Encryptor, LocalTrustConfig{
 			InstallationID: platform.InstanceID.String(), BridgeServerDNS: c.BridgeServerDNS,
 			MCPServerDNS: c.MCPServerDNS, Now: now,
 		})
 		if err != nil {
-			return err
+			return failOnboarding("onboarding.local_trust_failed", err)
+		}
+		if c.Installer != nil {
+			namespaceRollback, prepareErr := c.Installer.PrepareNamespace(ctx, platform.InstanceID)
+			if prepareErr != nil {
+				return failOnboarding("onboarding.namespace_prepare_failed", prepareErr)
+			}
+			rollbacks = append(rollbacks, namespaceRollback)
 		}
 		secretName := "charlie-agent-bootstrap-" + safeSecretSuffix(validated.PackageID)
 		enrollmentExpiresAt, artifactExpiresAt, expiryErr := onboardingCredentialExpiries(validated.Package)
 		if expiryErr != nil {
-			return expiryErr
+			return failOnboarding("onboarding.credential_expiry_invalid", expiryErr)
 		}
 		certificateExpiresAt, expiryErr := onboardingCertificateExpiry(validated.Package, trust.ExpiresAt)
 		if expiryErr != nil {
-			return expiryErr
+			return failOnboarding("onboarding.certificate_expiry_invalid", expiryErr)
 		}
 		connection, err := tx.CreateCharlieConnection(ctx, sqlc.CreateCharlieConnectionParams{
 			InstallationID: platform.InstanceID, ProductID: string(validated.Package.ProductId), ProductSlug: validated.Package.ProductSlug, DeploymentID: string(validated.Package.DeploymentId),
@@ -120,14 +153,14 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			CreatedByID: pgtype.UUID{Bytes: actorID, Valid: true},
 		})
 		if err != nil {
-			return fmt.Errorf("create Charlie onboarding record: %w", err)
+			return failOnboarding("onboarding.connection_create_failed", err)
 		}
 		automationIdentity, err := EnsureAutomationIdentity(ctx, tx)
 		if err != nil {
-			return fmt.Errorf("create Charlie automation identity: %w", err)
+			return failOnboarding("onboarding.automation_identity_failed", err)
 		}
 		if err := EnsureDefaultTriggerRules(ctx, tx, connection.ID, automationIdentity.ID, actorID); err != nil {
-			return err
+			return failOnboarding("onboarding.trigger_defaults_failed", err)
 		}
 		receipt, err := c.Secrets.WriteAgentSecret(ctx, AgentSecretBundle{
 			Name: secretName, InstallationID: platform.InstanceID.String(), OnboardingPackage: validated.RawPackage,
@@ -136,7 +169,7 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			MCPClientCertificate: trust.Agent.MCPClientCertificate, MCPClientPrivateKey: trust.Agent.MCPClientPrivateKey,
 		})
 		if err != nil {
-			return fmt.Errorf("materialize Charlie agent trust: %w", err)
+			return failOnboarding("onboarding.secret_materialization_failed", err)
 		}
 		rollbacks = append(rollbacks, receipt.Rollback)
 		if c.Installer != nil {
@@ -153,7 +186,7 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 				Trust: trust,
 			})
 			if installErr != nil {
-				return fmt.Errorf("install Charlie product agent: %w", installErr)
+				return failOnboarding("onboarding.agent_install_failed", installErr)
 			}
 			rollbacks = append(rollbacks, installReceipt.Rollback)
 		}
@@ -162,14 +195,14 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			AgentSecretHmac: receipt.IntegrityHMAC,
 		})
 		if err != nil {
-			return fmt.Errorf("record Charlie Secret materialization: %w", err)
+			return failOnboarding("onboarding.state_record_failed", err)
 		}
 		_, err = tx.AdvanceCharlieOnboardingState(ctx, sqlc.AdvanceCharlieOnboardingStateParams{
 			ID: connection.ID, ExpectedState: "secrets_written", NextState: "consumed",
 			AgentSecretHmac: receipt.IntegrityHMAC,
 		})
 		if err != nil {
-			return fmt.Errorf("consume Charlie onboarding package: %w", err)
+			return failOnboarding("onboarding.state_consume_failed", err)
 		}
 		result = validated.SafeStatus("consumed", false)
 		return nil
@@ -177,7 +210,7 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 	if err != nil {
 		for index := len(rollbacks) - 1; index >= 0; index-- {
 			if rollbackErr := rollbacks[index](ctx); rollbackErr != nil {
-				return OnboardingStatus{}, fmt.Errorf("Charlie onboarding failed and Secret rollback failed")
+				return OnboardingStatus{}, failOnboarding("onboarding.rollback_failed", rollbackErr)
 			}
 		}
 		return OnboardingStatus{}, err

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"strings"
@@ -23,10 +24,11 @@ type CharlieOnboardingConsumer interface {
 type CharlieOnboardingHandler struct {
 	consumer CharlieOnboardingConsumer
 	now      func() time.Time
+	log      *slog.Logger
 }
 
 func NewCharlieOnboardingHandler(consumer CharlieOnboardingConsumer) *CharlieOnboardingHandler {
-	return &CharlieOnboardingHandler{consumer: consumer, now: time.Now}
+	return &CharlieOnboardingHandler{consumer: consumer, now: time.Now, log: slog.Default()}
 }
 
 // openapi:request CharlieOnboardingRequest
@@ -64,6 +66,10 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 	}
 	status, err := h.consumer.Consume(r.Context(), validated, actorID)
 	if err != nil {
+		h.log.Warn("Charlie onboarding consume failed",
+			slog.String("failure_code", charlie.OnboardingFailureCode(err)),
+			slog.String("correlation_id", appmiddleware.GetCorrelationID(r.Context())),
+		)
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie onboarding could not be consumed safely")
 		return
 	}
