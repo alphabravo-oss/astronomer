@@ -132,12 +132,21 @@ func (b *managedAgentLifecycleBridge) Status(ctx context.Context) (AgentBridgeSt
 	if err != nil {
 		return AgentBridgeStatus{}, err
 	}
+	return agentBridgeStatusFromAdmin(status), nil
+}
+
+func agentBridgeStatusFromAdmin(status AdminBridgeStatus) AgentBridgeStatus {
 	return AgentBridgeStatus{
-		BridgeReady: true, CentralEnrolled: status.DeploymentEnabled,
-		LeaderElected:  status.Epoch > 0 && strings.TrimSpace(status.LeaderInstanceID) != "",
-		StandbyVisible: status.ReplicaCount >= 2, ProtocolCompatible: true,
+		BridgeReady: true,
+		// Enrollment is an authenticated connectivity fact, not execution
+		// authority. A freshly provisioned integration is deliberately disabled;
+		// requiring DeploymentEnabled here would deadlock installation against
+		// the later explicit mode activation.
+		CentralEnrolled: status.CentralHealth == "healthy" && strings.TrimSpace(status.LogicalAgentID) != "" && strings.TrimSpace(status.IntegrationRevision) != "",
+		LeaderElected:   status.Epoch > 0 && strings.TrimSpace(status.LeaderInstanceID) != "",
+		StandbyVisible:  status.ReplicaCount >= 2, ProtocolCompatible: true,
 		AgentProtocolVersion: contract.AgentProtocolVersion, BridgeProtocolVersion: contract.BridgeProtocolVersion,
-	}, nil
+	}
 }
 
 func (b *managedAgentLifecycleBridge) CentralHealth(ctx context.Context) error {
