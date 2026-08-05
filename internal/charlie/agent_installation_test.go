@@ -455,6 +455,56 @@ func TestAgentInstallerReadinessUninstallDisconnectAndReconnect(t *testing.T) {
 	}
 }
 
+func TestAgentInstallerPrunesOnlySupersededOwnerBoundPackageSecrets(t *testing.T) {
+	installer, kube, _, _ := testAgentInstaller(t)
+	spec := testAgentInstallSpec(t)
+	spec.SecretPrefix = "charlie-agent-bootstrap-current"
+	names := agentResourceNames(spec, DefaultCharlieAgentNamespace)
+	ctx := context.Background()
+	create := func(namespace, name string, owner uuid.UUID) {
+		t.Helper()
+		if _, err := kube.CoreV1().Secrets(namespace).Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: managedLabels(owner)},
+		}, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create("astronomer", names.Repository, spec.InstallationID)
+	create("astronomer", "charlie-agent-bootstrap-old-repository", spec.InstallationID)
+	create(DefaultCharlieAgentNamespace, names.Enrollment, spec.InstallationID)
+	create(DefaultCharlieAgentNamespace, "charlie-agent-bootstrap-old-enrollment", spec.InstallationID)
+	create(DefaultCharlieAgentNamespace, "charlie-agent-bootstrap-operator-owned", uuid.New())
+	create("astronomer", names.MCPServerTLS, spec.InstallationID)
+
+	if err := installer.PruneSupersededRepositories(ctx, spec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kube.CoreV1().Secrets("astronomer").Get(ctx, "charlie-agent-bootstrap-old-repository", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("superseded repository credential survived: %v", err)
+	}
+	if _, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(ctx, "charlie-agent-bootstrap-old-enrollment", metav1.GetOptions{}); err != nil {
+		t.Fatalf("pre-readiness cleanup removed an agent secret: %v", err)
+	}
+
+	if err := installer.PruneSupersededSecrets(ctx, spec); err != nil {
+		t.Fatal(err)
+	}
+	for namespace, name := range map[string]string{
+		DefaultCharlieAgentNamespace: names.Enrollment,
+		"astronomer":                 names.MCPServerTLS,
+	} {
+		if _, err := kube.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{}); err != nil {
+			t.Fatalf("current or fixed secret %s/%s was removed: %v", namespace, name, err)
+		}
+	}
+	if _, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(ctx, "charlie-agent-bootstrap-operator-owned", metav1.GetOptions{}); err != nil {
+		t.Fatalf("differently owned secret was removed: %v", err)
+	}
+	if _, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(ctx, "charlie-agent-bootstrap-old-enrollment", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("superseded enrollment secret survived: %v", err)
+	}
+}
+
 func TestAgentInstallerSuspendAndResumeRemoveOnlyRuntimeSurface(t *testing.T) {
 	installer, kube, _, metadata := testAgentInstaller(t)
 	spec := testAgentInstallSpec(t)

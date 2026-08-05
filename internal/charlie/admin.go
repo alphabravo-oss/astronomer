@@ -139,6 +139,11 @@ type AdminAgentInstaller interface {
 	Disconnect(context.Context, AgentInstallSpec, string) error
 }
 
+type supersededAgentMaterialPruner interface {
+	PruneSupersededRepositories(context.Context, AgentInstallSpec) error
+	PruneSupersededSecrets(context.Context, AgentInstallSpec) error
+}
+
 type AdminService struct {
 	pool      *pgxpool.Pool
 	queries   *sqlc.Queries
@@ -353,18 +358,34 @@ func (s *AdminService) Install(ctx context.Context) (AdminAgentView, error) {
 		return AdminAgentView{}, err
 	}
 	if connection.Active && connection.OnboardingState == "active" {
+		if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
+			if err := pruner.PruneSupersededSecrets(ctx, adminInstallSpec(connection)); err != nil {
+				return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie material cleanup is incomplete", ErrAdminConflict)
+			}
+		}
 		status, statusErr := s.Status(ctx)
 		return status.Agent, statusErr
 	}
 	if connection.OnboardingState != "consumed" || s.installer == nil {
 		return AdminAgentView{}, ErrAdminConflict
 	}
-	installation, err := s.installer.Status(ctx, adminInstallSpec(connection))
+	spec := adminInstallSpec(connection)
+	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
+		if err := pruner.PruneSupersededRepositories(ctx, spec); err != nil {
+			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie repository cleanup is incomplete", ErrAdminConflict)
+		}
+	}
+	installation, err := s.installer.Status(ctx, spec)
 	if err != nil || !installation.Ready() {
 		return AdminAgentView{}, fmt.Errorf("%w: Charlie agent readiness is incomplete", ErrAdminConflict)
 	}
 	if _, err := s.queries.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: connection.ID, HealthState: "ready"}); err != nil {
 		return AdminAgentView{}, ErrAdminConflict
+	}
+	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
+		if err := pruner.PruneSupersededSecrets(ctx, spec); err != nil {
+			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie material cleanup is incomplete", ErrAdminConflict)
+		}
 	}
 	status, err := s.Status(ctx)
 	return status.Agent, err

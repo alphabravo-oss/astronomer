@@ -385,6 +385,54 @@ func (i *AgentInstaller) Uninstall(ctx context.Context, spec AgentInstallSpec) e
 	return i.metadata.MarkTemporarilyUninstalled(ctx, spec.ConnectionID)
 }
 
+// PruneSupersededRepositories removes only owner-bound package repository
+// credentials other than the currently reviewed package. It runs before Argo
+// readiness evaluation because a revoked credential for the same OCI origin
+// can otherwise make repository selection nondeterministic.
+func (i *AgentInstaller) PruneSupersededRepositories(ctx context.Context, spec AgentInstallSpec) error {
+	if i == nil || i.kube == nil || spec.InstallationID == uuid.Nil {
+		return fmt.Errorf("Charlie repository cleanup dependencies are unavailable")
+	}
+	names := agentResourceNames(spec, i.agentNamespace)
+	return i.prunePackageSecrets(ctx, i.argoNamespace, spec.InstallationID, map[string]bool{names.Repository: true})
+}
+
+// PruneSupersededSecrets removes the remaining owner-bound package material
+// after the replacement workload is ready. Fixed product TLS names and the
+// current package closure are always preserved.
+func (i *AgentInstaller) PruneSupersededSecrets(ctx context.Context, spec AgentInstallSpec) error {
+	if i == nil || i.kube == nil || spec.InstallationID == uuid.Nil {
+		return fmt.Errorf("Charlie secret cleanup dependencies are unavailable")
+	}
+	names := agentResourceNames(spec, i.agentNamespace)
+	preserve := map[string]bool{
+		names.Bootstrap: true, names.Enrollment: true, names.BridgeTLS: true,
+		names.MCPClientTLS: true, names.CentralCA: true, names.ImagePull: true,
+	}
+	if err := i.prunePackageSecrets(ctx, i.agentNamespace, spec.InstallationID, preserve); err != nil {
+		return err
+	}
+	return i.prunePackageSecrets(ctx, i.argoNamespace, spec.InstallationID, map[string]bool{names.Repository: true})
+}
+
+func (i *AgentInstaller) prunePackageSecrets(ctx context.Context, namespace string, installationID uuid.UUID, preserve map[string]bool) error {
+	selector := installationOwnerLabel + "=" + installationID.String()
+	secrets, err := i.kube.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return err
+	}
+	for index := range secrets.Items {
+		name := secrets.Items[index].Name
+		if preserve[name] || !strings.HasPrefix(name, "charlie-agent-bootstrap-") {
+			continue
+		}
+		if err := i.kube.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 // Suspend removes Charlie's running workload and product network surface while
 // retaining installation secrets and an owner-bound copy of the reviewed Argo
 // desired state. It is the reversible feature-disable operation; it never
