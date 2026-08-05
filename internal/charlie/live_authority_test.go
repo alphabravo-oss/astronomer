@@ -134,6 +134,19 @@ func TestProductLiveAuthorityRejectsAbortedSessionEvenWithLiveDelegation(t *test
 	}
 }
 
+func TestProductLiveAuthorityAcceptsEquivalentPrefixedDisclosureDigest(t *testing.T) {
+	queries, bindings, safety, action, capability, automationID, _ := liveAuthorityFixture(ModeApproval)
+	queries.connection.DisclosureDigest = "sha256:" + action.DisclosureDigest
+	authority, err := NewProductLiveAuthority(queries, bindings, safety, automationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts, err := authority.Evaluate(t.Context(), action, capability, liveWriteArguments("resource-a"))
+	if err != nil || !facts.DisclosureCurrent {
+		t.Fatalf("equivalent disclosure digest encodings drifted: facts=%+v err=%v", facts, err)
+	}
+}
+
 func TestProductLiveAuthorityApprovalRequiresApproverAndTargetPermission(t *testing.T) {
 	queries, bindings, safety, action, capability, automationID, approverID := liveAuthorityFixture(ModeApproval)
 	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)

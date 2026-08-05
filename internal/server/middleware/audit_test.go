@@ -296,3 +296,16 @@ func TestAuditLogWithWriter_SkipAuthPaths(t *testing.T) {
 		t.Fatal("expected skip path not to persist audit row")
 	}
 }
+
+func TestStatusWriterPreservesStreamingFlush(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writer := &statusWriter{ResponseWriter: recorder}
+	flusher, ok := any(writer).(http.Flusher)
+	if !ok {
+		t.Fatal("audit status writer removed http.Flusher")
+	}
+	flusher.Flush()
+	if !recorder.Flushed || writer.status != http.StatusOK {
+		t.Fatalf("stream was not flushed through audit writer: flushed=%v status=%d", recorder.Flushed, writer.status)
+	}
+}

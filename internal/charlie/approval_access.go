@@ -383,7 +383,7 @@ func (s *ApprovalAccessService) verifyManifest(connection sqlc.CharlieConnection
 		return "", err
 	}
 	manifest := approval.Manifest
-	if string(manifest.SessionId) != session.CharlieSessionID || manifest.DisclosureDigest != connection.DisclosureDigest ||
+	if string(manifest.SessionId) != session.CharlieSessionID || normalizeDigest(manifest.DisclosureDigest) != normalizeDigest(connection.DisclosureDigest) ||
 		manifest.ModeRevision != connection.VerifiedModeRevision || manifest.PolicyRevision != manifest.ModeRevision ||
 		manifest.FencingEpoch != connection.FencingEpoch {
 		return "", fmt.Errorf("Charlie approval authority is stale")

@@ -104,6 +104,20 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 	return sw.ResponseWriter.Write(b)
 }
 
+// Flush preserves SSE through the shared read-audit status recorder. Read
+// auditing observes the response; it must never convert a streaming-capable
+// writer into a non-streaming one.
+func (sw *statusWriter) Flush() {
+	if sw.status == 0 {
+		sw.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := sw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (sw *statusWriter) Unwrap() http.ResponseWriter { return sw.ResponseWriter }
+
 // AuditLog returns middleware that logs mutating API requests.
 // It logs POST/PUT/PATCH/DELETE to /api/ paths (excluding skip paths)
 // regardless of outcome, so denied/failed mutations (4xx such as 401/403/409,

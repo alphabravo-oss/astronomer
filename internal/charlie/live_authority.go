@@ -121,7 +121,7 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		FeatureEnabled: a.features != nil && a.features.BoolValue(ctx, "feature.charlie", false), ConnectionActive: connection.Active,
 		EmergencyDisabled: connection.EmergencyDisabled, Mode: mode,
 		Effect: capability.Effect, Destructive: capability.Destructive,
-		DisclosureCurrent: connection.DisclosureDigest != "" && connection.DisclosureDigest == action.DisclosureDigest &&
+		DisclosureCurrent: normalizeDigest(connection.DisclosureDigest) != "" && normalizeDigest(connection.DisclosureDigest) == normalizeDigest(action.DisclosureDigest) &&
 			connection.VerifiedModeRevision == action.ModeRevision && action.PolicyRevision == action.ModeRevision,
 		LiveAuthorized: targetAllowed && charlieAllowed,
 		AutoEligible:   capability.AutoEligible,
