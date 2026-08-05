@@ -9,7 +9,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -234,7 +233,7 @@ func (r *EventRuntime) consumeManagementAlert(ctx context.Context, event events.
 		signal := TriggerSignal{
 			Source: "astronomer", EventType: triggerRule.Name, ResourceType: "alert", ResourceID: alert.ID.String(),
 			FailureClass: "management_alert_firing", Severity: rule.Severity, State: alert.Status,
-			Timestamp: alert.FiredAt.UTC(), ProductVersion: version.Version,
+			Timestamp: alert.FiredAt.UTC(), ProductVersion: currentProductDocumentationVersion(),
 			Summary: "A high-severity Astronomer management-plane alert requires investigation",
 		}
 		_, _, err = r.ingestor.Ingest(ctx, triggerRule, TriggerObservation{
@@ -283,7 +282,7 @@ func agentTriggerSignal(name string, clusterID uuid.UUID, agentVersion, state, f
 	}
 	return TriggerSignal{
 		Source: "astronomer", EventType: name, ResourceType: "agent_connection_record", ResourceID: clusterID.String(),
-		FailureClass: failure, Severity: severity, State: state, Timestamp: at.UTC(), ProductVersion: version.Version,
+		FailureClass: failure, Severity: severity, State: state, Timestamp: at.UTC(), ProductVersion: currentProductDocumentationVersion(),
 		Summary: "Astronomer cluster-agent connection state requires investigation",
 	}
 }

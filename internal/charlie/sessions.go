@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -163,13 +162,13 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 		_, _ = s.queries.RevokeCharlieDelegationsForSession(ctx, local.ID)
 		return CreatedSession{}, fmt.Errorf("build bounded Charlie product context")
 	}
-	productContext.ProductVersion = version.Version
+	productContext.ProductVersion = currentProductDocumentationVersion()
 	productContext.Resources = append([]SessionResource(nil), input.Resources...)
 	receipt, err := s.bridge.CreateSession(ctx, BridgeSessionRequest{
 		ClientSessionID: input.ClientSessionID.String(), ActorID: input.OwnerID.String(),
 		ActorType: input.ActorType, ActorLabel: input.ActorLabel,
 		AuthorizationRef: delegation.Reference, Intent: input.Intent,
-		ProductVersion: version.Version, Context: productContext,
+		ProductVersion: currentProductDocumentationVersion(), Context: productContext,
 	}, input.ClientSessionID.String())
 	if err != nil {
 		_, _ = s.queries.RevokeCharlieDelegationsForSession(ctx, local.ID)

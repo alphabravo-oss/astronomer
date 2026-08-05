@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -84,7 +83,7 @@ func (s *TriggerSweeper) Sweep(ctx context.Context) error {
 			signal := TriggerSignal{
 				Source: "astronomer", EventType: rule.Name, ResourceType: "agent_connection_record", ResourceID: row.ClusterID.String(),
 				FailureClass: check.failure, Severity: check.severity, State: check.state, Timestamp: now,
-				ProductVersion: version.Version, Environment: row.Environment, Region: row.Region,
+				ProductVersion: currentProductDocumentationVersion(), Environment: row.Environment, Region: row.Region,
 				Summary: "Astronomer cluster-agent operational state requires investigation",
 			}
 			_, _, _ = s.ingestor.Ingest(ctx, rule, TriggerObservation{Signal: signal, OriginResourceRef: "agent-connection:" + row.ClusterID.String(), OriginEventRef: "agent-state-sweep:" + now.Format(time.RFC3339)})
@@ -132,7 +131,7 @@ func (s *TriggerSweeper) ingestAggregate(ctx context.Context, rule sqlc.CharlieT
 	_, _, err := s.ingestor.Ingest(ctx, rule, TriggerObservation{Signal: TriggerSignal{
 		Source: "astronomer", EventType: rule.Name, ResourceType: resourceType, ResourceID: resourceID,
 		FailureClass: failure, Severity: severity, State: state, Timestamp: now,
-		ProductVersion: version.Version, Summary: "Astronomer management-plane fleet or tunnel state requires investigation",
+		ProductVersion: currentProductDocumentationVersion(), Summary: "Astronomer management-plane fleet or tunnel state requires investigation",
 	}, OriginResourceRef: resourceType + ":" + resourceID, OriginEventRef: "state-sweep:" + now.Format(time.RFC3339)})
 	return err
 }

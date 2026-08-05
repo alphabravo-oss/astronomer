@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -120,7 +119,7 @@ func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) err
 			EventType: event.EventType, ResourceType: event.ResourceType, ResourceID: event.ResourceID,
 			Fingerprint: event.Fingerprint, RepeatCount: event.RepeatCount,
 			FirstOccurredAt: event.FirstOccurredAt, LastOccurredAt: event.LastOccurredAt,
-			SummaryMetadata: append(json.RawMessage(nil), event.SummaryMetadata...), ProductVersion: version.Version,
+			SummaryMetadata: append(json.RawMessage(nil), event.SummaryMetadata...), ProductVersion: currentProductDocumentationVersion(),
 		}, event.ID.String())
 		if bridgeErr != nil || receipt.SessionID == "" || receipt.Revision < 1 {
 			return d.retry(ctx, event, rule, "bridge_unavailable")
