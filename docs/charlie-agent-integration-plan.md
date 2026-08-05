@@ -594,6 +594,11 @@ contract.
 - [x] **A5-011** Add content-free metrics for calls, latency, failures, circuit
   state, SSE connections, reconnects, and leader changes.
 - [x] **A5-012** Prove no code path constructs a direct central Charlie request.
+- [x] **A5-013** Reconcile newer central authority revisions on a bounded
+  background interval and on admin status reads without raising the requested
+  local mode ceiling. Reject stale and same-revision/mismatched state, map a
+  disabled product/deployment boundary to verified disabled, and preserve the
+  local emergency-disable latch as the highest-priority denial.
 
 **Verify**
 
@@ -635,6 +640,9 @@ contract.
 - [x] **A6-012** Recheck installation, management namespace/component, and named
   agent-connection-record scope; reject any downstream-resource target.
 - [x] **A6-013** Require the automation identity's live grant for background work.
+- [x] **A6-013a** Treat auto readiness as satisfied only by an exact global
+  resource/verb grant from the published auto-eligible write catalog. Wildcards,
+  read-only permissions, and cluster/project-scoped grants do not qualify.
 - [x] **A6-014** Require both approver permission and target permission for
   approval-mode writes.
 - [x] **A6-015** Reject revoked/expired delegation, user, service identity,
@@ -1227,6 +1235,39 @@ the minimum authorized evidence and correlate, in order:
   no implicit action.
 
 #### Connected qualification evidence — 2026-08-05
+
+##### Agent 1.0.13 and authority-reconciliation addendum
+
+- Astronomer commits `fe22a4d` and `b7a50eb940ac0d295a9906d8469510d3a5620514`
+  added central-authority reconciliation and exact target-grant readiness.
+  Charlie commit `f38c941647e08e31391714a37384f09e7b717d0d`
+  supplied signed agent/chart `1.0.13` artifacts.
+- The replacement install used immutable image digest
+  `sha256:98e5877f92ddb50c590a1cb400f2ba682c9a053655e00d220ed5915a75a3c9c6`
+  and chart digest
+  `sha256:7827b632a6fde66e2f380e1781a4a36ce77e6d9ccb20d85803c3f9646f901efb`.
+  Kubernetes reported both StatefulSet replicas ready and Argo remained
+  `Synced/Healthy`.
+- A fresh local connection imported central revision `36` but stayed effectively
+  disabled because its requested local ceiling was disabled. Astronomer then
+  explicitly moved to read-only at revision `37`, proving central reconciliation
+  cannot independently elevate local authority.
+- Auto initially failed closed until the dedicated service identity had an exact
+  global `monitoring:update` grant matching the published capability catalog.
+  Tests additionally reject wildcard, read-only, cluster-scoped, and
+  project-scoped grants as auto prerequisites.
+- With a temporary one-capability allowlist, auto revision `38` was reachable.
+  A human chat requested that allowlisted write and received
+  `authorization_denied`; no action was dispatched because its user delegation
+  could not become `system:charlie-automation`. This qualifies the human/service
+  isolation boundary but does not complete A14-011's successful service-trigger
+  execution requirement.
+- Final live state is acknowledged `read_only` revision `43` with an empty
+  central auto allowlist, disabled automation identity, zero automation grants,
+  and no temporary qualification role/binding. Transient onboarding and test
+  credential files were deleted from both hosts.
+- Astronomer API-contract verification passed after each change; Charlie's full
+  1.0.13 `make verify` suite passed before publication.
 
 - Charlie central commit `8fc943d` served the separately deployed control plane;
   Astronomer commit `39df916` served the product integration during live tests.
