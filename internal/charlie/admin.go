@@ -819,22 +819,39 @@ func (s *AdminService) automationState(ctx context.Context) (enabled, hasTargetG
 			SELECT 1 FROM users u JOIN global_roles r ON r.name='Charlie Automation' AND r.is_builtin=true
 			JOIN global_role_bindings b ON b.user_id=u.id AND b.role_id=r.id
 			WHERE u.username=$1 AND u.is_active=true AND u.is_service=true
-		), EXISTS(
-			SELECT 1 FROM users u
-			LEFT JOIN global_role_bindings gb ON gb.user_id=u.id
-			LEFT JOIN global_roles gr ON gr.id=gb.role_id
-			LEFT JOIN cluster_role_bindings cb ON cb.user_id=u.id
-			LEFT JOIN cluster_roles cr ON cr.id=cb.role_id
-			LEFT JOIN project_role_bindings pb ON pb.user_id=u.id
-			LEFT JOIN project_roles pr ON pr.id=pb.role_id
-			WHERE u.username=$1 AND (
-				COALESCE(gr.rules,'[]'::jsonb) @> '[{"resource":"management"}]'::jsonb OR
-				COALESCE(cr.rules,'[]'::jsonb) <> '[]'::jsonb OR COALESCE(pr.rules,'[]'::jsonb) <> '[]'::jsonb)
 		)`, AutomationUsername)
-	if scanErr := row.Scan(&enabled, &hasTargetGrants); scanErr != nil {
+	if scanErr := row.Scan(&enabled); scanErr != nil {
 		return false, false, ErrAdminUnavailable
 	}
-	return enabled, hasTargetGrants, nil
+	if !enabled {
+		return false, false, nil
+	}
+	access, accessErr := s.Access(ctx)
+	if accessErr != nil {
+		return false, false, accessErr
+	}
+	return true, hasAutomationWriteGrant(access.AutomationGrants), nil
+}
+
+// hasAutomationWriteGrant accepts only an exact global resource/verb pair from
+// Astronomer's published auto-eligible management-plane catalog. Wildcards and
+// cluster/project grants do not satisfy auto-mode readiness in v1.
+func hasAutomationWriteGrant(grants []AdminPermission) bool {
+	required := make(map[string]struct{})
+	for _, capability := range WriteCapabilityCatalog() {
+		if capability.AutoEligible {
+			required[capability.RBACResource+":"+capability.RBACVerb] = struct{}{}
+		}
+	}
+	for _, grant := range grants {
+		if grant.Scope != "global" {
+			continue
+		}
+		if _, ok := required[grant.Permission]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *AdminService) Access(ctx context.Context) (AdminAccessView, error) {
