@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,6 +122,9 @@ func TestSessionCreatePersistsAuthorizationBeforeBoundedBridgeCall(t *testing.T)
 	if bridge.calls != 1 || bridge.key != input.ClientSessionID.String() || bridge.request.AuthorizationRef == "" {
 		t.Fatalf("bridge request missing stable identity or opaque authorization: %#v", bridge)
 	}
+	if bridge.request.Intent != input.Intent || bridge.request.Objective != input.Intent {
+		t.Fatalf("bridge request lost its intent or initial objective: %#v", bridge.request)
+	}
 	if bridge.request.Context.ProductVersion == "" || bridge.request.Context.Resources[0] != input.Resources[0] {
 		t.Fatalf("bridge request missing bounded versioned context: %#v", bridge.request.Context)
 	}
@@ -129,6 +133,30 @@ func TestSessionCreatePersistsAuthorizationBeforeBoundedBridgeCall(t *testing.T)
 	}
 	if created.AuthorizationRef == queries.delegation.AuthorizationHash || created.AuthorizationRef == queries.delegation.AuthorizationPrefix {
 		t.Fatal("plaintext authorization reference was persisted")
+	}
+}
+
+func TestSessionCreateKeepsLongInitialObjectiveAndPersistsBoundedIntent(t *testing.T) {
+	connection := readySessionConnection()
+	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
+	bridge := &sessionBridgeFake{receipt: BridgeSessionReceipt{SessionID: "central-session", Revision: 1}}
+	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr-long"}}
+	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := validSessionInput()
+	input.Intent = strings.Repeat("diagnostic evidence ", 20)
+
+	created, err := service.Create(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bridge.request.Objective != input.Intent {
+		t.Fatal("initial objective was truncated before the Product Bridge")
+	}
+	if len([]rune(bridge.request.Intent)) != maxSessionIntentCharacters || created.Local.Intent != bridge.request.Intent {
+		t.Fatalf("persisted/display intent was not bounded consistently: request=%q local=%q", bridge.request.Intent, created.Local.Intent)
 	}
 }
 

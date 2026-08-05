@@ -113,6 +113,18 @@ func TestCharlieSessionCreateRejectsUnknownFieldsAndAPITokens(t *testing.T) {
 	}
 }
 
+func TestCharlieSessionCreateReportsInvalidObjectiveAsValidationError(t *testing.T) {
+	creator := &charlieCreatorFake{err: charlie.ErrInvalidSessionRequest}
+	handler := NewCharlieSessionHandler(creator, &charlieAccessFake{})
+	request := authenticatedCharlieRequest(http.MethodPost, "/", `{"client_session_id":"`+uuid.NewString()+`","intent":"invalid"}`, uuid.New(), "jwt")
+	recorder := httptest.NewRecorder()
+	handler.Create(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"validation_error"`) {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestCharlieMessageForwardsStableIDsAndContentOnlyToBridgeService(t *testing.T) {
 	actor, sessionID, messageID := uuid.New(), uuid.New(), uuid.New()
 	access := &charlieAccessFake{result: json.RawMessage(`{"turn_id":"turn-1","replayed":true}`)}

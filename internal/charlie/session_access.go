@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	MaxCharlieMessageBytes = 64 << 10
+	MaxCharlieMessageBytes = 32 << 10
 	MaxCharlieHistoryItems = 100
 )
 

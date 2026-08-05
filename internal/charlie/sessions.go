@@ -15,6 +15,13 @@ import (
 
 const SREContextSchema = "astronomer.sre-context/v1"
 
+const (
+	maxSessionIntentCharacters = 128
+	maxSessionObjectiveBytes   = 4096
+)
+
+var ErrInvalidSessionRequest = errors.New("Charlie session request is invalid")
+
 type SessionResource struct {
 	Type         string `json:"type"`
 	ID           string `json:"id"`
@@ -48,6 +55,7 @@ type BridgeSessionRequest struct {
 	ActorLabel       string     `json:"actor_label"`
 	AuthorizationRef string     `json:"authorization_ref"`
 	Intent           string     `json:"intent"`
+	Objective        string     `json:"objective"`
 	ProductVersion   string     `json:"product_version"`
 	Context          SREContext `json:"context"`
 }
@@ -137,10 +145,11 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 		return CreatedSession{}, fmt.Errorf("load Charlie session: %w", err)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
+		intent := sessionIntentSummary(input.Intent)
 		local, err = s.queries.CreateCharlieSession(ctx, sqlc.CreateCharlieSessionParams{
 			ConnectionID: connection.ID, CharlieSessionID: "", ClientSessionID: input.ClientSessionID,
 			OwnerUserID: pgtype.UUID{Bytes: input.OwnerID, Valid: true}, Source: "user", Visibility: "private",
-			Intent: input.Intent, ResourceScopeSummary: resourceScopeSummary(input.Resources), State: "creating",
+			Intent: intent, ResourceScopeSummary: resourceScopeSummary(input.Resources), State: "creating",
 		})
 		if err != nil {
 			return CreatedSession{}, fmt.Errorf("persist Charlie session intent: %w", err)
@@ -167,7 +176,7 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 	receipt, err := s.bridge.CreateSession(ctx, BridgeSessionRequest{
 		ClientSessionID: input.ClientSessionID.String(), ActorID: input.OwnerID.String(),
 		ActorType: input.ActorType, ActorLabel: input.ActorLabel,
-		AuthorizationRef: delegation.Reference, Intent: input.Intent,
+		AuthorizationRef: delegation.Reference, Intent: sessionIntentSummary(input.Intent), Objective: input.Intent,
 		ProductVersion: currentProductDocumentationVersion(), Context: productContext,
 	}, input.ClientSessionID.String())
 	if err != nil {
@@ -188,20 +197,28 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 }
 
 func validateCreateSession(input CreateSessionInput) error {
-	if input.ClientSessionID == uuid.Nil || input.OwnerID == uuid.Nil || input.ActorType != "user" || strings.TrimSpace(input.ActorLabel) == "" || len(input.ActorLabel) > 128 || strings.TrimSpace(input.Intent) == "" || len(input.Intent) > 128 || len(input.Trigger) > 128 || len(input.CurrentUIContext) > 255 || len(input.Resources) > 25 {
-		return fmt.Errorf("Charlie session request is invalid")
+	if input.ClientSessionID == uuid.Nil || input.OwnerID == uuid.Nil || input.ActorType != "user" || strings.TrimSpace(input.ActorLabel) == "" || len(input.ActorLabel) > 128 || strings.TrimSpace(input.Intent) == "" || len(input.Intent) > maxSessionObjectiveBytes || len(input.Trigger) > 128 || len(input.CurrentUIContext) > 255 || len(input.Resources) > 25 {
+		return ErrInvalidSessionRequest
 	}
 	seenIDs := make(map[string]struct{}, len(input.Resources))
 	for _, resource := range input.Resources {
 		if !allowedSessionResource(resource) {
-			return fmt.Errorf("Charlie session resource is invalid")
+			return ErrInvalidSessionRequest
 		}
 		if _, duplicate := seenIDs[resource.ID]; duplicate {
-			return fmt.Errorf("Charlie session resource ID is duplicated")
+			return ErrInvalidSessionRequest
 		}
 		seenIDs[resource.ID] = struct{}{}
 	}
 	return nil
+}
+
+func sessionIntentSummary(objective string) string {
+	runes := []rune(strings.TrimSpace(objective))
+	if len(runes) > maxSessionIntentCharacters {
+		runes = runes[:maxSessionIntentCharacters]
+	}
+	return string(runes)
 }
 
 func validSREContext(value SREContext, installationID string) bool {

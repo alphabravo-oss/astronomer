@@ -68,7 +68,7 @@ func (b *RuntimeBridge) CreateSession(ctx context.Context, input BridgeSessionRe
 	}
 	request := contract.CreateSession{
 		AuthorizationRef: input.AuthorizationRef,
-		Intent:           input.Intent, Objective: input.Intent, ProductVersion: input.ProductVersion,
+		Intent:           input.Intent, Objective: input.Objective, ProductVersion: input.ProductVersion,
 		RequestId: key, Resources: resources,
 	}
 	request.Actor.Id = input.ActorID

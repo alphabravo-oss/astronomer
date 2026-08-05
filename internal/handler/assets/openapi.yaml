@@ -157,7 +157,7 @@ components:
       required: [client_session_id, intent]
       properties:
         client_session_id: {type: string, format: uuid}
-        intent: {type: string, minLength: 1, maxLength: 128}
+        intent: {type: string, minLength: 1, maxLength: 4096}
         trigger: {type: string, maxLength: 128}
         current_ui_context: {type: string, maxLength: 255}
         resources:
@@ -171,7 +171,7 @@ components:
       required: [client_message_id, message]
       properties:
         client_message_id: {type: string, format: uuid}
-        message: {type: string, minLength: 1, maxLength: 65536}
+        message: {type: string, minLength: 1, maxLength: 32768}
     CharlieAbortRequest:
       type: object
       additionalProperties: false

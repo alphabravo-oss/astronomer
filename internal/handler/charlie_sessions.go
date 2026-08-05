@@ -106,6 +106,10 @@ func (h *CharlieSessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Intent: request.Intent, Trigger: request.Trigger, CurrentUIContext: request.CurrentUIContext, Resources: request.Resources,
 	})
 	if err != nil {
+		if errors.Is(err, charlie.ErrInvalidSessionRequest) {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie session request")
+			return
+		}
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie session is unavailable")
 		return
 	}

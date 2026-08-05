@@ -208,7 +208,7 @@ function CharlieDrawer() {
       if (!id) {
         const s = await createCharlieSession({
           clientSessionId: crypto.randomUUID(),
-          intent: message.slice(0, 128),
+          intent: message,
           trigger: "user_chat",
           currentUiContext: location.pathname.slice(0, 255),
           resources: resources.map(({ label: _, summary: __, ...r }) => r),
@@ -360,7 +360,7 @@ function CharlieDrawer() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={3}
-          maxLength={65536}
+          maxLength={sessionId ? 32768 : 4096}
           className="w-full resize-none rounded-lg border bg-background p-3 text-sm"
           placeholder="Ask Charlie…"
         />

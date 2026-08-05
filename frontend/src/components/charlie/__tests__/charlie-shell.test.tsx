@@ -98,9 +98,11 @@ describe("Charlie global shell accessibility", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
     const composer = await screen.findByLabelText("Message Charlie");
-    fireEvent.change(composer, { target: { value: "Inspect the control plane" } });
+    const objective = "Inspect the control plane and correlate agent fleet heartbeats, connection history, authentication results, server ownership, tunnel health, and recent rollout changes";
+    fireEvent.change(composer, { target: { value: objective } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(createCharlieSession).toHaveBeenCalledTimes(1));
+    expect(createCharlieSession).toHaveBeenCalledWith(expect.objectContaining({ intent: objective }));
     expect(sendCharlieMessage).not.toHaveBeenCalled();
 
     fireEvent.change(composer, { target: { value: "Now check tunnel health" } });
