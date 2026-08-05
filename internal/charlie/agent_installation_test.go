@@ -39,7 +39,7 @@ func (b *fakeAgentBridge) CentralHealth(context.Context) error {
 	b.calls = append(b.calls, "central-health")
 	return nil
 }
-func (b *fakeAgentBridge) VerifyArtifactDigests(context.Context, string, string) error {
+func (b *fakeAgentBridge) VerifyArtifactDigests(context.Context, string, string, string) error {
 	b.calls = append(b.calls, "artifact-digests")
 	return nil
 }
@@ -415,7 +415,11 @@ func TestAgentInstallerReadinessUninstallDisconnectAndReconnect(t *testing.T) {
 	replicas := int32(2)
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName, Namespace: DefaultCharlieAgentNamespace},
-		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas}, Status: appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "agent", Image: spec.ImageReference}}}},
+		},
+		Status: appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
 	}
 	if _, err := kube.AppsV1().StatefulSets(DefaultCharlieAgentNamespace).Create(context.Background(), statefulSet, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
@@ -425,6 +429,14 @@ func TestAgentInstallerReadinessUninstallDisconnectAndReconnect(t *testing.T) {
 	status, err := installer.WaitReady(ctx, spec)
 	if err != nil || !status.Ready() {
 		t.Fatalf("readiness diagnostics failed: status=%+v err=%v", status, err)
+	}
+	application, _ = appResource.Get(context.Background(), receipt.Names.Application, metav1.GetOptions{})
+	application.SetAnnotations(map[string]string{"astronomer.io/charlie-chart-digest": strings.Repeat("f", 64)})
+	if _, err := appResource.Update(context.Background(), application, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if mismatched, err := installer.Status(context.Background(), spec); err != nil || mismatched.ArtifactsVerified {
+		t.Fatalf("mismatched immutable artifact was accepted: status=%+v err=%v", mismatched, err)
 	}
 	if err := installer.Uninstall(context.Background(), spec); err != nil {
 		t.Fatal(err)

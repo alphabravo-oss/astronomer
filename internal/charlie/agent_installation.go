@@ -81,7 +81,7 @@ type AgentBridgeStatus struct {
 type AgentBridgeLifecycle interface {
 	Status(context.Context) (AgentBridgeStatus, error)
 	CentralHealth(context.Context) error
-	VerifyArtifactDigests(context.Context, string, string) error
+	VerifyArtifactDigests(context.Context, string, string, string) error
 	Disable(context.Context) error
 	StopTriggerDispatch(context.Context) error
 	SettleStreams(context.Context) error
@@ -359,7 +359,17 @@ func (i *AgentInstaller) Status(ctx context.Context, spec AgentInstallSpec) (Age
 	status.LeaderElected, status.StandbyVisible = bridgeStatus.LeaderElected, bridgeStatus.StandbyVisible
 	status.ProtocolCompatible = bridgeStatus.ProtocolCompatible && bridgeStatus.AgentProtocolVersion == contract.AgentProtocolVersion && bridgeStatus.BridgeProtocolVersion == contract.BridgeProtocolVersion
 	status.CentralHealthy = i.bridge.CentralHealth(ctx) == nil
-	status.ArtifactsVerified = i.bridge.VerifyArtifactDigests(ctx, spec.ChartDigest, spec.ImageDigest) == nil
+	annotations := application.GetAnnotations()
+	targetRevision, _, _ := unstructured.NestedString(application.Object, "spec", "source", "targetRevision")
+	runningImage := ""
+	if len(statefulSet.Spec.Template.Spec.Containers) == 1 {
+		runningImage = statefulSet.Spec.Template.Spec.Containers[0].Image
+	}
+	localArtifactsVerified := annotations["astronomer.io/charlie-chart-digest"] == spec.ChartDigest &&
+		annotations["astronomer.io/charlie-image-digest"] == spec.ImageDigest &&
+		targetRevision == spec.ChartDigest &&
+		runningImage == strings.TrimSuffix(spec.ImageReference, "@"+spec.ImageDigest)+"@"+spec.ImageDigest
+	status.ArtifactsVerified = localArtifactsVerified && i.bridge.VerifyArtifactDigests(ctx, spec.ChartVersion, spec.ChartDigest, spec.ImageDigest) == nil
 	return status, nil
 }
 

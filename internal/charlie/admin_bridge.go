@@ -160,13 +160,12 @@ func (b *managedAgentLifecycleBridge) CentralHealth(ctx context.Context) error {
 	return nil
 }
 
-func (b *managedAgentLifecycleBridge) VerifyArtifactDigests(ctx context.Context, chartDigest, imageDigest string) error {
-	connection, ok := b.bridge.configurationConnection(ctx)
-	if !ok || connection.ChartDigest != chartDigest || connection.ImageDigest != imageDigest {
-		return fmt.Errorf("Charlie artifact metadata does not match")
+func (b *managedAgentLifecycleBridge) VerifyArtifactDigests(ctx context.Context, chartVersion, chartDigest, imageDigest string) error {
+	if normalizeDigest(chartDigest) == "" || normalizeDigest(imageDigest) == "" || strings.TrimSpace(chartVersion) == "" {
+		return fmt.Errorf("Charlie artifact metadata is incomplete")
 	}
 	status, err := b.bridge.AdminStatus(ctx)
-	if err != nil || status.ArtifactVersion != connection.ChartVersion {
+	if err != nil || status.ArtifactVersion != chartVersion {
 		return fmt.Errorf("Charlie agent artifact version is unverified")
 	}
 	return nil
