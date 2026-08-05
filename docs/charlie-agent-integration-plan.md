@@ -1492,6 +1492,11 @@ the minimum authorized evidence and correlate, in order:
 
 ##### Agent 1.0.15 approval and actionable-alert addendum
 
+- Astronomer commit `238b415` deployed as exact server, worker, migrate, and
+  frontend tag `charlie-238b415`. The self-management application reconciled
+  `Synced/Healthy`; the public UI and health endpoint returned `200`; the Charlie
+  agent remained `2/2` ready at `1.0.15`; and authoritative `read_only` revision
+  `51` survived the rollout.
 - Charlie commit `690fce010a0ff494d5396d5db4d9b09da7346199` supplied
   signed agent/chart `1.0.15` artifacts. The replacement used immutable image
   digest `sha256:9a7760806155454e59e229216fee086853b32a397be0b92f48217fff780eb817`
@@ -1510,6 +1515,13 @@ the minimum authorized evidence and correlate, in order:
   and the local finding transitioned to resolved with `approval_rejected`.
   No approval was consumed and no product action ran. The deployment was then
   restored to acknowledged `read_only` revision `51`.
+- After the `238b415` rollout, read-only session
+  `184c1adc-e6ff-42a0-bc8b-ebbb2b9e41b0` executed six disclosed management-plane
+  reads and proposed one `astronomer.argocd.self_management_sync`. Charlie
+  blocked the write as `authority.read_only_write` and created one central
+  `read_only` finding. Astronomer authorized and persisted exactly one matching
+  open medium finding scoped to `self_management_application:astronomer`; the
+  blocked action had zero product execution receipts.
 
 ##### Agent 1.0.13 and authority-reconciliation addendum
 
