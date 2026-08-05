@@ -86,10 +86,17 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		logModeTransitionFailure(ctx, "mode.auto_prerequisites_incomplete")
 		return ModeState{}, fmt.Errorf("Charlie auto mode prerequisites are incomplete")
 	}
-	requested, err := c.store.SetRequestedMode(ctx, current.ConnectionID, desired, expectedRevision)
-	if err != nil {
-		logModeTransitionFailure(ctx, "mode.local_request_persist_failed")
-		return ModeState{}, fmt.Errorf("persist Charlie requested mode: %w", err)
+	requested := current
+	// A prior attempt may have committed the least-authority local request and
+	// then lost its authoritative readback. Retry that same revision instead of
+	// advancing the local CAS again; this lets an idempotent central transition
+	// be reconciled without weakening the stale-revision check.
+	if current.Requested != desired {
+		requested, err = c.store.SetRequestedMode(ctx, current.ConnectionID, desired, expectedRevision)
+		if err != nil {
+			logModeTransitionFailure(ctx, "mode.local_request_persist_failed")
+			return ModeState{}, fmt.Errorf("persist Charlie requested mode: %w", err)
+		}
 	}
 	remote, err := c.bridge.SetMode(ctx, desired, requested.Revision)
 	if err != nil {

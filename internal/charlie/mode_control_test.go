@@ -12,10 +12,12 @@ type fakeModeStore struct {
 	error          error
 	emergencyCalls int
 	clearCalls     int
+	requestCalls   int
 }
 
 func (f *fakeModeStore) LoadModeState(context.Context) (ModeState, error) { return f.state, f.error }
 func (f *fakeModeStore) SetRequestedMode(_ context.Context, connectionID string, mode Mode, expected int64) (ModeState, error) {
+	f.requestCalls++
 	if f.error != nil || connectionID != f.state.ConnectionID || expected != f.state.Revision {
 		return ModeState{}, errors.New("CAS failed")
 	}
@@ -137,6 +139,22 @@ func TestModeRequestAcceptsEqualAuthoritativeRevision(t *testing.T) {
 	}
 	if state.Requested != ModeDisabled || state.Verified != ModeDisabled || state.Revision != 5 {
 		t.Fatalf("equal authoritative revision was not committed: %+v", state)
+	}
+}
+
+func TestModeRequestRetriesPendingLocalRequestWithoutAdvancingRevision(t *testing.T) {
+	state := activeModeState()
+	state.Requested = ModeDisabled
+	state.Verified = ModeReadOnly
+	state.Revision = 5
+	store := &fakeModeStore{state: state}
+	controller, _ := NewModeController(store, equalRevisionModeBridge{})
+	got, err := controller.Request(context.Background(), ModeDisabled, 5, ModePrerequisites{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.requestCalls != 0 || got.Requested != ModeDisabled || got.Verified != ModeDisabled || got.Revision != 5 {
+		t.Fatalf("pending request was not reconciled at the same revision: state=%+v request_calls=%d", got, store.requestCalls)
 	}
 }
 
