@@ -243,6 +243,17 @@ func TestGameDayDisabledEmergencyAndAuthorityOutageIsolateEveryCapability(t *tes
 				v.FeatureEnabled = false
 				return &v
 			}(), want: DeniedFeatureDisabled},
+			{name: "enabled_without_activation", facts: func() *AuthorityInput {
+				v := allowedWriteFacts(ModeApproval)
+				v.Effect = descriptor.Effect
+				v.ConnectionActive = false
+				return &v
+			}(), want: DeniedConnectionInactive},
+			{name: "central_disabled", facts: func() *AuthorityInput {
+				v := allowedWriteFacts(ModeDisabled)
+				v.Effect = descriptor.Effect
+				return &v
+			}(), want: DeniedModeDisabled},
 			{name: "emergency_stop", facts: func() *AuthorityInput {
 				v := allowedWriteFacts(ModeApproval)
 				v.Effect = descriptor.Effect

@@ -84,8 +84,16 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		writeMCPResponse(w, http.StatusBadRequest, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Error: &mcpError{Code: -32600, Message: "invalid_request"}})
 		return
 	}
+	method = rpc.Method
+	// The listener and Service are removed when Charlie becomes inactive, but a
+	// request already accepted by the listener can race that teardown. Recheck
+	// activation before every MCP operation so initialize, notifications, and
+	// discovery cannot disclose or revive a disabled integration in that window.
+	if !h.active(request.Context()) {
+		writeMCPHTTPError(w, http.StatusServiceUnavailable, "integration_inactive")
+		return
+	}
 	if rpc.Method == "notifications/initialized" {
-		method = rpc.Method
 		if len(rpc.ID) != 0 {
 			writeMCPResponse(w, http.StatusBadRequest, mcpResponse{JSONRPC: "2.0", Error: &mcpError{Code: -32600, Message: "invalid_request"}})
 			return
@@ -97,7 +105,6 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		writeMCPResponse(w, http.StatusBadRequest, mcpResponse{JSONRPC: "2.0", Error: &mcpError{Code: -32600, Message: "invalid_request"}})
 		return
 	}
-	method = rpc.Method
 
 	switch rpc.Method {
 	case "initialize":
@@ -111,10 +118,6 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		tools := mcpToolsFor(h.guard.executor)
 		writeMCPResponse(w, http.StatusOK, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Result: map[string]any{"tools": tools, "disclosureDigest": capabilityDisclosureDigest(tools)}})
 	case "tools/call":
-		if !h.active(request.Context()) {
-			writeMCPHTTPError(w, http.StatusServiceUnavailable, "integration_inactive")
-			return
-		}
 		h.handleCall(w, request, rpc)
 	default:
 		writeMCPResponse(w, http.StatusNotFound, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Error: &mcpError{Code: -32601, Message: "method_not_found"}})

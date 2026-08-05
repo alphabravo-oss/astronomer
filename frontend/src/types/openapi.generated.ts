@@ -684,6 +684,9 @@ export interface OpenAPIComponents {
           "state": "creating" | "active" | "waiting_approval" | "completed" | "aborted" | "failed";
           "visibility": "private" | "incident";
           "central_revision": number;
+          "source": "user" | "event";
+          "created_at": string;
+          "updated_at": string;
         };
     CharlieSessionResource: {
           "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";

@@ -52,6 +52,21 @@ describe("Charlie global shell accessibility", () => {
     vi.mocked(subscribeCharlieSessionEvents).mockReturnValue(() => undefined);
   });
 
+  it("does not fetch Charlie overview or history while the drawer is closed", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <CharlieShell><main>Dashboard</main></CharlieShell>
+      </QueryClientProvider>,
+    );
+    await Promise.resolve();
+    expect(screen.queryByRole("dialog", { name: "Charlie" })).toBeNull();
+    expect(getCharlieOverview).not.toHaveBeenCalled();
+    expect(getCharlieHistory).not.toHaveBeenCalled();
+  });
+
   it("opens with the non-command-palette shortcut, exposes route context, and closes with Escape", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -123,6 +138,26 @@ describe("Charlie global shell accessibility", () => {
     fireEvent.change(composer, { target: { value: "Now check tunnel health" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sendCharlieMessage).toHaveBeenCalledWith("session-1", "Now check tunnel health"));
+  });
+
+  it("omits context removed before the first network request", async () => {
+    vi.mocked(createCharlieSession).mockResolvedValue({ id: "session-1" } as never);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <CharlieShell><main>Dashboard</main></CharlieShell>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Alerts" }));
+    fireEvent.change(screen.getByLabelText("Message Charlie"), {
+      target: { value: "Explain the current alert state" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(createCharlieSession).toHaveBeenCalledTimes(1));
+    expect(createCharlieSession).toHaveBeenCalledWith(
+      expect.objectContaining({ resources: [] }),
+    );
   });
 
   it("restores the latest authorized private user session and displays its effective mode", async () => {

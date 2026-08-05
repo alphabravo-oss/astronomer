@@ -17,6 +17,7 @@ import (
 type sessionAccessQueriesFake struct {
 	connection sqlc.CharlieConnection
 	session    sqlc.CharlieSession
+	candidates []sqlc.CharlieSession
 	resources  []sqlc.CharlieSessionResource
 	created    []sqlc.CreateCharlieDelegationParams
 	aborted    int
@@ -33,6 +34,31 @@ func (f *sessionAccessQueriesFake) GetCharlieSession(context.Context, uuid.UUID)
 }
 func (f *sessionAccessQueriesFake) ListCharlieSessionResources(context.Context, uuid.UUID) ([]sqlc.CharlieSessionResource, error) {
 	return f.resources, nil
+}
+func (f *sessionAccessQueriesFake) ListCharlieSessionResourcesBatch(_ context.Context, sessionIDs []uuid.UUID) ([]sqlc.CharlieSessionResource, error) {
+	allowed := make(map[uuid.UUID]struct{}, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		allowed[sessionID] = struct{}{}
+	}
+	result := make([]sqlc.CharlieSessionResource, 0, len(f.resources))
+	for _, resource := range f.resources {
+		if _, ok := allowed[resource.SessionID]; ok {
+			result = append(result, resource)
+		}
+	}
+	return result, nil
+}
+func (f *sessionAccessQueriesFake) ListCharlieAccessibleSessionCandidates(_ context.Context, params sqlc.ListCharlieAccessibleSessionCandidatesParams) ([]sqlc.CharlieSession, error) {
+	rows := f.candidates
+	if rows == nil {
+		rows = []sqlc.CharlieSession{f.session}
+	}
+	start := int(params.PageOffset)
+	if start >= len(rows) {
+		return nil, nil
+	}
+	end := min(len(rows), start+int(params.PageLimit))
+	return rows[start:end], nil
 }
 func (f *sessionAccessQueriesFake) ListCharlieSessionsForOwner(context.Context, sqlc.ListCharlieSessionsForOwnerParams) ([]sqlc.CharlieSession, error) {
 	return []sqlc.CharlieSession{f.session}, nil
@@ -63,17 +89,29 @@ func (f *sessionAccessQueriesFake) UpdateCharlieSessionCursor(_ context.Context,
 }
 
 type sessionAuthorizerFake struct {
-	use      bool
-	incident bool
-	calls    int
+	use               bool
+	incident          bool
+	incidentResources map[string]bool
+	calls             int
 }
 
 func (f *sessionAuthorizerFake) CanUseCharlie(context.Context, uuid.UUID) (bool, error) {
 	f.calls++
 	return f.use, nil
 }
-func (f *sessionAuthorizerFake) CanReadIncidentResources(context.Context, uuid.UUID, []sqlc.CharlieSessionResource) (bool, error) {
+func (f *sessionAuthorizerFake) CanReadIncidentResources(_ context.Context, _ uuid.UUID, resources []sqlc.CharlieSessionResource) (bool, error) {
 	f.calls++
+	if f.incidentResources != nil {
+		if len(resources) == 0 {
+			return false, nil
+		}
+		for _, resource := range resources {
+			if !f.incidentResources[resource.ResourceID] {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
 	return f.incident, nil
 }
 
@@ -184,6 +222,49 @@ func TestCurrentModeUsesLiveUserAndEffectiveConnectionAuthority(t *testing.T) {
 	authorizer.use = false
 	if _, err := service.CurrentMode(context.Background(), actor); err == nil {
 		t.Fatal("revoked Charlie access still disclosed the current mode")
+	}
+}
+
+func TestListAccessiblePreservesPrivateOwnershipAndFiltersEveryIncidentResource(t *testing.T) {
+	actor := uuid.New()
+	queries, _ := readyPrivateAccess(actor)
+	connectionID := queries.connection.ID
+	ownPrivate := queries.session
+	foreignPrivate := ownPrivate
+	foreignPrivate.ID = uuid.New()
+	foreignPrivate.OwnerUserID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	allowedIncident := ownPrivate
+	allowedIncident.ID = uuid.New()
+	allowedIncident.OwnerUserID = pgtype.UUID{}
+	allowedIncident.Source = "event"
+	allowedIncident.Visibility = "incident"
+	deniedIncident := allowedIncident
+	deniedIncident.ID = uuid.New()
+	queries.candidates = []sqlc.CharlieSession{ownPrivate, foreignPrivate, allowedIncident, deniedIncident}
+	queries.resources = []sqlc.CharlieSessionResource{
+		{SessionID: allowedIncident.ID, ResourceType: "agent_connection_record", ResourceID: "agent-a", RequiredVerb: "read"},
+		{SessionID: allowedIncident.ID, ResourceType: "alert", ResourceID: "alert-a", RequiredVerb: "read"},
+		{SessionID: deniedIncident.ID, ResourceType: "agent_connection_record", ResourceID: "agent-a", RequiredVerb: "read"},
+		{SessionID: deniedIncident.ID, ResourceType: "alert", ResourceID: "alert-denied", RequiredVerb: "read"},
+	}
+	authorizer := &sessionAuthorizerFake{use: true, incidentResources: map[string]bool{
+		"agent-a": true,
+		"alert-a": true,
+	}}
+	service, err := NewSessionAccessService(queries, authorizer, &contentBridgeFake{}, &sessionAuditFake{}, func() bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := service.ListAccessible(context.Background(), actor, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].ID != ownPrivate.ID || rows[1].ID != allowedIncident.ID {
+		t.Fatalf("accessible rows=%#v connection=%s", rows, connectionID)
+	}
+	rows, err = service.ListAccessible(context.Background(), actor, 1, 10)
+	if err != nil || len(rows) != 1 || rows[0].ID != allowedIncident.ID {
+		t.Fatalf("accessible offset rows=%#v err=%v", rows, err)
 	}
 }
 

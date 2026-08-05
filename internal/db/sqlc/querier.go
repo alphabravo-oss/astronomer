@@ -1154,6 +1154,7 @@ type Querier interface {
 	// Generated sqlc output is the canonical Go API for this surface.
 	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
+	ListCharlieAccessibleSessionCandidates(ctx context.Context, arg ListCharlieAccessibleSessionCandidatesParams) ([]CharlieSession, error)
 	ListCharlieAmbiguousReceipts(ctx context.Context, limit int32) ([]CharlieActionReceipt, error)
 	ListCharlieApprovalCandidateSessions(ctx context.Context) ([]CharlieSession, error)
 	ListCharlieAutomationPolicies(ctx context.Context, connectionID uuid.UUID) ([]CharlieAutomationPolicy, error)
@@ -1161,6 +1162,7 @@ type Querier interface {
 	ListCharlieFindingSyncCandidateSessions(ctx context.Context, connectionID uuid.UUID) ([]CharlieSession, error)
 	ListCharlieFindings(ctx context.Context, arg ListCharlieFindingsParams) ([]CharlieFinding, error)
 	ListCharlieSessionResources(ctx context.Context, sessionID uuid.UUID) ([]CharlieSessionResource, error)
+	ListCharlieSessionResourcesBatch(ctx context.Context, sessionIds []uuid.UUID) ([]CharlieSessionResource, error)
 	ListCharlieSessionsForOwner(ctx context.Context, arg ListCharlieSessionsForOwnerParams) ([]CharlieSession, error)
 	ListCharlieTriggerEventsForAdmin(ctx context.Context, arg ListCharlieTriggerEventsForAdminParams) ([]CharlieTriggerEvent, error)
 	ListCharlieTriggerRules(ctx context.Context, connectionID uuid.UUID) ([]CharlieTriggerRule, error)

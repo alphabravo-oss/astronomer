@@ -75,6 +75,82 @@ func TestDecideAuthorityDenialPrecedence(t *testing.T) {
 	}
 }
 
+func TestDecideAuthorityExhaustiveDenyPrecedenceByMode(t *testing.T) {
+	now := time.Now()
+	type gate struct {
+		name string
+		want DenialCode
+		set  func(*AuthorityInput)
+	}
+	common := []gate{
+		{"feature", DeniedFeatureDisabled, func(v *AuthorityInput) { v.FeatureEnabled = false }},
+		{"connection", DeniedConnectionInactive, func(v *AuthorityInput) { v.ConnectionActive = false }},
+		{"emergency", DeniedEmergencyDisabled, func(v *AuthorityInput) { v.EmergencyDisabled = true }},
+		{"mode", DeniedModeDisabled, func(v *AuthorityInput) { v.Mode = ModeDisabled }},
+		{"destructive", DeniedDestructive, func(v *AuthorityInput) { v.Destructive = true }},
+		{"disclosure", DeniedDisclosureChanged, func(v *AuthorityInput) { v.DisclosureCurrent = false }},
+		{"authorization", DeniedAuthorization, func(v *AuthorityInput) { v.LiveAuthorized = false }},
+	}
+	write := []gate{
+		{"idempotency", DeniedIdempotency, func(v *AuthorityInput) { v.IdempotencyKeyPresent = false }},
+		{"verification", DeniedVerification, func(v *AuthorityInput) { v.VerificationDeclared = false }},
+		{"fencing", DeniedStaleFencing, func(v *AuthorityInput) { v.CurrentFencingEpoch++ }},
+		{"ambiguous", DeniedAmbiguousPriorAttempt, func(v *AuthorityInput) { v.AmbiguousPriorAttempt = true }},
+		{"precondition", DeniedPrecondition, func(v *AuthorityInput) { v.PreconditionsMet = false }},
+	}
+	matrices := []struct {
+		name  string
+		mode  Mode
+		gates []gate
+	}{
+		{
+			name: "read_only", mode: ModeReadOnly,
+			gates: append(append([]gate{}, common...), gate{"read_only_write", DeniedReadOnlyWrite, func(*AuthorityInput) {}}),
+		},
+		{
+			name: "approval", mode: ModeApproval,
+			gates: append(append(append([]gate{}, common...), write...),
+				gate{"approval_required", DeniedApprovalRequired, func(v *AuthorityInput) { v.ApprovalPresent = false }},
+				gate{"approval_exact", DeniedApprovalInvalid, func(v *AuthorityInput) { v.ApprovalExact = false }},
+				gate{"approval_expired", DeniedApprovalInvalid, func(v *AuthorityInput) { v.ApprovalExpiresAt = now }},
+			),
+		},
+		{
+			name: "auto", mode: ModeAuto,
+			gates: append(append(append([]gate{}, common...), write...),
+				gate{"eligibility", DeniedNotAutoEligible, func(v *AuthorityInput) { v.AutoEligible = false }},
+				gate{"allowlist", DeniedNotAllowlisted, func(v *AuthorityInput) { v.Allowlisted = false }},
+				gate{"scope", DeniedScope, func(v *AuthorityInput) { v.ScopeAllowed = false }},
+				gate{"budget", DeniedBudget, func(v *AuthorityInput) { v.BudgetAvailable = false }},
+				gate{"cooldown", DeniedCooldown, func(v *AuthorityInput) { v.CooldownClear = false }},
+				gate{"circuit", DeniedCircuitOpen, func(v *AuthorityInput) { v.CircuitClosed = false }},
+			),
+		},
+	}
+
+	for _, matrix := range matrices {
+		matrix := matrix
+		t.Run(matrix.name, func(t *testing.T) {
+			for index, current := range matrix.gates {
+				index, current := index, current
+				t.Run(current.name, func(t *testing.T) {
+					in := permittedWrite(now)
+					in.Mode = matrix.mode
+					// Fail the selected gate and every lower-priority gate at once.
+					// The selected gate must remain the externally visible denial.
+					for _, lower := range matrix.gates[index:] {
+						lower.set(&in)
+					}
+					got := DecideAuthority(in, now)
+					if got.Allowed || got.Code != current.want {
+						t.Fatalf("decision=%+v want=%s with lower-priority denials also active", got, current.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestDecideAuthorityApprovalIsExactAndExpiring(t *testing.T) {
 	now := time.Now()
 	for _, mutate := range []func(*AuthorityInput){

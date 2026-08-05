@@ -380,6 +380,16 @@ WHERE owner_user_id = sqlc.arg(owner_user_id)
 ORDER BY updated_at DESC, id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
+-- name: ListCharlieAccessibleSessionCandidates :many
+SELECT * FROM charlie_sessions
+WHERE connection_id = sqlc.arg(connection_id)
+  AND (
+    (visibility = 'private' AND source = 'user' AND owner_user_id = sqlc.arg(owner_user_id))
+    OR visibility = 'incident'
+  )
+ORDER BY updated_at DESC, id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
 -- name: UpdateCharlieSessionCursor :one
 UPDATE charlie_sessions
 SET state = sqlc.arg(state),
@@ -423,6 +433,11 @@ ON CONFLICT DO NOTHING;
 
 -- name: ListCharlieSessionResources :many
 SELECT * FROM charlie_session_resources WHERE session_id = $1 ORDER BY resource_type, resource_id, required_verb;
+
+-- name: ListCharlieSessionResourcesBatch :many
+SELECT * FROM charlie_session_resources
+WHERE session_id = ANY(sqlc.arg(session_ids)::uuid[])
+ORDER BY session_id, resource_type, resource_id, required_verb;
 
 -- name: CreateCharlieDelegation :one
 INSERT INTO charlie_delegations (

@@ -426,6 +426,12 @@ export function ConnectionTab() {
         title="Connect or replace Charlie"
         description="Upload a signed onboarding package. It is held only in memory and sent to local validation; package contents are never rendered or persisted by the browser."
       >
+        <p className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+          Model providers, LLM routing, RAG, knowledge sources, and agentic
+          workflows remain administered in the separate Charlie service.
+          Astronomer stores only the product trust, route, mode, policy, and
+          product-agent integration needed to expose authorized capabilities.
+        </p>
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-5 text-sm hover:bg-accent">
           <Upload className="h-4 w-4" />
           <span>{fileName || "Choose JSON package"}</span>
@@ -642,6 +648,12 @@ export function AgentTab() {
     retry: false,
     refetchInterval: 15000,
   });
+  const connection = useQuery({
+    queryKey: queryKeys.charlie.adminConnection,
+    queryFn: getCharlieConnection,
+    retry: false,
+    refetchInterval: 15000,
+  });
   const [confirm, setConfirm] = useState(false);
   const action = useMutation({
     mutationFn: (a: "install" | "upgrade" | "rollback" | "rotate") =>
@@ -672,6 +684,12 @@ export function AgentTab() {
   if (q.isError || !q.data)
     return <Unavailable name="Agent status" retry={() => void q.refetch()} />;
   const a = q.data;
+  const trustReady = Boolean(
+    connection.data?.connected &&
+      connection.data.signingFingerprint &&
+      connection.data.packageDigest,
+  );
+  const actions = agentActionsForState(a.applicationState);
   return (
     <Section
       title="Charlie product agent"
@@ -749,10 +767,10 @@ export function AgentTab() {
         </Table>
       </div>
       <div className="flex flex-wrap gap-2">
-        {agentActionsForState(a.applicationState).map((v) => (
+        {actions.map((v) => (
           <button
             key={v}
-            disabled={action.isPending}
+            disabled={action.isPending || (v === "install" && !trustReady)}
             onClick={() => action.mutate(v)}
             className={button}
           >
@@ -769,6 +787,13 @@ export function AgentTab() {
           Uninstall
         </button>
       </div>
+      {actions.includes("install") && !trustReady && (
+        <p role="status" className="text-sm text-status-warning">
+          Install is unavailable until a signed Charlie onboarding package has
+          been validated and consumed into an active connection with recorded
+          signing and package digests.
+        </p>
+      )}
       <ConfirmDialog
         open={confirm}
         onClose={() => setConfirm(false)}

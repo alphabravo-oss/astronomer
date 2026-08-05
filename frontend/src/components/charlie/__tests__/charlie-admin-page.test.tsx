@@ -290,6 +290,29 @@ describe("Charlie administration acceptance", () => {
     expect(screen.getByRole("button", { name: "Upgrade" })).toBeEnabled();
   });
 
+  it("gates agent installation on a consumed signed connection", async () => {
+    api.getCharlieConnection.mockResolvedValue({ connected: false });
+    api.getCharlieAgent.mockResolvedValue({
+      applicationState: "not_installed",
+      desiredReplicas: 0,
+      readyReplicas: 0,
+      standbyReplicas: [],
+      replicas: [],
+    });
+    renderWithClient(<AgentTab />);
+    expect(await screen.findByRole("button", { name: "Install" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /signed Charlie onboarding package has been validated and consumed/i,
+    );
+    expect(api.runCharlieAgentAction).not.toHaveBeenCalled();
+  });
+
+  it("keeps Charlie-owned intelligence configuration out of Astronomer", async () => {
+    renderWithClient(<ConnectionTab />);
+    expect(await screen.findByText(/Model providers, LLM routing, RAG/i)).toBeInTheDocument();
+    expect(screen.getByText(/remain administered in the separate Charlie service/i)).toBeInTheDocument();
+  });
+
   it("explains every authority mode and blocks elevation until disclosure acknowledgement", async () => {
     renderWithClient(<ModeTab />);
     expect(await screen.findByText("Every write requires exact approval")).toBeInTheDocument();
@@ -396,10 +419,22 @@ describe("Charlie administration acceptance", () => {
   });
 
   it("renders every independent diagnostic without making it core readiness", async () => {
+    api.getCharlieDiagnostics.mockResolvedValue({
+      overall: "degraded",
+      correlationId: "correlation-a",
+      checks: [{
+        id: "product_bridge_mtls",
+        label: "Product bridge mTLS",
+        state: "degraded",
+        summary: "Certificate expires soon",
+        nextAction: "Rotate the product bridge certificate",
+      }],
+    });
     renderWithClient(<DiagnosticsTab />);
     expect(await screen.findByText("Local database and configuration")).toBeInTheDocument();
     expect(screen.getByText("Agent standby replica")).toBeInTheDocument();
     expect(screen.getByText(/never participates in Astronomer's core readiness/i)).toBeInTheDocument();
     expect(screen.getByText("correlation-a")).toBeInTheDocument();
+    expect(screen.getByText(/Next action: Rotate the product bridge certificate/i)).toBeInTheDocument();
   });
 });

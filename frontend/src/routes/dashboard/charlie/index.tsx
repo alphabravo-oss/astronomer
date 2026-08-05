@@ -199,10 +199,14 @@ function Conversations({
     queryFn: listCharlieSessions,
     retry: false,
   });
+  const rows = q.data?.filter((session) => session.visibility === "private") ?? [];
+  const selectedConversation = rows.some((session) => session.id === selected)
+    ? selected
+    : null;
   const h = useQuery({
-    queryKey: queryKeys.charlie.history(selected),
-    queryFn: () => getCharlieHistory(selected!),
-    enabled: !!selected,
+    queryKey: queryKeys.charlie.history(selectedConversation),
+    queryFn: () => getCharlieHistory(selectedConversation!),
+    enabled: !!selectedConversation,
     retry: false,
   });
   if (q.isLoading)
@@ -214,7 +218,7 @@ function Conversations({
   return (
     <div className="grid gap-4 md:grid-cols-[18rem_1fr]">
       <div className="space-y-2">
-        {q.data?.map((s) => (
+        {rows.map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
@@ -224,16 +228,32 @@ function Conversations({
             )}
           >
             <b className="block truncate text-sm">{s.intent}</b>
-            <StatusBadge status={s.state} />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <StatusBadge status={s.state} />
+              <StatusBadge status="private" label="Private chat" />
+            </div>
           </button>
         ))}
+        {rows.length === 0 && (
+          <EmptyState
+            icon={Bot}
+            title="No private conversations"
+            description="Your private Charlie chats appear here. Shared incident investigations are kept in the Investigations tab."
+          />
+        )}
       </div>
       <div className="rounded-lg border p-4">
-        {!selected ? (
+        {!selectedConversation ? (
           <EmptyState
             icon={Bot}
             title="Select a conversation"
-            description="Conversation IDs stay in the URL for refresh and navigation."
+            description="Only your private user-started conversations can be opened here."
+          />
+        ) : h.isLoading ? (
+          <StatePanel
+            icon={Loader2}
+            iconClassName="animate-spin motion-reduce:animate-none"
+            title="Loading private conversation"
           />
         ) : h.isError ? (
           <QueryFailure label="Conversation" retry={() => void h.refetch()} />
@@ -270,9 +290,15 @@ function Investigations({
     queryFn: listCharlieFindings,
     retry: false,
   });
-  if (q.isError)
+  if (q.isError || findings.isError)
     return (
-      <QueryFailure label="Investigations" retry={() => void q.refetch()} />
+      <QueryFailure
+        label="Investigations"
+        retry={() => {
+          void q.refetch();
+          void findings.refetch();
+        }}
+      />
     );
   const status = params.get("status") ?? "";
   const severity = params.get("severity") ?? "";
@@ -285,12 +311,15 @@ function Investigations({
     .filter(({ session, finding }) =>
       (!status || session.state === status) &&
       (!severity || finding?.severity === severity) &&
-      (!cluster || finding?.affectedResource.id.toLowerCase().includes(cluster.toLowerCase())) &&
+      (!cluster || (
+        finding?.affectedResource.type === "agent_connection_record" &&
+        finding.affectedResource.id.toLowerCase().includes(cluster.toLowerCase())
+      )) &&
       (!source || session.source === source || finding?.source === source) &&
       (!from || !session.createdAt || session.createdAt >= from) &&
       (!to || !session.createdAt || session.createdAt.slice(0, 10) <= to));
   const detail = rows.find(({ session }) => session.id === selected);
-  return rows.length ? (
+  return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 rounded-lg border p-3" aria-label="Investigation filters">
         <FilterField label="Investigation status" value={status} options={["active", "waiting_approval", "completed", "failed", "aborted"]} onChange={(value) => set({ status: value || undefined })} />
@@ -299,8 +328,18 @@ function Investigations({
         <FilterField label="Investigation source" value={source} options={["event", "user"]} onChange={(value) => set({ source: value || undefined })} />
         <FilterField type="date" label="From date" value={from} onChange={(value) => set({ from: value || undefined })} />
         <FilterField type="date" label="To date" value={to} onChange={(value) => set({ to: value || undefined })} />
+        <p className="w-full text-xs text-foreground/70">
+          Agent connection record matches only that exact resource type; other
+          affected resources are not treated as clusters.
+        </p>
       </div>
-      {rows.map(({ session: s, finding }) => (
+      {q.isLoading || findings.isLoading ? (
+        <StatePanel
+          icon={Loader2}
+          iconClassName="animate-spin motion-reduce:animate-none"
+          title="Loading authorized investigations"
+        />
+      ) : rows.length ? rows.map(({ session: s, finding }) => (
         <button
           key={s.id}
           onClick={() => onSelect(s.id)}
@@ -309,16 +348,30 @@ function Investigations({
             selected === s.id && "border-primary",
           )}
         >
-          <b>{s.intent}</b>
-          <span className="ml-2 text-xs text-foreground/70">
+          <div className="flex flex-wrap items-center gap-2">
+            <b>{s.intent}</b>
+            <StatusBadge status="incident" label="Shared incident" />
+            {finding && <StatusBadge status={finding.severity} />}
+          </div>
+          <span className="mt-1 block text-xs text-foreground/70">
             {s.resourceScopeSummary}
           </span>
-          {finding && <span className="ml-2"><StatusBadge status={finding.severity} /></span>}
         </button>
-      ))}
+      )) : (
+        <EmptyState
+          icon={Clock}
+          title="No investigations match"
+          description="Shared incident investigations appear only while you can read every affected Astronomer resource. Try changing the filters."
+        />
+      )}
       {detail && (
         <section className="rounded-lg border p-4" aria-label="Investigation detail">
           <h2 className="font-medium">{detail.session.intent}</h2>
+          <p className="mt-1 text-xs text-foreground/70">
+            Shared incident metadata is visible because you can currently read
+            every affected Astronomer resource. Evidence remains in Charlie and
+            is fetched only through authorized detail requests.
+          </p>
           {detail.finding && (
             <>
               <Link className="mt-2 inline-block text-sm text-primary underline" href={resourceHref(detail.finding.affectedResource.type, detail.finding.affectedResource.id)}>
@@ -334,12 +387,6 @@ function Investigations({
         </section>
       )}
     </div>
-  ) : (
-    <EmptyState
-      icon={Clock}
-      title="No investigations"
-      description="Incident-scoped Charlie sessions appear here."
-    />
   );
 }
 function Findings({
@@ -375,10 +422,15 @@ function Findings({
       id: string;
       a: "acknowledge" | "dismiss" | "resolve";
     }) => transitionCharlieFinding(id, a),
-    onSuccess: () =>
-      void qc.invalidateQueries({ queryKey: queryKeys.charlie.findings }),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.findings });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.charlie.finding(variables.id),
+      });
+    },
   });
-  if (q.isError) return <QueryFailure label="Findings" />;
+  if (q.isError)
+    return <QueryFailure label="Findings" retry={() => void q.refetch()} />;
   const status = params.get("status") ?? "";
   const severity = params.get("severity") ?? "";
   const source = params.get("source") ?? "";
@@ -407,7 +459,13 @@ function Findings({
       </div>
       <div className="grid gap-4 md:grid-cols-[20rem_1fr]">
       <div className="space-y-2">
-        {rows?.map((f) => (
+        {q.isLoading ? (
+          <StatePanel
+            icon={Loader2}
+            iconClassName="animate-spin motion-reduce:animate-none"
+            title="Loading findings"
+          />
+        ) : rows?.length ? rows.map((f) => (
           <button
             key={f.id}
             onClick={() => onSelect(f.id)}
@@ -425,7 +483,13 @@ function Findings({
             </p>
             <p className="text-xs text-foreground/70">{f.repeatCount ?? 1} occurrence{(f.repeatCount ?? 1) === 1 ? "" : "s"}</p>
           </button>
-        ))}
+        )) : (
+          <EmptyState
+            icon={ShieldCheck}
+            title="No findings match"
+            description="Try changing the finding filters."
+          />
+        )}
       </div>
       <div className="rounded-lg border p-4">
         {!selected ? (
@@ -567,9 +631,13 @@ function Findings({
                     )}
                 </div>
               )}
-              {canTriage ? (
+              {canTriage && ["open", "acknowledged"].includes(d.data.state) ? (
                 <div className="flex flex-wrap gap-2">
-                  {(["acknowledge", "dismiss", "resolve"] as const).map((a) => (
+                  {([
+                    ...(d.data.state === "open" ? ["acknowledge" as const] : []),
+                    "dismiss" as const,
+                    "resolve" as const,
+                  ]).map((a) => (
                     <button
                       key={a}
                       disabled={action.isPending}
@@ -580,9 +648,14 @@ function Findings({
                     </button>
                   ))}
                 </div>
-              ) : (
+              ) : !canTriage ? (
                 <p className="text-sm text-foreground/70">
                   Requires charlie:read to update finding lifecycle.
+                </p>
+              ) : (
+                <p className="text-sm text-foreground/70">
+                  This finding is {d.data.state}; no further lifecycle action is
+                  available.
                 </p>
               )}
               {action.isError && (
@@ -620,9 +693,20 @@ function Approvals({ selected }: { selected: string | null }) {
   });
   if (q.isError)
     return <QueryFailure label="Approvals" retry={() => void q.refetch()} />;
+  if (q.isLoading)
+    return (
+      <StatePanel
+        icon={Loader2}
+        iconClassName="animate-spin motion-reduce:animate-none"
+        title="Loading approvals"
+      />
+    );
+  const approvals = [...(q.data ?? [])].sort((left, right) =>
+    left.id === selected ? -1 : right.id === selected ? 1 : 0,
+  );
   return (
     <div className="space-y-3">
-      {q.data?.map((a) => (
+      {approvals.map((a) => (
         <article
           key={a.id}
           id={`approval-${a.id}`}
@@ -676,7 +760,7 @@ function Approvals({ selected }: { selected: string | null }) {
           )}
         </article>
       ))}
-      {q.data?.length === 0 && (
+      {approvals.length === 0 && (
         <EmptyState
           icon={CheckCircle2}
           title="No pending approvals"

@@ -33,14 +33,19 @@ type charlieAccessFake struct {
 	message                 uuid.UUID
 	messageBody             string
 	result                  json.RawMessage
+	sessions                []sqlc.CharlieSession
+	mode                    charlie.Mode
 }
 
 func (f *charlieAccessFake) CurrentMode(context.Context, uuid.UUID) (charlie.Mode, error) {
+	if f.mode != "" {
+		return f.mode, nil
+	}
 	return charlie.ModeReadOnly, nil
 }
 
-func (f *charlieAccessFake) ListPrivate(context.Context, uuid.UUID, int32, int32) ([]sqlc.CharlieSession, error) {
-	return nil, nil
+func (f *charlieAccessFake) ListAccessible(context.Context, uuid.UUID, int32, int32) ([]sqlc.CharlieSession, error) {
+	return f.sessions, nil
 }
 func (f *charlieAccessFake) Get(context.Context, uuid.UUID, uuid.UUID) (charlie.SessionView, error) {
 	return charlie.SessionView{}, nil
@@ -93,6 +98,28 @@ func TestCharlieSessionCreateReturnsOnlySafeMetadata(t *testing.T) {
 	}
 	if creator.input.OwnerID != actor || creator.input.ClientSessionID != clientID || creator.input.ActorType != "user" {
 		t.Fatalf("unexpected creator input: %#v", creator.input)
+	}
+}
+
+func TestCharlieSessionListDistinguishesAuthorizedPrivateAndSharedMetadata(t *testing.T) {
+	actor := uuid.New()
+	access := &charlieAccessFake{mode: charlie.ModeApproval, sessions: []sqlc.CharlieSession{
+		{ID: uuid.New(), ClientSessionID: uuid.New(), Source: "user", Visibility: "private", State: "active", Intent: "private chat", CharlieSessionID: "central-private"},
+		{ID: uuid.New(), ClientSessionID: uuid.New(), Source: "event", Visibility: "incident", State: "active", Intent: "shared incident", CharlieSessionID: "central-incident"},
+	}}
+	recorder := httptest.NewRecorder()
+	NewCharlieSessionHandler(&charlieCreatorFake{}, access).List(recorder, authenticatedCharlieRequest(http.MethodGet, "/", "", actor, "jwt"))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	for _, expected := range []string{`"mode":"approval"`, `"visibility":"private"`, `"visibility":"incident"`, `"source":"user"`, `"source":"event"`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("missing %s in %s", expected, body)
+		}
+	}
+	if strings.Contains(body, "central-private") || strings.Contains(body, "central-incident") {
+		t.Fatalf("list exposed central session identifiers: %s", body)
 	}
 }
 

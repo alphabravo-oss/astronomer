@@ -195,6 +195,17 @@ async function mockApi(page: Page, user = adminUser) {
         json: apiResponse({
           mode: 'approval',
           sessions: [{
+            id: 'session-shared-incident',
+            clientSessionId: 'client-session-shared-incident',
+            intent: 'Investigate agent connection health',
+            resourceScopeSummary: 'agent_connection_record:connection-1',
+            state: 'active',
+            visibility: 'incident',
+            centralRevision: 5,
+            source: 'event',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }, {
             id: 'session-private-user',
             clientSessionId: 'client-session-private-user',
             intent: 'Inspect alert health',
@@ -212,11 +223,8 @@ async function mockApi(page: Page, user = adminUser) {
     if (path === '/charlie/sessions/session-private-user/history' && method === 'GET') {
       return route.fulfill({
         json: apiResponse({ messages: [{
-          id: 'message-charlie', role: 'assistant', content: 'The selected alert is under investigation.',
-          tools: [{
-            id: 'tool-read', capability: 'astronomer.alert.inspect', effect: 'read alert state',
-            risk: 'low', argumentSummary: ['alert_id'], state: 'complete', result: 'Alert remains active.',
-          }],
+          itemId: 'message-charlie', kind: 'assistant_message',
+          redactedContent: 'The selected alert is under investigation.',
         }] }),
       });
     }
@@ -224,9 +232,9 @@ async function mockApi(page: Page, user = adminUser) {
       return route.fulfill({
         json: apiResponse({ items: [{
           id: 'f-1', title: 'Bounded finding', severity: 'high', state: 'open',
-          source: 'alert', repeatCount: 2, sessionId: 'session-private-user',
+          source: 'alert', repeatCount: 2, sessionId: 'session-shared-incident',
           createdAt: new Date(Date.now() - 60_000).toISOString(), updatedAt: new Date().toISOString(),
-          affectedResource: { type: 'installation', id: 'cluster-1', requiredVerb: 'read' },
+          affectedResource: { type: 'agent_connection_record', id: 'connection-1', requiredVerb: 'read' },
           summary: 'Review the selected installation.',
         }] }),
       });
@@ -239,7 +247,7 @@ async function mockApi(page: Page, user = adminUser) {
             title: 'Bounded finding',
             severity: 'high',
             state: 'open',
-            affectedResource: { type: 'installation', id: 'cluster-1', requiredVerb: 'read' },
+            affectedResource: { type: 'agent_connection_record', id: 'connection-1', requiredVerb: 'read' },
             summary: 'Review the selected installation.',
             confidence: 0.9,
             operatorChecks: [],
@@ -402,8 +410,8 @@ test('settings general form remains usable on responsive viewports', async ({ co
 test('Charlie launcher exposes only bounded route context across product surfaces', async ({ context, page }) => {
   await seedAuth(context, page, adminUser);
   const cases = [
-    ['/dashboard/clusters/cluster-1', 'Installation'],
-    ['/dashboard/clusters/cluster-1/tools', 'Cluster components'],
+    ['/dashboard/clusters/cluster-1', 'Cluster agent connection'],
+    ['/dashboard/clusters/cluster-1/tools', 'Cluster agent connection'],
     ['/dashboard/alerting', 'Alerts'],
     ['/dashboard/agents', 'Agent fleet'],
     ['/dashboard/backups', 'Backups'],
@@ -443,6 +451,21 @@ test('Charlie hub and administration deep links survive refresh and history', as
   await expect(page.getByRole('tab', { name: 'access' })).toHaveAttribute('aria-selected', 'true');
 });
 
+test('Charlie hub separates private conversations from authorized shared incidents', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  await page.goto('/dashboard/charlie?tab=conversations');
+  await expect(page.getByText('Inspect alert health')).toBeVisible();
+  await expect(page.getByText('Private chat')).toBeVisible();
+  await expect(page.getByText('Investigate agent connection health')).toHaveCount(0);
+
+  await page.getByRole('tab', { name: 'investigations' }).click();
+  await expect(page.getByText('Investigate agent connection health')).toBeVisible();
+  await expect(page.getByText('Shared incident')).toBeVisible();
+  await expect(page.getByText('Inspect alert health')).toHaveCount(0);
+  await page.getByText('Investigate agent connection health').click();
+  await expect(page.getByText(/you can currently read every affected Astronomer resource/i)).toBeVisible();
+});
+
 test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async ({ context, page }) => {
   await seedAuth(context, page, adminUser);
   await page.goto('/dashboard/alerting');
@@ -450,8 +473,7 @@ test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async
   const drawer = page.getByRole('dialog', { name: 'Charlie' });
   await expect(drawer).toBeVisible();
   await expect(page.getByLabel('Current Charlie mode: approval')).toBeVisible();
-  await page.getByText('astronomer.alert.inspect').click();
-  await expect(page.getByText('alert_id')).toBeVisible();
+  await expect(page.getByText('The selected alert is under investigation.')).toBeVisible();
   const viewportWidth = page.viewportSize()?.width ?? 0;
   const drawerBox = await drawer.boundingBox();
   expect(drawerBox).not.toBeNull();

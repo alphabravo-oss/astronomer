@@ -29,7 +29,7 @@ type CharlieSessionCreator interface {
 }
 
 type CharlieSessionAccess interface {
-	ListPrivate(context.Context, uuid.UUID, int32, int32) ([]sqlc.CharlieSession, error)
+	ListAccessible(context.Context, uuid.UUID, int32, int32) ([]sqlc.CharlieSession, error)
 	CurrentMode(context.Context, uuid.UUID) (charlie.Mode, error)
 	Get(context.Context, uuid.UUID, uuid.UUID) (charlie.SessionView, error)
 	History(context.Context, uuid.UUID, uuid.UUID, string, int) (json.RawMessage, error)
@@ -139,7 +139,7 @@ func (h *CharlieSessionHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := h.access.ListPrivate(r.Context(), mustUserID(actor), int32(offset), int32(limit))
+	rows, err := h.access.ListAccessible(r.Context(), mustUserID(actor), int32(offset), int32(limit))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie session access is denied")
 		return

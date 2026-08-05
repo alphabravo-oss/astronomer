@@ -26,15 +26,19 @@ describe("Charlie message safety and states", () => {
     "policy_denied",
     "expired",
     "waiting_approval",
+    "disabled",
+    "read_only_finding",
+    "approval_required",
     "mcp_denied",
     "auto_blocked",
+    "destructive_denied",
     "verification_failed",
     "emergency_stopped",
   ])("renders %s lifecycle state", (state) => {
     const { unmount } = render(<CharlieLifecycleNotice state={state} />);
     expect(
       screen.getByText(
-        /Reconnecting|Retrying|Partial response|central unavailable|Agent failover|Denied by product policy|Session expired|Waiting for exact approval|MCP request denied|Automatic action blocked|Verification failed|Emergency stop active/,
+        /Reconnecting|Retrying|Partial response|central unavailable|Agent failover|Denied by product policy|Session expired|Waiting for exact approval|Charlie disabled|Read-only finding|Approval required|MCP request denied|Automatic action blocked|Destructive action denied|Verification failed|Emergency stop active/,
       ),
     ).toBeInTheDocument();
     unmount();

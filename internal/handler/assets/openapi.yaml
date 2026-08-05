@@ -181,7 +181,7 @@ components:
     CharlieSessionMetadata:
       type: object
       additionalProperties: false
-      required: [id, client_session_id, intent, resource_scope_summary, state, visibility, central_revision]
+      required: [id, client_session_id, intent, resource_scope_summary, state, visibility, central_revision, source, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         client_session_id: {type: string, format: uuid}
@@ -192,6 +192,9 @@ components:
           enum: [creating, active, waiting_approval, completed, aborted, failed]
         visibility: {type: string, enum: [private, incident]}
         central_revision: {type: integer, format: int64, minimum: 0}
+        source: {type: string, enum: [user, event]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
     CharlieFindingResource:
       type: object
       additionalProperties: false
@@ -17803,7 +17806,7 @@ paths:
   /api/v1/charlie/sessions/:
     get:
       operationId: listCharlieSessions
-      summary: List the authenticated user's private Charlie sessions
+      summary: List Charlie sessions currently visible to the authenticated user
       tags: [charlie]
       security: [{bearerJWT: []}]
       parameters:
@@ -17811,14 +17814,15 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
       responses:
         '200':
-          description: Owner-filtered session metadata; conversation content remains in Charlie.
+          description: Owner-filtered private metadata plus resource-authorized incident metadata; conversation content remains in Charlie.
           content:
             application/json:
               schema:
                 type: object
-                required: [sessions]
+                required: [sessions, mode]
                 properties:
                   sessions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieSessionMetadata'}}
+                  mode: {type: string, enum: [disabled, read_only, approval, auto]}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
     post:

@@ -439,6 +439,20 @@ func TestEveryWriteCapabilityUsesCompleteSafetyEnvelope(t *testing.T) {
 				}
 			})
 
+			t.Run("leader_epoch_changed_after_claim", func(t *testing.T) {
+				first := allowedWriteFacts(ModeApproval)
+				second := first
+				second.CurrentFencingEpoch++
+				authority := &fakeLiveAuthority{facts: []AuthorityInput{first, second}}
+				receipts := &fakeReceipts{}
+				executor := &fakeCapabilityExecutor{}
+				guard, key := newTestActionGuard(t, authority, receipts, executor)
+				result := guard.Execute(context.Background(), signedTestAction(t, key, descriptor.Name, arguments))
+				if result.Code != DeniedStaleFencing || executor.calls != 0 || receipts.claimCalls != 1 || stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) {
+					t.Fatalf("leader change did not fence dispatch: result=%+v execute=%d claims=%d transitions=%v", result, executor.calls, receipts.claimCalls, receipts.transitions)
+				}
+			})
+
 			t.Run("maintenance_deferred", func(t *testing.T) {
 				facts := allowedWriteFacts(ModeApproval)
 				authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}, commitError: &ActionDeferredError{OperationID: "action-a", DeferredUntil: time.Now().Add(time.Hour), ExpiresAt: time.Now().Add(25 * time.Hour)}}

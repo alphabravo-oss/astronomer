@@ -150,7 +150,7 @@ func TestMCPRuntimeBindsOnlyWhileLiveAndStopsOnEmergencyDisable(t *testing.T) {
 	}
 }
 
-func TestMCPRuntimeKeepsOnlyConfigurationDiscoveryWhileModeDisabled(t *testing.T) {
+func TestMCPRuntimeKeepsPrivateListenerFencedWhileModeDisabled(t *testing.T) {
 	runtime, queries := mcpRuntimeFixture(t)
 	queries.connection.RequestedMode = string(ModeDisabled)
 	queries.connection.VerifiedMode = string(ModeDisabled)
@@ -161,7 +161,7 @@ func TestMCPRuntimeKeepsOnlyConfigurationDiscoveryWhileModeDisabled(t *testing.T
 	serving := runtime.listener != nil
 	runtime.mu.Unlock()
 	if !serving {
-		t.Fatal("disabled enrolled integration did not expose bounded mTLS discovery")
+		t.Fatal("disabled enrolled integration did not retain its private listener for later activation")
 	}
 	if state := runtime.config.WriteFence.State(); !state.Closed || !state.Drained {
 		t.Fatalf("disabled discovery opened product writes: %+v", state)

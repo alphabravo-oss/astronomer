@@ -24,10 +24,14 @@ type sessionAccessQueries interface {
 	GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
 	GetCharlieSession(context.Context, uuid.UUID) (sqlc.CharlieSession, error)
 	ListCharlieSessionResources(context.Context, uuid.UUID) ([]sqlc.CharlieSessionResource, error)
-	ListCharlieSessionsForOwner(context.Context, sqlc.ListCharlieSessionsForOwnerParams) ([]sqlc.CharlieSession, error)
 	AbortCharlieSession(context.Context, uuid.UUID) (sqlc.CharlieSession, error)
 	RevokeCharlieDelegationsForSession(context.Context, uuid.UUID) (int64, error)
 	UpdateCharlieSessionCursor(context.Context, sqlc.UpdateCharlieSessionCursorParams) (sqlc.CharlieSession, error)
+}
+
+type accessibleSessionQueries interface {
+	ListCharlieAccessibleSessionCandidates(context.Context, sqlc.ListCharlieAccessibleSessionCandidatesParams) ([]sqlc.CharlieSession, error)
+	ListCharlieSessionResourcesBatch(context.Context, []uuid.UUID) ([]sqlc.CharlieSessionResource, error)
 }
 
 // SessionAccessAuthorizer is deliberately product-owned and live. It must
@@ -101,7 +105,7 @@ type SessionView struct {
 	Remote  json.RawMessage     `json:"remote"`
 }
 
-func (s *SessionAccessService) ListPrivate(ctx context.Context, actorID uuid.UUID, offset, limit int32) ([]sqlc.CharlieSession, error) {
+func (s *SessionAccessService) ListAccessible(ctx context.Context, actorID uuid.UUID, offset, limit int32) ([]sqlc.CharlieSession, error) {
 	if err := s.guardActive(); err != nil {
 		return nil, err
 	}
@@ -113,11 +117,74 @@ func (s *SessionAccessService) ListPrivate(ctx context.Context, actorID uuid.UUI
 		s.audit(ctx, "charlie.session.list", uuid.Nil, actorID, "private", "authorization_denied", 0)
 		return nil, fmt.Errorf("Charlie session access is denied")
 	}
-	rows, err := s.queries.ListCharlieSessionsForOwner(ctx, sqlc.ListCharlieSessionsForOwnerParams{OwnerUserID: pgtype.UUID{Bytes: actorID, Valid: true}, PageOffset: offset, PageLimit: limit})
-	if err != nil {
+	connection, err := s.queries.GetActiveCharlieConnection(ctx)
+	if err != nil || !connection.Active {
 		return nil, fmt.Errorf("Charlie session list is unavailable")
 	}
-	return rows, nil
+	listing, ok := s.queries.(accessibleSessionQueries)
+	if !ok {
+		return nil, fmt.Errorf("Charlie session list is unavailable")
+	}
+	const candidatePageSize int32 = 100
+	result := make([]sqlc.CharlieSession, 0, limit)
+	var candidateOffset, accessibleOffset int32
+	for len(result) < int(limit) {
+		rows, queryErr := listing.ListCharlieAccessibleSessionCandidates(ctx, sqlc.ListCharlieAccessibleSessionCandidatesParams{
+			ConnectionID: connection.ID,
+			OwnerUserID:  pgtype.UUID{Bytes: actorID, Valid: true},
+			PageOffset:   candidateOffset,
+			PageLimit:    candidatePageSize,
+		})
+		if queryErr != nil {
+			return nil, fmt.Errorf("Charlie session list is unavailable")
+		}
+		if len(rows) == 0 {
+			break
+		}
+		incidentIDs := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			if row.Visibility == "incident" {
+				incidentIDs = append(incidentIDs, row.ID)
+			}
+		}
+		resourcesBySession := make(map[uuid.UUID][]sqlc.CharlieSessionResource, len(incidentIDs))
+		if len(incidentIDs) > 0 {
+			resources, resourceErr := listing.ListCharlieSessionResourcesBatch(ctx, incidentIDs)
+			if resourceErr != nil {
+				return nil, fmt.Errorf("Charlie session scopes are unavailable")
+			}
+			for _, resource := range resources {
+				resourcesBySession[resource.SessionID] = append(resourcesBySession[resource.SessionID], resource)
+			}
+		}
+		for _, row := range rows {
+			visible := row.Visibility == "private" && row.Source == "user" && row.OwnerUserID.Valid && row.OwnerUserID.Bytes == actorID
+			if row.Visibility == "incident" {
+				resources := resourcesBySession[row.ID]
+				resourceAllowed, resourceErr := s.authorizer.CanReadIncidentResources(ctx, actorID, resources)
+				visible = len(resources) > 0 && resourceErr == nil && resourceAllowed
+				if !visible {
+					s.audit(ctx, "charlie.session.list_visibility", row.ID, actorID, row.Visibility, "resource_denied", len(resources))
+				}
+			}
+			if !visible {
+				continue
+			}
+			if accessibleOffset < offset {
+				accessibleOffset++
+				continue
+			}
+			result = append(result, row)
+			if len(result) == int(limit) {
+				break
+			}
+		}
+		candidateOffset += int32(len(rows))
+		if len(rows) < int(candidatePageSize) {
+			break
+		}
+	}
+	return result, nil
 }
 
 func (s *SessionAccessService) Get(ctx context.Context, actorID, sessionID uuid.UUID) (SessionView, error) {

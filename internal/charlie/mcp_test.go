@@ -43,21 +43,23 @@ func authenticatedMCPRequest(t *testing.T, body string) *http.Request {
 	return request
 }
 
-func TestMCPDisabledAllowsDiscoveryButRejectsCalls(t *testing.T) {
+func TestMCPInactiveRejectsInitializeDiscoveryAndCalls(t *testing.T) {
 	facts := allowedWriteFacts(ModeAuto)
 	handler, executor, _ := testMCPHandler(t, facts)
 	handler.active = func(context.Context) bool { return false }
-	request := authenticatedMCPRequest(t, `{"jsonrpc":"2.0","id":"one","method":"tools/list","params":{}}`)
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "astronomer.agent_fleet.summary") {
-		t.Fatalf("disabled configuration discovery failed: %d %s", recorder.Code, recorder.Body.String())
-	}
-	request = authenticatedMCPRequest(t, `{"jsonrpc":"2.0","id":"one","method":"tools/call","params":{}}`)
-	recorder = httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusServiceUnavailable || executor.calls != 0 {
-		t.Fatalf("disabled execution reached a product capability: status=%d calls=%d", recorder.Code, executor.calls)
+	for _, method := range []string{"initialize", "notifications/initialized", "tools/list", "tools/call"} {
+		t.Run(method, func(t *testing.T) {
+			id := `,"id":"one"`
+			if method == "notifications/initialized" {
+				id = ""
+			}
+			request := authenticatedMCPRequest(t, `{"jsonrpc":"2.0"`+id+`,"method":"`+method+`","params":{}}`)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusServiceUnavailable || executor.calls != 0 || !strings.Contains(recorder.Body.String(), "integration_inactive") {
+				t.Fatalf("inactive MCP operation escaped: method=%s status=%d calls=%d body=%s", method, recorder.Code, executor.calls, recorder.Body.String())
+			}
+		})
 	}
 }
 

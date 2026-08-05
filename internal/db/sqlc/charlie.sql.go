@@ -3072,6 +3072,65 @@ func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnec
 	return i, err
 }
 
+const listCharlieAccessibleSessionCandidates = `-- name: ListCharlieAccessibleSessionCandidates :many
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions
+WHERE connection_id = $1
+  AND (
+    (visibility = 'private' AND source = 'user' AND owner_user_id = $2)
+    OR visibility = 'incident'
+  )
+ORDER BY updated_at DESC, id
+LIMIT $4 OFFSET $3
+`
+
+type ListCharlieAccessibleSessionCandidatesParams struct {
+	ConnectionID uuid.UUID   `json:"connection_id"`
+	OwnerUserID  pgtype.UUID `json:"owner_user_id"`
+	PageOffset   int32       `json:"page_offset"`
+	PageLimit    int32       `json:"page_limit"`
+}
+
+func (q *Queries) ListCharlieAccessibleSessionCandidates(ctx context.Context, arg ListCharlieAccessibleSessionCandidatesParams) ([]CharlieSession, error) {
+	rows, err := q.db.Query(ctx, listCharlieAccessibleSessionCandidates,
+		arg.ConnectionID,
+		arg.OwnerUserID,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieSession{}
+	for rows.Next() {
+		var i CharlieSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectionID,
+			&i.CharlieSessionID,
+			&i.ClientSessionID,
+			&i.OwnerUserID,
+			&i.Source,
+			&i.Visibility,
+			&i.Intent,
+			&i.ResourceScopeSummary,
+			&i.State,
+			&i.LastEventID,
+			&i.CentralRevision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCharlieAmbiguousReceipts = `-- name: ListCharlieAmbiguousReceipts :many
 SELECT id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, arguments_encrypted, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, result_encrypted, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at FROM charlie_action_receipts
 WHERE state IN ('dispatched', 'ambiguous', 'verifying')
@@ -3358,6 +3417,38 @@ SELECT session_id, resource_type, resource_id, required_verb, created_at FROM ch
 
 func (q *Queries) ListCharlieSessionResources(ctx context.Context, sessionID uuid.UUID) ([]CharlieSessionResource, error) {
 	rows, err := q.db.Query(ctx, listCharlieSessionResources, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieSessionResource{}
+	for rows.Next() {
+		var i CharlieSessionResource
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.ResourceType,
+			&i.ResourceID,
+			&i.RequiredVerb,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCharlieSessionResourcesBatch = `-- name: ListCharlieSessionResourcesBatch :many
+SELECT session_id, resource_type, resource_id, required_verb, created_at FROM charlie_session_resources
+WHERE session_id = ANY($1::uuid[])
+ORDER BY session_id, resource_type, resource_id, required_verb
+`
+
+func (q *Queries) ListCharlieSessionResourcesBatch(ctx context.Context, sessionIds []uuid.UUID) ([]CharlieSessionResource, error) {
+	rows, err := q.db.Query(ctx, listCharlieSessionResourcesBatch, sessionIds)
 	if err != nil {
 		return nil, err
 	}
