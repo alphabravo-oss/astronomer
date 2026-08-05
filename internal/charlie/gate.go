@@ -27,10 +27,11 @@ const (
 )
 
 type Activation struct {
-	State      ActivationState
-	Runnable   bool
-	HealthOnly bool
-	Connection sqlc.CharlieConnection
+	State        ActivationState
+	Runnable     bool
+	Configurable bool
+	HealthOnly   bool
+	Connection   sqlc.CharlieConnection
 }
 
 // EvaluateActivation is the single backend-owned switch for handlers,
@@ -54,9 +55,9 @@ func EvaluateActivation(ctx context.Context, features featureReader, connections
 		return activationResult(Activation{State: ActivationInstalling, HealthOnly: true, Connection: connection})
 	}
 	if !connection.Active || connection.RequestedMode == string(ModeDisabled) || connection.VerifiedMode == string(ModeDisabled) {
-		return activationResult(Activation{State: ActivationInactive, HealthOnly: true, Connection: connection})
+		return activationResult(Activation{State: ActivationInactive, Configurable: connection.Active, HealthOnly: true, Connection: connection})
 	}
-	return activationResult(Activation{State: ActivationReady, Runnable: true, HealthOnly: true, Connection: connection})
+	return activationResult(Activation{State: ActivationReady, Runnable: true, Configurable: true, HealthOnly: true, Connection: connection})
 }
 
 func activationResult(result Activation) Activation {

@@ -63,10 +63,6 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		writeMCPHTTPError(w, http.StatusNotFound, "not_found")
 		return
 	}
-	if !h.active(request.Context()) {
-		writeMCPHTTPError(w, http.StatusServiceUnavailable, "integration_inactive")
-		return
-	}
 	if request.Header.Get("Authorization") != "" || request.Header.Get("Cookie") != "" {
 		writeMCPHTTPError(w, http.StatusUnauthorized, "unsupported_credential")
 		return
@@ -115,6 +111,10 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		tools := mcpToolsFor(h.guard.executor)
 		writeMCPResponse(w, http.StatusOK, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Result: map[string]any{"tools": tools, "disclosureDigest": capabilityDisclosureDigest(tools)}})
 	case "tools/call":
+		if !h.active(request.Context()) {
+			writeMCPHTTPError(w, http.StatusServiceUnavailable, "integration_inactive")
+			return
+		}
 		h.handleCall(w, request, rpc)
 	default:
 		writeMCPResponse(w, http.StatusNotFound, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Error: &mcpError{Code: -32601, Message: "method_not_found"}})

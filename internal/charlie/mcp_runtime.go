@@ -119,7 +119,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	r.lifecycle.Lock()
 	defer r.lifecycle.Unlock()
 	activation := EvaluateActivation(ctx, r.features, r.queries)
-	if !activation.Runnable {
+	if !activation.Configurable {
 		r.config.WriteFence.Close()
 		shutdownErr := r.shutdownLocked(ctx)
 		_, drainErr := r.config.WriteFence.CloseAndWait(ctx)
@@ -127,6 +127,11 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 			return shutdownErr
 		}
 		return drainErr
+	}
+	if activation.Runnable {
+		r.config.WriteFence.Open()
+	} else if _, err := r.config.WriteFence.CloseAndWait(ctx); err != nil {
+		return err
 	}
 	connectionKey := activation.Connection.ID.String()
 	material, err := mcpMaterialDigest(r.config)
@@ -175,7 +180,6 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	}
 	guard.SetLogger(r.logger)
 	guard.SetWriteFence(r.config.WriteFence)
-	r.config.WriteFence.Open()
 	identities, err := ExpectedLocalIdentityURIs(activation.Connection.InstallationID.String())
 	if err != nil {
 		return err

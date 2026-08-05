@@ -150,6 +150,24 @@ func TestMCPRuntimeBindsOnlyWhileLiveAndStopsOnEmergencyDisable(t *testing.T) {
 	}
 }
 
+func TestMCPRuntimeKeepsOnlyConfigurationDiscoveryWhileModeDisabled(t *testing.T) {
+	runtime, queries := mcpRuntimeFixture(t)
+	queries.connection.RequestedMode = string(ModeDisabled)
+	queries.connection.VerifiedMode = string(ModeDisabled)
+	if err := runtime.reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	runtime.mu.Lock()
+	serving := runtime.listener != nil
+	runtime.mu.Unlock()
+	if !serving {
+		t.Fatal("disabled enrolled integration did not expose bounded mTLS discovery")
+	}
+	if state := runtime.config.WriteFence.State(); !state.Closed || !state.Drained {
+		t.Fatalf("disabled discovery opened product writes: %+v", state)
+	}
+}
+
 func TestMCPRuntimeRejectsSigningKeyThatDoesNotMatchOnboarding(t *testing.T) {
 	runtime, queries := mcpRuntimeFixture(t)
 	queries.connection.SigningKeyFingerprint = digestBytes([]byte("different"))

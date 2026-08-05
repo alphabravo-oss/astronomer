@@ -43,15 +43,21 @@ func authenticatedMCPRequest(t *testing.T, body string) *http.Request {
 	return request
 }
 
-func TestMCPDisabledBeforeIdentityOrBodyResolution(t *testing.T) {
+func TestMCPDisabledAllowsDiscoveryButRejectsCalls(t *testing.T) {
 	facts := allowedWriteFacts(ModeAuto)
-	handler, _, _ := testMCPHandler(t, facts)
+	handler, executor, _ := testMCPHandler(t, facts)
 	handler.active = func(context.Context) bool { return false }
-	request := httptest.NewRequest(http.MethodPost, "https://mcp/mcp", strings.NewReader(`{"private":"evidence"}`))
+	request := authenticatedMCPRequest(t, `{"jsonrpc":"2.0","id":"one","method":"tools/list","params":{}}`)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusServiceUnavailable || strings.Contains(recorder.Body.String(), "evidence") {
-		t.Fatalf("disabled response leaked or accepted work: %d %s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "astronomer.agent_fleet.summary") {
+		t.Fatalf("disabled configuration discovery failed: %d %s", recorder.Code, recorder.Body.String())
+	}
+	request = authenticatedMCPRequest(t, `{"jsonrpc":"2.0","id":"one","method":"tools/call","params":{}}`)
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable || executor.calls != 0 {
+		t.Fatalf("disabled execution reached a product capability: status=%d calls=%d", recorder.Code, executor.calls)
 	}
 }
 

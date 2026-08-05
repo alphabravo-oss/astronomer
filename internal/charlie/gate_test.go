@@ -27,19 +27,20 @@ func TestActivationFailsClosedForEveryIncompleteState(t *testing.T) {
 		features    featureReader
 		connections activeConnectionReader
 		want        ActivationState
+		config      bool
 	}{
-		{"nil feature reader", nil, nil, ActivationFeatureDisabled},
-		{"feature false", gateFeature(false), nil, ActivationFeatureDisabled},
-		{"no connection store", gateFeature(true), nil, ActivationUnconfigured},
-		{"connection read failed", gateFeature(true), gateConnection{err: errors.New("db")}, ActivationUnconfigured},
-		{"install incomplete", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "secrets_written"}}, ActivationInstalling},
-		{"emergency", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", EmergencyDisabled: true, RequestedMode: "auto", VerifiedMode: "auto"}}, ActivationEmergencyStop},
-		{"mode disabled", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", RequestedMode: "disabled", VerifiedMode: "disabled"}}, ActivationInactive},
+		{"nil feature reader", nil, nil, ActivationFeatureDisabled, false},
+		{"feature false", gateFeature(false), nil, ActivationFeatureDisabled, false},
+		{"no connection store", gateFeature(true), nil, ActivationUnconfigured, false},
+		{"connection read failed", gateFeature(true), gateConnection{err: errors.New("db")}, ActivationUnconfigured, false},
+		{"install incomplete", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "secrets_written"}}, ActivationInstalling, false},
+		{"emergency", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", EmergencyDisabled: true, RequestedMode: "auto", VerifiedMode: "auto"}}, ActivationEmergencyStop, false},
+		{"mode disabled", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", RequestedMode: "disabled", VerifiedMode: "disabled"}}, ActivationInactive, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := EvaluateActivation(context.Background(), tc.features, tc.connections)
-			if got.Runnable || got.State != tc.want {
+			if got.Runnable || got.State != tc.want || got.Configurable != tc.config {
 				t.Fatalf("activation=%+v, want non-runnable %s", got, tc.want)
 			}
 		})

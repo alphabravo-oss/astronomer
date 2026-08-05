@@ -308,6 +308,9 @@ func installationState(status AgentInstallationStatus, err error) string {
 }
 
 func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
+	if status.ArtifactVersion != "" {
+		view.Agent.AgentVersion = status.ArtifactVersion
+	}
 	view.Agent.LeaderReplica = status.LeaderInstanceID
 	view.Agent.FencingEpoch = status.Epoch
 	if status.InstanceID != "" && status.InstanceID != status.LeaderInstanceID {
