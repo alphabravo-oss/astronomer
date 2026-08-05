@@ -9,10 +9,10 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 ## Scan Scope
 
 - Frontend source files: 400
-- Frontend source lines: 110630
-- Go source files under `internal/` excluding generated sqlc and tests: 533
-- Go source files scanned for sqlc query references excluding generated sqlc: 17006
-- sqlc query declarations: 987
+- Frontend source lines: 110664
+- Go source files under `internal/` excluding generated sqlc and tests: 535
+- Go source files scanned for sqlc query references excluding generated sqlc: 17012
+- sqlc query declarations: 989
 - Component files scanned: 123
 - Helm top-level values scanned: 33
 
@@ -94,15 +94,15 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2085`](internal/server/routes.go:2085)
-- `copyStringMap` in [`internal/charlie/agent_installation.go:1192`](internal/charlie/agent_installation.go:1192), [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2101`](internal/server/routes.go:2101)
+- `copyStringMap` in [`internal/charlie/agent_installation.go:1250`](internal/charlie/agent_installation.go:1250), [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:291`](internal/charlie/contract/fakebridge/fake.go:291), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac.go:1110`](internal/handler/rbac.go:1110), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
 - `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:120`](internal/handler/charlie_onboarding.go:120), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
 - `nullableTime` in [`internal/charlie/fleet_capability_adapter.go:198`](internal/charlie/fleet_capability_adapter.go:198), [`internal/handler/alerting.go:2144`](internal/handler/alerting.go:2144)
-- `objectMeta` in [`internal/charlie/agent_installation.go:626`](internal/charlie/agent_installation.go:626), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
+- `objectMeta` in [`internal/charlie/agent_installation.go:684`](internal/charlie/agent_installation.go:684), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:165`](internal/server/middleware/read_audit.go:165)
 - `writeJSON` in [`internal/charlie/contract/fakebridge/fake.go:301`](internal/charlie/contract/fakebridge/fake.go:301), [`internal/handler/response.go:161`](internal/handler/response.go:161)
@@ -111,19 +111,18 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
-- `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:794`](internal/db/queries/charlie.sql:794) has no non-generated Go reference
-- `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:288`](internal/db/queries/charlie.sql:288) has no non-generated Go reference
-- `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:264`](internal/db/queries/charlie.sql:264) has no non-generated Go reference
-- `CreateCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:727`](internal/db/queries/charlie.sql:727) has no non-generated Go reference
-- `DisconnectCharlieConnection` declared at [`internal/db/queries/charlie.sql:313`](internal/db/queries/charlie.sql:313) has no non-generated Go reference
-- `GetCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:807`](internal/db/queries/charlie.sql:807) has no non-generated Go reference
-- `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:558`](internal/db/queries/charlie.sql:558) has no non-generated Go reference
+- `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:812`](internal/db/queries/charlie.sql:812) has no non-generated Go reference
+- `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:306`](internal/db/queries/charlie.sql:306) has no non-generated Go reference
+- `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:282`](internal/db/queries/charlie.sql:282) has no non-generated Go reference
+- `CreateCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:745`](internal/db/queries/charlie.sql:745) has no non-generated Go reference
+- `DisconnectCharlieConnection` declared at [`internal/db/queries/charlie.sql:331`](internal/db/queries/charlie.sql:331) has no non-generated Go reference
+- `GetCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:825`](internal/db/queries/charlie.sql:825) has no non-generated Go reference
+- `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:576`](internal/db/queries/charlie.sql:576) has no non-generated Go reference
 - `RecordTunnelLocatorEvent` declared at [`internal/db/queries/charlie.sql:71`](internal/db/queries/charlie.sql:71) has no non-generated Go reference
-- `RevokeCharlieDelegation` declared at [`internal/db/queries/charlie.sql:422`](internal/db/queries/charlie.sql:422) has no non-generated Go reference
-- `RevokeCharlieDelegationsForPrincipal` declared at [`internal/db/queries/charlie.sql:430`](internal/db/queries/charlie.sql:430) has no non-generated Go reference
-- `SetCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:278`](internal/db/queries/charlie.sql:278) has no non-generated Go reference
-- `SetCharlieTriggerRuleEnabled` declared at [`internal/db/queries/charlie.sql:704`](internal/db/queries/charlie.sql:704) has no non-generated Go reference
-- `UpdateCharlieAgentStatus` declared at [`internal/db/queries/charlie.sql:302`](internal/db/queries/charlie.sql:302) has no non-generated Go reference
+- `RevokeCharlieDelegation` declared at [`internal/db/queries/charlie.sql:440`](internal/db/queries/charlie.sql:440) has no non-generated Go reference
+- `RevokeCharlieDelegationsForPrincipal` declared at [`internal/db/queries/charlie.sql:448`](internal/db/queries/charlie.sql:448) has no non-generated Go reference
+- `SetCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:296`](internal/db/queries/charlie.sql:296) has no non-generated Go reference
+- `SetCharlieTriggerRuleEnabled` declared at [`internal/db/queries/charlie.sql:722`](internal/db/queries/charlie.sql:722) has no non-generated Go reference
 - `UpsertAgentOperationalStatus` declared at [`internal/db/queries/charlie.sql:13`](internal/db/queries/charlie.sql:13) has no non-generated Go reference
 
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.
@@ -153,7 +152,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 
 - Hard failures: 0
 - Duplicate-code candidates: 12
-- Dead-code candidates: 31
+- Dead-code candidates: 30
 
 ## Definition Of Done For Each Candidate
 
