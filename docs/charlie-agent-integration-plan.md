@@ -7,12 +7,14 @@
 > gaps are recorded in section 5.1, while A10/A11 acceptance and A14 require the
 > integrated UI or a live deployment.
 >
-> **Planned at:** Astronomer commit `0fad3e1`, 2026-08-05.
+> **Implementation branch:** `feat/charlie-core-integration`, audited through
+> schema version 149 on 2026-08-05.
 >
 > **Cross-repository dependency:**
-> `../../charlie/docs/product-agent-integration-platform-plan.md` at Charlie commit
-> `ce1040f` defines the generic onboarding, Product Bridge, agent HA, and artifact
-> contracts. If that contract changes, update this plan before implementation.
+> `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
+> generic onboarding, Product Bridge, agent HA, isolation, authority-mode,
+> finding, capability-disclosure, and artifact contracts. If that contract
+> changes, update this plan before implementation.
 >
 > **Executor contract:** Complete tasks in dependency order. Check a box only
 > after its tests pass and evidence is recorded. Never copy credentials, private
@@ -97,7 +99,8 @@ Facts the implementer must confirm before changing code:
 - Reusable integration credentials are encrypted with `auth.Encryptor`; bearer
   tokens are stored hash-only; secret-looking columns must be added to
   `docs/secret-column-inventory.md` and its guard tests.
-- The next database migration is `147`.
+- The Charlie integration migration series is `147` through `149`: the base
+  schema, trust/release hardening, and signed immutable artifact references.
 - Astronomer already owns installation readiness, cluster-agent connection
   state, metrics, logs, audit, self-management GitOps, backups, task outbox, and
   managed-cluster tunnels. Charlie capabilities must wrap bounded existing
@@ -206,6 +209,23 @@ otherwise-authorized user to decide an exact waiting action; `charlie:manage`
 controls connection/mode/policy administration; the hidden automation service
 identity receives only named capabilities and scopes. None of these permissions
 alone grants the underlying management-resource action, and deny always wins.
+
+### Isolation and actionable-alert invariant
+
+- [x] The feature gate prevents Charlie route, UI, worker, trigger, finding,
+  listener, and installation initialization when unavailable.
+- [x] An installed disabled integration exposes authenticated health,
+  configuration, and MCP catalog discovery only; `tools/call` and all runtime
+  work remain unavailable.
+- [x] `read_only`, `approval`, and `auto` are ceilings over the same live
+  Astronomer RBAC/resource-scope checks, never privilege-bearing roles.
+- [x] Every write is non-destructive, action-ID idempotent, preconditioned,
+  bounded, audited, and product-post-verified; missing disclosure fails closed.
+- [x] When execution is not permitted, a material diagnosis becomes a
+  deduplicated actionable finding/alert with evidence, impact, a safe next step,
+  verification, exact denial reason, approval link when eligible, and deep link.
+- [x] Finding acknowledgement never counts as action approval, and a mode change
+  never grants underlying target permission.
 
 ## 4. Data model and public interfaces
 

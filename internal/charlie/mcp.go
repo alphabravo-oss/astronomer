@@ -189,6 +189,14 @@ func (h *MCPHandler) handleCall(w http.ResponseWriter, request *http.Request, rp
 	if !result.Allowed {
 		status = http.StatusForbidden
 	}
+	if descriptor, found := capabilityByName(params.Name); found && descriptor.Effect == EffectWrite {
+		w.Header().Set("X-Charlie-Verification-Method", capabilityVerificationMethod(descriptor))
+		verificationStatus := "failed"
+		if result.State == "succeeded" && result.Verified {
+			verificationStatus = "succeeded"
+		}
+		w.Header().Set("X-Charlie-Verification-Status", verificationStatus)
+	}
 	writeMCPResponse(w, status, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Result: map[string]any{
 		"content":           []map[string]string{{"type": "text", "text": boundedActionSummary(result)}},
 		"structuredContent": result,
@@ -252,7 +260,8 @@ func mcpToolsFor(executor CapabilityExecutor) []map[string]any {
 				"openWorldHint":   false,
 			},
 			"_meta": map[string]any{
-				"effect": capability.Effect, "source": capability.Source,
+				"charlie/capability": capabilitySafetyDisclosure(capability),
+				"effect":             capability.Effect, "source": capability.Source,
 				"schema_version": capability.SchemaVersion, "risk": capability.Risk,
 				"target_bounds": capability.TargetBounds, "impact": capability.Impact,
 				"reversibility": capability.Reversibility, "rollback": capability.Rollback,
@@ -266,6 +275,35 @@ func mcpToolsFor(executor CapabilityExecutor) []map[string]any {
 		tools = append(tools, tool)
 	}
 	return tools
+}
+
+func capabilityVerificationMethod(capability CapabilityDescriptor) string {
+	return capability.Name + ".postcondition"
+}
+
+// capabilitySafetyDisclosure is the Charlie-owned, versioned extension to
+// standard MCP tool annotations. Read tools can be inferred conservatively
+// without it; write tools are rejected by Charlie unless every safety property
+// below is present and passes central policy compilation.
+func capabilitySafetyDisclosure(capability CapabilityDescriptor) map[string]any {
+	disclosure := map[string]any{
+		"schema":        "charlie.mcp-capability/v1",
+		"name":          capability.Name,
+		"effect":        capability.Effect,
+		"risk":          capability.Risk,
+		"destructive":   capability.Destructive,
+		"auto_eligible": false,
+		"timeout_ms":    capability.TimeoutSeconds * 1000,
+		"reversible":    false,
+	}
+	if capability.Effect == EffectWrite {
+		disclosure["auto_eligible"] = capability.AutoEligible
+		disclosure["idempotency"] = map[string]any{"required": true, "key": "action_id"}
+		disclosure["preconditions"] = []string{"Target and product policy remain within the disclosed management-plane bounds"}
+		disclosure["expected_impact"] = capability.Impact
+		disclosure["post_verification"] = map[string]any{"required": true, "method": capabilityVerificationMethod(capability)}
+	}
+	return disclosure
 }
 
 func CapabilityDisclosureDigest() string {

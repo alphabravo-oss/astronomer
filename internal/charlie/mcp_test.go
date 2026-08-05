@@ -102,6 +102,9 @@ func TestMCPToolsExposeOnlyBoundedManagementCapabilities(t *testing.T) {
 			t.Fatalf("catalog omitted %q", required)
 		}
 	}
+	if !strings.Contains(body, `"charlie/capability"`) || !strings.Contains(body, `"schema":"charlie.mcp-capability/v1"`) || !strings.Contains(body, `"post_verification"`) {
+		t.Fatalf("catalog omitted Charlie write safety disclosure: %s", body)
+	}
 }
 
 func TestMCPReadOnlyWriteReturnsActionableDenialWithoutExecuting(t *testing.T) {
