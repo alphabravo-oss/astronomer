@@ -979,7 +979,7 @@ func (p PGModeStore) SetVerifiedMode(ctx context.Context, connectionID string, m
 	if err != nil {
 		return ModeState{}, err
 	}
-	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET verified_mode=$1, verified_mode_revision=$2, disclosure_digest=$3, acknowledged_disclosure_digest=CASE WHEN disclosure_digest=$3 THEN acknowledged_disclosure_digest ELSE '' END, last_verified_at=now(), updated_at=now() WHERE id=$4 AND active=true AND emergency_disabled=false AND verified_mode_revision=$5`, string(mode), next, digest, id, expected)
+	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET verified_mode=$1, verified_mode_revision=$2, disclosure_digest=$3::VARCHAR(128), acknowledged_disclosure_digest=CASE WHEN disclosure_digest=$3::VARCHAR(128) THEN acknowledged_disclosure_digest ELSE '' END, last_verified_at=now(), updated_at=now() WHERE id=$4 AND active=true AND emergency_disabled=false AND verified_mode_revision=$5`, string(mode), next, digest, id, expected)
 	if err != nil || result.RowsAffected() != 1 {
 		return ModeState{}, ErrAdminConflict
 	}
