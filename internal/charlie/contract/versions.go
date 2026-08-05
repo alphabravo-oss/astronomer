@@ -3,7 +3,7 @@ package contract
 const (
 	BridgeProtocolVersion    = "1.0.0"
 	AgentProtocolVersion     = "1.0.0"
-	AgentChartVersion        = "1.0.8"
+	AgentChartVersion        = "1.0.9"
 	MinimumCentralAPIVersion = "1.0.0"
 	CentralAPISchemaVersion  = "charlie/v1"
 )
