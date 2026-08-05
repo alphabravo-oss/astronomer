@@ -7,7 +7,7 @@
   "bridge_protocol": "bridge/v1",
   "bridge_openapi_version": "1.0.0",
   "agent_protocol_version": "1.0.0",
-  "agent_chart_version": "1.0.2",
+  "agent_chart_version": "1.0.3",
   "agent_app_version": "1.0.0",
   "minimum_central_api_version": "1.0.0",
   "central_api_base_path": "/charlie/v1",
