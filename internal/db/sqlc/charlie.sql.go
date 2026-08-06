@@ -5003,11 +5003,8 @@ INSERT INTO charlie_findings (
 )
 ON CONFLICT (connection_id, dedupe_fingerprint) WHERE status IN ('open', 'acknowledged')
 DO UPDATE SET
-	 session_id = EXCLUDED.session_id,
-	 source = EXCLUDED.source,
     severity = EXCLUDED.severity,
     execution_block_code = EXCLUDED.execution_block_code,
-	 dedupe_fingerprint = EXCLUDED.dedupe_fingerprint,
     title = EXCLUDED.title,
     summary = EXCLUDED.summary,
     recommended_action_label = EXCLUDED.recommended_action_label,
@@ -5100,10 +5097,13 @@ INSERT INTO charlie_findings (
 )
 ON CONFLICT (connection_id, charlie_finding_id)
 DO UPDATE SET
+    session_id = EXCLUDED.session_id,
+    source = EXCLUDED.source,
     severity = EXCLUDED.severity,
     status = EXCLUDED.status,
     effective_mode = EXCLUDED.effective_mode,
     execution_block_code = EXCLUDED.execution_block_code,
+    dedupe_fingerprint = EXCLUDED.dedupe_fingerprint,
     title = EXCLUDED.title,
     summary = EXCLUDED.summary,
     recommended_action_label = EXCLUDED.recommended_action_label,
