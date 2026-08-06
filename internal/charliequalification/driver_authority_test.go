@@ -267,6 +267,9 @@ func TestAnswerQualificationScenariosUseRealSessionHistoryAndExactCounters(t *te
 			state := newAuthorityLiveState(fixtures)
 			state.ragAnswer = fixtures.VersionedRAGGrounded
 			state.generalAnswer = fixtures.GeneralAnswer
+			if scenario == "general_answer" {
+				state.streamVariant = "many_answer_deltas"
+			}
 			driver, server := newAuthorityDriver(t, state, fixtures)
 			defer server.Close()
 
@@ -612,7 +615,7 @@ func (s *authorityLiveState) serveProduct(w http.ResponseWriter, r *http.Request
 		s.streamEvents(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/charlie/sessions/") && strings.HasSuffix(r.URL.Path, "/history/"):
 		localSessionID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/charlie/sessions/"), "/history/")
-		_ = json.NewEncoder(w).Encode(s.history[localSessionID])
+		_ = json.NewEncoder(w).Encode(historyEnvelope{Data: s.history[localSessionID]})
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/charlie/sessions/") && strings.HasSuffix(r.URL.Path, "/abort/"):
 		s.abortSession(w, r)
 	default:
@@ -721,7 +724,7 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(messageReceipt{TurnID: turnID, State: "queued"})
+	_ = json.NewEncoder(w).Encode(messageReceipt{SessionID: "central-" + localSessionID, TurnID: turnID, AcceptedAt: time.Now().UTC()})
 }
 
 func (s *authorityLiveState) streamEvents(w http.ResponseWriter, r *http.Request) {
@@ -735,9 +738,16 @@ func (s *authorityLiveState) streamEvents(w http.ResponseWriter, r *http.Request
 	}
 	if answerTurn != "" {
 		w.Header().Set("Content-Type", "text/event-stream")
+		if s.streamVariant == "many_answer_deltas" {
+			delta := streamedActionEvent{TurnID: answerTurn, Type: "text.delta"}
+			encoded, _ := json.Marshal(delta)
+			for sequence := 1; sequence <= 300; sequence++ {
+				_, _ = fmt.Fprintf(w, "id: answer-%d\nevent: text.delta\ndata: %s\n\n", sequence, encoded)
+			}
+		}
 		terminal := streamedActionEvent{TurnID: answerTurn, Type: "turn.completed"}
 		encoded, _ := json.Marshal(terminal)
-		_, _ = fmt.Fprintf(w, "id: answer-1\nevent: turn.completed\ndata: %s\n\n", encoded)
+		_, _ = fmt.Fprintf(w, "id: answer-terminal\nevent: turn.completed\ndata: %s\n\n", encoded)
 		return
 	}
 	if !exists || stimulus.ClientSessionID != s.autoAction.Stimulus.ClientSessionID || !s.autoTriggered {

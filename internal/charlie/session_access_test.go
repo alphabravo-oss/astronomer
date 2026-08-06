@@ -354,6 +354,24 @@ func TestAbortRevokesLocallyBeforeRemoteAndDoesNotReopen(t *testing.T) {
 	}
 }
 
+func TestAbortClosesCompletedSessionAndRevokesDelegations(t *testing.T) {
+	owner := uuid.New()
+	queries, sessionID := readyPrivateAccess(owner)
+	queries.session.State = "completed"
+	bridge := &contentBridgeFake{}
+	service, _ := NewSessionAccessService(queries, &sessionAuthorizerFake{use: true}, bridge, &sessionAuditFake{}, func() bool { return true })
+
+	if err := service.Abort(context.Background(), owner, sessionID, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+	if queries.aborted != 1 || queries.revoked != 1 || bridge.abortCalls != 1 || queries.session.State != "aborted" {
+		t.Fatalf("completed session was not closed exactly once: queries=%#v bridge=%#v", queries, bridge)
+	}
+	if _, err := service.Get(context.Background(), owner, sessionID); err == nil {
+		t.Fatal("closed completed session retained product access")
+	}
+}
+
 func TestInactiveSessionAPIIsSilent(t *testing.T) {
 	owner := uuid.New()
 	queries, sessionID := readyPrivateAccess(owner)

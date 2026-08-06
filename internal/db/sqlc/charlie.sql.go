@@ -18,7 +18,10 @@ const abortCharlieSession = `-- name: AbortCharlieSession :one
 UPDATE charlie_sessions
 SET state = 'aborted', completed_at = now(), updated_at = now()
 WHERE id = $1
-  AND state IN ('creating', 'active', 'waiting_approval')
+  -- A completed read-only turn can still hold unexpired product delegations.
+  -- Treat an explicit close/abort as a terminal local authority revocation and
+  -- let Charlie's idempotent abort endpoint confirm the already-terminal turn.
+  AND state IN ('creating', 'active', 'waiting_approval', 'completed')
 RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at
 `
 

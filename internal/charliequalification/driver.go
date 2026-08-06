@@ -391,14 +391,21 @@ type sessionCreateEnvelope struct {
 }
 
 type messageReceipt struct {
-	TurnID string `json:"turn_id"`
-	State  string `json:"state"`
+	SessionID  string    `json:"session_id"`
+	TurnID     string    `json:"turn_id"`
+	AcceptedAt time.Time `json:"accepted_at"`
 }
 
 var (
 	fixtureIDPattern         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 	fixtureCapabilityPattern = regexp.MustCompile(`^[a-z][a-z0-9._:-]{0,127}$`)
 )
+
+// Real streaming providers may emit one bounded event per small text delta.
+// The byte-limited reader remains the primary memory bound; this secondary
+// event-count bound prevents an otherwise valid response from being rejected
+// merely because it was split into more than 256 deltas.
+const maxQualificationStreamEvents = 4096
 
 func (d *LiveDriver) approvalExpiry(ctx context.Context, scenario string) (result ScenarioResult) {
 	fixture := d.fixtures.ApprovalExpiry
@@ -747,7 +754,13 @@ func (d *LiveDriver) sendStimulus(ctx context.Context, localSessionID string, st
 	var receipt messageReceipt
 	status, err := d.api(ctx, http.MethodPost, "/api/v1/charlie/sessions/"+url.PathEscape(localSessionID)+"/messages/", d.approverToken,
 		map[string]any{"client_message_id": stimulus.ClientMessageID, "message": stimulus.Message}, &receipt)
-	if err != nil || status != http.StatusAccepted || !validFixtureID(receipt.TurnID) || receipt.State != "queued" {
+	now := time.Now().UTC()
+	// The bridge receipt carries Charlie's opaque central session ID. Astronomer
+	// deliberately addresses the browser session with a different local UUID,
+	// so the receipt identity must be bounded and non-empty rather than equal to
+	// the product-local route parameter.
+	if err != nil || status != http.StatusAccepted || !validFixtureID(receipt.SessionID) || !validFixtureID(receipt.TurnID) ||
+		receipt.AcceptedAt.IsZero() || receipt.AcceptedAt.Before(now.Add(-5*time.Minute)) || receipt.AcceptedAt.After(now.Add(time.Minute)) {
 		return messageReceipt{}, errors.New("qualification stimulus was not accepted")
 	}
 	return receipt, nil
@@ -796,6 +809,10 @@ type historyItem struct {
 	Citations []historyCitation `json:"citations,omitempty"`
 }
 
+type historyEnvelope struct {
+	Data []historyItem `json:"data"`
+}
+
 func (d *LiveDriver) waitForTurnCompletion(ctx context.Context, localSessionID, turnID string) bool {
 	streamCtx, cancel := context.WithTimeout(ctx, d.proofTimeout)
 	defer cancel()
@@ -826,7 +843,7 @@ func (d *LiveDriver) waitForTurnCompletion(ctx context.Context, localSessionID, 
 			return false, true
 		}
 		events++
-		if events > 256 {
+		if events > maxQualificationStreamEvents {
 			return false, false
 		}
 		var event streamedActionEvent
@@ -882,8 +899,9 @@ func (d *LiveDriver) waitForTurnCompletion(ctx context.Context, localSessionID, 
 func (d *LiveDriver) waitForSingleAssistantAnswer(ctx context.Context, localSessionID string) (historyItem, bool) {
 	deadline := time.Now().Add(d.proofTimeout)
 	for {
-		var history []historyItem
-		_, err := d.api(ctx, http.MethodGet, "/api/v1/charlie/sessions/"+url.PathEscape(localSessionID)+"/history/", d.approverToken, nil, &history)
+		var response historyEnvelope
+		_, err := d.api(ctx, http.MethodGet, "/api/v1/charlie/sessions/"+url.PathEscape(localSessionID)+"/history/", d.approverToken, nil, &response)
+		history := response.Data
 		if err == nil && len(history) <= 100 {
 			var answer historyItem
 			userCount, assistantCount := 0, 0
@@ -1026,7 +1044,7 @@ func (d *LiveDriver) discoverActionFromEvents(ctx context.Context, localSessionI
 			return false, true
 		}
 		events++
-		if events > 256 {
+		if events > maxQualificationStreamEvents {
 			return false, false
 		}
 		var event streamedActionEvent

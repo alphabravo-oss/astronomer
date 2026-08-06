@@ -405,7 +405,10 @@ RETURNING *;
 UPDATE charlie_sessions
 SET state = 'aborted', completed_at = now(), updated_at = now()
 WHERE id = sqlc.arg(id)
-  AND state IN ('creating', 'active', 'waiting_approval')
+  -- A completed read-only turn can still hold unexpired product delegations.
+  -- Treat an explicit close/abort as a terminal local authority revocation and
+  -- let Charlie's idempotent abort endpoint confirm the already-terminal turn.
+  AND state IN ('creating', 'active', 'waiting_approval', 'completed')
 RETURNING *;
 
 -- name: GetCharlieSessionByCentralID :one
