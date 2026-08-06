@@ -1727,6 +1727,40 @@ the minimum authorized evidence and correlate, in order:
   `make verify` passed before artifact publication. Every transient signed
   onboarding package file was deleted from both servers after activation.
 
+#### Content-free audit boundary addendum — 2026-08-06
+
+- Astronomer commits `6f8225e` and `8da6fa7` add an embedded machine-readable
+  Charlie audit contract with exact action names, resource types, typed fields,
+  and applicable success/denial/failure/replay/redaction classes. Unknown
+  actions, fields, enums, digests, counts, and arbitrary strings fail closed.
+- Charlie action admission/reconciliation, session/finding/approval lifecycle,
+  administrator mutations, authenticated HTTP mutations, matched read audits,
+  and unauthenticated Charlie mutation denials now use the same content-free
+  encoder. Charlie rows omit paths, query values, IP addresses, user agents,
+  resource names/values, request/response bodies, prompts, evidence, rationale,
+  raw errors, authorization references, credentials, and model/RAG content.
+- Approval ineligibility retains user-facing guidance only in the response;
+  audit receives stable codes such as `actor_inactive`,
+  `approval_permission_denied`, or `target_permission_denied`.
+- A live pre-authentication canary initially returned `401` without an audit
+  row, proving authentication was outside the prior mutation-audit boundary.
+  `8da6fa7` adds a content-free pre-auth denial observer and moves the normal
+  mutation auditor ahead of write-scope enforcement while retaining
+  authenticated actor context.
+- Repeating the canary against deployed server/migrate
+  `charlie-8da6fa7` returned `401` and persisted exactly one
+  `charlie.http.mutation` row containing only `POST`, status `401`, duration,
+  and outcome `denied`. The marked URL path/query, body, user agent, and source
+  address were absent. Argo was `Synced/Healthy`, schema remained clean at
+  `151`, Charlie remained `read_only/read_only` revision `61`, and the generic
+  1.0.18 agent remained two-ready-replica healthy.
+- Both revisions passed the complete race-enabled Go suite; zero-issue lint and
+  the SQLC generated check also passed. A13-015 through A13-019 remain open
+  until every listed lifecycle/denial and every log/metric/trace/event/
+  diagnostic/support sink has exhaustive assertions, opaque cross-system
+  ownership/retention is documented, and audit-storage failure proves
+  authority changes and write dispatch fail closed.
+
 #### Internal-Charlie air gap
 
 - [ ] **A14-017** Install an internal Charlie from its signed transfer kit with
