@@ -8,7 +8,7 @@
 > integrated UI or a live deployment.
 >
 > **Implementation branch:** `feat/charlie-core-integration`, audited through
-> commit `163f046` and schema version 149 on 2026-08-06.
+> commit `d81e8f2` and schema version 149 on 2026-08-06.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
@@ -1532,6 +1532,53 @@ the minimum authorized evidence and correlate, in order:
   but not A14-016e: listener/timer assertions, DNS/packet capture, central work
   counters, and the separate control-only operational-`disabled` observation
   window remain required.
+
+##### Agent 1.0.16 isolation and exact-alert addendum
+
+- Charlie commit `d52b0f1` released product agent/chart `1.0.16`. Astronomer
+  commit `554ccab` pinned that reviewed release and installed immutable image
+  digest
+  `sha256:c0f331205ad8a8ae59a7e434edc222b84bcfe5f855f5b6cdaf6b3b5d7d474359`
+  and chart digest
+  `sha256:5df5d10f0dabb363e33f4cd581999716259a43e17948672ee02dbeecf9c24e6e`.
+  The generic agent reached `2/2` ready and its Argo Application remained
+  `Synced/Healthy`.
+- A feature-off/on qualification removed the Charlie Application, StatefulSet,
+  and pods while Astronomer remained healthy, then restored the retained
+  connection only as inactive-authority `disabled` with the emergency latch
+  still closed. Commits `c0c692b` and `163f046` make emergency recovery retry
+  the remote disabled transition before opening the local latch and reactivate
+  only a safely retained inactive connection; recovery never restores a former
+  mode.
+- With operational authority explicitly disabled and enrollment settled, a
+  bounded 22-second packet observation on Charlie central's loopback proxy saw
+  four authenticated heartbeat requests, zero command claims, and zero other
+  runtime requests. Agent `1.0.16` does not enter the claim loop until both
+  product and deployment activation are true. This is positive control-only
+  evidence; the broader A14-016e matrix remains unchecked.
+- Charlie commit `b7abb57` keeps a deduplicated finding identity but rebases its
+  delivery linkage to the newest authorized session. Astronomer commits
+  `b30ad7c`, `7908cb0`, and `d81e8f2` admit only the finding's hashed resource
+  target and catalog capability, match exactly one currently authorized session
+  resource, reject missing/ambiguous/substituted targets, replace inherited
+  scope transactionally, and carry a repeated finding to the newest session.
+  Central diagnosis/model content is discarded at this background boundary.
+- Live server tag `charlie-d81e8f2` reconciled `Synced/Healthy` and the public UI
+  returned `200`. Read-only session
+  `7359b8dd-5572-443a-9e03-3c52cf8d9118` completed an authorized
+  `astronomer.argocd.self_management_status` read and proposed
+  `astronomer.argocd.self_management_sync`. Charlie blocked the write as
+  `authority.read_only_write`; no Astronomer action receipt exists.
+- The durable open medium finding
+  `afinding_a99b2e143f3bf3e1460a3674a559c463` is visible through Astronomer's
+  authenticated findings API, has repeat count `5`, links to that exact latest
+  session, recommends `astronomer.argocd.self_management_sync`, and is scoped
+  only to `self_management_application:astronomer`. This is the same feed used
+  by the top-bar notification selector and Charlie findings deep link.
+- Charlie's full `make verify` passed for both the control-only agent and the
+  finding-rebase fix. Astronomer's full race-enabled `make test`, `make lint`
+  with zero issues, focused Charlie/DB race tests, and `make verify` API-contract
+  gate passed before deployment.
 
 ##### Agent 1.0.15 approval and actionable-alert addendum
 
