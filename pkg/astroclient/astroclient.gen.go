@@ -258,18 +258,9 @@ const (
 const (
 	CharlieFindingDetailAvailableDecisionsAcknowledge         CharlieFindingDetailAvailableDecisions = "acknowledge"
 	CharlieFindingDetailAvailableDecisionsDismiss             CharlieFindingDetailAvailableDecisions = "dismiss"
-	CharlieFindingDetailAvailableDecisionsOpenExactApproval   CharlieFindingDetailAvailableDecisions = "open_exact_approval"
-	CharlieFindingDetailAvailableDecisionsRejectExactApproval CharlieFindingDetailAvailableDecisions = "reject_exact_approval"
 	CharlieFindingDetailAvailableDecisionsRequestVerification CharlieFindingDetailAvailableDecisions = "request_verification"
 	CharlieFindingDetailAvailableDecisionsResolve             CharlieFindingDetailAvailableDecisions = "resolve"
 	CharlieFindingDetailAvailableDecisionsStartRemediation    CharlieFindingDetailAvailableDecisions = "start_remediation"
-)
-
-// Defines values for CharlieFindingDetailProposedActionMode.
-const (
-	CharlieFindingDetailProposedActionModeApproval CharlieFindingDetailProposedActionMode = "approval"
-	CharlieFindingDetailProposedActionModeAuto     CharlieFindingDetailProposedActionMode = "auto"
-	CharlieFindingDetailProposedActionModeReadOnly CharlieFindingDetailProposedActionMode = "read_only"
 )
 
 // Defines values for CharlieFindingDetailSeverity.
@@ -323,8 +314,6 @@ const (
 const (
 	CharlieFindingSummaryAvailableDecisionsAcknowledge         CharlieFindingSummaryAvailableDecisions = "acknowledge"
 	CharlieFindingSummaryAvailableDecisionsDismiss             CharlieFindingSummaryAvailableDecisions = "dismiss"
-	CharlieFindingSummaryAvailableDecisionsOpenExactApproval   CharlieFindingSummaryAvailableDecisions = "open_exact_approval"
-	CharlieFindingSummaryAvailableDecisionsRejectExactApproval CharlieFindingSummaryAvailableDecisions = "reject_exact_approval"
 	CharlieFindingSummaryAvailableDecisionsRequestVerification CharlieFindingSummaryAvailableDecisions = "request_verification"
 	CharlieFindingSummaryAvailableDecisionsResolve             CharlieFindingSummaryAvailableDecisions = "resolve"
 	CharlieFindingSummaryAvailableDecisionsStartRemediation    CharlieFindingSummaryAvailableDecisions = "start_remediation"
@@ -1589,6 +1578,19 @@ type CharlieContextSearchResult struct {
 // CharlieContextSearchResultType defines model for CharlieContextSearchResult.Type.
 type CharlieContextSearchResultType string
 
+// CharlieFindingAdvisoryDetail defines model for CharlieFindingAdvisoryDetail.
+type CharlieFindingAdvisoryDetail struct {
+	Confidence        float32                          `json:"confidence"`
+	Diagnosis         string                           `json:"diagnosis"`
+	EvidenceSummary   []string                         `json:"evidence_summary"`
+	ManualRemediation *CharlieFindingManualRemediation `json:"manual_remediation,omitempty"`
+	OperatorChecks    []string                         `json:"operator_checks"`
+	Preconditions     *[]string                        `json:"preconditions,omitempty"`
+	RiskImpact        string                           `json:"risk_impact"`
+	Rollback          *string                          `json:"rollback,omitempty"`
+	VerificationSteps []string                         `json:"verification_steps"`
+}
+
 // CharlieFindingDetail defines model for CharlieFindingDetail.
 type CharlieFindingDetail struct {
 	AffectedResource CharlieFindingResource `json:"affected_resource"`
@@ -1596,27 +1598,18 @@ type CharlieFindingDetail struct {
 	// AvailableDecisions Exact currently legal decisions. Clients must not infer or add decisions from model content.
 	AvailableDecisions []CharlieFindingDetailAvailableDecisions `json:"available_decisions"`
 
-	// Detail On-demand Charlie-managed evidence returned only after current product authorization.
-	Detail         *map[string]interface{} `json:"detail,omitempty"`
-	Id             openapi_types.UUID      `json:"id"`
-	ProposedAction *struct {
-		// ApprovalId Bounded display identifier only; no signed manifest or action arguments are exposed.
-		ApprovalId *string `json:"approval_id,omitempty"`
-
-		// Eligible True only while the linked exact approval remains pending and unexpired; it is never authority by itself.
-		Eligible bool                                   `json:"eligible"`
-		Label    string                                 `json:"label"`
-		Mode     CharlieFindingDetailProposedActionMode `json:"mode"`
-	} `json:"proposed_action,omitempty"`
-	ReasonNoAction      string                       `json:"reason_no_action"`
-	RepeatCount         int                          `json:"repeat_count"`
-	RiskImpact          *string                      `json:"risk_impact,omitempty"`
-	Severity            CharlieFindingDetailSeverity `json:"severity"`
-	State               CharlieFindingDetailState    `json:"state"`
-	Summary             string                       `json:"summary"`
-	Title               string                       `json:"title"`
-	UpdatedAt           time.Time                    `json:"updated_at"`
-	VerificationSummary *string                      `json:"verification_summary,omitempty"`
+	// Detail Strict advisory evidence returned only after current product authorization. It cannot contain approval, manifest, signature, action, argument, or authorization fields.
+	Detail              *CharlieFindingAdvisoryDetail `json:"detail,omitempty"`
+	Id                  openapi_types.UUID            `json:"id"`
+	ReasonNoAction      string                        `json:"reason_no_action"`
+	RepeatCount         int                           `json:"repeat_count"`
+	RiskImpact          *string                       `json:"risk_impact,omitempty"`
+	Severity            CharlieFindingDetailSeverity  `json:"severity"`
+	State               CharlieFindingDetailState     `json:"state"`
+	Summary             string                        `json:"summary"`
+	Title               string                        `json:"title"`
+	UpdatedAt           time.Time                     `json:"updated_at"`
+	VerificationSummary *string                       `json:"verification_summary,omitempty"`
 
 	// WorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
 	WorkflowState CharlieFindingDetailWorkflowState `json:"workflow_state"`
@@ -1624,9 +1617,6 @@ type CharlieFindingDetail struct {
 
 // CharlieFindingDetailAvailableDecisions defines model for CharlieFindingDetail.AvailableDecisions.
 type CharlieFindingDetailAvailableDecisions string
-
-// CharlieFindingDetailProposedActionMode defines model for CharlieFindingDetail.ProposedAction.Mode.
-type CharlieFindingDetailProposedActionMode string
 
 // CharlieFindingDetailSeverity defines model for CharlieFindingDetail.Severity.
 type CharlieFindingDetailSeverity string
@@ -1636,6 +1626,15 @@ type CharlieFindingDetailState string
 
 // CharlieFindingDetailWorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
 type CharlieFindingDetailWorkflowState string
+
+// CharlieFindingManualRemediation defines model for CharlieFindingManualRemediation.
+type CharlieFindingManualRemediation struct {
+	ExpectedImpact string                     `json:"expected_impact"`
+	Preconditions  *[]string                  `json:"preconditions,omitempty"`
+	Rollback       *string                    `json:"rollback,omitempty"`
+	Steps          []string                   `json:"steps"`
+	Verification   CharlieFindingVerification `json:"verification"`
+}
 
 // CharlieFindingResource defines model for CharlieFindingResource.
 type CharlieFindingResource struct {
@@ -1684,6 +1683,12 @@ type CharlieFindingSummaryWorkflowState string
 // CharlieFindingTransitionRequest defines model for CharlieFindingTransitionRequest.
 type CharlieFindingTransitionRequest struct {
 	RequestId openapi_types.UUID `json:"request_id"`
+}
+
+// CharlieFindingVerification defines model for CharlieFindingVerification.
+type CharlieFindingVerification struct {
+	Method string   `json:"method"`
+	Steps  []string `json:"steps"`
 }
 
 // CharlieMessageRequest defines model for CharlieMessageRequest.

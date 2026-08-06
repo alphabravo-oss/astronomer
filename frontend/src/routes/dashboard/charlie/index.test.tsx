@@ -95,15 +95,6 @@ const finding: CharlieFinding = {
     verificationMethod: "product_readback",
     verificationSteps: ["Verify the heartbeat is current."],
   },
-  proposedAction: {
-    capability: "astronomer.server.restart_replica",
-    target: "management_component:server-a",
-    risk: "medium",
-    impact: "Restart one unhealthy management-plane replica.",
-    preconditions: ["Replica health is still failing."],
-    mode: "read_only",
-    eligible: false,
-  },
 };
 
 function renderHub() {

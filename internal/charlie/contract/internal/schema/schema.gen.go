@@ -1688,9 +1688,6 @@ func (j *Verification) UnmarshalJSON(value []byte) error {
 }
 
 type Workflow struct {
-	// ApprovalId corresponds to the JSON schema field "approval_id".
-	ApprovalId *OpaqueId `json:"approval_id,omitempty,omitzero" yaml:"approval_id,omitempty" mapstructure:"approval_id,omitempty"`
-
 	// ManualRemediation corresponds to the JSON schema field "manual_remediation".
 	ManualRemediation *ManualRemediation `json:"manual_remediation,omitempty,omitzero" yaml:"manual_remediation,omitempty" mapstructure:"manual_remediation,omitempty"`
 

@@ -35,7 +35,7 @@ func TestEventFindingPublisherEmitsBoundedActionableMetadata(t *testing.T) {
 		if payload["id"] != alert.FindingID || payload["deep_link"] != "/dashboard/charlie?tab=findings&finding=finding-1" || payload["block_code"] != "read_only" {
 			t.Fatalf("unexpected finding event payload: %#v", payload)
 		}
-		for _, prohibited := range []string{"prompt", "evidence", "arguments", "credential", "authorization_ref", "summary"} {
+		for _, prohibited := range []string{"prompt", "evidence", "arguments", "argument_digest", "credential", "authorization_ref", "manifest", "signature", "action_request", "request_id", "approval_id", "summary"} {
 			if _, exists := payload[prohibited]; exists {
 				t.Fatalf("sensitive field %q leaked into event", prohibited)
 			}

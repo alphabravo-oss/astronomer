@@ -2,9 +2,9 @@ package charlie
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +15,7 @@ import (
 )
 
 type findingAccessFake struct {
+	mu          sync.Mutex
 	connection  sqlc.CharlieConnection
 	connections map[uuid.UUID]sqlc.CharlieConnection
 	rows        []sqlc.CharlieFinding
@@ -27,9 +28,13 @@ type findingAccessFake struct {
 }
 
 func (f *findingAccessFake) GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.connection, nil
 }
 func (f *findingAccessFake) GetCharlieConnection(_ context.Context, id uuid.UUID) (sqlc.CharlieConnection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if id == f.connection.ID {
 		return f.connection, nil
 	}
@@ -40,6 +45,8 @@ func (f *findingAccessFake) GetCharlieConnection(_ context.Context, id uuid.UUID
 	return connection, nil
 }
 func (f *findingAccessFake) GetCharlieFinding(_ context.Context, id uuid.UUID) (sqlc.CharlieFinding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for _, row := range f.rows {
 		if row.ID == id {
 			return row, nil
@@ -48,16 +55,24 @@ func (f *findingAccessFake) GetCharlieFinding(_ context.Context, id uuid.UUID) (
 	return sqlc.CharlieFinding{}, pgx.ErrNoRows
 }
 func (f *findingAccessFake) GetCharlieSession(context.Context, uuid.UUID) (sqlc.CharlieSession, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.session, nil
 }
 func (f *findingAccessFake) ListCharlieFindingResources(_ context.Context, id uuid.UUID) ([]sqlc.CharlieFindingResource, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.resources[id], nil
 }
 func (f *findingAccessFake) ListCharlieFindings(context.Context, sqlc.ListCharlieFindingsParams) ([]sqlc.CharlieFinding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lists++
 	return f.rows, nil
 }
 func (f *findingAccessFake) GetCharlieFindingDecision(_ context.Context, requestID uuid.UUID) (sqlc.CharlieFindingDecision, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	decision, ok := f.decisions[requestID]
 	if !ok {
 		return sqlc.CharlieFindingDecision{}, pgx.ErrNoRows
@@ -65,6 +80,8 @@ func (f *findingAccessFake) GetCharlieFindingDecision(_ context.Context, request
 	return decision, nil
 }
 func (f *findingAccessFake) TransitionCharlieFinding(_ context.Context, p sqlc.TransitionCharlieFindingParams) (uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.transition = p
 	for i := range f.rows {
 		if f.rows[i].ID == p.ID && f.rows[i].Status == p.ExpectedStatus && f.rows[i].WorkflowState == p.ExpectedWorkflowState {
@@ -77,6 +94,8 @@ func (f *findingAccessFake) TransitionCharlieFinding(_ context.Context, p sqlc.T
 	return uuid.Nil, pgx.ErrNoRows
 }
 func (f *findingAccessFake) CreateCharlieDelegation(_ context.Context, p sqlc.CreateCharlieDelegationParams) (sqlc.CharlieDelegation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.delegations++
 	return sqlc.CharlieDelegation{SessionID: p.SessionID}, nil
 }
@@ -97,40 +116,69 @@ func (f *findingAccessAuthorizerFake) CanReadIncidentResources(_ context.Context
 }
 
 type findingBridgeFake struct {
+	mu              sync.Mutex
 	getCalls        int
 	transitionCalls int
+	approvalCalls   int
+	dispatchCalls   int
 	authRef         string
 	next            string
 }
 
-func (f *findingBridgeFake) GetFinding(_ context.Context, _, auth string) (json.RawMessage, error) {
+func (f *findingBridgeFake) GetFinding(_ context.Context, _, auth string) (FindingAdvisoryDetail, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.getCalls++
 	f.authRef = auth
-	return json.RawMessage(`{"schema":"charlie.finding/v1"}`), nil
+	return FindingAdvisoryDetail{Diagnosis: "bounded diagnosis", RiskImpact: "bounded impact"}, nil
 }
-func (f *findingBridgeFake) TransitionFinding(_ context.Context, _, auth string, _ uuid.UUID, next, _ string) (json.RawMessage, error) {
+func (f *findingBridgeFake) TransitionFinding(_ context.Context, findingID, auth string, _ uuid.UUID, next, _ string) (BridgeFindingSummary, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.transitionCalls++
 	f.authRef, f.next = auth, next
-	return json.RawMessage(`{"status":"acknowledged"}`), nil
+	return BridgeFindingSummary{FindingID: findingID, Status: "acknowledged"}, nil
+}
+
+func (f *findingBridgeFake) DecideApproval() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.approvalCalls++
+}
+
+func (f *findingBridgeFake) DispatchAction() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dispatchCalls++
 }
 
 type findingAuditFake struct {
+	mu           sync.Mutex
 	entries      []FindingLifecycleAudit
 	authority    []AuthorityMutationAudit
 	authorityErr error
 }
 
 func (f *findingAuditFake) RecordCharlieFindingLifecycle(_ context.Context, event FindingLifecycleAudit) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.entries = append(f.entries, event)
 }
 func (f *findingAuditFake) RecordCharlieAuthorityMutation(_ context.Context, event AuthorityMutationAudit) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.authority = append(f.authority, event)
 	return f.authorityErr
 }
 
-type findingLifecyclePublisherFake struct{ alerts []FindingAlert }
+type findingLifecyclePublisherFake struct {
+	mu     sync.Mutex
+	alerts []FindingAlert
+}
 
 func (f *findingLifecyclePublisherFake) PublishCharlieFindingLifecycle(_ context.Context, alert FindingAlert) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.alerts = append(f.alerts, alert)
 }
 
@@ -178,7 +226,7 @@ func TestFindingAccessFetchesCentralDetailOnlyAfterLiveAuthorization(t *testing.
 	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
 	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
 	view, err := service.Get(context.Background(), actorID, store.rows[0].ID)
-	if err != nil || bridge.getCalls != 1 || bridge.authRef == "" || store.delegations != 1 || len(view.Remote) == 0 {
+	if err != nil || bridge.getCalls != 1 || bridge.authRef == "" || store.delegations != 1 || view.Detail == nil {
 		t.Fatalf("central detail was not live-authorized: view=%#v err=%v", view, err)
 	}
 	authorizer.resourcePass["replica-a"] = false
@@ -200,7 +248,7 @@ func TestFindingAccessSurvivesSignedConnectionReplacementWithoutRebindingProvena
 		t.Fatalf("same-lineage replacement hid retained finding: %v", err)
 	}
 	requestID := uuid.New()
-	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, requestID, "acknowledge"); err != nil {
+	if _, err := service.TransitionAdvisory(context.Background(), actorID, store.rows[0].ID, requestID, FindingAdvisoryAcknowledge); err != nil {
 		t.Fatalf("same-lineage replacement blocked retained finding decision: %v", err)
 	}
 	if store.transition.ActorRef != findingActorRef(source.ID, actorID) || store.transition.ActorRef == findingActorRef(replacement.ID, actorID) {
@@ -231,7 +279,7 @@ func TestFindingAccessRejectsConnectionFromDifferentDeploymentLineage(t *testing
 func TestFindingAccessTransitionsCentralThenCommitsAndPublishes(t *testing.T) {
 	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
 	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
-	view, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "start_remediation")
+	view, err := service.TransitionWorkflow(context.Background(), actorID, store.rows[0].ID, uuid.New(), "start_remediation")
 	if err != nil || bridge.transitionCalls != 1 || bridge.next != "start_remediation" || store.transition.ExpectedStatus != "open" ||
 		store.transition.ExpectedWorkflowState != "manual_remediation_required" || store.transition.NextWorkflowState != "remediation_in_progress" ||
 		view.Finding.Status != "acknowledged" {
@@ -247,7 +295,7 @@ func TestFindingAccessAuditFailureCreatesNoDelegationDispatchOrTransition(t *tes
 	audit.authorityErr = errors.New("database-SENTINEL")
 	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
 
-	_, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "start_remediation")
+	_, err := service.TransitionWorkflow(context.Background(), actorID, store.rows[0].ID, uuid.New(), "start_remediation")
 	if err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
 		t.Fatalf("audit failure was missing or leaked storage detail: %v", err)
 	}
@@ -261,10 +309,10 @@ func TestFindingAccessReplaysCommittedDecisionWithoutRepublishing(t *testing.T) 
 	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
 	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
 	requestID := uuid.New()
-	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, requestID, "acknowledge"); err != nil {
+	if _, err := service.TransitionAdvisory(context.Background(), actorID, store.rows[0].ID, requestID, FindingAdvisoryAcknowledge); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, requestID, "acknowledge"); err != nil {
+	if _, err := service.TransitionAdvisory(context.Background(), actorID, store.rows[0].ID, requestID, FindingAdvisoryAcknowledge); err != nil {
 		t.Fatalf("idempotent replay failed: %v", err)
 	}
 	if bridge.transitionCalls != 2 || len(publisher.alerts) != 1 || len(audit.entries) != 2 || audit.entries[1].OutcomeCode != "replayed" {
@@ -287,7 +335,7 @@ func TestFindingAccessRejectsGenericLifecycleTransitionForExactPendingApproval(t
 	store.rows[0].WorkflowState = "approval_pending"
 	store.rows[0].ExecutionBlockCode = "approval_required"
 	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
-	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "resolve"); err == nil {
+	if _, err := service.TransitionAdvisory(context.Background(), actorID, store.rows[0].ID, uuid.New(), FindingAdvisoryResolve); err == nil {
 		t.Fatal("generic resolution bypassed the exact pending approval workflow")
 	}
 	if bridge.transitionCalls != 0 || store.transition.ID != uuid.Nil || len(audit.entries) != 0 || len(publisher.alerts) != 0 {
@@ -343,11 +391,121 @@ func TestFindingEventAndDecisionRecheckCurrentUserResourceAuthorization(t *testi
 	if _, err := service.Get(context.Background(), ownerID, findingID); err == nil {
 		t.Fatal("revoked owner retained finding detail access")
 	}
-	if _, err := service.Transition(context.Background(), ownerID, findingID, uuid.New(), "acknowledge"); err == nil {
+	if _, err := service.TransitionAdvisory(context.Background(), ownerID, findingID, uuid.New(), FindingAdvisoryAcknowledge); err == nil {
 		t.Fatal("revoked owner retained finding decision access")
 	}
 	if bridge.getCalls != 0 || bridge.transitionCalls != 0 || store.transition.ID != uuid.Nil || len(publisher.alerts) != 0 {
 		t.Fatalf("revoked access reached Charlie or durable workflow: bridge_get=%d bridge_transition=%d transition=%#v alerts=%d",
 			bridge.getCalls, bridge.transitionCalls, store.transition, len(publisher.alerts))
+	}
+}
+
+func TestFindingTransitionsRecheckLiveResourceAuthorizationWithoutExecution(t *testing.T) {
+	tests := []struct {
+		name     string
+		decision string
+		prepare  func(*findingAccessFake)
+	}{
+		{name: "acknowledge", decision: "acknowledge"},
+		{name: "start_remediation", decision: "start_remediation"},
+		{name: "request_verification", decision: "request_verification", prepare: func(store *findingAccessFake) {
+			store.rows[0].Status = "acknowledged"
+			store.rows[0].WorkflowState = string(FindingWorkflowRemediationInProgress)
+		}},
+		{name: "dismiss", decision: "dismiss"},
+		{name: "resolve", decision: "resolve", prepare: func(store *findingAccessFake) {
+			store.rows[0].WorkflowState = string(FindingWorkflowVerificationPending)
+			store.rows[0].ExecutionBlockCode = string(ReasonVerificationFailed)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+			if test.prepare != nil {
+				test.prepare(store)
+			}
+			authorizer.resourcePass["replica-a"] = false
+			service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+			if _, err := runFindingTransition(service, actorID, store.rows[0].ID, uuid.New(), test.decision); err == nil {
+				t.Fatal("revoked resource access admitted an advisory transition")
+			}
+			if bridge.transitionCalls != 0 || bridge.approvalCalls != 0 || bridge.dispatchCalls != 0 || store.delegations != 0 || store.transition.ID != uuid.Nil || len(publisher.alerts) != 0 {
+				t.Fatalf("denied advisory produced side effects: bridge=%d approvals=%d dispatch=%d delegations=%d transition=%#v alerts=%d",
+					bridge.transitionCalls, bridge.approvalCalls, bridge.dispatchCalls, store.delegations, store.transition, len(publisher.alerts))
+			}
+		})
+	}
+}
+
+func TestFindingTransitionReplayAndConcurrencyCannotReachExecutionChannels(t *testing.T) {
+	tests := []struct {
+		name     string
+		decision string
+		prepare  func(*findingAccessFake)
+	}{
+		{name: "acknowledge", decision: "acknowledge"},
+		{name: "start_remediation", decision: "start_remediation"},
+		{name: "request_verification", decision: "request_verification", prepare: func(store *findingAccessFake) {
+			store.rows[0].Status = "acknowledged"
+			store.rows[0].WorkflowState = string(FindingWorkflowRemediationInProgress)
+		}},
+		{name: "dismiss", decision: "dismiss"},
+		{name: "resolve", decision: "resolve", prepare: func(store *findingAccessFake) {
+			store.rows[0].WorkflowState = string(FindingWorkflowVerificationPending)
+			store.rows[0].ExecutionBlockCode = string(ReasonVerificationFailed)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+			if test.prepare != nil {
+				test.prepare(store)
+			}
+			service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+			requestID := uuid.New()
+			findingID := store.rows[0].ID
+			const callers = 12
+			results := make(chan error, callers)
+			var group sync.WaitGroup
+			for range callers {
+				group.Add(1)
+				go func() {
+					defer group.Done()
+					_, err := runFindingTransition(service, actorID, findingID, requestID, test.decision)
+					results <- err
+				}()
+			}
+			group.Wait()
+			close(results)
+			succeeded := 0
+			for err := range results {
+				if err == nil {
+					succeeded++
+				}
+			}
+			if succeeded == 0 {
+				t.Fatal("no concurrent advisory transition committed")
+			}
+			if _, err := runFindingTransition(service, actorID, findingID, requestID, test.decision); err != nil {
+				t.Fatalf("committed advisory replay failed: %v", err)
+			}
+			if len(publisher.alerts) != 1 || bridge.approvalCalls != 0 || bridge.dispatchCalls != 0 {
+				t.Fatalf("advisory replay crossed execution channels: alerts=%d approvals=%d dispatch=%d bridge_transitions=%d",
+					len(publisher.alerts), bridge.approvalCalls, bridge.dispatchCalls, bridge.transitionCalls)
+			}
+		})
+	}
+}
+
+func runFindingTransition(service *FindingAccessService, actorID, findingID, requestID uuid.UUID, decision string) (FindingView, error) {
+	switch decision {
+	case "acknowledge":
+		return service.TransitionAdvisory(context.Background(), actorID, findingID, requestID, FindingAdvisoryAcknowledge)
+	case "dismiss":
+		return service.TransitionAdvisory(context.Background(), actorID, findingID, requestID, FindingAdvisoryDismiss)
+	case "resolve":
+		return service.TransitionAdvisory(context.Background(), actorID, findingID, requestID, FindingAdvisoryResolve)
+	default:
+		return service.TransitionWorkflow(context.Background(), actorID, findingID, requestID, decision)
 	}
 }

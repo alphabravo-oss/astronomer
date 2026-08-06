@@ -16,7 +16,8 @@ import (
 type CharlieFindingAccess interface {
 	List(context.Context, uuid.UUID, string, int32, int32) ([]charlie.FindingView, error)
 	Get(context.Context, uuid.UUID, uuid.UUID) (charlie.FindingView, error)
-	Transition(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (charlie.FindingView, error)
+	TransitionAdvisory(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, charlie.FindingAdvisoryDecision) (charlie.FindingView, error)
+	TransitionWorkflow(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (charlie.FindingView, error)
 }
 
 type CharlieFindingHandler struct{ access CharlieFindingAccess }
@@ -48,7 +49,7 @@ func (h *CharlieFindingHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie finding access is denied")
 		return
 	}
-	items := make([]map[string]any, 0, len(views))
+	items := make([]charlieFindingResponse, 0, len(views))
 	for _, view := range views {
 		items = append(items, safeCharlieFinding(view, false))
 	}
@@ -69,45 +70,66 @@ func (h *CharlieFindingHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CharlieFindingHandler) Acknowledge(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "acknowledge")
+	h.transitionAdvisory(w, r, charlie.FindingAdvisoryAcknowledge)
 }
 
 func (h *CharlieFindingHandler) StartRemediation(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "start_remediation")
+	h.transitionWorkflow(w, r, "start_remediation")
 }
 
 func (h *CharlieFindingHandler) RequestVerification(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "request_verification")
+	h.transitionWorkflow(w, r, "request_verification")
 }
 
 func (h *CharlieFindingHandler) Dismiss(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "dismiss")
+	h.transitionAdvisory(w, r, charlie.FindingAdvisoryDismiss)
 }
 
 func (h *CharlieFindingHandler) Resolve(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "resolve")
+	h.transitionAdvisory(w, r, charlie.FindingAdvisoryResolve)
 }
 
-func (h *CharlieFindingHandler) transition(w http.ResponseWriter, r *http.Request, next string) {
-	actor, findingID, ok := charlieFindingActorAndID(w, r)
+func (h *CharlieFindingHandler) transitionAdvisory(w http.ResponseWriter, r *http.Request, next charlie.FindingAdvisoryDecision) {
+	actor, findingID, requestID, ok := charlieFindingTransition(w, r)
 	if !ok {
 		return
 	}
-	var request charlieFindingTransitionRequest
-	if !decodeCharlieJSON(w, r, &request) {
-		return
-	}
-	requestID, err := uuid.Parse(request.RequestID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie finding transition")
-		return
-	}
-	view, err := h.access.Transition(r.Context(), mustUserID(actor), findingID, requestID, next)
+	view, err := h.access.TransitionAdvisory(r.Context(), mustUserID(actor), findingID, requestID, next)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie finding transition could not be completed")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"finding": safeCharlieFinding(view, true)})
+}
+
+func (h *CharlieFindingHandler) transitionWorkflow(w http.ResponseWriter, r *http.Request, next string) {
+	actor, findingID, requestID, ok := charlieFindingTransition(w, r)
+	if !ok {
+		return
+	}
+	view, err := h.access.TransitionWorkflow(r.Context(), mustUserID(actor), findingID, requestID, next)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie finding transition could not be completed")
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{"finding": safeCharlieFinding(view, true)})
+}
+
+func charlieFindingTransition(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, uuid.UUID, uuid.UUID, bool) {
+	actor, findingID, ok := charlieFindingActorAndID(w, r)
+	if !ok {
+		return nil, uuid.Nil, uuid.Nil, false
+	}
+	var request charlieFindingTransitionRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return nil, uuid.Nil, uuid.Nil, false
+	}
+	requestID, err := uuid.Parse(request.RequestID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie finding transition")
+		return nil, uuid.Nil, uuid.Nil, false
+	}
+	return actor, findingID, requestID, true
 }
 
 func charlieFindingActorAndID(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, uuid.UUID, bool) {
@@ -123,38 +145,55 @@ func charlieFindingActorAndID(w http.ResponseWriter, r *http.Request) (*appmiddl
 	return actor, findingID, true
 }
 
-func safeCharlieFinding(view charlie.FindingView, includeDetail bool) map[string]any {
+type charlieFindingResourceResponse struct {
+	Type         string `json:"type"`
+	ID           string `json:"id"`
+	RequiredVerb string `json:"required_verb"`
+}
+
+type charlieFindingResponse struct {
+	ID                 uuid.UUID                       `json:"id"`
+	Title              string                          `json:"title"`
+	Severity           string                          `json:"severity"`
+	State              string                          `json:"state"`
+	Summary            string                          `json:"summary"`
+	ReasonNoAction     string                          `json:"reason_no_action"`
+	RepeatCount        int32                           `json:"repeat_count"`
+	Source             string                          `json:"source"`
+	CreatedAt          time.Time                       `json:"created_at"`
+	UpdatedAt          time.Time                       `json:"updated_at"`
+	WorkflowState      charlie.FindingWorkflowState    `json:"workflow_state"`
+	AvailableDecisions []string                        `json:"available_decisions"`
+	SessionID          *uuid.UUID                      `json:"session_id,omitempty"`
+	AffectedResource   *charlieFindingResourceResponse `json:"affected_resource,omitempty"`
+	RiskImpact         string                          `json:"risk_impact,omitempty"`
+	Verification       string                          `json:"verification_summary,omitempty"`
+	Detail             *charlie.FindingAdvisoryDetail  `json:"detail,omitempty"`
+}
+
+func safeCharlieFinding(view charlie.FindingView, includeDetail bool) charlieFindingResponse {
 	row := view.Finding
 	severity := charlie.NormalizeFindingSeverity(row.Severity)
 	workflow := charlie.FindingWorkflowFor(row, time.Now().UTC())
-	item := map[string]any{
-		"id": row.ID, "title": row.Title, "severity": severity, "state": row.Status,
-		"summary": row.Summary, "reason_no_action": row.ExecutionBlockCode,
-		"repeat_count": row.RepeatCount, "source": row.Source,
-		"created_at": row.CreatedAt, "updated_at": row.UpdatedAt,
-		"workflow_state": workflow.State, "available_decisions": workflow.Decisions,
+	item := charlieFindingResponse{
+		ID: row.ID, Title: row.Title, Severity: severity, State: row.Status,
+		Summary: row.Summary, ReasonNoAction: row.ExecutionBlockCode,
+		RepeatCount: row.RepeatCount, Source: row.Source,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		WorkflowState: workflow.State, AvailableDecisions: workflow.Decisions,
 	}
 	if row.SessionID.Valid {
-		item["session_id"] = uuid.UUID(row.SessionID.Bytes)
+		sessionID := uuid.UUID(row.SessionID.Bytes)
+		item.SessionID = &sessionID
 	}
 	if len(view.Resources) > 0 {
 		resource := view.Resources[0]
-		item["affected_resource"] = map[string]any{"type": resource.ResourceType, "id": resource.ResourceID, "required_verb": resource.RequiredVerb}
+		item.AffectedResource = &charlieFindingResourceResponse{Type: resource.ResourceType, ID: resource.ResourceID, RequiredVerb: resource.RequiredVerb}
 	}
 	if includeDetail {
-		item["risk_impact"] = row.RiskImpact
-		item["verification_summary"] = row.VerificationSummary
-		if row.RecommendedActionLabel != "" {
-			proposed := map[string]any{"label": row.RecommendedActionLabel, "mode": row.EffectiveMode, "eligible": false}
-			if row.ApprovalID.Valid {
-				proposed["approval_id"] = row.ApprovalID.String
-				proposed["eligible"] = (row.Status == "open" || row.Status == "acknowledged") && row.ExecutionBlockCode == "approval_required" && row.ExpiresAt.Valid && row.ExpiresAt.Time.After(time.Now())
-			}
-			item["proposed_action"] = proposed
-		}
-		if len(view.Remote) > 0 {
-			item["detail"] = view.Remote
-		}
+		item.RiskImpact = row.RiskImpact
+		item.Verification = row.VerificationSummary
+		item.Detail = view.Detail
 	}
 	return item
 }

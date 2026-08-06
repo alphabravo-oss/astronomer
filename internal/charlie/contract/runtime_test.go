@@ -128,6 +128,30 @@ func TestRuntimeRejectsOversizedAndTrailingJSONResponses(t *testing.T) {
 	}
 }
 
+func TestRuntimeRejectsForgedFindingExecutionFields(t *testing.T) {
+	responses := []struct{ name, body string }{
+		{name: "manifest", body: `{"schema":"charlie.finding/v1","manifest":{"forged":true}}`},
+		{name: "authorization_ref", body: `{"schema":"charlie.finding/v1","authorization_ref":"forged"}`},
+		{name: "arguments", body: `{"schema":"charlie.finding/v1","finding":{"arguments":{"forged":true}}}`},
+		{name: "action_request", body: `{"schema":"charlie.finding/v1","finding":{"workflow":{"action_request":{"forged":true}}}}`},
+	}
+	for _, response := range responses {
+		t.Run(response.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, response.body)
+			}))
+			defer server.Close()
+			var active atomic.Bool
+			active.Store(true)
+			var output FindingEnvelope
+			if err := testRuntime(server, &active).DoJSONAuthorized(context.Background(), http.MethodGet, "/findings/finding-a", "", "opaque-product-ref", nil, &output); err == nil {
+				t.Fatal("forged finding execution field crossed the strict bridge decoder")
+			}
+		})
+	}
+}
+
 func TestStreamEnforcesTurnTimeoutAndCancelsBlockedResponse(t *testing.T) {
 	cancelled := make(chan struct{}, 1)
 	var calls atomic.Int32

@@ -50,17 +50,17 @@ func FindingWorkflowFor(row sqlc.CharlieFinding, now time.Time) FindingWorkflow 
 	if reason == ReasonApprovalRejected {
 		return manualFindingWorkflow(row.Status)
 	}
-	if row.WorkflowState == string(FindingWorkflowApprovalPending) ||
-		(row.WorkflowState == "" && reason == ReasonApprovalRequired && row.ApprovalID.Valid) {
-		if !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(now.UTC()) {
+	if row.WorkflowState == string(FindingWorkflowApprovalPending) || (row.WorkflowState == "" && reason == ReasonApprovalRequired) {
+		if row.ExpiresAt.Valid && !row.ExpiresAt.Time.After(now.UTC()) {
 			return noDecisionFindingWorkflow(FindingWorkflowExpired)
 		}
-		if reason != ReasonApprovalRequired || !row.ApprovalID.Valid ||
+		if reason != ReasonApprovalRequired ||
 			(Mode(row.EffectiveMode) != ModeApproval && Mode(row.EffectiveMode) != ModeAuto) {
 			return manualFindingWorkflow(row.Status)
 		}
-		return FindingWorkflow{State: FindingWorkflowApprovalPending,
-			Decisions: []string{"open_exact_approval", "reject_exact_approval"}}
+		// A finding exposes only advisory state. Exact approval identifiers and
+		// decisions are discovered and performed through the approvals lane.
+		return noDecisionFindingWorkflow(FindingWorkflowApprovalPending)
 	}
 	switch FindingWorkflowState(row.WorkflowState) {
 	case FindingWorkflowManualRemediationRequired:

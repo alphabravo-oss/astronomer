@@ -38,13 +38,10 @@ describe("Charlie finding workflow decisions", () => {
   });
 
   it("keeps exact approval decisions out of generic lifecycle controls", () => {
-    const finding = fixture("approval_pending", [
-      "open_exact_approval",
-      "reject_exact_approval",
-    ]);
+    const finding = fixture("approval_pending", []);
     expect(findingLifecycleDecisions(finding)).toEqual([]);
     expect(findingWorkflowLabel(finding)).toBe("approval pending");
-    expect(findingWorkflowGuidance(finding)).toContain("exact human approval");
+    expect(findingWorkflowGuidance(finding)).toContain("separate approvals list");
   });
 
   it("makes blocked automation explicit and non-executing", () => {
@@ -52,17 +49,7 @@ describe("Charlie finding workflow decisions", () => {
       "start_remediation",
       "dismiss",
     ]);
-    finding.proposedAction = {
-      capability: "astronomer.safe.write",
-      target: "management-component",
-      risk: "bounded",
-      impact: "bounded",
-      preconditions: [],
-      mode: "auto",
-      eligible: false,
-    };
-    expect(findingWorkflowGuidance(finding)).toContain("Automation did not run");
-    expect(findingWorkflowGuidance(finding)).toContain("does not retry");
+    expect(findingWorkflowGuidance(finding)).toContain("No Charlie action is authorized");
   });
 
   it.each([

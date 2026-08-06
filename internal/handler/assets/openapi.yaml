@@ -227,8 +227,64 @@ components:
           maxItems: 3
           items:
             type: string
-            enum: [open_exact_approval, reject_exact_approval, acknowledge, start_remediation, request_verification, dismiss, resolve]
+            enum: [acknowledge, start_remediation, request_verification, dismiss, resolve]
           description: Exact currently legal decisions. Clients must not infer or add decisions from model content.
+    CharlieFindingVerification:
+      type: object
+      additionalProperties: false
+      required: [method, steps]
+      properties:
+        method: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+    CharlieFindingManualRemediation:
+      type: object
+      additionalProperties: false
+      required: [steps, expected_impact, verification]
+      properties:
+        preconditions:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 256}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+        expected_impact: {type: string, minLength: 1, maxLength: 1024}
+        rollback: {type: string, minLength: 1, maxLength: 1024}
+        verification: {$ref: '#/components/schemas/CharlieFindingVerification'}
+    CharlieFindingAdvisoryDetail:
+      type: object
+      additionalProperties: false
+      required: [evidence_summary, diagnosis, confidence, risk_impact, operator_checks, verification_steps]
+      properties:
+        evidence_summary:
+          type: array
+          maxItems: 20
+          items: {type: string, minLength: 1, maxLength: 8192}
+        diagnosis: {type: string, minLength: 1, maxLength: 4096}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        risk_impact: {type: string, minLength: 1, maxLength: 2048}
+        preconditions:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 256}
+        rollback: {type: string, minLength: 1, maxLength: 1024}
+        operator_checks:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+        verification_steps:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+        manual_remediation: {$ref: '#/components/schemas/CharlieFindingManualRemediation'}
     CharlieFindingDetail:
       allOf:
         - {$ref: '#/components/schemas/CharlieFindingSummary'}
@@ -236,19 +292,10 @@ components:
           properties:
             risk_impact: {type: string, maxLength: 1024}
             verification_summary: {type: string, maxLength: 1024}
-            proposed_action:
-              type: object
-              additionalProperties: false
-              required: [label, mode, eligible]
-              properties:
-                label: {type: string, maxLength: 256}
-                mode: {type: string, enum: [read_only, approval, auto]}
-                eligible: {type: boolean, description: True only while the linked exact approval remains pending and unexpired; it is never authority by itself.}
-                approval_id: {type: string, minLength: 1, maxLength: 128, description: Bounded display identifier only; no signed manifest or action arguments are exposed.}
             detail:
-              type: object
-              additionalProperties: true
-              description: On-demand Charlie-managed evidence returned only after current product authorization.
+              allOf:
+                - {$ref: '#/components/schemas/CharlieFindingAdvisoryDetail'}
+              description: Strict advisory evidence returned only after current product authorization. It cannot contain approval, manifest, signature, action, argument, or authorization fields.
     CharlieFindingTransitionRequest:
       type: object
       additionalProperties: false

@@ -54,33 +54,32 @@ func TestFindingWorkflowUsesPersistedCentralWorkflowWithoutInferringAuthority(t 
 	}
 }
 
-func TestFindingWorkflowApprovalRequiresCurrentExactLink(t *testing.T) {
+func TestFindingWorkflowApprovalExposesPendingStateWithoutExactLink(t *testing.T) {
 	now := time.Unix(20_000, 0).UTC()
 	row := sqlc.CharlieFinding{Status: "open", ExecutionBlockCode: "approval_required",
 		EffectiveMode: string(ModeApproval),
-		ApprovalID:    pgtype.Text{String: "approval-a", Valid: true},
+		WorkflowState: string(FindingWorkflowApprovalPending),
 		ExpiresAt:     pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true}}
 	workflow := FindingWorkflowFor(row, now)
-	if workflow.State != FindingWorkflowApprovalPending || len(workflow.Decisions) != 2 || FindingWorkflowAllows(row, "resolve", now) {
+	if workflow.State != FindingWorkflowApprovalPending || len(workflow.Decisions) != 0 || FindingWorkflowAllows(row, "resolve", now) {
 		t.Fatalf("approval workflow = %#v", workflow)
 	}
 	row.ExpiresAt.Time = now.Add(-time.Second)
-	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowExpired || len(got.Decisions) != 0 || FindingWorkflowAllows(row, "open_exact_approval", now) {
+	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowExpired || len(got.Decisions) != 0 {
 		t.Fatalf("expired approval retained authority: %#v", got)
 	}
 	row.ExecutionBlockCode = string(ReasonApprovalExpired)
 	row.WorkflowState = string(FindingWorkflowManualRemediationRequired)
 	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowManualRemediationRequired ||
-		FindingWorkflowAllows(row, "open_exact_approval", now) || !FindingWorkflowAllows(row, "start_remediation", now) {
+		!FindingWorkflowAllows(row, "start_remediation", now) {
 		t.Fatalf("persisted expired approval did not offer safe manual remediation: %#v", got)
 	}
 	row.ExecutionBlockCode = string(ReasonApprovalRequired)
 	row.WorkflowState = ""
 	row.ExpiresAt.Time = now.Add(time.Minute)
-	row.ApprovalID = pgtype.Text{}
-	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowManualRemediationRequired ||
-		FindingWorkflowAllows(row, "open_exact_approval", now) || FindingWorkflowAllows(row, "reject_exact_approval", now) {
-		t.Fatalf("missing approval link retained execution control: %#v", got)
+	row.ExpiresAt = pgtype.Timestamptz{}
+	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowApprovalPending || len(got.Decisions) != 0 {
+		t.Fatalf("approval state depended on exact approval linkage: %#v", got)
 	}
 }
 

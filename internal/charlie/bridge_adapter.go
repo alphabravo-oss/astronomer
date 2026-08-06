@@ -326,49 +326,49 @@ func (b *RuntimeBridge) DecideApproval(ctx context.Context, approvalID, authoriz
 	return response, nil
 }
 
-func (b *RuntimeBridge) GetFinding(ctx context.Context, findingID, authorizationRef string) (json.RawMessage, error) {
+func (b *RuntimeBridge) GetFinding(ctx context.Context, findingID, authorizationRef string) (FindingAdvisoryDetail, error) {
+	envelope, err := b.getFindingEnvelope(ctx, findingID, authorizationRef)
+	if err != nil {
+		return FindingAdvisoryDetail{}, err
+	}
+	return advisoryDetailFromEnvelope(envelope)
+}
+
+func (b *RuntimeBridge) getFindingEnvelope(ctx context.Context, findingID, authorizationRef string) (contract.FindingEnvelope, error) {
 	path, err := opaqueBridgePath("/findings/", findingID)
 	if err != nil {
-		return nil, err
+		return contract.FindingEnvelope{}, err
 	}
-	var response json.RawMessage
+	var response contract.FindingEnvelope
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodGet, path, "", authorizationRef, nil, &response); err != nil {
-		return nil, err
+		return contract.FindingEnvelope{}, err
 	}
 	return response, nil
 }
 
 func (b *RuntimeBridge) GetFindingScope(ctx context.Context, findingID, authorizationRef string) (BridgeFindingScope, error) {
-	raw, err := b.GetFinding(ctx, findingID, authorizationRef)
+	envelope, err := b.getFindingEnvelope(ctx, findingID, authorizationRef)
 	if err != nil {
 		return BridgeFindingScope{}, err
 	}
-	return decodeBridgeFindingScope(raw)
+	return bridgeFindingScopeFromEnvelope(envelope)
 }
 
-func decodeBridgeFindingScope(raw json.RawMessage) (BridgeFindingScope, error) {
-	var envelope struct {
-		Finding struct {
-			FindingID             string   `json:"finding_id"`
-			SessionID             string   `json:"session_id"`
-			BlockCode             string   `json:"block_code"`
-			AffectedResources     []string `json:"affected_resources"`
-			RecommendedCapability *string  `json:"recommended_capability"`
-		} `json:"finding"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Finding.RecommendedCapability == nil || len(envelope.Finding.AffectedResources) != 1 {
+func bridgeFindingScopeFromEnvelope(envelope contract.FindingEnvelope) (BridgeFindingScope, error) {
+	finding := envelope.Finding
+	if envelope.Schema != "charlie.finding/v1" || finding.RecommendedCapability == nil || len(finding.AffectedResources) != 1 {
 		return BridgeFindingScope{}, fmt.Errorf("Charlie finding scope is invalid")
 	}
-	resource := envelope.Finding.AffectedResources[0]
-	capability := strings.TrimSpace(*envelope.Finding.RecommendedCapability)
+	resource := finding.AffectedResources[0]
+	capability := strings.TrimSpace(*finding.RecommendedCapability)
 	if !strings.HasPrefix(resource, "sha256:") || !isLowerHexDigest(strings.TrimPrefix(resource, "sha256:")) ||
-		!bridgeFindingOpaqueIDPattern.MatchString(envelope.Finding.FindingID) ||
-		!bridgeFindingOpaqueIDPattern.MatchString(envelope.Finding.SessionID) ||
-		!validCentralFindingBlockCode(envelope.Finding.BlockCode) || !bridgeFindingCapabilityPattern.MatchString(capability) {
+		!bridgeFindingOpaqueIDPattern.MatchString(finding.FindingId) ||
+		!bridgeFindingOpaqueIDPattern.MatchString(finding.SessionId) ||
+		!validCentralFindingBlockCode(string(finding.BlockCode)) || !bridgeFindingCapabilityPattern.MatchString(capability) {
 		return BridgeFindingScope{}, fmt.Errorf("Charlie finding scope is invalid")
 	}
-	return BridgeFindingScope{FindingID: envelope.Finding.FindingID, SessionID: envelope.Finding.SessionID,
-		BlockCode: envelope.Finding.BlockCode, ResourceDigest: strings.TrimPrefix(resource, "sha256:"),
+	return BridgeFindingScope{FindingID: finding.FindingId, SessionID: finding.SessionId,
+		BlockCode: string(finding.BlockCode), ResourceDigest: strings.TrimPrefix(resource, "sha256:"),
 		RecommendedCapability: capability}, nil
 }
 
@@ -376,21 +376,24 @@ func findingResourceDigest(resourceID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(resourceID)))
 }
 
-func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, decision, actorRef string) (json.RawMessage, error) {
+func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, decision, actorRef string) (BridgeFindingSummary, error) {
 	path, err := opaqueBridgePath("/findings/", findingID)
 	if err != nil {
-		return nil, err
+		return BridgeFindingSummary{}, err
 	}
 	if !validFindingDecision(decision) {
-		return nil, fmt.Errorf("Charlie finding transition is invalid")
+		return BridgeFindingSummary{}, fmt.Errorf("Charlie finding transition is invalid")
 	}
 	if !bridgeFindingOpaqueIDPattern.MatchString(actorRef) {
-		return nil, fmt.Errorf("Charlie finding actor reference is invalid")
+		return BridgeFindingSummary{}, fmt.Errorf("Charlie finding actor reference is invalid")
 	}
 	request := map[string]string{"request_id": requestID.String(), "transition": decision, "actor_ref": actorRef}
-	var response json.RawMessage
+	var response BridgeFindingSummary
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/transitions", requestID.String(), authorizationRef, request, &response); err != nil {
-		return nil, err
+		return BridgeFindingSummary{}, err
+	}
+	if response.FindingID != findingID || !validBridgeFindingSummary(response) {
+		return BridgeFindingSummary{}, fmt.Errorf("Charlie finding transition response is invalid")
 	}
 	return response, nil
 }

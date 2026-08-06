@@ -582,16 +582,28 @@ export interface OpenAPIComponents {
           "label": string;
           "summary": string;
         };
+    CharlieFindingAdvisoryDetail: {
+          "evidence_summary": string[];
+          "diagnosis": string;
+          "confidence": number;
+          "risk_impact": string;
+          "preconditions"?: string[];
+          "rollback"?: string;
+          "operator_checks": string[];
+          "verification_steps": string[];
+          "manual_remediation"?: OpenAPIComponents['schemas']['CharlieFindingManualRemediation'];
+        };
     CharlieFindingDetail: OpenAPIComponents['schemas']['CharlieFindingSummary'] & {
           "risk_impact"?: string;
           "verification_summary"?: string;
-          "proposed_action"?: {
-            "label": string;
-            "mode": "read_only" | "approval" | "auto";
-            "eligible": boolean;
-            "approval_id"?: string;
-          };
-          "detail"?: Record<string, unknown>;
+          "detail"?: OpenAPIComponents['schemas']['CharlieFindingAdvisoryDetail'];
+        };
+    CharlieFindingManualRemediation: {
+          "preconditions"?: string[];
+          "steps": string[];
+          "expected_impact": string;
+          "rollback"?: string;
+          "verification": OpenAPIComponents['schemas']['CharlieFindingVerification'];
         };
     CharlieFindingResource: {
           "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
@@ -609,10 +621,14 @@ export interface OpenAPIComponents {
           "updated_at": string;
           "affected_resource": OpenAPIComponents['schemas']['CharlieFindingResource'];
           "workflow_state": "approval_pending" | "manual_remediation_required" | "remediation_in_progress" | "verification_pending" | "resolved" | "rejected" | "dismissed" | "expired";
-          "available_decisions": Array<"open_exact_approval" | "reject_exact_approval" | "acknowledge" | "start_remediation" | "request_verification" | "dismiss" | "resolve">;
+          "available_decisions": Array<"acknowledge" | "start_remediation" | "request_verification" | "dismiss" | "resolve">;
         };
     CharlieFindingTransitionRequest: {
           "request_id": string;
+        };
+    CharlieFindingVerification: {
+          "method": string;
+          "steps": string[];
         };
     CharlieMessageRequest: {
           "client_message_id": string;
@@ -1966,10 +1982,13 @@ export type CharlieAdminTriggerRule = OpenAPIComponents['schemas']['CharlieAdmin
 export type CharlieApprovalDecisionRequest = OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
 export type CharlieApprovalSummary = OpenAPIComponents['schemas']['CharlieApprovalSummary'];
 export type CharlieContextSearchResult = OpenAPIComponents['schemas']['CharlieContextSearchResult'];
+export type CharlieFindingAdvisoryDetail = OpenAPIComponents['schemas']['CharlieFindingAdvisoryDetail'];
 export type CharlieFindingDetail = OpenAPIComponents['schemas']['CharlieFindingDetail'];
+export type CharlieFindingManualRemediation = OpenAPIComponents['schemas']['CharlieFindingManualRemediation'];
 export type CharlieFindingResource = OpenAPIComponents['schemas']['CharlieFindingResource'];
 export type CharlieFindingSummary = OpenAPIComponents['schemas']['CharlieFindingSummary'];
 export type CharlieFindingTransitionRequest = OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+export type CharlieFindingVerification = OpenAPIComponents['schemas']['CharlieFindingVerification'];
 export type CharlieMessageRequest = OpenAPIComponents['schemas']['CharlieMessageRequest'];
 export type CharlieModeRequest = OpenAPIComponents['schemas']['CharlieModeRequest'];
 export type CharlieOnboardingRequest = OpenAPIComponents['schemas']['CharlieOnboardingRequest'];

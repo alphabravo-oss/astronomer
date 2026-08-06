@@ -7,8 +7,10 @@
 > gaps are recorded in section 5.1, while A10/A11 acceptance and A14 require the
 > integrated UI or a live deployment.
 >
-> **Implementation branch:** `feat/charlie-core-integration`, audited through
-> commit `d81e8f2` and schema version 149 on 2026-08-06.
+> **Implementation branch:** `feat/charlie-core-integration`, implementation
+> base through commit `d966b87` and schema version 149 on 2026-08-06. The
+> Charlie `1.0.21` contract alignment remains in progress until its generated
+> contracts, repository tests, commit, deployment, and live evidence complete.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
@@ -93,6 +95,31 @@ Astronomer browser
 - [x] **A-017** Reject destructive/irreversible disclosures entirely in v1 and
   require every permitted write to be typed, reversible, idempotent, scoped,
   preconditioned, budgeted, fenced, audited, and independently verified.
+
+### Release safety invariant
+
+The Charlie integration is an isolated optional subsystem, never an ambient
+Astronomer privilege. These are requirements, not claims that the remaining
+unchecked qualification gates have passed:
+
+| State or path | Required invariant |
+| --- | --- |
+| Feature absent or disabled | No Charlie agent, process, listener, timer, worker, trigger, DNS lookup, credential refresh, central egress, MCP call, session, finding, or notification work exists. Persisted local administration is the only surface. |
+| Connection enabled at wire `disabled` | Only the minimal authenticated signed control protocol is allowed. Product data, AI, RAG, evidence, findings, claims, and actions remain unavailable. |
+| `read_only` | Live actor RBAC and exact resource scope may authorize disclosed reads only. A material recommended write becomes bounded operator guidance and a durable actionable finding; it never becomes an action request. |
+| `approval` | All read-only behavior remains. One safe action may run only through the separate authenticated exact-approval path after approve-once, expiry, live RBAC/scope, safety, fencing, idempotency, required product audit admission, and final precondition checks all pass. |
+| `auto` | All read-only and exact human-approval paths remain. Only a separately reviewed capability/resource allowlist under the narrow automation identity may run automatically; failure to qualify falls back to exact approval or manual guidance, never broader authority. |
+| Destructive or generic capability | Shell, exec, raw SQL, generic HTTP/proxy, Secret/credential access, delete, downstream-tunnel use, and irreversible work are rejected from the v1 catalog in every mode. Approval and automation cannot override this. |
+| Alert or finding | It is untrusted advisory data containing bounded impact, evidence summary, safe checks, remediation guidance, verification, coded non-execution reason, timeline/repeat state, and a product deep link. It contains no approval ID, manifest, signature, exact arguments, authorization reference, or reusable action. |
+| Logs and audit | Operational telemetry uses typed allowlisted codes, bounded counts/timing/revisions/digests, and opaque correlations only. Required product audit admission fails closed before authority changes and writes; notification delivery is durable/retry-safe but never execution authority. |
+
+Astronomer is the final enforcement point. Charlie central policy and the local
+agent may only narrow a request; they cannot raise the product feature state,
+mode ceiling, actor permission, target scope, safety admission, or action
+authority. Unknown, missing, stale, conflicting, or unavailable inputs deny.
+When an active integration cannot act, Astronomer preserves the diagnosis as a
+deduplicated durable finding and alerts only currently authorized users with the
+next legal decision. Disabled states produce no runtime findings or alerts.
 
 ## 2. Current state and plan scope
 
@@ -386,7 +413,9 @@ exact approval or automation grant -> fresh live authorization -> action reserva
                                   -> product verification -> durable result
 ```
 
-The alert may reference an opaque pending approval, but it must never carry an
+The alert may state that its workflow is `approval_pending`, but it must not
+carry even an approval identifier. The separately authorized detail path loads
+the exact current approval from the approvals lane. An alert must never carry an
 executable manifest, signed authority, product authorization reference, exact
 arguments, or a replayable action request. Opening, clicking, acknowledging,
 dismissing, assigning, snoozing, or resolving an alert cannot enter the execution
@@ -420,10 +449,10 @@ values, and arbitrary exception text are forbidden. Read-only diagnosis may
 degrade safely when an optional telemetry sink is unavailable, but it must never
 silently claim an action, approval, notification, or audit write succeeded.
 
-- [ ] **A-ALERT-001** Make finding/notification payload schemas structurally
+- [x] **A-ALERT-001** Make finding/notification payload schemas structurally
   incapable of carrying an executable manifest, authority token, product
   authorization reference, exact tool arguments, or reusable action request.
-- [ ] **A-ALERT-002** Prove every notification interaction other than the
+- [x] **A-ALERT-002** Prove every notification interaction other than the
   separately authenticated exact-approval endpoint has zero action-dispatch
   side effects, including replay, concurrent clicks, stale cards, and forged UI
   payloads.
@@ -441,6 +470,20 @@ silently claim an action, approval, notification, or audit write succeeded.
   or connection disabled; control-status only in wire `disabled`; manual guidance
   in `read_only`; exact approve/reject or manual guidance in `approval`; verified
   automatic result, exact fallback approval, or manual guidance in `auto`.
+
+Charlie `1.0.21` contract-alignment evidence: the pinned strict finding schema,
+generated bridge types, Astronomer public OpenAPI, generated Go SDK, and generated
+frontend types expose advisory finding detail without any approval identifier,
+manifest, signature, authorization reference, exact arguments, or action
+request. The handler accepts only `request_id` on finding transitions. Focused
+tests forge every forbidden field across every current finding interaction and
+prove rejection before service entry; live-resource revocation, idempotent
+replay, and twelve-way concurrent interaction tests cover acknowledge, start
+remediation, request verification, dismiss, and resolve while asserting zero
+approval and zero action-dispatch calls. The focused Go and race suites,
+frontend tests/typecheck/lint, pinned-contract drift check, and API-contract gate
+pass. This completes A-ALERT-001 and A-ALERT-002 only; the policy, complete audit,
+complete logging, and live mode-matrix gates remain open.
 
 #### Required isolation, authority, and alert acceptance matrix
 

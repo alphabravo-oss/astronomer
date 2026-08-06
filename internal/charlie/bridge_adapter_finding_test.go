@@ -5,13 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestDecodeBridgeFindingScopeKeepsOnlyExactActionMetadata(t *testing.T) {
 	digest := findingResourceDigest("astronomer")
 	raw := json.RawMessage(`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `"],"recommended_capability":"astronomer.argocd.self_management_sync","diagnosis":"content-canary","operator_checks":["content-canary"]}}`)
-	got, err := decodeBridgeFindingScope(raw)
+	got, err := bridgeFindingScopeFromEnvelope(decodeFindingEnvelopeForTest(t, raw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,10 +36,20 @@ func TestDecodeBridgeFindingScopeRejectsAmbiguousOrSubstitutedTargets(t *testing
 		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["astronomer"],"recommended_capability":"astronomer.argocd.self_management_sync"}}`,
 		`{"finding":{"finding_id":"finding-a","session_id":"session-a","block_code":"read_only","affected_resources":["sha256:` + digest + `"],"recommended_capability":"invalid capability"}}`,
 	} {
-		if _, err := decodeBridgeFindingScope(json.RawMessage(raw)); err == nil {
+		if _, err := bridgeFindingScopeFromEnvelope(decodeFindingEnvelopeForTest(t, json.RawMessage(raw))); err == nil {
 			t.Fatalf("unsafe finding scope was accepted: %s", raw)
 		}
 	}
+}
+
+func decodeFindingEnvelopeForTest(t *testing.T, raw json.RawMessage) contract.FindingEnvelope {
+	t.Helper()
+	var envelope contract.FindingEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	envelope.Schema = "charlie.finding/v1"
+	return envelope
 }
 
 func TestExactFindingResourceRejectsMissingAndAmbiguousDigests(t *testing.T) {

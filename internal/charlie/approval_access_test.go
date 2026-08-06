@@ -309,7 +309,7 @@ func TestApprovalAccessTurnsExpiredApprovalIntoManualRemediation(t *testing.T) {
 	workflow := FindingWorkflowFor(store.finding, time.Now().UTC())
 	if store.finding.Status != "open" || store.finding.ExecutionBlockCode != string(ReasonApprovalExpired) ||
 		workflow.State != FindingWorkflowManualRemediationRequired ||
-		slices.Contains(workflow.Decisions, "open_exact_approval") || !slices.Contains(workflow.Decisions, "start_remediation") {
+		!slices.Contains(workflow.Decisions, "start_remediation") {
 		t.Fatalf("expired approval did not become bounded manual remediation: finding=%#v workflow=%#v", store.finding, workflow)
 	}
 }

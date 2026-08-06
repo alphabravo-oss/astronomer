@@ -607,7 +607,6 @@ type FindingVerification struct {
 
 // FindingWorkflow defines model for FindingWorkflow.
 type FindingWorkflow struct {
-	ApprovalId        *FindingOpaqueId          `json:"approval_id,omitempty"`
 	ManualRemediation *FindingManualRemediation `json:"manual_remediation,omitempty"`
 	State             FindingWorkflowState      `json:"state"`
 }

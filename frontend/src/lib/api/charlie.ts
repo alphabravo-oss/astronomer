@@ -119,8 +119,6 @@ export interface CharlieFinding {
     | "dismissed"
     | "expired";
   availableDecisions: Array<
-    | "open_exact_approval"
-    | "reject_exact_approval"
     | "acknowledge"
     | "start_remediation"
     | "request_verification"
@@ -140,19 +138,6 @@ export interface CharlieFinding {
     rollback?: string;
     verificationMethod: string;
     verificationSteps: string[];
-  };
-  proposedAction?: {
-    capability: string;
-    target: string;
-    risk: string;
-    impact: string;
-    preconditions: string[];
-    expectedResult?: string;
-    rollback?: string;
-    verification?: string;
-    mode: string;
-    eligible: boolean;
-    approvalId?: string;
   };
 }
 
@@ -180,17 +165,11 @@ type CharlieWireSession = {
   updated_at?: string;
 };
 
-interface CharlieCentralFinding {
-  recommendedCapability?: string;
-  recommended_capability?: string;
-  blockCode?: string;
-  block_code?: string;
+interface CharlieAdvisoryDetailWire {
   riskImpact?: string;
   risk_impact?: string;
   preconditions?: string[];
   rollback?: string;
-  expectedResult?: string;
-  expected_result?: string;
   verificationSteps?: string[];
   verification_steps?: string[];
   confidence?: number;
@@ -199,11 +178,8 @@ interface CharlieCentralFinding {
   evidence_summary?: string[];
   operatorChecks?: string[];
   operator_checks?: string[];
-  workflow?: {
-    state?: CharlieFinding["workflowState"];
-    manualRemediation?: CharlieManualRemediationWire;
-    manual_remediation?: CharlieManualRemediationWire;
-  };
+  manualRemediation?: CharlieManualRemediationWire;
+  manual_remediation?: CharlieManualRemediationWire;
 }
 interface CharlieManualRemediationWire {
   preconditions?: string[];
@@ -212,13 +188,6 @@ interface CharlieManualRemediationWire {
   expected_impact?: string;
   rollback?: string;
   verification?: { method?: string; steps?: string[] };
-}
-interface CharlieProposedActionWire {
-  label?: string;
-  mode?: string;
-  eligible?: boolean;
-  approvalId?: string;
-  approval_id?: string;
 }
 interface CharlieFindingWire {
   id: string;
@@ -234,9 +203,7 @@ interface CharlieFindingWire {
   risk_impact?: string;
   verificationSummary?: string;
   verification_summary?: string;
-  proposedAction?: CharlieProposedActionWire;
-  proposed_action?: CharlieProposedActionWire;
-  detail?: { finding?: CharlieCentralFinding };
+  detail?: CharlieAdvisoryDetailWire;
   sessionId?: string;
   session_id?: string;
   source?: string;
@@ -277,7 +244,7 @@ function mapCharlieResource(value: CharlieWireResource): CharlieResource {
 }
 
 function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
-  const central = value.detail?.finding ?? {};
+  const advisory = value.detail ?? {};
   const affected = value.affectedResource ??
     value.affected_resource ?? {
       type: "installation",
@@ -285,54 +252,17 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
       requiredVerb: "read",
     };
   const severity = value.severity === "info" ? "low" : value.severity;
-  const proposedWire = value.proposedAction ?? value.proposed_action;
   const manualWire =
-    central.workflow?.manualRemediation ??
-    central.workflow?.manual_remediation;
-  const recommended =
-    central.recommendedCapability ?? central.recommended_capability;
-  const proposed =
-    proposedWire || recommended
-      ? {
-          capability: recommended ?? proposedWire?.label ?? "operator.review",
-          target: affected?.id ?? "installation",
-          risk:
-            central.blockCode ??
-            central.block_code ??
-            value.reasonNoAction ??
-            value.reason_no_action ??
-            "review_required",
-          impact:
-            central.riskImpact ??
-            central.risk_impact ??
-            value.riskImpact ??
-            value.risk_impact ??
-            "Review the bounded recommendation before proceeding.",
-          preconditions: central.preconditions ?? [],
-          rollback: central.rollback,
-          expectedResult: central.expectedResult ?? central.expected_result,
-          verification:
-            ((
-              central.verificationSteps ??
-              central.verification_steps ??
-              []
-            ).join("; ") ||
-              value.verificationSummary) ??
-            value.verification_summary,
-          mode: proposedWire?.mode ?? "read_only",
-          eligible: proposedWire?.eligible === true,
-          approvalId: proposedWire?.approvalId ?? proposedWire?.approval_id,
-        }
-      : undefined;
+    advisory.manualRemediation ?? advisory.manual_remediation;
   return {
     id: value.id,
     title: value.title,
     severity,
     state: value.state,
     affectedResource: mapCharlieResource(affected),
-    confidence: central.confidence,
+    confidence: advisory.confidence,
     reasonNoAction: value.reasonNoAction ?? value.reason_no_action,
-    summary: value.summary || central.diagnosis || "",
+    summary: value.summary || advisory.diagnosis || "",
     sessionId: value.sessionId ?? value.session_id,
     source: value.source,
     repeatCount: value.repeatCount ?? value.repeat_count ?? 1,
@@ -342,13 +272,13 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
       value.workflowState ?? value.workflow_state ?? "manual_remediation_required",
     availableDecisions:
       value.availableDecisions ?? value.available_decisions ?? [],
-    evidence: (central.evidenceSummary ?? central.evidence_summary ?? []).map(
+    evidence: (advisory.evidenceSummary ?? advisory.evidence_summary ?? []).map(
       (summary: string, index: number) => ({
         label: `Evidence ${index + 1}`,
         summary,
       }),
     ),
-    operatorChecks: central.operatorChecks ?? central.operator_checks ?? [],
+    operatorChecks: advisory.operatorChecks ?? advisory.operator_checks ?? [],
     manualRemediation: manualWire
       ? {
           preconditions: manualWire.preconditions ?? [],
@@ -360,7 +290,6 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
           verificationSteps: manualWire.verification?.steps ?? [],
         }
       : undefined,
-    proposedAction: proposed,
   };
 }
 

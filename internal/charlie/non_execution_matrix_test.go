@@ -50,17 +50,9 @@ func TestA12029A12030NonExecutionWorkflowMatrix(t *testing.T) {
 					ExpiresAt:  pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true},
 				}
 				workflow := FindingWorkflowFor(row, now)
-				wantState, wantDecisions, wantApprovalLink := expectedNonExecutionWorkflow(reason, mode)
+				wantState, wantDecisions := expectedNonExecutionWorkflow(reason, mode)
 				if workflow.State != wantState || !slices.Equal(workflow.Decisions, wantDecisions) {
 					t.Fatalf("workflow=%#v want state=%s decisions=%v", workflow, wantState, wantDecisions)
-				}
-				hasApprovalLink := slices.Contains(workflow.Decisions, "open_exact_approval")
-				if hasApprovalLink != wantApprovalLink {
-					t.Fatalf("approval link=%v want=%v", hasApprovalLink, wantApprovalLink)
-				}
-				if !wantApprovalLink && (FindingWorkflowAllows(row, "open_exact_approval", now) ||
-					FindingWorkflowAllows(row, "reject_exact_approval", now)) {
-					t.Fatal("non-approval workflow exposed execution control")
 				}
 			})
 		}
@@ -174,24 +166,24 @@ func assertA12029Vocabulary(t *testing.T) {
 	}
 }
 
-func expectedNonExecutionWorkflow(reason DenialCode, mode Mode) (FindingWorkflowState, []string, bool) {
+func expectedNonExecutionWorkflow(reason DenialCode, mode Mode) (FindingWorkflowState, []string) {
 	if mode == ModeDisabled || !IsActionableNonExecutionReason(reason) {
-		return FindingWorkflowManualRemediationRequired, []string{}, false
+		return FindingWorkflowManualRemediationRequired, []string{}
 	}
 	switch reason {
 	case ReasonApprovalRequired:
 		if mode == ModeApproval || mode == ModeAuto {
-			return FindingWorkflowApprovalPending, []string{"open_exact_approval", "reject_exact_approval"}, true
+			return FindingWorkflowApprovalPending, []string{}
 		}
-		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}, false
+		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}
 	case ReasonApprovalExpired:
-		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}, false
+		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}
 	case ReasonApprovalRejected:
-		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}, false
+		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}
 	case ReasonVerificationFailed:
-		return FindingWorkflowVerificationPending, []string{"start_remediation", "dismiss", "resolve"}, false
+		return FindingWorkflowVerificationPending, []string{"start_remediation", "dismiss", "resolve"}
 	default:
-		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}, false
+		return FindingWorkflowManualRemediationRequired, []string{"acknowledge", "start_remediation", "dismiss"}
 	}
 }
 

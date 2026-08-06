@@ -79,7 +79,6 @@
       "required": ["state"],
       "properties": {
         "state": {"$ref": "#/$defs/workflowState"},
-        "approval_id": {"$ref": "#/$defs/opaqueId"},
         "manual_remediation": {"$ref": "#/$defs/manualRemediation"}
       }
     },

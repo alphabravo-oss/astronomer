@@ -3,7 +3,6 @@ package charlie
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -33,8 +32,8 @@ type findingAccessQueries interface {
 // keeps only a bounded redacted summary; full evidence remains in Charlie and
 // is fetched only after current product authorization succeeds.
 type FindingContentBridge interface {
-	GetFinding(context.Context, string, string) (json.RawMessage, error)
-	TransitionFinding(context.Context, string, string, uuid.UUID, string, string) (json.RawMessage, error)
+	GetFinding(context.Context, string, string) (FindingAdvisoryDetail, error)
+	TransitionFinding(context.Context, string, string, uuid.UUID, string, string) (BridgeFindingSummary, error)
 }
 
 type FindingLifecycleAudit struct {
@@ -74,9 +73,9 @@ func NewFindingAccessService(queries findingAccessQueries, authorizer SessionAcc
 }
 
 type FindingView struct {
-	Finding   sqlc.CharlieFinding           `json:"finding"`
-	Resources []sqlc.CharlieFindingResource `json:"resources"`
-	Remote    json.RawMessage               `json:"remote,omitempty"`
+	Finding   sqlc.CharlieFinding           `json:"-"`
+	Resources []sqlc.CharlieFindingResource `json:"-"`
+	Detail    *FindingAdvisoryDetail        `json:"-"`
 }
 
 // CanReceiveFinding is the event-stream delivery boundary. It deliberately
@@ -134,17 +133,31 @@ func (s *FindingAccessService) Get(ctx context.Context, actorID, findingID uuid.
 		if authErr != nil {
 			return FindingView{}, authErr
 		}
-		remote, bridgeErr := s.bridge.GetFinding(ctx, row.CharlieFindingID, authorizationRef)
+		detail, bridgeErr := s.bridge.GetFinding(ctx, row.CharlieFindingID, authorizationRef)
 		if bridgeErr != nil {
 			return FindingView{}, fmt.Errorf("Charlie finding detail is unavailable")
 		}
-		view.Remote = remote
+		view.Detail = &detail
 	}
 	s.audit(ctx, "charlie.finding.read", row.ID, actorID, "allowed", len(resources))
 	return view, nil
 }
 
-func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingID, requestID uuid.UUID, decision string) (FindingView, error) {
+func (s *FindingAccessService) TransitionAdvisory(ctx context.Context, actorID, findingID, requestID uuid.UUID, decision FindingAdvisoryDecision) (FindingView, error) {
+	if !decision.valid() {
+		return FindingView{}, fmt.Errorf("Charlie advisory transition is invalid")
+	}
+	return s.transition(ctx, actorID, findingID, requestID, string(decision))
+}
+
+func (s *FindingAccessService) TransitionWorkflow(ctx context.Context, actorID, findingID, requestID uuid.UUID, decision string) (FindingView, error) {
+	if decision != "start_remediation" && decision != "request_verification" {
+		return FindingView{}, fmt.Errorf("Charlie finding workflow transition is invalid")
+	}
+	return s.transition(ctx, actorID, findingID, requestID, decision)
+}
+
+func (s *FindingAccessService) transition(ctx context.Context, actorID, findingID, requestID uuid.UUID, decision string) (FindingView, error) {
 	if requestID == uuid.Nil || !validFindingDecision(decision) {
 		return FindingView{}, fmt.Errorf("Charlie finding transition is invalid")
 	}
@@ -164,20 +177,19 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 			s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "idempotency_conflict", len(resources))
 			return FindingView{}, fmt.Errorf("Charlie finding transition request was already used")
 		}
-		var remote json.RawMessage
 		if shouldFetchCentralFinding(row) {
 			authorizationRef, authErr := s.issueFindingDelegation(ctx, row, actorID, connection.ID)
 			if authErr != nil {
 				return FindingView{}, authErr
 			}
-			remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(row.ConnectionID, actorID))
+			_, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(row.ConnectionID, actorID))
 			if err != nil {
 				s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_replay_failed", len(resources))
 				return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
 			}
 		}
 		s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "replayed", len(resources))
-		return FindingView{Finding: row, Resources: resources, Remote: remote}, nil
+		return FindingView{Finding: row, Resources: resources}, nil
 	}
 	if !errors.Is(priorErr, pgx.ErrNoRows) {
 		return FindingView{}, fmt.Errorf("Charlie finding transition history is unavailable")
@@ -186,13 +198,12 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	if !allowed {
 		return FindingView{}, fmt.Errorf("Charlie finding transition is invalid")
 	}
-	var remote json.RawMessage
 	if shouldFetchCentralFinding(row) {
 		authorizationRef, authErr := s.issueFindingDelegation(ctx, row, actorID, connection.ID)
 		if authErr != nil {
 			return FindingView{}, authErr
 		}
-		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(row.ConnectionID, actorID))
+		_, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(row.ConnectionID, actorID))
 		if err != nil {
 			s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_rejected", len(resources))
 			return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
@@ -219,7 +230,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	alert := FindingAlert{FindingID: updated.ID.String(), Severity: NormalizeFindingSeverity(updated.Severity), Status: updated.Status, ResourceType: resources[0].ResourceType, ResourceID: resources[0].ResourceID, BlockCode: updated.ExecutionBlockCode, RepeatCount: int(updated.RepeatCount)}
 	s.publisher.PublishCharlieFindingLifecycle(ctx, alert)
 	s.audit(ctx, findingDecisionAuditAction(decision), updated.ID, actorID, "completed", len(resources))
-	return FindingView{Finding: updated, Resources: resources, Remote: remote}, nil
+	return FindingView{Finding: updated, Resources: resources}, nil
 }
 
 // findingActorRef gives Charlie stable finding-lineage audit attribution
