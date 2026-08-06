@@ -154,7 +154,13 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 			activation.Connection = connection
 		}
 	}
-	r.config.WriteFence.Open()
+	effective := EffectiveMode(Mode(activation.Connection.RequestedMode), Mode(activation.Connection.VerifiedMode), activation.Connection.EmergencyDisabled)
+	if effective != ModeApproval && effective != ModeAuto {
+		r.config.WriteFence.Close()
+	}
+	// Runtime reconciliation owns listener lifecycle only. Write admission is
+	// opened exclusively by ModeController after durable mode state, central
+	// readback, and the all-replica workload ceiling are proven together.
 	connectionKey := activation.Connection.ID.String()
 	material, err := mcpMaterialDigest(r.config)
 	if err != nil {

@@ -104,7 +104,7 @@ func TestFeatureDisableQuiescesBeforeAuthorizedAgentSuspension(t *testing.T) {
 	if err := lifecycle.Disable(t.Context(), "actor-a"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(order, ","); got != "runtime,mode,suspend" {
+	if got := strings.Join(order, ","); got != "mode,runtime,suspend" {
 		t.Fatalf("disable order=%s", got)
 	}
 	if installer.suspendCalls != 1 || runtime.shutdowns != 1 {

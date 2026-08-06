@@ -438,6 +438,9 @@ components:
         - disclosure_digest
         - auto_allowlist
         - effective_mode
+        - product_mode_ceiling
+        - central_mode
+        - emergency_disabled
         - route_id
         - artifact_version
         - product_enabled
@@ -461,14 +464,17 @@ components:
           uniqueItems: true
           items: {type: string, pattern: "^[a-z][a-z0-9_.:-]{0,127}$"}
         effective_mode: {$ref: "#/components/schemas/Mode"}
+        product_mode_ceiling: {$ref: "#/components/schemas/Mode"}
+        central_mode: {$ref: "#/components/schemas/Mode"}
+        emergency_disabled: {type: boolean}
         route_id: {$ref: "#/components/schemas/OpaqueId"}
         artifact_version: {type: string, minLength: 1, maxLength: 128}
         product_enabled: {type: boolean}
         deployment_enabled: {type: boolean}
-        effective_enabled: {type: boolean, description: True only when both enablement authorities are true.}
+        effective_enabled: {type: boolean, description: "True only when connection, activation, non-disabled lower mode, disclosure, and emergency-latch inputs agree."}
     Mode:
       type: string
-      enum: [read_only, approval, auto]
+      enum: [disabled, read_only, approval, auto]
     ActivationRequest:
       type: object
       additionalProperties: false

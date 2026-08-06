@@ -176,10 +176,10 @@ func (s *liveState) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, key := range runtimeKeys {
 			_, _ = fmt.Fprintf(w, "%s %d\n", defaultCounterMetrics()[key], s.runtime[key])
 		}
-		_, _ = fmt.Fprintf(w, "astronomer_downstream_boundary_calls_total{entrypoint=%q,operation=%q} %d\n", "tunnel_message", "other", s.downstream["tunnel"])
-		_, _ = fmt.Fprintf(w, "astronomer_downstream_boundary_calls_total{entrypoint=%q,operation=%q} %d\n", "kubernetes_proxy", "other", s.downstream["proxy"])
+		_, _ = fmt.Fprintf(w, "astronomer_charlie_downstream_boundary_calls_total{entrypoint=%q,operation=%q} %d\n", "tunnel_message", "other", s.downstream["tunnel"])
+		_, _ = fmt.Fprintf(w, "astronomer_charlie_downstream_boundary_calls_total{entrypoint=%q,operation=%q} %d\n", "kubernetes_proxy", "other", s.downstream["proxy"])
 		for _, operation := range []string{"kubernetes", "exec", "logs", "helm"} {
-			_, _ = fmt.Fprintf(w, "astronomer_downstream_boundary_calls_total{entrypoint=%q,operation=%q} %d\n", "other", operation, s.downstream[operation])
+			_, _ = fmt.Fprintf(w, "astronomer_charlie_downstream_boundary_calls_total{entrypoint=%q,operation=%q} %d\n", "other", operation, s.downstream[operation])
 		}
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/settings/feature.charlie/":
 		_, _ = fmt.Fprintf(w, `{"data":{"value":%t,"is_default":false}}`, s.feature)
@@ -270,12 +270,16 @@ func TestCountersParseRequiredRuntimeAndBoundaryFamilies(t *testing.T) {
 		}
 	}
 	lines = append(lines,
-		`astronomer_downstream_boundary_calls_total{entrypoint="tunnel_message",operation="other"} 1`,
-		`astronomer_downstream_boundary_calls_total{entrypoint="kubernetes_proxy",operation="other"} 2`,
-		`astronomer_downstream_boundary_calls_total{entrypoint="other",operation="kubernetes"} 3`,
-		`astronomer_downstream_boundary_calls_total{entrypoint="other",operation="exec"} 4`,
-		`astronomer_downstream_boundary_calls_total{entrypoint="other",operation="logs"} 5`,
-		`astronomer_downstream_boundary_calls_total{entrypoint="other",operation="helm"} 6`)
+		// Normal downstream-agent traffic is deliberately non-zero. Charlie
+		// qualification must read the trusted-origin family below and ignore
+		// this fleet-wide counter.
+		`astronomer_downstream_boundary_calls_total{entrypoint="tunnel_message",operation="agent_command"} 999`,
+		`astronomer_charlie_downstream_boundary_calls_total{entrypoint="tunnel_message",operation="other"} 1`,
+		`astronomer_charlie_downstream_boundary_calls_total{entrypoint="kubernetes_proxy",operation="other"} 2`,
+		`astronomer_charlie_downstream_boundary_calls_total{entrypoint="other",operation="kubernetes"} 3`,
+		`astronomer_charlie_downstream_boundary_calls_total{entrypoint="other",operation="exec"} 4`,
+		`astronomer_charlie_downstream_boundary_calls_total{entrypoint="other",operation="logs"} 5`,
+		`astronomer_charlie_downstream_boundary_calls_total{entrypoint="other",operation="helm"} 6`)
 	metrics := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprintln(w, strings.Join(lines, "\n")) }))
 	defer metrics.Close()
 	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: metrics.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: metrics.URL}}, HTTPClient: metrics.Client()})
@@ -303,10 +307,10 @@ func TestCountersBindEachBearerToOnlyItsMetricEndpoint(t *testing.T) {
 	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		secondAuthorization = r.Header.Get("Authorization")
 		for _, operation := range []string{"kubernetes", "exec", "logs", "helm"} {
-			_, _ = fmt.Fprintf(w, "astronomer_downstream_boundary_calls_total{entrypoint=%q,operation=%q} 0\n", "other", operation)
+			_, _ = fmt.Fprintf(w, "astronomer_charlie_downstream_boundary_calls_total{entrypoint=%q,operation=%q} 0\n", "other", operation)
 		}
-		_, _ = fmt.Fprintln(w, `astronomer_downstream_boundary_calls_total{entrypoint="tunnel_message",operation="other"} 0`)
-		_, _ = fmt.Fprintln(w, `astronomer_downstream_boundary_calls_total{entrypoint="kubernetes_proxy",operation="other"} 0`)
+		_, _ = fmt.Fprintln(w, `astronomer_charlie_downstream_boundary_calls_total{entrypoint="tunnel_message",operation="other"} 0`)
+		_, _ = fmt.Fprintln(w, `astronomer_charlie_downstream_boundary_calls_total{entrypoint="kubernetes_proxy",operation="other"} 0`)
 	}))
 	defer second.Close()
 	driver, err := NewLiveDriver(LiveConfig{

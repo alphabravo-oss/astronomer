@@ -33,7 +33,7 @@ func TestPinnedContractChecksumsAndVersions(t *testing.T) {
 		"bridge_protocol":                  "bridge/v1",
 		"bridge_openapi_version":           "1.0.0",
 		"agent_protocol_version":           "1.0.0",
-		"agent_chart_version":              "1.0.22",
+		"agent_chart_version":              "1.0.23",
 		"minimum_central_api_version":      "1.0.0",
 		"direct_central_transport_allowed": false,
 	}

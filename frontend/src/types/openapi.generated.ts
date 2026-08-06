@@ -548,6 +548,8 @@ export interface OpenAPIComponents {
           "acknowledged_disclosure_digest"?: string;
           "effects": string[];
           "auto_readiness": OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
+          "workload_ceiling": "disabled" | "read_only" | "approval" | "auto";
+          "workload_ceiling_ready": boolean;
         };
     CharlieAdminPermission: {
           "permission": string;

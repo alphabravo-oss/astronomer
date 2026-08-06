@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -244,6 +246,10 @@ func TestAgentInstallerCreatesPrivateDigestPinnedAgentOnly(t *testing.T) {
 	network := values["networkPolicy"].(map[string]any)
 	mcp := network["mcp"].(map[string]any)
 	central := network["central"].(map[string]any)
+	runtimeValues := values["runtime"].(map[string]any)
+	if runtimeValues["enabled"] != true || runtimeValues["modeCeiling"] != string(ModeDisabled) {
+		t.Fatalf("fresh onboarding was not control-only: %v", runtimeValues)
+	}
 	if bridgeNamespace["kubernetes.io/metadata.name"] != "astronomer" ||
 		bridgePods["app.kubernetes.io/component"] != "server" ||
 		mcp["namespaceSelector"].(map[string]any)["kubernetes.io/metadata.name"] != "astronomer" ||
@@ -255,8 +261,9 @@ func TestAgentInstallerCreatesPrivateDigestPinnedAgentOnly(t *testing.T) {
 		t.Fatalf("agent central egress is not exact: %v", centralCIDRs)
 	}
 	selfHeal, _, _ := unstructured.NestedBool(application.Object, "spec", "syncPolicy", "automated", "selfHeal")
-	if !selfHeal {
-		t.Fatal("Argo drift self-healing is not enabled")
+	prune, pruneFound, _ := unstructured.NestedBool(application.Object, "spec", "syncPolicy", "automated", "prune")
+	if !selfHeal || !pruneFound || prune {
+		t.Fatal("Argo reconciliation is not self-healing and non-pruning")
 	}
 }
 
@@ -437,17 +444,64 @@ func TestAgentInstallerReadinessUninstallDisconnectAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	replicas := int32(2)
+	statefulSetUID := types.UID("ready-charlie-statefulset")
 	statefulSet := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName, Namespace: DefaultCharlieAgentNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName, Namespace: DefaultCharlieAgentNamespace, UID: statefulSetUID, Generation: 2},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
-			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "agent", Image: spec.ImageReference}}}},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "agent", Image: spec.ImageReference, Env: []corev1.EnvVar{{Name: "CHARLIE_MODE", Value: "disabled"}}}}}},
 		},
-		Status: appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
+		Status: appsv1.StatefulSetStatus{Replicas: 2, CurrentReplicas: 2, UpdatedReplicas: 2, ReadyReplicas: 2, ObservedGeneration: 2, CurrentRevision: "ready-2", UpdateRevision: "ready-2"},
 	}
 	if _, err := kube.AppsV1().StatefulSets(DefaultCharlieAgentNamespace).Create(context.Background(), statefulSet, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
+	application, _ = appResource.Get(context.Background(), receipt.Names.Application, metav1.GetOptions{})
+	annotations := application.GetAnnotations()
+	annotations["astronomer.io/charlie-mode-ceiling"] = "disabled"
+	application.SetAnnotations(annotations)
+	_ = unstructured.SetNestedField(application.Object, false, "spec", "syncPolicy", "automated", "prune")
+	if _, err := appResource.Update(context.Background(), application, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	for ordinal := 0; ordinal < 2; ordinal++ {
+		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%d", charlieAgentWorkloadName, ordinal), Namespace: DefaultCharlieAgentNamespace,
+			Labels: map[string]string{"app.kubernetes.io/name": charlieAgentWorkloadName, "app.kubernetes.io/component": "product-agent"}, OwnerReferences: []metav1.OwnerReference{{Kind: "StatefulSet", Name: charlieAgentWorkloadName, UID: statefulSetUID}}},
+			Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "agent", Image: spec.ImageReference, Env: []corev1.EnvVar{{Name: "CHARLIE_MODE", Value: "disabled"}}}}},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}}
+		if _, err := kube.CoreV1().Pods(DefaultCharlieAgentNamespace).Create(context.Background(), pod, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The client-go fake object tracker does not implement Kubernetes foreground
+	// garbage collection. Model the API server's StatefulSet cascade so the
+	// uninstall test still proves that AgentInstaller waits for both the
+	// controller and its owned pods to disappear.
+	kube.PrependReactor("delete", "statefulsets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		deleteAction, ok := action.(k8stesting.DeleteAction)
+		if !ok || deleteAction.GetNamespace() != DefaultCharlieAgentNamespace || deleteAction.GetName() != charlieAgentWorkloadName {
+			return false, nil, nil
+		}
+		pods, err := kube.Tracker().List(
+			schema.GroupVersionResource{Version: "v1", Resource: "pods"},
+			schema.GroupVersionKind{Version: "v1", Kind: "Pod"},
+			DefaultCharlieAgentNamespace,
+		)
+		if err != nil {
+			return true, nil, err
+		}
+		for _, pod := range pods.(*corev1.PodList).Items {
+			for _, owner := range pod.OwnerReferences {
+				if owner.Kind == "StatefulSet" && owner.Name == charlieAgentWorkloadName && owner.UID == statefulSetUID {
+					if err := kube.Tracker().Delete(schema.GroupVersionResource{Version: "v1", Resource: "pods"}, pod.Namespace, pod.Name); err != nil {
+						return true, nil, err
+					}
+					break
+				}
+			}
+		}
+		return false, nil, nil
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	status, err := installer.WaitReady(ctx, spec)

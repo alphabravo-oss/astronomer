@@ -4,9 +4,26 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+type modeCeilingRolloutFunc func(context.Context, ModeCeilingTarget) error
+
+func (f modeCeilingRolloutFunc) Reconcile(ctx context.Context, target ModeCeilingTarget) error {
+	return f(ctx, target)
+}
+
+type bridgeWithoutModeCeiling struct{ delegate *fakeModeBridge }
+
+func (b bridgeWithoutModeCeiling) SetMode(ctx context.Context, mode Mode, revision int64) (ModeState, error) {
+	return b.delegate.SetMode(ctx, mode, revision)
+}
+
+func (b bridgeWithoutModeCeiling) Status(ctx context.Context) (ModeState, error) {
+	return b.delegate.Status(ctx)
+}
 
 type fakeModeStore struct {
 	state          ModeState
@@ -96,6 +113,266 @@ func TestModeReconcileDoesNotContactRemoteDuringEmergencyDisable(t *testing.T) {
 	}
 }
 
+func TestModeReconcileCentralDowngradeCancelsAndDrainsAdmittedWrite(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeAuto
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeReadOnly, Revision: 5, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	fence := NewWriteFence()
+	controller.SetWriteFence(fence)
+	writeCtx, releaseWrite, err := fence.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	drained := make(chan struct{})
+	go func() {
+		<-writeCtx.Done()
+		releaseWrite()
+		close(drained)
+	}()
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(_ context.Context, target ModeCeilingTarget) error {
+		select {
+		case <-drained:
+		default:
+			t.Fatal("central downgrade rolled out before the admitted write drained")
+		}
+		if target.ExpectedRequested != ModeAuto || target.ExpectedRevision != 5 || target.Desired != ModeReadOnly ||
+			!fence.State().Closed || !fence.State().Drained || store.verifyCalls != 1 || store.state.Verified != ModeReadOnly {
+			t.Fatalf("downgrade ordering fence=%+v verify_calls=%d", fence.State(), store.verifyCalls)
+		}
+		return nil
+	}))
+
+	got, err := controller.Reconcile(t.Context())
+	if err != nil || got.Verified != ModeReadOnly || !fence.State().Closed || !fence.State().Drained {
+		t.Fatalf("central downgrade did not remain drained and closed: state=%+v fence=%+v err=%v", got, fence.State(), err)
+	}
+}
+
+func TestModeReconcileUpwardRestorationRequiresFreshReadbackBeforeOpen(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeApproval
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeAuto, Revision: 5, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	controller.writes.Close()
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(_ context.Context, target ModeCeilingTarget) error {
+		if target.Desired != ModeAuto || target.ExpectedRevision != 4 || !controller.writes.State().Closed || store.verifyCalls != 0 || bridge.statusCalls != 1 {
+			t.Fatalf("upward rollout occurred outside the closed pre-CAS boundary: target=%+v fence=%+v verifies=%d status=%d", target, controller.writes.State(), store.verifyCalls, bridge.statusCalls)
+		}
+		return nil
+	}))
+
+	got, err := controller.Reconcile(t.Context())
+	if err != nil || got.Verified != ModeAuto || bridge.statusCalls != 2 || controller.writes.State().Closed {
+		t.Fatalf("upward restoration opened without exact readback: state=%+v statuses=%d fence=%+v err=%v", got, bridge.statusCalls, controller.writes.State(), err)
+	}
+}
+
+func TestModeReconcileRolloutFailureLeavesPriorStateAndFenceClosed(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeApproval
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeAuto, Revision: 5, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(context.Context, ModeCeilingTarget) error {
+		return errors.New("partial rollout")
+	}))
+
+	got, err := controller.Reconcile(t.Context())
+	if err == nil || got != state || store.verifyCalls != 0 || !controller.writes.State().Closed {
+		t.Fatalf("rollout failure changed authority: state=%+v verifies=%d fence=%+v err=%v", got, store.verifyCalls, controller.writes.State(), err)
+	}
+}
+
+func TestModeReconcileRejectsLocalStateChangeAfterRollout(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeApproval
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeAuto, Revision: 5, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(context.Context, ModeCeilingTarget) error {
+		// Model an HA controller winning a durable transition while this replica
+		// was reconciling the workload ceiling.
+		store.state.EmergencyDisabled = true
+		store.state.Requested = ModeDisabled
+		store.state.Revision++
+		return nil
+	}))
+
+	if _, err := controller.Reconcile(t.Context()); err == nil || store.verifyCalls != 0 || !controller.writes.State().Closed {
+		t.Fatalf("stale post-rollout state was persisted: verifies=%d fence=%+v err=%v", store.verifyCalls, controller.writes.State(), err)
+	}
+}
+
+func TestModeReconcileDowngradeFailuresLeaveDurableLowerAuthority(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		auditor     AuthorityMutationAuditor
+		rolloutErr  error
+		readbackErr error
+		wantErr     bool
+	}{
+		{name: "audit unavailable", auditor: &authorityAuditFake{err: errors.New("audit unavailable")}},
+		{name: "rollout unavailable", auditor: &authorityAuditFake{}, rolloutErr: errors.New("partial rollout"), wantErr: true},
+		{name: "central readback unavailable", auditor: &authorityAuditFake{}, readbackErr: errors.New("central unavailable"), wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			state := activeModeState()
+			state.Requested, state.Verified = ModeAuto, ModeAuto
+			store := &fakeModeStore{state: state}
+			remote := ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeReadOnly, Revision: 5, DisclosureDigest: "disclosure-b"}
+			bridge := &fakeModeBridge{state: remote}
+			if test.readbackErr != nil {
+				bridge.statusStates = []ModeState{remote}
+				bridge.statusErrors = []error{nil, test.readbackErr}
+			}
+			controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, test.auditor)
+			controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(_ context.Context, target ModeCeilingTarget) error {
+				if store.state.Verified != ModeReadOnly || store.state.Revision != 5 || store.verifyCalls != 1 || target.Desired != ModeReadOnly {
+					t.Fatalf("signed downgrade was not durable before rollout: state=%+v target=%+v", store.state, target)
+				}
+				return test.rolloutErr
+			}))
+
+			got, err := controller.Reconcile(t.Context())
+			if (err != nil) != test.wantErr || got.Verified != ModeReadOnly || got.Revision != 5 ||
+				store.state.Verified != ModeReadOnly || !controller.writes.State().Closed {
+				t.Fatalf("downgrade failure reopened stale authority: state=%+v durable=%+v fence=%+v err=%v", got, store.state, controller.writes.State(), err)
+			}
+		})
+	}
+}
+
+func TestModeReconcileSameRevisionReadOnlyReprovesAllReplicaCeiling(t *testing.T) {
+	state := activeModeState()
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{state: state}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	rollouts := 0
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(_ context.Context, target ModeCeilingTarget) error {
+		rollouts++
+		if target.ExpectedRevision != state.Revision || target.Desired != ModeReadOnly {
+			t.Fatalf("same-revision lower ceiling target=%+v", target)
+		}
+		return nil
+	}))
+	if _, err := controller.Reconcile(t.Context()); err != nil || rollouts != 1 || bridge.statusCalls != 2 || !controller.writes.State().Closed {
+		t.Fatalf("same-revision lower ceiling was not reproved: rollouts=%d statuses=%d fence=%+v err=%v", rollouts, bridge.statusCalls, controller.writes.State(), err)
+	}
+}
+
+func TestModeReconcileSecondReplicaActionDeniedAfterDowngradeLockRelease(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeAuto
+	store := &fakeModeStore{state: state}
+	remote := ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeReadOnly, Revision: 5, DisclosureDigest: "disclosure-b"}
+	controller, _ := NewModeController(store, &fakeModeBridge{state: remote}, &authorityAuditFake{})
+	if _, err := controller.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	facts := allowedWriteFacts(EffectiveMode(store.state.Requested, store.state.Verified, store.state.EmergencyDisabled))
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{verified: true}
+	guard, key := newTestActionGuard(t, authority, receipts, executor)
+	result := guard.Execute(t.Context(), signedTestAction(t, key, "astronomer.queue.retry_task", map[string]any{
+		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
+	}))
+	if result.Code != DeniedReadOnlyWrite || executor.calls != 0 || len(receipts.transitions) != 0 {
+		t.Fatalf("second-replica action used stale pre-downgrade authority: result=%+v executes=%d receipts=%v", result, executor.calls, receipts.transitions)
+	}
+}
+
+type concurrentModeStore struct {
+	mu              sync.Mutex
+	state           ModeState
+	verifyAttempts  int
+	verifySuccesses int
+}
+
+func (s *concurrentModeStore) LoadModeState(context.Context) (ModeState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state, nil
+}
+
+func (s *concurrentModeStore) SetVerifiedMode(_ context.Context, connectionID string, mode Mode, expected, next int64, digest string) (ModeState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.verifyAttempts++
+	if connectionID != s.state.ConnectionID || expected != s.state.Revision || next <= expected {
+		return ModeState{}, errors.New("verify CAS failed")
+	}
+	s.state.Verified, s.state.Revision, s.state.DisclosureDigest = mode, next, digest
+	s.verifySuccesses++
+	return s.state, nil
+}
+
+func (s *concurrentModeStore) SetRequestedMode(context.Context, string, Mode, int64) (ModeState, error) {
+	return ModeState{}, errors.New("not used")
+}
+func (s *concurrentModeStore) SetEmergencyDisabled(context.Context, string, string) (ModeState, error) {
+	return ModeState{}, errors.New("not used")
+}
+func (s *concurrentModeStore) ClearEmergencyDisabled(context.Context, string, string) (ModeState, error) {
+	return ModeState{}, errors.New("not used")
+}
+
+type staticModeBridge struct{ state ModeState }
+
+func (b staticModeBridge) SetMode(context.Context, Mode, int64) (ModeState, error) {
+	return b.state, nil
+}
+func (b staticModeBridge) Status(context.Context) (ModeState, error) { return b.state, nil }
+
+func TestModeReconcileConcurrentControllersUseDurableCASAndFailClosed(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeApproval
+	store := &concurrentModeStore{state: state}
+	remote := ModeState{ConnectionID: state.ConnectionID, Active: true, Verified: ModeAuto, Revision: 5, DisclosureDigest: "disclosure-b"}
+	arrived := sync.WaitGroup{}
+	arrived.Add(2)
+	releaseRollout := make(chan struct{})
+	controllers := make([]*ModeController, 2)
+	for index := range controllers {
+		controllers[index], _ = NewModeController(store, staticModeBridge{state: remote}, &authorityAuditFake{})
+		controllers[index].SetModeCeilingRollout(modeCeilingRolloutFunc(func(context.Context, ModeCeilingTarget) error {
+			arrived.Done()
+			<-releaseRollout
+			return nil
+		}))
+	}
+	results := make(chan error, 2)
+	for _, controller := range controllers {
+		go func(controller *ModeController) {
+			_, err := controller.Reconcile(t.Context())
+			results <- err
+		}(controller)
+	}
+	arrived.Wait()
+	close(releaseRollout)
+	errorsSeen := 0
+	for range controllers {
+		if err := <-results; err != nil {
+			errorsSeen++
+		}
+	}
+	store.mu.Lock()
+	successes, final := store.verifySuccesses, store.state
+	store.mu.Unlock()
+	openFences := 0
+	for _, controller := range controllers {
+		if !controller.writes.State().Closed {
+			openFences++
+		}
+	}
+	if successes != 1 || errorsSeen != 1 || final.Verified != ModeAuto || final.Revision != 5 || openFences != 1 {
+		t.Fatalf("concurrent reconcile did not fail closed: successes=%d errors=%d state=%+v open_fences=%d", successes, errorsSeen, final, openFences)
+	}
+}
+
 func TestModeReconcilerStopsWithContext(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{state: activeModeState()}
@@ -150,12 +427,19 @@ func (f *fakeModeStore) ClearEmergencyDisabled(_ context.Context, connectionID, 
 }
 
 type fakeModeBridge struct {
-	state       ModeState
-	error       error
-	setError    error
-	calls       int
-	statusCalls int
-	lastMode    Mode
+	state        ModeState
+	error        error
+	setError     error
+	statusStates []ModeState
+	statusErrors []error
+	calls        int
+	statusCalls  int
+	lastMode     Mode
+}
+
+func (f *fakeModeBridge) Reconcile(_ context.Context, target ModeCeilingTarget) error {
+	f.lastMode = target.Desired
+	return nil
 }
 
 func (f *fakeModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (ModeState, error) {
@@ -176,7 +460,14 @@ func (f *fakeModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (
 	return f.state, nil
 }
 func (f *fakeModeBridge) Status(context.Context) (ModeState, error) {
+	index := f.statusCalls
 	f.statusCalls++
+	if index < len(f.statusErrors) && f.statusErrors[index] != nil {
+		return ModeState{}, f.statusErrors[index]
+	}
+	if index < len(f.statusStates) {
+		return f.statusStates[index], nil
+	}
 	return f.state, f.error
 }
 
@@ -210,7 +501,7 @@ func TestEffectiveModeUsesLeastAuthority(t *testing.T) {
 
 func TestModeRequestRequiresAuthoritativeReadback(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
-	bridge := &fakeModeBridge{state: ModeState{ConnectionID: "connection-a"}}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: "connection-a", Active: true}}
 	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	state, err := controller.Request(context.Background(), ModeApproval, 4, ModePrerequisites{})
 	if err != nil {
@@ -280,6 +571,8 @@ func TestModeAuditFailureCannotWidenOrReconcileAuthority(t *testing.T) {
 
 type equalRevisionModeBridge struct{}
 
+func (equalRevisionModeBridge) Reconcile(context.Context, ModeCeilingTarget) error { return nil }
+
 func (equalRevisionModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (ModeState, error) {
 	return ModeState{
 		ConnectionID:     "connection-a",
@@ -320,6 +613,47 @@ func TestModeRequestRetriesPendingLocalRequestWithoutAdvancingRevision(t *testin
 	}
 	if store.requestCalls != 0 || got.Requested != ModeDisabled || got.Verified != ModeDisabled || got.Revision != 5 {
 		t.Fatalf("pending request was not reconciled at the same revision: state=%+v request_calls=%d", got, store.requestCalls)
+	}
+}
+
+func TestModeRequestKeepsCentralLowerUntilAllReplicaCeilingReadback(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: "connection-a", Active: true, Requested: ModeAuto, Verified: ModeAuto, Revision: 5, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(_ context.Context, target ModeCeilingTarget) error {
+		if target.ConnectionID != "connection-a" || target.Desired != ModeAuto || target.ExpectedRevision != 5 || bridge.calls != 0 || store.state.Requested != ModeAuto || store.state.Verified != ModeReadOnly {
+			t.Fatalf("rollout ordering did not retain the lower central mode: state=%+v bridge_calls=%d", store.state, bridge.calls)
+		}
+		return nil
+	}))
+	got, err := controller.Request(t.Context(), ModeAuto, 4, ModePrerequisites{DisclosureAcknowledged: true, AutomationAllowlistReady: true, AutomationIdentityReady: true, AutomationTargetReady: true})
+	if err != nil || got.Verified != ModeAuto || bridge.calls != 1 || controller.writes.State().Closed {
+		t.Fatalf("verified upward transition=%+v bridge_calls=%d fence=%+v err=%v", got, bridge.calls, controller.writes.State(), err)
+	}
+}
+
+func TestModeReductionPersistsAndStaysFencedWhenCeilingReadbackFails(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeAuto, ModeAuto
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(context.Context, ModeCeilingTarget) error {
+		return errors.New("partial rollout")
+	}))
+	got, err := controller.Request(t.Context(), ModeReadOnly, 4, ModePrerequisites{})
+	if err == nil || got.Requested != ModeReadOnly || got.Verified != ModeAuto || bridge.calls != 0 || !controller.writes.State().Closed {
+		t.Fatalf("failed reduction was not locally bounded: state=%+v bridge_calls=%d fence=%+v err=%v", got, bridge.calls, controller.writes.State(), err)
+	}
+}
+
+func TestModeTransitionFailsClosedWithoutKubernetesRolloutDependency(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	got, err := controller.Request(t.Context(), ModeApproval, 4, ModePrerequisites{})
+	if err == nil || got.Requested != ModeApproval || got.Verified != ModeReadOnly || bridge.calls != 0 || !controller.writes.State().Closed {
+		t.Fatalf("missing rollout dependency did not fail closed: state=%+v bridge_calls=%d fence=%+v err=%v", got, bridge.calls, controller.writes.State(), err)
 	}
 }
 
@@ -418,7 +752,7 @@ func TestEmergencyDisableReturnsPendingStateUntilNonCancellableWriteDrains(t *te
 	defer cancel()
 	state, err := controller.EmergencyDisable(ctx, "admin-a")
 	var pending *WriteDrainError
-	if !errors.As(err, &pending) || !state.EmergencyDisabled || pending.State.Active != 1 || bridge.calls != 0 {
+	if !errors.As(err, &pending) || state.EmergencyDisabled || store.emergencyCalls != 0 || pending.State.Active != 1 || bridge.calls != 0 {
 		t.Fatalf("state=%+v pending=%+v bridge_calls=%d err=%v", state, pending, bridge.calls, err)
 	}
 	release()

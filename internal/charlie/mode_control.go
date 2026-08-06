@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,22 @@ type AgentModeBridge interface {
 	Status(context.Context) (ModeState, error)
 }
 
+type ModeCeilingRollout interface {
+	Reconcile(context.Context, ModeCeilingTarget) error
+}
+
+// ModeCeilingTarget separates the product-owned local CAS snapshot used to
+// authorize a rollout from the least-authority ceiling being deployed. Central
+// reconciliation may lower the effective workload ceiling while Requested
+// remains the product-owned maximum.
+type ModeCeilingTarget struct {
+	ConnectionID              string
+	ExpectedRequested         Mode
+	ExpectedRevision          int64
+	ExpectedEmergencyDisabled bool
+	Desired                   Mode
+}
+
 type activationChangeNotifier interface {
 	activationChanged(context.Context)
 }
@@ -50,23 +67,37 @@ func notifyActivationChanged(ctx context.Context, bridge AgentModeBridge) {
 }
 
 type ModeController struct {
-	store  ModeStore
-	bridge AgentModeBridge
-	writes *WriteFence
-	audit  AuthorityMutationAuditor
-	ticker func(time.Duration) runtimeTicker
+	store        ModeStore
+	bridge       AgentModeBridge
+	writes       *WriteFence
+	audit        AuthorityMutationAuditor
+	rollout      ModeCeilingRollout
+	transitionMu sync.Mutex
+	ticker       func(time.Duration) runtimeTicker
 }
 
 func NewModeController(store ModeStore, bridge AgentModeBridge, auditor AuthorityMutationAuditor) (*ModeController, error) {
 	if store == nil || bridge == nil || auditor == nil {
 		return nil, fmt.Errorf("Charlie mode control requires local state, the product bridge, and durable audit")
 	}
-	return &ModeController{store: store, bridge: bridge, writes: NewWriteFence(), audit: auditor, ticker: newRuntimeTicker}, nil
+	controller := &ModeController{store: store, bridge: bridge, writes: NewWriteFence(), audit: auditor, ticker: newRuntimeTicker}
+	// Test and embedded bridge implementations may own their rollout directly;
+	// production wires the Kubernetes/Argo reconciler explicitly.
+	if rollout, ok := bridge.(ModeCeilingRollout); ok {
+		controller.rollout = rollout
+	}
+	return controller, nil
 }
 
 func (c *ModeController) SetWriteFence(fence *WriteFence) {
 	if c != nil && fence != nil {
 		c.writes = fence
+	}
+}
+
+func (c *ModeController) SetModeCeilingRollout(rollout ModeCeilingRollout) {
+	if c != nil {
+		c.rollout = rollout
 	}
 }
 
@@ -83,6 +114,8 @@ func EffectiveMode(requested, verified Mode, emergency bool) Mode {
 }
 
 func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevision int64, prerequisites ModePrerequisites) (ModeState, error) {
+	c.transitionMu.Lock()
+	defer c.transitionMu.Unlock()
 	if !validMode(desired) || expectedRevision < 0 {
 		logModeTransitionFailure(ctx, "mode.request_invalid")
 		return ModeState{}, fmt.Errorf("Charlie mode request is invalid")
@@ -100,6 +133,14 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		logModeTransitionFailure(ctx, "mode.auto_prerequisites_incomplete")
 		return ModeState{}, fmt.Errorf("Charlie auto mode prerequisites are incomplete")
 	}
+	// Retain the cross-replica exclusive drain from before the audit through the
+	// final CAS/readback. No product write can enter between intent persistence
+	// and the workload/central transition.
+	_, releaseDrain, drainErr := c.writes.CloseAndHold(ctx)
+	if drainErr != nil {
+		return current, drainErr
+	}
+	defer releaseDrain()
 	if err := requireAuthorityMutationAudit(ctx, c.audit, AuthorityMutationAudit{
 		Action: "charlie.mode.requested", ResourceType: "charlie_mode", ResourceID: current.ConnectionID,
 		Fields: map[string]any{"mode": string(desired), "revision": expectedRevision},
@@ -108,6 +149,9 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		return ModeState{}, fmt.Errorf("Charlie mode audit is unavailable")
 	}
 	requested := current
+	// No product write may straddle a mixed-ceiling rollout. For reductions this
+	// closes admission before the lower durable ceiling is committed; for
+	// increases it keeps central at the prior lower authority until readback.
 	// A prior attempt may have committed the least-authority local request and
 	// then lost its authoritative readback. Retry that same revision instead of
 	// advancing the local CAS again; this lets an idempotent central transition
@@ -123,6 +167,14 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 	// the runtime owner before any remote call so a disable cannot remain live
 	// while signed confirmation is slow or unavailable.
 	notifyActivationChanged(ctx, c.bridge)
+	if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: desired, ExpectedRevision: requested.Revision, Desired: desired}) != nil {
+		logModeTransitionFailure(ctx, "mode.ceiling_rollout_unavailable")
+		return requested, fmt.Errorf("Charlie mode-ceiling rollout was not verified")
+	}
+	latest, loadErr := c.store.LoadModeState(ctx)
+	if loadErr != nil || latest.ConnectionID != current.ConnectionID || latest.Requested != desired || latest.Revision != requested.Revision || latest.EmergencyDisabled {
+		return requested, fmt.Errorf("Charlie mode state changed during agent rollout")
+	}
 	remote, err := c.bridge.SetMode(ctx, desired, requested.Revision)
 	if err != nil {
 		// The requested/verified intersection prevents authority escalation while
@@ -133,6 +185,10 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 	if remote.ConnectionID != "" && remote.ConnectionID != current.ConnectionID {
 		logModeTransitionFailure(ctx, "mode.remote_installation_changed")
 		return requested, fmt.Errorf("Charlie mode readback installation changed")
+	}
+	if !remote.Active {
+		logModeTransitionFailure(ctx, "mode.remote_inactive")
+		return requested, fmt.Errorf("Charlie mode readback did not confirm the request")
 	}
 	if remote.Verified != desired {
 		logModeTransitionFailure(ctx, "mode.remote_mode_mismatch")
@@ -155,7 +211,18 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		return requested, fmt.Errorf("persist Charlie verified mode: %w", err)
 	}
 	notifyActivationChanged(ctx, c.bridge)
-	return verified, nil
+	final, loadErr := c.store.LoadModeState(ctx)
+	if loadErr != nil || final.ConnectionID != current.ConnectionID || !final.Active || final.EmergencyDisabled ||
+		final.Requested != desired || final.Verified != remote.Verified || final.Revision != remote.Revision ||
+		final.DisclosureDigest != remote.DisclosureDigest {
+		return verified, fmt.Errorf("Charlie mode state changed after authoritative readback")
+	}
+	if EffectiveMode(final.Requested, final.Verified, final.EmergencyDisabled) == ModeApproval ||
+		EffectiveMode(final.Requested, final.Verified, final.EmergencyDisabled) == ModeAuto {
+		releaseDrain()
+		c.writes.Open()
+	}
+	return final, nil
 }
 
 // Reconcile imports a newer Charlie-authoritative mode snapshot without ever
@@ -163,11 +230,16 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 // change can therefore suspend or reduce authority immediately, while a more
 // permissive remote mode remains bounded by EffectiveMode.
 func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
+	c.transitionMu.Lock()
+	defer c.transitionMu.Unlock()
 	current, err := c.store.LoadModeState(ctx)
 	if err != nil {
 		return ModeState{}, fmt.Errorf("load Charlie mode state: %w", err)
 	}
 	if !current.Active || current.EmergencyDisabled {
+		if _, drainErr := c.writes.CloseAndWait(ctx); drainErr != nil {
+			return current, drainErr
+		}
 		return current, nil
 	}
 	remote, err := c.bridge.Status(ctx)
@@ -181,23 +253,52 @@ func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
 		return current, fmt.Errorf("Charlie mode status revision is stale")
 	}
 
-	verified := remote.Verified
-	digest := remote.DisclosureDigest
-	if !remote.Active {
-		// An inactive central integration has no executable disclosure. Never
-		// retain a previously acknowledged digest across that boundary.
-		verified = ModeDisabled
-		digest = ""
-	} else if !validMode(verified) || verified == ModeDisabled || digest == "" {
+	verified, digest, normalizeErr := normalizedCentralMode(remote)
+	if normalizeErr != nil {
 		return current, fmt.Errorf("Charlie mode status is incomplete")
 	}
 
 	if remote.Revision == current.Revision {
 		if current.Verified != verified || current.DisclosureDigest != digest {
+			_, _ = c.writes.CloseAndWait(ctx)
 			return current, fmt.Errorf("Charlie mode status conflicts at the current revision")
+		}
+		effective := EffectiveMode(current.Requested, current.Verified, current.EmergencyDisabled)
+		// read_only/disabled must continuously prove the lower workload ceiling;
+		// approval/auto repeats this proof only when recovering a closed fence.
+		if effective != ModeApproval && effective != ModeAuto || c.writes.State().Closed {
+			_, release, drainErr := c.writes.CloseAndHold(ctx)
+			if drainErr != nil {
+				return current, drainErr
+			}
+			defer release()
+			if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: current.Requested, ExpectedRevision: current.Revision, Desired: effective}) != nil {
+				return current, fmt.Errorf("Charlie mode-ceiling rollout was not verified")
+			}
+			confirmed, confirmErr := c.bridge.Status(ctx)
+			if confirmErr != nil || !sameCentralSnapshot(remote, confirmed, current.ConnectionID) {
+				return current, fmt.Errorf("Charlie mode status changed during agent rollout")
+			}
+			latest, loadErr := c.store.LoadModeState(ctx)
+			if loadErr != nil || !sameLocalModeSnapshot(current, latest) {
+				return current, fmt.Errorf("Charlie mode state changed during agent rollout")
+			}
+			if effective == ModeApproval || effective == ModeAuto {
+				release()
+				c.writes.Open()
+			}
 		}
 		return current, nil
 	}
+
+	// A newer central revision may change executable authority. Close local
+	// admission, cancel admitted work, and retain the distributed exclusive lock
+	// across audit, all-replica ceiling readback, and the local CAS.
+	_, release, drainErr := c.writes.CloseAndHold(ctx)
+	if drainErr != nil {
+		return current, drainErr
+	}
+	defer release()
 	event := AuthorityMutationAudit{
 		Action: "charlie.mode.verified", ResourceType: "charlie_mode", ResourceID: current.ConnectionID,
 		Fields: map[string]any{"mode": string(verified), "revision": remote.Revision},
@@ -211,12 +312,103 @@ func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
 		}
 	}
 
+	safeCeiling := newEffective
+
+	if modeRank(newEffective) <= modeRank(oldEffective) {
+		// Downgrades, suspension, and same-effective revision/disclosure changes
+		// publish the fail-closed DB authority first while every shared writer is
+		// drained. If rollout fails, every replica still denies after lock release.
+		reconciled, persistErr := c.store.SetVerifiedMode(ctx, current.ConnectionID, verified, current.Revision, remote.Revision, digest)
+		if persistErr != nil {
+			return current, fmt.Errorf("persist reconciled Charlie mode: %w", persistErr)
+		}
+		notifyActivationChanged(ctx, c.bridge)
+		final, loadErr := c.store.LoadModeState(ctx)
+		if loadErr != nil || !matchesReconciledMode(current, final, verified, remote.Revision, digest, safeCeiling) {
+			return reconciled, fmt.Errorf("Charlie mode state changed after central reconciliation")
+		}
+		if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: final.Requested, ExpectedRevision: final.Revision, Desired: safeCeiling}) != nil {
+			logModeTransitionFailure(ctx, "mode.ceiling_rollout_unavailable")
+			return final, fmt.Errorf("Charlie mode-ceiling rollout was not verified")
+		}
+		confirmed, confirmErr := c.bridge.Status(ctx)
+		if confirmErr != nil || !sameCentralSnapshot(remote, confirmed, current.ConnectionID) {
+			return final, fmt.Errorf("Charlie mode status changed during agent rollout")
+		}
+		latest, loadErr := c.store.LoadModeState(ctx)
+		if loadErr != nil || !sameLocalModeSnapshot(final, latest) {
+			return final, fmt.Errorf("Charlie mode state changed during agent rollout")
+		}
+		return final, nil
+	}
+
+	// Increases deploy and read back the exact effective ceiling against the
+	// still-lower local snapshot. Only then may the higher central revision CAS.
+	if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: current.Requested, ExpectedRevision: current.Revision, Desired: safeCeiling}) != nil {
+		logModeTransitionFailure(ctx, "mode.ceiling_rollout_unavailable")
+		return current, fmt.Errorf("Charlie mode-ceiling rollout was not verified")
+	}
+	confirmed, confirmErr := c.bridge.Status(ctx)
+	if confirmErr != nil || !sameCentralSnapshot(remote, confirmed, current.ConnectionID) {
+		return current, fmt.Errorf("Charlie mode status changed during agent rollout")
+	}
+	latest, loadErr := c.store.LoadModeState(ctx)
+	if loadErr != nil || !sameLocalModeSnapshot(current, latest) {
+		return current, fmt.Errorf("Charlie mode state changed during agent rollout")
+	}
 	reconciled, err := c.store.SetVerifiedMode(ctx, current.ConnectionID, verified, current.Revision, remote.Revision, digest)
 	if err != nil {
 		return current, fmt.Errorf("persist reconciled Charlie mode: %w", err)
 	}
 	notifyActivationChanged(ctx, c.bridge)
-	return reconciled, nil
+	final, loadErr := c.store.LoadModeState(ctx)
+	if loadErr != nil || !matchesReconciledMode(current, final, verified, remote.Revision, digest, safeCeiling) {
+		return reconciled, fmt.Errorf("Charlie mode state changed after central reconciliation")
+	}
+	release()
+	c.writes.Open()
+	return final, nil
+}
+
+func matchesReconciledMode(previous, final ModeState, verified Mode, revision int64, digest string, effective Mode) bool {
+	return final.ConnectionID == previous.ConnectionID && final.Active && !final.EmergencyDisabled &&
+		final.Requested == previous.Requested && final.Verified == verified && final.Revision == revision &&
+		final.DisclosureDigest == digest && EffectiveMode(final.Requested, final.Verified, final.EmergencyDisabled) == effective
+}
+
+func normalizedCentralMode(remote ModeState) (Mode, string, error) {
+	if !remote.Active {
+		// An inactive central integration has no executable disclosure. Never
+		// retain a previously acknowledged digest across that boundary.
+		return ModeDisabled, "", nil
+	}
+	if !validMode(remote.Verified) {
+		return ModeDisabled, "", fmt.Errorf("invalid central mode")
+	}
+	if remote.Verified == ModeDisabled {
+		return ModeDisabled, "", nil
+	}
+	if remote.DisclosureDigest == "" {
+		return ModeDisabled, "", fmt.Errorf("missing disclosure")
+	}
+	return remote.Verified, remote.DisclosureDigest, nil
+}
+
+func sameCentralSnapshot(expected, actual ModeState, connectionID string) bool {
+	if actual.ConnectionID != "" && actual.ConnectionID != connectionID {
+		return false
+	}
+	expectedMode, expectedDigest, expectedErr := normalizedCentralMode(expected)
+	actualMode, actualDigest, actualErr := normalizedCentralMode(actual)
+	return expectedErr == nil && actualErr == nil && expected.Active == actual.Active &&
+		expected.Revision == actual.Revision && expectedMode == actualMode && expectedDigest == actualDigest
+}
+
+func sameLocalModeSnapshot(expected, actual ModeState) bool {
+	return expected.ConnectionID == actual.ConnectionID && expected.Active == actual.Active &&
+		expected.EmergencyDisabled == actual.EmergencyDisabled && expected.Requested == actual.Requested &&
+		expected.Verified == actual.Verified && expected.Revision == actual.Revision &&
+		expected.DisclosureDigest == actual.DisclosureDigest
 }
 
 // Run periodically reconciles Charlie's signed integration revision into the
@@ -267,6 +459,8 @@ func logModeTransitionFailure(ctx context.Context, code string) {
 // agent cannot keep sessions, triggers, findings, approvals, claims, or MCP
 // calls active. Remote disable is attempted only after the local commit.
 func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
+	c.transitionMu.Lock()
+	defer c.transitionMu.Unlock()
 	// Close admission before reading or mutating mode state. Any write that won
 	// the admission race is registered and will be cancelled and drained below;
 	// every later write is rejected.
@@ -284,6 +478,11 @@ func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (
 		}
 		return ModeState{}, fmt.Errorf("Charlie integration is inactive")
 	}
+	_, releaseDrain, drainErr := c.writes.CloseAndHold(ctx)
+	if drainErr != nil {
+		return current, drainErr
+	}
+	defer releaseDrain()
 	actor, _ := uuid.Parse(actorID)
 	_ = requireAuthorityMutationAudit(ctx, c.audit, AuthorityMutationAudit{
 		Action: "charlie.mode.emergency_disabled", ResourceType: "charlie_mode", ResourceID: current.ConnectionID, ActorID: actor,
@@ -294,11 +493,19 @@ func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (
 		return ModeState{}, fmt.Errorf("persist Charlie emergency disable: %w", err)
 	}
 	notifyActivationChanged(ctx, c.bridge)
-	if _, err := c.writes.CloseAndWait(ctx); err != nil {
-		return disabled, err
+	if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: ModeDisabled, ExpectedRevision: disabled.Revision, ExpectedEmergencyDisabled: true, Desired: ModeDisabled}) != nil {
+		return disabled, fmt.Errorf("Charlie is locally disabled; agent ceiling confirmation is pending")
 	}
-	_, bridgeErr := c.bridge.SetMode(ctx, ModeDisabled, disabled.Revision)
+	latest, loadErr := c.store.LoadModeState(ctx)
+	if loadErr != nil || latest.ConnectionID != current.ConnectionID || !latest.EmergencyDisabled || latest.Requested != ModeDisabled || latest.Revision != disabled.Revision {
+		return disabled, fmt.Errorf("Charlie is locally disabled; mode state changed during agent rollout")
+	}
+	remote, bridgeErr := c.bridge.SetMode(ctx, ModeDisabled, disabled.Revision)
 	if bridgeErr != nil {
+		return disabled, fmt.Errorf("Charlie is locally disabled; remote confirmation is pending")
+	}
+	if remote.ConnectionID != "" && remote.ConnectionID != current.ConnectionID ||
+		remote.Revision < disabled.Revision || EffectiveMode(remote.Requested, remote.Verified, remote.EmergencyDisabled) != ModeDisabled {
 		return disabled, fmt.Errorf("Charlie is locally disabled; remote confirmation is pending")
 	}
 	return disabled, nil
@@ -310,9 +517,14 @@ func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (
 // operation retries only that authority-reducing transition and verifies its
 // readback. It never restores the prior authority mode.
 func (c *ModeController) ClearEmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
+	c.transitionMu.Lock()
+	defer c.transitionMu.Unlock()
 	current, err := c.store.LoadModeState(ctx)
 	if err != nil || !current.Active || !current.EmergencyDisabled {
 		return ModeState{}, fmt.Errorf("Charlie emergency disable is not active")
+	}
+	if c.rollout == nil || c.rollout.Reconcile(ctx, ModeCeilingTarget{ConnectionID: current.ConnectionID, ExpectedRequested: current.Requested, ExpectedRevision: current.Revision, ExpectedEmergencyDisabled: true, Desired: ModeDisabled}) != nil {
+		return current, fmt.Errorf("Charlie agent has not confirmed disabled mode ceiling")
 	}
 	remote, err := c.bridge.Status(ctx)
 	if err != nil {
@@ -340,7 +552,6 @@ func (c *ModeController) ClearEmergencyDisable(ctx context.Context, actorID stri
 	if cleared.Requested != ModeDisabled || cleared.Verified != ModeDisabled {
 		return current, fmt.Errorf("cleared Charlie state attempted to restore authority")
 	}
-	c.writes.Open()
 	return cleared, nil
 }
 

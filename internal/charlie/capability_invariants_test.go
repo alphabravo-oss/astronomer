@@ -98,7 +98,7 @@ func TestActionGuardFinalDispatchRejectsUnsafeDescriptorWithoutSideEffect(t *tes
 	if safe, err := guard.commitAuthority(context.Background(), ActionEnvelope{ApprovalID: "approved-a"}, descriptor, nil, allowedWriteFacts(ModeAuto)); safe || err != nil || authority.commitCalls != 0 {
 		t.Fatalf("unsafe pre-dispatch descriptor consumed authority: safe=%t commits=%d err=%v", safe, authority.commitCalls, err)
 	}
-	result := guard.executeAndVerify(context.Background(), ActionEnvelope{ActionID: "action-a"}, descriptor, map[string]json.RawMessage{}, false)
+	result := guard.executeAndVerify(context.Background(), ActionEnvelope{ActionID: "action-a"}, descriptor, map[string]json.RawMessage{}, false, AuthorityInput{})
 	if result.Code != DeniedDestructive || result.Allowed || executor.calls != 0 || executor.verifyCalls != 0 {
 		t.Fatalf("unsafe final dispatch escaped: result=%+v execute=%d verify=%d", result, executor.calls, executor.verifyCalls)
 	}

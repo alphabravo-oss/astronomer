@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -93,5 +94,22 @@ func TestFindingServiceCoalescedRepeatCanSuppressAlertStorm(t *testing.T) {
 	}
 	if store.calls != 1 || len(publisher.alerts) != 0 {
 		t.Fatal("coalesced repeat created an alert storm")
+	}
+}
+
+func TestFindingServiceDeliveryFailureRetainsDurableFindingForIdempotentRetry(t *testing.T) {
+	store := &fakeFindingStore{result: DurableFinding{ID: "finding-a", Fingerprint: "fingerprint-a", Status: "open", RepeatCount: 1, Notify: true}}
+	publisher := &fakeFindingPublisher{error: errors.New("notification-provider-SENTINEL")}
+	service, _ := NewFindingService(store, publisher)
+	input := validFindingInputForTest(DeniedPrecondition)
+
+	first, err := service.RecordBlocked(context.Background(), input)
+	if err == nil || strings.Contains(err.Error(), "SENTINEL") || first.ID != "finding-a" || store.calls != 1 || len(publisher.alerts) != 1 {
+		t.Fatalf("delivery failure lost or leaked durable finding: finding=%+v err=%v store=%d alerts=%d", first, err, store.calls, len(publisher.alerts))
+	}
+	publisher.error = nil
+	second, err := service.RecordBlocked(context.Background(), input)
+	if err != nil || second.ID != first.ID || second.Fingerprint != first.Fingerprint || store.calls != 2 || len(publisher.alerts) != 2 {
+		t.Fatalf("delivery retry was not idempotent: first=%+v second=%+v err=%v store=%d alerts=%d", first, second, err, store.calls, len(publisher.alerts))
 	}
 }

@@ -529,28 +529,30 @@ type CatalogOperationEvent struct {
 }
 
 type CharlieActionApproval struct {
-	ID               uuid.UUID          `json:"id"`
-	ConnectionID     uuid.UUID          `json:"connection_id"`
-	SessionID        uuid.UUID          `json:"session_id"`
-	ApprovalID       string             `json:"approval_id"`
-	CharlieActionID  string             `json:"charlie_action_id"`
-	TurnID           string             `json:"turn_id"`
-	Capability       string             `json:"capability"`
-	ArgumentDigest   string             `json:"argument_digest"`
-	DisclosureDigest string             `json:"disclosure_digest"`
-	ModeRevision     int64              `json:"mode_revision"`
-	PolicyRevision   int64              `json:"policy_revision"`
-	FencingEpoch     int64              `json:"fencing_epoch"`
-	ManifestDigest   string             `json:"manifest_digest"`
-	ResourceType     string             `json:"resource_type"`
-	ResourceID       string             `json:"resource_id"`
-	ApproverID       uuid.UUID          `json:"approver_id"`
-	RationaleDigest  string             `json:"rationale_digest"`
-	State            string             `json:"state"`
-	ExpiresAt        time.Time          `json:"expires_at"`
-	DispatchedAt     pgtype.Timestamptz `json:"dispatched_at"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	ID                uuid.UUID          `json:"id"`
+	ConnectionID      uuid.UUID          `json:"connection_id"`
+	SessionID         uuid.UUID          `json:"session_id"`
+	ApprovalID        string             `json:"approval_id"`
+	CharlieActionID   string             `json:"charlie_action_id"`
+	TurnID            string             `json:"turn_id"`
+	Capability        string             `json:"capability"`
+	ArgumentDigest    string             `json:"argument_digest"`
+	DisclosureDigest  string             `json:"disclosure_digest"`
+	ModeRevision      int64              `json:"mode_revision"`
+	PolicyRevision    int64              `json:"policy_revision"`
+	FencingEpoch      int64              `json:"fencing_epoch"`
+	ManifestDigest    string             `json:"manifest_digest"`
+	ResourceType      string             `json:"resource_type"`
+	ResourceID        string             `json:"resource_id"`
+	ApproverID        uuid.UUID          `json:"approver_id"`
+	RationaleDigest   string             `json:"rationale_digest"`
+	State             string             `json:"state"`
+	ExpiresAt         time.Time          `json:"expires_at"`
+	DispatchedAt      pgtype.Timestamptz `json:"dispatched_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	DecisionRequestID uuid.UUID          `json:"decision_request_id"`
+	Decision          string             `json:"decision"`
 }
 
 type CharlieActionDeferral struct {

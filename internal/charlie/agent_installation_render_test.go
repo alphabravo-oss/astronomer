@@ -22,6 +22,20 @@ func TestAgentArgoValuesRenderOnlyHardenedGenericAgent(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(chart, "Chart.yaml")); err != nil {
 		t.Skip("sibling Charlie generic-agent chart is unavailable")
 	}
+	// The generic chart's default is deliberately cold: configuration alone
+	// must not create a workload, listener, Service, or network surface.
+	cold := exec.CommandContext(context.Background(), helm, "template", "charlie-cold", chart)
+	var coldOutput, coldError bytes.Buffer
+	cold.Stdout, cold.Stderr = &coldOutput, &coldError
+	if err := cold.Run(); err != nil {
+		t.Fatalf("cold-disabled generic agent values do not render: %v\n%s", err, coldError.String())
+	}
+	if strings.TrimSpace(coldOutput.String()) != "" {
+		t.Fatalf("runtime.enabled=false rendered an agent surface")
+	}
+
+	// Astronomer's reviewed onboarding application explicitly enables only the
+	// control plane with a disabled product-owned authority ceiling.
 	installer, _, _, _ := testAgentInstaller(t)
 	spec := testAgentInstallSpec(t)
 	packageFixture := newOnboardingFixture(t)
@@ -56,7 +70,7 @@ func TestAgentArgoValuesRenderOnlyHardenedGenericAgent(t *testing.T) {
 		"kind: StatefulSet", "replicas: 3", "automountServiceAccountToken: false", "kind: PodDisruptionBudget",
 		"kind: NetworkPolicy", "image: \"" + spec.ImageReference + "\"",
 		"secretName: \"" + names.Enrollment + "\"", "secretName: \"" + names.BridgeTLS + "\"",
-		"secretName: \"" + names.MCPClientTLS + "\"", "port: 7444",
+		"secretName: \"" + names.MCPClientTLS + "\"", "name: CHARLIE_MODE", "value: \"disabled\"",
 	} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("generic agent render missing %q", expected)

@@ -62,6 +62,10 @@ type AgentInstallSpec struct {
 	Trust                                     GeneratedLocalTrust `json:"-"`
 	CentralCIDRs                              []string
 	Proxy                                     AgentProxyConfig
+	// ModeCeiling is product-owned rollout configuration. Fresh onboarding
+	// always installs it as disabled; administration may change it only through
+	// the all-replica reconciliation path.
+	ModeCeiling Mode
 }
 
 type AgentProxyConfig struct {
@@ -228,6 +232,9 @@ func (i *AgentInstaller) Install(ctx context.Context, spec AgentInstallSpec) (Ag
 		}
 		spec.CentralCIDRs = cidrs
 	}
+	// Onboarding and replacement are control-only. A signed package can install
+	// transport, but can never grant product authority by itself.
+	spec.ModeCeiling = ModeDisabled
 	names := agentResourceNames(spec, i.agentNamespace)
 	var rollbacks []func(context.Context) error
 	rollbackAll := func(rollbackCtx context.Context) error {
@@ -313,12 +320,14 @@ type AgentInstallationStatus struct {
 	BridgeReady, CentralEnrolled, LeaderElected      bool
 	StandbyVisible, ProtocolCompatible               bool
 	CentralHealthy, ArtifactsVerified                bool
+	ModeCeiling                                      Mode
+	ModeCeilingReady                                 bool
 }
 
 func (s AgentInstallationStatus) Ready() bool {
 	return s.ApplicationSynced && s.ApplicationHealthy && s.ExpectedReplicas >= 2 && s.DesiredReplicas == s.ExpectedReplicas && s.ReadyReplicas == s.DesiredReplicas &&
 		s.BridgeReady && s.CentralEnrolled && s.LeaderElected && s.StandbyVisible && s.ProtocolCompatible &&
-		s.CentralHealthy && s.ArtifactsVerified
+		s.CentralHealthy && s.ArtifactsVerified && validMode(s.ModeCeiling) && s.ModeCeilingReady
 }
 
 func (i *AgentInstaller) Status(ctx context.Context, spec AgentInstallSpec) (AgentInstallationStatus, error) {
@@ -337,6 +346,8 @@ func (i *AgentInstaller) Status(ctx context.Context, spec AgentInstallSpec) (Age
 		ApplicationSynced: syncStatus == "Synced", ApplicationHealthy: healthStatus == "Healthy",
 		ReadyReplicas: statefulSet.Status.ReadyReplicas, ExpectedReplicas: int32(spec.ReplicaCount),
 	}
+	status.ModeCeiling = applicationModeCeiling(application)
+	status.ModeCeilingReady = i.modeCeilingReady(ctx, spec, normalizedModeCeiling(spec.ModeCeiling))
 	if statefulSet.Spec.Replicas != nil {
 		status.DesiredReplicas = *statefulSet.Spec.Replicas
 	}
@@ -824,7 +835,7 @@ func (i *AgentInstaller) application(spec AgentInstallSpec, names AgentResourceN
 	values := map[string]any{
 		"replicaCount": spec.ReplicaCount, "nameOverride": charlieAgentWorkloadName, "fullnameOverride": charlieAgentWorkloadName,
 		"image":   map[string]any{"repository": imageRepository, "digest": spec.ImageDigest, "tag": spec.ChartVersion, "pullPolicy": "IfNotPresent"},
-		"runtime": map[string]any{"enabled": true, "disclosureAcknowledgement": spec.DisclosureDigest},
+		"runtime": map[string]any{"enabled": true, "modeCeiling": string(normalizedModeCeiling(spec.ModeCeiling)), "disclosureAcknowledgement": spec.DisclosureDigest},
 		"charlie": map[string]any{"baseUrl": spec.CentralURL, "agentId": spec.LogicalAgentID, "product": "astronomer", "environment": spec.EnvironmentID, "tenant": spec.TenantID},
 		"bridge": map[string]any{
 			"enabled": true, "port": 7443, "serverNames": []string{"charlie-agent-bridge." + i.agentNamespace + ".svc"},
@@ -862,7 +873,7 @@ func (i *AgentInstaller) application(spec AgentInstallSpec, names AgentResourceN
 		"apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
 		"metadata": map[string]any{
 			"name": names.Application, "namespace": i.argoNamespace, "labels": stringMapAny(managedLabels(spec.InstallationID)),
-			"annotations": map[string]any{"astronomer.io/charlie-chart-digest": spec.ChartDigest, "astronomer.io/charlie-image-digest": spec.ImageDigest},
+			"annotations": map[string]any{"astronomer.io/charlie-chart-digest": spec.ChartDigest, "astronomer.io/charlie-image-digest": spec.ImageDigest, "astronomer.io/charlie-mode-ceiling": string(normalizedModeCeiling(spec.ModeCeiling))},
 		},
 		"spec": map[string]any{
 			"project": "default",
@@ -872,9 +883,16 @@ func (i *AgentInstaller) application(spec AgentInstallSpec, names AgentResourceN
 			// exact release closure recorded in the signed onboarding package.
 			"source":      map[string]any{"repoURL": spec.ChartReference, "path": ".", "targetRevision": spec.ChartDigest, "helm": map[string]any{"releaseName": names.Application, "values": string(valuesJSON)}},
 			"destination": map[string]any{"server": "https://kubernetes.default.svc", "namespace": i.agentNamespace},
-			"syncPolicy":  map[string]any{"automated": map[string]any{"prune": true, "selfHeal": true}, "syncOptions": []any{"CreateNamespace=false"}, "retry": map[string]any{"limit": int64(5)}},
+			"syncPolicy":  map[string]any{"automated": map[string]any{"prune": false, "selfHeal": true}, "syncOptions": []any{"CreateNamespace=false"}, "retry": map[string]any{"limit": int64(5)}},
 		},
 	}}, nil
+}
+
+func normalizedModeCeiling(mode Mode) Mode {
+	if !validMode(mode) {
+		return ModeDisabled
+	}
+	return mode
 }
 
 func centralPort(rawURL string) int32 {

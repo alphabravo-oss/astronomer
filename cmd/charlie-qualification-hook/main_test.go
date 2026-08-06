@@ -58,3 +58,34 @@ func TestMetricSourcesRejectPublicTokenFileAndInlineSecretField(t *testing.T) {
 		t.Fatal("inline metric secret field accepted")
 	}
 }
+
+func TestFixturesRequirePrivateStrictJSONFile(t *testing.T) {
+	directory := t.TempDir()
+	config := filepath.Join(directory, "fixtures.json")
+	body := `{"approval_once":{"approval_id":"approval-a","action_id":"action-a","capability":"astronomer.queue.retry_task","decision_request_id":"00000000-0000-4000-8000-000000000001","replay_request_id":"00000000-0000-4000-8000-000000000002"}}`
+	if err := os.WriteFile(config, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixtures, err := fixturesFromFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixtures.ApprovalOnce.ApprovalID != "approval-a" || fixtures.ApprovalOnce.ActionID != "action-a" {
+		t.Fatalf("fixture identifiers were not loaded exactly: %#v", fixtures.ApprovalOnce)
+	}
+	if err := os.Chmod(config, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixturesFromFile(config); err == nil {
+		t.Fatal("group/world-readable qualification fixture file accepted")
+	}
+	if err := os.Chmod(config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(`{"approval_once":{},"unexpected":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixturesFromFile(config); err == nil {
+		t.Fatal("unknown qualification fixture field accepted")
+	}
+}

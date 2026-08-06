@@ -339,6 +339,7 @@ const (
 const (
 	ModeApproval Mode = "approval"
 	ModeAuto     Mode = "auto"
+	ModeDisabled Mode = "disabled"
 	ModeReadOnly Mode = "read_only"
 )
 
@@ -479,15 +480,17 @@ type BridgeStatus struct {
 	ArtifactVersion   string                    `json:"artifact_version"`
 	AutoAllowlist     []string                  `json:"auto_allowlist"`
 	CentralHealth     BridgeStatusCentralHealth `json:"central_health"`
+	CentralMode       Mode                      `json:"central_mode"`
 	DeploymentEnabled bool                      `json:"deployment_enabled"`
 	DeploymentId      OpaqueId                  `json:"deployment_id"`
 
 	// DisclosureDigest Empty only while no reviewed disclosure is active.
 	DisclosureDigest string `json:"disclosure_digest"`
 
-	// EffectiveEnabled True only when both enablement authorities are true.
+	// EffectiveEnabled True only when connection, activation, non-disabled lower mode, disclosure, and emergency-latch inputs agree.
 	EffectiveEnabled    bool      `json:"effective_enabled"`
 	EffectiveMode       Mode      `json:"effective_mode"`
+	EmergencyDisabled   bool      `json:"emergency_disabled"`
 	Epoch               int64     `json:"epoch"`
 	InstanceId          OpaqueId  `json:"instance_id"`
 	IntegrationRevision OpaqueId  `json:"integration_revision"`
@@ -495,6 +498,7 @@ type BridgeStatus struct {
 	LeaseExpiresAt      time.Time `json:"lease_expires_at"`
 	LogicalAgentId      OpaqueId  `json:"logical_agent_id"`
 	ProductEnabled      bool      `json:"product_enabled"`
+	ProductModeCeiling  Mode      `json:"product_mode_ceiling"`
 	ReplicaCount        int       `json:"replica_count"`
 	ReplicaOrdinal      int       `json:"replica_ordinal"`
 	RouteId             OpaqueId  `json:"route_id"`

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -69,6 +70,7 @@ func NewTriggerDispatcher(queries triggerDispatchQueries, bridge InvestigationBr
 // creates at most one stable incident session, and commits lifecycle state
 // before publication. Redis/Asynq delivery may repeat this method safely.
 func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) error {
+	ctx = downstreamboundary.WithCharlieOrigin(ctx)
 	if eventID == uuid.Nil || !d.active() {
 		return nil
 	}

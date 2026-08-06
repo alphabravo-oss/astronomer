@@ -68,7 +68,7 @@ func NewProxyHandler(hub *Hub, log *slog.Logger) *ProxyHandler {
 // they last until either the client disconnects or the agent closes the
 // upstream stream.
 func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
-	downstreamboundary.Record(downstreamboundary.EntrypointKubernetesProxy, downstreamboundary.OperationKubernetes)
+	downstreamboundary.RecordContext(r.Context(), downstreamboundary.EntrypointKubernetesProxy, downstreamboundary.OperationKubernetes)
 	clusterID := chi.URLParam(r, "cluster_id")
 	mode := k8sProxyMode(r)
 	if clusterID == "" {

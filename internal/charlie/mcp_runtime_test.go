@@ -178,6 +178,19 @@ func TestMCPRuntimeOperationalDisabledHasNoWorkListener(t *testing.T) {
 	}
 }
 
+func TestMCPRuntimeReconcileCannotReopenModeTransitionFence(t *testing.T) {
+	runtime, queries := mcpRuntimeFixture(t)
+	queries.connection.RequestedMode = string(ModeApproval)
+	queries.connection.VerifiedMode = string(ModeApproval)
+	runtime.config.WriteFence.Close()
+	if err := runtime.reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !runtime.config.WriteFence.State().Closed {
+		t.Fatal("MCP runtime tick reopened admission owned by mode reconciliation")
+	}
+}
+
 type fakeRuntimeTicker struct{ channel chan time.Time }
 
 func (t *fakeRuntimeTicker) C() <-chan time.Time { return t.channel }

@@ -288,7 +288,7 @@ func (s *RemoteServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *RemoteServer) DialerFor(clusterID string) remotedialer.Dialer {
 	dialer := s.server.Dialer(clusterID)
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
-		downstreamboundary.Record(downstreamboundary.EntrypointRemoteDialer, downstreamboundary.OperationKubernetes)
+		downstreamboundary.RecordContext(ctx, downstreamboundary.EntrypointRemoteDialer, downstreamboundary.OperationKubernetes)
 		return dialer(ctx, network, address)
 	}
 }

@@ -473,14 +473,14 @@ INSERT INTO charlie_action_approvals (
     connection_id, session_id, approval_id, charlie_action_id, turn_id,
     capability, argument_digest, disclosure_digest, mode_revision,
     policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id,
-    approver_id, rationale_digest, expires_at
+    approver_id, rationale_digest, decision_request_id, decision, expires_at
 ) VALUES (
     sqlc.arg(connection_id), sqlc.arg(session_id), sqlc.arg(approval_id),
     sqlc.arg(charlie_action_id), sqlc.arg(turn_id), sqlc.arg(capability),
     sqlc.arg(argument_digest), sqlc.arg(disclosure_digest),
     sqlc.arg(mode_revision), sqlc.arg(policy_revision), sqlc.arg(fencing_epoch),
     sqlc.arg(manifest_digest), sqlc.arg(resource_type), sqlc.arg(resource_id), sqlc.arg(approver_id),
-    sqlc.arg(rationale_digest), sqlc.arg(expires_at)
+    sqlc.arg(rationale_digest), sqlc.arg(decision_request_id), sqlc.arg(decision), sqlc.arg(expires_at)
 ) RETURNING *;
 
 -- name: ApproveCharlieActionApproval :one

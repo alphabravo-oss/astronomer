@@ -278,7 +278,7 @@ SET state = 'approved', updated_at = now()
 WHERE id = $1
   AND state = 'pending'
   AND expires_at > now()
-RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at
+RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at, decision_request_id, decision
 `
 
 func (q *Queries) ApproveCharlieActionApproval(ctx context.Context, id uuid.UUID) (CharlieActionApproval, error) {
@@ -307,6 +307,8 @@ func (q *Queries) ApproveCharlieActionApproval(ctx context.Context, id uuid.UUID
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionRequestID,
+		&i.Decision,
 	)
 	return i, err
 }
@@ -1332,7 +1334,7 @@ WHERE charlie_action_id = $1
 		  AND resource.resource_id = charlie_action_approvals.resource_id
 		  AND resource.required_verb = 'read'
 	)
-RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at
+RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at, decision_request_id, decision
 `
 
 type ConsumeCharlieActionApprovalParams struct {
@@ -1381,6 +1383,8 @@ func (q *Queries) ConsumeCharlieActionApproval(ctx context.Context, arg ConsumeC
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionRequestID,
+		&i.Decision,
 	)
 	return i, err
 }
@@ -1390,35 +1394,37 @@ INSERT INTO charlie_action_approvals (
     connection_id, session_id, approval_id, charlie_action_id, turn_id,
     capability, argument_digest, disclosure_digest, mode_revision,
     policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id,
-    approver_id, rationale_digest, expires_at
+    approver_id, rationale_digest, decision_request_id, decision, expires_at
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6,
     $7, $8,
     $9, $10, $11,
     $12, $13, $14, $15,
-    $16, $17
-) RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at
+    $16, $17, $18, $19
+) RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at, decision_request_id, decision
 `
 
 type CreateCharlieActionApprovalParams struct {
-	ConnectionID     uuid.UUID `json:"connection_id"`
-	SessionID        uuid.UUID `json:"session_id"`
-	ApprovalID       string    `json:"approval_id"`
-	CharlieActionID  string    `json:"charlie_action_id"`
-	TurnID           string    `json:"turn_id"`
-	Capability       string    `json:"capability"`
-	ArgumentDigest   string    `json:"argument_digest"`
-	DisclosureDigest string    `json:"disclosure_digest"`
-	ModeRevision     int64     `json:"mode_revision"`
-	PolicyRevision   int64     `json:"policy_revision"`
-	FencingEpoch     int64     `json:"fencing_epoch"`
-	ManifestDigest   string    `json:"manifest_digest"`
-	ResourceType     string    `json:"resource_type"`
-	ResourceID       string    `json:"resource_id"`
-	ApproverID       uuid.UUID `json:"approver_id"`
-	RationaleDigest  string    `json:"rationale_digest"`
-	ExpiresAt        time.Time `json:"expires_at"`
+	ConnectionID      uuid.UUID `json:"connection_id"`
+	SessionID         uuid.UUID `json:"session_id"`
+	ApprovalID        string    `json:"approval_id"`
+	CharlieActionID   string    `json:"charlie_action_id"`
+	TurnID            string    `json:"turn_id"`
+	Capability        string    `json:"capability"`
+	ArgumentDigest    string    `json:"argument_digest"`
+	DisclosureDigest  string    `json:"disclosure_digest"`
+	ModeRevision      int64     `json:"mode_revision"`
+	PolicyRevision    int64     `json:"policy_revision"`
+	FencingEpoch      int64     `json:"fencing_epoch"`
+	ManifestDigest    string    `json:"manifest_digest"`
+	ResourceType      string    `json:"resource_type"`
+	ResourceID        string    `json:"resource_id"`
+	ApproverID        uuid.UUID `json:"approver_id"`
+	RationaleDigest   string    `json:"rationale_digest"`
+	DecisionRequestID uuid.UUID `json:"decision_request_id"`
+	Decision          string    `json:"decision"`
+	ExpiresAt         time.Time `json:"expires_at"`
 }
 
 func (q *Queries) CreateCharlieActionApproval(ctx context.Context, arg CreateCharlieActionApprovalParams) (CharlieActionApproval, error) {
@@ -1439,6 +1445,8 @@ func (q *Queries) CreateCharlieActionApproval(ctx context.Context, arg CreateCha
 		arg.ResourceID,
 		arg.ApproverID,
 		arg.RationaleDigest,
+		arg.DecisionRequestID,
+		arg.Decision,
 		arg.ExpiresAt,
 	)
 	var i CharlieActionApproval
@@ -1465,6 +1473,8 @@ func (q *Queries) CreateCharlieActionApproval(ctx context.Context, arg CreateCha
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionRequestID,
+		&i.Decision,
 	)
 	return i, err
 }
@@ -2359,7 +2369,7 @@ func (q *Queries) FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) 
 }
 
 const getActiveCharlieActionApproval = `-- name: GetActiveCharlieActionApproval :one
-SELECT id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at FROM charlie_action_approvals
+SELECT id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at, decision_request_id, decision FROM charlie_action_approvals
 WHERE charlie_action_id = $1
   AND approval_id = $2
   AND state = 'approved'
@@ -2404,6 +2414,8 @@ func (q *Queries) GetActiveCharlieActionApproval(ctx context.Context, arg GetAct
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionRequestID,
+		&i.Decision,
 	)
 	return i, err
 }
@@ -2546,7 +2558,7 @@ func (q *Queries) GetActiveCharlieFindingByFingerprint(ctx context.Context, arg 
 }
 
 const getCharlieActionApprovalByApprovalID = `-- name: GetCharlieActionApprovalByApprovalID :one
-SELECT id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at FROM charlie_action_approvals
+SELECT id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at, decision_request_id, decision FROM charlie_action_approvals
 WHERE approval_id = $1
 `
 
@@ -2576,6 +2588,8 @@ func (q *Queries) GetCharlieActionApprovalByApprovalID(ctx context.Context, appr
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionRequestID,
+		&i.Decision,
 	)
 	return i, err
 }
@@ -4716,7 +4730,7 @@ SET state = $1, updated_at = now()
 WHERE id = $2
   AND state IN ('pending', 'approved')
   AND $1::text IN ('rejected', 'expired')
-RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at
+RETURNING id, connection_id, session_id, approval_id, charlie_action_id, turn_id, capability, argument_digest, disclosure_digest, mode_revision, policy_revision, fencing_epoch, manifest_digest, resource_type, resource_id, approver_id, rationale_digest, state, expires_at, dispatched_at, created_at, updated_at, decision_request_id, decision
 `
 
 type TransitionCharlieActionApprovalParams struct {
@@ -4750,6 +4764,8 @@ func (q *Queries) TransitionCharlieActionApproval(ctx context.Context, arg Trans
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DecisionRequestID,
+		&i.Decision,
 	)
 	return i, err
 }

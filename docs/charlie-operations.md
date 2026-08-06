@@ -14,9 +14,11 @@ service never run in the Astronomer release.
   agent workload, and removes the MCP Service plus exact access NetworkPolicy.
   It deliberately retains the namespace, installation Secrets, owner-bound
   resume state, metadata, and audit/history for a safe re-enable.
-- An installed agent is still inert until the Astronomer connection is active
-  and the Charlie deployment is enabled. Either side disabling the integration
-  wins immediately.
+- Onboarding installs the two-replica product agent as a control-only runtime:
+  `runtime.enabled=true` with product-owned `runtime.modeCeiling=disabled`.
+  Configuration with `runtime.enabled=false` renders no workload or listener.
+  The agent has no Kubernetes service-account token or RBAC. Either product or
+  Charlie deployment disablement wins immediately.
 - Effective authority is the least privilege of current product feature state,
   connection state, emergency latch, Charlie-verified mode, current Astronomer
   RBAC, affected-resource scope, disclosure digest, action classification,
@@ -103,10 +105,20 @@ audit or receipt cannot be committed, the action fails closed.
 ### Requested and verified mode drift
 
 Mode drift always reduces authority through `EffectiveMode`; it never adopts
-the more permissive value. Check agent/central reachability and the last mode
-revision. Retry the idempotent mode reconciliation only after the same
-connection, signing trust, and disclosure digest are confirmed. For unexplained
-drift, emergency-disable and rotate local trust.
+the more permissive value. Before contacting the Product Bridge, Astronomer
+persists the desired ceiling, updates only the owner-bound Argo Application's
+`runtime.modeCeiling`, forces a non-pruning self-healing sync, waits for the
+StatefulSet rollout, and verifies both ready pods contain the exact immutable
+`CHARLIE_MODE` value. Upward transitions leave central at the lower prior mode
+until that readback succeeds. Downward and emergency transitions close and
+drain write admission first and retain the lower durable product ceiling even
+when Kubernetes, Argo, either replica, the bridge, or central is unavailable.
+Check the UI's product-agent ceiling readback, Argo health, StatefulSet revision,
+both pod readiness states, agent/central reachability, and the last mode
+revision. Retry the same transition idempotently only after the same connection,
+signing trust, and disclosure digest are confirmed. Never enable pruning to
+force a mode rollout. For unexplained drift, emergency-disable and rotate local
+trust.
 
 ### Enrollment, certificate, or credential rotation failure
 

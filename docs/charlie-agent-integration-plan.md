@@ -1,18 +1,19 @@
 # Charlie Agent Integration Plan for Astronomer
 
 > **Status:** Implementation and release-qualification record. Audited against
-> the v1 code and tests on 2026-08-05. The fail-closed, reconciliation, and local
+> the v1 code and tests on 2026-08-06. The fail-closed, reconciliation, and local
 > emergency-deny decisions below are part of v1. Unchecked boxes are deliberate
 > release gates, not implied implementation: the remaining server test/lifecycle
 > gaps are recorded in section 5.1, while A10/A11 acceptance and A14 require the
 > integrated UI or a live deployment.
 >
-> **Implementation branch:** `feat/charlie-core-integration`, implementation
-> base through commit `bae05f2` and live schema version 151 on 2026-08-06.
-> Charlie `1.0.21` contract alignment, repository verification, immutable-agent
-> replacement, and read-only authority restoration are complete; the unchecked
-> cross-mode, packet-isolation, alert-delivery, and destructive-corpus gates
-> below remain release work.
+> **Implementation branch:** `feat/charlie-core-integration`; source schema
+> version 154 and Charlie release candidate `1.0.23`. Repository verification
+> covers the cumulative authority matrix, HA mode fencing, exact approval replay,
+> actionable alerts, destructive/confused-deputy denial, and downstream-boundary
+> attribution. The currently deployed `1.0.22`/schema-153 system remains the
+> historical baseline until the exact commits and immutable artifacts are
+> published and the unchecked live, packet-isolation, and sentinel gates pass.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
@@ -468,7 +469,7 @@ silently claim an action, approval, notification, or audit write succeeded.
   the Astronomer API, workers, Product Bridge client, Product MCP, qualification
   tooling, and notification delivery; prove secret/content sentinels never reach
   logs, audit, metrics, traces, crash output, or support bundles.
-- [ ] **A-ALERT-006** Prove alert behavior by effective state: none while feature
+- [x] **A-ALERT-006** Prove alert behavior by effective state: none while feature
   or connection disabled; control-status only in wire `disabled`; manual guidance
   in `read_only`; exact approve/reject or manual guidance in `approval`; verified
   automatic result, exact fallback approval, or manual guidance in `auto`.
@@ -502,9 +503,36 @@ and asserts all eight typed stages plus zero unintended effects.
 suites, the API contract, 789 frontend tests/type-check/build/audit, and both
 development and production Helm renders pass. The alert-policy CAS, mandatory
 finding-scope query, and cross-process delivery fence also pass under `-race`
-against a disposable real PostgreSQL database. A-ALERT-005 and A-ALERT-006 stay
-open for the complete cross-process content-sentinel and live effective-mode
-notification matrices; this source evidence does not substitute for them.
+against a disposable real PostgreSQL database. A-ALERT-005 stays open for the
+complete cross-process content-sentinel matrix; this source evidence does not
+substitute for that live-only proof.
+
+Source effective-state alert acceptance evidence — 2026-08-06: the table-driven
+`TestAAlert006EffectiveStateProducesOnlyThePermittedOutcome` and
+`TestAuthorityMatrixRolesTargetRBACAndCumulativeModes` suites drive the signed
+product ActionGuard through feature absent, connection inactive, wire disabled,
+`read_only`, `approval`, and `auto`. Inert states persist and publish nothing;
+active non-execution outcomes persist exactly one bounded finding and alert;
+approval exposes only the separate exact decision lane; and successful approval
+or allowlisted automation produces one verified result without a finding. The
+role/target matrix covers viewer, operator, approver, administrator, and the
+separate automation identity with allowed and revoked target authority.
+
+Post-dispatch failure evidence is also source-complete. Verification failure,
+ambiguous receipt, and caller cancellation after a possible side effect persist
+a coded terminal receipt and deduplicated actionable finding through a bounded
+`context.WithoutCancel` cleanup context. Receipt replay retries only missing
+finding persistence and never re-invokes the adapter. Finding publication and
+provider alert failures retain their durable rows for idempotent retry. Existing
+advisory concurrency tests prove acknowledge, dismiss, resolve, remediation,
+verification request, replay, and stale/forged interaction cannot call approval
+or action dispatch; mode changes have no action-dispatch dependency. The
+table-driven destructive/confused-deputy corpus covers all modes and roles and
+replays shell, exec, raw SQL, proxy, Secret, delete, downstream transport,
+forged-authority, prompt-injection, and target-substitution attempts with zero
+adapter/receipt/authority consumption and only coded content-free audit/log
+outcomes. Packet capture, process absence, and the complete cross-process
+sentinel matrix remain live gates below.
 
 Charlie `1.0.21` contract-alignment evidence: the pinned strict finding schema,
 generated bridge types, Astronomer public OpenAPI, generated Go SDK, and generated
@@ -528,23 +556,23 @@ complete logging, and live mode-matrix gates remain open.
 - [ ] Prove enabled wire mode `disabled` accepts only the signed control protocol
   and cannot create a session, finding, alert, evidence request, MCP call, or
   model/RAG request.
-- [ ] For each user role and target-RBAC combination, prove `read_only` performs
+- [x] For each user role and target-RBAC combination, prove `read_only` performs
   only authorized reads and turns every material proposed write into one
   authorized, deduplicated manual-remediation finding with zero action receipt.
-- [ ] For each user role and target-RBAC combination, prove `approval` retains
+- [x] For each user role and target-RBAC combination, prove `approval` retains
   read-only behavior and dispatches only after an eligible actor approves one
   exact, current, unexpired action; reject, expiry, revocation, replay, silence,
   alert acknowledgement, and mode change execute nothing.
-- [ ] Prove `auto` retains both lower workflows: an exact allowlisted action uses
+- [x] Prove `auto` retains both lower workflows: an exact allowlisted action uses
   only the narrow automation identity, an otherwise-eligible safe action becomes
   an exact approval, and every other material diagnosis becomes actionable
   manual guidance. No blocked condition is silently dropped.
-- [ ] Run a destructive/confused-deputy corpus in every mode and role combination
+- [x] Run a destructive/confused-deputy corpus in every mode and role combination
   covering shell, exec, raw SQL, generic HTTP/proxy, Secret/credential access,
   delete, downstream-cluster transport, forged authority fields, model/prompt
   injection, target substitution, and replay; assert denial before dispatch,
   zero product side effect, and a content-free coded audit outcome.
-- [ ] Inject audit, finding-delivery, alert-delivery, and post-verification
+- [x] Inject audit, finding-delivery, alert-delivery, and post-verification
   failures. Required audit failure must fail closed before a write; notification
   failure must retain the durable finding for retry; ambiguous action results
   must reconcile rather than execute again.
@@ -1565,9 +1593,20 @@ the minimum authorized evidence and correlate, in order:
 - [x] Multi-user tests prove only currently resource-authorized users receive or
   open the finding/alert and that permission revocation closes subsequent detail
   and decision requests.
-- [ ] Decision concurrency/replay tests prove acknowledge, dismiss, resolve,
+- [x] Decision concurrency/replay tests prove acknowledge, dismiss, resolve,
   approve, deny, expiry, and notification retry are idempotent and mutually
   consistent across Astronomer and Charlie.
+
+Source completion evidence — 2026-08-06: Astronomer migration 154 binds each
+approval decision to `(connection_id, decision_request_id)`, actor, decision, and
+rationale digest with one concurrency winner and exact replay. Charlie `1.0.23`
+binds the forwarded idempotency key to the same decision and commits approval,
+action, session resume, safety reservation, signed execution ticket, and encrypted
+permission outbox together. Restart, prepare/enqueue/commit failure, exact replay,
+altered replay, approval expiry/rejection, and approve-vs-reject tests prove no
+lost or duplicate execution. Finding lifecycle concurrency and notification
+outage tests independently prove that every advisory interaction has zero action
+dispatch side effects.
 
 ### Phase A13 — Observability, audit, security, and operations
 
@@ -1630,7 +1669,7 @@ the minimum authorized evidence and correlate, in order:
   URLs, authorization references, tokens, credentials, private certificate
   material, onboarding bodies, Secret data, and model/provider/RAG content from
   logs, audit, metrics, tracing, events, diagnostics, and support bundles.
-- [ ] **A13-018** Correlate product and Charlie records using opaque installation,
+- [x] **A13-018** Correlate product and Charlie records using opaque installation,
   deployment, route, session, turn, finding, approval, action, operation, request,
   and audit IDs without logging their associated content. Document which system
   owns each record and its retention/deletion behavior.
@@ -1654,6 +1693,14 @@ the minimum authorized evidence and correlate, in order:
 - [x] Audit-storage failure tests prove no approval is consumed and no write is
   dispatched without its required durable, content-free audit record.
 - [ ] Every runbook is exercised by a game-day or deterministic test.
+
+A13 source completion evidence — 2026-08-06: the ownership/retention table in
+section 4.4 assigns central and product records explicitly. Both systems now emit
+closed `charlie.observability/v1` event/reason fields with opaque correlation
+identifiers only; provider IDs are hashed, required audit admission shares the
+authority transaction, and sink-failure tests roll mutations back. The complete
+cross-process property/sentinel matrix and runbook game days remain separate
+unchecked qualification gates.
 
 ### Phase A14 — Connected and air-gap qualification
 

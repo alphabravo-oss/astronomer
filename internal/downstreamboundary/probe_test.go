@@ -1,6 +1,9 @@
 package downstreamboundary
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,14 +44,14 @@ func TestBoundaryEnumsAreCompleteBoundedAndInstrumented(t *testing.T) {
 	internal := filepath.Dir(filepath.Dir(file))
 	required := map[string][]string{
 		filepath.Join(internal, "tunnel", "proxy.go"): {
-			"Record(downstreamboundary.EntrypointKubernetesProxy, downstreamboundary.OperationKubernetes)",
+			"RecordContext(r.Context(), downstreamboundary.EntrypointKubernetesProxy, downstreamboundary.OperationKubernetes)",
 		},
 		filepath.Join(internal, "tunnel", "server.go"): {
 			"Record(downstreamboundary.EntrypointTunnelMessage, operation)",
 			"Record(downstreamboundary.EntrypointTunnelBroadcast, operation)",
 		},
 		filepath.Join(internal, "tunnel2", "server.go"): {
-			"Record(downstreamboundary.EntrypointRemoteDialer, downstreamboundary.OperationKubernetes)",
+			"RecordContext(ctx, downstreamboundary.EntrypointRemoteDialer, downstreamboundary.OperationKubernetes)",
 		},
 	}
 	for path, markers := range required {
@@ -88,6 +91,47 @@ func TestBoundaryEnumsAreCompleteBoundedAndInstrumented(t *testing.T) {
 	}
 }
 
+func TestCharlieAttributionIsTrustedAndIndependentFromFleetTraffic(t *testing.T) {
+	allBefore := TakeSnapshot()
+	charlieBefore := TakeCharlieSnapshot()
+	RecordContext(context.Background(), EntrypointKubernetesProxy, OperationKubernetes)
+	if delta := TakeSnapshot().DeltaTotal(allBefore); delta != 1 {
+		t.Fatalf("fleet boundary delta=%d want=1", delta)
+	}
+	if delta := TakeCharlieSnapshot().DeltaTotal(charlieBefore); delta != 0 {
+		t.Fatalf("unmarked boundary was attributed to Charlie: %d", delta)
+	}
+
+	allBefore = TakeSnapshot()
+	charlieBefore = TakeCharlieSnapshot()
+	RecordContext(WithCharlieOrigin(context.Background()), EntrypointRemoteDialer, OperationKubernetes)
+	if delta := TakeSnapshot().DeltaTotal(allBefore); delta != 1 {
+		t.Fatalf("fleet boundary delta=%d want=1", delta)
+	}
+	if delta := TakeCharlieSnapshot().DeltaTotal(charlieBefore); delta != 1 {
+		t.Fatalf("Charlie boundary delta=%d want=1", delta)
+	}
+}
+
+func TestCharlieOriginCannotBeForgedByRequestHeader(t *testing.T) {
+	before := TakeCharlieSnapshot()
+	plain := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		RecordContext(r.Context(), EntrypointKubernetesProxy, OperationKubernetes)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("X-Charlie-Origin", "true")
+	plain.ServeHTTP(httptest.NewRecorder(), request)
+	if delta := TakeCharlieSnapshot().DeltaTotal(before); delta != 0 {
+		t.Fatalf("request header forged Charlie attribution: %d", delta)
+	}
+
+	before = TakeCharlieSnapshot()
+	MarkCharlieOrigin(plain).ServeHTTP(httptest.NewRecorder(), request)
+	if delta := TakeCharlieSnapshot().DeltaTotal(before); delta != 1 {
+		t.Fatalf("trusted Charlie middleware delta=%d want=1", delta)
+	}
+}
+
 func TestSnapshotCountsOnlyFixedValidDimensions(t *testing.T) {
 	before := TakeSnapshot()
 	metric := boundaryCalls.WithLabelValues(EntrypointTunnelMessage.String(), OperationExec.String())
@@ -106,9 +150,17 @@ func TestSnapshotCountsOnlyFixedValidDimensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	found := false
+	foundCharlie := false
 	for _, family := range families {
-		if family.GetName() == "astronomer_downstream_boundary_calls_total" {
+		if family.GetName() == "astronomer_downstream_boundary_calls_total" ||
+			family.GetName() == "astronomer_charlie_downstream_boundary_calls_total" {
 			found = true
+			if family.GetName() == "astronomer_charlie_downstream_boundary_calls_total" {
+				foundCharlie = true
+				if got, want := len(family.Metric), int(entrypointCount)*int(operationCount); got != want {
+					t.Fatalf("Charlie boundary series=%d want=%d", got, want)
+				}
+			}
 			for _, sample := range family.Metric {
 				for _, label := range sample.Label {
 					if label.GetName() != "entrypoint" && label.GetName() != "operation" {
@@ -120,5 +172,8 @@ func TestSnapshotCountsOnlyFixedValidDimensions(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("downstream boundary metric is not registered")
+	}
+	if !foundCharlie {
+		t.Fatal("Charlie-attributed downstream boundary metric is not registered")
 	}
 }

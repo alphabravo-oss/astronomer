@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 )
 
 const maxMCPRequestBytes = 1 << 20
@@ -51,6 +53,7 @@ type mcpError struct {
 }
 
 func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
+	request = request.WithContext(downstreamboundary.WithCharlieOrigin(request.Context()))
 	started := time.Now()
 	method := "unknown"
 	statusWriter := &mcpStatusWriter{ResponseWriter: w}

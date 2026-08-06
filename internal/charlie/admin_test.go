@@ -13,9 +13,19 @@ import (
 )
 
 func TestAdminInstallSpecUsesPersistedSignedReplicaCount(t *testing.T) {
-	spec := adminInstallSpec(sqlc.CharlieConnection{ReplicaCount: 7})
-	if spec.ReplicaCount != 7 {
-		t.Fatalf("admin readiness expected replicas = %d, want 7", spec.ReplicaCount)
+	spec := adminInstallSpec(sqlc.CharlieConnection{ReplicaCount: 7, RequestedMode: "approval"})
+	if spec.ReplicaCount != 7 || spec.ModeCeiling != ModeApproval {
+		t.Fatalf("admin install spec = %+v", spec)
+	}
+}
+
+func TestAdminModeExposesProductOwnedWorkloadCeilingAsUnverifiedUntilReadback(t *testing.T) {
+	view := safeAdminMode(sqlc.CharlieConnection{RequestedMode: "auto", VerifiedMode: "read_only", VerifiedModeRevision: 7})
+	if view.WorkloadCeiling != ModeAuto || view.WorkloadCeilingReady || view.Authoritative != ModeReadOnly {
+		t.Fatalf("unsafe mode status: %+v", view)
+	}
+	if empty := emptyAdminStatus().Mode; empty.WorkloadCeiling != ModeDisabled || empty.WorkloadCeilingReady {
+		t.Fatalf("empty mode status did not fail closed: %+v", empty)
 	}
 }
 

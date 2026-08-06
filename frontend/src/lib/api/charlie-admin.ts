@@ -81,6 +81,8 @@ export interface CharlieModeView {
   disclosureDigest?: string;
   acknowledgedDisclosureDigest?: string;
   effects: string[];
+  workloadCeiling: CharlieMode;
+  workloadCeilingReady: boolean;
   autoReadiness?: {
     ready: boolean;
     blockers: Array<{

@@ -974,6 +974,10 @@ export function ModeTab() {
           />
           <Meta label="Revision" value={m.revision} />
           <Meta
+            label="Product-agent ceiling"
+            value={`${productModeLabel[m.workloadCeiling]}${m.workloadCeilingReady ? " · both replicas verified" : " · rollout not verified"}`}
+          />
+          <Meta
             label="Emergency disabled"
             value={m.emergencyDisabled ? "Yes" : "No"}
           />
@@ -982,6 +986,13 @@ export function ModeTab() {
             value={m.disablePending ? "Pending agent confirmation" : "Confirmed"}
           />
         </dl>
+        {!m.workloadCeilingReady && (
+          <p role="status" className="text-sm text-status-warning">
+            Charlie authority remains fail-closed until the non-pruning Argo
+            rollout is healthy and both product-agent replicas report the exact
+            requested ceiling.
+          </p>
+        )}
         <div aria-live="polite" className="rounded-lg border p-4">
           <p className="text-sm font-medium">Authoritative effects</p>
           {m.effects.length ? (

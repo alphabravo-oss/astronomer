@@ -147,14 +147,28 @@ func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, a
 	if actorID == uuid.Nil || requestID == uuid.Nil || strings.TrimSpace(approvalID) == "" || len(approvalID) > 128 || len(rationale) > 512 || (decision != "approve" && decision != "reject") {
 		return ApprovalView{}, fmt.Errorf("Charlie approval decision is invalid")
 	}
+	rationaleDigest := digestBytes([]byte(strings.TrimSpace(rationale)))
 	// A response lost after a successful commit is safe to replay only for the
-	// same product approver and final state. No central content is needed.
+	// same product approver, exact idempotency request, decision, rationale, and
+	// final state. No central content is needed, and a new request can never
+	// adopt authority established by an earlier operator decision.
 	if existing, err := s.queries.GetCharlieActionApprovalByApprovalID(ctx, approvalID); err == nil {
-		if existing.ApproverID == actorID && ((decision == "approve" && existing.State == "approved") || (decision == "reject" && existing.State == "rejected")) {
+		exactReplay := existing.ApproverID == actorID && existing.DecisionRequestID == requestID &&
+			existing.Decision == decision && existing.RationaleDigest == rationaleDigest
+		terminalMatch := (decision == "approve" && (existing.State == "approved" || existing.State == "dispatched")) ||
+			(decision == "reject" && existing.State == "rejected")
+		if exactReplay && terminalMatch {
 			if decision == "reject" {
 				if err := s.transitionApprovalFinding(ctx, approvalID, "rejected"); err != nil {
 					return ApprovalView{}, err
 				}
+			}
+			if err := s.auditor.RecordCharlieApprovalLifecycle(ctx, ApprovalLifecycleAudit{
+				ApprovalID: existing.ApprovalID, ActionID: existing.CharlieActionID, SessionID: existing.SessionID,
+				ActorID: actorID, Capability: existing.Capability, Decision: decision,
+				OutcomeCode: "replayed", ManifestDigest: existing.ManifestDigest,
+			}); err != nil {
+				return ApprovalView{}, fmt.Errorf("Charlie approval replay audit could not be persisted")
 			}
 			return localApprovalView(existing), nil
 		}
@@ -184,7 +198,7 @@ func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, a
 		DisclosureDigest: manifest.DisclosureDigest, ModeRevision: manifest.ModeRevision,
 		PolicyRevision: manifest.PolicyRevision, FencingEpoch: manifest.FencingEpoch,
 		ManifestDigest: candidate.manifestDigest, ResourceType: strings.TrimSpace(candidate.resource.Kind), ResourceID: string(candidate.resource.Id), ApproverID: actorID,
-		RationaleDigest: digestBytes([]byte(strings.TrimSpace(rationale))), ExpiresAt: manifest.ExpiresAt.UTC(),
+		RationaleDigest: rationaleDigest, DecisionRequestID: requestID, Decision: decision, ExpiresAt: manifest.ExpiresAt.UTC(),
 	})
 	if err != nil {
 		return ApprovalView{}, fmt.Errorf("Charlie approval authority could not be reserved")
@@ -447,7 +461,14 @@ func approvalView(item verifiedApproval) ApprovalView {
 }
 
 func localApprovalView(row sqlc.CharlieActionApproval) ApprovalView {
-	return ApprovalView{ID: row.ApprovalID, Title: "Charlie action decision", State: mapApprovalState(row.State), Eligible: false, Capability: row.Capability, Target: "exact signed target", Risk: "bounded", Effect: "write", RequiredPermission: "Exact target permission", ExpiresAt: row.ExpiresAt.UTC(), Reason: "This exact action has already been " + mapApprovalState(row.State) + "."}
+	state := mapApprovalState(row.State)
+	// Dispatch consumes the exact approval but does not change the browser
+	// decision result. Keep the bounded public enum and avoid implying that a
+	// replay initiated another execution.
+	if state == "dispatched" {
+		state = "approved"
+	}
+	return ApprovalView{ID: row.ApprovalID, Title: "Charlie action decision", State: state, Eligible: false, Capability: row.Capability, Target: "exact signed target", Risk: "bounded", Effect: "write", RequiredPermission: "Exact target permission", ExpiresAt: row.ExpiresAt.UTC(), Reason: "This exact action has already been " + state + "."}
 }
 
 func mapApprovalState(state string) string {

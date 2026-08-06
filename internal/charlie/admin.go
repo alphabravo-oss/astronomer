@@ -75,6 +75,8 @@ type AdminModeView struct {
 	AcknowledgedDisclosureDigest string             `json:"acknowledged_disclosure_digest,omitempty"`
 	Effects                      []string           `json:"effects"`
 	AutoReadiness                AdminAutoReadiness `json:"auto_readiness"`
+	WorkloadCeiling              Mode               `json:"workload_ceiling"`
+	WorkloadCeilingReady         bool               `json:"workload_ceiling_ready"`
 }
 
 type AdminAutoReadiness struct {
@@ -220,6 +222,9 @@ func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *
 		if err != nil {
 			return nil, err
 		}
+		if ceilingInstaller, ok := installer.(ModeCeilingInstaller); ok {
+			controller.SetModeCeilingRollout(modeCeilingRollout{load: queries.GetLatestCharlieConnection, installer: ceilingInstaller})
+		}
 		service.mode = controller
 	}
 	return service, nil
@@ -279,6 +284,8 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 		view.Agent.DesiredReplicas = installation.DesiredReplicas
 		view.Agent.ReadyReplicas = installation.ReadyReplicas
 		view.Agent.ApplicationState = installationState(installation, statusErr)
+		view.Mode.WorkloadCeiling = installation.ModeCeiling
+		view.Mode.WorkloadCeilingReady = statusErr == nil && installation.ModeCeilingReady
 	}
 	if s.bridge != nil {
 		if bridgeStatus, statusErr := s.bridge.AdminStatus(ctx); statusErr == nil {
@@ -293,6 +300,8 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 						view.Agent.DesiredReplicas = installation.DesiredReplicas
 						view.Agent.ReadyReplicas = installation.ReadyReplicas
 						view.Agent.ApplicationState = installationState(installation, installErr)
+						view.Mode.WorkloadCeiling = installation.ModeCeiling
+						view.Mode.WorkloadCeilingReady = installErr == nil && installation.ModeCeilingReady
 					}
 				}
 			}
@@ -333,6 +342,8 @@ func (s *AdminService) LocalStatus(ctx context.Context) (AdminStatusView, error)
 	}
 	view.Mode.Requested = ModeDisabled
 	view.Mode.Authoritative = ModeDisabled
+	view.Mode.WorkloadCeiling = ModeDisabled
+	view.Mode.WorkloadCeilingReady = false
 	view.Mode.Effects = modeEffects(ModeDisabled)
 	return view, nil
 }
@@ -341,7 +352,7 @@ func emptyAdminStatus() AdminStatusView {
 	return AdminStatusView{
 		Connection: AdminConnectionView{},
 		Agent:      AdminAgentView{ApplicationState: "not_installed", StandbyReplicas: []string{}, Replicas: []AdminAgentReplicaView{}},
-		Mode: AdminModeView{Requested: ModeDisabled, Authoritative: ModeDisabled, Effects: modeEffects(ModeDisabled), AutoReadiness: AdminAutoReadiness{Blockers: []AdminAutoReadinessBlocker{{
+		Mode: AdminModeView{Requested: ModeDisabled, Authoritative: ModeDisabled, WorkloadCeiling: ModeDisabled, Effects: modeEffects(ModeDisabled), AutoReadiness: AdminAutoReadiness{Blockers: []AdminAutoReadinessBlocker{{
 			Code: "allowlist_unreviewed", Message: "Charlie is not connected or active.", NextAction: "Connect Charlie and review its MCP disclosure before configuring automation.",
 		}}}},
 	}
@@ -390,6 +401,7 @@ func safeAdminMode(row sqlc.CharlieConnection) AdminModeView {
 		DisablePending:   requested == ModeDisabled && verified != ModeDisabled,
 		DisclosureDigest: row.DisclosureDigest, AcknowledgedDisclosureDigest: row.AcknowledgedDisclosureDigest,
 		Effects: modeEffects(EffectiveMode(requested, verified, row.EmergencyDisabled)), AutoReadiness: AdminAutoReadiness{Blockers: []AdminAutoReadinessBlocker{}},
+		WorkloadCeiling: requested,
 	}
 }
 
@@ -499,6 +511,7 @@ func adminInstallSpec(row sqlc.CharlieConnection) AgentInstallSpec {
 		CentralURL:          row.CentralUrl, ChartReference: row.ChartReference, ChartVersion: row.ChartVersion, ChartDigest: row.ChartDigest,
 		ImageReference: row.ImageReference, ImageDigest: row.ImageDigest, SecretPrefix: row.AgentSecretName, DisclosureDigest: row.DisclosureDigest,
 		SecretIntegrityHMAC: row.AgentSecretHmac, ReplicaCount: int(row.ReplicaCount),
+		ModeCeiling: normalizedModeCeiling(Mode(row.RequestedMode)),
 	}
 }
 
@@ -795,7 +808,9 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 		}
 	}
 	remotePending := emergency && state.EmergencyDisabled && err != nil && strings.Contains(err.Error(), "remote confirmation is pending")
-	if err != nil && !remotePending {
+	ceilingPending := emergency && state.EmergencyDisabled && err != nil && strings.Contains(err.Error(), "agent ceiling confirmation is pending")
+	confirmationPending := remotePending || ceilingPending
+	if err != nil && !confirmationPending {
 		return AdminModeView{}, fmt.Errorf("%w: %v", ErrAdminConflict, err)
 	}
 	connection, loadErr := s.connection(ctx)
@@ -804,7 +819,10 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 	}
 	view := safeAdminMode(connection)
 	view = s.enrichMode(ctx, view)
-	if remotePending {
+	// A successful transition, including one awaiting only central confirmation,
+	// has already proven the exact ceiling on both product-agent replicas.
+	view.WorkloadCeilingReady = err == nil || remotePending
+	if confirmationPending {
 		view.DisablePending = true
 	}
 	return view, nil

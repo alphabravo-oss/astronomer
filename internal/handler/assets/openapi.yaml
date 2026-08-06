@@ -353,7 +353,7 @@ components:
     CharlieAdminMode:
       type: object
       additionalProperties: false
-      required: [requested, authoritative, revision, emergency_disabled, effects, auto_readiness]
+      required: [requested, authoritative, revision, emergency_disabled, effects, auto_readiness, workload_ceiling, workload_ceiling_ready]
       properties:
         requested: {type: string, enum: [disabled, read_only, approval, auto]}
         authoritative: {type: string, enum: [disabled, read_only, approval, auto]}
@@ -364,6 +364,8 @@ components:
         acknowledged_disclosure_digest: {type: string}
         effects: {type: array, items: {type: string}}
         auto_readiness: {$ref: '#/components/schemas/CharlieAdminAutoReadiness'}
+        workload_ceiling: {type: string, enum: [disabled, read_only, approval, auto], description: Product-owned ceiling currently rendered in the agent Argo workload.}
+        workload_ceiling_ready: {type: boolean, description: True only after a non-pruning rollout and exact readback from both ready product-agent replicas.}
     CharlieAdminAutoReadiness:
       type: object
       additionalProperties: false

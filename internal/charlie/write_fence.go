@@ -146,6 +146,21 @@ func (f *WriteFence) Close() WriteDrainState {
 // CloseAndWait closes admission before waiting. On timeout the fence remains
 // closed and the returned state makes the incomplete drain explicit.
 func (f *WriteFence) CloseAndWait(ctx context.Context) (WriteDrainState, error) {
+	state, release, err := f.CloseAndHold(ctx)
+	if release != nil {
+		release()
+	}
+	return state, err
+}
+
+// CloseAndHold closes local admission, drains registered work, and retains the
+// cross-replica exclusive advisory lock until release. Authority transitions
+// use this form so another replica cannot admit a new write between the drain,
+// workload-ceiling readback, and the durable mode CAS.
+func (f *WriteFence) CloseAndHold(ctx context.Context) (WriteDrainState, func(), error) {
+	if f == nil {
+		return WriteDrainState{Closed: true, Drained: true}, func() {}, nil
+	}
 	f.Close()
 	for {
 		f.mu.Lock()
@@ -153,32 +168,42 @@ func (f *WriteFence) CloseAndWait(ctx context.Context) (WriteDrainState, error) 
 		changed := f.changed
 		f.mu.Unlock()
 		if state.Drained {
-			if err := f.waitForDistributedWrites(ctx); err != nil {
+			release, err := f.holdDistributedWrites(ctx)
+			if err != nil {
 				state.Drained = false
 				state.DistributedPending = true
-				return state, &WriteDrainError{State: state}
+				return state, nil, &WriteDrainError{State: state}
 			}
-			return state, nil
+			return state, release, nil
 		}
 		select {
 		case <-ctx.Done():
-			return state, &WriteDrainError{State: state}
+			return state, nil, &WriteDrainError{State: state}
 		case <-changed:
 		}
 	}
 }
 
-func (f *WriteFence) waitForDistributedWrites(ctx context.Context) error {
+func (f *WriteFence) holdDistributedWrites(ctx context.Context) (func(), error) {
 	if f == nil || f.pool == nil {
-		return nil
+		return func() {}, nil
 	}
 	transaction, err := f.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { _ = transaction.Rollback(context.Background()) }()
-	_, err = transaction.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, charlieWriteAdvisoryLock)
-	return err
+	if _, err = transaction.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, charlieWriteAdvisoryLock); err != nil {
+		_ = transaction.Rollback(context.Background())
+		return nil, err
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = transaction.Rollback(releaseCtx)
+		})
+	}, nil
 }
 
 // Open admits writes again. Callers must first re-establish the feature,

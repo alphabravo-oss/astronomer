@@ -13,6 +13,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 )
 
 const (
@@ -134,6 +136,10 @@ type ActionGuard struct {
 	writeFence *WriteFence
 	findings   BlockedFindingRecorder
 	installID  string
+	// persistenceTimeout is intentionally separate from capability execution and
+	// verification time. Terminal durability receives its full bounded window
+	// only after the operation reaches a terminal branch.
+	persistenceTimeout time.Duration
 }
 
 // SetFindingRecorder attaches the durable finding/alert path for policy
@@ -152,7 +158,7 @@ func NewActionGuard(publicKey ed25519.PublicKey, authority LiveActionAuthority, 
 	if len(publicKey) != ed25519.PublicKeySize || authority == nil || receipts == nil || executor == nil || auditor == nil {
 		return nil, fmt.Errorf("Charlie action guard requires signing trust, live authority, receipts, executor, and durable audit")
 	}
-	return &ActionGuard{publicKey: append(ed25519.PublicKey(nil), publicKey...), authority: authority, receipts: receipts, executor: executor, auditor: auditor, now: time.Now, writeFence: NewWriteFence()}, nil
+	return &ActionGuard{publicKey: append(ed25519.PublicKey(nil), publicKey...), authority: authority, receipts: receipts, executor: executor, auditor: auditor, now: time.Now, writeFence: NewWriteFence(), persistenceTimeout: 5 * time.Second}, nil
 }
 
 // SetWriteFence attaches the server-wide write admission registry. Every MCP
@@ -173,6 +179,7 @@ func (g *ActionGuard) SetLogger(logger *slog.Logger) {
 }
 
 func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (result ActionResult) {
+	ctx = downstreamboundary.WithCharlieOrigin(ctx)
 	observedMode := ModeDisabled
 	defer func() {
 		observeAction(envelope, result)
@@ -232,7 +239,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 	}
 
 	if descriptor.Effect == EffectRead {
-		return g.executeAndVerify(ctx, envelope, descriptor, arguments, false)
+		return g.executeAndVerify(ctx, envelope, descriptor, arguments, false, facts)
 	}
 
 	if operationCtx.Err() != nil {
@@ -252,11 +259,18 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 		if claim.Result.Code == DeniedAuditUnavailable && descriptor.Effect == EffectWrite {
 			claim.Result, _ = g.recordAuditUnavailable(operationCtx, envelope, descriptor, arguments, &facts)
 			claim.Result.Replay = true
+		} else if descriptor.Effect == EffectWrite && isRetryableExecutionFinding(claim.Result.Code) {
+			// The product operation is already represented by the durable receipt.
+			// Retry only the deduplicated advisory projection; never invoke the
+			// adapter again to recover a failed notification/finding write.
+			claim.Result = g.recordExecutionFinding(operationCtx, descriptor, facts, claim.Result)
+			claim.Result.Replay = true
 		}
 		g.recordAuditOutcome(ctx, "replayed", envelope, descriptor, claim.Result)
 		return claim.Result
 	case ReceiptAmbiguous:
-		result := denied(DeniedAmbiguousPriorAttempt, "A prior attempt has an ambiguous outcome and requires reconciliation")
+		result := g.recordExecutionFinding(operationCtx, descriptor, facts,
+			actionableDenied(DeniedAmbiguousPriorAttempt, "A prior attempt has an ambiguous outcome and requires reconciliation"))
 		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
 		return result
 	case ReceiptConflict:
@@ -379,7 +393,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 		g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 		return result
 	}
-	return g.executeAndVerify(operationCtx, envelope, descriptor, arguments, true)
+	return g.executeAndVerify(operationCtx, envelope, descriptor, arguments, true, facts)
 }
 
 func (g *ActionGuard) commitAuthority(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, arguments map[string]json.RawMessage, facts AuthorityInput) (bool, error) {
@@ -496,7 +510,7 @@ func blockedActionFindingInput(installationID, resourceType, resourceID, capabil
 	}
 }
 
-func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, arguments map[string]json.RawMessage, durable bool) ActionResult {
+func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, arguments map[string]json.RawMessage, durable bool, facts AuthorityInput) ActionResult {
 	if validateV1CapabilityDescriptor(descriptor) != nil {
 		result := denied(DeniedDestructive, "Charlie rejected an unsafe capability descriptor before dispatch")
 		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
@@ -526,55 +540,133 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 		if durable && errors.Is(callCtx.Err(), context.Canceled) && g.writeFence.State().Closed {
 			return g.recordFenced(ctx, envelope, descriptor, "Charlie write executor was cancelled by disable")
 		}
-		result := ActionResult{Allowed: true, State: "failed"}
-		if g.auditor.Record(ctx, "failed", envelope, descriptor, result) != nil {
-			result.State = "ambiguous"
+		return g.withPersistenceContext(ctx, func(persistCtx context.Context) ActionResult {
+			result := ActionResult{Allowed: true, Code: DeniedAmbiguousPriorAttempt, State: "failed"}
+			if g.auditor.Record(persistCtx, "failed", envelope, descriptor, result) != nil {
+				result.State = "ambiguous"
+			}
+			if durable {
+				g.recordReceiptOutcome(persistCtx, envelope, "ambiguous", result)
+				result = g.recordExecutionFinding(persistCtx, descriptor, facts, result)
+			}
+			return result
+		})
+	}
+	if callCtx.Err() != nil {
+		if durable && g.writeFence.State().Closed {
+			return g.recordFenced(ctx, envelope, descriptor, "Charlie write execution was cancelled by disable")
 		}
-		if durable {
-			g.recordReceiptOutcome(ctx, envelope, "ambiguous", result)
-		}
-		return result
+		return g.withPersistenceContext(ctx, func(persistCtx context.Context) ActionResult {
+			result := ActionResult{Allowed: true, Code: DeniedAmbiguousPriorAttempt, State: "ambiguous"}
+			if g.auditor.Record(persistCtx, "failed", envelope, descriptor, result) != nil {
+				g.logPersistenceFailure(persistCtx, "charlie.action_audit_persist_failed")
+			}
+			if durable {
+				g.recordReceiptOutcome(persistCtx, envelope, "ambiguous", result)
+				result = g.recordExecutionFinding(persistCtx, descriptor, facts, result)
+			}
+			return result
+		})
 	}
 	if len(resultBytes) > min(descriptor.MaxResponseBytes, maxActionResult) || !json.Valid(resultBytes) {
-		result := ActionResult{Allowed: true, State: "failed"}
-		if g.auditor.Record(ctx, "failed", envelope, descriptor, result) != nil {
-			result.State = "ambiguous"
-		}
-		if durable {
-			g.recordReceiptOutcome(ctx, envelope, result.State, result)
-		}
-		return result
+		return g.withPersistenceContext(ctx, func(persistCtx context.Context) ActionResult {
+			result := ActionResult{Allowed: true, Code: DeniedAmbiguousPriorAttempt, State: "failed"}
+			if g.auditor.Record(persistCtx, "failed", envelope, descriptor, result) != nil {
+				result.State = "ambiguous"
+			}
+			if durable {
+				g.recordReceiptOutcome(persistCtx, envelope, result.State, result)
+				result = g.recordExecutionFinding(persistCtx, descriptor, facts, result)
+			}
+			return result
+		})
 	}
 	verified := true
 	if descriptor.RequiresVerification {
 		verified, err = g.executor.Verify(callCtx, descriptor, arguments, resultBytes)
-		if err != nil || !verified {
-			if durable && errors.Is(callCtx.Err(), context.Canceled) && g.writeFence.State().Closed {
+		if callCtx.Err() != nil {
+			if durable && g.writeFence.State().Closed {
 				return g.recordFenced(ctx, envelope, descriptor, "Charlie write verification was cancelled by disable")
 			}
-			result := ActionResult{Allowed: true, State: "failed", Verified: false}
-			if g.auditor.Record(ctx, "failed", envelope, descriptor, result) != nil {
-				result.State = "ambiguous"
-			}
+			return g.withPersistenceContext(ctx, func(persistCtx context.Context) ActionResult {
+				result := ActionResult{Allowed: true, Code: DeniedAmbiguousPriorAttempt, State: "ambiguous"}
+				if g.auditor.Record(persistCtx, "failed", envelope, descriptor, result) != nil {
+					g.logPersistenceFailure(persistCtx, "charlie.action_audit_persist_failed")
+				}
+				if durable {
+					g.recordReceiptOutcome(persistCtx, envelope, "ambiguous", result)
+					result = g.recordExecutionFinding(persistCtx, descriptor, facts, result)
+				}
+				return result
+			})
+		}
+		if err != nil || !verified {
+			return g.withPersistenceContext(ctx, func(persistCtx context.Context) ActionResult {
+				result := ActionResult{Allowed: true, Code: DeniedVerification, State: "failed", Verified: false}
+				if g.auditor.Record(persistCtx, "failed", envelope, descriptor, result) != nil {
+					result.State = "ambiguous"
+				}
+				if durable {
+					g.recordReceiptOutcome(persistCtx, envelope, result.State, result)
+					result = g.recordExecutionFinding(persistCtx, descriptor, facts, result)
+				}
+				return result
+			})
+		}
+	}
+	return g.withPersistenceContext(ctx, func(persistCtx context.Context) ActionResult {
+		result := ActionResult{Allowed: true, State: "succeeded", Result: resultBytes, Verified: verified}
+		if err := g.auditor.Record(persistCtx, "succeeded", envelope, descriptor, result); err != nil {
 			if durable {
-				g.recordReceiptOutcome(ctx, envelope, result.State, result)
+				result = ActionResult{Allowed: true, Code: DeniedAmbiguousPriorAttempt, State: "ambiguous"}
+				g.recordReceiptOutcome(persistCtx, envelope, "ambiguous", result)
+				return g.recordExecutionFinding(persistCtx, descriptor, facts, result)
 			}
-			return result
-		}
-	}
-	result := ActionResult{Allowed: true, State: "succeeded", Result: resultBytes, Verified: verified}
-	if err := g.auditor.Record(ctx, "succeeded", envelope, descriptor, result); err != nil {
-		if durable {
-			g.recordReceiptOutcome(ctx, envelope, "ambiguous", ActionResult{Allowed: true, State: "ambiguous"})
-		}
-		return ActionResult{Allowed: true, State: "ambiguous"}
-	}
-	if durable {
-		if err := g.receipts.Transition(ctx, envelope, "succeeded", result); err != nil {
 			return ActionResult{Allowed: true, State: "ambiguous"}
 		}
+		if durable {
+			if err := g.receipts.Transition(persistCtx, envelope, "succeeded", result); err != nil {
+				return g.recordExecutionFinding(persistCtx, descriptor, facts,
+					ActionResult{Allowed: true, Code: DeniedAmbiguousPriorAttempt, State: "ambiguous"})
+			}
+		}
+		return result
+	})
+}
+
+// withPersistenceContext starts the bounded terminal-durability window at the
+// persistence branch itself. Capability execution and verification therefore
+// cannot consume this budget, and defer guarantees every timer is released.
+func (g *ActionGuard) withPersistenceContext(ctx context.Context, persist func(context.Context) ActionResult) ActionResult {
+	timeout := g.persistenceTimeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
 	}
-	return result
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+	return persist(persistCtx)
+}
+
+func isRetryableExecutionFinding(code DenialCode) bool {
+	return code == DeniedVerification || code == DeniedAmbiguousPriorAttempt
+}
+
+// recordExecutionFinding projects a post-dispatch failure into the same
+// durable, deduplicated advisory lane as a policy denial. Allowed remains true
+// because the underlying product operation may already have occurred; the
+// finding is explicitly not reusable authority and replay never dispatches.
+func (g *ActionGuard) recordExecutionFinding(ctx context.Context, descriptor CapabilityDescriptor, facts AuthorityInput, result ActionResult) ActionResult {
+	if descriptor.Effect != EffectWrite || !isRetryableExecutionFinding(result.Code) {
+		return result
+	}
+	finding := BlockedFinding(AuthorityDecision{Code: result.Code}, "Charlie action requires verification",
+		"The product action did not produce a safely verified terminal result.",
+		"Reconcile the durable operation receipt before retrying any action.",
+		"Re-read the affected management-plane resource and compare it with the operation receipt.")
+	if finding.Actionable {
+		result.Finding = &finding
+	}
+	return g.recordActionableFinding(ctx, descriptor, facts, result)
 }
 
 func (g *ActionGuard) recordFenced(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, summary string) ActionResult {

@@ -56,6 +56,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	approverToken, err := optionalSecret("APPROVER_TOKEN")
+	if err != nil {
+		return err
+	}
 	metricSources, err := metricSourcesFromFile(os.Getenv(envPrefix + "METRICS_SOURCES_FILE"))
 	if err != nil {
 		return err
@@ -64,6 +68,11 @@ func run() error {
 	counterMetrics := map[string]string{}
 	if err := optionalJSONFile(os.Getenv(envPrefix+"COUNTER_METRICS_FILE"), &counterMetrics); err != nil {
 		return fmt.Errorf("counter metrics: %w", err)
+	}
+	fixturesPath := strings.TrimSpace(os.Getenv(envPrefix + "FIXTURES_FILE"))
+	fixtures, err := fixturesFromFile(fixturesPath)
+	if err != nil {
+		return err
 	}
 	var scaler charliequalification.AgentScaler
 	kubeconfig := strings.TrimSpace(os.Getenv(envPrefix + "KUBECONFIG_FILE"))
@@ -87,9 +96,11 @@ func run() error {
 	driver, err := charliequalification.NewLiveDriver(charliequalification.LiveConfig{
 		AstronomerURL:  strings.TrimSpace(os.Getenv(envPrefix + "ASTRONOMER_URL")),
 		AdminToken:     adminToken,
+		ApproverToken:  approverToken,
 		DeniedToken:    deniedToken,
 		MetricSources:  metricSources,
 		CounterMetrics: counterMetrics,
+		Fixtures:       fixtures,
 		AllowHTTP:      os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
 		AgentScaler:    scaler,
 		HTTPClient:     client,
@@ -252,6 +263,21 @@ func metricSourcesFromFile(path string) ([]charliequalification.MetricSource, er
 		result = append(result, charliequalification.MetricSource{URL: source.URL, Token: token})
 	}
 	return result, nil
+}
+
+func fixturesFromFile(path string) (charliequalification.LiveFixtures, error) {
+	path = strings.TrimSpace(path)
+	var fixtures charliequalification.LiveFixtures
+	if path == "" {
+		return fixtures, nil
+	}
+	if err := privateFile(path); err != nil {
+		return fixtures, fmt.Errorf("fixtures file: %w", err)
+	}
+	if err := optionalJSONFile(path, &fixtures); err != nil {
+		return fixtures, fmt.Errorf("fixtures: %w", err)
+	}
+	return fixtures, nil
 }
 
 func valueOrDefault(value, fallback string) string {

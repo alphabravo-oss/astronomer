@@ -173,6 +173,8 @@ beforeEach(() => {
     disclosureDigest: digest("d"),
     acknowledgedDisclosureDigest: digest("c"),
     effects: ["Every write requires exact approval"],
+    workloadCeiling: "approval",
+    workloadCeilingReady: true,
   });
   api.getCharlieAutomation.mockResolvedValue({
     defaultsRevision: 3,
@@ -385,6 +387,8 @@ describe("Charlie administration acceptance", () => {
       acknowledgedDisclosureDigest: digest("d"),
       effects: ["Authorized reads only"],
       autoReadiness: { ready: true, blockers: [] },
+      workloadCeiling: "read_only",
+      workloadCeilingReady: true,
     });
     api.updateCharlieMode.mockResolvedValue({
       requested: "auto",
@@ -392,6 +396,8 @@ describe("Charlie administration acceptance", () => {
       revision: 5,
       emergencyDisabled: false,
       effects: [],
+      workloadCeiling: "auto",
+      workloadCeilingReady: true,
     });
     renderWithClient(<ModeTab />);
     fireEvent.click(await screen.findByRole("button", { name: /^automation/i }));

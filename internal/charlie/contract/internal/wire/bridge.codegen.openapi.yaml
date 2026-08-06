@@ -398,6 +398,8 @@ components:
                         - degraded
                         - unavailable
                     type: string
+                central_mode:
+                    $ref: '#/components/schemas/Mode'
                 deployment_enabled:
                     type: boolean
                 deployment_id:
@@ -407,10 +409,12 @@ components:
                     pattern: ^(?:|sha256:[a-f0-9]{64})$
                     type: string
                 effective_enabled:
-                    description: True only when both enablement authorities are true.
+                    description: True only when connection, activation, non-disabled lower mode, disclosure, and emergency-latch inputs agree.
                     type: boolean
                 effective_mode:
                     $ref: '#/components/schemas/Mode'
+                emergency_disabled:
+                    type: boolean
                 epoch:
                     format: int64
                     minimum: 1
@@ -428,6 +432,8 @@ components:
                     $ref: '#/components/schemas/OpaqueId'
                 product_enabled:
                     type: boolean
+                product_mode_ceiling:
+                    $ref: '#/components/schemas/Mode'
                 replica_count:
                     maximum: 20
                     minimum: 1
@@ -452,6 +458,9 @@ components:
                 - disclosure_digest
                 - auto_allowlist
                 - effective_mode
+                - product_mode_ceiling
+                - central_mode
+                - emergency_disabled
                 - route_id
                 - artifact_version
                 - product_enabled
@@ -1147,6 +1156,7 @@ components:
             type: object
         Mode:
             enum:
+                - disabled
                 - read_only
                 - approval
                 - auto

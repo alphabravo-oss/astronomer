@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 )
 
 type approvalAccessStoreFake struct {
+	mu               sync.Mutex
 	connection       sqlc.CharlieConnection
 	session          sqlc.CharlieSession
 	resources        []sqlc.CharlieSessionResource
@@ -35,24 +37,36 @@ type approvalAccessStoreFake struct {
 }
 
 func (f *approvalAccessStoreFake) ListCharlieApprovalCandidateSessions(context.Context) ([]sqlc.CharlieSession, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return []sqlc.CharlieSession{f.session}, nil
 }
 func (f *approvalAccessStoreFake) GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.connection, nil
 }
 func (f *approvalAccessStoreFake) GetCharlieSession(_ context.Context, id uuid.UUID) (sqlc.CharlieSession, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if id != f.session.ID {
 		return sqlc.CharlieSession{}, errors.New("not found")
 	}
 	return f.session, nil
 }
 func (f *approvalAccessStoreFake) ListCharlieSessionResources(context.Context, uuid.UUID) ([]sqlc.CharlieSessionResource, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.resources, nil
 }
 func (f *approvalAccessStoreFake) ListCharlieSessionsForOwner(context.Context, sqlc.ListCharlieSessionsForOwnerParams) ([]sqlc.CharlieSession, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return []sqlc.CharlieSession{f.session}, nil
 }
 func (f *approvalAccessStoreFake) AbortCharlieSession(context.Context, uuid.UUID) (sqlc.CharlieSession, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.session, nil
 }
 func (f *approvalAccessStoreFake) RevokeCharlieDelegationsForSession(context.Context, uuid.UUID) (int64, error) {
@@ -68,12 +82,16 @@ func (f *approvalAccessStoreFake) GetActiveCharlieDelegationByHash(context.Conte
 	return sqlc.CharlieDelegation{}, errors.New("unused")
 }
 func (f *approvalAccessStoreFake) GetCharlieActionApprovalByApprovalID(_ context.Context, id string) (sqlc.CharlieActionApproval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.approval.ApprovalID == id {
 		return f.approval, nil
 	}
 	return sqlc.CharlieActionApproval{}, errors.New("not found")
 }
 func (f *approvalAccessStoreFake) CreateCharlieActionApproval(_ context.Context, arg sqlc.CreateCharlieActionApprovalParams) (sqlc.CharlieActionApproval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.approval.ID != uuid.Nil {
 		return sqlc.CharlieActionApproval{}, errors.New("duplicate")
 	}
@@ -84,12 +102,15 @@ func (f *approvalAccessStoreFake) CreateCharlieActionApproval(_ context.Context,
 		ArgumentDigest: arg.ArgumentDigest, DisclosureDigest: arg.DisclosureDigest,
 		ModeRevision: arg.ModeRevision, PolicyRevision: arg.PolicyRevision, FencingEpoch: arg.FencingEpoch,
 		ManifestDigest: arg.ManifestDigest, ApproverID: arg.ApproverID, RationaleDigest: arg.RationaleDigest,
+		DecisionRequestID: arg.DecisionRequestID, Decision: arg.Decision,
 		ResourceType: arg.ResourceType, ResourceID: arg.ResourceID,
 		State: "pending", ExpiresAt: arg.ExpiresAt,
 	}
 	return f.approval, nil
 }
 func (f *approvalAccessStoreFake) ApproveCharlieActionApproval(_ context.Context, id uuid.UUID) (sqlc.CharlieActionApproval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if id != f.approval.ID || f.approval.State != "pending" {
 		return sqlc.CharlieActionApproval{}, errors.New("CAS")
 	}
@@ -97,6 +118,8 @@ func (f *approvalAccessStoreFake) ApproveCharlieActionApproval(_ context.Context
 	return f.approval, nil
 }
 func (f *approvalAccessStoreFake) TransitionCharlieActionApproval(_ context.Context, arg sqlc.TransitionCharlieActionApprovalParams) (sqlc.CharlieActionApproval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if arg.ID != f.approval.ID || (f.approval.State != "pending" && f.approval.State != "approved") {
 		return sqlc.CharlieActionApproval{}, errors.New("CAS")
 	}
@@ -104,12 +127,16 @@ func (f *approvalAccessStoreFake) TransitionCharlieActionApproval(_ context.Cont
 	return f.approval, nil
 }
 func (f *approvalAccessStoreFake) GetCharlieFindingByApprovalID(_ context.Context, id pgtype.Text) (sqlc.CharlieFinding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.finding.ID != uuid.Nil && f.finding.ApprovalID.Valid && f.finding.ApprovalID.String == id.String {
 		return f.finding, nil
 	}
 	return sqlc.CharlieFinding{}, pgx.ErrNoRows
 }
 func (f *approvalAccessStoreFake) UpsertCharlieApprovalFinding(_ context.Context, arg sqlc.UpsertCharlieApprovalFindingParams) (sqlc.CharlieFinding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.finding.ID == uuid.Nil {
 		f.finding = sqlc.CharlieFinding{
 			ID: uuid.New(), ConnectionID: arg.ConnectionID, CharlieFindingID: arg.CharlieFindingID,
@@ -123,6 +150,8 @@ func (f *approvalAccessStoreFake) UpsertCharlieApprovalFinding(_ context.Context
 	return f.finding, nil
 }
 func (f *approvalAccessStoreFake) TransitionCharlieFindingForApproval(_ context.Context, arg sqlc.TransitionCharlieFindingForApprovalParams) (sqlc.CharlieFinding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.finding.ID == uuid.Nil || !f.finding.ApprovalID.Valid || f.finding.ApprovalID.String != arg.ApprovalID.String || (f.finding.Status != "open" && f.finding.Status != "acknowledged") {
 		return sqlc.CharlieFinding{}, pgx.ErrNoRows
 	}
@@ -136,23 +165,32 @@ func (f *approvalAccessStoreFake) TransitionCharlieFindingForApproval(_ context.
 	return f.finding, nil
 }
 func (f *approvalAccessStoreFake) AddCharlieFindingResource(_ context.Context, arg sqlc.AddCharlieFindingResourceParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.findingResources = append(f.findingResources, sqlc.CharlieFindingResource{FindingID: arg.FindingID, ResourceType: arg.ResourceType, ResourceID: arg.ResourceID, RequiredVerb: arg.RequiredVerb})
 	return nil
 }
 func (f *approvalAccessStoreFake) ListCharlieFindingResources(context.Context, uuid.UUID) ([]sqlc.CharlieFindingResource, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.findingResources, nil
 }
 
 type approvalBridgeFake struct {
+	mu       sync.Mutex
 	approval contract.Approval
 	fail     bool
 	decides  int
 }
 
 func (f *approvalBridgeFake) ListApprovals(context.Context, string) ([]contract.Approval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return []contract.Approval{f.approval}, nil
 }
 func (f *approvalBridgeFake) DecideApproval(_ context.Context, _ string, _ string, _ uuid.UUID, decision, _ string) (contract.Approval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.decides++
 	if f.fail {
 		return contract.Approval{}, errors.New("bridge")
@@ -207,20 +245,27 @@ func (f approvalBindingsFake) CanReadIncidentResources(context.Context, uuid.UUI
 }
 
 type approvalAuditFake struct {
+	mu       sync.Mutex
 	events   []ApprovalLifecycleAudit
 	findings []FindingAlert
 	err      error
 }
 
 func (f *approvalAuditFake) RecordCharlieApprovalLifecycle(_ context.Context, event ApprovalLifecycleAudit) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.events = append(f.events, event)
 	return f.err
 }
 func (f *approvalAuditFake) RecordCharlieAuthorityMutation(context.Context, AuthorityMutationAudit) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.err
 }
 func (*approvalAuditFake) RecordCharlieSessionLifecycle(context.Context, SessionLifecycleAudit) {}
 func (f *approvalAuditFake) PublishCharlieFindingLifecycle(_ context.Context, alert FindingAlert) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.findings = append(f.findings, alert)
 }
 
@@ -316,15 +361,173 @@ func TestApprovalAccessTurnsExpiredApprovalIntoManualRemediation(t *testing.T) {
 
 func TestApprovalAccessApprovesExactSignedActionOnce(t *testing.T) {
 	service, store, bridge, actorID := approvalAccessFixture(t)
-	view, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", "bounded retry")
+	requestID := uuid.New()
+	view, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry")
 	if err != nil || view.State != "approved" || store.approval.State != "approved" || bridge.decides != 1 {
 		t.Fatalf("decision = %+v, local=%s calls=%d err=%v", view, store.approval.State, bridge.decides, err)
 	}
 	if store.approval.ResourceType != "management_component" || store.approval.ResourceID != "task-a" {
 		t.Fatalf("local approval did not retain the exact signed resource: %+v", store.approval)
 	}
-	if _, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", "retry"); err != nil || bridge.decides != 1 {
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry"); err != nil || bridge.decides != 1 {
 		t.Fatalf("safe replay reached central bridge: calls=%d err=%v", bridge.decides, err)
+	}
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", "bounded retry"); err == nil || bridge.decides != 1 {
+		t.Fatalf("distinct decision request adopted prior authority: calls=%d err=%v", bridge.decides, err)
+	}
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "changed rationale"); err == nil || bridge.decides != 1 {
+		t.Fatalf("changed replay payload adopted prior authority: calls=%d err=%v", bridge.decides, err)
+	}
+}
+
+func TestApprovalAccessConcurrentExactDecisionReservesAndConfirmsOnce(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	requestID := uuid.New()
+	const callers = 12
+	errs := make(chan error, callers)
+	var group sync.WaitGroup
+	for range callers {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			_, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry")
+			errs <- err
+		}()
+	}
+	group.Wait()
+	close(errs)
+	succeeded := 0
+	for err := range errs {
+		if err == nil {
+			succeeded++
+		}
+	}
+	if succeeded == 0 {
+		t.Fatal("no concurrent exact approval decision committed")
+	}
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry"); err != nil {
+		t.Fatalf("committed exact decision did not replay: %v", err)
+	}
+	store.mu.Lock()
+	created, state := store.created, store.approval.State
+	store.mu.Unlock()
+	bridge.mu.Lock()
+	decides := bridge.decides
+	bridge.mu.Unlock()
+	if created != 1 || state != "approved" || decides != 1 {
+		t.Fatalf("concurrent decision widened authority: reservations=%d state=%s central_decisions=%d successes=%d", created, state, decides, succeeded)
+	}
+}
+
+func TestApprovalAccessConcurrentOpposingDecisionsHaveOneWinner(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	start := make(chan struct{})
+	type result struct {
+		decision string
+		err      error
+	}
+	results := make(chan result, 2)
+	for _, decision := range []string{"approve", "reject"} {
+		decision := decision
+		go func() {
+			<-start
+			_, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), decision, "bounded decision")
+			results <- result{decision: decision, err: err}
+		}()
+	}
+	close(start)
+	first, second := <-results, <-results
+	if (first.err == nil) == (second.err == nil) {
+		t.Fatalf("opposing decisions did not have exactly one winner: %#v %#v", first, second)
+	}
+	store.mu.Lock()
+	created, state, persistedDecision := store.created, store.approval.State, store.approval.Decision
+	store.mu.Unlock()
+	bridge.mu.Lock()
+	decides := bridge.decides
+	bridge.mu.Unlock()
+	winner := first
+	if winner.err != nil {
+		winner = second
+	}
+	wantState := "approved"
+	if winner.decision == "reject" {
+		wantState = "rejected"
+	}
+	if created != 1 || decides != 1 || persistedDecision != winner.decision || state != wantState {
+		t.Fatalf("opposing decision state is inconsistent: reservations=%d central=%d decision=%s state=%s winner=%#v", created, decides, persistedDecision, state, winner)
+	}
+}
+
+func TestApprovalAccessExactReplayAfterDispatchKeepsApprovedPublicState(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	requestID := uuid.New()
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry"); err != nil {
+		t.Fatal(err)
+	}
+	store.mu.Lock()
+	store.approval.State = "dispatched"
+	store.mu.Unlock()
+	view, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry")
+	if err != nil || view.State != "approved" {
+		t.Fatalf("dispatched exact replay left the public decision contract: view=%#v err=%v", view, err)
+	}
+	bridge.mu.Lock()
+	defer bridge.mu.Unlock()
+	if bridge.decides != 1 {
+		t.Fatalf("dispatched replay reached central decision endpoint: %d", bridge.decides)
+	}
+}
+
+func TestApprovalAccessRejectReplayIsExactAndAudited(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	requestID := uuid.New()
+	if _, err := service.List(context.Background(), actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "reject", "unsafe now"); err != nil {
+		t.Fatal(err)
+	}
+	view, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "reject", "unsafe now")
+	if err != nil || view.State != "denied" {
+		t.Fatalf("exact rejection did not replay: view=%#v err=%v", view, err)
+	}
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "unsafe now"); err == nil {
+		t.Fatal("opposing decision reused a rejection request")
+	}
+	bridge.mu.Lock()
+	decides := bridge.decides
+	bridge.mu.Unlock()
+	service.auditor.(*approvalAuditFake).mu.Lock()
+	events := append([]ApprovalLifecycleAudit(nil), service.auditor.(*approvalAuditFake).events...)
+	service.auditor.(*approvalAuditFake).mu.Unlock()
+	if decides != 1 || len(events) < 3 || events[len(events)-1].OutcomeCode != "replayed" {
+		t.Fatalf("rejection replay was not content-free and side-effect free: central=%d audits=%#v", decides, events)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.approval.Decision != "reject" || store.approval.DecisionRequestID != requestID || store.approval.State != "rejected" {
+		t.Fatalf("rejection identity drifted: %#v", store.approval)
+	}
+}
+
+func TestApprovalAccessReplayAuditFailureReturnsNoFalseSuccess(t *testing.T) {
+	service, _, bridge, actorID := approvalAccessFixture(t)
+	requestID := uuid.New()
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry"); err != nil {
+		t.Fatal(err)
+	}
+	audit := service.auditor.(*approvalAuditFake)
+	audit.mu.Lock()
+	audit.err = errors.New("database-SENTINEL")
+	audit.mu.Unlock()
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry"); err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("replay audit failure was hidden or leaked storage detail: %v", err)
+	}
+	bridge.mu.Lock()
+	defer bridge.mu.Unlock()
+	if bridge.decides != 1 {
+		t.Fatalf("failed replay audit reached central decision endpoint: %d", bridge.decides)
 	}
 }
 

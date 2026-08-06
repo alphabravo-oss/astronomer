@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,6 +46,7 @@ type fakeReceipts struct {
 	claim       ReceiptClaim
 	claimCalls  int
 	transitions []string
+	canceled    []bool
 	error       error
 }
 
@@ -59,8 +61,9 @@ func (f *fakeReceipts) Claim(context.Context, ActionEnvelope, CapabilityDescript
 	return f.claim, nil
 }
 
-func (f *fakeReceipts) Transition(_ context.Context, _ ActionEnvelope, state string, _ ActionResult) error {
+func (f *fakeReceipts) Transition(ctx context.Context, _ ActionEnvelope, state string, _ ActionResult) error {
 	f.transitions = append(f.transitions, state)
+	f.canceled = append(f.canceled, ctx.Err() != nil)
 	return f.error
 }
 
@@ -71,12 +74,32 @@ type fakeCapabilityExecutor struct {
 	error          error
 	verified       bool
 	waitForContext bool
+	verifyDelay    time.Duration
+}
+
+type cancelAfterEffectExecutor struct {
+	cancel      context.CancelFunc
+	calls       int
+	verifyCalls int
+}
+
+func (e *cancelAfterEffectExecutor) Execute(context.Context, CapabilityDescriptor, map[string]json.RawMessage) (json.RawMessage, error) {
+	e.calls++
+	e.cancel()
+	return json.RawMessage(`{"ok":true}`), nil
+}
+
+func (e *cancelAfterEffectExecutor) Verify(context.Context, CapabilityDescriptor, map[string]json.RawMessage, json.RawMessage) (bool, error) {
+	e.verifyCalls++
+	return true, nil
 }
 
 type fakeActionAuditor struct {
-	phases []string
-	error  error
-	failAt string
+	phases   []string
+	canceled []bool
+	results  []ActionResult
+	error    error
+	failAt   string
 }
 
 type cancelBlockingActionAuditor struct {
@@ -96,12 +119,14 @@ func (a *cancelBlockingActionAuditor) Record(ctx context.Context, phase string, 
 
 type actionFindingRecorder struct {
 	inputs   []FindingInput
+	canceled []bool
 	err      error
 	onRecord func(FindingInput)
 }
 
-func (f *actionFindingRecorder) RecordBlocked(_ context.Context, input FindingInput) (DurableFinding, error) {
+func (f *actionFindingRecorder) RecordBlocked(ctx context.Context, input FindingInput) (DurableFinding, error) {
 	f.inputs = append(f.inputs, input)
+	f.canceled = append(f.canceled, ctx.Err() != nil)
 	if f.onRecord != nil {
 		f.onRecord(input)
 	}
@@ -186,8 +211,10 @@ func (discardActionAuditor) Record(context.Context, string, ActionEnvelope, Capa
 	return nil
 }
 
-func (f *fakeActionAuditor) Record(_ context.Context, phase string, _ ActionEnvelope, _ CapabilityDescriptor, _ ActionResult) error {
+func (f *fakeActionAuditor) Record(ctx context.Context, phase string, _ ActionEnvelope, _ CapabilityDescriptor, result ActionResult) error {
 	f.phases = append(f.phases, phase)
+	f.canceled = append(f.canceled, ctx.Err() != nil)
+	f.results = append(f.results, result)
 	if phase == f.failAt {
 		return errors.New("audit unavailable")
 	}
@@ -211,6 +238,9 @@ func (f *fakeCapabilityExecutor) Execute(ctx context.Context, _ CapabilityDescri
 
 func (f *fakeCapabilityExecutor) Verify(context.Context, CapabilityDescriptor, map[string]json.RawMessage, json.RawMessage) (bool, error) {
 	f.verifyCalls++
+	if f.verifyDelay > 0 {
+		time.Sleep(f.verifyDelay)
+	}
 	return f.verified, f.error
 }
 
@@ -999,6 +1029,145 @@ func TestActionGuardAuditOutageReplayReconcilesFailedFinding(t *testing.T) {
 	}
 	if findings.inputs[0].NormalizedDiagnosis != findings.inputs[1].NormalizedDiagnosis || findings.inputs[0].ResourceID != findings.inputs[1].ResourceID || findings.inputs[0].RecommendedCapability != findings.inputs[1].RecommendedCapability {
 		t.Fatalf("replay changed the finding dedupe identity: first=%+v replay=%+v", findings.inputs[0], findings.inputs[1])
+	}
+}
+
+func TestActionGuardPostVerificationFailureIsDurableAndReplayNeverExecutesAgain(t *testing.T) {
+	facts := allowedWriteFacts(ModeApproval)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{verified: false}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, err := NewActionGuard(publicKey, authority, receipts, executor, &fakeActionAuditor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := &actionFindingRecorder{err: errors.New("finding store unavailable")}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{
+		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
+	})
+	action.ApprovalID = "approval-a"
+	payload, _ := json.Marshal(action.signed())
+	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+
+	first := guard.Execute(context.Background(), action)
+	if !first.Allowed || first.Code != DeniedVerification || first.State != "failed" || first.Verified ||
+		first.Finding != nil || executor.calls != 1 || executor.verifyCalls != 1 || authority.commitCalls != 1 ||
+		len(findings.inputs) != 1 || findings.inputs[0].Decision.Code != DeniedVerification {
+		t.Fatalf("post-verification failure was not fail-closed and durable: result=%+v execute=%d verify=%d commit=%d findings=%+v", first, executor.calls, executor.verifyCalls, authority.commitCalls, findings.inputs)
+	}
+	if stringSlice(receipts.transitions) != stringSlice([]string{"dispatched", "failed"}) {
+		t.Fatalf("post-verification receipt=%v", receipts.transitions)
+	}
+
+	// Simulate a process retry reading the already-terminal receipt after the
+	// first finding-store outage. Only the advisory upsert is retried.
+	receipts.claim = ReceiptClaim{Disposition: ReceiptReplay, Result: first}
+	findings.err = nil
+	replay := guard.Execute(context.Background(), action)
+	if !replay.Replay || replay.Finding == nil || !replay.Finding.Actionable || executor.calls != 1 ||
+		executor.verifyCalls != 1 || authority.commitCalls != 1 || len(findings.inputs) != 2 {
+		t.Fatalf("receipt replay did not reconcile only the finding: result=%+v execute=%d verify=%d commit=%d findings=%d", replay, executor.calls, executor.verifyCalls, authority.commitCalls, len(findings.inputs))
+	}
+	if findings.inputs[0].NormalizedDiagnosis != findings.inputs[1].NormalizedDiagnosis ||
+		findings.inputs[0].ResourceID != findings.inputs[1].ResourceID ||
+		findings.inputs[0].RecommendedCapability != findings.inputs[1].RecommendedCapability {
+		t.Fatalf("finding retry changed dedupe identity: first=%+v replay=%+v", findings.inputs[0], findings.inputs[1])
+	}
+}
+
+func TestActionGuardVerificationCannotConsumeTerminalPersistenceBudget(t *testing.T) {
+	facts := allowedWriteFacts(ModeApproval)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{verified: false, verifyDelay: 60 * time.Millisecond}
+	auditor := &fakeActionAuditor{}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verification intentionally takes three times this duration. A context
+	// allocated before Verify would already be expired at every durable write.
+	guard.persistenceTimeout = 20 * time.Millisecond
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{
+		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
+	})
+	action.ApprovalID = "approval-a"
+	payload, _ := json.Marshal(action.signed())
+	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+
+	result := guard.Execute(context.Background(), action)
+	if result.Code != DeniedVerification || result.State != "failed" || result.Finding == nil {
+		t.Fatalf("verification failure did not reach durable terminal handling: %+v", result)
+	}
+	if executor.verifyCalls != 1 || len(auditor.canceled) == 0 || auditor.canceled[len(auditor.canceled)-1] ||
+		len(receipts.canceled) < 2 || receipts.canceled[len(receipts.canceled)-1] ||
+		len(findings.canceled) != 1 || findings.canceled[0] {
+		t.Fatalf("verification consumed persistence budget: audit=%v receipts=%v findings=%v", auditor.canceled, receipts.canceled, findings.canceled)
+	}
+}
+
+func TestActionGuardAmbiguousReceiptCreatesGuidanceWithoutDispatch(t *testing.T) {
+	facts := allowedWriteFacts(ModeAuto)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts}}
+	receipts := &fakeReceipts{claim: ReceiptClaim{Disposition: ReceiptAmbiguous}}
+	executor := &fakeCapabilityExecutor{}
+	guard, key := newTestActionGuard(t, authority, receipts, executor)
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
+	result := guard.Execute(context.Background(), signedTestAction(t, key, "astronomer.queue.retry_task", map[string]any{
+		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
+	}))
+	if result.Allowed || result.Code != DeniedAmbiguousPriorAttempt || result.Finding == nil ||
+		executor.calls != 0 || authority.commitCalls != 0 || len(findings.inputs) != 1 {
+		t.Fatalf("ambiguous receipt was retried or silently dropped: result=%+v execute=%d commit=%d findings=%d", result, executor.calls, authority.commitCalls, len(findings.inputs))
+	}
+}
+
+func TestActionGuardCallerCancellationAfterSideEffectPersistsAmbiguousTrailWithoutRedispatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	facts := allowedWriteFacts(ModeAuto)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+	receipts := &fakeReceipts{}
+	executor := &cancelAfterEffectExecutor{cancel: cancel}
+	auditor := &fakeActionAuditor{}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{
+		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
+	})
+
+	first := guard.Execute(ctx, action)
+	if !first.Allowed || first.Code != DeniedAmbiguousPriorAttempt || first.State != "ambiguous" ||
+		first.Finding == nil || executor.calls != 1 || executor.verifyCalls != 0 || len(findings.inputs) != 1 ||
+		stringSlice(receipts.transitions) != stringSlice([]string{"dispatched", "ambiguous"}) ||
+		!slices.Contains(auditor.phases, "failed") || receipts.canceled[len(receipts.canceled)-1] ||
+		findings.canceled[0] || auditor.canceled[len(auditor.canceled)-1] {
+		t.Fatalf("cancelled post-dispatch trail is incomplete: result=%+v execute=%d verify=%d receipts=%v audit=%v findings=%d", first, executor.calls, executor.verifyCalls, receipts.transitions, auditor.phases, len(findings.inputs))
+	}
+
+	receipts.claim = ReceiptClaim{Disposition: ReceiptReplay, Result: first}
+	replay := guard.Execute(context.Background(), action)
+	if !replay.Replay || replay.Finding == nil || executor.calls != 1 || authority.commitCalls != 1 || len(findings.inputs) != 2 {
+		t.Fatalf("cancelled action replay dispatched again: result=%+v execute=%d commit=%d findings=%d", replay, executor.calls, authority.commitCalls, len(findings.inputs))
 	}
 }
 

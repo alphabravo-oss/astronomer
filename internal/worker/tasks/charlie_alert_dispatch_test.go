@@ -325,3 +325,53 @@ func TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses(t *tes
 		t.Fatal("cross-process disable did not acquire the exclusive lock")
 	}
 }
+
+func TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease(t *testing.T) {
+	dsn := os.Getenv("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	transitionPool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transitionPool.Close()
+	secondReplicaPool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondReplicaPool.Close()
+	transitionFence := charlie.NewDistributedWriteFence(transitionPool)
+	secondReplicaFence := charlie.NewDistributedWriteFence(secondReplicaPool)
+	_, releaseTransition, err := transitionFence.CloseAndHold(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admitted := make(chan error, 1)
+	var releaseWrite func()
+	go func() {
+		_, release, beginErr := secondReplicaFence.Begin(ctx)
+		releaseWrite = release
+		admitted <- beginErr
+	}()
+	select {
+	case err := <-admitted:
+		releaseTransition()
+		t.Fatalf("queued second-replica shared lock bypassed held transition: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	releaseTransition()
+	select {
+	case err := <-admitted:
+		if err != nil {
+			t.Fatalf("queued second-replica admission failed after transition release: %v", err)
+		}
+		if releaseWrite != nil {
+			releaseWrite()
+		}
+	case <-ctx.Done():
+		t.Fatal("queued second-replica admission did not resume after transition release")
+	}
+}

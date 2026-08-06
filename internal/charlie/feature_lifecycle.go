@@ -41,7 +41,8 @@ func NewFeatureLifecycle(pool *pgxpool.Pool, installer FeatureAgentLifecycle, br
 	if pool == nil || writes == nil {
 		return nil, fmt.Errorf("Charlie feature lifecycle requires durable state and write admission")
 	}
-	auditor := NewDBLifecycleAuditor(sqlc.New(pool))
+	queries := sqlc.New(pool)
+	auditor := NewDBLifecycleAuditor(queries)
 	var mode *ModeController
 	if bridge != nil {
 		var err error
@@ -49,9 +50,11 @@ func NewFeatureLifecycle(pool *pgxpool.Pool, installer FeatureAgentLifecycle, br
 		if err != nil {
 			return nil, err
 		}
+		if ceilingInstaller, ok := installer.(ModeCeilingInstaller); ok {
+			mode.SetModeCeilingRollout(modeCeilingRollout{load: queries.GetLatestCharlieConnection, installer: ceilingInstaller})
+		}
 		mode.SetWriteFence(writes)
 	}
-	queries := sqlc.New(pool)
 	return &FeatureLifecycle{queries: queries, connection: queries.GetLatestCharlieConnection, installer: installer, mode: mode, runtime: runtime, writes: writes, auditor: auditor, timeout: 30 * time.Second}, nil
 }
 
@@ -67,11 +70,6 @@ func (l *FeatureLifecycle) Disable(parent context.Context, actorID string) error
 		Action: "charlie.feature.disabled", ResourceType: "charlie_feature", ResourceID: "feature.charlie", ActorID: actor,
 		Fields: map[string]any{"enabled": false},
 	})
-	if l.runtime != nil {
-		if err := l.runtime.Shutdown(ctx); err != nil {
-			return fmt.Errorf("stop Charlie MCP listener: %w", err)
-		}
-	}
 	connection, err := l.latestConnection(ctx)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, err = l.writes.CloseAndWait(ctx)
@@ -90,6 +88,15 @@ func (l *FeatureLifecycle) Disable(parent context.Context, actorID string) error
 		}
 	} else if _, err := l.writes.CloseAndWait(ctx); err != nil {
 		return err
+	}
+	// EmergencyDisable retains the distributed exclusive write fence through
+	// its durable latch, all-replica ceiling, and remote readback. Only then may
+	// local runtime teardown continue; this avoids a cross-replica admission gap
+	// while feature disable is still being committed.
+	if l.runtime != nil {
+		if err := l.runtime.Shutdown(ctx); err != nil {
+			return fmt.Errorf("stop Charlie MCP listener: %w", err)
+		}
 	}
 	if connection.HealthState == "inactive" || connection.HealthState == "disconnected" {
 		return nil
