@@ -614,8 +614,20 @@ components:
         item_id: {$ref: "#/components/schemas/OpaqueId"}
         kind: {type: string, enum: [user_message, assistant_message, finding_evidence]}
         redacted_content: {type: string, maxLength: 32768}
+        citations:
+          type: array
+          maxItems: 16
+          items: {$ref: "#/components/schemas/HistoryCitation"}
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
+    HistoryCitation:
+      type: object
+      additionalProperties: false
+      required: [id, title, source]
+      properties:
+        id: {$ref: "#/components/schemas/OpaqueId"}
+        title: {type: string, minLength: 1, maxLength: 1024}
+        source: {type: string, minLength: 1, maxLength: 2048}
     Action:
       type: object
       additionalProperties: false

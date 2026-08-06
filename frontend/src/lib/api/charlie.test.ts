@@ -53,6 +53,13 @@ describe("Charlie browser gateway mapping", () => {
             itemId: "assistant-1",
             kind: "assistant_message",
             redactedContent: "answer",
+            citations: [
+              {
+                id: "chunk-1",
+                title: "Astronomer operations",
+                source: "knowledge://collection-1/version-1#chunk=0",
+              },
+            ],
             createdAt: "2026-08-05T22:19:25Z",
           },
           {
@@ -66,7 +73,18 @@ describe("Charlie browser gateway mapping", () => {
 
     await expect(getCharlieHistory("session/a")).resolves.toEqual([
       expect.objectContaining({ id: "user-1", role: "user", content: "question" }),
-      expect.objectContaining({ id: "assistant-1", role: "assistant", content: "answer" }),
+      expect.objectContaining({
+        id: "assistant-1",
+        role: "assistant",
+        content: "answer",
+        citations: [
+          {
+            id: "chunk-1",
+            title: "Astronomer operations",
+            source: "knowledge://collection-1/version-1#chunk=0",
+          },
+        ],
+      }),
       expect.objectContaining({ id: "evidence-1", role: "system", content: "bounded evidence" }),
     ]);
     expect(mockedApi.get).toHaveBeenCalledWith(

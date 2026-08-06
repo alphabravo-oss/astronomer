@@ -921,9 +921,32 @@ components:
             required:
                 - status
             type: object
+        HistoryCitation:
+            additionalProperties: false
+            properties:
+                id:
+                    $ref: '#/components/schemas/OpaqueId'
+                source:
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                title:
+                    maxLength: 1024
+                    minLength: 1
+                    type: string
+            required:
+                - id
+                - title
+                - source
+            type: object
         HistoryItem:
             additionalProperties: false
             properties:
+                citations:
+                    items:
+                        $ref: '#/components/schemas/HistoryCitation'
+                    maxItems: 16
+                    type: array
                 created_at:
                     format: date-time
                     type: string

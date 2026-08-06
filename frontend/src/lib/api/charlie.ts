@@ -87,6 +87,11 @@ type CharlieHistoryItemWire = {
   kind: "user_message" | "assistant_message" | "finding_evidence";
   redacted_content?: string;
   redactedContent?: string;
+  citations?: Array<{
+    id?: unknown;
+    title?: unknown;
+    source?: unknown;
+  }>;
   created_at?: string;
   createdAt?: string;
 };
@@ -399,17 +404,29 @@ export async function getCharlieHistory(id: string): Promise<CharlieMessage[]> {
   );
   const value = data.messages ?? data.data?.messages ?? data.data ?? data;
   if (!Array.isArray(value)) return [];
-  return (value as CharlieHistoryItemWire[]).map((item) => ({
-    id: item.itemId ?? item.item_id ?? "",
-    role:
-      item.kind === "user_message"
-        ? "user"
-        : item.kind === "assistant_message"
-          ? "assistant"
-          : "system",
-    content: item.redactedContent ?? item.redacted_content ?? "",
-    createdAt: item.createdAt ?? item.created_at,
-  }));
+  return (value as CharlieHistoryItemWire[]).map((item) => {
+    const citations = (Array.isArray(item.citations) ? item.citations : [])
+      .slice(0, 16)
+      .flatMap((citation) => {
+        const id = typeof citation.id === "string" ? citation.id : "";
+        const title = typeof citation.title === "string" ? citation.title.trim() : "";
+        const source = typeof citation.source === "string" ? citation.source.trim() : "";
+        if (!id || !title || !source) return [];
+        return [{ id: id.slice(0, 128), title: title.slice(0, 1024), source: source.slice(0, 2048) }];
+      });
+    return {
+      id: item.itemId ?? item.item_id ?? "",
+      role:
+        item.kind === "user_message"
+          ? "user"
+          : item.kind === "assistant_message"
+            ? "assistant"
+            : "system",
+      content: item.redactedContent ?? item.redacted_content ?? "",
+      ...(citations.length ? { citations } : {}),
+      createdAt: item.createdAt ?? item.created_at,
+    };
+  });
 }
 export async function sendCharlieMessage(id: string, message: string) {
   const { data } = await api.post(

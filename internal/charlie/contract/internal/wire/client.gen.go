@@ -623,13 +623,21 @@ type Health struct {
 // HealthStatus defines model for Health.Status.
 type HealthStatus string
 
+// HistoryCitation defines model for HistoryCitation.
+type HistoryCitation struct {
+	Id     OpaqueId `json:"id"`
+	Source string   `json:"source"`
+	Title  string   `json:"title"`
+}
+
 // HistoryItem defines model for HistoryItem.
 type HistoryItem struct {
-	CreatedAt       time.Time       `json:"created_at"`
-	ExpiresAt       time.Time       `json:"expires_at"`
-	ItemId          OpaqueId        `json:"item_id"`
-	Kind            HistoryItemKind `json:"kind"`
-	RedactedContent string          `json:"redacted_content"`
+	Citations       *[]HistoryCitation `json:"citations,omitempty"`
+	CreatedAt       time.Time          `json:"created_at"`
+	ExpiresAt       time.Time          `json:"expires_at"`
+	ItemId          OpaqueId           `json:"item_id"`
+	Kind            HistoryItemKind    `json:"kind"`
+	RedactedContent string             `json:"redacted_content"`
 }
 
 // HistoryItemKind defines model for HistoryItem.Kind.
