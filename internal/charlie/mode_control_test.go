@@ -134,6 +134,7 @@ func (f *fakeModeStore) ClearEmergencyDisabled(_ context.Context, connectionID, 
 type fakeModeBridge struct {
 	state    ModeState
 	error    error
+	setError error
 	calls    int
 	lastMode Mode
 }
@@ -141,6 +142,9 @@ type fakeModeBridge struct {
 func (f *fakeModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (ModeState, error) {
 	f.calls++
 	f.lastMode = mode
+	if f.setError != nil {
+		return ModeState{}, f.setError
+	}
 	if f.error != nil {
 		return ModeState{}, f.error
 	}
@@ -338,22 +342,34 @@ func TestEmergencyDisableIsIdempotentAfterFeatureSuspension(t *testing.T) {
 	}
 }
 
-func TestEmergencyClearRequiresRemoteDisabledAndRestoresNoAuthority(t *testing.T) {
+func TestEmergencyClearReconcilesRemoteDisabledAndRestoresNoAuthority(t *testing.T) {
 	state := activeModeState()
 	state.EmergencyDisabled = true
 	state.Requested = ModeDisabled
 	store := &fakeModeStore{state: state}
 	bridge := &fakeModeBridge{state: ModeState{Requested: ModeAuto, Verified: ModeAuto}}
 	controller, _ := NewModeController(store, bridge)
-	if _, err := controller.ClearEmergencyDisable(context.Background(), "admin-a"); err == nil || store.clearCalls != 0 {
-		t.Fatal("emergency latch cleared before remote disabled")
-	}
-	bridge.state = ModeState{Requested: ModeDisabled, Verified: ModeDisabled}
 	cleared, err := controller.ClearEmergencyDisable(context.Background(), "admin-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cleared.EmergencyDisabled || cleared.Requested != ModeDisabled || cleared.Verified != ModeDisabled {
-		t.Fatalf("clear restored prior authority: %+v", cleared)
+	if bridge.calls != 1 || bridge.lastMode != ModeDisabled || store.clearCalls != 1 || cleared.EmergencyDisabled || cleared.Requested != ModeDisabled || cleared.Verified != ModeDisabled {
+		t.Fatalf("clear did not reconcile disabled without restoring authority: state=%+v bridge_calls=%d mode=%s", cleared, bridge.calls, bridge.lastMode)
+	}
+}
+
+func TestEmergencyClearKeepsLatchWhenRemoteDisableRetryFails(t *testing.T) {
+	state := activeModeState()
+	state.EmergencyDisabled = true
+	state.Requested = ModeDisabled
+	store := &fakeModeStore{state: state}
+	bridge := &fakeModeBridge{
+		state:    ModeState{Requested: ModeAuto, Verified: ModeAuto},
+		setError: errors.New("remote unavailable"),
+	}
+	controller, _ := NewModeController(store, bridge)
+	got, err := controller.ClearEmergencyDisable(context.Background(), "admin-a")
+	if err == nil || !got.EmergencyDisabled || store.clearCalls != 0 || bridge.calls != 1 || bridge.lastMode != ModeDisabled {
+		t.Fatalf("failed remote disable weakened the latch: state=%+v bridge_calls=%d mode=%s err=%v", got, bridge.calls, bridge.lastMode, err)
 	}
 }

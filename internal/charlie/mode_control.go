@@ -250,17 +250,25 @@ func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (
 	return disabled, nil
 }
 
-// ClearEmergencyDisable is intentionally two-step: the agent must already
-// report authoritative disabled mode, then an explicit product-local action may
-// clear the latch. It never restores the prior authority mode.
+// ClearEmergencyDisable is intentionally two-step: the agent must report
+// authoritative disabled mode before the product-local latch can be cleared.
+// If an earlier remote-disable attempt was interrupted, this explicit recovery
+// operation retries only that authority-reducing transition and verifies its
+// readback. It never restores the prior authority mode.
 func (c *ModeController) ClearEmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
 	current, err := c.store.LoadModeState(ctx)
 	if err != nil || !current.Active || !current.EmergencyDisabled {
 		return ModeState{}, fmt.Errorf("Charlie emergency disable is not active")
 	}
 	remote, err := c.bridge.Status(ctx)
-	if err != nil || EffectiveMode(remote.Requested, remote.Verified, remote.EmergencyDisabled) != ModeDisabled {
+	if err != nil {
 		return current, fmt.Errorf("Charlie agent has not confirmed disabled mode")
+	}
+	if EffectiveMode(remote.Requested, remote.Verified, remote.EmergencyDisabled) != ModeDisabled {
+		remote, err = c.bridge.SetMode(ctx, ModeDisabled, current.Revision)
+		if err != nil || EffectiveMode(remote.Requested, remote.Verified, remote.EmergencyDisabled) != ModeDisabled {
+			return current, fmt.Errorf("Charlie agent has not confirmed disabled mode")
+		}
 	}
 	cleared, err := c.store.ClearEmergencyDisabled(ctx, current.ConnectionID, actorID)
 	if err != nil {
