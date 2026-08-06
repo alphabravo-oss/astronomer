@@ -8,7 +8,7 @@
 > integrated UI or a live deployment.
 >
 > **Implementation branch:** `feat/charlie-core-integration`, audited through
-> schema version 149 on 2026-08-05.
+> commit `163f046` and schema version 149 on 2026-08-06.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
@@ -86,6 +86,13 @@ Astronomer browser
   alerts/findings when Charlie diagnoses an issue but mode, approval,
   authorization, or safety policy prevents execution. Disabled remains inert and
   creates no new finding or notification work.
+- [x] **A-016** Record every authority decision and lifecycle transition through
+  bounded event/reason codes and opaque correlations; never copy prompts,
+  evidence, arguments, results, secrets, credentials, provider bodies, or raw
+  exception text into operational logs or audit.
+- [x] **A-017** Reject destructive/irreversible disclosures entirely in v1 and
+  require every permitted write to be typed, reversible, idempotent, scoped,
+  preconditioned, budgeted, fenced, audited, and independently verified.
 
 ## 2. Current state and plan scope
 
@@ -1489,6 +1496,42 @@ the minimum authorized evidence and correlate, in order:
   approval only when eligible, idempotent decisions, and zero implicit action.
 
 #### Connected qualification evidence — 2026-08-05
+
+##### Feature-lifecycle isolation and recovery addendum — 2026-08-06
+
+- Astronomer commits `c0c692b` and `163f046` corrected two fail-closed recovery
+  defects found by the live feature-off test. An explicit emergency-clear now
+  retries only a remote downgrade to `disabled`, verifies that readback, and
+  keeps the local write fence closed if confirmation fails. Resume now
+  reactivates only the retained connection row while preserving requested and
+  verified `disabled` plus the emergency latch; it cannot restore prior
+  authority.
+- With `feature.charlie=false`, the public Astronomer health endpoint remained
+  `200`, the Charlie agent Argo Application and StatefulSet were absent, and the
+  agent namespace contained no pod. The two stable bridge/headless Service
+  objects remained as inert configuration, without a running workload; this
+  evidence does not claim packet-level quiescence.
+- The authenticated Charlie status surface remained local and reported
+  authoritative `disabled`, revision `52`, with emergency disable engaged.
+  Re-enabling the feature restored the owner-bound Argo Application and exact
+  signed agent artifacts at `2/2` ready, but the durable connection stayed
+  `disabled/disabled` with the emergency latch engaged. Enablement therefore did
+  not restore or raise authority.
+- The operator then cleared emergency disable at the exact revision. The server
+  reconciled Charlie central down to `disabled` before opening the local latch,
+  returning local revision `53`. A separate explicit request and authoritative
+  readback restored `read_only`; exact current disclosure acknowledgement left
+  the final durable state active, ready, `read_only/read_only`, revision `56`,
+  emergency disable false.
+- The deployed server and migrate images are exact commit tag
+  `charlie-163f046`; self-management and Charlie agent Applications are
+  `Synced/Healthy`, the agent is `2/2` ready at signed version `1.0.15`, and the
+  public Astronomer root/health and separate Charlie health endpoint return
+  `200`.
+- This completes workload teardown/recreation and fail-closed recovery evidence,
+  but not A14-016e: listener/timer assertions, DNS/packet capture, central work
+  counters, and the separate control-only operational-`disabled` observation
+  window remain required.
 
 ##### Agent 1.0.15 approval and actionable-alert addendum
 
