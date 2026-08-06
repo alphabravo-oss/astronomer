@@ -42,6 +42,9 @@ func TestPinnedContractChecksumsAndVersions(t *testing.T) {
 			t.Errorf("pin %s = %v, want %v", field, pin[field], want)
 		}
 	}
+	if AgentChartVersion != wants["agent_chart_version"] {
+		t.Errorf("compiled AgentChartVersion = %q, want pinned %q", AgentChartVersion, wants["agent_chart_version"])
+	}
 }
 
 func TestPinnedContractDriftIsRejected(t *testing.T) {
