@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,7 +25,7 @@ func main() {
 		// The hook can read operator tokens and exercise live effects. Keep its
 		// process log content-free even for malformed configuration and remote
 		// failures; detailed errors stay on the authenticated loopback response.
-		slog.Error("Charlie qualification hook stopped", slog.String("failure_code", "charlie.qualification_hook_failed"))
+		charliequalification.LogHookLifecycle(nil, charliequalification.HookStoppedWithFailure)
 		os.Exit(1)
 	}
 }
@@ -76,14 +75,16 @@ func run() error {
 	}
 	var scaler charliequalification.AgentScaler
 	kubeconfig := strings.TrimSpace(os.Getenv(envPrefix + "KUBECONFIG_FILE"))
+	agentNamespace := valueOrDefault(os.Getenv(envPrefix+"AGENT_NAMESPACE"), "astronomer-charlie")
+	agentStatefulSet := valueOrDefault(os.Getenv(envPrefix+"AGENT_STATEFULSET"), "charlie-agent")
 	if kubeconfig != "" {
 		if err := privateFile(kubeconfig); err != nil {
 			return fmt.Errorf("kubeconfig: %w", err)
 		}
 		scaler, err = charliequalification.NewKubectlScaler(
 			os.Getenv(envPrefix+"KUBECTL"), kubeconfig,
-			valueOrDefault(os.Getenv(envPrefix+"AGENT_NAMESPACE"), "astronomer-charlie"),
-			valueOrDefault(os.Getenv(envPrefix+"AGENT_STATEFULSET"), "charlie-agent"),
+			agentNamespace,
+			agentStatefulSet,
 		)
 		if err != nil {
 			return err
@@ -93,17 +94,46 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	var isolationObserver charliequalification.IsolationObserver
+	captureInterface := strings.TrimSpace(os.Getenv(envPrefix + "ISOLATION_CAPTURE_INTERFACE"))
+	if captureInterface != "" {
+		if kubeconfig == "" {
+			return errors.New("ISOLATION_CAPTURE_INTERFACE requires KUBECONFIG_FILE")
+		}
+		isolationObserver, err = charliequalification.NewKubectlTCPDumpIsolationObserver(charliequalification.IsolationObserverConfig{
+			KubectlBinary:    os.Getenv(envPrefix + "KUBECTL"),
+			TCPDumpBinary:    os.Getenv(envPrefix + "TCPDUMP"),
+			Kubeconfig:       kubeconfig,
+			Namespace:        agentNamespace,
+			Release:          valueOrDefault(os.Getenv(envPrefix+"AGENT_RELEASE"), "astronomer-charlie"),
+			StatefulSet:      agentStatefulSet,
+			Service:          valueOrDefault(os.Getenv(envPrefix+"AGENT_SERVICE"), "charlie-agent"),
+			CaptureInterface: captureInterface,
+			MetricSources:    metricSources,
+			HTTPClient:       client,
+			AllowHTTP:        os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
+		})
+		if err != nil {
+			return err
+		}
+	}
+	noCallDwell, err := optionalDuration(os.Getenv(envPrefix + "NO_CALL_DWELL"))
+	if err != nil {
+		return err
+	}
 	driver, err := charliequalification.NewLiveDriver(charliequalification.LiveConfig{
-		AstronomerURL:  strings.TrimSpace(os.Getenv(envPrefix + "ASTRONOMER_URL")),
-		AdminToken:     adminToken,
-		ApproverToken:  approverToken,
-		DeniedToken:    deniedToken,
-		MetricSources:  metricSources,
-		CounterMetrics: counterMetrics,
-		Fixtures:       fixtures,
-		AllowHTTP:      os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
-		AgentScaler:    scaler,
-		HTTPClient:     client,
+		AstronomerURL:     strings.TrimSpace(os.Getenv(envPrefix + "ASTRONOMER_URL")),
+		AdminToken:        adminToken,
+		ApproverToken:     approverToken,
+		DeniedToken:       deniedToken,
+		MetricSources:     metricSources,
+		CounterMetrics:    counterMetrics,
+		Fixtures:          fixtures,
+		AllowHTTP:         os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
+		AgentScaler:       scaler,
+		IsolationObserver: isolationObserver,
+		HTTPClient:        client,
+		NoCallDwell:       noCallDwell,
 	})
 	if err != nil {
 		return err
@@ -122,9 +152,7 @@ func run() error {
 	defer stop()
 	result := make(chan error, 1)
 	go func() { result <- server.ListenAndServeTLS(certFile, keyFile) }()
-	slog.Info("Charlie qualification hook started",
-		slog.String("event", "charlie.qualification_hook_started"),
-		slog.String("transport", "tls"))
+	charliequalification.LogHookLifecycle(nil, charliequalification.HookStarted)
 	select {
 	case err := <-result:
 		if !errors.Is(err, http.ErrServerClosed) {
@@ -136,6 +164,18 @@ func run() error {
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
 	}
+}
+
+func optionalDuration(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, errors.New("NO_CALL_DWELL is invalid")
+	}
+	return value, nil
 }
 
 func operatorHTTPClient(caFile string) (*http.Client, error) {

@@ -89,3 +89,63 @@ func TestFixturesRequirePrivateStrictJSONFile(t *testing.T) {
 		t.Fatal("unknown qualification fixture field accepted")
 	}
 }
+
+func TestAnswerFixturesLoadExactNonSecretProofValues(t *testing.T) {
+	directory := t.TempDir()
+	config := filepath.Join(directory, "fixtures.json")
+	body := `{
+		"versioned_rag_grounded":{
+			"stimulus":{"client_session_id":"10000000-0000-4000-8000-000000000003","client_message_id":"20000000-0000-4000-8000-000000000003","abort_request_id":"40000000-0000-4000-8000-000000000003","intent":"qualification_versioned_rag","resource_type":"installation","resource_id":"qualification-rag-installation","message":"Return the corrected canary."},
+			"corrected_revision_marker":"CORRECTED-REVISION-CANARY","product_version_marker":"PRODUCT-VERSION-1.1","citation_id":"chunk-version-1-1","citation_title":"Qualification guide","citation_source":"knowledge://astronomer/version-1-1#chunk=0"
+		},
+		"general_answer":{
+			"stimulus":{"client_session_id":"10000000-0000-4000-8000-000000000004","client_message_id":"20000000-0000-4000-8000-000000000004","abort_request_id":"40000000-0000-4000-8000-000000000004","intent":"qualification_general_answer","resource_type":"management_component","resource_id":"qualification-general-component","message":"Return the general canary."},
+			"expected_answer_marker":"GENERAL-KUBERNETES-CANARY"
+		}
+	}`
+	if err := os.WriteFile(config, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixtures, err := fixturesFromFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixtures.VersionedRAGGrounded.CitationSource != "knowledge://astronomer/version-1-1#chunk=0" || fixtures.GeneralAnswer.ExpectedAnswerMarker != "GENERAL-KUBERNETES-CANARY" {
+		t.Fatalf("answer fixtures were not loaded exactly: %#v %#v", fixtures.VersionedRAGGrounded, fixtures.GeneralAnswer)
+	}
+	if err := os.WriteFile(config, []byte(strings.Replace(body, `"citation_source":`, `"unknown":true,"citation_source":`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixturesFromFile(config); err == nil {
+		t.Fatal("unknown nested answer fixture field accepted")
+	}
+}
+
+func TestAlertFixturesLoadOnlyMetadataProofValues(t *testing.T) {
+	directory := t.TempDir()
+	config := filepath.Join(directory, "fixtures.json")
+	body := `{"diagnosis_alert":{"finding_id":"10000000-0000-4000-8000-000000000010","delivery_id":"20000000-0000-4000-8000-000000000010","expected_block_code":"no_safe_action","expected_workflow_state":"blocked"}}`
+	if err := os.WriteFile(config, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixtures, err := fixturesFromFile(config)
+	if err != nil || fixtures.DiagnosisAlert.ExpectedBlockCode != "no_safe_action" {
+		t.Fatalf("alert metadata fixture not loaded exactly: %#v err=%v", fixtures.DiagnosisAlert, err)
+	}
+	if err := os.WriteFile(config, []byte(strings.Replace(body, `"delivery_id":`, `"title":"secret","delivery_id":`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixturesFromFile(config); err == nil {
+		t.Fatal("raw alert content field accepted in metadata fixture")
+	}
+}
+
+func TestOptionalNoCallDwellIsExplicitAndStrict(t *testing.T) {
+	value, err := optionalDuration("30s")
+	if err != nil || value.String() != "30s" {
+		t.Fatalf("explicit dwell was not parsed: %v %v", value, err)
+	}
+	if _, err := optionalDuration("forever"); err == nil {
+		t.Fatal("invalid dwell accepted")
+	}
+}

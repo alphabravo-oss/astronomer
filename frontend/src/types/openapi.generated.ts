@@ -470,6 +470,28 @@ export interface OpenAPIComponents {
           "enabled": boolean;
           "destination_configured": boolean;
         };
+    CharlieAdminAlertDeliveryProof: {
+          "delivery_id": string;
+          "finding_id": string;
+          "delivery_kind": "initial" | "escalation";
+          "status": "queued" | "delivering" | "retry" | "delivered" | "suppressed" | "dead";
+          "template_identity": "charlie.finding.initial/v1" | "charlie.finding.escalation/v1" | "unrecognized";
+          "deep_link_valid": boolean;
+          "content_free": boolean;
+          "attempt_count": number;
+          "maximum_attempts": number;
+          "created_at": string;
+          "updated_at": string;
+          "delivered_at"?: string;
+        };
+    CharlieAdminAlertDeliveryProofView: {
+          "finding_id": string;
+          "finding_block_code": string;
+          "finding_workflow_state": string;
+          "delivery_count": number;
+          "dedupe_valid": boolean;
+          "deliveries": OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProof'][];
+        };
     CharlieAdminAlertPolicy: {
           "enabled": boolean;
           "minimum_severity": "info" | "low" | "medium" | "warning" | "high" | "critical";
@@ -537,6 +559,16 @@ export interface OpenAPIComponents {
           "overall": "healthy" | "degraded" | "unavailable" | "inactive" | "ready" | "unknown";
           "checks": OpenAPIComponents['schemas']['CharlieAdminDiagnosticCheck'][];
           "correlation_id"?: string;
+        };
+    CharlieAdminDiscoveryQualification: {
+          "scenario": "mixed_catalog" | "malformed_catalog";
+          "candidate_enabled": boolean;
+          "accepted_count": number;
+          "rejected_count": number;
+          "accepted_names": string[];
+          "disclosure_digest"?: string;
+          "catalog_bound": boolean;
+          "malformed_rejected": boolean;
         };
     CharlieAdminMode: {
           "requested": "disabled" | "read_only" | "approval" | "auto";
@@ -617,6 +649,9 @@ export interface OpenAPIComponents {
           "required_verb": string;
           "label": string;
           "summary": string;
+        };
+    CharlieDiscoveryQualificationRequest: {
+          "scenario": "mixed_catalog" | "malformed_catalog";
         };
     CharlieFindingAdvisoryDetail: {
           "evidence_summary": string[];
@@ -2006,6 +2041,8 @@ export type CharlieAdminActionRequest = OpenAPIComponents['schemas']['CharlieAdm
 export type CharlieAdminAgent = OpenAPIComponents['schemas']['CharlieAdminAgent'];
 export type CharlieAdminAgentReplica = OpenAPIComponents['schemas']['CharlieAdminAgentReplica'];
 export type CharlieAdminAlertChannel = OpenAPIComponents['schemas']['CharlieAdminAlertChannel'];
+export type CharlieAdminAlertDeliveryProof = OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProof'];
+export type CharlieAdminAlertDeliveryProofView = OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProofView'];
 export type CharlieAdminAlertPolicy = OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
 export type CharlieAdminAlertPolicyInput = OpenAPIComponents['schemas']['CharlieAdminAlertPolicyInput'];
 export type CharlieAdminAutoReadiness = OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
@@ -2013,6 +2050,7 @@ export type CharlieAdminAutomation = OpenAPIComponents['schemas']['CharlieAdminA
 export type CharlieAdminConnection = OpenAPIComponents['schemas']['CharlieAdminConnection'];
 export type CharlieAdminDiagnosticCheck = OpenAPIComponents['schemas']['CharlieAdminDiagnosticCheck'];
 export type CharlieAdminDiagnostics = OpenAPIComponents['schemas']['CharlieAdminDiagnostics'];
+export type CharlieAdminDiscoveryQualification = OpenAPIComponents['schemas']['CharlieAdminDiscoveryQualification'];
 export type CharlieAdminMode = OpenAPIComponents['schemas']['CharlieAdminMode'];
 export type CharlieAdminPermission = OpenAPIComponents['schemas']['CharlieAdminPermission'];
 export type CharlieAdminStatus = OpenAPIComponents['schemas']['CharlieAdminStatus'];
@@ -2021,6 +2059,7 @@ export type CharlieAdminTriggerRule = OpenAPIComponents['schemas']['CharlieAdmin
 export type CharlieApprovalDecisionRequest = OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
 export type CharlieApprovalSummary = OpenAPIComponents['schemas']['CharlieApprovalSummary'];
 export type CharlieContextSearchResult = OpenAPIComponents['schemas']['CharlieContextSearchResult'];
+export type CharlieDiscoveryQualificationRequest = OpenAPIComponents['schemas']['CharlieDiscoveryQualificationRequest'];
 export type CharlieFindingAdvisoryDetail = OpenAPIComponents['schemas']['CharlieFindingAdvisoryDetail'];
 export type CharlieFindingDetail = OpenAPIComponents['schemas']['CharlieFindingDetail'];
 export type CharlieFindingManualRemediation = OpenAPIComponents['schemas']['CharlieFindingManualRemediation'];

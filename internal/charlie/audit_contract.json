@@ -208,6 +208,28 @@
     "channel_count": {
       "kind": "count"
     },
+    "delivery_count": {
+      "kind": "count"
+    },
+    "dedupe_valid": {
+      "kind": "bool"
+    },
+    "scenario": {
+      "kind": "enum",
+      "values": ["mixed_catalog", "malformed_catalog"]
+    },
+    "accepted_count": {
+      "kind": "count"
+    },
+    "rejected_count": {
+      "kind": "count"
+    },
+    "candidate_enabled": {
+      "kind": "bool"
+    },
+    "catalog_bound": {
+      "kind": "bool"
+    },
     "overall": {
       "kind": "code"
     }
@@ -359,6 +381,53 @@
         "quiet_hours_enabled",
         "channel_count",
         "revision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.alert_delivery.",
+      "actions": [
+        "admin.charlie.alert_delivery.read"
+      ],
+      "resource_type": "charlie_finding",
+      "allowed_fields": [
+        "outcome_code",
+        "delivery_count",
+        "dedupe_valid"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.discovery_qualification.",
+      "actions": [
+        "admin.charlie.discovery_qualification.run"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code",
+        "scenario",
+        "accepted_count",
+        "rejected_count",
+        "candidate_enabled",
+        "catalog_bound"
       ],
       "coverage": [
         "success",

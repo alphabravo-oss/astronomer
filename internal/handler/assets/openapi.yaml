@@ -510,6 +510,54 @@ components:
         quiet_hours_end: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
         quiet_hours_timezone: {type: string, minLength: 1, maxLength: 64}
         channel_ids: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
+    CharlieAdminAlertDeliveryProof:
+      type: object
+      additionalProperties: false
+      required: [delivery_id, finding_id, delivery_kind, status, template_identity, deep_link_valid, content_free, attempt_count, maximum_attempts, created_at, updated_at]
+      description: Metadata-only proof. Notification subject, body, destination, channel identity, dedupe bucket, and provider errors are never returned.
+      properties:
+        delivery_id: {type: string, format: uuid}
+        finding_id: {type: string, format: uuid}
+        delivery_kind: {type: string, enum: [initial, escalation]}
+        status: {type: string, enum: [queued, delivering, retry, delivered, suppressed, dead]}
+        template_identity: {type: string, enum: [charlie.finding.initial/v1, charlie.finding.escalation/v1, unrecognized]}
+        deep_link_valid: {type: boolean}
+        content_free: {type: boolean, description: True only when the persisted subject/body exactly match Astronomer's fixed content-free template and finding-bound deep link.}
+        attempt_count: {type: integer, format: int32, minimum: 0}
+        maximum_attempts: {type: integer, format: int32, minimum: 1, maximum: 20}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        delivered_at: {type: string, format: date-time}
+    CharlieAdminAlertDeliveryProofView:
+      type: object
+      additionalProperties: false
+      required: [finding_id, finding_block_code, finding_workflow_state, delivery_count, dedupe_valid, deliveries]
+      properties:
+        finding_id: {type: string, format: uuid}
+        finding_block_code: {type: string, maxLength: 64}
+        finding_workflow_state: {type: string, maxLength: 64}
+        delivery_count: {type: integer, minimum: 0, maximum: 32}
+        dedupe_valid: {type: boolean}
+        deliveries: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/CharlieAdminAlertDeliveryProof'}}
+    CharlieDiscoveryQualificationRequest:
+      type: object
+      additionalProperties: false
+      required: [scenario]
+      properties:
+        scenario: {type: string, enum: [mixed_catalog, malformed_catalog]}
+    CharlieAdminDiscoveryQualification:
+      type: object
+      additionalProperties: false
+      required: [scenario, candidate_enabled, accepted_count, rejected_count, accepted_names, catalog_bound, malformed_rejected]
+      properties:
+        scenario: {type: string, enum: [mixed_catalog, malformed_catalog]}
+        candidate_enabled: {type: boolean, description: Whether this fixed candidate generation is eligible to activate; it does not report or modify current integration activation.}
+        accepted_count: {type: integer, minimum: 0, maximum: 2}
+        rejected_count: {type: integer, minimum: 0, maximum: 1}
+        accepted_names: {type: array, maxItems: 2, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}}
+        disclosure_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+        catalog_bound: {type: boolean}
+        malformed_rejected: {type: boolean}
     CharlieAdminTriggerEvent:
       type: object
       additionalProperties: false
@@ -18479,6 +18527,37 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {description: Channel references or policy bounds changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/alert-deliveries/:
+    get:
+      operationId: adminCharlieAlertDeliveryProofs
+      summary: Read metadata-only delivery proof for one Charlie finding
+      description: Returns only finding/delivery identifiers, lifecycle counts and timestamps, fixed template identity, and server-computed deep-link/content-free verdicts. Raw notification content, channel/destination metadata, dedupe buckets, and provider errors are never returned.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Bounded current-deployment delivery proof., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertDeliveryProofView'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/qualification/discovery/:
+    post:
+      operationId: adminCharlieDiscoveryQualification
+      summary: Qualify Astronomer's fixed discovery compiler cases
+      description: Operator-started, non-mutating qualification of one embedded mixed or malformed catalog candidate. Caller-controlled capability data is never accepted and current activation is never changed.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieDiscoveryQualificationRequest'}}}}
+      responses:
+        '200': {description: Fixed discovery generation verdict., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminDiscoveryQualification'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Qualification prerequisites are not active., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/charlie/trigger-rules/{rule_id}/:
     patch:

@@ -23,6 +23,8 @@ type CharlieAdminBackend interface {
 	AcknowledgeDisclosure(context.Context, string) (charlie.AdminModeView, error)
 	Automation(context.Context) (charlie.AdminAutomationView, error)
 	AlertPolicy(context.Context) (charlie.AdminAlertPolicyView, error)
+	AlertDeliveryProofs(context.Context, uuid.UUID) (charlie.AdminAlertDeliveryProofView, error)
+	DiscoveryQualification(context.Context, string) (charlie.AdminDiscoveryQualificationView, error)
 	UpdateAlertPolicy(context.Context, charlie.AdminAlertPolicyInput, uuid.UUID) (charlie.AdminAlertPolicyView, error)
 	UpdateActionPolicy(context.Context, string, charlie.AdminActionPolicyInput) (charlie.AdminActionPolicy, error)
 	CreateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
@@ -248,6 +250,55 @@ func (h *CharlieAdminHandler) AlertPolicy(w http.ResponseWriter, r *http.Request
 		h.respondError(w, r, err)
 		return
 	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) AlertDeliveryProofs(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	findingID, err := uuid.Parse(strings.TrimSpace(r.URL.Query().Get("finding_id")))
+	if err != nil || findingID == uuid.Nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Valid Charlie finding ID is required")
+		return
+	}
+	view, err := h.backend.AlertDeliveryProofs(r.Context(), findingID)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordCharlieAdminReadAudit(r, h.audit, "admin.charlie.alert_delivery.read", "charlie_finding", findingID.String(), map[string]any{
+		"delivery_count": view.DeliveryCount, "dedupe_valid": view.DedupeValid,
+	})
+	RespondJSON(w, http.StatusOK, view)
+}
+
+// openapi:request CharlieDiscoveryQualificationRequest
+type charlieDiscoveryQualificationRequest struct {
+	Scenario string `json:"scenario"`
+}
+
+func (h *CharlieAdminHandler) DiscoveryQualification(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	var request charlieDiscoveryQualificationRequest
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	if request.Scenario != charlie.DiscoveryQualificationMixed && request.Scenario != charlie.DiscoveryQualificationMalformed {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Unknown Charlie discovery qualification scenario")
+		return
+	}
+	view, err := h.backend.DiscoveryQualification(r.Context(), request.Scenario)
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordCharlieAdminReadAudit(r, h.audit, "admin.charlie.discovery_qualification.run", "charlie_connection", "current", map[string]any{
+		"scenario": view.Scenario, "accepted_count": view.AcceptedCount, "rejected_count": view.RejectedCount,
+		"candidate_enabled": view.CandidateEnabled, "catalog_bound": view.CatalogBound,
+	})
 	RespondJSON(w, http.StatusOK, view)
 }
 

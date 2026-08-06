@@ -42,6 +42,10 @@ type authorityLiveState struct {
 	operations       map[string]qualificationOperation
 	autoAction       ActionFixture
 	autoPending      PendingApprovalFixture
+	ragAnswer        VersionedRAGFixture
+	generalAnswer    GeneralAnswerFixture
+	alertFixtures    map[string]AlertDeliveryFixture
+	history          map[string][]historyItem
 	autoTriggered    bool
 	sessions         map[string]SessionStimulus
 	clientSessions   map[string]string
@@ -53,6 +57,7 @@ type authorityLiveState struct {
 	unwrapDecision   bool
 	unwrapOperation  bool
 	streamVariant    string
+	answerVariant    string
 	activeModes      atomic.Int32
 	maximumModeCalls atomic.Int32
 }
@@ -89,6 +94,43 @@ func authorityFixtures() LiveFixtures {
 	}
 }
 
+func answerFixtures() LiveFixtures {
+	fixtures := authorityFixtures()
+	fixtures.VersionedRAGGrounded = VersionedRAGFixture{
+		Stimulus: SessionStimulus{
+			ClientSessionID: "10000000-0000-4000-8000-000000000003", ClientMessageID: "20000000-0000-4000-8000-000000000003", AbortRequestID: "40000000-0000-4000-8000-000000000003",
+			Intent: "qualification_versioned_rag", ResourceType: "installation", ResourceID: "qualification-rag-installation", Message: "Return the corrected qualification canary for this product version.",
+		},
+		CorrectedRevisionMarker: "CORRECTED-REVISION-CANARY", ProductVersionMarker: "PRODUCT-VERSION-1.1",
+		CitationID: "chunk-version-1-1", CitationTitle: "Qualification guide", CitationSource: "knowledge://astronomer/version-1-1#chunk=0",
+	}
+	fixtures.GeneralAnswer = GeneralAnswerFixture{
+		Stimulus: SessionStimulus{
+			ClientSessionID: "10000000-0000-4000-8000-000000000004", ClientMessageID: "20000000-0000-4000-8000-000000000004", AbortRequestID: "40000000-0000-4000-8000-000000000004",
+			Intent: "qualification_general_answer", ResourceType: "management_component", ResourceID: "qualification-general-component", Message: "Return the general Kubernetes qualification canary without a product citation.",
+		},
+		ExpectedAnswerMarker: "GENERAL-KUBERNETES-CANARY",
+	}
+	return fixtures
+}
+
+func alertFixtures() LiveFixtures {
+	fixtures := authorityFixtures()
+	values := []*AlertDeliveryFixture{
+		&fixtures.DiagnosisAlert, &fixtures.ApprovalPendingAlert, &fixtures.ApprovalRejectedAlert,
+		&fixtures.ApprovalExpiredAlert, &fixtures.BlockedAutoAlert, &fixtures.FailedPreconditionAlert,
+		&fixtures.FailedVerificationAlert,
+	}
+	blocks := []string{"no_safe_action", "approval_required", "approval_rejected", "approval_expired", "allowlist_denied", "precondition_failed", "verification_failed"}
+	for i, fixture := range values {
+		fixture.FindingID = fmt.Sprintf("10000000-0000-4000-8000-%012d", i+10)
+		fixture.DeliveryID = fmt.Sprintf("20000000-0000-4000-8000-%012d", i+10)
+		fixture.ExpectedBlockCode = blocks[i]
+		fixture.ExpectedWorkflowState = "blocked"
+	}
+	return fixtures
+}
+
 func newAuthorityLiveState(fixtures LiveFixtures) *authorityLiveState {
 	now := time.Now().UTC()
 	approvals := map[string]*qualificationApproval{}
@@ -99,6 +141,14 @@ func newAuthorityLiveState(fixtures LiveFixtures) *authorityLiveState {
 		requested: "read_only", authority: "read_only", revision: 70, digest: readOnlyDisclosureDigest, acknowledged: true,
 		runtime: map[string]uint64{}, downstream: map[string]uint64{}, approvals: approvals, operations: map[string]qualificationOperation{},
 		sessions: map[string]SessionStimulus{}, clientSessions: map[string]string{},
+		history:       map[string][]historyItem{},
+		alertFixtures: map[string]AlertDeliveryFixture{},
+	}
+}
+
+func configureAlertFixtures(state *authorityLiveState, fixtures LiveFixtures) {
+	for _, fixture := range []AlertDeliveryFixture{fixtures.DiagnosisAlert, fixtures.ApprovalPendingAlert, fixtures.ApprovalRejectedAlert, fixtures.ApprovalExpiredAlert, fixtures.BlockedAutoAlert, fixtures.FailedPreconditionAlert, fixtures.FailedVerificationAlert} {
+		state.alertFixtures[fixture.FindingID] = fixture
 	}
 }
 
@@ -167,6 +217,127 @@ func TestAuthorityQualificationScenariosUseExactFixturesAndRestoreReadOnly(t *te
 		assertQualificationPassed(t, driver.Run(t.Context(), ScenarioRequest{Scenario: "auto_nonallowlisted_approval"}))
 		assertAuthorityRestored(t, state, 0)
 	})
+}
+
+func TestDiscoveryQualificationDriversUseRealFixedAdminSurface(t *testing.T) {
+	fixtures := authorityFixtures()
+	state := newAuthorityLiveState(fixtures)
+	driver, server := newAuthorityDriver(t, state, fixtures)
+	defer server.Close()
+	for _, scenario := range []string{"discovery_mixed_catalog", "malformed_discovery"} {
+		if result := driver.Run(t.Context(), ScenarioRequest{Scenario: scenario}); !result.Passed || len(result.Assertions) != 3 {
+			t.Fatalf("%s qualification failed: %#v", scenario, result)
+		}
+	}
+}
+
+func TestAllAlertQualificationDriversRequireOneStableContentFreeDelivery(t *testing.T) {
+	fixtures := alertFixtures()
+	state := newAuthorityLiveState(fixtures)
+	configureAlertFixtures(state, fixtures)
+	driver, server := newAuthorityDriver(t, state, fixtures)
+	defer server.Close()
+	for _, scenario := range []string{"diagnosis_alert", "approval_pending_alert", "approval_rejected_alert", "approval_expired_alert", "blocked_auto_alert", "failed_precondition_alert", "failed_verification_alert"} {
+		result := driver.Run(t.Context(), ScenarioRequest{Scenario: scenario})
+		want := 3
+		if scenario == "failed_verification_alert" {
+			want = 4
+		}
+		if !result.Passed || len(result.Assertions) != want {
+			t.Fatalf("%s qualification failed: %#v", scenario, result)
+		}
+	}
+	state.mu.Lock()
+	fixture := state.alertFixtures[fixtures.DiagnosisAlert.FindingID]
+	fixture.DeliveryID = "30000000-0000-4000-8000-000000000099"
+	state.alertFixtures[fixtures.DiagnosisAlert.FindingID] = fixture
+	state.mu.Unlock()
+	// A changed persisted delivery can no longer satisfy the corresponding
+	// pre-staged fixture; no simulated/finding-only substitute is accepted.
+	result := driver.Run(t.Context(), ScenarioRequest{Scenario: "diagnosis_alert"})
+	if result.Passed {
+		t.Fatal("alert scenario accepted delivery identity drift")
+	}
+}
+
+func TestAnswerQualificationScenariosUseRealSessionHistoryAndExactCounters(t *testing.T) {
+	for _, scenario := range []string{"versioned_rag_grounded", "general_answer"} {
+		t.Run(scenario, func(t *testing.T) {
+			fixtures := answerFixtures()
+			state := newAuthorityLiveState(fixtures)
+			state.ragAnswer = fixtures.VersionedRAGGrounded
+			state.generalAnswer = fixtures.GeneralAnswer
+			driver, server := newAuthorityDriver(t, state, fixtures)
+			defer server.Close()
+
+			result := driver.Run(t.Context(), ScenarioRequest{Scenario: scenario})
+			wantAssertions := 3
+			if scenario == "versioned_rag_grounded" {
+				wantAssertions = 5
+			}
+			if !result.Passed || len(result.Assertions) != wantAssertions {
+				t.Fatalf("answer qualification failed: %#v", result)
+			}
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			if state.requested != "read_only" || state.authority != "read_only" || !state.acknowledged || state.runtime["model_calls"] != 2 || state.runtime["rag_queries"] != 1 || state.runtime["sessions"] != 1 || state.runtime["tool_calls"] != 0 {
+				t.Fatalf("answer proof did not retain exact read-only counters: mode=%s/%s counters=%#v", state.requested, state.authority, state.runtime)
+			}
+		})
+	}
+}
+
+func TestAnswerQualificationFailsClosedOnContentCitationAndCounterMismatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		scenario string
+		mutate   func(*authorityLiveState, *LiveFixtures)
+	}{
+		{name: "wrong corrected marker", scenario: "versioned_rag_grounded", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
+			state.ragAnswer = fixtures.VersionedRAGGrounded
+			state.ragAnswer.CorrectedRevisionMarker = "WRONG-CORRECTED-CANARY"
+			state.generalAnswer = fixtures.GeneralAnswer
+		}},
+		{name: "fabricated general citation", scenario: "general_answer", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
+			state.ragAnswer = fixtures.VersionedRAGGrounded
+			state.generalAnswer = fixtures.GeneralAnswer
+			state.answerVariant = "general_citation"
+		}},
+		{name: "unexpected tool call", scenario: "general_answer", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
+			state.ragAnswer = fixtures.VersionedRAGGrounded
+			state.generalAnswer = fixtures.GeneralAnswer
+			state.answerVariant = "unexpected_tool"
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixtures := answerFixtures()
+			state := newAuthorityLiveState(fixtures)
+			test.mutate(state, &fixtures)
+			driver, server := newAuthorityDriver(t, state, fixtures)
+			defer server.Close()
+			result := driver.Run(t.Context(), ScenarioRequest{Scenario: test.scenario})
+			if result.Passed || len(result.Assertions) != 0 {
+				t.Fatalf("answer proof accepted mismatch: %#v", result)
+			}
+		})
+	}
+}
+
+func TestAlertQualificationDoesNotSubstituteAFindingForMissingDeliveryFixture(t *testing.T) {
+	fixtures := answerFixtures()
+	state := newAuthorityLiveState(fixtures)
+	driver, server := newAuthorityDriver(t, state, fixtures)
+	defer server.Close()
+	for _, scenario := range []string{
+		"diagnosis_alert", "approval_pending_alert",
+		"approval_rejected_alert", "approval_expired_alert", "blocked_auto_alert", "failed_precondition_alert", "failed_verification_alert",
+	} {
+		result := driver.Run(t.Context(), ScenarioRequest{Scenario: scenario})
+		if result.Passed || len(result.Assertions) != 0 || result.Scenario != scenario {
+			t.Fatalf("%s synthesized unsupported live evidence: %#v", scenario, result)
+		}
+	}
 }
 
 func TestAuthorityQualificationFailsClosedOnMissingOrMismatchedProof(t *testing.T) {
@@ -338,6 +509,33 @@ func (s *authorityLiveState) writeMetrics(w http.ResponseWriter) {
 
 func (s *authorityLiveState) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/admin/charlie/qualification/discovery/":
+		var body struct {
+			Scenario string `json:"scenario"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil {
+			http.Error(w, "invalid", http.StatusBadRequest)
+			return
+		}
+		if body.Scenario == "mixed_catalog" {
+			_, _ = fmt.Fprint(w, `{"data":{"scenario":"mixed_catalog","candidate_enabled":true,"accepted_count":2,"rejected_count":1,"accepted_names":["astronomer.installation.summary","astronomer.management.workload_restart"],"disclosure_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","catalog_bound":true,"malformed_rejected":true}}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"data":{"scenario":"malformed_catalog","candidate_enabled":false,"accepted_count":0,"rejected_count":1,"accepted_names":[],"catalog_bound":false,"malformed_rejected":true}}`)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/charlie/alert-deliveries/":
+		fixture, ok := s.alertFixtures[r.URL.Query().Get("finding_id")]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+			"finding_id": fixture.FindingID, "finding_block_code": fixture.ExpectedBlockCode, "finding_workflow_state": fixture.ExpectedWorkflowState,
+			"delivery_count": 1, "dedupe_valid": true, "deliveries": []map[string]any{{
+				"delivery_id": fixture.DeliveryID, "finding_id": fixture.FindingID, "delivery_kind": "initial", "status": "delivered", "template_identity": "charlie.finding.initial/v1",
+				"deep_link_valid": true, "content_free": true, "attempt_count": 1, "maximum_attempts": 3, "created_at": now, "updated_at": now, "delivered_at": now,
+			}},
+		}})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/charlie/status/":
 		_, _ = fmt.Fprintf(w, `{"data":{"connection":{"connected":true,"disclosure_digest":%q,"disclosure_acknowledged":%t},"mode":{"requested":%q,"authoritative":%q,"revision":%d,"emergency_disabled":false,"disclosure_digest":%q},"agent":{"desired_replicas":2,"ready_replicas":2,"agent_version":"v1.2.3","image_digest":"sha256:test"}}}`, s.digest, s.acknowledged, s.requested, s.authority, s.revision, s.digest)
 	case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/admin/charlie/mode/":
@@ -412,6 +610,9 @@ func (s *authorityLiveState) serveProduct(w http.ResponseWriter, r *http.Request
 		s.acceptStimulus(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/charlie/sessions/") && strings.HasSuffix(r.URL.Path, "/events/"):
 		s.streamEvents(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/charlie/sessions/") && strings.HasSuffix(r.URL.Path, "/history/"):
+		localSessionID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/charlie/sessions/"), "/history/")
+		_ = json.NewEncoder(w).Encode(s.history[localSessionID])
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/charlie/sessions/") && strings.HasSuffix(r.URL.Path, "/abort/"):
 		s.abortSession(w, r)
 	default:
@@ -429,7 +630,7 @@ func (s *authorityLiveState) createSession(w http.ResponseWriter, r *http.Reques
 			RequiredVerb string `json:"required_verb"`
 		} `json:"resources"`
 	}
-	if json.NewDecoder(r.Body).Decode(&body) != nil || s.requested != "auto" || s.authority != "auto" || len(body.Resources) != 1 || body.Resources[0].RequiredVerb != "read" {
+	if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.Resources) != 1 || body.Resources[0].RequiredVerb != "read" {
 		http.Error(w, "invalid", http.StatusBadRequest)
 		return
 	}
@@ -441,8 +642,17 @@ func (s *authorityLiveState) createSession(w http.ResponseWriter, r *http.Reques
 		stimulus, localID = s.autoAction.Stimulus, "30000000-0000-4000-8000-000000000001"
 	} else if match(s.autoPending.Stimulus) {
 		stimulus, localID = s.autoPending.Stimulus, "30000000-0000-4000-8000-000000000002"
+	} else if match(s.ragAnswer.Stimulus) {
+		stimulus, localID = s.ragAnswer.Stimulus, "30000000-0000-4000-8000-000000000003"
+	} else if match(s.generalAnswer.Stimulus) {
+		stimulus, localID = s.generalAnswer.Stimulus, "30000000-0000-4000-8000-000000000004"
 	} else {
 		http.Error(w, "fixture mismatch", http.StatusConflict)
+		return
+	}
+	isAnswer := localID == "30000000-0000-4000-8000-000000000003" || localID == "30000000-0000-4000-8000-000000000004"
+	if isAnswer && (s.requested != "read_only" || s.authority != "read_only") || !isAnswer && (s.requested != "auto" || s.authority != "auto") {
+		http.Error(w, "mode mismatch", http.StatusConflict)
 		return
 	}
 	if existing := s.clientSessions[body.ClientSessionID]; existing != "" || s.replaySession {
@@ -453,6 +663,7 @@ func (s *authorityLiveState) createSession(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.sessions[localID], s.clientSessions[body.ClientSessionID] = stimulus, localID
+	s.runtime["sessions"]++
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"session": map[string]any{"id": localID}, "replayed": false}})
 }
@@ -463,7 +674,7 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 		ClientMessageID string `json:"client_message_id"`
 		Message         string `json:"message"`
 	}
-	if json.NewDecoder(r.Body).Decode(&body) != nil || s.requested != "auto" || s.authority != "auto" {
+	if json.NewDecoder(r.Body).Decode(&body) != nil {
 		http.Error(w, "invalid", http.StatusBadRequest)
 		return
 	}
@@ -483,6 +694,28 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 		approvalID := "approval-auto-generated"
 		target := stimulus.ResourceType + ":" + stimulus.ResourceID
 		s.approvals[approvalID] = &qualificationApproval{fixture: ApprovalFixture{ApprovalID: approvalID, ActionID: target, Capability: s.autoPending.Capability}, expiresAt: time.Now().UTC().Add(time.Minute), state: "pending", visible: true}
+	} else if stimulus.ClientSessionID == s.ragAnswer.Stimulus.ClientSessionID && s.requested == "read_only" && s.authority == "read_only" {
+		turnID = "turn-rag-answer"
+		s.runtime["model_calls"] += 2
+		s.runtime["rag_queries"]++
+		s.history[localSessionID] = []historyItem{
+			{ItemID: "history-rag-user", Kind: "user_message", Content: stimulus.Message},
+			{ItemID: "history-rag-assistant", Kind: "assistant_message", Content: "Answer " + s.ragAnswer.CorrectedRevisionMarker + " for " + s.ragAnswer.ProductVersionMarker, Citations: []historyCitation{{ID: s.ragAnswer.CitationID, Title: s.ragAnswer.CitationTitle, Source: s.ragAnswer.CitationSource}}},
+		}
+	} else if stimulus.ClientSessionID == s.generalAnswer.Stimulus.ClientSessionID && s.requested == "read_only" && s.authority == "read_only" {
+		turnID = "turn-general-answer"
+		s.runtime["model_calls"] += 2
+		s.runtime["rag_queries"]++
+		s.history[localSessionID] = []historyItem{
+			{ItemID: "history-general-user", Kind: "user_message", Content: stimulus.Message},
+			{ItemID: "history-general-assistant", Kind: "assistant_message", Content: "Answer " + s.generalAnswer.ExpectedAnswerMarker},
+		}
+		if s.answerVariant == "general_citation" {
+			s.history[localSessionID][1].Citations = []historyCitation{{ID: "invented-citation", Title: "Invented", Source: "knowledge://invented/source"}}
+		}
+		if s.answerVariant == "unexpected_tool" {
+			s.runtime["tool_calls"]++
+		}
 	} else {
 		http.Error(w, "fixture mismatch", http.StatusConflict)
 		return
@@ -494,6 +727,19 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 func (s *authorityLiveState) streamEvents(w http.ResponseWriter, r *http.Request) {
 	localSessionID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/charlie/sessions/"), "/events/")
 	stimulus, exists := s.sessions[localSessionID]
+	answerTurn := ""
+	if exists && stimulus.ClientSessionID == s.ragAnswer.Stimulus.ClientSessionID {
+		answerTurn = "turn-rag-answer"
+	} else if exists && stimulus.ClientSessionID == s.generalAnswer.Stimulus.ClientSessionID {
+		answerTurn = "turn-general-answer"
+	}
+	if answerTurn != "" {
+		w.Header().Set("Content-Type", "text/event-stream")
+		terminal := streamedActionEvent{TurnID: answerTurn, Type: "turn.completed"}
+		encoded, _ := json.Marshal(terminal)
+		_, _ = fmt.Fprintf(w, "id: answer-1\nevent: turn.completed\ndata: %s\n\n", encoded)
+		return
+	}
 	if !exists || stimulus.ClientSessionID != s.autoAction.Stimulus.ClientSessionID || !s.autoTriggered {
 		http.Error(w, "stream unavailable", http.StatusConflict)
 		return

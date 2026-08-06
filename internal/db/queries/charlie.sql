@@ -1230,6 +1230,43 @@ SELECT delivery.* FROM delivery CROSS JOIN outbox;
 -- name: GetCharlieAlertDelivery :one
 SELECT * FROM charlie_alert_deliveries WHERE id = $1;
 
+-- name: CharlieFindingMatchesConnectionIdentity :one
+SELECT EXISTS (
+    SELECT 1 FROM charlie_findings f
+    JOIN charlie_connections source ON source.id = f.connection_id
+    JOIN charlie_connections current ON current.id = sqlc.arg(connection_id)
+        AND source.installation_id = current.installation_id
+        AND source.product_id = current.product_id
+        AND source.product_slug = current.product_slug
+        AND source.deployment_id = current.deployment_id
+        AND source.route_id = current.route_id
+        AND source.central_url = current.central_url
+        AND source.central_ca_fingerprint = current.central_ca_fingerprint
+        AND source.signing_key_id = current.signing_key_id
+        AND source.signing_key_fingerprint = current.signing_key_fingerprint
+        AND source.logical_agent_id = current.logical_agent_id
+    WHERE f.id = sqlc.arg(finding_id)
+);
+
+-- name: ListCharlieAlertDeliveriesForFinding :many
+SELECT d.* FROM charlie_alert_deliveries d
+JOIN charlie_findings f ON f.id = d.finding_id
+JOIN charlie_connections source ON source.id = f.connection_id
+JOIN charlie_connections current ON current.id = d.connection_id
+    AND source.installation_id = current.installation_id
+    AND source.product_id = current.product_id
+    AND source.product_slug = current.product_slug
+    AND source.deployment_id = current.deployment_id
+    AND source.route_id = current.route_id
+    AND source.central_url = current.central_url
+    AND source.central_ca_fingerprint = current.central_ca_fingerprint
+    AND source.signing_key_id = current.signing_key_id
+    AND source.signing_key_fingerprint = current.signing_key_fingerprint
+    AND source.logical_agent_id = current.logical_agent_id
+WHERE d.connection_id = sqlc.arg(connection_id) AND d.finding_id = sqlc.arg(finding_id)
+ORDER BY d.created_at, d.id
+LIMIT sqlc.arg(page_limit);
+
 -- name: ClaimCharlieAlertDelivery :one
 UPDATE charlie_alert_deliveries
 SET status = 'delivering', attempt_count = attempt_count + 1, updated_at = now()

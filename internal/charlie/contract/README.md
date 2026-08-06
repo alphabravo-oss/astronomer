@@ -26,3 +26,8 @@ make charlie-contract-check
 
 The fake bridge under `fakebridge/` is deterministic contract infrastructure.
 It does not contain credentials, prompts, evidence, or product payloads.
+
+`pinned/live-qualification-scenarios-v1.json` is also the sole scenario,
+assertion, and timeout catalog for the operator-started live qualification
+hook. `QualificationScenarioContract` strictly decodes that reviewed artifact;
+Astronomer must not maintain a parallel hand-written scenario map.

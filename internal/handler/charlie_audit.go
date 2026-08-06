@@ -20,7 +20,13 @@ var charlieAuditDigestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 // agents, resource names, or caller-supplied detail. All detail fields must be
 // accepted by the same embedded contract used by runtime lifecycle audits.
 func recordCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any) {
-	if err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "completed"); err != nil {
+	if err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "completed", "mutation"); err != nil {
+		logCharlieAdminAuditFailure(r)
+	}
+}
+
+func recordCharlieAdminReadAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any) {
+	if err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "completed", "read"); err != nil {
 		logCharlieAdminAuditFailure(r)
 	}
 }
@@ -29,14 +35,14 @@ func recordCharlieAdminAudit(r *http.Request, writer any, action, resourceType, 
 // Callers must not perform the associated authority change if this returns an
 // error. Emergency disable deliberately remains on the best-effort path.
 func requireCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any) error {
-	err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "authorized")
+	err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "authorized", "mutation")
 	if err != nil {
 		logCharlieAdminAuditFailure(r)
 	}
 	return err
 }
 
-func persistCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any, outcome string) error {
+func persistCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any, outcome, actionClass string) error {
 	if r == nil || writer == nil {
 		return fmt.Errorf("Charlie administrator audit is unavailable")
 	}
@@ -61,7 +67,7 @@ func persistCharlieAdminAudit(r *http.Request, writer any, action, resourceType,
 		err = w.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
 			Source: "service", CorrelationID: appmiddleware.GetCorrelationID(r.Context()), UserID: currentUserUUID(r),
 			ActorAuthMethod: authMethodFromRequest(r), Action: action, ResourceType: resourceType, ResourceID: resourceID,
-			StatusCode: http.StatusOK, RequestID: appmiddleware.GetRequestID(r.Context()), Detail: detail, ActionClass: "mutation",
+			StatusCode: http.StatusOK, RequestID: appmiddleware.GetRequestID(r.Context()), Detail: detail, ActionClass: actionClass,
 		})
 	}
 	return err

@@ -39,6 +39,20 @@ type charlieAdminFake struct {
 	alertPolicyErr       error
 	alertPolicyInput     charlie.AdminAlertPolicyInput
 	alertPolicyActor     uuid.UUID
+	alertDeliveryProof   charlie.AdminAlertDeliveryProofView
+	alertDeliveryFinding uuid.UUID
+	discoveryProof       charlie.AdminDiscoveryQualificationView
+	discoveryScenario    string
+}
+
+func (f *charlieAdminFake) AlertDeliveryProofs(_ context.Context, findingID uuid.UUID) (charlie.AdminAlertDeliveryProofView, error) {
+	f.alertDeliveryFinding = findingID
+	return f.alertDeliveryProof, nil
+}
+
+func (f *charlieAdminFake) DiscoveryQualification(_ context.Context, scenario string) (charlie.AdminDiscoveryQualificationView, error) {
+	f.discoveryScenario = scenario
+	return f.discoveryProof, nil
 }
 
 func (f *charlieAdminFake) AlertPolicy(context.Context) (charlie.AdminAlertPolicyView, error) {
@@ -57,6 +71,76 @@ func TestCharlieAdminAlertPolicyRejectsStaleRevision(t *testing.T) {
 	h.UpdateAlertPolicy(recorder, authenticatedCharlieRequest(http.MethodPut, "/", body, uuid.New(), "jwt"))
 	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "conflict") {
 		t.Fatalf("stale alert policy response=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCharlieAdminAlertDeliveryProofIsMetadataOnlyAndAuditedAsRead(t *testing.T) {
+	findingID, deliveryID := uuid.New(), uuid.New()
+	now := time.Now().UTC()
+	fake := &charlieAdminFake{alertDeliveryProof: charlie.AdminAlertDeliveryProofView{
+		FindingID: findingID.String(), FindingBlockCode: "verification_failed", FindingWorkflowState: "manual_remediation_required",
+		DeliveryCount: 1, DedupeValid: true,
+		Deliveries: []charlie.AdminAlertDeliveryProof{{
+			DeliveryID: deliveryID.String(), FindingID: findingID.String(), DeliveryKind: "initial", Status: "delivered",
+			TemplateIdentity: "charlie.finding.initial/v1", DeepLinkValid: true, ContentFree: true,
+			AttemptCount: 1, MaximumAttempts: 8, CreatedAt: now, UpdatedAt: now,
+		}},
+	}}
+	writer := &charlieAuditWriterFake{}
+	h := NewCharlieAdminHandler(fake, writer)
+	request := authenticatedCharlieRequest(http.MethodGet, "/?finding_id="+findingID.String(), "", uuid.New(), "jwt")
+	recorder := httptest.NewRecorder()
+	h.AlertDeliveryProofs(recorder, request)
+	if recorder.Code != http.StatusOK || fake.alertDeliveryFinding != findingID || !strings.Contains(recorder.Body.String(), deliveryID.String()) {
+		t.Fatalf("alert delivery proof response=%d finding=%s body=%s", recorder.Code, fake.alertDeliveryFinding, recorder.Body.String())
+	}
+	for _, prohibited := range []string{"subject", "body", "destination", "channel_id", "dedupe_bucket", "last_error"} {
+		if strings.Contains(strings.ToLower(recorder.Body.String()), prohibited) {
+			t.Fatalf("alert delivery proof leaked %q: %s", prohibited, recorder.Body.String())
+		}
+	}
+	if writer.row.Action != "admin.charlie.alert_delivery.read" || writer.row.ActionClass != "read" || writer.row.ResourceID != findingID.String() ||
+		!strings.Contains(string(writer.row.Detail), `"delivery_count":1`) || !strings.Contains(string(writer.row.Detail), `"dedupe_valid":true`) {
+		t.Fatalf("alert delivery read audit is incomplete: %+v detail=%s", writer.row, writer.row.Detail)
+	}
+}
+
+func TestCharlieAdminAlertDeliveryProofRequiresExactFindingID(t *testing.T) {
+	fake := &charlieAdminFake{}
+	h := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+	for _, raw := range []string{"", "not-a-uuid", uuid.Nil.String()} {
+		recorder := httptest.NewRecorder()
+		h.AlertDeliveryProofs(recorder, authenticatedCharlieRequest(http.MethodGet, "/?finding_id="+raw, "", uuid.New(), "jwt"))
+		if recorder.Code != http.StatusBadRequest || fake.alertDeliveryFinding != uuid.Nil {
+			t.Fatalf("invalid finding %q reached backend: status=%d finding=%s", raw, recorder.Code, fake.alertDeliveryFinding)
+		}
+	}
+}
+
+func TestCharlieAdminDiscoveryQualificationAcceptsOnlyFixedCasesAndAuditsMetadata(t *testing.T) {
+	fake := &charlieAdminFake{discoveryProof: charlie.AdminDiscoveryQualificationView{
+		Scenario: charlie.DiscoveryQualificationMixed, CandidateEnabled: true, AcceptedCount: 2, RejectedCount: 1,
+		AcceptedNames:    []string{"astronomer.installation.summary", "astronomer.management.workload_restart"},
+		DisclosureDigest: strings.Repeat("a", 64), CatalogBound: true, MalformedRejected: true,
+	}}
+	writer := &charlieAuditWriterFake{}
+	h := NewCharlieAdminHandler(fake, writer)
+	recorder := httptest.NewRecorder()
+	h.DiscoveryQualification(recorder, authenticatedCharlieRequest(http.MethodPost, "/", `{"scenario":"mixed_catalog"}`, uuid.New(), "jwt"))
+	if recorder.Code != http.StatusOK || fake.discoveryScenario != charlie.DiscoveryQualificationMixed || !strings.Contains(recorder.Body.String(), `"accepted_count":2`) {
+		t.Fatalf("discovery qualification response=%d scenario=%q body=%s", recorder.Code, fake.discoveryScenario, recorder.Body.String())
+	}
+	if writer.row.Action != "admin.charlie.discovery_qualification.run" || writer.row.ActionClass != "read" || strings.Contains(string(writer.row.Detail), "astronomer.") || strings.Contains(string(writer.row.Detail), strings.Repeat("a", 64)) {
+		t.Fatalf("discovery qualification audit leaked catalog detail: %+v detail=%s", writer.row, writer.row.Detail)
+	}
+
+	for _, body := range []string{`{"scenario":"custom"}`, `{"scenario":"mixed_catalog","catalog":[]}`} {
+		fake.discoveryScenario = ""
+		rejected := httptest.NewRecorder()
+		h.DiscoveryQualification(rejected, authenticatedCharlieRequest(http.MethodPost, "/", body, uuid.New(), "jwt"))
+		if rejected.Code != http.StatusBadRequest || fake.discoveryScenario != "" {
+			t.Fatalf("arbitrary discovery payload accepted: status=%d scenario=%q body=%s", rejected.Code, fake.discoveryScenario, rejected.Body.String())
+		}
 	}
 }
 

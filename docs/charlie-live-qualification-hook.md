@@ -36,11 +36,13 @@ only by their owner. Prefer the `_FILE` variants for secrets. Required settings:
 | `APPROVER_TOKEN_FILE` | Short-lived browser JWT for a dedicated active qualification user with `charlie:read`, `charlie:approve`, and the exact fixture target permission. API tokens are intentionally rejected by these product APIs. |
 | `ASTRONOMER_URL` | HTTPS Astronomer API base URL. HTTP is rejected except loopback when explicitly enabled. |
 | `METRICS_SOURCES_FILE` | Owner-only bounded JSON defining one to eight metrics endpoints and each endpoint's optional, separate bearer-token file. |
-| `FIXTURES_FILE` | Owner-only strict JSON containing the pre-staged approval identifiers, expected capabilities, exact single-resource session stimuli, and idempotency UUIDs used by authority scenarios. |
+| `FIXTURES_FILE` | Owner-only strict JSON containing the pre-staged approval identifiers, expected capabilities, exact single-resource session stimuli, idempotency UUIDs, and non-secret answer/citation canaries used by live scenarios. |
+| `NO_CALL_DWELL` | Optional Go duration for continuous unchanged-counter observation; defaults to `10s`, is bounded to two minutes, and should be set longer (for example `30s`) for the final release run. |
 | `KUBECONFIG_FILE` | Owner-only kubeconfig required by scenarios that scale the agent. |
-| `AGENT_NAMESPACE`, `AGENT_STATEFULSET` | Exact product-agent workload target. |
+| `AGENT_NAMESPACE`, `AGENT_RELEASE`, `AGENT_STATEFULSET`, `AGENT_SERVICE` | Exact product-agent Helm release and workload targets used by fixed Kubernetes inventory queries. |
+| `ISOLATION_CAPTURE_INTERFACE` | Operator-selected interface at the Charlie agent network boundary. Enables the typed isolation observer; zero-runtime scenarios fail closed when it is absent. |
 
-`DENIED_TOKEN_FILE`, `CA_FILE`, `KUBECTL`, and `COUNTER_METRICS_FILE` are
+`DENIED_TOKEN_FILE`, `CA_FILE`, `KUBECTL`, `TCPDUMP`, and `COUNTER_METRICS_FILE` are
 optional. The counter mapping file is bounded JSON whose keys must match the
 hook's fixed runtime/downstream inventory and whose values must be valid
 Prometheus metric names. URLs may not contain credentials, queries, fragments,
@@ -58,6 +60,10 @@ ASTRONOMER_CHARLIE_QUALIFICATION_APPROVER_TOKEN_FILE=/secure/approver.token \
 ASTRONOMER_CHARLIE_QUALIFICATION_ASTRONOMER_URL=https://astronomer.example \
 ASTRONOMER_CHARLIE_QUALIFICATION_METRICS_SOURCES_FILE=/secure/metrics-sources.json \
 ASTRONOMER_CHARLIE_QUALIFICATION_FIXTURES_FILE=/secure/fixtures.json \
+ASTRONOMER_CHARLIE_QUALIFICATION_KUBECONFIG_FILE=/secure/qualification.kubeconfig \
+ASTRONOMER_CHARLIE_QUALIFICATION_AGENT_RELEASE=astronomer-charlie \
+ASTRONOMER_CHARLIE_QUALIFICATION_ISOLATION_CAPTURE_INTERFACE=any \
+ASTRONOMER_CHARLIE_QUALIFICATION_NO_CALL_DWELL=30s \
 ./bin/charlie-qualification-hook
 ```
 
@@ -69,10 +75,16 @@ credential from being sent to an Astronomer listener:
 {
   "sources": [
     {"url": "http://127.0.0.1:19090/metrics"},
+    {"url": "http://127.0.0.1:19191/metrics"},
     {"url": "https://charlie.example/charlie/v1/metrics", "bearer_token_file": "/secure/charlie-metrics.token"}
   ]
 }
 ```
+
+At least one source must be a short-lived loopback port-forward to the Charlie
+product agent's own `/metrics` endpoint so the fixed isolation families are
+present. The observer requires every fixed family and rejects arbitrary labels;
+the other sources continue to provide the product and central counters.
 
 Authority fixtures are inputs, not mock results. Approval scenarios reference
 pre-staged approvals in Charlie. Automatic-mode scenarios create a fresh,
@@ -121,14 +133,61 @@ resources must be safe, disposable qualification targets:
       "resource_id": "qualification-workload",
       "message": "Propose the exact safe non-allowlisted qualification action."
     }
+  },
+  "versioned_rag_grounded": {
+    "stimulus": {
+      "client_session_id": "10000000-0000-4000-8000-000000000003",
+      "client_message_id": "20000000-0000-4000-8000-000000000003",
+      "abort_request_id": "40000000-0000-4000-8000-000000000003",
+      "intent": "qualification_versioned_rag",
+      "resource_type": "installation",
+      "resource_id": "qualification-rag-installation",
+      "message": "Return the corrected qualification canary for this product version."
+    },
+    "corrected_revision_marker": "CORRECTED-REVISION-CANARY",
+    "product_version_marker": "PRODUCT-VERSION-1.1",
+    "citation_id": "chunk-version-1-1",
+    "citation_title": "Qualification guide",
+    "citation_source": "knowledge://astronomer/version-1-1#chunk=0"
+  },
+  "general_answer": {
+    "stimulus": {
+      "client_session_id": "10000000-0000-4000-8000-000000000004",
+      "client_message_id": "20000000-0000-4000-8000-000000000004",
+      "abort_request_id": "40000000-0000-4000-8000-000000000004",
+      "intent": "qualification_general_answer",
+      "resource_type": "management_component",
+      "resource_id": "qualification-general-component",
+      "message": "Return the general Kubernetes qualification canary without a product citation."
+    },
+    "expected_answer_marker": "GENERAL-KUBERNETES-CANARY"
+  },
+  "diagnosis_alert": {
+    "finding_id": "10000000-0000-4000-8000-000000000010",
+    "delivery_id": "20000000-0000-4000-8000-000000000010",
+    "expected_block_code": "no_safe_action",
+    "expected_workflow_state": "blocked"
   }
 }
 ```
+
+Provide the same four metadata-only fields under `approval_pending_alert`,
+`approval_rejected_alert`, `approval_expired_alert`, `blocked_auto_alert`,
+`failed_precondition_alert`, and `failed_verification_alert`, each bound to its
+own real finding/delivery. The final fixture's block code must be
+`verification_failed`. These may be pre-staged or retained from an earlier real
+scenario, but they are identifiers and expected state—not simulated results.
+Stage these findings under a qualification alert policy with exactly one
+channel and wait for the initial delivery to reach a settled state before the
+run; escalation or multi-channel rows intentionally fail the `one_alert` proof.
 
 All pre-staged approval IDs must be distinct. Every session, message, abort, and
 decision request ID must be a dedicated UUID that has never been used for a
 prior qualification run. The expiry approval must be pending and expire within
 90 seconds of the scenario beginning. The once/reject fixtures must be pending.
+All four session fixtures must target distinct disposable resources. Answer and
+citation markers are exact, case-sensitive, non-secret qualification canaries;
+never put credentials, customer data, or production-only content in them.
 
 For the allowlisted scenario, the driver rejects a replayed session, binds the
 single dynamically created action to the exact returned turn through the
@@ -153,6 +212,23 @@ safety budget, preconditions, and verification. Run in a quiet dedicated
 environment because an unrelated Charlie product action invalidates the exact
 zero/one-call counter proof.
 
+The answer scenarios remain in the acknowledged read-only baseline and use the
+same authenticated product APIs as the browser. Each creates one fresh private
+session, submits one exact message, observes the exact turn complete on SSE,
+and reads the authorized retention-bounded history. The history must contain
+exactly one user message and one assistant message. `versioned_rag_grounded`
+requires both configured revision/version canaries and the exact configured
+citation tuple. `general_answer` requires its configured answer canary and no
+citations. Both require one RAG query, two model-usage records (one successful
+query embedding and one generation), one session creation, and no other
+runtime or downstream-boundary counter change. This intentionally proves the
+retrieval-aware passthrough route: a general question still attempts product
+retrieval but may answer from general model knowledge without fabricating a
+product citation. Use a route with one selected collection/release and no model
+fallbacks or retries; extra model calls invalidate the proof rather than being
+silently accepted. Temporary sessions are aborted before either scenario can
+pass.
+
 The binary logs only stable event/failure codes. It never logs token values,
 URLs, resource names, request bodies, response bodies, or remote errors.
 
@@ -174,14 +250,27 @@ and immutable candidate identifiers/digests.
 The live driver currently implements `feature_false`, `unactivated`,
 `central_disabled`, `emergency_disabled`, `read_denial`, `approval_expiry`,
 `approval_once`, `approval_replay`, `approval_reject`,
-`auto_allowlisted_success`, and `auto_nonallowlisted_approval`. Automation is a
-cumulative ceiling: a safe, disclosed write that is not eligible for unattended
-execution must remain pending in the exact-approval lane rather than becoming a
-terminal denial. Other names in the versioned assertion catalog deliberately
-return `passed: false`; they are reserved qualification contracts, not simulated
-successes. A release record may check only a scenario whose complete assertion
-set passed and whose before/after counters prove the exact expected side-effect
-count.
+`auto_allowlisted_success`, `auto_nonallowlisted_approval`,
+`versioned_rag_grounded`, `general_answer`, both discovery scenarios, and all
+seven alert-delivery scenarios. Automation is a cumulative
+ceiling: a safe, disclosed write that is not eligible for unattended execution
+must remain pending in the exact-approval lane rather than becoming a terminal
+denial.
+
+The discovery drivers call an authenticated administrator surface that accepts
+only `mixed_catalog` or `malformed_catalog`. It compiles embedded candidates
+through Astronomer's production catalog compiler, never accepts arbitrary
+capabilities, never mutates current activation, and proves the malformed-only
+candidate is ineligible. Alert drivers read an authenticated, metadata-only
+delivery view twice, require exactly one stable finding-bound delivery, and
+require server-computed deep-link and fixed-template content-free verdicts.
+Raw title/body, destination, channel, provider error, and dedupe keys are never
+returned or logged. Every zero-call claim continuously observes the complete
+counter set for the configured dwell; a delayed increment fails the scenario.
+Other names in the versioned assertion catalog are likewise reserved
+qualification contracts. A release record may check only a scenario whose
+complete assertion set passed and whose before/after counters prove the exact
+expected side-effect count.
 
 The four inert-state scenarios (`feature_false`, `unactivated`,
 `central_disabled`, and `emergency_disabled`) compare every configured runtime
@@ -190,6 +279,27 @@ state is applied and after cleanup. Mode cleanup restores the prior mode first,
 verifies that its disclosure digest is exactly the captured digest, and then
 submits a separate acknowledgement for that digest. A stale acknowledgement or
 digest drift cannot satisfy cleanup.
+
+The two cold scenarios prepare their observation before disabling or scaling
+the agent. A fixed label selector derived from the validated Helm release is
+used to obtain a bounded set of agent pod addresses; those addresses remain
+internal to the short-lived observer and are cleared after use. Six concurrent
+`tcpdump` counters then scope ingress/egress DNS, TCP, and UDP filters to those
+exact addresses for the complete dwell. Packet bytes and headers are written to
+`/dev/null`; only tcpdump's numeric capture summaries are parsed. Raw captures,
+addresses, commands, endpoints, and payloads are never returned or logged.
+Fixed kubectl templates emit numeric counts only. Actual matching pods (including
+pending or terminating remnants), running containers, Service endpoints, and
+matching CronJobs are sampled throughout the dwell; any remaining pod also
+counts conservatively as listener and timer presence.
+
+The operational-disabled scenarios scrape Charlie's fixed, label-free agent
+isolation counters before and after the quiet dwell. Only a reconciled verified
+signed heartbeat may move: central-control connection attempts and requests
+must match, successes must match responses, lifecycle controls and all other
+signed classes must remain zero, and work, session, model, capability,
+central-work, product-MCP, rejected-auth, and non-control counters must not move.
+Missing, reset, malformed, or unreconciled metrics fail the proof.
 
 Stop the hook immediately after qualification and revoke/delete its short-lived
 tokens and test TLS material.

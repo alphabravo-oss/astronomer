@@ -749,6 +749,37 @@ func (q *Queries) CharlieAlertDeliveryAllowed(ctx context.Context, id uuid.UUID)
 	return exists, err
 }
 
+const charlieFindingMatchesConnectionIdentity = `-- name: CharlieFindingMatchesConnectionIdentity :one
+SELECT EXISTS (
+    SELECT 1 FROM charlie_findings f
+    JOIN charlie_connections source ON source.id = f.connection_id
+    JOIN charlie_connections current ON current.id = $1
+        AND source.installation_id = current.installation_id
+        AND source.product_id = current.product_id
+        AND source.product_slug = current.product_slug
+        AND source.deployment_id = current.deployment_id
+        AND source.route_id = current.route_id
+        AND source.central_url = current.central_url
+        AND source.central_ca_fingerprint = current.central_ca_fingerprint
+        AND source.signing_key_id = current.signing_key_id
+        AND source.signing_key_fingerprint = current.signing_key_fingerprint
+        AND source.logical_agent_id = current.logical_agent_id
+    WHERE f.id = $2
+)
+`
+
+type CharlieFindingMatchesConnectionIdentityParams struct {
+	ConnectionID uuid.UUID `json:"connection_id"`
+	FindingID    uuid.UUID `json:"finding_id"`
+}
+
+func (q *Queries) CharlieFindingMatchesConnectionIdentity(ctx context.Context, arg CharlieFindingMatchesConnectionIdentityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, charlieFindingMatchesConnectionIdentity, arg.ConnectionID, arg.FindingID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const charlieTunnelHealth = `-- name: CharlieTunnelHealth :one
 SELECT
     count(*) FILTER (WHERE event_type <> 'recovered')::bigint AS recent_errors,
@@ -3451,6 +3482,72 @@ func (q *Queries) ListCharlieAlertAvailableChannels(ctx context.Context) ([]Noti
 			&i.Configuration,
 			&i.Enabled,
 			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCharlieAlertDeliveriesForFinding = `-- name: ListCharlieAlertDeliveriesForFinding :many
+SELECT d.id, d.connection_id, d.finding_id, d.notification_channel_id, d.policy_revision, d.delivery_kind, d.dedupe_bucket, d.severity, d.status, d.attempt_count, d.maximum_attempts, d.next_attempt_at, d.delivered_at, d.last_error_code, d.deep_link, d.subject, d.body, d.created_at, d.updated_at FROM charlie_alert_deliveries d
+JOIN charlie_findings f ON f.id = d.finding_id
+JOIN charlie_connections source ON source.id = f.connection_id
+JOIN charlie_connections current ON current.id = d.connection_id
+    AND source.installation_id = current.installation_id
+    AND source.product_id = current.product_id
+    AND source.product_slug = current.product_slug
+    AND source.deployment_id = current.deployment_id
+    AND source.route_id = current.route_id
+    AND source.central_url = current.central_url
+    AND source.central_ca_fingerprint = current.central_ca_fingerprint
+    AND source.signing_key_id = current.signing_key_id
+    AND source.signing_key_fingerprint = current.signing_key_fingerprint
+    AND source.logical_agent_id = current.logical_agent_id
+WHERE d.connection_id = $1 AND d.finding_id = $2
+ORDER BY d.created_at, d.id
+LIMIT $3
+`
+
+type ListCharlieAlertDeliveriesForFindingParams struct {
+	ConnectionID uuid.UUID `json:"connection_id"`
+	FindingID    uuid.UUID `json:"finding_id"`
+	PageLimit    int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListCharlieAlertDeliveriesForFinding(ctx context.Context, arg ListCharlieAlertDeliveriesForFindingParams) ([]CharlieAlertDelivery, error) {
+	rows, err := q.db.Query(ctx, listCharlieAlertDeliveriesForFinding, arg.ConnectionID, arg.FindingID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieAlertDelivery{}
+	for rows.Next() {
+		var i CharlieAlertDelivery
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectionID,
+			&i.FindingID,
+			&i.NotificationChannelID,
+			&i.PolicyRevision,
+			&i.DeliveryKind,
+			&i.DedupeBucket,
+			&i.Severity,
+			&i.Status,
+			&i.AttemptCount,
+			&i.MaximumAttempts,
+			&i.NextAttemptAt,
+			&i.DeliveredAt,
+			&i.LastErrorCode,
+			&i.DeepLink,
+			&i.Subject,
+			&i.Body,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

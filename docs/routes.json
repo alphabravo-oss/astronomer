@@ -61,6 +61,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/charlie/alert-deliveries"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/charlie/alert-policy"
   },
   {
@@ -86,6 +90,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/admin/charlie/onboarding/validate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/qualification/discovery"
   },
   {
     "method": "GET",

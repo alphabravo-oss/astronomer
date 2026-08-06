@@ -184,6 +184,35 @@ type AdminDiagnosticsView struct {
 	CorrelationID string                 `json:"correlation_id,omitempty"`
 }
 
+const MaxAdminAlertDeliveryProofs = 32
+
+// AdminAlertDeliveryProof is deliberately metadata-only. Subject, body,
+// destination, channel identity, dedupe bucket, and provider error text never
+// cross the administrator API boundary.
+type AdminAlertDeliveryProof struct {
+	DeliveryID       string     `json:"delivery_id"`
+	FindingID        string     `json:"finding_id"`
+	DeliveryKind     string     `json:"delivery_kind"`
+	Status           string     `json:"status"`
+	TemplateIdentity string     `json:"template_identity"`
+	DeepLinkValid    bool       `json:"deep_link_valid"`
+	ContentFree      bool       `json:"content_free"`
+	AttemptCount     int32      `json:"attempt_count"`
+	MaximumAttempts  int32      `json:"maximum_attempts"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	DeliveredAt      *time.Time `json:"delivered_at,omitempty"`
+}
+
+type AdminAlertDeliveryProofView struct {
+	FindingID            string                    `json:"finding_id"`
+	FindingBlockCode     string                    `json:"finding_block_code"`
+	FindingWorkflowState string                    `json:"finding_workflow_state"`
+	DeliveryCount        int                       `json:"delivery_count"`
+	DedupeValid          bool                      `json:"dedupe_valid"`
+	Deliveries           []AdminAlertDeliveryProof `json:"deliveries"`
+}
+
 type AdminAgentInstaller interface {
 	Status(context.Context, AgentInstallSpec) (AgentInstallationStatus, error)
 	Uninstall(context.Context, AgentInstallSpec) error
@@ -258,6 +287,73 @@ func (s *AdminService) connection(ctx context.Context) (sqlc.CharlieConnection, 
 		return sqlc.CharlieConnection{}, ErrAdminUnavailable
 	}
 	return connection, nil
+}
+
+func (s *AdminService) AlertDeliveryProofs(ctx context.Context, findingID uuid.UUID) (AdminAlertDeliveryProofView, error) {
+	if findingID == uuid.Nil || s == nil || s.queries == nil {
+		return AdminAlertDeliveryProofView{}, ErrAdminUnavailable
+	}
+	connection, err := s.connection(ctx)
+	if err != nil {
+		return AdminAlertDeliveryProofView{}, err
+	}
+	matches, err := s.queries.CharlieFindingMatchesConnectionIdentity(ctx, sqlc.CharlieFindingMatchesConnectionIdentityParams{ConnectionID: connection.ID, FindingID: findingID})
+	if err != nil || !matches {
+		return AdminAlertDeliveryProofView{}, ErrAdminNotConfigured
+	}
+	finding, err := s.queries.GetCharlieFinding(ctx, findingID)
+	if err != nil {
+		return AdminAlertDeliveryProofView{}, ErrAdminNotConfigured
+	}
+	rows, err := s.queries.ListCharlieAlertDeliveriesForFinding(ctx, sqlc.ListCharlieAlertDeliveriesForFindingParams{ConnectionID: connection.ID, FindingID: findingID, PageLimit: MaxAdminAlertDeliveryProofs + 1})
+	if err != nil || len(rows) > MaxAdminAlertDeliveryProofs {
+		return AdminAlertDeliveryProofView{}, ErrAdminUnavailable
+	}
+	view := AdminAlertDeliveryProofView{
+		FindingID: findingID.String(), FindingBlockCode: finding.ExecutionBlockCode,
+		FindingWorkflowState: finding.WorkflowState, DeliveryCount: len(rows), DedupeValid: true,
+		Deliveries: make([]AdminAlertDeliveryProof, 0, len(rows)),
+	}
+	seen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		proof := safeAdminAlertDeliveryProof(row)
+		view.Deliveries = append(view.Deliveries, proof)
+		channel := "none"
+		if row.NotificationChannelID.Valid {
+			channel = uuid.UUID(row.NotificationChannelID.Bytes).String()
+		}
+		key := channel + ":" + row.DeliveryKind + ":" + fmt.Sprint(row.DedupeBucket)
+		if _, duplicate := seen[key]; duplicate {
+			view.DedupeValid = false
+		}
+		seen[key] = struct{}{}
+	}
+	return view, nil
+}
+
+func safeAdminAlertDeliveryProof(row sqlc.CharlieAlertDelivery) AdminAlertDeliveryProof {
+	wantLink := "/dashboard/charlie?tab=findings&finding=" + row.FindingID.String()
+	identity, subject := "unrecognized", ""
+	switch row.DeliveryKind {
+	case "initial":
+		identity, subject = "charlie.finding.initial/v1", "Charlie finding requires attention"
+	case "escalation":
+		identity, subject = "charlie.finding.escalation/v1", "Charlie finding remains unresolved"
+	}
+	wantBody := "Review the durable finding in Astronomer. No approval or product action is implied by this notification. " + wantLink
+	deepLinkValid := row.DeepLink == wantLink
+	contentFree := identity != "unrecognized" && deepLinkValid && row.Subject == subject && row.Body == wantBody
+	proof := AdminAlertDeliveryProof{
+		DeliveryID: row.ID.String(), FindingID: row.FindingID.String(), DeliveryKind: row.DeliveryKind,
+		Status: row.Status, TemplateIdentity: identity, DeepLinkValid: deepLinkValid, ContentFree: contentFree,
+		AttemptCount: row.AttemptCount, MaximumAttempts: row.MaximumAttempts,
+		CreatedAt: row.CreatedAt.UTC(), UpdatedAt: row.UpdatedAt.UTC(),
+	}
+	if row.DeliveredAt.Valid {
+		delivered := row.DeliveredAt.Time.UTC()
+		proof.DeliveredAt = &delivered
+	}
+	return proof
 }
 
 func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {

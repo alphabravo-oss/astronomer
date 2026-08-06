@@ -2,7 +2,7 @@
   "schema": "astronomer.charlie-contract-pin/v1",
   "frozen_at": "2026-08-06T00:00:00Z",
   "source_repository": "AlphaBravoCompany/charlie",
-  "source_commit": "7c3097166fb23623d302c3679e47fb321f420824",
+  "source_commit": "b4413907c8e30d7586f4b499fd5ca3c753d72071",
   "source_phase": "v1",
   "bridge_protocol": "bridge/v1",
   "bridge_openapi_version": "1.0.0",

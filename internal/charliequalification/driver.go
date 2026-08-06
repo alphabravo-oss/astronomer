@@ -25,7 +25,7 @@ import (
 const (
 	defaultProofTimeout = 60 * time.Second
 	defaultProofPoll    = time.Second
-	defaultNoCallDwell  = 3 * time.Second
+	defaultNoCallDwell  = 10 * time.Second
 	maxExpiryWait       = 90 * time.Second
 )
 
@@ -67,31 +67,70 @@ type PendingApprovalFixture struct {
 	Stimulus   SessionStimulus `json:"stimulus"`
 }
 
+// VersionedRAGFixture proves one real route invocation against a uniquely
+// identifiable corrected document revision. Markers are non-secret canaries
+// that the operator placed in the selected product-version documentation.
+type VersionedRAGFixture struct {
+	Stimulus                SessionStimulus `json:"stimulus"`
+	CorrectedRevisionMarker string          `json:"corrected_revision_marker"`
+	ProductVersionMarker    string          `json:"product_version_marker"`
+	CitationID              string          `json:"citation_id"`
+	CitationTitle           string          `json:"citation_title"`
+	CitationSource          string          `json:"citation_source"`
+}
+
+// GeneralAnswerFixture proves that the same product route can answer a
+// non-product question without inventing a citation when retrieval finds no
+// applicable product material.
+type GeneralAnswerFixture struct {
+	Stimulus             SessionStimulus `json:"stimulus"`
+	ExpectedAnswerMarker string          `json:"expected_answer_marker"`
+}
+
+// AlertDeliveryFixture binds an alert scenario to one real, already-created
+// Astronomer finding and delivery. It contains no notification content.
+type AlertDeliveryFixture struct {
+	FindingID             string `json:"finding_id"`
+	DeliveryID            string `json:"delivery_id"`
+	ExpectedBlockCode     string `json:"expected_block_code"`
+	ExpectedWorkflowState string `json:"expected_workflow_state"`
+}
+
 // LiveFixtures is intentionally scenario-specific. Reusing one unconstrained
 // identifier across scenarios could allow an earlier side effect to masquerade
 // as proof for a later scenario.
 type LiveFixtures struct {
-	ApprovalExpiry         ApprovalFixture        `json:"approval_expiry"`
-	ApprovalOnce           ApprovalFixture        `json:"approval_once"`
-	ApprovalReject         ApprovalFixture        `json:"approval_reject"`
-	AutoAllowlistedSuccess ActionFixture          `json:"auto_allowlisted_success"`
-	AutoNonallowlisted     PendingApprovalFixture `json:"auto_nonallowlisted_approval"`
+	ApprovalExpiry          ApprovalFixture        `json:"approval_expiry"`
+	ApprovalOnce            ApprovalFixture        `json:"approval_once"`
+	ApprovalReject          ApprovalFixture        `json:"approval_reject"`
+	AutoAllowlistedSuccess  ActionFixture          `json:"auto_allowlisted_success"`
+	AutoNonallowlisted      PendingApprovalFixture `json:"auto_nonallowlisted_approval"`
+	VersionedRAGGrounded    VersionedRAGFixture    `json:"versioned_rag_grounded"`
+	GeneralAnswer           GeneralAnswerFixture   `json:"general_answer"`
+	DiagnosisAlert          AlertDeliveryFixture   `json:"diagnosis_alert"`
+	ApprovalPendingAlert    AlertDeliveryFixture   `json:"approval_pending_alert"`
+	ApprovalRejectedAlert   AlertDeliveryFixture   `json:"approval_rejected_alert"`
+	ApprovalExpiredAlert    AlertDeliveryFixture   `json:"approval_expired_alert"`
+	BlockedAutoAlert        AlertDeliveryFixture   `json:"blocked_auto_alert"`
+	FailedPreconditionAlert AlertDeliveryFixture   `json:"failed_precondition_alert"`
+	FailedVerificationAlert AlertDeliveryFixture   `json:"failed_verification_alert"`
 }
 
 type LiveConfig struct {
-	AstronomerURL  string
-	AdminToken     string
-	ApproverToken  string
-	DeniedToken    string
-	MetricSources  []MetricSource
-	CounterMetrics map[string]string
-	Fixtures       LiveFixtures
-	AllowHTTP      bool
-	HTTPClient     *http.Client
-	AgentScaler    AgentScaler
-	ProofTimeout   time.Duration
-	ProofPoll      time.Duration
-	NoCallDwell    time.Duration
+	AstronomerURL     string
+	AdminToken        string
+	ApproverToken     string
+	DeniedToken       string
+	MetricSources     []MetricSource
+	CounterMetrics    map[string]string
+	Fixtures          LiveFixtures
+	AllowHTTP         bool
+	HTTPClient        *http.Client
+	AgentScaler       AgentScaler
+	IsolationObserver IsolationObserver
+	ProofTimeout      time.Duration
+	ProofPoll         time.Duration
+	NoCallDwell       time.Duration
 }
 
 // MetricSource binds one scrape endpoint to only its own optional bearer.
@@ -108,19 +147,21 @@ type metricEndpoint struct {
 }
 
 type LiveDriver struct {
-	base           *url.URL
-	adminToken     string
-	approverToken  string
-	deniedToken    string
-	metricSources  []metricEndpoint
-	counterMetrics map[string]string
-	fixtures       LiveFixtures
-	client         *http.Client
-	agentScaler    AgentScaler
-	proofTimeout   time.Duration
-	proofPoll      time.Duration
-	noCallDwell    time.Duration
-	scenarioMu     sync.Mutex
+	base              *url.URL
+	adminToken        string
+	approverToken     string
+	deniedToken       string
+	metricSources     []metricEndpoint
+	counterMetrics    map[string]string
+	fixtures          LiveFixtures
+	client            *http.Client
+	agentScaler       AgentScaler
+	isolationObserver IsolationObserver
+	infrastructure    infrastructureQualificationOperator
+	proofTimeout      time.Duration
+	proofPoll         time.Duration
+	noCallDwell       time.Duration
+	scenarioMu        sync.Mutex
 }
 
 func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
@@ -166,13 +207,13 @@ func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
 	if noCallDwell == 0 {
 		noCallDwell = defaultNoCallDwell
 	}
-	if proofTimeout < proofPoll || proofTimeout > 2*time.Minute || proofPoll < time.Millisecond || proofPoll > 10*time.Second || noCallDwell < time.Millisecond || noCallDwell > 30*time.Second {
+	if proofTimeout < proofPoll || proofTimeout > 2*time.Minute || proofPoll < time.Millisecond || proofPoll > 10*time.Second || noCallDwell < time.Millisecond || noCallDwell > 2*time.Minute {
 		return nil, errors.New("live proof timing is outside its safe bound")
 	}
 	return &LiveDriver{
 		base: base, adminToken: strings.TrimSpace(config.AdminToken), approverToken: strings.TrimSpace(config.ApproverToken), deniedToken: strings.TrimSpace(config.DeniedToken),
 		metricSources: metrics, counterMetrics: mapping, fixtures: config.Fixtures,
-		client: client, agentScaler: config.AgentScaler,
+		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver,
 		proofTimeout: proofTimeout, proofPoll: proofPoll, noCallDwell: noCallDwell,
 	}, nil
 }
@@ -292,6 +333,19 @@ func (d *LiveDriver) Run(ctx context.Context, request ScenarioRequest) ScenarioR
 		return d.autoAllowlistedSuccess(ctx, request.Scenario)
 	case "auto_nonallowlisted_approval":
 		return d.autoNonallowlistedApproval(ctx, request.Scenario)
+	case "versioned_rag_grounded":
+		return d.versionedRAGGrounded(ctx, request.Scenario)
+	case "general_answer":
+		return d.generalAnswer(ctx, request.Scenario)
+	case "discovery_mixed_catalog":
+		return d.discoveryQualification(ctx, request.Scenario, "mixed_catalog")
+	case "malformed_discovery":
+		return d.discoveryQualification(ctx, request.Scenario, "malformed_catalog")
+	case "diagnosis_alert", "approval_pending_alert", "approval_rejected_alert", "approval_expired_alert",
+		"blocked_auto_alert", "failed_precondition_alert", "failed_verification_alert":
+		return d.alertDeliveryQualification(ctx, request.Scenario)
+	case "leader_kill_failover", "clean_install", "isolation_matrix", "resilience_matrix", "upgrade_rollback":
+		return d.infrastructureQualification(ctx, request)
 	default:
 		return Unsupported(request.Scenario)
 	}
@@ -505,6 +559,70 @@ func (d *LiveDriver) autoNonallowlistedApproval(ctx context.Context, scenario st
 	return Passed(scenario, "approval_pending", "product_calls_zero")
 }
 
+func (d *LiveDriver) versionedRAGGrounded(ctx context.Context, scenario string) (result ScenarioResult) {
+	fixture := d.fixtures.VersionedRAGGrounded
+	if d.approverToken == "" || !validVersionedRAGFixture(fixture) || !d.fixtureIDsAreIsolated() {
+		return Unsupported(scenario)
+	}
+	original, err := d.qualificationBaseline(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	before, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	localSessionID, err := d.createFixtureSession(ctx, fixture.Stimulus)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	defer d.finishAnswerProof(&result, scenario, original, before, localSessionID, fixture.Stimulus.AbortRequestID, 2, 1)
+	receipt, err := d.sendStimulus(ctx, localSessionID, fixture.Stimulus)
+	if err != nil || !d.waitForTurnCompletion(ctx, localSessionID, receipt.TurnID) {
+		return Unsupported(scenario)
+	}
+	answer, ok := d.waitForSingleAssistantAnswer(ctx, localSessionID)
+	if !ok || !strings.Contains(answer.Content, fixture.CorrectedRevisionMarker) || !strings.Contains(answer.Content, fixture.ProductVersionMarker) ||
+		!hasExactCitation(answer.Citations, fixture.CitationID, fixture.CitationTitle, fixture.CitationSource) ||
+		!d.waitForAnswerCounterDelta(ctx, before, 2, 1) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "real_generation", "real_embedding", "corrected_revision", "version_selected", "grounded_citation")
+}
+
+func (d *LiveDriver) generalAnswer(ctx context.Context, scenario string) (result ScenarioResult) {
+	fixture := d.fixtures.GeneralAnswer
+	if d.approverToken == "" || !validGeneralAnswerFixture(fixture) || !d.fixtureIDsAreIsolated() {
+		return Unsupported(scenario)
+	}
+	original, err := d.qualificationBaseline(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	before, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	localSessionID, err := d.createFixtureSession(ctx, fixture.Stimulus)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	// The production route is retrieval-aware even for a general question: one
+	// query embedding plus one generation call proves the intended RAG
+	// passthrough instead of silently exercising a retrieval-disabled route.
+	defer d.finishAnswerProof(&result, scenario, original, before, localSessionID, fixture.Stimulus.AbortRequestID, 2, 1)
+	receipt, err := d.sendStimulus(ctx, localSessionID, fixture.Stimulus)
+	if err != nil || !d.waitForTurnCompletion(ctx, localSessionID, receipt.TurnID) {
+		return Unsupported(scenario)
+	}
+	answer, ok := d.waitForSingleAssistantAnswer(ctx, localSessionID)
+	if !ok || !strings.Contains(answer.Content, fixture.ExpectedAnswerMarker) || len(answer.Citations) != 0 ||
+		!d.waitForAnswerCounterDelta(ctx, before, 2, 1) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "real_generation", "general_answer", "no_fabricated_citation")
+}
+
 func (d *LiveDriver) beginAuthorityProof(ctx context.Context, mode string) (statusEnvelope, CounterSet, bool) {
 	original, err := d.qualificationBaseline(ctx)
 	if err != nil || !d.fixtureIDsAreIsolated() {
@@ -663,6 +781,218 @@ type streamedActionEvent struct {
 			Capability string `json:"capability"`
 		} `json:"data"`
 	} `json:"data"`
+}
+
+type historyCitation struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Source string `json:"source"`
+}
+
+type historyItem struct {
+	ItemID    string            `json:"item_id"`
+	Kind      string            `json:"kind"`
+	Content   string            `json:"redacted_content"`
+	Citations []historyCitation `json:"citations,omitempty"`
+}
+
+func (d *LiveDriver) waitForTurnCompletion(ctx context.Context, localSessionID, turnID string) bool {
+	streamCtx, cancel := context.WithTimeout(ctx, d.proofTimeout)
+	defer cancel()
+	endpoint := d.base.ResolveReference(&url.URL{Path: "/api/v1/charlie/sessions/" + localSessionID + "/events/"})
+	request, err := http.NewRequestWithContext(streamCtx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Authorization", "Bearer "+d.approverToken)
+	request.Header.Set("Accept", "text/event-stream")
+	response, err := d.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK || !strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+		return false
+	}
+	limited := &io.LimitedReader{R: response.Body, N: (1 << 20) + 1}
+	scanner := bufio.NewScanner(limited)
+	scanner.Buffer(make([]byte, 16<<10), 256<<10)
+	eventName := ""
+	dataLines := make([]string, 0, 2)
+	events := 0
+	process := func() (bool, bool) {
+		if len(dataLines) == 0 {
+			eventName = ""
+			return false, true
+		}
+		events++
+		if events > 256 {
+			return false, false
+		}
+		var event streamedActionEvent
+		if json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &event) != nil {
+			return false, false
+		}
+		dataLines = dataLines[:0]
+		if eventName != "" && event.Type != "" && eventName != event.Type {
+			return false, false
+		}
+		typeName := event.Type
+		if typeName == "" {
+			typeName = eventName
+		}
+		eventName = ""
+		if event.TurnID != "" && event.TurnID != turnID {
+			return false, false
+		}
+		switch typeName {
+		case "turn.completed":
+			return true, event.TurnID == turnID
+		case "turn.failed", "turn.aborted", "charlie.error":
+			return true, false
+		default:
+			return false, true
+		}
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case line == "":
+			done, valid := process()
+			if done || !valid {
+				return done && valid
+			}
+		case strings.HasPrefix(line, "event:"):
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		case strings.HasPrefix(line, "data:"):
+			dataLines = append(dataLines, strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+		case strings.HasPrefix(line, "id:"):
+			eventID := strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+			if len(eventID) > 128 || strings.ContainsRune(eventID, '\x00') {
+				return false
+			}
+		case strings.HasPrefix(line, ":"):
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func (d *LiveDriver) waitForSingleAssistantAnswer(ctx context.Context, localSessionID string) (historyItem, bool) {
+	deadline := time.Now().Add(d.proofTimeout)
+	for {
+		var history []historyItem
+		_, err := d.api(ctx, http.MethodGet, "/api/v1/charlie/sessions/"+url.PathEscape(localSessionID)+"/history/", d.approverToken, nil, &history)
+		if err == nil && len(history) <= 100 {
+			var answer historyItem
+			userCount, assistantCount := 0, 0
+			valid := true
+			for _, item := range history {
+				if !validFixtureID(item.ItemID) || len([]byte(item.Content)) > 32768 || len(item.Citations) > 16 {
+					valid = false
+					break
+				}
+				switch item.Kind {
+				case "user_message":
+					userCount++
+				case "assistant_message":
+					assistantCount++
+					answer = item
+				case "finding_evidence":
+				default:
+					valid = false
+				}
+				for _, citation := range item.Citations {
+					if !validFixtureID(citation.ID) || strings.TrimSpace(citation.Title) == "" || strings.TrimSpace(citation.Source) == "" || len([]byte(citation.Title)) > 1024 || len([]byte(citation.Source)) > 2048 {
+						valid = false
+					}
+				}
+			}
+			if valid && userCount == 1 && assistantCount == 1 && strings.TrimSpace(answer.Content) != "" {
+				return answer, true
+			}
+			if !valid || userCount > 1 || assistantCount > 1 {
+				return historyItem{}, false
+			}
+		}
+		if !time.Now().Before(deadline) || waitContext(ctx, d.proofPoll) != nil {
+			return historyItem{}, false
+		}
+	}
+}
+
+func hasExactCitation(citations []historyCitation, id, title, source string) bool {
+	for _, citation := range citations {
+		if citation.ID == id && citation.Title == title && citation.Source == source {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *LiveDriver) waitForAnswerCounterDelta(ctx context.Context, before CounterSet, modelCalls, ragQueries uint64) bool {
+	deadline := time.Now().Add(d.proofTimeout)
+	for {
+		after, err := d.Counters(ctx)
+		if err == nil && exactAnswerCounterDelta(before, after, modelCalls, ragQueries) {
+			return true
+		}
+		if err != nil || countersExceededAnswerDelta(before, after, modelCalls, ragQueries) || !time.Now().Before(deadline) || waitContext(ctx, d.proofPoll) != nil {
+			return false
+		}
+	}
+}
+
+func exactAnswerCounterDelta(before, after CounterSet, modelCalls, ragQueries uint64) bool {
+	if !completeCounters(before) || !completeCounters(after) || !sameCounterMap(before.Downstream, after.Downstream) {
+		return false
+	}
+	for _, key := range runtimeKeys {
+		expected := uint64(0)
+		switch key {
+		case "model_calls":
+			expected = modelCalls
+		case "rag_queries":
+			expected = ragQueries
+		case "sessions":
+			expected = 1
+		}
+		if after.Runtime[key] < before.Runtime[key] || after.Runtime[key]-before.Runtime[key] != expected {
+			return false
+		}
+	}
+	return true
+}
+
+func countersExceededAnswerDelta(before, after CounterSet, modelCalls, ragQueries uint64) bool {
+	if !completeCounters(before) || !completeCounters(after) || !sameCounterMap(before.Downstream, after.Downstream) {
+		return true
+	}
+	for _, key := range runtimeKeys {
+		maximum := uint64(0)
+		switch key {
+		case "model_calls":
+			maximum = modelCalls
+		case "rag_queries":
+			maximum = ragQueries
+		case "sessions":
+			maximum = 1
+		}
+		if after.Runtime[key] < before.Runtime[key] || after.Runtime[key]-before.Runtime[key] > maximum {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *LiveDriver) finishAnswerProof(result *ScenarioResult, scenario string, original statusEnvelope, before CounterSet, localSessionID, abortRequestID string, modelCalls, ragQueries uint64) {
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
+	if d.abortFixtureSession(cleanupCtx, localSessionID, abortRequestID) != nil || d.restoreMode(original) != nil ||
+		!d.waitForAnswerCounterDelta(cleanupCtx, before, modelCalls, ragQueries) {
+		*result = Unsupported(scenario)
+	}
 }
 
 func (d *LiveDriver) discoverActionFromEvents(ctx context.Context, localSessionID, turnID, capability string) (string, bool) {
@@ -873,6 +1203,25 @@ func validActionFixture(fixture ActionFixture) bool {
 	return fixtureCapabilityPattern.MatchString(fixture.Capability) && validStimulus(fixture.Stimulus)
 }
 
+func validVersionedRAGFixture(fixture VersionedRAGFixture) bool {
+	return validStimulus(fixture.Stimulus) && validFixtureMarker(fixture.CorrectedRevisionMarker) && validFixtureMarker(fixture.ProductVersionMarker) &&
+		fixture.CorrectedRevisionMarker != fixture.ProductVersionMarker && validFixtureID(fixture.CitationID) &&
+		validFixtureText(fixture.CitationTitle, 1024) && validFixtureText(fixture.CitationSource, 2048)
+}
+
+func validGeneralAnswerFixture(fixture GeneralAnswerFixture) bool {
+	return validStimulus(fixture.Stimulus) && validFixtureMarker(fixture.ExpectedAnswerMarker)
+}
+
+func validFixtureMarker(value string) bool {
+	return validFixtureText(value, 256) && len([]byte(strings.TrimSpace(value))) >= 8
+}
+
+func validFixtureText(value string, maximum int) bool {
+	trimmed := strings.TrimSpace(value)
+	return trimmed == value && trimmed != "" && len([]byte(value)) <= maximum && !strings.ContainsAny(value, "\x00\r\n")
+}
+
 func validStimulus(stimulus SessionStimulus) bool {
 	sessionID, sessionErr := uuid.Parse(stimulus.ClientSessionID)
 	messageID, messageErr := uuid.Parse(stimulus.ClientMessageID)
@@ -910,6 +1259,12 @@ func (d *LiveDriver) fixtureIDsAreIsolated() bool {
 		d.fixtures.AutoNonallowlisted.Stimulus.ClientSessionID,
 		d.fixtures.AutoNonallowlisted.Stimulus.ClientMessageID,
 		d.fixtures.AutoNonallowlisted.Stimulus.AbortRequestID,
+		d.fixtures.VersionedRAGGrounded.Stimulus.ClientSessionID,
+		d.fixtures.VersionedRAGGrounded.Stimulus.ClientMessageID,
+		d.fixtures.VersionedRAGGrounded.Stimulus.AbortRequestID,
+		d.fixtures.GeneralAnswer.Stimulus.ClientSessionID,
+		d.fixtures.GeneralAnswer.Stimulus.ClientMessageID,
+		d.fixtures.GeneralAnswer.Stimulus.AbortRequestID,
 	} {
 		if requestID == "" {
 			continue
@@ -919,10 +1274,21 @@ func (d *LiveDriver) fixtureIDsAreIsolated() bool {
 		}
 		seenRequests[requestID] = struct{}{}
 	}
-	allowlisted := d.fixtures.AutoAllowlistedSuccess.Stimulus
-	nonallowlisted := d.fixtures.AutoNonallowlisted.Stimulus
-	if allowlisted.ResourceType != "" && allowlisted.ResourceType == nonallowlisted.ResourceType && allowlisted.ResourceID == nonallowlisted.ResourceID {
-		return false
+	seenResources := map[string]struct{}{}
+	for _, stimulus := range []SessionStimulus{
+		d.fixtures.AutoAllowlistedSuccess.Stimulus,
+		d.fixtures.AutoNonallowlisted.Stimulus,
+		d.fixtures.VersionedRAGGrounded.Stimulus,
+		d.fixtures.GeneralAnswer.Stimulus,
+	} {
+		if stimulus.ResourceType == "" && stimulus.ResourceID == "" {
+			continue
+		}
+		resource := stimulus.ResourceType + ":" + stimulus.ResourceID
+		if _, duplicate := seenResources[resource]; duplicate {
+			return false
+		}
+		seenResources[resource] = struct{}{}
 	}
 	return true
 }
@@ -940,6 +1306,13 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	if d.isolationObserver == nil {
+		return Unsupported(scenario)
+	}
+	preparedObservation, err := d.isolationObserver.Prepare(ctx, IsolationColdFeatureDisabled)
 	if err != nil {
 		return Unsupported(scenario)
 	}
@@ -961,10 +1334,11 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 	if applyErr != nil || string(applied.Data.Value) != "false" {
 		return Unsupported(scenario)
 	}
-	if !d.countersUnchanged(ctx, baselineCounters) {
+	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
+	if observeErr != nil || !coldIsolationProved(observation, IsolationColdFeatureDisabled) || !d.countersUnchanged(ctx, baselineCounters) {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
+	return Passed(scenario, "state_applied", "process_absent", "listener_absent", "timer_absent", "dns_packets_zero", "tcp_packets_zero", "udp_packets_zero", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 func (d *LiveDriver) restoreFeatureSetting(ctx context.Context, original settingEnvelope) error {
@@ -1037,6 +1411,13 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 	if err != nil || replicas < 1 {
 		return Unsupported(scenario)
 	}
+	if d.isolationObserver == nil {
+		return Unsupported(scenario)
+	}
+	preparedObservation, err := d.isolationObserver.Prepare(ctx, IsolationColdConnectionDisabled)
+	if err != nil {
+		return Unsupported(scenario)
+	}
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -1057,10 +1438,11 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 	if d.agentScaler.WaitReady(ctx, 0) != nil {
 		return Unsupported(scenario)
 	}
-	if !d.countersUnchanged(ctx, baselineCounters) {
+	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
+	if observeErr != nil || !coldIsolationProved(observation, IsolationColdConnectionDisabled) || !d.countersUnchanged(ctx, baselineCounters) {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
+	return Passed(scenario, "state_applied", "process_absent", "listener_absent", "timer_absent", "dns_packets_zero", "tcp_packets_zero", "udp_packets_zero", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (result ScenarioResult) {
@@ -1069,6 +1451,13 @@ func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (resu
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	if d.isolationObserver == nil {
+		return Unsupported(scenario)
+	}
+	preparedObservation, err := d.isolationObserver.Prepare(ctx, IsolationOperationalWireDisabled)
 	if err != nil {
 		return Unsupported(scenario)
 	}
@@ -1084,10 +1473,11 @@ func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (resu
 	if statusErr != nil || applied.Data.Mode.Requested != "disabled" || applied.Data.Mode.Authoritative != "disabled" {
 		return Unsupported(scenario)
 	}
-	if !d.countersUnchanged(ctx, baselineCounters) {
+	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
+	if observeErr != nil || !controlProtocolOnly(observation) || !d.countersUnchanged(ctx, baselineCounters) {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
+	return Passed(scenario, "state_applied", "control_protocol_only", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (result ScenarioResult) {
@@ -1096,6 +1486,13 @@ func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (re
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	if d.isolationObserver == nil {
+		return Unsupported(scenario)
+	}
+	preparedObservation, err := d.isolationObserver.Prepare(ctx, IsolationOperationalWireDisabled)
 	if err != nil {
 		return Unsupported(scenario)
 	}
@@ -1111,10 +1508,11 @@ func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (re
 	if err != nil || !applied.Data.Mode.EmergencyDisabled || applied.Data.Mode.Authoritative != "disabled" {
 		return Unsupported(scenario)
 	}
-	if !d.countersUnchanged(ctx, baselineCounters) {
+	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
+	if observeErr != nil || !controlProtocolOnly(observation) || !d.countersUnchanged(ctx, baselineCounters) {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
+	return Passed(scenario, "state_applied", "control_protocol_only", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 type modeEnvelope struct {
@@ -1188,8 +1586,31 @@ func (d *LiveDriver) restoreBaseline(original statusEnvelope, counters CounterSe
 }
 
 func (d *LiveDriver) countersUnchanged(ctx context.Context, before CounterSet) bool {
-	after, err := d.Counters(ctx)
-	return err == nil && sameCounterKeys(before.Runtime, after.Runtime, runtimeKeys) && sameCounterKeys(before.Downstream, after.Downstream, downstreamKeys)
+	if !completeCounters(before) {
+		return false
+	}
+	deadline := time.Now().Add(d.noCallDwell)
+	for {
+		after, err := d.Counters(ctx)
+		if err != nil || !completeCounters(after) || !sameCounterKeys(before.Runtime, after.Runtime, runtimeKeys) || !sameCounterKeys(before.Downstream, after.Downstream, downstreamKeys) {
+			return false
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return true
+		}
+		wait := d.proofPoll
+		if wait > remaining {
+			wait = remaining
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false
+		case <-timer.C:
+		}
+	}
 }
 
 func (d *LiveDriver) readDenial(ctx context.Context, scenario string) ScenarioResult {
@@ -1208,6 +1629,157 @@ func (d *LiveDriver) readDenial(ctx context.Context, scenario string) ScenarioRe
 	return Passed(scenario, "authorization_denied", "product_calls_zero")
 }
 
+type discoveryQualificationEnvelope struct {
+	Data struct {
+		Scenario          string   `json:"scenario"`
+		CandidateEnabled  bool     `json:"candidate_enabled"`
+		AcceptedCount     int      `json:"accepted_count"`
+		RejectedCount     int      `json:"rejected_count"`
+		AcceptedNames     []string `json:"accepted_names"`
+		DisclosureDigest  string   `json:"disclosure_digest"`
+		CatalogBound      bool     `json:"catalog_bound"`
+		MalformedRejected bool     `json:"malformed_rejected"`
+	} `json:"data"`
+}
+
+func (d *LiveDriver) discoveryQualification(ctx context.Context, scenario, fixedCase string) ScenarioResult {
+	before, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	var response discoveryQualificationEnvelope
+	status, err := d.api(ctx, http.MethodPost, "/api/v1/admin/charlie/qualification/discovery/", d.adminToken, map[string]string{"scenario": fixedCase}, &response)
+	proof := response.Data
+	if err != nil || status != http.StatusOK || proof.Scenario != fixedCase || !proof.MalformedRejected {
+		return Unsupported(scenario)
+	}
+	if fixedCase == "mixed_catalog" {
+		if !proof.CandidateEnabled || proof.AcceptedCount != 2 || proof.RejectedCount != 1 || !proof.CatalogBound ||
+			!regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(proof.DisclosureDigest) ||
+			len(proof.AcceptedNames) != 2 || proof.AcceptedNames[0] != "astronomer.installation.summary" || proof.AcceptedNames[1] != "astronomer.management.workload_restart" {
+			return Unsupported(scenario)
+		}
+		if !d.countersUnchanged(ctx, before) {
+			return Unsupported(scenario)
+		}
+		return Passed(scenario, "valid_capability_retained", "malformed_capability_rejected", "catalog_bound")
+	}
+	if proof.CandidateEnabled || proof.AcceptedCount != 0 || proof.RejectedCount != 1 || proof.CatalogBound || proof.DisclosureDigest != "" || len(proof.AcceptedNames) != 0 || !d.countersUnchanged(ctx, before) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "discovery_rejected", "integration_disabled", "product_calls_zero")
+}
+
+type alertDeliveryEnvelope struct {
+	Data struct {
+		FindingID            string `json:"finding_id"`
+		FindingBlockCode     string `json:"finding_block_code"`
+		FindingWorkflowState string `json:"finding_workflow_state"`
+		DeliveryCount        int    `json:"delivery_count"`
+		DedupeValid          bool   `json:"dedupe_valid"`
+		Deliveries           []struct {
+			DeliveryID       string     `json:"delivery_id"`
+			FindingID        string     `json:"finding_id"`
+			DeliveryKind     string     `json:"delivery_kind"`
+			Status           string     `json:"status"`
+			TemplateIdentity string     `json:"template_identity"`
+			DeepLinkValid    bool       `json:"deep_link_valid"`
+			ContentFree      bool       `json:"content_free"`
+			AttemptCount     int32      `json:"attempt_count"`
+			MaximumAttempts  int32      `json:"maximum_attempts"`
+			CreatedAt        time.Time  `json:"created_at"`
+			UpdatedAt        time.Time  `json:"updated_at"`
+			DeliveredAt      *time.Time `json:"delivered_at"`
+		} `json:"deliveries"`
+	} `json:"data"`
+}
+
+func (d *LiveDriver) alertFixture(scenario string) AlertDeliveryFixture {
+	switch scenario {
+	case "diagnosis_alert":
+		return d.fixtures.DiagnosisAlert
+	case "approval_pending_alert":
+		return d.fixtures.ApprovalPendingAlert
+	case "approval_rejected_alert":
+		return d.fixtures.ApprovalRejectedAlert
+	case "approval_expired_alert":
+		return d.fixtures.ApprovalExpiredAlert
+	case "blocked_auto_alert":
+		return d.fixtures.BlockedAutoAlert
+	case "failed_precondition_alert":
+		return d.fixtures.FailedPreconditionAlert
+	case "failed_verification_alert":
+		return d.fixtures.FailedVerificationAlert
+	default:
+		return AlertDeliveryFixture{}
+	}
+}
+
+func (d *LiveDriver) alertDeliveryQualification(ctx context.Context, scenario string) ScenarioResult {
+	fixture := d.alertFixture(scenario)
+	findingID, findingErr := uuid.Parse(fixture.FindingID)
+	deliveryID, deliveryErr := uuid.Parse(fixture.DeliveryID)
+	if findingErr != nil || deliveryErr != nil || findingID == uuid.Nil || deliveryID == uuid.Nil || strings.TrimSpace(fixture.ExpectedBlockCode) == "" || strings.TrimSpace(fixture.ExpectedWorkflowState) == "" {
+		return Unsupported(scenario)
+	}
+	before, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
+	var first, second alertDeliveryEnvelope
+	query := url.Values{"finding_id": []string{findingID.String()}}
+	if status, callErr := d.apiQuery(ctx, http.MethodGet, "/api/v1/admin/charlie/alert-deliveries/", query, d.adminToken, nil, &first); callErr != nil || status != http.StatusOK || !validAlertDeliveryProof(first, fixture) {
+		return Unsupported(scenario)
+	}
+	if !d.countersUnchanged(ctx, before) {
+		return Unsupported(scenario)
+	}
+	if status, callErr := d.apiQuery(ctx, http.MethodGet, "/api/v1/admin/charlie/alert-deliveries/", query, d.adminToken, nil, &second); callErr != nil || status != http.StatusOK || !validAlertDeliveryProof(second, fixture) || !sameAlertDeliveryProof(first, second) {
+		return Unsupported(scenario)
+	}
+	if !d.countersUnchanged(ctx, before) {
+		return Unsupported(scenario)
+	}
+	names := []string{"one_alert", "valid_deep_link", "content_free"}
+	if scenario == "failed_verification_alert" {
+		if fixture.ExpectedBlockCode != "verification_failed" {
+			return Unsupported(scenario)
+		}
+		names = append(names, "block_code_verification_failed")
+	}
+	return Passed(scenario, names...)
+}
+
+func validAlertDeliveryProof(value alertDeliveryEnvelope, fixture AlertDeliveryFixture) bool {
+	proof := value.Data
+	if proof.FindingID != fixture.FindingID || proof.FindingBlockCode != fixture.ExpectedBlockCode || proof.FindingWorkflowState != fixture.ExpectedWorkflowState || proof.DeliveryCount != 1 || !proof.DedupeValid || len(proof.Deliveries) != 1 {
+		return false
+	}
+	delivery := proof.Deliveries[0]
+	deliveredAtValid := delivery.DeliveredAt == nil || (!delivery.DeliveredAt.IsZero() && !delivery.DeliveredAt.Before(delivery.CreatedAt))
+	return delivery.DeliveryID == fixture.DeliveryID && delivery.FindingID == fixture.FindingID && delivery.DeliveryKind == "initial" &&
+		delivery.TemplateIdentity == "charlie.finding.initial/v1" && delivery.DeepLinkValid && delivery.ContentFree &&
+		delivery.AttemptCount >= 0 && delivery.MaximumAttempts >= 1 && delivery.MaximumAttempts <= 20 && delivery.AttemptCount <= delivery.MaximumAttempts &&
+		!delivery.CreatedAt.IsZero() && !delivery.UpdatedAt.IsZero() && !delivery.UpdatedAt.Before(delivery.CreatedAt) &&
+		deliveredAtValid && contains([]string{"queued", "delivering", "retry", "delivered", "suppressed", "dead"}, delivery.Status)
+}
+
+func sameAlertDeliveryProof(a, b alertDeliveryEnvelope) bool {
+	left, right := a.Data, b.Data
+	if left.FindingID != right.FindingID || left.FindingBlockCode != right.FindingBlockCode || left.FindingWorkflowState != right.FindingWorkflowState || left.DeliveryCount != right.DeliveryCount || left.DedupeValid != right.DedupeValid || len(left.Deliveries) != 1 || len(right.Deliveries) != 1 {
+		return false
+	}
+	l, r := left.Deliveries[0], right.Deliveries[0]
+	return l.DeliveryID == r.DeliveryID && l.FindingID == r.FindingID && l.DeliveryKind == r.DeliveryKind && l.Status == r.Status && l.TemplateIdentity == r.TemplateIdentity && l.DeepLinkValid == r.DeepLinkValid && l.ContentFree == r.ContentFree && l.AttemptCount == r.AttemptCount && l.MaximumAttempts == r.MaximumAttempts && l.CreatedAt.Equal(r.CreatedAt) && l.UpdatedAt.Equal(r.UpdatedAt) && sameOptionalTime(l.DeliveredAt, r.DeliveredAt)
+}
+
+func sameOptionalTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
+}
+
 func sameCounterMap(before, after map[string]uint64) bool {
 	return sameCounterKeys(before, after, downstreamKeys)
 }
@@ -1222,7 +1794,11 @@ func sameCounterKeys(before, after map[string]uint64, keys []string) bool {
 }
 
 func (d *LiveDriver) api(ctx context.Context, method, path, token string, body any, output any) (int, error) {
-	endpoint := d.base.ResolveReference(&url.URL{Path: path})
+	return d.apiQuery(ctx, method, path, nil, token, body, output)
+}
+
+func (d *LiveDriver) apiQuery(ctx context.Context, method, path string, query url.Values, token string, body any, output any) (int, error) {
+	endpoint := d.base.ResolveReference(&url.URL{Path: path, RawQuery: query.Encode()})
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)

@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type liveState struct {
@@ -31,6 +33,38 @@ type liveState struct {
 
 type fakeScaler struct{ replicas int }
 
+type fakeIsolationObserver struct {
+	observation func(IsolationState, time.Duration) IsolationObservation
+	err         error
+	state       IsolationState
+}
+
+func (f *fakeIsolationObserver) Prepare(_ context.Context, state IsolationState) (PreparedIsolationObserver, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	copy := *f
+	copy.state = state
+	return &copy, nil
+}
+
+func (f *fakeIsolationObserver) Observe(_ context.Context, dwell time.Duration) (IsolationObservation, error) {
+	state := f.state
+	if f.observation != nil {
+		return f.observation(state, dwell), nil
+	}
+	result := IsolationObservation{State: state, Duration: dwell}
+	if state == IsolationOperationalWireDisabled {
+		result.Runtime.HeartbeatAttempts = 1
+		result.Runtime.HeartbeatSuccesses = 1
+		result.Downstream.CentralControl.ConnectionAttempts = 1
+		result.Downstream.CentralControl.Requests = 1
+		result.Downstream.CentralControl.Responses = 1
+		result.Control.VerifiedSignedHeartbeat = 1
+	}
+	return result, nil
+}
+
 func (s *fakeScaler) Replicas(context.Context) (int, error) { return s.replicas, nil }
 func (s *fakeScaler) Scale(_ context.Context, replicas int) error {
 	s.replicas = replicas
@@ -48,7 +82,7 @@ func TestZeroScenariosRestoreExactReadOnlyBaseline(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))
 	defer server.Close()
 	scaler := &fakeScaler{replicas: 2}
-	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client(), AgentScaler: scaler})
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client(), AgentScaler: scaler, IsolationObserver: &fakeIsolationObserver{}, ProofPoll: time.Millisecond, NoCallDwell: time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +90,16 @@ func TestZeroScenariosRestoreExactReadOnlyBaseline(t *testing.T) {
 		result := driver.Run(t.Context(), ScenarioRequest{Scenario: scenario, Candidate: Candidate{Version: "v1.2.3"}})
 		if !result.Passed {
 			t.Fatalf("%s did not pass: %#v", scenario, result)
+		}
+		gotAssertions := make([]string, 0, len(result.Assertions))
+		for _, assertion := range result.Assertions {
+			if !assertion.Passed {
+				t.Fatalf("%s returned a false assertion: %#v", scenario, assertion)
+			}
+			gotAssertions = append(gotAssertions, assertion.Name)
+		}
+		if !reflect.DeepEqual(gotAssertions, requiredAssertions[scenario]) {
+			t.Fatalf("%s returned non-canonical assertions: got=%v want=%v", scenario, gotAssertions, requiredAssertions[scenario])
 		}
 		state.mu.Lock()
 		if !state.feature || state.requested != "read_only" || state.authority != "read_only" || state.emergency || !state.ack || state.disclosureDigest != readOnlyDisclosureDigest {
@@ -89,13 +133,36 @@ func TestCleanupFailsWhenCountersDoNotReturnToBaseline(t *testing.T) {
 	state.incrementOnFeatureRestore = true
 	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))
 	defer server.Close()
-	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client()})
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client(), IsolationObserver: &fakeIsolationObserver{}, ProofPoll: time.Millisecond, NoCallDwell: time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := driver.Run(t.Context(), ScenarioRequest{Scenario: "feature_false"})
 	if result.Passed {
 		t.Fatalf("scenario passed despite cleanup counter drift: %#v", result)
+	}
+}
+
+func TestCountersUnchangedObservesEntireDwellAndRejectsDelayedIncrement(t *testing.T) {
+	state := newLiveState()
+	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))
+	defer server.Close()
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client(), ProofPoll: 2 * time.Millisecond, NoCallDwell: 40 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := driver.Counters(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(12 * time.Millisecond)
+		state.mu.Lock()
+		state.runtime["model_calls"]++
+		state.mu.Unlock()
+	}()
+	if driver.countersUnchanged(t.Context(), before) {
+		t.Fatal("delayed runtime increment passed the no-call dwell proof")
 	}
 }
 

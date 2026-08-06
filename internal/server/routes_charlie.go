@@ -40,6 +40,8 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, admin, manage, adminLimited).Get("/admin/charlie/trigger-rules/", deps.CharlieAdmin.ListTriggers)
 			r.With(gate, admin, manage, adminLimited).Get("/admin/charlie/alert-policy/", deps.CharlieAdmin.AlertPolicy)
 			r.With(gate, admin, manage, adminLimited).Put("/admin/charlie/alert-policy/", deps.CharlieAdmin.UpdateAlertPolicy)
+			r.With(gate, admin, manage, adminLimited).Get("/admin/charlie/alert-deliveries/", deps.CharlieAdmin.AlertDeliveryProofs)
+			r.With(gate, admin, manage, adminLimited).Post("/admin/charlie/qualification/discovery/", deps.CharlieAdmin.DiscoveryQualification)
 			r.With(gate, admin, manage, adminLimited).Put("/admin/charlie/action-policies/{capability}/", deps.CharlieAdmin.UpdateActionPolicy)
 			r.With(gate, admin, manage, adminLimited).Post("/admin/charlie/trigger-rules/", deps.CharlieAdmin.CreateTrigger)
 			r.With(gate, admin, manage, adminLimited).Patch("/admin/charlie/trigger-rules/{rule_id}/", deps.CharlieAdmin.UpdateTrigger)
