@@ -454,16 +454,26 @@ func (i *AgentInstaller) Suspend(ctx context.Context, spec AgentInstallSpec) err
 	if i == nil || i.bridge == nil || i.metadata == nil || spec.InstallationID == uuid.Nil || spec.ConnectionID == uuid.Nil {
 		return fmt.Errorf("Charlie suspend lifecycle dependencies are unavailable")
 	}
+	names := agentResourceNames(spec, i.agentNamespace)
+	runtimeAbsent, err := i.runtimeWorkloadAbsent(ctx, names)
+	if err != nil {
+		return err
+	}
 	// A central outage must not keep a local workload alive. Remote disable is
 	// best effort after the product-local emergency latch; local dispatch and
 	// streams, however, must settle before runtime resources are removed.
-	_ = i.bridge.Disable(ctx)
-	for _, step := range []func(context.Context) error{i.bridge.StopTriggerDispatch, i.bridge.SettleStreams} {
-		if err := step(ctx); err != nil {
-			return err
+	// An idempotent retry after the Application, StatefulSet, and every agent pod
+	// are already absent has no remote runtime left to settle. In that narrowly
+	// proven state, skip the intentionally inactive configuration transport and
+	// converge any orphaned chart-owned network surface instead.
+	if !runtimeAbsent {
+		_ = i.bridge.Disable(ctx)
+		for _, step := range []func(context.Context) error{i.bridge.StopTriggerDispatch, i.bridge.SettleStreams} {
+			if err := step(ctx); err != nil {
+				return err
+			}
 		}
 	}
-	names := agentResourceNames(spec, i.agentNamespace)
 	if err := i.snapshotApplication(ctx, names, spec.InstallationID); err != nil {
 		return err
 	}
@@ -474,6 +484,34 @@ func (i *AgentInstaller) Suspend(ctx context.Context, spec AgentInstallSpec) err
 		return err
 	}
 	return i.metadata.MarkTemporarilyUninstalled(ctx, spec.ConnectionID)
+}
+
+// runtimeWorkloadAbsent proves that there is no Charlie execution surface left
+// before an idempotent suspend is allowed to bypass bridge quiescence. Services,
+// PDBs, and NetworkPolicies deliberately do not affect this verdict: they cannot
+// execute work and are the stale chart surface the retry exists to remove.
+func (i *AgentInstaller) runtimeWorkloadAbsent(ctx context.Context, names AgentResourceNames) (bool, error) {
+	_, err := i.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace(i.argoNamespace).Get(ctx, names.Application, metav1.GetOptions{})
+	if err == nil {
+		return false, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return false, err
+	}
+	_, err = i.kube.AppsV1().StatefulSets(i.agentNamespace).Get(ctx, charlieAgentWorkloadName, metav1.GetOptions{})
+	if err == nil {
+		return false, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return false, err
+	}
+	pods, err := i.kube.CoreV1().Pods(i.agentNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=" + charlieAgentWorkloadName + ",app.kubernetes.io/component=product-agent",
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(pods.Items) == 0, nil
 }
 
 // Resume restores only the owner-bound runtime/network objects captured by

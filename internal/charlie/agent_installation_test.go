@@ -33,6 +33,8 @@ import (
 type fakeAgentBridge struct {
 	calls              []string
 	status             AgentBridgeStatus
+	stopErr            error
+	settleErr          error
 	revokeRequestFail  bool
 	revokeReadbackFail bool
 	revocationTargets  []CredentialRevocationTarget
@@ -56,11 +58,11 @@ func (b *fakeAgentBridge) Disable(context.Context) error {
 }
 func (b *fakeAgentBridge) StopTriggerDispatch(context.Context) error {
 	b.calls = append(b.calls, "stop-triggers")
-	return nil
+	return b.stopErr
 }
 func (b *fakeAgentBridge) SettleStreams(context.Context) error {
 	b.calls = append(b.calls, "settle-streams")
-	return nil
+	return b.settleErr
 }
 func (b *fakeAgentBridge) RevokeCredentialPackage(_ context.Context, target CredentialRevocationTarget) error {
 	b.revocationTargets = append(b.revocationTargets, target)
@@ -793,6 +795,49 @@ func TestAgentInstallerSuspendAndResumeRemoveOnlyRuntimeSurface(t *testing.T) {
 	}
 	if got := strings.Join(metadata.events, ","); got != "uninstalled,reconnected" {
 		t.Fatalf("lifecycle metadata=%s", got)
+	}
+}
+
+func TestAgentInstallerRepeatedSuspendConvergesStaleChartSurfaceWithoutInactiveBridge(t *testing.T) {
+	installer, kube, bridge, _ := testAgentInstaller(t)
+	spec := testAgentInstallSpec(t)
+	receipt, err := installer.Install(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := installer.Suspend(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+
+	chartLabels := map[string]string{
+		"app.kubernetes.io/instance":   receipt.Names.Application,
+		"app.kubernetes.io/name":       charlieAgentWorkloadName,
+		"app.kubernetes.io/managed-by": "Helm",
+	}
+	if _, err := kube.CoreV1().Services(DefaultCharlieAgentNamespace).Create(context.Background(), &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName + "-bridge", Namespace: DefaultCharlieAgentNamespace, Labels: chartLabels},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kube.NetworkingV1().NetworkPolicies(DefaultCharlieAgentNamespace).Create(context.Background(), &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: receipt.Names.DefaultDeny, Namespace: DefaultCharlieAgentNamespace, Labels: map[string]string{installationOwnerLabel: spec.InstallationID.String()}},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	bridge.stopErr = errors.New("Charlie configuration transport is inactive")
+	bridge.settleErr = bridge.stopErr
+	callsBefore := len(bridge.calls)
+	if err := installer.Suspend(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	if len(bridge.calls) != callsBefore {
+		t.Fatalf("already-absent runtime contacted inactive bridge: %v", bridge.calls[callsBefore:])
+	}
+	if _, err := kube.CoreV1().Services(DefaultCharlieAgentNamespace).Get(context.Background(), charlieAgentWorkloadName+"-bridge", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("stale chart Service survived repeated suspend: %v", err)
+	}
+	if _, err := kube.NetworkingV1().NetworkPolicies(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.DefaultDeny, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("stale default-deny policy survived repeated suspend: %v", err)
 	}
 }
 
