@@ -463,6 +463,40 @@ export interface OpenAPIComponents {
           "last_heartbeat_at"?: string;
           "version"?: string;
         };
+    CharlieAdminAlertChannel: {
+          "id": string;
+          "name": string;
+          "type": "slack" | "pagerduty" | "msteams" | "webhook";
+          "enabled": boolean;
+          "destination_configured": boolean;
+        };
+    CharlieAdminAlertPolicy: {
+          "enabled": boolean;
+          "minimum_severity": "info" | "low" | "medium" | "warning" | "high" | "critical";
+          "dedupe_window_seconds": number;
+          "escalation_after_seconds": number;
+          "quiet_hours_enabled": boolean;
+          "quiet_hours_start": string;
+          "quiet_hours_end": string;
+          "quiet_hours_timezone": string;
+          "revision": number;
+          "channel_ids": string[];
+          "channels": OpenAPIComponents['schemas']['CharlieAdminAlertChannel'][];
+          "available_channels": OpenAPIComponents['schemas']['CharlieAdminAlertChannel'][];
+          "in_app_enabled": boolean;
+        };
+    CharlieAdminAlertPolicyInput: {
+          "revision": number;
+          "enabled": boolean;
+          "minimum_severity": "info" | "low" | "medium" | "warning" | "high" | "critical";
+          "dedupe_window_seconds": number;
+          "escalation_after_seconds": number;
+          "quiet_hours_enabled": boolean;
+          "quiet_hours_start": string;
+          "quiet_hours_end": string;
+          "quiet_hours_timezone": string;
+          "channel_ids": string[];
+        };
     CharlieAdminAutoReadiness: {
           "ready": boolean;
           "blockers": Array<{
@@ -1969,6 +2003,9 @@ export type CharlieAdminActionPolicyInput = OpenAPIComponents['schemas']['Charli
 export type CharlieAdminActionRequest = OpenAPIComponents['schemas']['CharlieAdminActionRequest'];
 export type CharlieAdminAgent = OpenAPIComponents['schemas']['CharlieAdminAgent'];
 export type CharlieAdminAgentReplica = OpenAPIComponents['schemas']['CharlieAdminAgentReplica'];
+export type CharlieAdminAlertChannel = OpenAPIComponents['schemas']['CharlieAdminAlertChannel'];
+export type CharlieAdminAlertPolicy = OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+export type CharlieAdminAlertPolicyInput = OpenAPIComponents['schemas']['CharlieAdminAlertPolicyInput'];
 export type CharlieAdminAutoReadiness = OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
 export type CharlieAdminAutomation = OpenAPIComponents['schemas']['CharlieAdminAutomation'];
 export type CharlieAdminConnection = OpenAPIComponents['schemas']['CharlieAdminConnection'];

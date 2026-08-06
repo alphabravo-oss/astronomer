@@ -32,8 +32,7 @@ only by their owner. Prefer the `_FILE` variants for secrets. Required settings:
 | `HOOK_TOKEN_FILE` | Strong bearer token used by the qualification runner. |
 | `ADMIN_TOKEN_FILE` | Short-lived Astronomer administrator token. |
 | `ASTRONOMER_URL` | HTTPS Astronomer API base URL. HTTP is rejected except loopback when explicitly enabled. |
-| `METRICS_URLS` | Comma-separated HTTPS Prometheus endpoints used for before/after counters. |
-| `METRICS_TOKEN_FILE` | Optional metrics bearer token. |
+| `METRICS_SOURCES_FILE` | Owner-only bounded JSON defining one to eight metrics endpoints and each endpoint's optional, separate bearer-token file. |
 | `KUBECONFIG_FILE` | Owner-only kubeconfig required by scenarios that scale the agent. |
 | `AGENT_NAMESPACE`, `AGENT_STATEFULSET` | Exact product-agent workload target. |
 
@@ -52,8 +51,21 @@ ASTRONOMER_CHARLIE_QUALIFICATION_TLS_KEY_FILE=/secure/hook.key \
 ASTRONOMER_CHARLIE_QUALIFICATION_HOOK_TOKEN_FILE=/secure/hook.token \
 ASTRONOMER_CHARLIE_QUALIFICATION_ADMIN_TOKEN_FILE=/secure/admin.token \
 ASTRONOMER_CHARLIE_QUALIFICATION_ASTRONOMER_URL=https://astronomer.example \
-ASTRONOMER_CHARLIE_QUALIFICATION_METRICS_URLS=https://metrics.example/metrics \
+ASTRONOMER_CHARLIE_QUALIFICATION_METRICS_SOURCES_FILE=/secure/metrics-sources.json \
 ./bin/charlie-qualification-hook
+```
+
+The metrics source file contains no token values. Each entry binds a URL to
+only its own optional private token file, preventing a Charlie central scrape
+credential from being sent to an Astronomer listener:
+
+```json
+{
+  "sources": [
+    {"url": "http://127.0.0.1:19090/metrics"},
+    {"url": "https://charlie.example/charlie/v1/metrics", "bearer_token_file": "/secure/charlie-metrics.token"}
+  ]
+}
 ```
 
 The binary logs only stable event/failure codes. It never logs token values,
@@ -64,14 +76,22 @@ URLs, resource names, request bodies, response bodies, or remote errors.
 - `GET /v1/counters` returns the complete bounded runtime and downstream-boundary
   counter set.
 - `POST /v1/scenarios/{scenario}` accepts schema
-  `charlie.live-scenario/v1`, a `qualification-*` run ID, the same scenario name,
-  and immutable candidate identifiers/digests.
+`charlie.live-scenario/v1`, a `qualification-*` run ID, the same scenario name,
+and immutable candidate identifiers/digests.
+- The first valid scenario binds the hook process to one run ID and one complete
+  candidate tuple. A changed run/candidate is rejected, and replaying an already
+  completed scenario returns its normalized stored verdict without repeating
+  effects. Start a new hook process for a new candidate or qualification run.
 - Every request requires `Authorization: Bearer <hook token>`. Request bodies are
   limited to 64 KiB, unknown JSON fields are rejected, and responses contain
   only named boolean assertions.
 
 The live driver currently implements `feature_false`, `unactivated`,
-`central_disabled`, `emergency_disabled`, and `read_denial`. Other names in the
+`central_disabled`, `emergency_disabled`, and `read_denial`. The reserved
+`auto_nonallowlisted_approval` scenario deliberately requires a safe,
+non-auto-eligible write to remain pending in the exact-approval lane; automation
+is cumulative and may not turn that lower-mode workflow into a terminal denial.
+Other names in the
 versioned assertion catalog deliberately return `passed: false`; they are
 reserved qualification contracts, not simulated successes. A release record
 may check only a scenario whose complete assertion set passed and whose

@@ -1152,3 +1152,154 @@ ON CONFLICT DO NOTHING;
 
 -- name: ListCharlieFindingResources :many
 SELECT * FROM charlie_finding_resources WHERE finding_id = $1 ORDER BY resource_type, resource_id, required_verb;
+
+-- Charlie finding notification policy is product-owned. It references local
+-- notification channels by ID and never stores destination credentials.
+
+-- name: GetCharlieAlertPolicy :one
+SELECT * FROM charlie_alert_policies WHERE connection_id = $1;
+
+-- name: UpsertCharlieAlertPolicy :one
+INSERT INTO charlie_alert_policies (
+    connection_id, enabled, minimum_severity, dedupe_window_seconds,
+    escalation_after_seconds, quiet_hours_enabled, quiet_hours_start,
+    quiet_hours_end, quiet_hours_timezone, updated_by_id
+) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+WHERE sqlc.arg(expected_revision)::bigint = 0
+   OR EXISTS (SELECT 1 FROM charlie_alert_policies WHERE connection_id = $1)
+ON CONFLICT (connection_id) DO UPDATE SET
+    enabled = EXCLUDED.enabled,
+    minimum_severity = EXCLUDED.minimum_severity,
+    dedupe_window_seconds = EXCLUDED.dedupe_window_seconds,
+    escalation_after_seconds = EXCLUDED.escalation_after_seconds,
+    quiet_hours_enabled = EXCLUDED.quiet_hours_enabled,
+    quiet_hours_start = EXCLUDED.quiet_hours_start,
+    quiet_hours_end = EXCLUDED.quiet_hours_end,
+    quiet_hours_timezone = EXCLUDED.quiet_hours_timezone,
+    updated_by_id = EXCLUDED.updated_by_id,
+    revision = charlie_alert_policies.revision + 1,
+    updated_at = now()
+WHERE charlie_alert_policies.revision = sqlc.arg(expected_revision)::bigint
+RETURNING *;
+
+-- name: DeleteCharlieAlertPolicyChannels :exec
+DELETE FROM charlie_alert_policy_channels WHERE connection_id = $1;
+
+-- name: AddCharlieAlertPolicyChannel :exec
+INSERT INTO charlie_alert_policy_channels (connection_id, notification_channel_id)
+VALUES ($1, $2);
+
+-- name: ListCharlieAlertPolicyChannels :many
+SELECT nc.* FROM notification_channels nc
+JOIN charlie_alert_policy_channels pc ON pc.notification_channel_id = nc.id
+WHERE pc.connection_id = $1
+ORDER BY nc.name, nc.id;
+
+-- name: ListCharlieAlertAvailableChannels :many
+SELECT * FROM notification_channels
+WHERE enabled = true AND channel_type IN ('slack', 'pagerduty', 'msteams', 'webhook')
+ORDER BY name, id;
+
+-- name: CreateCharlieAlertDeliveryWithOutbox :one
+WITH delivery AS (
+    INSERT INTO charlie_alert_deliveries (
+        id, connection_id, finding_id, notification_channel_id, policy_revision,
+        delivery_kind, dedupe_bucket, severity, next_attempt_at, deep_link, subject, body
+    ) VALUES (
+        sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(finding_id), sqlc.arg(notification_channel_id),
+        sqlc.arg(policy_revision), sqlc.arg(delivery_kind), sqlc.arg(dedupe_bucket),
+        sqlc.arg(severity), sqlc.arg(next_attempt_at), sqlc.arg(deep_link),
+        sqlc.arg(subject), sqlc.arg(body)
+    )
+    ON CONFLICT (finding_id, notification_channel_id, delivery_kind, dedupe_bucket) DO NOTHING
+    RETURNING *
+), outbox AS (
+    INSERT INTO task_outbox (
+        dedupe_key, task_type, payload, queue_name, max_retry,
+        timeout_seconds, unique_seconds, max_delivery_attempts, next_attempt_at
+    )
+    SELECT 'charlie-alert:' || id::text, 'charlie:alert_dispatch',
+        convert_to(jsonb_build_object('delivery_id', id::text)::text, 'UTF8'),
+        'critical', 8, 30, 0, 20, next_attempt_at
+    FROM delivery
+    ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+    RETURNING id
+)
+SELECT delivery.* FROM delivery CROSS JOIN outbox;
+
+-- name: GetCharlieAlertDelivery :one
+SELECT * FROM charlie_alert_deliveries WHERE id = $1;
+
+-- name: ClaimCharlieAlertDelivery :one
+UPDATE charlie_alert_deliveries
+SET status = 'delivering', attempt_count = attempt_count + 1, updated_at = now()
+WHERE id = $1 AND (
+    (status IN ('queued', 'retry') AND next_attempt_at <= now())
+    OR (status = 'delivering' AND updated_at <= now() - interval '2 minutes')
+)
+RETURNING *;
+
+-- name: MarkCharlieAlertDeliveryDelivered :exec
+UPDATE charlie_alert_deliveries
+SET status = 'delivered', delivered_at = now(), last_error_code = '', updated_at = now()
+WHERE id = $1 AND status = 'delivering';
+
+-- name: MarkCharlieAlertDeliveryRetry :exec
+UPDATE charlie_alert_deliveries
+SET status = CASE WHEN attempt_count >= maximum_attempts THEN 'dead' ELSE 'retry' END,
+    next_attempt_at = $2, last_error_code = $3, updated_at = now()
+WHERE id = $1 AND status = 'delivering';
+
+-- name: SuppressCharlieAlertDelivery :exec
+UPDATE charlie_alert_deliveries
+SET status = 'suppressed', last_error_code = $2, updated_at = now()
+WHERE id = $1 AND status = 'delivering';
+
+-- name: CharlieAlertDeliveryAllowed :one
+SELECT EXISTS (
+    SELECT 1 FROM charlie_alert_deliveries d
+    JOIN charlie_connections c ON c.id = d.connection_id
+        AND c.active = true AND c.emergency_disabled = false
+        AND c.requested_mode <> 'disabled' AND c.verified_mode <> 'disabled'
+    JOIN charlie_alert_policies p ON p.connection_id = d.connection_id AND p.enabled = true
+    JOIN charlie_alert_policy_channels pc ON pc.connection_id = p.connection_id
+        AND pc.notification_channel_id = d.notification_channel_id
+    JOIN notification_channels nc ON nc.id = pc.notification_channel_id AND nc.enabled = true
+    WHERE d.id = $1
+      AND CASE d.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+          >= CASE p.minimum_severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+);
+
+-- name: ListCharlieAlertReconcileCandidates :many
+SELECT f.id AS finding_id, f.severity, f.status, f.execution_block_code,
+       f.repeat_count, scope.resource_type, scope.resource_id
+FROM charlie_findings f
+JOIN charlie_connections c ON c.id = f.connection_id AND c.active = true AND c.emergency_disabled = false
+    AND c.requested_mode <> 'disabled' AND c.verified_mode <> 'disabled'
+JOIN charlie_alert_policies p ON p.connection_id = c.id AND p.enabled = true
+JOIN LATERAL (
+    SELECT resource_type, resource_id FROM charlie_finding_resources
+    WHERE finding_id = f.id ORDER BY resource_type, resource_id LIMIT 1
+) scope ON true
+WHERE f.status IN ('open', 'acknowledged')
+  AND CASE f.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+      >= CASE p.minimum_severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+  AND EXISTS (
+      SELECT 1 FROM charlie_alert_policy_channels pc
+      JOIN notification_channels nc ON nc.id = pc.notification_channel_id AND nc.enabled = true
+      WHERE pc.connection_id = p.connection_id
+        AND (
+          NOT EXISTS (
+              SELECT 1 FROM charlie_alert_deliveries d
+              WHERE d.finding_id = f.id AND d.notification_channel_id = pc.notification_channel_id
+                AND d.delivery_kind = 'initial'
+          )
+          OR (p.escalation_after_seconds > 0 AND NOT EXISTS (
+              SELECT 1 FROM charlie_alert_deliveries d
+              WHERE d.finding_id = f.id AND d.notification_channel_id = pc.notification_channel_id
+                AND d.delivery_kind = 'escalation'
+          ))
+        )
+  )
+ORDER BY f.updated_at, f.id
+LIMIT $1;

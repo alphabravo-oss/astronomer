@@ -14,18 +14,22 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 4 {
-		panic("usage: specprep BRIDGE FINDING OUTPUT")
+	if len(os.Args) != 5 {
+		panic("usage: specprep BRIDGE FINDING ALERT_DELIVERY OUTPUT")
 	}
 	bridgeRaw, err := os.ReadFile(os.Args[1])
 	check(err)
 	findingRaw, err := os.ReadFile(os.Args[2])
+	check(err)
+	alertDeliveryRaw, err := os.ReadFile(os.Args[3])
 	check(err)
 
 	var bridge map[string]any
 	check(yaml.Unmarshal(bridgeRaw, &bridge))
 	var finding map[string]any
 	check(json.Unmarshal(findingRaw, &finding))
+	var alertDelivery map[string]any
+	check(json.Unmarshal(alertDeliveryRaw, &alertDelivery))
 
 	components := bridge["components"].(map[string]any)
 	schemas := components["schemas"].(map[string]any)
@@ -39,11 +43,14 @@ func main() {
 		rewriteRefs(definition)
 		schemas["Finding"+upperFirst(name)] = definition
 	}
+	delete(alertDelivery, "$schema")
+	delete(alertDelivery, "$id")
+	schemas["AlertDeliveryProfile"] = alertDelivery
 
 	generated, err := yaml.Marshal(bridge)
 	check(err)
-	check(os.MkdirAll(filepath.Dir(os.Args[3]), 0o755))
-	check(os.WriteFile(os.Args[3], generated, 0o644))
+	check(os.MkdirAll(filepath.Dir(os.Args[4]), 0o755))
+	check(os.WriteFile(os.Args[4], generated, 0o644))
 }
 
 func rewriteRefs(value any) {

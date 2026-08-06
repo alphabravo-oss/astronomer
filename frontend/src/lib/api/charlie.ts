@@ -103,6 +103,8 @@ export interface CharlieFinding {
   affectedResource: CharlieResource;
   confidence?: number;
   reasonNoAction?: string;
+  riskImpact?: string;
+  verificationSummary?: string;
   summary: string;
   sessionId?: string;
   source?: string;
@@ -131,6 +133,12 @@ export interface CharlieFinding {
     citation?: CharlieCitation;
   }>;
   operatorChecks?: string[];
+  proposedAction?: {
+    capability: string;
+    mode: "approval" | "auto";
+    eligible: boolean;
+    approvalId?: string;
+  };
   manualRemediation?: {
     preconditions: string[];
     steps: string[];
@@ -180,6 +188,11 @@ interface CharlieAdvisoryDetailWire {
   operator_checks?: string[];
   manualRemediation?: CharlieManualRemediationWire;
   manual_remediation?: CharlieManualRemediationWire;
+  workflow?: {
+    state?: CharlieFinding["workflowState"];
+    manualRemediation?: CharlieManualRemediationWire;
+    manual_remediation?: CharlieManualRemediationWire;
+  };
 }
 interface CharlieManualRemediationWire {
   preconditions?: string[];
@@ -203,7 +216,16 @@ interface CharlieFindingWire {
   risk_impact?: string;
   verificationSummary?: string;
   verification_summary?: string;
-  detail?: CharlieAdvisoryDetailWire;
+  detail?: CharlieAdvisoryDetailWire | { finding?: CharlieAdvisoryDetailWire };
+  proposedAction?: {
+    label?: string;
+    capability?: string;
+    mode?: "approval" | "auto";
+    eligible?: boolean;
+    approvalId?: string;
+    approval_id?: string;
+  };
+  proposed_action?: CharlieFindingWire["proposedAction"];
   sessionId?: string;
   session_id?: string;
   source?: string;
@@ -244,7 +266,10 @@ function mapCharlieResource(value: CharlieWireResource): CharlieResource {
 }
 
 function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
-  const advisory = value.detail ?? {};
+  const detail = value.detail ?? {};
+  const advisory: CharlieAdvisoryDetailWire = "finding" in detail
+    ? (detail.finding ?? {})
+    : (detail as CharlieAdvisoryDetailWire);
   const affected = value.affectedResource ??
     value.affected_resource ?? {
       type: "installation",
@@ -252,8 +277,9 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
       requiredVerb: "read",
     };
   const severity = value.severity === "info" ? "low" : value.severity;
-  const manualWire =
-    advisory.manualRemediation ?? advisory.manual_remediation;
+  const manualWire = advisory.manualRemediation ?? advisory.manual_remediation ??
+    advisory.workflow?.manualRemediation ?? advisory.workflow?.manual_remediation;
+  const proposedAction = value.proposedAction ?? value.proposed_action;
   return {
     id: value.id,
     title: value.title,
@@ -262,6 +288,8 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     affectedResource: mapCharlieResource(affected),
     confidence: advisory.confidence,
     reasonNoAction: value.reasonNoAction ?? value.reason_no_action,
+    riskImpact: value.riskImpact ?? value.risk_impact ?? advisory.riskImpact ?? advisory.risk_impact,
+    verificationSummary: value.verificationSummary ?? value.verification_summary,
     summary: value.summary || advisory.diagnosis || "",
     sessionId: value.sessionId ?? value.session_id,
     source: value.source,
@@ -269,7 +297,7 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     createdAt: value.createdAt ?? value.created_at,
     updatedAt: value.updatedAt ?? value.updated_at,
     workflowState:
-      value.workflowState ?? value.workflow_state ?? "manual_remediation_required",
+      value.workflowState ?? value.workflow_state ?? advisory.workflow?.state ?? "manual_remediation_required",
     availableDecisions:
       value.availableDecisions ?? value.available_decisions ?? [],
     evidence: (advisory.evidenceSummary ?? advisory.evidence_summary ?? []).map(
@@ -279,6 +307,14 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
       }),
     ),
     operatorChecks: advisory.operatorChecks ?? advisory.operator_checks ?? [],
+    proposedAction: proposedAction
+      ? {
+          capability: proposedAction.capability ?? proposedAction.label ?? "",
+          mode: proposedAction.mode ?? "approval",
+          eligible: proposedAction.eligible ?? false,
+          approvalId: proposedAction.approvalId ?? proposedAction.approval_id,
+        }
+      : undefined,
     manualRemediation: manualWire
       ? {
           preconditions: manualWire.preconditions ?? [],

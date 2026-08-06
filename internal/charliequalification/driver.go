@@ -23,20 +23,31 @@ type LiveConfig struct {
 	AstronomerURL  string
 	AdminToken     string
 	DeniedToken    string
-	MetricsURLs    []string
-	MetricsToken   string
+	MetricSources  []MetricSource
 	CounterMetrics map[string]string
 	AllowHTTP      bool
 	HTTPClient     *http.Client
 	AgentScaler    AgentScaler
 }
 
+// MetricSource binds one scrape endpoint to only its own optional bearer.
+// Charlie central's qualification credential must never be forwarded to an
+// Astronomer metrics listener (or vice versa).
+type MetricSource struct {
+	URL   string
+	Token string
+}
+
+type metricEndpoint struct {
+	url   *url.URL
+	token string
+}
+
 type LiveDriver struct {
 	base           *url.URL
 	adminToken     string
 	deniedToken    string
-	metricsURLs    []*url.URL
-	metricsToken   string
+	metricSources  []metricEndpoint
 	counterMetrics map[string]string
 	client         *http.Client
 	agentScaler    AgentScaler
@@ -47,13 +58,18 @@ func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
 	if err != nil || strings.TrimSpace(config.AdminToken) == "" {
 		return nil, errors.New("live driver requires a safe Astronomer URL and admin token")
 	}
-	metrics := make([]*url.URL, 0, len(config.MetricsURLs))
-	for _, raw := range config.MetricsURLs {
-		parsed, parseErr := safeOperatorURL(raw, config.AllowHTTP)
+	metrics := make([]metricEndpoint, 0, len(config.MetricSources))
+	seenMetricURLs := make(map[string]struct{}, len(config.MetricSources))
+	for _, source := range config.MetricSources {
+		parsed, parseErr := safeOperatorURL(source.URL, config.AllowHTTP)
 		if parseErr != nil {
 			return nil, fmt.Errorf("invalid metrics URL")
 		}
-		metrics = append(metrics, parsed)
+		if _, duplicate := seenMetricURLs[parsed.String()]; duplicate {
+			return nil, fmt.Errorf("duplicate metrics URL")
+		}
+		seenMetricURLs[parsed.String()] = struct{}{}
+		metrics = append(metrics, metricEndpoint{url: parsed, token: strings.TrimSpace(source.Token)})
 	}
 	mapping := defaultCounterMetrics()
 	for key, name := range config.CounterMetrics {
@@ -72,7 +88,7 @@ func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
 	}
 	return &LiveDriver{
 		base: base, adminToken: strings.TrimSpace(config.AdminToken), deniedToken: strings.TrimSpace(config.DeniedToken),
-		metricsURLs: metrics, metricsToken: strings.TrimSpace(config.MetricsToken), counterMetrics: mapping,
+		metricSources: metrics, counterMetrics: mapping,
 		client:      client,
 		agentScaler: config.AgentScaler,
 	}, nil
@@ -109,15 +125,15 @@ func defaultCounterMetrics() map[string]string {
 }
 
 func (d *LiveDriver) Counters(ctx context.Context) (CounterSet, error) {
-	if len(d.metricsURLs) == 0 {
+	if len(d.metricSources) == 0 {
 		return CounterSet{}, errors.New("metrics URLs are not configured")
 	}
 	samples := make([]metricSample, 0)
-	for _, endpoint := range d.metricsURLs {
-		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	for _, endpoint := range d.metricSources {
+		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.url.String(), nil)
 		request.Header.Set("Accept", "text/plain")
-		if d.metricsToken != "" {
-			request.Header.Set("Authorization", "Bearer "+d.metricsToken)
+		if endpoint.token != "" {
+			request.Header.Set("Authorization", "Bearer "+endpoint.token)
 		}
 		response, err := d.client.Do(request)
 		if err != nil {

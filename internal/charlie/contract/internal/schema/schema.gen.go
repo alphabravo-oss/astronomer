@@ -11,6 +11,439 @@ import "strings"
 import "time"
 import "unicode/utf8"
 
+// Product-neutral, advisory-only alert material. The consuming product owns
+// delivery policy, recipients, channels, thresholds, credentials, authorization,
+// and execution.
+type AlertDeliveryV1SchemaJson struct {
+	// AdvisoryOnly corresponds to the JSON schema field "advisory_only".
+	AdvisoryOnly bool `json:"advisory_only" yaml:"advisory_only" mapstructure:"advisory_only"`
+
+	// AlertId corresponds to the JSON schema field "alert_id".
+	AlertId string `json:"alert_id" yaml:"alert_id" mapstructure:"alert_id"`
+
+	// DeduplicationKey corresponds to the JSON schema field "deduplication_key".
+	DeduplicationKey string `json:"deduplication_key" yaml:"deduplication_key" mapstructure:"deduplication_key"`
+
+	// DeepLinkReference corresponds to the JSON schema field "deep_link_reference".
+	DeepLinkReference string `json:"deep_link_reference" yaml:"deep_link_reference" mapstructure:"deep_link_reference"`
+
+	// ExpiresAt corresponds to the JSON schema field "expires_at".
+	ExpiresAt time.Time `json:"expires_at" yaml:"expires_at" mapstructure:"expires_at"`
+
+	// FindingRef corresponds to the JSON schema field "finding_ref".
+	FindingRef string `json:"finding_ref" yaml:"finding_ref" mapstructure:"finding_ref"`
+
+	// ReasonCode corresponds to the JSON schema field "reason_code".
+	ReasonCode AlertDeliveryV1SchemaJsonReasonCode `json:"reason_code" yaml:"reason_code" mapstructure:"reason_code"`
+
+	// SafeNextChecks corresponds to the JSON schema field "safe_next_checks".
+	SafeNextChecks []string `json:"safe_next_checks" yaml:"safe_next_checks" mapstructure:"safe_next_checks"`
+
+	// Schema corresponds to the JSON schema field "schema".
+	Schema string `json:"schema" yaml:"schema" mapstructure:"schema"`
+
+	// Severity corresponds to the JSON schema field "severity".
+	Severity AlertDeliveryV1SchemaJsonSeverity `json:"severity" yaml:"severity" mapstructure:"severity"`
+
+	// Timeline corresponds to the JSON schema field "timeline".
+	Timeline AlertDeliveryV1SchemaJsonTimeline `json:"timeline" yaml:"timeline" mapstructure:"timeline"`
+
+	// VerificationPlan corresponds to the JSON schema field "verification_plan".
+	VerificationPlan AlertDeliveryV1SchemaJsonVerificationPlan `json:"verification_plan" yaml:"verification_plan" mapstructure:"verification_plan"`
+
+	// WorkflowKind corresponds to the JSON schema field "workflow_kind".
+	WorkflowKind AlertDeliveryV1SchemaJsonWorkflowKind `json:"workflow_kind" yaml:"workflow_kind" mapstructure:"workflow_kind"`
+}
+
+type AlertDeliveryV1SchemaJsonReasonCode string
+
+const AlertDeliveryV1SchemaJsonReasonCodeAllowlistDenied AlertDeliveryV1SchemaJsonReasonCode = "allowlist_denied"
+const AlertDeliveryV1SchemaJsonReasonCodeAmbiguousPriorAttempt AlertDeliveryV1SchemaJsonReasonCode = "ambiguous_prior_attempt"
+const AlertDeliveryV1SchemaJsonReasonCodeApprovalExpired AlertDeliveryV1SchemaJsonReasonCode = "approval_expired"
+const AlertDeliveryV1SchemaJsonReasonCodeApprovalRejected AlertDeliveryV1SchemaJsonReasonCode = "approval_rejected"
+const AlertDeliveryV1SchemaJsonReasonCodeApprovalRequired AlertDeliveryV1SchemaJsonReasonCode = "approval_required"
+const AlertDeliveryV1SchemaJsonReasonCodeAuditUnavailable AlertDeliveryV1SchemaJsonReasonCode = "audit_unavailable"
+const AlertDeliveryV1SchemaJsonReasonCodeCapabilityDestructive AlertDeliveryV1SchemaJsonReasonCode = "capability_destructive"
+const AlertDeliveryV1SchemaJsonReasonCodeCentralUnavailable AlertDeliveryV1SchemaJsonReasonCode = "central_unavailable"
+const AlertDeliveryV1SchemaJsonReasonCodeCircuitBreakerOpen AlertDeliveryV1SchemaJsonReasonCode = "circuit_breaker_open"
+const AlertDeliveryV1SchemaJsonReasonCodeCooldownActive AlertDeliveryV1SchemaJsonReasonCode = "cooldown_active"
+const AlertDeliveryV1SchemaJsonReasonCodeDeploymentDisabled AlertDeliveryV1SchemaJsonReasonCode = "deployment_disabled"
+const AlertDeliveryV1SchemaJsonReasonCodeDisclosureDrift AlertDeliveryV1SchemaJsonReasonCode = "disclosure_drift"
+const AlertDeliveryV1SchemaJsonReasonCodeExecutionFailed AlertDeliveryV1SchemaJsonReasonCode = "execution_failed"
+const AlertDeliveryV1SchemaJsonReasonCodeIdempotencyConflict AlertDeliveryV1SchemaJsonReasonCode = "idempotency_conflict"
+const AlertDeliveryV1SchemaJsonReasonCodeMaintenanceWindow AlertDeliveryV1SchemaJsonReasonCode = "maintenance_window"
+const AlertDeliveryV1SchemaJsonReasonCodeNoSafeAction AlertDeliveryV1SchemaJsonReasonCode = "no_safe_action"
+const AlertDeliveryV1SchemaJsonReasonCodeNonAutoEligible AlertDeliveryV1SchemaJsonReasonCode = "non_auto_eligible"
+const AlertDeliveryV1SchemaJsonReasonCodePreconditionFailed AlertDeliveryV1SchemaJsonReasonCode = "precondition_failed"
+const AlertDeliveryV1SchemaJsonReasonCodeProductDisabled AlertDeliveryV1SchemaJsonReasonCode = "product_disabled"
+const AlertDeliveryV1SchemaJsonReasonCodeProductRbacDenied AlertDeliveryV1SchemaJsonReasonCode = "product_rbac_denied"
+const AlertDeliveryV1SchemaJsonReasonCodeReadOnly AlertDeliveryV1SchemaJsonReasonCode = "read_only"
+const AlertDeliveryV1SchemaJsonReasonCodeSafetyBudgetExceeded AlertDeliveryV1SchemaJsonReasonCode = "safety_budget_exceeded"
+const AlertDeliveryV1SchemaJsonReasonCodeScopeDenied AlertDeliveryV1SchemaJsonReasonCode = "scope_denied"
+const AlertDeliveryV1SchemaJsonReasonCodeStaleLeadership AlertDeliveryV1SchemaJsonReasonCode = "stale_leadership"
+const AlertDeliveryV1SchemaJsonReasonCodeVerificationFailed AlertDeliveryV1SchemaJsonReasonCode = "verification_failed"
+
+var enumValues_AlertDeliveryV1SchemaJsonReasonCode = []interface{}{
+	"capability_destructive",
+	"product_disabled",
+	"deployment_disabled",
+	"stale_leadership",
+	"disclosure_drift",
+	"product_rbac_denied",
+	"scope_denied",
+	"read_only",
+	"non_auto_eligible",
+	"approval_required",
+	"approval_expired",
+	"approval_rejected",
+	"allowlist_denied",
+	"safety_budget_exceeded",
+	"cooldown_active",
+	"maintenance_window",
+	"precondition_failed",
+	"circuit_breaker_open",
+	"idempotency_conflict",
+	"ambiguous_prior_attempt",
+	"execution_failed",
+	"central_unavailable",
+	"audit_unavailable",
+	"verification_failed",
+	"no_safe_action",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonReasonCode) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_AlertDeliveryV1SchemaJsonReasonCode {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_AlertDeliveryV1SchemaJsonReasonCode, v)
+	}
+	*j = AlertDeliveryV1SchemaJsonReasonCode(v)
+	return nil
+}
+
+type AlertDeliveryV1SchemaJsonSeverity string
+
+const AlertDeliveryV1SchemaJsonSeverityCritical AlertDeliveryV1SchemaJsonSeverity = "critical"
+const AlertDeliveryV1SchemaJsonSeverityHigh AlertDeliveryV1SchemaJsonSeverity = "high"
+const AlertDeliveryV1SchemaJsonSeverityInfo AlertDeliveryV1SchemaJsonSeverity = "info"
+const AlertDeliveryV1SchemaJsonSeverityLow AlertDeliveryV1SchemaJsonSeverity = "low"
+const AlertDeliveryV1SchemaJsonSeverityMedium AlertDeliveryV1SchemaJsonSeverity = "medium"
+
+var enumValues_AlertDeliveryV1SchemaJsonSeverity = []interface{}{
+	"info",
+	"low",
+	"medium",
+	"high",
+	"critical",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonSeverity) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_AlertDeliveryV1SchemaJsonSeverity {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_AlertDeliveryV1SchemaJsonSeverity, v)
+	}
+	*j = AlertDeliveryV1SchemaJsonSeverity(v)
+	return nil
+}
+
+type AlertDeliveryV1SchemaJsonTimeline struct {
+	// FirstSeenAt corresponds to the JSON schema field "first_seen_at".
+	FirstSeenAt time.Time `json:"first_seen_at" yaml:"first_seen_at" mapstructure:"first_seen_at"`
+
+	// LastSeenAt corresponds to the JSON schema field "last_seen_at".
+	LastSeenAt time.Time `json:"last_seen_at" yaml:"last_seen_at" mapstructure:"last_seen_at"`
+
+	// LatestTransition corresponds to the JSON schema field "latest_transition".
+	LatestTransition AlertDeliveryV1SchemaJsonTimelineLatestTransition `json:"latest_transition" yaml:"latest_transition" mapstructure:"latest_transition"`
+
+	// RepeatCount corresponds to the JSON schema field "repeat_count".
+	RepeatCount int `json:"repeat_count" yaml:"repeat_count" mapstructure:"repeat_count"`
+
+	// State corresponds to the JSON schema field "state".
+	State AlertDeliveryV1SchemaJsonTimelineState `json:"state" yaml:"state" mapstructure:"state"`
+}
+
+type AlertDeliveryV1SchemaJsonTimelineLatestTransition string
+
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionAcknowledged AlertDeliveryV1SchemaJsonTimelineLatestTransition = "acknowledged"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionCreated AlertDeliveryV1SchemaJsonTimelineLatestTransition = "created"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionDeduplicated AlertDeliveryV1SchemaJsonTimelineLatestTransition = "deduplicated"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionDismissed AlertDeliveryV1SchemaJsonTimelineLatestTransition = "dismissed"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionRemediationStarted AlertDeliveryV1SchemaJsonTimelineLatestTransition = "remediation_started"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionReopened AlertDeliveryV1SchemaJsonTimelineLatestTransition = "reopened"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionResolved AlertDeliveryV1SchemaJsonTimelineLatestTransition = "resolved"
+const AlertDeliveryV1SchemaJsonTimelineLatestTransitionVerificationRequested AlertDeliveryV1SchemaJsonTimelineLatestTransition = "verification_requested"
+
+var enumValues_AlertDeliveryV1SchemaJsonTimelineLatestTransition = []interface{}{
+	"created",
+	"deduplicated",
+	"acknowledged",
+	"remediation_started",
+	"verification_requested",
+	"dismissed",
+	"resolved",
+	"reopened",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonTimelineLatestTransition) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_AlertDeliveryV1SchemaJsonTimelineLatestTransition {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_AlertDeliveryV1SchemaJsonTimelineLatestTransition, v)
+	}
+	*j = AlertDeliveryV1SchemaJsonTimelineLatestTransition(v)
+	return nil
+}
+
+type AlertDeliveryV1SchemaJsonTimelineState string
+
+const AlertDeliveryV1SchemaJsonTimelineStateInitial AlertDeliveryV1SchemaJsonTimelineState = "initial"
+const AlertDeliveryV1SchemaJsonTimelineStateRepeated AlertDeliveryV1SchemaJsonTimelineState = "repeated"
+const AlertDeliveryV1SchemaJsonTimelineStateTerminal AlertDeliveryV1SchemaJsonTimelineState = "terminal"
+
+var enumValues_AlertDeliveryV1SchemaJsonTimelineState = []interface{}{
+	"initial",
+	"repeated",
+	"terminal",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonTimelineState) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_AlertDeliveryV1SchemaJsonTimelineState {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_AlertDeliveryV1SchemaJsonTimelineState, v)
+	}
+	*j = AlertDeliveryV1SchemaJsonTimelineState(v)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonTimeline) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["first_seen_at"]; raw != nil && !ok {
+		return fmt.Errorf("field first_seen_at in AlertDeliveryV1SchemaJsonTimeline: required")
+	}
+	if _, ok := raw["last_seen_at"]; raw != nil && !ok {
+		return fmt.Errorf("field last_seen_at in AlertDeliveryV1SchemaJsonTimeline: required")
+	}
+	if _, ok := raw["latest_transition"]; raw != nil && !ok {
+		return fmt.Errorf("field latest_transition in AlertDeliveryV1SchemaJsonTimeline: required")
+	}
+	if _, ok := raw["repeat_count"]; raw != nil && !ok {
+		return fmt.Errorf("field repeat_count in AlertDeliveryV1SchemaJsonTimeline: required")
+	}
+	if _, ok := raw["state"]; raw != nil && !ok {
+		return fmt.Errorf("field state in AlertDeliveryV1SchemaJsonTimeline: required")
+	}
+	type Plain AlertDeliveryV1SchemaJsonTimeline
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if 100 < plain.RepeatCount {
+		return fmt.Errorf("field %s: must be <= %v", "repeat_count", 100)
+	}
+	if 1 > plain.RepeatCount {
+		return fmt.Errorf("field %s: must be >= %v", "repeat_count", 1)
+	}
+	*j = AlertDeliveryV1SchemaJsonTimeline(plain)
+	return nil
+}
+
+type AlertDeliveryV1SchemaJsonVerificationPlan struct {
+	// Method corresponds to the JSON schema field "method".
+	Method string `json:"method" yaml:"method" mapstructure:"method"`
+
+	// Steps corresponds to the JSON schema field "steps".
+	Steps []string `json:"steps" yaml:"steps" mapstructure:"steps"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonVerificationPlan) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["method"]; raw != nil && !ok {
+		return fmt.Errorf("field method in AlertDeliveryV1SchemaJsonVerificationPlan: required")
+	}
+	if _, ok := raw["steps"]; raw != nil && !ok {
+		return fmt.Errorf("field steps in AlertDeliveryV1SchemaJsonVerificationPlan: required")
+	}
+	type Plain AlertDeliveryV1SchemaJsonVerificationPlan
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if matched, _ := regexp.MatchString(`^[a-z][a-z0-9_.:-]{0,127}$`, string(plain.Method)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "Method", `^[a-z][a-z0-9_.:-]{0,127}$`)
+	}
+	if plain.Steps != nil && len(plain.Steps) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "steps", 1)
+	}
+	if len(plain.Steps) > 16 {
+		return fmt.Errorf("field %s length: must be <= %d", "steps", 16)
+	}
+	*j = AlertDeliveryV1SchemaJsonVerificationPlan(plain)
+	return nil
+}
+
+type AlertDeliveryV1SchemaJsonWorkflowKind string
+
+const AlertDeliveryV1SchemaJsonWorkflowKindClosed AlertDeliveryV1SchemaJsonWorkflowKind = "closed"
+const AlertDeliveryV1SchemaJsonWorkflowKindManualRemediation AlertDeliveryV1SchemaJsonWorkflowKind = "manual_remediation"
+const AlertDeliveryV1SchemaJsonWorkflowKindReviewRequired AlertDeliveryV1SchemaJsonWorkflowKind = "review_required"
+const AlertDeliveryV1SchemaJsonWorkflowKindVerification AlertDeliveryV1SchemaJsonWorkflowKind = "verification"
+
+var enumValues_AlertDeliveryV1SchemaJsonWorkflowKind = []interface{}{
+	"review_required",
+	"manual_remediation",
+	"verification",
+	"closed",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJsonWorkflowKind) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_AlertDeliveryV1SchemaJsonWorkflowKind {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_AlertDeliveryV1SchemaJsonWorkflowKind, v)
+	}
+	*j = AlertDeliveryV1SchemaJsonWorkflowKind(v)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *AlertDeliveryV1SchemaJson) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["advisory_only"]; raw != nil && !ok {
+		return fmt.Errorf("field advisory_only in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["alert_id"]; raw != nil && !ok {
+		return fmt.Errorf("field alert_id in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["deduplication_key"]; raw != nil && !ok {
+		return fmt.Errorf("field deduplication_key in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["deep_link_reference"]; raw != nil && !ok {
+		return fmt.Errorf("field deep_link_reference in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["expires_at"]; raw != nil && !ok {
+		return fmt.Errorf("field expires_at in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["finding_ref"]; raw != nil && !ok {
+		return fmt.Errorf("field finding_ref in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["reason_code"]; raw != nil && !ok {
+		return fmt.Errorf("field reason_code in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["safe_next_checks"]; raw != nil && !ok {
+		return fmt.Errorf("field safe_next_checks in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["schema"]; raw != nil && !ok {
+		return fmt.Errorf("field schema in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["severity"]; raw != nil && !ok {
+		return fmt.Errorf("field severity in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["timeline"]; raw != nil && !ok {
+		return fmt.Errorf("field timeline in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["verification_plan"]; raw != nil && !ok {
+		return fmt.Errorf("field verification_plan in AlertDeliveryV1SchemaJson: required")
+	}
+	if _, ok := raw["workflow_kind"]; raw != nil && !ok {
+		return fmt.Errorf("field workflow_kind in AlertDeliveryV1SchemaJson: required")
+	}
+	type Plain AlertDeliveryV1SchemaJson
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.AdvisoryOnly != true {
+		return fmt.Errorf("field %s: must be equal to %t", "advisory_only", true)
+	}
+	if matched, _ := regexp.MatchString(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, string(plain.AlertId)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "AlertId", `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	}
+	if matched, _ := regexp.MatchString(`^[a-f0-9]{64}$`, string(plain.DeduplicationKey)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "DeduplicationKey", `^[a-f0-9]{64}$`)
+	}
+	if matched, _ := regexp.MatchString(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, string(plain.DeepLinkReference)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "DeepLinkReference", `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	}
+	if matched, _ := regexp.MatchString(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, string(plain.FindingRef)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "FindingRef", `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	}
+	if plain.SafeNextChecks != nil && len(plain.SafeNextChecks) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "safe_next_checks", 1)
+	}
+	if len(plain.SafeNextChecks) > 16 {
+		return fmt.Errorf("field %s length: must be <= %d", "safe_next_checks", 16)
+	}
+	if plain.Schema != "charlie.alert-delivery/v1" {
+		return fmt.Errorf("field %s: must be equal to %s", "schema", "charlie.alert-delivery/v1")
+	}
+	*j = AlertDeliveryV1SchemaJson(plain)
+	return nil
+}
+
 type ArgumentProperty struct {
 	// Description corresponds to the JSON schema field "description".
 	Description *string `json:"description,omitempty,omitzero" yaml:"description,omitempty" mapstructure:"description,omitempty"`
@@ -114,6 +547,7 @@ const BlockCodeAmbiguousPriorAttempt BlockCode = "ambiguous_prior_attempt"
 const BlockCodeApprovalExpired BlockCode = "approval_expired"
 const BlockCodeApprovalRejected BlockCode = "approval_rejected"
 const BlockCodeApprovalRequired BlockCode = "approval_required"
+const BlockCodeAuditUnavailable BlockCode = "audit_unavailable"
 const BlockCodeCapabilityDestructive BlockCode = "capability_destructive"
 const BlockCodeCentralUnavailable BlockCode = "central_unavailable"
 const BlockCodeCircuitBreakerOpen BlockCode = "circuit_breaker_open"
@@ -157,6 +591,7 @@ var enumValues_BlockCode = []interface{}{
 	"ambiguous_prior_attempt",
 	"execution_failed",
 	"central_unavailable",
+	"audit_unavailable",
 	"verification_failed",
 	"no_safe_action",
 }

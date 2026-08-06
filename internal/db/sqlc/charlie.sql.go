@@ -123,6 +123,21 @@ func (q *Queries) ActivateCharlieConnection(ctx context.Context, arg ActivateCha
 	return i, err
 }
 
+const addCharlieAlertPolicyChannel = `-- name: AddCharlieAlertPolicyChannel :exec
+INSERT INTO charlie_alert_policy_channels (connection_id, notification_channel_id)
+VALUES ($1, $2)
+`
+
+type AddCharlieAlertPolicyChannelParams struct {
+	ConnectionID          uuid.UUID `json:"connection_id"`
+	NotificationChannelID uuid.UUID `json:"notification_channel_id"`
+}
+
+func (q *Queries) AddCharlieAlertPolicyChannel(ctx context.Context, arg AddCharlieAlertPolicyChannelParams) error {
+	_, err := q.db.Exec(ctx, addCharlieAlertPolicyChannel, arg.ConnectionID, arg.NotificationChannelID)
+	return err
+}
+
 const addCharlieFindingResource = `-- name: AddCharlieFindingResource :exec
 INSERT INTO charlie_finding_resources (finding_id, resource_type, resource_id, required_verb)
 VALUES ($1, $2, $3, $4)
@@ -697,6 +712,29 @@ func (q *Queries) CharlieAgentReconnectStats(ctx context.Context, arg CharlieAge
 	return i, err
 }
 
+const charlieAlertDeliveryAllowed = `-- name: CharlieAlertDeliveryAllowed :one
+SELECT EXISTS (
+    SELECT 1 FROM charlie_alert_deliveries d
+    JOIN charlie_connections c ON c.id = d.connection_id
+        AND c.active = true AND c.emergency_disabled = false
+        AND c.requested_mode <> 'disabled' AND c.verified_mode <> 'disabled'
+    JOIN charlie_alert_policies p ON p.connection_id = d.connection_id AND p.enabled = true
+    JOIN charlie_alert_policy_channels pc ON pc.connection_id = p.connection_id
+        AND pc.notification_channel_id = d.notification_channel_id
+    JOIN notification_channels nc ON nc.id = pc.notification_channel_id AND nc.enabled = true
+    WHERE d.id = $1
+      AND CASE d.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+          >= CASE p.minimum_severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+)
+`
+
+func (q *Queries) CharlieAlertDeliveryAllowed(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, charlieAlertDeliveryAllowed, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const charlieTunnelHealth = `-- name: CharlieTunnelHealth :one
 SELECT
     count(*) FILTER (WHERE event_type <> 'recovered')::bigint AS recent_errors,
@@ -898,6 +936,43 @@ func (q *Queries) ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharli
 		&i.VerifiedAt,
 		&i.AutoBudgetReserved,
 		&i.SafetyPolicyRevision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const claimCharlieAlertDelivery = `-- name: ClaimCharlieAlertDelivery :one
+UPDATE charlie_alert_deliveries
+SET status = 'delivering', attempt_count = attempt_count + 1, updated_at = now()
+WHERE id = $1 AND (
+    (status IN ('queued', 'retry') AND next_attempt_at <= now())
+    OR (status = 'delivering' AND updated_at <= now() - interval '2 minutes')
+)
+RETURNING id, connection_id, finding_id, notification_channel_id, policy_revision, delivery_kind, dedupe_bucket, severity, status, attempt_count, maximum_attempts, next_attempt_at, delivered_at, last_error_code, deep_link, subject, body, created_at, updated_at
+`
+
+func (q *Queries) ClaimCharlieAlertDelivery(ctx context.Context, id uuid.UUID) (CharlieAlertDelivery, error) {
+	row := q.db.QueryRow(ctx, claimCharlieAlertDelivery, id)
+	var i CharlieAlertDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.FindingID,
+		&i.NotificationChannelID,
+		&i.PolicyRevision,
+		&i.DeliveryKind,
+		&i.DedupeBucket,
+		&i.Severity,
+		&i.Status,
+		&i.AttemptCount,
+		&i.MaximumAttempts,
+		&i.NextAttemptAt,
+		&i.DeliveredAt,
+		&i.LastErrorCode,
+		&i.DeepLink,
+		&i.Subject,
+		&i.Body,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1418,6 +1493,111 @@ func (q *Queries) CreateCharlieActionDeferral(ctx context.Context, arg CreateCha
 		&i.WindowID,
 		&i.DeferredUntil,
 		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createCharlieAlertDeliveryWithOutbox = `-- name: CreateCharlieAlertDeliveryWithOutbox :one
+WITH delivery AS (
+    INSERT INTO charlie_alert_deliveries (
+        id, connection_id, finding_id, notification_channel_id, policy_revision,
+        delivery_kind, dedupe_bucket, severity, next_attempt_at, deep_link, subject, body
+    ) VALUES (
+        $1, $2, $3, $4,
+        $5, $6, $7,
+        $8, $9, $10,
+        $11, $12
+    )
+    ON CONFLICT (finding_id, notification_channel_id, delivery_kind, dedupe_bucket) DO NOTHING
+    RETURNING id, connection_id, finding_id, notification_channel_id, policy_revision, delivery_kind, dedupe_bucket, severity, status, attempt_count, maximum_attempts, next_attempt_at, delivered_at, last_error_code, deep_link, subject, body, created_at, updated_at
+), outbox AS (
+    INSERT INTO task_outbox (
+        dedupe_key, task_type, payload, queue_name, max_retry,
+        timeout_seconds, unique_seconds, max_delivery_attempts, next_attempt_at
+    )
+    SELECT 'charlie-alert:' || id::text, 'charlie:alert_dispatch',
+        convert_to(jsonb_build_object('delivery_id', id::text)::text, 'UTF8'),
+        'critical', 8, 30, 0, 20, next_attempt_at
+    FROM delivery
+    ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+    RETURNING id
+)
+SELECT delivery.id, delivery.connection_id, delivery.finding_id, delivery.notification_channel_id, delivery.policy_revision, delivery.delivery_kind, delivery.dedupe_bucket, delivery.severity, delivery.status, delivery.attempt_count, delivery.maximum_attempts, delivery.next_attempt_at, delivery.delivered_at, delivery.last_error_code, delivery.deep_link, delivery.subject, delivery.body, delivery.created_at, delivery.updated_at FROM delivery CROSS JOIN outbox
+`
+
+type CreateCharlieAlertDeliveryWithOutboxParams struct {
+	ID                    uuid.UUID   `json:"id"`
+	ConnectionID          uuid.UUID   `json:"connection_id"`
+	FindingID             uuid.UUID   `json:"finding_id"`
+	NotificationChannelID pgtype.UUID `json:"notification_channel_id"`
+	PolicyRevision        int64       `json:"policy_revision"`
+	DeliveryKind          string      `json:"delivery_kind"`
+	DedupeBucket          int64       `json:"dedupe_bucket"`
+	Severity              string      `json:"severity"`
+	NextAttemptAt         time.Time   `json:"next_attempt_at"`
+	DeepLink              string      `json:"deep_link"`
+	Subject               string      `json:"subject"`
+	Body                  string      `json:"body"`
+}
+
+type CreateCharlieAlertDeliveryWithOutboxRow struct {
+	ID                    uuid.UUID          `json:"id"`
+	ConnectionID          uuid.UUID          `json:"connection_id"`
+	FindingID             uuid.UUID          `json:"finding_id"`
+	NotificationChannelID pgtype.UUID        `json:"notification_channel_id"`
+	PolicyRevision        int64              `json:"policy_revision"`
+	DeliveryKind          string             `json:"delivery_kind"`
+	DedupeBucket          int64              `json:"dedupe_bucket"`
+	Severity              string             `json:"severity"`
+	Status                string             `json:"status"`
+	AttemptCount          int32              `json:"attempt_count"`
+	MaximumAttempts       int32              `json:"maximum_attempts"`
+	NextAttemptAt         time.Time          `json:"next_attempt_at"`
+	DeliveredAt           pgtype.Timestamptz `json:"delivered_at"`
+	LastErrorCode         string             `json:"last_error_code"`
+	DeepLink              string             `json:"deep_link"`
+	Subject               string             `json:"subject"`
+	Body                  string             `json:"body"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+}
+
+func (q *Queries) CreateCharlieAlertDeliveryWithOutbox(ctx context.Context, arg CreateCharlieAlertDeliveryWithOutboxParams) (CreateCharlieAlertDeliveryWithOutboxRow, error) {
+	row := q.db.QueryRow(ctx, createCharlieAlertDeliveryWithOutbox,
+		arg.ID,
+		arg.ConnectionID,
+		arg.FindingID,
+		arg.NotificationChannelID,
+		arg.PolicyRevision,
+		arg.DeliveryKind,
+		arg.DedupeBucket,
+		arg.Severity,
+		arg.NextAttemptAt,
+		arg.DeepLink,
+		arg.Subject,
+		arg.Body,
+	)
+	var i CreateCharlieAlertDeliveryWithOutboxRow
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.FindingID,
+		&i.NotificationChannelID,
+		&i.PolicyRevision,
+		&i.DeliveryKind,
+		&i.DedupeBucket,
+		&i.Severity,
+		&i.Status,
+		&i.AttemptCount,
+		&i.MaximumAttempts,
+		&i.NextAttemptAt,
+		&i.DeliveredAt,
+		&i.LastErrorCode,
+		&i.DeepLink,
+		&i.Subject,
+		&i.Body,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1979,6 +2159,15 @@ func (q *Queries) DeactivateCharlieConnectionsForReplacement(ctx context.Context
 	return err
 }
 
+const deleteCharlieAlertPolicyChannels = `-- name: DeleteCharlieAlertPolicyChannels :exec
+DELETE FROM charlie_alert_policy_channels WHERE connection_id = $1
+`
+
+func (q *Queries) DeleteCharlieAlertPolicyChannels(ctx context.Context, connectionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCharlieAlertPolicyChannels, connectionID)
+	return err
+}
+
 const deleteCharlieFindingMetadataBefore = `-- name: DeleteCharlieFindingMetadataBefore :execrows
 DELETE FROM charlie_findings
 WHERE status IN ('dismissed', 'resolved', 'expired')
@@ -2488,6 +2677,65 @@ func (q *Queries) GetCharlieActionSafetySnapshot(ctx context.Context, arg GetCha
 		&i.CircuitClosed,
 		&i.IncidentBudgetAvailable,
 		&i.WindowBudgetAvailable,
+	)
+	return i, err
+}
+
+const getCharlieAlertDelivery = `-- name: GetCharlieAlertDelivery :one
+SELECT id, connection_id, finding_id, notification_channel_id, policy_revision, delivery_kind, dedupe_bucket, severity, status, attempt_count, maximum_attempts, next_attempt_at, delivered_at, last_error_code, deep_link, subject, body, created_at, updated_at FROM charlie_alert_deliveries WHERE id = $1
+`
+
+func (q *Queries) GetCharlieAlertDelivery(ctx context.Context, id uuid.UUID) (CharlieAlertDelivery, error) {
+	row := q.db.QueryRow(ctx, getCharlieAlertDelivery, id)
+	var i CharlieAlertDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.FindingID,
+		&i.NotificationChannelID,
+		&i.PolicyRevision,
+		&i.DeliveryKind,
+		&i.DedupeBucket,
+		&i.Severity,
+		&i.Status,
+		&i.AttemptCount,
+		&i.MaximumAttempts,
+		&i.NextAttemptAt,
+		&i.DeliveredAt,
+		&i.LastErrorCode,
+		&i.DeepLink,
+		&i.Subject,
+		&i.Body,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCharlieAlertPolicy = `-- name: GetCharlieAlertPolicy :one
+
+SELECT connection_id, enabled, minimum_severity, dedupe_window_seconds, escalation_after_seconds, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, revision, updated_by_id, created_at, updated_at FROM charlie_alert_policies WHERE connection_id = $1
+`
+
+// Charlie finding notification policy is product-owned. It references local
+// notification channels by ID and never stores destination credentials.
+func (q *Queries) GetCharlieAlertPolicy(ctx context.Context, connectionID uuid.UUID) (CharlieAlertPolicy, error) {
+	row := q.db.QueryRow(ctx, getCharlieAlertPolicy, connectionID)
+	var i CharlieAlertPolicy
+	err := row.Scan(
+		&i.ConnectionID,
+		&i.Enabled,
+		&i.MinimumSeverity,
+		&i.DedupeWindowSeconds,
+		&i.EscalationAfterSeconds,
+		&i.QuietHoursEnabled,
+		&i.QuietHoursStart,
+		&i.QuietHoursEnd,
+		&i.QuietHoursTimezone,
+		&i.Revision,
+		&i.UpdatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -3155,6 +3403,150 @@ func (q *Queries) ListCharlieAccessibleSessionCandidates(ctx context.Context, ar
 	return items, nil
 }
 
+const listCharlieAlertAvailableChannels = `-- name: ListCharlieAlertAvailableChannels :many
+SELECT id, name, channel_type, configuration, enabled, created_by_id, created_at, updated_at FROM notification_channels
+WHERE enabled = true AND channel_type IN ('slack', 'pagerduty', 'msteams', 'webhook')
+ORDER BY name, id
+`
+
+func (q *Queries) ListCharlieAlertAvailableChannels(ctx context.Context) ([]NotificationChannel, error) {
+	rows, err := q.db.Query(ctx, listCharlieAlertAvailableChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NotificationChannel{}
+	for rows.Next() {
+		var i NotificationChannel
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ChannelType,
+			&i.Configuration,
+			&i.Enabled,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCharlieAlertPolicyChannels = `-- name: ListCharlieAlertPolicyChannels :many
+SELECT nc.id, nc.name, nc.channel_type, nc.configuration, nc.enabled, nc.created_by_id, nc.created_at, nc.updated_at FROM notification_channels nc
+JOIN charlie_alert_policy_channels pc ON pc.notification_channel_id = nc.id
+WHERE pc.connection_id = $1
+ORDER BY nc.name, nc.id
+`
+
+func (q *Queries) ListCharlieAlertPolicyChannels(ctx context.Context, connectionID uuid.UUID) ([]NotificationChannel, error) {
+	rows, err := q.db.Query(ctx, listCharlieAlertPolicyChannels, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NotificationChannel{}
+	for rows.Next() {
+		var i NotificationChannel
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ChannelType,
+			&i.Configuration,
+			&i.Enabled,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCharlieAlertReconcileCandidates = `-- name: ListCharlieAlertReconcileCandidates :many
+SELECT f.id AS finding_id, f.severity, f.status, f.execution_block_code,
+       f.repeat_count, scope.resource_type, scope.resource_id
+FROM charlie_findings f
+JOIN charlie_connections c ON c.id = f.connection_id AND c.active = true AND c.emergency_disabled = false
+    AND c.requested_mode <> 'disabled' AND c.verified_mode <> 'disabled'
+JOIN charlie_alert_policies p ON p.connection_id = c.id AND p.enabled = true
+JOIN LATERAL (
+    SELECT resource_type, resource_id FROM charlie_finding_resources
+    WHERE finding_id = f.id ORDER BY resource_type, resource_id LIMIT 1
+) scope ON true
+WHERE f.status IN ('open', 'acknowledged')
+  AND CASE f.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+      >= CASE p.minimum_severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'warning' THEN 3 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END
+  AND EXISTS (
+      SELECT 1 FROM charlie_alert_policy_channels pc
+      JOIN notification_channels nc ON nc.id = pc.notification_channel_id AND nc.enabled = true
+      WHERE pc.connection_id = p.connection_id
+        AND (
+          NOT EXISTS (
+              SELECT 1 FROM charlie_alert_deliveries d
+              WHERE d.finding_id = f.id AND d.notification_channel_id = pc.notification_channel_id
+                AND d.delivery_kind = 'initial'
+          )
+          OR (p.escalation_after_seconds > 0 AND NOT EXISTS (
+              SELECT 1 FROM charlie_alert_deliveries d
+              WHERE d.finding_id = f.id AND d.notification_channel_id = pc.notification_channel_id
+                AND d.delivery_kind = 'escalation'
+          ))
+        )
+  )
+ORDER BY f.updated_at, f.id
+LIMIT $1
+`
+
+type ListCharlieAlertReconcileCandidatesRow struct {
+	FindingID          uuid.UUID `json:"finding_id"`
+	Severity           string    `json:"severity"`
+	Status             string    `json:"status"`
+	ExecutionBlockCode string    `json:"execution_block_code"`
+	RepeatCount        int32     `json:"repeat_count"`
+	ResourceType       string    `json:"resource_type"`
+	ResourceID         string    `json:"resource_id"`
+}
+
+func (q *Queries) ListCharlieAlertReconcileCandidates(ctx context.Context, limit int32) ([]ListCharlieAlertReconcileCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listCharlieAlertReconcileCandidates, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCharlieAlertReconcileCandidatesRow{}
+	for rows.Next() {
+		var i ListCharlieAlertReconcileCandidatesRow
+		if err := rows.Scan(
+			&i.FindingID,
+			&i.Severity,
+			&i.Status,
+			&i.ExecutionBlockCode,
+			&i.RepeatCount,
+			&i.ResourceType,
+			&i.ResourceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCharlieAmbiguousReceipts = `-- name: ListCharlieAmbiguousReceipts :many
 SELECT id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, arguments_encrypted, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, result_encrypted, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at FROM charlie_action_receipts
 WHERE state IN ('dispatched', 'ambiguous', 'verifying')
@@ -3733,6 +4125,35 @@ func (q *Queries) LockCharlieConnectionActivation(ctx context.Context, id uuid.U
 	return items, nil
 }
 
+const markCharlieAlertDeliveryDelivered = `-- name: MarkCharlieAlertDeliveryDelivered :exec
+UPDATE charlie_alert_deliveries
+SET status = 'delivered', delivered_at = now(), last_error_code = '', updated_at = now()
+WHERE id = $1 AND status = 'delivering'
+`
+
+func (q *Queries) MarkCharlieAlertDeliveryDelivered(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markCharlieAlertDeliveryDelivered, id)
+	return err
+}
+
+const markCharlieAlertDeliveryRetry = `-- name: MarkCharlieAlertDeliveryRetry :exec
+UPDATE charlie_alert_deliveries
+SET status = CASE WHEN attempt_count >= maximum_attempts THEN 'dead' ELSE 'retry' END,
+    next_attempt_at = $2, last_error_code = $3, updated_at = now()
+WHERE id = $1 AND status = 'delivering'
+`
+
+type MarkCharlieAlertDeliveryRetryParams struct {
+	ID            uuid.UUID `json:"id"`
+	NextAttemptAt time.Time `json:"next_attempt_at"`
+	LastErrorCode string    `json:"last_error_code"`
+}
+
+func (q *Queries) MarkCharlieAlertDeliveryRetry(ctx context.Context, arg MarkCharlieAlertDeliveryRetryParams) error {
+	_, err := q.db.Exec(ctx, markCharlieAlertDeliveryRetry, arg.ID, arg.NextAttemptAt, arg.LastErrorCode)
+	return err
+}
+
 const recordAgentConnectionEvent = `-- name: RecordAgentConnectionEvent :one
 INSERT INTO agent_connection_events (
     cluster_id, connection_id, event_type, reason_code, agent_id,
@@ -4248,6 +4669,22 @@ func (q *Queries) SuppressActiveCharlieTriggerEvent(ctx context.Context, arg Sup
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const suppressCharlieAlertDelivery = `-- name: SuppressCharlieAlertDelivery :exec
+UPDATE charlie_alert_deliveries
+SET status = 'suppressed', last_error_code = $2, updated_at = now()
+WHERE id = $1 AND status = 'delivering'
+`
+
+type SuppressCharlieAlertDeliveryParams struct {
+	ID            uuid.UUID `json:"id"`
+	LastErrorCode string    `json:"last_error_code"`
+}
+
+func (q *Queries) SuppressCharlieAlertDelivery(ctx context.Context, arg SuppressCharlieAlertDeliveryParams) error {
+	_, err := q.db.Exec(ctx, suppressCharlieAlertDelivery, arg.ID, arg.LastErrorCode)
+	return err
 }
 
 const transitionCharlieActionApproval = `-- name: TransitionCharlieActionApproval :one
@@ -4882,6 +5319,77 @@ func (q *Queries) UpsertAgentOperationalStatus(ctx context.Context, arg UpsertAg
 		&i.OwningServerReplica,
 		&i.LastSuccessfulConnectionAt,
 		&i.LastStatusAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertCharlieAlertPolicy = `-- name: UpsertCharlieAlertPolicy :one
+INSERT INTO charlie_alert_policies (
+    connection_id, enabled, minimum_severity, dedupe_window_seconds,
+    escalation_after_seconds, quiet_hours_enabled, quiet_hours_start,
+    quiet_hours_end, quiet_hours_timezone, updated_by_id
+) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+WHERE $11::bigint = 0
+   OR EXISTS (SELECT 1 FROM charlie_alert_policies WHERE connection_id = $1)
+ON CONFLICT (connection_id) DO UPDATE SET
+    enabled = EXCLUDED.enabled,
+    minimum_severity = EXCLUDED.minimum_severity,
+    dedupe_window_seconds = EXCLUDED.dedupe_window_seconds,
+    escalation_after_seconds = EXCLUDED.escalation_after_seconds,
+    quiet_hours_enabled = EXCLUDED.quiet_hours_enabled,
+    quiet_hours_start = EXCLUDED.quiet_hours_start,
+    quiet_hours_end = EXCLUDED.quiet_hours_end,
+    quiet_hours_timezone = EXCLUDED.quiet_hours_timezone,
+    updated_by_id = EXCLUDED.updated_by_id,
+    revision = charlie_alert_policies.revision + 1,
+    updated_at = now()
+WHERE charlie_alert_policies.revision = $11::bigint
+RETURNING connection_id, enabled, minimum_severity, dedupe_window_seconds, escalation_after_seconds, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, revision, updated_by_id, created_at, updated_at
+`
+
+type UpsertCharlieAlertPolicyParams struct {
+	ConnectionID           uuid.UUID   `json:"connection_id"`
+	Enabled                bool        `json:"enabled"`
+	MinimumSeverity        string      `json:"minimum_severity"`
+	DedupeWindowSeconds    int32       `json:"dedupe_window_seconds"`
+	EscalationAfterSeconds int32       `json:"escalation_after_seconds"`
+	QuietHoursEnabled      bool        `json:"quiet_hours_enabled"`
+	QuietHoursStart        string      `json:"quiet_hours_start"`
+	QuietHoursEnd          string      `json:"quiet_hours_end"`
+	QuietHoursTimezone     string      `json:"quiet_hours_timezone"`
+	UpdatedByID            pgtype.UUID `json:"updated_by_id"`
+	ExpectedRevision       int64       `json:"expected_revision"`
+}
+
+func (q *Queries) UpsertCharlieAlertPolicy(ctx context.Context, arg UpsertCharlieAlertPolicyParams) (CharlieAlertPolicy, error) {
+	row := q.db.QueryRow(ctx, upsertCharlieAlertPolicy,
+		arg.ConnectionID,
+		arg.Enabled,
+		arg.MinimumSeverity,
+		arg.DedupeWindowSeconds,
+		arg.EscalationAfterSeconds,
+		arg.QuietHoursEnabled,
+		arg.QuietHoursStart,
+		arg.QuietHoursEnd,
+		arg.QuietHoursTimezone,
+		arg.UpdatedByID,
+		arg.ExpectedRevision,
+	)
+	var i CharlieAlertPolicy
+	err := row.Scan(
+		&i.ConnectionID,
+		&i.Enabled,
+		&i.MinimumSeverity,
+		&i.DedupeWindowSeconds,
+		&i.EscalationAfterSeconds,
+		&i.QuietHoursEnabled,
+		&i.QuietHoursStart,
+		&i.QuietHoursEnd,
+		&i.QuietHoursTimezone,
+		&i.Revision,
+		&i.UpdatedByID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -16,6 +16,8 @@ func validAuditFields(prefix, resourceType string) map[string]any {
 		return map[string]any{"outcome_code": "completed"}
 	case "admin.charlie.mode.":
 		return map[string]any{"outcome_code": "completed", "mode": "read_only", "revision": int64(2)}
+	case "admin.charlie.alert_policy.":
+		return map[string]any{"outcome_code": "completed", "enabled": true, "minimum_severity": "high", "dedupe_window_seconds": int32(900), "escalation_after_seconds": int32(3600), "quiet_hours_enabled": true, "channel_count": 2, "revision": int64(2)}
 	case "admin.charlie.trigger.":
 		if resourceType == "charlie_trigger_rule" {
 			return map[string]any{"outcome_code": "completed", "enabled": true, "suppressed": false}

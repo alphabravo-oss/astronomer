@@ -593,6 +593,50 @@ type CharlieActionReceipt struct {
 	UpdatedAt             time.Time          `json:"updated_at"`
 }
 
+type CharlieAlertDelivery struct {
+	ID                    uuid.UUID          `json:"id"`
+	ConnectionID          uuid.UUID          `json:"connection_id"`
+	FindingID             uuid.UUID          `json:"finding_id"`
+	NotificationChannelID pgtype.UUID        `json:"notification_channel_id"`
+	PolicyRevision        int64              `json:"policy_revision"`
+	DeliveryKind          string             `json:"delivery_kind"`
+	DedupeBucket          int64              `json:"dedupe_bucket"`
+	Severity              string             `json:"severity"`
+	Status                string             `json:"status"`
+	AttemptCount          int32              `json:"attempt_count"`
+	MaximumAttempts       int32              `json:"maximum_attempts"`
+	NextAttemptAt         time.Time          `json:"next_attempt_at"`
+	DeliveredAt           pgtype.Timestamptz `json:"delivered_at"`
+	LastErrorCode         string             `json:"last_error_code"`
+	DeepLink              string             `json:"deep_link"`
+	Subject               string             `json:"subject"`
+	Body                  string             `json:"body"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+}
+
+type CharlieAlertPolicy struct {
+	ConnectionID           uuid.UUID   `json:"connection_id"`
+	Enabled                bool        `json:"enabled"`
+	MinimumSeverity        string      `json:"minimum_severity"`
+	DedupeWindowSeconds    int32       `json:"dedupe_window_seconds"`
+	EscalationAfterSeconds int32       `json:"escalation_after_seconds"`
+	QuietHoursEnabled      bool        `json:"quiet_hours_enabled"`
+	QuietHoursStart        string      `json:"quiet_hours_start"`
+	QuietHoursEnd          string      `json:"quiet_hours_end"`
+	QuietHoursTimezone     string      `json:"quiet_hours_timezone"`
+	Revision               int64       `json:"revision"`
+	UpdatedByID            pgtype.UUID `json:"updated_by_id"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+}
+
+type CharlieAlertPolicyChannel struct {
+	ConnectionID          uuid.UUID `json:"connection_id"`
+	NotificationChannelID uuid.UUID `json:"notification_channel_id"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
 type CharlieAutomationPolicy struct {
 	ID                    uuid.UUID `json:"id"`
 	ConnectionID          uuid.UUID `json:"connection_id"`

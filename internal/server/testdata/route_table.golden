@@ -90,6 +90,7 @@ GET /api/v1/admin/agents/cluster-admin-posture
 GET /api/v1/admin/alerting/inhibitions
 GET /api/v1/admin/alerting/inhibitions/{id}
 GET /api/v1/admin/charlie/access
+GET /api/v1/admin/charlie/alert-policy
 GET /api/v1/admin/charlie/status
 GET /api/v1/admin/charlie/trigger-events
 GET /api/v1/admin/charlie/trigger-rules
@@ -653,6 +654,7 @@ POST /scim/v2/Users
 PUT /api/v1/admin/alerting/inhibitions/{id}
 PUT /api/v1/admin/charlie/access
 PUT /api/v1/admin/charlie/action-policies/{capability}
+PUT /api/v1/admin/charlie/alert-policy
 PUT /api/v1/admin/dashboard-widgets/{id}
 PUT /api/v1/admin/gitops-sources/{id}
 PUT /api/v1/admin/network-policy-templates/{id}

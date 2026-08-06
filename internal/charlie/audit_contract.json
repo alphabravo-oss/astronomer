@@ -21,6 +21,7 @@
     "destructive_capability",
     "disclosure_changed",
     "authorization_denied",
+    "audit_unavailable",
     "read_only_write",
     "approval_required",
     "approval_invalid",
@@ -114,6 +115,7 @@
         "destructive_capability",
         "disclosure_changed",
         "authorization_denied",
+        "audit_unavailable",
         "read_only_write",
         "approval_required",
         "approval_invalid",
@@ -189,6 +191,22 @@
     },
     "suppressed": {
       "kind": "bool"
+    },
+    "minimum_severity": {
+      "kind": "enum",
+      "values": ["info", "low", "medium", "warning", "high", "critical"]
+    },
+    "dedupe_window_seconds": {
+      "kind": "count"
+    },
+    "escalation_after_seconds": {
+      "kind": "count"
+    },
+    "quiet_hours_enabled": {
+      "kind": "bool"
+    },
+    "channel_count": {
+      "kind": "count"
     },
     "overall": {
       "kind": "code"
@@ -314,6 +332,33 @@
       "resource_type": "charlie_action_policy",
       "allowed_fields": [
         "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.alert_policy.",
+      "actions": [
+        "admin.charlie.alert_policy.update"
+      ],
+      "resource_type": "charlie_alert_policy",
+      "allowed_fields": [
+        "outcome_code",
+        "enabled",
+        "minimum_severity",
+        "dedupe_window_seconds",
+        "escalation_after_seconds",
+        "quiet_hours_enabled",
+        "channel_count",
+        "revision"
       ],
       "coverage": [
         "success",

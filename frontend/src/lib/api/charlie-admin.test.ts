@@ -6,6 +6,7 @@ vi.mock("@/lib/api", () => ({
 import {
   listCharlieTriggerEvents,
   retryCharlieTriggerEvent,
+  updateCharlieAlertPolicy,
   updateCharlieActionPolicy,
   updateCharlieAutomation,
   validateCharlieOnboarding,
@@ -136,6 +137,31 @@ describe("Charlie admin wire boundary", () => {
         cooldown_seconds: 60,
       },
     );
+  });
+  it("keeps Charlie alert routing product-local and sends channel references only", async () => {
+    mockedApi.put.mockResolvedValue({ data: { data: { revision: 2 } } });
+    await updateCharlieAlertPolicy({
+      enabled: true, minimumSeverity: "high", dedupeWindowSeconds: 900,
+      escalationAfterSeconds: 3600, quietHoursEnabled: true,
+      quietHoursStart: "22:00", quietHoursEnd: "07:00", quietHoursTimezone: "UTC",
+      revision: 1, channelIds: ["channel-a"], channels: [], availableChannels: [], inAppEnabled: true,
+    });
+    expect(mockedApi.put).toHaveBeenCalledWith("/admin/charlie/alert-policy/", {
+      revision: 1, enabled: true, minimum_severity: "high", dedupe_window_seconds: 900,
+      escalation_after_seconds: 3600, quiet_hours_enabled: true,
+      quiet_hours_start: "22:00", quiet_hours_end: "07:00", quiet_hours_timezone: "UTC",
+      channel_ids: ["channel-a"],
+    });
+    expect(JSON.stringify(mockedApi.put.mock.calls.at(-1))).not.toMatch(/secret|api_key|approval/i);
+  });
+  it("surfaces stale alert-policy revisions without implying a save", async () => {
+    mockedApi.put.mockRejectedValue({ response: { status: 409 } });
+    await expect(updateCharlieAlertPolicy({
+      enabled: true, minimumSeverity: "high", dedupeWindowSeconds: 900,
+      escalationAfterSeconds: 3600, quietHoursEnabled: false,
+      quietHoursStart: "22:00", quietHoursEnd: "07:00", quietHoursTimezone: "UTC",
+      revision: 3, channelIds: [], channels: [], availableChannels: [], inAppEnabled: true,
+    })).rejects.toThrow(/changed.*refresh/i);
   });
   it("surfaces action-policy conflicts without implying a save", async () => {
     mockedApi.put.mockRejectedValue({ response: { status: 409 } });

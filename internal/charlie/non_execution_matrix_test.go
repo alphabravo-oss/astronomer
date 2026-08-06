@@ -151,6 +151,7 @@ func assertA12029Vocabulary(t *testing.T) {
 		ReasonDisclosureDrift, ReasonSafetyBudgetExceeded, ReasonCooldownActive, ReasonMaintenanceWindow,
 		ReasonPreconditionFailed, ReasonCircuitBreakerOpen, ReasonStaleLeadership, ReasonIdempotencyConflict,
 		ReasonAmbiguousPriorAttempt, ReasonExecutionFailed, ReasonVerificationFailed,
+		ReasonAuditUnavailable,
 	}
 	seen := make(map[DenialCode]struct{}, len(boundedNonExecutionReasons))
 	for _, reason := range boundedNonExecutionReasons {

@@ -100,6 +100,8 @@ const (
 	// retry bridge from committed DB task intents into Redis/Asynq.
 	TypeTaskOutboxDispatch     = tasks.TaskOutboxDispatchType
 	TypeCharlieTriggerDispatch = tasks.CharlieTriggerDispatchType
+	TypeCharlieAlertDispatch   = tasks.CharlieAlertDispatchTaskType
+	TypeCharlieAlertReconcile  = tasks.CharlieAlertReconcileType
 	// Migration 065 / sprint 17: in-browser kubectl shell reaper.
 	// 60s cadence — see internal/worker/tasks/kubectl_session_reap.go.
 	TypeKubectlSessionReap = tasks.KubectlSessionReapType
@@ -251,6 +253,8 @@ func (w *Worker) RegisterHandlers() {
 	w.mux.HandleFunc(TypeSecurityScan, instrumentTask(TypeSecurityScan, tasks.HandleSecurityScan))
 	w.mux.HandleFunc(TypeSecurityIngest, instrumentTask(TypeSecurityIngest, tasks.HandleSecurityIngest))
 	w.mux.HandleFunc(TypeNotificationSend, instrumentTask(TypeNotificationSend, tasks.HandleNotificationSend))
+	w.mux.HandleFunc(TypeCharlieAlertDispatch, instrumentTask(TypeCharlieAlertDispatch, tasks.HandleCharlieAlertDispatch))
+	w.mux.HandleFunc(TypeCharlieAlertReconcile, instrumentTask(TypeCharlieAlertReconcile, tasks.HandleCharlieAlertReconcile))
 	w.mux.HandleFunc(TypeAgentManifest, instrumentTask(TypeAgentManifest, tasks.HandleAgentManifest))
 	w.mux.HandleFunc(TypeCleanupExpiredRegistrationTokens, instrumentTask(TypeCleanupExpiredRegistrationTokens, tasks.HandleCleanupRegistrationTokens))
 	w.mux.HandleFunc(TypeCleanupOldAlertEvents, instrumentTask(TypeCleanupOldAlertEvents, tasks.HandleCleanupAlertEvents))

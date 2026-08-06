@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/product-adapter-result-v1.schema.json",
+  "title": "ProductAdapterResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "outcome", "reason_code", "stages"],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.product-adapter-result/v1"},
+    "outcome": {"$ref": "#/$defs/finalOutcome"},
+    "reason_code": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$"},
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode_permitted", "actor_authorized", "target_authorized", "approval_valid", "automation_authorized", "safety_admitted", "dispatch_committed", "post_verified"],
+      "properties": {
+        "mode_permitted": {"$ref": "#/$defs/stageOutcome"},
+        "actor_authorized": {"$ref": "#/$defs/stageOutcome"},
+        "target_authorized": {"$ref": "#/$defs/stageOutcome"},
+        "approval_valid": {"$ref": "#/$defs/stageOutcome"},
+        "automation_authorized": {"$ref": "#/$defs/stageOutcome"},
+        "safety_admitted": {"$ref": "#/$defs/stageOutcome"},
+        "dispatch_committed": {"$ref": "#/$defs/stageOutcome"},
+        "post_verified": {"$ref": "#/$defs/stageOutcome"}
+      }
+    }
+  },
+  "$defs": {
+    "finalOutcome": {"type": "string", "enum": ["allowed", "ask", "deny", "inactive", "expired", "stale", "ambiguous", "failed_verification"]},
+    "stageOutcome": {"type": "string", "enum": ["allowed", "ask", "deny", "inactive", "expired", "stale", "ambiguous", "failed_verification", "not_reached"]}
+  }
+}

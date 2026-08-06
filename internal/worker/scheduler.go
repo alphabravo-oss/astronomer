@@ -47,6 +47,7 @@ func (s *Scheduler) RegisterPeriodicTasks() error {
 		// stuck clusters from tight-looping.
 		{"@every 30s", tasks.ClusterConditionReconcileType, "cluster-condition remediation"},
 		{"@every 60s", TypeAlertEvaluation, "alert rule evaluation"},
+		{"@every 60s", TypeCharlieAlertReconcile, "Charlie alert delivery reconciliation"},
 		{"@every 6h", TypeCatalogSync, "catalog sync"},
 		{"@every 5m", TypeMetricsAggregation, "metrics aggregation"},
 		{"@every 2m", TypeMonitoringReconcile, "monitoring reconciliation"},

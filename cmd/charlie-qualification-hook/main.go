@@ -56,7 +56,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	metricsToken, err := optionalSecret("METRICS_TOKEN")
+	metricSources, err := metricSourcesFromFile(os.Getenv(envPrefix + "METRICS_SOURCES_FILE"))
 	if err != nil {
 		return err
 	}
@@ -88,8 +88,7 @@ func run() error {
 		AstronomerURL:  strings.TrimSpace(os.Getenv(envPrefix + "ASTRONOMER_URL")),
 		AdminToken:     adminToken,
 		DeniedToken:    deniedToken,
-		MetricsURLs:    splitList(os.Getenv(envPrefix + "METRICS_URLS")),
-		MetricsToken:   metricsToken,
+		MetricSources:  metricSources,
 		CounterMetrics: counterMetrics,
 		AllowHTTP:      os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
 		AgentScaler:    scaler,
@@ -212,14 +211,47 @@ func optionalJSONFile(path string, destination any) error {
 	return nil
 }
 
-func splitList(value string) []string {
-	result := []string{}
-	for _, item := range strings.Split(value, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			result = append(result, item)
-		}
+type metricSourceFile struct {
+	Sources []struct {
+		URL             string `json:"url"`
+		BearerTokenFile string `json:"bearer_token_file,omitempty"`
+	} `json:"sources"`
+}
+
+func metricSourcesFromFile(path string) ([]charliequalification.MetricSource, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, nil
 	}
-	return result
+	if err := privateFile(path); err != nil {
+		return nil, fmt.Errorf("metrics sources file: %w", err)
+	}
+	var configured metricSourceFile
+	if err := optionalJSONFile(path, &configured); err != nil {
+		return nil, fmt.Errorf("metrics sources: %w", err)
+	}
+	if len(configured.Sources) == 0 || len(configured.Sources) > 8 {
+		return nil, errors.New("metrics sources must contain one to eight endpoints")
+	}
+	result := make([]charliequalification.MetricSource, 0, len(configured.Sources))
+	for _, source := range configured.Sources {
+		token := ""
+		if source.BearerTokenFile != "" {
+			if err := privateFile(source.BearerTokenFile); err != nil {
+				return nil, errors.New("metrics bearer file is not private")
+			}
+			contents, err := os.ReadFile(source.BearerTokenFile)
+			if err != nil || len(contents) > 16<<10 {
+				return nil, errors.New("metrics bearer file is unavailable")
+			}
+			token = strings.TrimSpace(string(contents))
+			if len(token) < 16 || len(token) > 16<<10 {
+				return nil, errors.New("metrics bearer is invalid")
+			}
+		}
+		result = append(result, charliequalification.MetricSource{URL: source.URL, Token: token})
+	}
+	return result, nil
 }
 
 func valueOrDefault(value, fallback string) string {

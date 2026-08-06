@@ -1364,7 +1364,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return nil, accessErr
 			}
 			charlieSessionsHandler = handler.NewCharlieSessionHandler(sessionService, sessionAccess)
-			findingPublisher := charlie.NewEventFindingPublisher(bus)
+			findingAlertPlanner, plannerErr := charlie.NewFindingAlertPlanner(database.Pool())
+			if plannerErr != nil {
+				database.Close()
+				return nil, plannerErr
+			}
+			findingPublisher := charlie.NewPolicyFindingPublisher(bus, findingAlertPlanner)
 			approvalAccess, approvalErr := charlie.NewApprovalAccessService(queries, sessionAccess, charlieBindings, managedCharlieBridge, auditor, findingPublisher, cfg.CharlieMCPActionSigningKeyFile)
 			if approvalErr != nil {
 				database.Close()
@@ -2013,7 +2018,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			if err != nil {
 				return fail(err)
 			}
-			charlieFindingRecorder, err := charlie.NewFindingService(charlieFindingStore, charlie.NewEventFindingPublisher(bus))
+			findingAlertPlanner, err := charlie.NewFindingAlertPlanner(database.Pool())
+			if err != nil {
+				return fail(err)
+			}
+			charlieFindingRecorder, err := charlie.NewFindingService(charlieFindingStore, charlie.NewPolicyFindingPublisher(bus, findingAlertPlanner))
 			if err != nil {
 				return fail(err)
 			}
@@ -2171,6 +2180,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Queries:  queries,
 		Enqueuer: queue,
 	})
+	tasks.ConfigureCharlieAlertDispatch(queries, charlieWriteFence)
+	if alertReconciler, alertErr := charlie.NewFindingAlertPlanner(database.Pool()); alertErr == nil {
+		tasks.ConfigureCharlieAlertReconciler(alertReconciler)
+	} else {
+		database.Close()
+		return nil, alertErr
+	}
 	// Cluster decommission reconciler: needs DB + the tunnel hub for both
 	// MsgDecommission RPC and forced Disconnect after token revoke. When the
 	// hub is unavailable (worker-only process), pass nil — the reconciler

@@ -262,7 +262,7 @@ func TestCentralFindingSyncInactiveEmergencyAndOutageFailClosed(t *testing.T) {
 	}
 }
 
-func TestCentralFindingNotificationEscalationCooldownAndClosedStates(t *testing.T) {
+func TestCentralFindingNotificationDefersThresholdAndDedupeToProductPolicy(t *testing.T) {
 	now := time.Unix(10_000, 0).UTC()
 	prior := sqlc.CharlieFinding{Severity: "medium", Status: "open", ExecutionBlockCode: "read_only", UpdatedAt: now.Add(-time.Minute)}
 	tests := []struct {
@@ -273,9 +273,9 @@ func TestCentralFindingNotificationEscalationCooldownAndClosedStates(t *testing.
 		want    bool
 	}{
 		{name: "new medium", err: pgx.ErrNoRows, summary: syncedSummary("f", "s", "medium", "open", "read_only", now), want: true},
-		{name: "same inside cooldown", prior: prior, summary: syncedSummary("f", "s", "medium", "open", "read_only", now), want: false},
+		{name: "new central revision reaches policy", prior: prior, summary: syncedSummary("f", "s", "medium", "open", "read_only", now), want: true},
 		{name: "severity escalation", prior: prior, summary: syncedSummary("f", "s", "critical", "open", "read_only", now), want: true},
-		{name: "cooldown elapsed", prior: sqlc.CharlieFinding{Severity: "medium", Status: "open", ExecutionBlockCode: "read_only", UpdatedAt: now.Add(-DefaultFindingAlertCooldown - time.Second)}, summary: syncedSummary("f", "s", "medium", "open", "read_only", now), want: true},
+		{name: "low severity reaches policy", prior: prior, summary: syncedSummary("f", "s", "low", "open", "read_only", now), want: true},
 		{name: "resolved critical", prior: prior, summary: syncedSummary("f", "s", "critical", "resolved", "read_only", now), want: false},
 		{name: "reopened", prior: sqlc.CharlieFinding{Severity: "medium", Status: "resolved", ExecutionBlockCode: "read_only", UpdatedAt: now.Add(-time.Minute)}, summary: syncedSummary("f", "s", "medium", "reopened", "read_only", now), want: true},
 	}

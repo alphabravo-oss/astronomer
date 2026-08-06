@@ -171,6 +171,34 @@ const (
 	CharlieAdminAgentReplicaStateUnknown     CharlieAdminAgentReplicaState = "unknown"
 )
 
+// Defines values for CharlieAdminAlertChannelType.
+const (
+	CharlieAdminAlertChannelTypeMsteams   CharlieAdminAlertChannelType = "msteams"
+	CharlieAdminAlertChannelTypePagerduty CharlieAdminAlertChannelType = "pagerduty"
+	CharlieAdminAlertChannelTypeSlack     CharlieAdminAlertChannelType = "slack"
+	CharlieAdminAlertChannelTypeWebhook   CharlieAdminAlertChannelType = "webhook"
+)
+
+// Defines values for CharlieAdminAlertPolicyMinimumSeverity.
+const (
+	CharlieAdminAlertPolicyMinimumSeverityCritical CharlieAdminAlertPolicyMinimumSeverity = "critical"
+	CharlieAdminAlertPolicyMinimumSeverityHigh     CharlieAdminAlertPolicyMinimumSeverity = "high"
+	CharlieAdminAlertPolicyMinimumSeverityInfo     CharlieAdminAlertPolicyMinimumSeverity = "info"
+	CharlieAdminAlertPolicyMinimumSeverityLow      CharlieAdminAlertPolicyMinimumSeverity = "low"
+	CharlieAdminAlertPolicyMinimumSeverityMedium   CharlieAdminAlertPolicyMinimumSeverity = "medium"
+	CharlieAdminAlertPolicyMinimumSeverityWarning  CharlieAdminAlertPolicyMinimumSeverity = "warning"
+)
+
+// Defines values for CharlieAdminAlertPolicyInputMinimumSeverity.
+const (
+	CharlieAdminAlertPolicyInputMinimumSeverityCritical CharlieAdminAlertPolicyInputMinimumSeverity = "critical"
+	CharlieAdminAlertPolicyInputMinimumSeverityHigh     CharlieAdminAlertPolicyInputMinimumSeverity = "high"
+	CharlieAdminAlertPolicyInputMinimumSeverityInfo     CharlieAdminAlertPolicyInputMinimumSeverity = "info"
+	CharlieAdminAlertPolicyInputMinimumSeverityLow      CharlieAdminAlertPolicyInputMinimumSeverity = "low"
+	CharlieAdminAlertPolicyInputMinimumSeverityMedium   CharlieAdminAlertPolicyInputMinimumSeverity = "medium"
+	CharlieAdminAlertPolicyInputMinimumSeverityWarning  CharlieAdminAlertPolicyInputMinimumSeverity = "warning"
+)
+
 // Defines values for CharlieAdminDiagnosticCheckState.
 const (
 	CharlieAdminDiagnosticCheckStateDegraded    CharlieAdminDiagnosticCheckState = "degraded"
@@ -1405,6 +1433,60 @@ type CharlieAdminAgentReplicaRole string
 
 // CharlieAdminAgentReplicaState defines model for CharlieAdminAgentReplica.State.
 type CharlieAdminAgentReplicaState string
+
+// CharlieAdminAlertChannel defines model for CharlieAdminAlertChannel.
+type CharlieAdminAlertChannel struct {
+	// DestinationConfigured Indicates a local destination exists without returning its value.
+	DestinationConfigured bool                         `json:"destination_configured"`
+	Enabled               bool                         `json:"enabled"`
+	Id                    openapi_types.UUID           `json:"id"`
+	Name                  string                       `json:"name"`
+	Type                  CharlieAdminAlertChannelType `json:"type"`
+}
+
+// CharlieAdminAlertChannelType defines model for CharlieAdminAlertChannel.Type.
+type CharlieAdminAlertChannelType string
+
+// CharlieAdminAlertPolicy defines model for CharlieAdminAlertPolicy.
+type CharlieAdminAlertPolicy struct {
+	AvailableChannels      []CharlieAdminAlertChannel `json:"available_channels"`
+	ChannelIds             []openapi_types.UUID       `json:"channel_ids"`
+	Channels               []CharlieAdminAlertChannel `json:"channels"`
+	DedupeWindowSeconds    int32                      `json:"dedupe_window_seconds"`
+	Enabled                bool                       `json:"enabled"`
+	EscalationAfterSeconds int32                      `json:"escalation_after_seconds"`
+
+	// InAppEnabled Durable findings remain visible in Astronomer regardless of external routing.
+	InAppEnabled       *bool                                  `json:"in_app_enabled,omitempty"`
+	MinimumSeverity    CharlieAdminAlertPolicyMinimumSeverity `json:"minimum_severity"`
+	QuietHoursEnabled  bool                                   `json:"quiet_hours_enabled"`
+	QuietHoursEnd      string                                 `json:"quiet_hours_end"`
+	QuietHoursStart    string                                 `json:"quiet_hours_start"`
+	QuietHoursTimezone string                                 `json:"quiet_hours_timezone"`
+	Revision           int64                                  `json:"revision"`
+}
+
+// CharlieAdminAlertPolicyMinimumSeverity defines model for CharlieAdminAlertPolicy.MinimumSeverity.
+type CharlieAdminAlertPolicyMinimumSeverity string
+
+// CharlieAdminAlertPolicyInput defines model for CharlieAdminAlertPolicyInput.
+type CharlieAdminAlertPolicyInput struct {
+	ChannelIds             []openapi_types.UUID                        `json:"channel_ids"`
+	DedupeWindowSeconds    int32                                       `json:"dedupe_window_seconds"`
+	Enabled                bool                                        `json:"enabled"`
+	EscalationAfterSeconds int32                                       `json:"escalation_after_seconds"`
+	MinimumSeverity        CharlieAdminAlertPolicyInputMinimumSeverity `json:"minimum_severity"`
+	QuietHoursEnabled      bool                                        `json:"quiet_hours_enabled"`
+	QuietHoursEnd          string                                      `json:"quiet_hours_end"`
+	QuietHoursStart        string                                      `json:"quiet_hours_start"`
+	QuietHoursTimezone     string                                      `json:"quiet_hours_timezone"`
+
+	// Revision Exact revision read by the administrator; zero creates the first policy.
+	Revision int64 `json:"revision"`
+}
+
+// CharlieAdminAlertPolicyInputMinimumSeverity defines model for CharlieAdminAlertPolicyInput.MinimumSeverity.
+type CharlieAdminAlertPolicyInputMinimumSeverity string
 
 // CharlieAdminAutoReadiness defines model for CharlieAdminAutoReadiness.
 type CharlieAdminAutoReadiness struct {
@@ -4698,6 +4780,9 @@ type AdminCharlieActionPolicyUpdateJSONRequestBody = CharlieAdminActionPolicyInp
 
 // AdminCharlieAgentUninstallJSONRequestBody defines body for AdminCharlieAgentUninstall for application/json ContentType.
 type AdminCharlieAgentUninstallJSONRequestBody = CharlieAdminActionRequest
+
+// AdminCharlieAlertPolicyUpdateJSONRequestBody defines body for AdminCharlieAlertPolicyUpdate for application/json ContentType.
+type AdminCharlieAlertPolicyUpdateJSONRequestBody = CharlieAdminAlertPolicyInput
 
 // AdminCharlieDisconnectJSONRequestBody defines body for AdminCharlieDisconnect for application/json ContentType.
 type AdminCharlieDisconnectJSONRequestBody = CharlieAdminActionRequest
@@ -9991,6 +10076,14 @@ type ClientInterface interface {
 	// AdminCharlieAgentUpgrade request
 	AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminCharlieAlertPolicyGet request
+	AdminCharlieAlertPolicyGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieAlertPolicyUpdateWithBody request with any body
+	AdminCharlieAlertPolicyUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieAlertPolicyUpdate(ctx context.Context, body AdminCharlieAlertPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminCharlieDiagnosticsRun request
 	AdminCharlieDiagnosticsRun(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -11986,6 +12079,42 @@ func (c *Client) AdminCharlieAgentUninstall(ctx context.Context, body AdminCharl
 
 func (c *Client) AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieAgentUpgradeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAlertPolicyGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAlertPolicyGetRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAlertPolicyUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAlertPolicyUpdateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieAlertPolicyUpdate(ctx context.Context, body AdminCharlieAlertPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAlertPolicyUpdateRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -20186,6 +20315,73 @@ func NewAdminCharlieAgentUpgradeRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAlertPolicyGetRequest generates requests for AdminCharlieAlertPolicyGet
+func NewAdminCharlieAlertPolicyGetRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/alert-policy/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieAlertPolicyUpdateRequest calls the generic AdminCharlieAlertPolicyUpdate builder with application/json body
+func NewAdminCharlieAlertPolicyUpdateRequest(server string, body AdminCharlieAlertPolicyUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieAlertPolicyUpdateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieAlertPolicyUpdateRequestWithBody generates requests for AdminCharlieAlertPolicyUpdate with any type of body
+func NewAdminCharlieAlertPolicyUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/alert-policy/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -41904,6 +42100,14 @@ type ClientWithResponsesInterface interface {
 	// AdminCharlieAgentUpgradeWithResponse request
 	AdminCharlieAgentUpgradeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUpgradeResponse, error)
 
+	// AdminCharlieAlertPolicyGetWithResponse request
+	AdminCharlieAlertPolicyGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyGetResponse, error)
+
+	// AdminCharlieAlertPolicyUpdateWithBodyWithResponse request with any body
+	AdminCharlieAlertPolicyUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyUpdateResponse, error)
+
+	AdminCharlieAlertPolicyUpdateWithResponse(ctx context.Context, body AdminCharlieAlertPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyUpdateResponse, error)
+
 	// AdminCharlieDiagnosticsRunWithResponse request
 	AdminCharlieDiagnosticsRunWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieDiagnosticsRunResponse, error)
 
@@ -44060,6 +44264,58 @@ func (r AdminCharlieAgentUpgradeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminCharlieAgentUpgradeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAlertPolicyGetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAlertPolicy
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAlertPolicyGetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAlertPolicyGetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieAlertPolicyUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAlertPolicy
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAlertPolicyUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAlertPolicyUpdateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -56870,6 +57126,32 @@ func (c *ClientWithResponses) AdminCharlieAgentUpgradeWithResponse(ctx context.C
 	return ParseAdminCharlieAgentUpgradeResponse(rsp)
 }
 
+// AdminCharlieAlertPolicyGetWithResponse request returning *AdminCharlieAlertPolicyGetResponse
+func (c *ClientWithResponses) AdminCharlieAlertPolicyGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyGetResponse, error) {
+	rsp, err := c.AdminCharlieAlertPolicyGet(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAlertPolicyGetResponse(rsp)
+}
+
+// AdminCharlieAlertPolicyUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieAlertPolicyUpdateResponse
+func (c *ClientWithResponses) AdminCharlieAlertPolicyUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyUpdateResponse, error) {
+	rsp, err := c.AdminCharlieAlertPolicyUpdateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAlertPolicyUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieAlertPolicyUpdateWithResponse(ctx context.Context, body AdminCharlieAlertPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyUpdateResponse, error) {
+	rsp, err := c.AdminCharlieAlertPolicyUpdate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAlertPolicyUpdateResponse(rsp)
+}
+
 // AdminCharlieDiagnosticsRunWithResponse request returning *AdminCharlieDiagnosticsRunResponse
 func (c *ClientWithResponses) AdminCharlieDiagnosticsRunWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieDiagnosticsRunResponse, error) {
 	rsp, err := c.AdminCharlieDiagnosticsRun(ctx, reqEditors...)
@@ -63056,6 +63338,114 @@ func ParseAdminCharlieAgentUpgradeResponse(rsp *http.Response) (*AdminCharlieAge
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAlertPolicyGetResponse parses an HTTP response from a AdminCharlieAlertPolicyGetWithResponse call
+func ParseAdminCharlieAlertPolicyGetResponse(rsp *http.Response) (*AdminCharlieAlertPolicyGetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAlertPolicyGetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAlertPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieAlertPolicyUpdateResponse parses an HTTP response from a AdminCharlieAlertPolicyUpdateWithResponse call
+func ParseAdminCharlieAlertPolicyUpdateResponse(rsp *http.Response) (*AdminCharlieAlertPolicyUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAlertPolicyUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAlertPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

@@ -266,12 +266,13 @@ func denialCodeLabel(value string) string {
 	for _, code := range []DenialCode{
 		DeniedFeatureDisabled, DeniedConnectionInactive, DeniedEmergencyDisabled,
 		DeniedModeDisabled, DeniedDestructive, DeniedDisclosureChanged, DeniedAuthorization,
+		DeniedAuditUnavailable,
 		DeniedReadOnlyWrite,
 		DeniedApprovalRequired, DeniedApprovalInvalid,
 		DeniedNotAutoEligible, DeniedNotAllowlisted, DeniedScope,
 		DeniedBudget, DeniedCooldown, DeniedCircuitOpen, DeniedPrecondition,
 		DeniedIdempotency, DeniedVerification, DeniedStaleFencing,
-		DeniedAmbiguousPriorAttempt,
+		DeniedAmbiguousPriorAttempt, DeniedMaintenance,
 	} {
 		if value == string(code) {
 			return value

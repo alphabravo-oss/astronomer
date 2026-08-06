@@ -48,7 +48,7 @@ func TestZeroScenariosRestoreExactReadOnlyBaseline(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))
 	defer server.Close()
 	scaler := &fakeScaler{replicas: 2}
-	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricsURLs: []string{server.URL + "/metrics"}, MetricsToken: "admin", HTTPClient: server.Client(), AgentScaler: scaler})
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client(), AgentScaler: scaler})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestCleanupFailsWhenCountersDoNotReturnToBaseline(t *testing.T) {
 	state.incrementOnFeatureRestore = true
 	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))
 	defer server.Close()
-	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricsURLs: []string{server.URL + "/metrics"}, MetricsToken: "admin", HTTPClient: server.Client()})
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestRestoreModeReacknowledgesExactDigestAfterModeDigestDrift(t *testing.T) 
 	state := newLiveState()
 	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))
 	defer server.Close()
-	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricsURLs: []string{server.URL + "/metrics"}, MetricsToken: "admin", HTTPClient: server.Client()})
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: server.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestCountersParseRequiredRuntimeAndBoundaryFamilies(t *testing.T) {
 		`astronomer_downstream_boundary_calls_total{entrypoint="other",operation="helm"} 6`)
 	metrics := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprintln(w, strings.Join(lines, "\n")) }))
 	defer metrics.Close()
-	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: metrics.URL, AdminToken: "admin", MetricsURLs: []string{metrics.URL}, HTTPClient: metrics.Client()})
+	driver, err := NewLiveDriver(LiveConfig{AstronomerURL: metrics.URL, AdminToken: "admin", MetricSources: []MetricSource{{URL: metrics.URL}}, HTTPClient: metrics.Client()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,6 +288,49 @@ func TestCountersParseRequiredRuntimeAndBoundaryFamilies(t *testing.T) {
 	}
 	if !completeCounters(value) || value.Downstream["tunnel"] != 1 || value.Downstream["helm"] != 6 {
 		t.Fatalf("unexpected counters: %#v", value)
+	}
+}
+
+func TestCountersBindEachBearerToOnlyItsMetricEndpoint(t *testing.T) {
+	var firstAuthorization, secondAuthorization string
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		firstAuthorization = r.Header.Get("Authorization")
+		for _, key := range runtimeKeys {
+			_, _ = fmt.Fprintf(w, "%s 0\n", defaultCounterMetrics()[key])
+		}
+	}))
+	defer first.Close()
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondAuthorization = r.Header.Get("Authorization")
+		for _, operation := range []string{"kubernetes", "exec", "logs", "helm"} {
+			_, _ = fmt.Fprintf(w, "astronomer_downstream_boundary_calls_total{entrypoint=%q,operation=%q} 0\n", "other", operation)
+		}
+		_, _ = fmt.Fprintln(w, `astronomer_downstream_boundary_calls_total{entrypoint="tunnel_message",operation="other"} 0`)
+		_, _ = fmt.Fprintln(w, `astronomer_downstream_boundary_calls_total{entrypoint="kubernetes_proxy",operation="other"} 0`)
+	}))
+	defer second.Close()
+	driver, err := NewLiveDriver(LiveConfig{
+		AstronomerURL: first.URL, AdminToken: "admin", AllowHTTP: true,
+		MetricSources: []MetricSource{{URL: first.URL, Token: "central-only"}, {URL: second.URL, Token: "product-only"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = driver.Counters(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if firstAuthorization != "Bearer central-only" || secondAuthorization != "Bearer product-only" {
+		t.Fatalf("metric bearer crossed endpoints: first=%q second=%q", firstAuthorization, secondAuthorization)
+	}
+}
+
+func TestLiveDriverRejectsDuplicateMetricEndpoint(t *testing.T) {
+	_, err := NewLiveDriver(LiveConfig{
+		AstronomerURL: "http://127.0.0.1:8000", AdminToken: "admin", AllowHTTP: true,
+		MetricSources: []MetricSource{{URL: "http://127.0.0.1:9090/metrics"}, {URL: "http://127.0.0.1:9090/metrics", Token: "substitute"}},
+	})
+	if err == nil {
+		t.Fatal("duplicate metric endpoint accepted with alternate credential")
 	}
 }
 

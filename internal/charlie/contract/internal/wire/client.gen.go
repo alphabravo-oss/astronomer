@@ -38,6 +38,71 @@ const (
 	ActionStateSucceeded ActionState = "succeeded"
 )
 
+// Defines values for AlertDeliveryProfileReasonCode.
+const (
+	AlertDeliveryProfileReasonCodeAllowlistDenied       AlertDeliveryProfileReasonCode = "allowlist_denied"
+	AlertDeliveryProfileReasonCodeAmbiguousPriorAttempt AlertDeliveryProfileReasonCode = "ambiguous_prior_attempt"
+	AlertDeliveryProfileReasonCodeApprovalExpired       AlertDeliveryProfileReasonCode = "approval_expired"
+	AlertDeliveryProfileReasonCodeApprovalRejected      AlertDeliveryProfileReasonCode = "approval_rejected"
+	AlertDeliveryProfileReasonCodeApprovalRequired      AlertDeliveryProfileReasonCode = "approval_required"
+	AlertDeliveryProfileReasonCodeAuditUnavailable      AlertDeliveryProfileReasonCode = "audit_unavailable"
+	AlertDeliveryProfileReasonCodeCapabilityDestructive AlertDeliveryProfileReasonCode = "capability_destructive"
+	AlertDeliveryProfileReasonCodeCentralUnavailable    AlertDeliveryProfileReasonCode = "central_unavailable"
+	AlertDeliveryProfileReasonCodeCircuitBreakerOpen    AlertDeliveryProfileReasonCode = "circuit_breaker_open"
+	AlertDeliveryProfileReasonCodeCooldownActive        AlertDeliveryProfileReasonCode = "cooldown_active"
+	AlertDeliveryProfileReasonCodeDeploymentDisabled    AlertDeliveryProfileReasonCode = "deployment_disabled"
+	AlertDeliveryProfileReasonCodeDisclosureDrift       AlertDeliveryProfileReasonCode = "disclosure_drift"
+	AlertDeliveryProfileReasonCodeExecutionFailed       AlertDeliveryProfileReasonCode = "execution_failed"
+	AlertDeliveryProfileReasonCodeIdempotencyConflict   AlertDeliveryProfileReasonCode = "idempotency_conflict"
+	AlertDeliveryProfileReasonCodeMaintenanceWindow     AlertDeliveryProfileReasonCode = "maintenance_window"
+	AlertDeliveryProfileReasonCodeNoSafeAction          AlertDeliveryProfileReasonCode = "no_safe_action"
+	AlertDeliveryProfileReasonCodeNonAutoEligible       AlertDeliveryProfileReasonCode = "non_auto_eligible"
+	AlertDeliveryProfileReasonCodePreconditionFailed    AlertDeliveryProfileReasonCode = "precondition_failed"
+	AlertDeliveryProfileReasonCodeProductDisabled       AlertDeliveryProfileReasonCode = "product_disabled"
+	AlertDeliveryProfileReasonCodeProductRbacDenied     AlertDeliveryProfileReasonCode = "product_rbac_denied"
+	AlertDeliveryProfileReasonCodeReadOnly              AlertDeliveryProfileReasonCode = "read_only"
+	AlertDeliveryProfileReasonCodeSafetyBudgetExceeded  AlertDeliveryProfileReasonCode = "safety_budget_exceeded"
+	AlertDeliveryProfileReasonCodeScopeDenied           AlertDeliveryProfileReasonCode = "scope_denied"
+	AlertDeliveryProfileReasonCodeStaleLeadership       AlertDeliveryProfileReasonCode = "stale_leadership"
+	AlertDeliveryProfileReasonCodeVerificationFailed    AlertDeliveryProfileReasonCode = "verification_failed"
+)
+
+// Defines values for AlertDeliveryProfileSeverity.
+const (
+	AlertDeliveryProfileSeverityCritical AlertDeliveryProfileSeverity = "critical"
+	AlertDeliveryProfileSeverityHigh     AlertDeliveryProfileSeverity = "high"
+	AlertDeliveryProfileSeverityInfo     AlertDeliveryProfileSeverity = "info"
+	AlertDeliveryProfileSeverityLow      AlertDeliveryProfileSeverity = "low"
+	AlertDeliveryProfileSeverityMedium   AlertDeliveryProfileSeverity = "medium"
+)
+
+// Defines values for AlertDeliveryProfileTimelineLatestTransition.
+const (
+	AlertDeliveryProfileTimelineLatestTransitionAcknowledged          AlertDeliveryProfileTimelineLatestTransition = "acknowledged"
+	AlertDeliveryProfileTimelineLatestTransitionCreated               AlertDeliveryProfileTimelineLatestTransition = "created"
+	AlertDeliveryProfileTimelineLatestTransitionDeduplicated          AlertDeliveryProfileTimelineLatestTransition = "deduplicated"
+	AlertDeliveryProfileTimelineLatestTransitionDismissed             AlertDeliveryProfileTimelineLatestTransition = "dismissed"
+	AlertDeliveryProfileTimelineLatestTransitionRemediationStarted    AlertDeliveryProfileTimelineLatestTransition = "remediation_started"
+	AlertDeliveryProfileTimelineLatestTransitionReopened              AlertDeliveryProfileTimelineLatestTransition = "reopened"
+	AlertDeliveryProfileTimelineLatestTransitionResolved              AlertDeliveryProfileTimelineLatestTransition = "resolved"
+	AlertDeliveryProfileTimelineLatestTransitionVerificationRequested AlertDeliveryProfileTimelineLatestTransition = "verification_requested"
+)
+
+// Defines values for AlertDeliveryProfileTimelineState.
+const (
+	AlertDeliveryProfileTimelineStateInitial  AlertDeliveryProfileTimelineState = "initial"
+	AlertDeliveryProfileTimelineStateRepeated AlertDeliveryProfileTimelineState = "repeated"
+	AlertDeliveryProfileTimelineStateTerminal AlertDeliveryProfileTimelineState = "terminal"
+)
+
+// Defines values for AlertDeliveryProfileWorkflowKind.
+const (
+	AlertDeliveryProfileWorkflowKindClosed            AlertDeliveryProfileWorkflowKind = "closed"
+	AlertDeliveryProfileWorkflowKindManualRemediation AlertDeliveryProfileWorkflowKind = "manual_remediation"
+	AlertDeliveryProfileWorkflowKindReviewRequired    AlertDeliveryProfileWorkflowKind = "review_required"
+	AlertDeliveryProfileWorkflowKindVerification      AlertDeliveryProfileWorkflowKind = "verification"
+)
+
 // Defines values for ApprovalState.
 const (
 	ApprovalStateApproved ApprovalState = "approved"
@@ -69,6 +134,7 @@ const (
 	BlockCodeApprovalExpired       BlockCode = "approval_expired"
 	BlockCodeApprovalRejected      BlockCode = "approval_rejected"
 	BlockCodeApprovalRequired      BlockCode = "approval_required"
+	BlockCodeAuditUnavailable      BlockCode = "audit_unavailable"
 	BlockCodeCapabilityDestructive BlockCode = "capability_destructive"
 	BlockCodeCentralUnavailable    BlockCode = "central_unavailable"
 	BlockCodeCircuitBreakerOpen    BlockCode = "circuit_breaker_open"
@@ -152,6 +218,7 @@ const (
 	FindingBlockCodeApprovalExpired       FindingBlockCode = "approval_expired"
 	FindingBlockCodeApprovalRejected      FindingBlockCode = "approval_rejected"
 	FindingBlockCodeApprovalRequired      FindingBlockCode = "approval_required"
+	FindingBlockCodeAuditUnavailable      FindingBlockCode = "audit_unavailable"
 	FindingBlockCodeCapabilityDestructive FindingBlockCode = "capability_destructive"
 	FindingBlockCodeCentralUnavailable    FindingBlockCode = "central_unavailable"
 	FindingBlockCodeCircuitBreakerOpen    FindingBlockCode = "circuit_breaker_open"
@@ -306,6 +373,47 @@ type ActivationRequest struct {
 	ExpectedRevision OpaqueId `json:"expected_revision"`
 	ProductEnabled   bool     `json:"product_enabled"`
 }
+
+// AlertDeliveryProfile Product-neutral, advisory-only alert material. The consuming product owns delivery policy, recipients, channels, thresholds, credentials, authorization, and execution.
+type AlertDeliveryProfile struct {
+	AdvisoryOnly      bool                           `json:"advisory_only"`
+	AlertId           string                         `json:"alert_id"`
+	DeduplicationKey  string                         `json:"deduplication_key"`
+	DeepLinkReference string                         `json:"deep_link_reference"`
+	ExpiresAt         time.Time                      `json:"expires_at"`
+	FindingRef        string                         `json:"finding_ref"`
+	ReasonCode        AlertDeliveryProfileReasonCode `json:"reason_code"`
+	SafeNextChecks    []string                       `json:"safe_next_checks"`
+	Schema            string                         `json:"schema"`
+	Severity          AlertDeliveryProfileSeverity   `json:"severity"`
+	Timeline          struct {
+		FirstSeenAt      time.Time                                    `json:"first_seen_at"`
+		LastSeenAt       time.Time                                    `json:"last_seen_at"`
+		LatestTransition AlertDeliveryProfileTimelineLatestTransition `json:"latest_transition"`
+		RepeatCount      int                                          `json:"repeat_count"`
+		State            AlertDeliveryProfileTimelineState            `json:"state"`
+	} `json:"timeline"`
+	VerificationPlan struct {
+		Method string   `json:"method"`
+		Steps  []string `json:"steps"`
+	} `json:"verification_plan"`
+	WorkflowKind AlertDeliveryProfileWorkflowKind `json:"workflow_kind"`
+}
+
+// AlertDeliveryProfileReasonCode defines model for AlertDeliveryProfile.ReasonCode.
+type AlertDeliveryProfileReasonCode string
+
+// AlertDeliveryProfileSeverity defines model for AlertDeliveryProfile.Severity.
+type AlertDeliveryProfileSeverity string
+
+// AlertDeliveryProfileTimelineLatestTransition defines model for AlertDeliveryProfile.Timeline.LatestTransition.
+type AlertDeliveryProfileTimelineLatestTransition string
+
+// AlertDeliveryProfileTimelineState defines model for AlertDeliveryProfile.Timeline.State.
+type AlertDeliveryProfileTimelineState string
+
+// AlertDeliveryProfileWorkflowKind defines model for AlertDeliveryProfile.WorkflowKind.
+type AlertDeliveryProfileWorkflowKind string
 
 // Approval defines model for Approval.
 type Approval struct {
@@ -741,6 +849,12 @@ type GetBridgeFindingParams struct {
 	XCharlieAuthorizationRef AuthorizationRef `json:"X-Charlie-Authorization-Ref"`
 }
 
+// GetBridgeFindingAlertDeliveryParams defines parameters for GetBridgeFindingAlertDelivery.
+type GetBridgeFindingAlertDeliveryParams struct {
+	// XCharlieAuthorizationRef Opaque live product authorization reference; the deployment credential never substitutes for end-user authority.
+	XCharlieAuthorizationRef AuthorizationRef `json:"X-Charlie-Authorization-Ref"`
+}
+
 // ListBridgeFindingEventsParams defines parameters for ListBridgeFindingEvents.
 type ListBridgeFindingEventsParams struct {
 	LastEventID *OpaqueId `json:"Last-Event-ID,omitempty"`
@@ -941,6 +1055,9 @@ type ClientInterface interface {
 	// GetBridgeFinding request
 	GetBridgeFinding(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetBridgeFindingAlertDelivery request
+	GetBridgeFindingAlertDelivery(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingAlertDeliveryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListBridgeFindingEvents request
 	ListBridgeFindingEvents(ctx context.Context, findingId OpaqueId, params *ListBridgeFindingEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1081,6 +1198,18 @@ func (c *Client) ListBridgeFindings(ctx context.Context, params *ListBridgeFindi
 
 func (c *Client) GetBridgeFinding(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBridgeFindingRequest(c.Server, findingId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetBridgeFindingAlertDelivery(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingAlertDeliveryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBridgeFindingAlertDeliveryRequest(c.Server, findingId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1576,6 +1705,53 @@ func NewGetBridgeFindingRequest(server string, findingId OpaqueId, params *GetBr
 	}
 
 	operationPath := fmt.Sprintf("/findings/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-Charlie-Authorization-Ref", runtime.ParamLocationHeader, params.XCharlieAuthorizationRef)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Charlie-Authorization-Ref", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetBridgeFindingAlertDeliveryRequest generates requests for GetBridgeFindingAlertDelivery
+func NewGetBridgeFindingAlertDeliveryRequest(server string, findingId OpaqueId, params *GetBridgeFindingAlertDeliveryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/findings/%s/alert-delivery", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2497,6 +2673,9 @@ type ClientWithResponsesInterface interface {
 	// GetBridgeFindingWithResponse request
 	GetBridgeFindingWithResponse(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingParams, reqEditors ...RequestEditorFn) (*GetBridgeFindingResponse, error)
 
+	// GetBridgeFindingAlertDeliveryWithResponse request
+	GetBridgeFindingAlertDeliveryWithResponse(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingAlertDeliveryParams, reqEditors ...RequestEditorFn) (*GetBridgeFindingAlertDeliveryResponse, error)
+
 	// ListBridgeFindingEventsWithResponse request
 	ListBridgeFindingEventsWithResponse(ctx context.Context, findingId OpaqueId, params *ListBridgeFindingEventsParams, reqEditors ...RequestEditorFn) (*ListBridgeFindingEventsResponse, error)
 
@@ -2672,6 +2851,29 @@ func (r GetBridgeFindingResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetBridgeFindingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetBridgeFindingAlertDeliveryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertDeliveryProfile
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBridgeFindingAlertDeliveryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBridgeFindingAlertDeliveryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3134,6 +3336,15 @@ func (c *ClientWithResponses) GetBridgeFindingWithResponse(ctx context.Context, 
 	return ParseGetBridgeFindingResponse(rsp)
 }
 
+// GetBridgeFindingAlertDeliveryWithResponse request returning *GetBridgeFindingAlertDeliveryResponse
+func (c *ClientWithResponses) GetBridgeFindingAlertDeliveryWithResponse(ctx context.Context, findingId OpaqueId, params *GetBridgeFindingAlertDeliveryParams, reqEditors ...RequestEditorFn) (*GetBridgeFindingAlertDeliveryResponse, error) {
+	rsp, err := c.GetBridgeFindingAlertDelivery(ctx, findingId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBridgeFindingAlertDeliveryResponse(rsp)
+}
+
 // ListBridgeFindingEventsWithResponse request returning *ListBridgeFindingEventsResponse
 func (c *ClientWithResponses) ListBridgeFindingEventsWithResponse(ctx context.Context, findingId OpaqueId, params *ListBridgeFindingEventsParams, reqEditors ...RequestEditorFn) (*ListBridgeFindingEventsResponse, error) {
 	rsp, err := c.ListBridgeFindingEvents(ctx, findingId, params, reqEditors...)
@@ -3491,6 +3702,39 @@ func ParseGetBridgeFindingResponse(rsp *http.Response) (*GetBridgeFindingRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest FindingEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetBridgeFindingAlertDeliveryResponse parses an HTTP response from a GetBridgeFindingAlertDeliveryWithResponse call
+func ParseGetBridgeFindingAlertDeliveryResponse(rsp *http.Response) (*GetBridgeFindingAlertDeliveryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBridgeFindingAlertDeliveryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertDeliveryProfile
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

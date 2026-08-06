@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   emergencyDisableCharlie: vi.fn(),
   getCharlieAccess: vi.fn(),
   getCharlieAgent: vi.fn(),
+  getCharlieAlertPolicy: vi.fn(),
   getCharlieAutomation: vi.fn(),
   getCharlieConnection: vi.fn(),
   getCharlieDiagnostics: vi.fn(),
@@ -22,6 +23,7 @@ const api = vi.hoisted(() => ({
   uninstallCharlieAgent: vi.fn(),
   updateCharlieAutomation: vi.fn(),
   updateCharlieActionPolicy: vi.fn(),
+  updateCharlieAlertPolicy: vi.fn(),
   updateCharlieMode: vi.fn(),
   validateCharlieOnboarding: vi.fn(),
 }));
@@ -65,6 +67,7 @@ vi.mock("@/lib/api/charlie-admin", () => api);
 
 import {
   AgentTab,
+  AlertsTab,
   AutomationTab,
   CharlieAdminContent,
   ConnectionTab,
@@ -146,6 +149,21 @@ beforeEach(() => {
     chartDigest: digest("b"),
     imageDigest: digest("a"),
   });
+  api.getCharlieAlertPolicy.mockResolvedValue({
+    enabled: true,
+    minimumSeverity: "medium",
+    dedupeWindowSeconds: 1800,
+    escalationAfterSeconds: 3600,
+    quietHoursEnabled: false,
+    quietHoursStart: "22:00",
+    quietHoursEnd: "07:00",
+    quietHoursTimezone: "UTC",
+    revision: 1,
+    channelIds: ["channel-a"],
+    channels: [{ id: "channel-a", name: "Platform on-call", type: "slack", enabled: true, destinationConfigured: true }],
+    availableChannels: [{ id: "channel-a", name: "Platform on-call", type: "slack", enabled: true, destinationConfigured: true }],
+    inAppEnabled: true,
+  });
   api.getCharlieMode.mockResolvedValue({
     requested: "approval",
     authoritative: "approval",
@@ -197,11 +215,25 @@ beforeEach(() => {
     verification: "task reaches a terminal state",
     circuitState: "closed",
   }));
+  api.updateCharlieAlertPolicy.mockImplementation(async (policy) => ({ ...policy, revision: policy.revision + 1 }));
 });
 
 afterEach(cleanup);
 
 describe("Charlie administration acceptance", () => {
+  it("configures product-owned alert routing without implying action authority", async () => {
+    renderWithClient(<AlertsTab />);
+    expect(await screen.findByText("Actionable finding alerts")).toBeInTheDocument();
+    expect(screen.getByText(/cannot approve, authorize, or dispatch work/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Route Charlie alerts to Platform on-call" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save alert policy" }));
+    await waitFor(() => expect(api.updateCharlieAlertPolicy).toHaveBeenCalledTimes(1));
+    expect(api.updateCharlieAlertPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ channelIds: [], minimumSeverity: "medium" }),
+      expect.anything(),
+    );
+  });
+
   it("covers disabled, loading, denied, and authorized feature/permission states", async () => {
     feature.value = { data: { "feature.charlie": false }, isError: false, refetch: vi.fn() };
     const disabled = renderWithClient(<CharlieAdminPage />);

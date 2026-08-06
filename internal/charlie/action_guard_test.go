@@ -1,12 +1,14 @@
 package charlie
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -77,14 +79,49 @@ type fakeActionAuditor struct {
 	failAt string
 }
 
+type cancelBlockingActionAuditor struct {
+	phase   string
+	started chan struct{}
+	once    sync.Once
+}
+
+func (a *cancelBlockingActionAuditor) Record(ctx context.Context, phase string, _ ActionEnvelope, _ CapabilityDescriptor, _ ActionResult) error {
+	if phase != a.phase {
+		return nil
+	}
+	a.once.Do(func() { close(a.started) })
+	<-ctx.Done()
+	return ctx.Err()
+}
+
 type actionFindingRecorder struct {
-	inputs []FindingInput
-	err    error
+	inputs   []FindingInput
+	err      error
+	onRecord func(FindingInput)
 }
 
 func (f *actionFindingRecorder) RecordBlocked(_ context.Context, input FindingInput) (DurableFinding, error) {
 	f.inputs = append(f.inputs, input)
+	if f.onRecord != nil {
+		f.onRecord(input)
+	}
 	return DurableFinding{ID: "finding-a", Status: "open"}, f.err
+}
+
+type cancelBlockingAuthority struct {
+	facts   AuthorityInput
+	started chan struct{}
+	once    sync.Once
+}
+
+func (a *cancelBlockingAuthority) Evaluate(ctx context.Context, _ ActionEnvelope, _ CapabilityDescriptor, _ map[string]json.RawMessage) (AuthorityInput, error) {
+	a.once.Do(func() { close(a.started) })
+	<-ctx.Done()
+	return a.facts, nil
+}
+
+func (*cancelBlockingAuthority) Commit(context.Context, ActionEnvelope, CapabilityDescriptor, map[string]json.RawMessage, AuthorityInput) error {
+	return nil
 }
 
 type concurrentAuthority struct{ facts AuthorityInput }
@@ -733,8 +770,8 @@ func TestActionGuardFailsClosedWhenLiveAuthorityUnavailable(t *testing.T) {
 	}
 }
 
-func TestActionGuardDoesNotDispatchWhenDurableAuditFails(t *testing.T) {
-	for _, phase := range []string{"approved", "dispatched"} {
+func TestActionGuardAuditOutageIsActionableRetrySafeAndNeverDispatches(t *testing.T) {
+	for _, phase := range []string{"proposed", "approved", "dispatched"} {
 		t.Run(phase, func(t *testing.T) {
 			facts := allowedWriteFacts(ModeApproval)
 			authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
@@ -749,15 +786,219 @@ func TestActionGuardDoesNotDispatchWhenDurableAuditFails(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			findings := &actionFindingRecorder{}
+			if phase != "proposed" {
+				findings.onRecord = func(FindingInput) {
+					if stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) {
+						t.Errorf("finding was recorded before receipt became terminal: %v", receipts.transitions)
+					}
+				}
+			}
+			guard.SetFindingRecorder(findings, "installation-a")
 			action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 			action.ApprovalID = "approval-a"
 			payload, _ := json.Marshal(action.signed())
 			action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 			result := guard.Execute(context.Background(), action)
-			if result.Allowed || authority.commitCalls != 0 || executor.calls != 0 || stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) {
+			wantTransitions := []string{"blocked"}
+			if phase == "proposed" {
+				wantTransitions = nil
+			}
+			if result.Allowed || result.Code != DeniedAuditUnavailable || result.Finding == nil || !result.Finding.Actionable || authority.commitCalls != 0 || executor.calls != 0 || stringSlice(receipts.transitions) != stringSlice(wantTransitions) || len(findings.inputs) != 1 || findings.inputs[0].Decision.Code != DeniedAuditUnavailable {
 				t.Fatalf("audit failure reached consumption/dispatch: phase=%s result=%+v commits=%d calls=%d transitions=%v", phase, result, authority.commitCalls, executor.calls, receipts.transitions)
 			}
 		})
+	}
+}
+
+func TestActionGuardAuditOutageIsSilentWhileIntegrationIsInert(t *testing.T) {
+	for name, mutate := range map[string]func(*AuthorityInput){
+		"feature_disabled": func(facts *AuthorityInput) { facts.FeatureEnabled = false },
+		"disconnected":     func(facts *AuthorityInput) { facts.ConnectionActive = false },
+		"emergency_stop":   func(facts *AuthorityInput) { facts.EmergencyDisabled = true },
+		"mode_disabled":    func(facts *AuthorityInput) { facts.Mode = ModeDisabled },
+	} {
+		t.Run(name, func(t *testing.T) {
+			facts := allowedWriteFacts(ModeApproval)
+			mutate(&facts)
+			authority := &fakeLiveAuthority{facts: []AuthorityInput{facts}}
+			receipts := &fakeReceipts{}
+			executor := &fakeCapabilityExecutor{}
+			publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			guard, err := NewActionGuard(publicKey, authority, receipts, executor, &fakeActionAuditor{failAt: "proposed"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			findings := &actionFindingRecorder{}
+			guard.SetFindingRecorder(findings, "installation-a")
+			result := guard.Execute(context.Background(), signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"}))
+			if result.Code != DeniedAuditUnavailable || result.Finding != nil || len(findings.inputs) != 0 || receipts.claimCalls != 0 || authority.commitCalls != 0 || executor.calls != 0 {
+				t.Fatalf("inert integration emitted work during audit outage: result=%+v findings=%d claims=%d commits=%d executes=%d", result, len(findings.inputs), receipts.claimCalls, authority.commitCalls, executor.calls)
+			}
+		})
+	}
+}
+
+func TestActionGuardAuditOutageNeverLeaksPersistenceError(t *testing.T) {
+	const canary = "database-provider-secret-SENTINEL"
+	facts := allowedWriteFacts(ModeApproval)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auditor := &fakeActionAuditor{error: errors.New(canary)}
+	guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	guard.SetLogger(slog.New(slog.NewJSONHandler(&output, nil)))
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
+	result := guard.Execute(context.Background(), signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"}))
+	serialized, _ := json.Marshal(result)
+	if result.Code != DeniedAuditUnavailable || strings.Contains(output.String(), canary) || bytes.Contains(serialized, []byte(canary)) {
+		t.Fatalf("audit persistence detail escaped bounded outcome: result=%s log=%s", serialized, output.String())
+	}
+}
+
+func TestActionGuardAuditOutageDoesNotTurnUntrustedInputIntoFinding(t *testing.T) {
+	facts := allowedWriteFacts(ModeApproval)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{}
+	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
+	guard.auditor = &fakeActionAuditor{failAt: "proposed"}
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+	action.Signature = "attacker-controlled"
+	result := guard.Execute(context.Background(), action)
+	if result.Code != DeniedAuthorization || result.Finding != nil || authority.calls != 0 || receipts.claimCalls != 0 || len(findings.inputs) != 0 || executor.calls != 0 {
+		t.Fatalf("invalid request created work during audit outage: result=%+v authority=%d claims=%d findings=%d executes=%d", result, authority.calls, receipts.claimCalls, len(findings.inputs), executor.calls)
+	}
+}
+
+func TestActionGuardAuditOutageParticipatesInEmergencyDrain(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority := &cancelBlockingAuthority{facts: allowedWriteFacts(ModeApproval), started: make(chan struct{})}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{}
+	guard, err := NewActionGuard(publicKey, authority, receipts, executor, &fakeActionAuditor{failAt: "proposed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := &actionFindingRecorder{}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+
+	resultCh := make(chan ActionResult, 1)
+	go func() { resultCh <- guard.Execute(context.Background(), action) }()
+	select {
+	case <-authority.started:
+	case <-time.After(time.Second):
+		t.Fatal("audit-outage authority evaluation did not start")
+	}
+	drainCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	state, err := guard.writeFence.CloseAndWait(drainCtx)
+	if err != nil || !state.Closed || !state.Drained {
+		t.Fatalf("audit-outage path did not drain: state=%+v err=%v", state, err)
+	}
+	result := <-resultCh
+	if result.Code != DeniedAuditUnavailable || result.Finding != nil || len(findings.inputs) != 0 || receipts.claimCalls != 0 || executor.calls != 0 {
+		t.Fatalf("drained audit-outage path emitted stale work: result=%+v findings=%d claims=%d executes=%d", result, len(findings.inputs), receipts.claimCalls, executor.calls)
+	}
+}
+
+func TestActionGuardEmergencyDisableWinsWhileRequiredAuditIsInFlight(t *testing.T) {
+	for _, phase := range []string{"proposed", "dispatched"} {
+		t.Run(phase, func(t *testing.T) {
+			publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			facts := allowedWriteFacts(ModeApproval)
+			authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+			receipts := &fakeReceipts{}
+			executor := &fakeCapabilityExecutor{}
+			auditor := &cancelBlockingActionAuditor{phase: phase, started: make(chan struct{})}
+			guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			findings := &actionFindingRecorder{}
+			guard.SetFindingRecorder(findings, "installation-a")
+			action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+			action.ApprovalID = "approval-a"
+			payload, _ := json.Marshal(action.signed())
+			action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+
+			resultCh := make(chan ActionResult, 1)
+			go func() { resultCh <- guard.Execute(context.Background(), action) }()
+			select {
+			case <-auditor.started:
+			case <-time.After(time.Second):
+				t.Fatalf("%s audit did not start", phase)
+			}
+			drainCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			state, drainErr := guard.writeFence.CloseAndWait(drainCtx)
+			if drainErr != nil || !state.Closed || !state.Drained {
+				t.Fatalf("%s audit did not drain: state=%+v err=%v", phase, state, drainErr)
+			}
+			result := <-resultCh
+			if result.Code != DeniedEmergencyDisabled || result.Finding != nil || len(findings.inputs) != 0 || authority.commitCalls != 0 || executor.calls != 0 {
+				t.Fatalf("disable lost to %s audit failure: result=%+v findings=%d commits=%d executes=%d", phase, result, len(findings.inputs), authority.commitCalls, executor.calls)
+			}
+		})
+	}
+}
+
+func TestActionGuardAuditOutageReplayReconcilesFailedFinding(t *testing.T) {
+	facts := allowedWriteFacts(ModeApproval)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auditor := &fakeActionAuditor{failAt: "approved"}
+	guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := &actionFindingRecorder{err: errors.New("finding store unavailable")}
+	guard.SetFindingRecorder(findings, "installation-a")
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+	action.ApprovalID = "approval-a"
+	payload, _ := json.Marshal(action.signed())
+	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+
+	first := guard.Execute(context.Background(), action)
+	if first.Code != DeniedAuditUnavailable || first.Finding != nil || stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) || len(findings.inputs) != 1 {
+		t.Fatalf("initial audit-outage result was not durably blocked: result=%+v transitions=%v findings=%d", first, receipts.transitions, len(findings.inputs))
+	}
+	auditor.failAt = ""
+	findings.err = nil
+	receipts.claim = ReceiptClaim{Disposition: ReceiptReplay, Result: denied(DeniedAuditUnavailable, "bounded")}
+
+	replay := guard.Execute(context.Background(), action)
+	if replay.Code != DeniedAuditUnavailable || !replay.Replay || replay.Finding == nil || !replay.Finding.Actionable || len(findings.inputs) != 2 || authority.commitCalls != 0 || executor.calls != 0 {
+		t.Fatalf("audit-outage replay did not reconcile finding: result=%+v findings=%d commits=%d executes=%d", replay, len(findings.inputs), authority.commitCalls, executor.calls)
+	}
+	if findings.inputs[0].NormalizedDiagnosis != findings.inputs[1].NormalizedDiagnosis || findings.inputs[0].ResourceID != findings.inputs[1].ResourceID || findings.inputs[0].RecommendedCapability != findings.inputs[1].RecommendedCapability {
+		t.Fatalf("replay changed the finding dedupe identity: first=%+v replay=%+v", findings.inputs[0], findings.inputs[1])
 	}
 }
 

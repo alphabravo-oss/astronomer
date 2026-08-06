@@ -6,6 +6,7 @@ export const CHARLIE_ADMIN_TABS = [
   "connection",
   "agent",
   "mode",
+  "alerts",
   "automation",
   "access",
   "diagnostics",

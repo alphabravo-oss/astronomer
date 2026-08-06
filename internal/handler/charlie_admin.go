@@ -22,6 +22,8 @@ type CharlieAdminBackend interface {
 	UpdateMode(context.Context, charlie.Mode, int64, bool, uuid.UUID) (charlie.AdminModeView, error)
 	AcknowledgeDisclosure(context.Context, string) (charlie.AdminModeView, error)
 	Automation(context.Context) (charlie.AdminAutomationView, error)
+	AlertPolicy(context.Context) (charlie.AdminAlertPolicyView, error)
+	UpdateAlertPolicy(context.Context, charlie.AdminAlertPolicyInput, uuid.UUID) (charlie.AdminAlertPolicyView, error)
 	UpdateActionPolicy(context.Context, string, charlie.AdminActionPolicyInput) (charlie.AdminActionPolicy, error)
 	CreateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
 	UpdateTrigger(context.Context, uuid.UUID, charlie.AdminTriggerRule) (charlie.AdminTriggerRule, error)
@@ -234,6 +236,43 @@ func (h *CharlieAdminHandler) ListTriggers(w http.ResponseWriter, r *http.Reques
 		h.respondError(w, r, err)
 		return
 	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) AlertPolicy(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	view, err := h.backend.AlertPolicy(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) UpdateAlertPolicy(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	var request charlie.AdminAlertPolicyInput
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	fields := map[string]any{
+		"enabled": request.Enabled, "minimum_severity": request.MinimumSeverity,
+		"dedupe_window_seconds":    request.DedupeWindowSeconds,
+		"escalation_after_seconds": request.EscalationAfterSeconds,
+		"quiet_hours_enabled":      request.QuietHoursEnabled, "channel_count": len(request.ChannelIDs), "revision": request.Revision,
+	}
+	view, err := h.backend.UpdateAlertPolicy(r.Context(), request, mustUserID(actor))
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	fields["revision"] = view.Revision
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.alert_policy.update", "charlie_alert_policy", "current", fields)
 	RespondJSON(w, http.StatusOK, view)
 }
 

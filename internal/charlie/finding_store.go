@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	DefaultFindingAlertCooldown = 30 * time.Minute
-	DefaultFindingTTL           = 7 * 24 * time.Hour
+	DefaultFindingTTL = 7 * 24 * time.Hour
 )
 
 type findingStoreQueries interface {
@@ -46,7 +45,7 @@ func (s *DBFindingStore) UpsertBlockedFinding(ctx context.Context, input Finding
 	if err != nil || !connection.Active || connection.EmergencyDisabled || connection.InstallationID.String() != input.InstallationID {
 		return DurableFinding{}, fmt.Errorf("Charlie finding connection is inactive")
 	}
-	prior, priorErr := s.queries.GetActiveCharlieFindingByFingerprint(ctx, sqlc.GetActiveCharlieFindingByFingerprintParams{ConnectionID: connection.ID, DedupeFingerprint: fingerprint})
+	_, priorErr := s.queries.GetActiveCharlieFindingByFingerprint(ctx, sqlc.GetActiveCharlieFindingByFingerprintParams{ConnectionID: connection.ID, DedupeFingerprint: fingerprint})
 	if priorErr != nil && !errors.Is(priorErr, pgx.ErrNoRows) {
 		return DurableFinding{}, fmt.Errorf("load active Charlie finding: %w", priorErr)
 	}
@@ -77,8 +76,10 @@ func (s *DBFindingStore) UpsertBlockedFinding(ctx context.Context, input Finding
 	}); err != nil {
 		return DurableFinding{}, fmt.Errorf("persist Charlie finding resource scope: %w", err)
 	}
-	notify := input.Severity != "info" && (errors.Is(priorErr, pgx.ErrNoRows) || prior.UpdatedAt.Add(DefaultFindingAlertCooldown).Before(now) || severityAtLeast(input.Severity, prior.Severity) && input.Severity != prior.Severity)
-	return DurableFinding{ID: row.ID.String(), Fingerprint: row.DedupeFingerprint, Status: row.Status, RepeatCount: int(row.RepeatCount), UpdatedAt: row.UpdatedAt, Notify: notify}, nil
+	// Every committed occurrence reaches the product-owned alert planner. The
+	// planner, not the finding store, owns severity thresholds, quiet hours,
+	// deduplication, channel routing, and escalation.
+	return DurableFinding{ID: row.ID.String(), Fingerprint: row.DedupeFingerprint, Status: row.Status, RepeatCount: int(row.RepeatCount), UpdatedAt: row.UpdatedAt, Notify: true}, nil
 }
 
 func redactFindingText(value string, maximum int) string {

@@ -458,10 +458,10 @@ silently claim an action, approval, notification, or audit write succeeded.
   separately authenticated exact-approval endpoint has zero action-dispatch
   side effects, including replay, concurrent clicks, stale cards, and forged UI
   payloads.
-- [ ] **A-ALERT-003** Add configurable severity, dedupe, escalation, quiet-hour,
+- [x] **A-ALERT-003** Add configurable severity, dedupe, escalation, quiet-hour,
   recipient, and channel policy without moving thresholds or user-notification
   credentials into Charlie central.
-- [ ] **A-ALERT-004** Make required product audit admission fail closed before
+- [x] **A-ALERT-004** Make required product audit admission fail closed before
   every authority increase and write dispatch; prove audit outage causes no
   Product MCP write and leaves one actionable, retry-safe coded outcome.
 - [ ] **A-ALERT-005** Centralize typed allowlisted operational log fields across
@@ -472,6 +472,39 @@ silently claim an action, approval, notification, or audit write succeeded.
   or connection disabled; control-status only in wire `disabled`; manual guidance
   in `read_only`; exact approve/reject or manual guidance in `approval`; verified
   automatic result, exact fallback approval, or manual guidance in `auto`.
+
+Charlie `1.0.22` alert and audit-admission evidence: Astronomer owns a
+revisioned alert policy for severity, dedupe, escalation, quiet hours, and
+references to its existing notification channels; recipient destinations and
+credentials remain in the product's channel subsystem and never enter Charlie.
+Finding-to-delivery creation and its task outbox are atomic, reconciliation is
+idempotent, an unscoped partial finding is ineligible, and delivery rechecks the
+live connection, emergency latch, requested/verified modes, policy revision,
+severity, channel mapping, and channel state immediately before provider I/O.
+The worker holds the same distributed PostgreSQL write fence used by Product MCP
+from claim through provider return and terminal persistence. Feature disable or
+a downward authority drain waits for an in-flight alert call and rejects queued
+delivery before database claim or HTTP; separate API/worker pools proved the
+shared/exclusive advisory-lock boundary against real PostgreSQL.
+
+Product action admission now requires the bounded product audit record before
+authority consumption or dispatch at proposed, approved, and dispatched
+phases. Audit failure returns only `audit_unavailable`, commits or reconciles one
+retry-safe actionable finding in active modes, transitions any existing receipt
+to a terminal blocked state, and makes zero Product MCP calls. Cancellation,
+emergency disable, and downward-mode races win before or during audit, and
+replay revalidates current state without duplicate authority or findings. The
+pinned 19-scenario plus 360-case Charlie conformance corpus drives the real
+Astronomer guard, catalog, receipt, executor, verifier, and MCP-header boundary
+and asserts all eight typed stages plus zero unintended effects.
+
+`make sqlc-check`, the pinned contract drift gate, the full non-race and race Go
+suites, the API contract, 789 frontend tests/type-check/build/audit, and both
+development and production Helm renders pass. The alert-policy CAS, mandatory
+finding-scope query, and cross-process delivery fence also pass under `-race`
+against a disposable real PostgreSQL database. A-ALERT-005 and A-ALERT-006 stay
+open for the complete cross-process content-sentinel and live effective-mode
+notification matrices; this source evidence does not substitute for them.
 
 Charlie `1.0.21` contract-alignment evidence: the pinned strict finding schema,
 generated bridge types, Astronomer public OpenAPI, generated Go SDK, and generated

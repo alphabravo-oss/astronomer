@@ -8,11 +8,11 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 402
-- Frontend source lines: 112145
-- Go source files under `internal/` excluding generated sqlc and tests: 548
-- Go source files scanned for sqlc query references excluding generated sqlc: 17045
-- sqlc query declarations: 994
+- Frontend source files: 403
+- Frontend source lines: 112625
+- Go source files under `internal/` excluding generated sqlc and tests: 551
+- Go source files scanned for sqlc query references excluding generated sqlc: 17054
+- sqlc query declarations: 1008
 - Component files scanned: 124
 - Helm top-level values scanned: 33
 
@@ -105,8 +105,8 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `objectMeta` in [`internal/charlie/agent_installation.go:728`](internal/charlie/agent_installation.go:728), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
-- `writeError` in [`internal/charlie/contract/fakebridge/fake.go:314`](internal/charlie/contract/fakebridge/fake.go:314), [`internal/charliequalification/hook.go:216`](internal/charliequalification/hook.go:216)
-- `writeJSON` in [`internal/charlie/contract/fakebridge/fake.go:308`](internal/charlie/contract/fakebridge/fake.go:308), [`internal/charliequalification/hook.go:210`](internal/charliequalification/hook.go:210), [`internal/handler/response.go:161`](internal/handler/response.go:161)
+- `writeError` in [`internal/charlie/contract/fakebridge/fake.go:314`](internal/charlie/contract/fakebridge/fake.go:314), [`internal/charliequalification/hook.go:248`](internal/charliequalification/hook.go:248)
+- `writeJSON` in [`internal/charlie/contract/fakebridge/fake.go:308`](internal/charlie/contract/fakebridge/fake.go:308), [`internal/charliequalification/hook.go:242`](internal/charliequalification/hook.go:242), [`internal/handler/response.go:161`](internal/handler/response.go:161)
 
 ### Dead-Code Candidates
 

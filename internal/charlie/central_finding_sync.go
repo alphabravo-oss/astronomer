@@ -253,13 +253,10 @@ func centralFindingReplay(prior sqlc.CharlieFinding, summary BridgeFindingSummar
 }
 
 func shouldNotifyCentralFinding(prior sqlc.CharlieFinding, priorErr error, summary BridgeFindingSummary, status string, now time.Time) bool {
-	if !centralFindingActionable(status, summary.BlockCode) || !severityAtLeast(summary.Severity, "medium") {
-		return false
-	}
-	return errors.Is(priorErr, pgx.ErrNoRows) ||
-		severityAtLeast(summary.Severity, prior.Severity) && summary.Severity != prior.Severity ||
-		!centralFindingActionable(prior.Status, prior.ExecutionBlockCode) ||
-		prior.UpdatedAt.Add(DefaultFindingAlertCooldown).Before(now)
+	_ = now
+	// Product alert policy owns thresholds and deduplication. The sync layer
+	// merely says whether this was a new actionable central revision.
+	return centralFindingActionable(status, summary.BlockCode) && (errors.Is(priorErr, pgx.ErrNoRows) || summary.UpdatedAt.After(prior.UpdatedAt))
 }
 
 func durableCentralFinding(row sqlc.CharlieFinding, notify bool) DurableFinding {

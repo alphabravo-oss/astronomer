@@ -24,38 +24,46 @@ const (
 )
 
 var (
-	runIDPattern    = regexp.MustCompile(`^qualification-[a-z0-9-]{1,120}$`)
-	scenarioPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	runIDPattern        = regexp.MustCompile(`^qualification-[a-z0-9-]{1,120}$`)
+	scenarioPattern     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	candidateRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$`)
+	commitPattern       = regexp.MustCompile(`^[a-f0-9]{40}$`)
+	versionPattern      = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
+	digestPattern       = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 )
 
 var requiredAssertions = map[string][]string{
-	"feature_false":              {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
-	"unactivated":                {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
-	"central_disabled":           {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
-	"emergency_disabled":         {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
-	"read_denial":                {"authorization_denied", "product_calls_zero"},
-	"approval_expiry":            {"approval_expired", "product_calls_zero"},
-	"approval_once":              {"approval_consumed_once", "product_call_once"},
-	"approval_replay":            {"approval_replay_denied", "additional_product_calls_zero"},
-	"approval_reject":            {"approval_rejected", "product_calls_zero"},
-	"auto_allowlisted_success":   {"allowlisted_action_succeeded", "product_call_once"},
-	"auto_nonallowlisted_denial": {"nonallowlisted_action_denied", "product_calls_zero"},
-	"discovery_mixed_catalog":    {"valid_capability_retained", "malformed_capability_rejected", "catalog_bound"},
-	"malformed_discovery":        {"discovery_rejected", "integration_disabled", "product_calls_zero"},
-	"versioned_rag_grounded":     {"real_generation", "real_embedding", "corrected_revision", "version_selected", "grounded_citation"},
-	"general_answer":             {"real_generation", "general_answer", "no_fabricated_citation"},
-	"diagnosis_alert":            {"one_alert", "valid_deep_link", "content_free"},
-	"approval_pending_alert":     {"one_alert", "valid_deep_link", "content_free"},
-	"approval_rejected_alert":    {"one_alert", "valid_deep_link", "content_free"},
-	"approval_expired_alert":     {"one_alert", "valid_deep_link", "content_free"},
-	"blocked_auto_alert":         {"one_alert", "valid_deep_link", "content_free"},
-	"failed_precondition_alert":  {"one_alert", "valid_deep_link", "content_free"},
-	"failed_verification_alert":  {"one_alert", "valid_deep_link", "content_free", "block_code_verification_failed"},
-	"leader_kill_failover":       {"leader_identified", "leader_killed", "replacement_elected", "bounded_failover", "epoch_advanced", "sse_resumed", "no_duplicate_action"},
-	"clean_install":              {"fresh_database", "migrations_applied", "pgvector_ready", "object_storage_ready", "oci_authenticated", "tls_enforced", "admin_login_succeeded", "development_bypass_absent", "candidate_digests_running"},
-	"isolation_matrix":           {"two_deployments_same_product", "second_product_created", "credentials_isolated", "sessions_isolated", "usage_isolated", "findings_isolated", "audit_isolated", "cross_reads_denied"},
-	"resilience_matrix":          {"restart_authority_not_increased", "leader_loss_recovered", "central_outage_failed_closed", "product_outage_failed_closed", "credential_rotation_converged", "disclosure_drift_disabled", "emergency_disable_drained", "recovery_required_explicit_enable"},
-	"upgrade_rollback":           {"upgrade_candidate_pinned", "rollback_candidate_pinned", "authority_not_restored", "stale_credentials_rejected", "explicit_reenable_required"},
+	"feature_false":            {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"unactivated":              {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"central_disabled":         {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"emergency_disabled":       {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"read_denial":              {"authorization_denied", "product_calls_zero"},
+	"approval_expiry":          {"approval_expired", "product_calls_zero"},
+	"approval_once":            {"approval_consumed_once", "product_call_once"},
+	"approval_replay":          {"approval_replay_denied", "additional_product_calls_zero"},
+	"approval_reject":          {"approval_rejected", "product_calls_zero"},
+	"auto_allowlisted_success": {"allowlisted_action_succeeded", "product_call_once"},
+	// Automation is a cumulative ceiling: a safe, disclosed write that is not
+	// eligible for unattended execution must retain the exact-approval path.
+	// Treating it as a terminal denial would make auto less capable than
+	// approval mode and would contradict the product authority contract.
+	"auto_nonallowlisted_approval": {"approval_pending", "product_calls_zero"},
+	"discovery_mixed_catalog":      {"valid_capability_retained", "malformed_capability_rejected", "catalog_bound"},
+	"malformed_discovery":          {"discovery_rejected", "integration_disabled", "product_calls_zero"},
+	"versioned_rag_grounded":       {"real_generation", "real_embedding", "corrected_revision", "version_selected", "grounded_citation"},
+	"general_answer":               {"real_generation", "general_answer", "no_fabricated_citation"},
+	"diagnosis_alert":              {"one_alert", "valid_deep_link", "content_free"},
+	"approval_pending_alert":       {"one_alert", "valid_deep_link", "content_free"},
+	"approval_rejected_alert":      {"one_alert", "valid_deep_link", "content_free"},
+	"approval_expired_alert":       {"one_alert", "valid_deep_link", "content_free"},
+	"blocked_auto_alert":           {"one_alert", "valid_deep_link", "content_free"},
+	"failed_precondition_alert":    {"one_alert", "valid_deep_link", "content_free"},
+	"failed_verification_alert":    {"one_alert", "valid_deep_link", "content_free", "block_code_verification_failed"},
+	"leader_kill_failover":         {"leader_identified", "leader_killed", "replacement_elected", "bounded_failover", "epoch_advanced", "sse_resumed", "no_duplicate_action"},
+	"clean_install":                {"fresh_database", "migrations_applied", "pgvector_ready", "object_storage_ready", "oci_authenticated", "tls_enforced", "admin_login_succeeded", "development_bypass_absent", "candidate_digests_running"},
+	"isolation_matrix":             {"two_deployments_same_product", "second_product_created", "credentials_isolated", "sessions_isolated", "usage_isolated", "findings_isolated", "audit_isolated", "cross_reads_denied"},
+	"resilience_matrix":            {"restart_authority_not_increased", "leader_loss_recovered", "central_outage_failed_closed", "product_outage_failed_closed", "credential_rotation_converged", "disclosure_drift_disabled", "emergency_disable_drained", "recovery_required_explicit_enable"},
+	"upgrade_rollback":             {"upgrade_candidate_pinned", "rollback_candidate_pinned", "authority_not_restored", "stale_credentials_rejected", "explicit_reenable_required"},
 }
 
 type Assertion struct {
@@ -97,9 +105,12 @@ type Driver interface {
 }
 
 type Hook struct {
-	token  string
-	driver Driver
-	mu     sync.Mutex
+	token          string
+	driver         Driver
+	mu             sync.Mutex
+	runID          string
+	boundCandidate Candidate
+	results        map[string]ScenarioResult
 }
 
 func NewHook(token string, driver Driver) (*Hook, error) {
@@ -107,7 +118,7 @@ func NewHook(token string, driver Driver) (*Hook, error) {
 	if len(token) < 32 || len(token) > 512 || driver == nil {
 		return nil, errors.New("qualification hook requires a strong bearer token and live driver")
 	}
-	return &Hook{token: token, driver: driver}, nil
+	return &Hook{token: token, driver: driver, results: make(map[string]ScenarioResult)}, nil
 }
 
 func ValidateLoopbackAddress(address string) error {
@@ -166,14 +177,33 @@ func (h *Hook) scenario(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	var request ScenarioRequest
 	if err := decoder.Decode(&request); err != nil || decoder.Decode(&struct{}{}) != io.EOF ||
-		request.Schema != "charlie.live-scenario/v1" || request.Scenario != scenario || !runIDPattern.MatchString(request.RunID) {
+		request.Schema != "charlie.live-scenario/v1" || request.Scenario != scenario || !runIDPattern.MatchString(request.RunID) ||
+		!validCandidate(request.Candidate) {
 		writeError(w, http.StatusBadRequest, "request_invalid")
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.runID == "" {
+		h.runID, h.boundCandidate = request.RunID, request.Candidate
+	} else if h.runID != request.RunID || h.boundCandidate != request.Candidate {
+		writeError(w, http.StatusConflict, "qualification_binding_changed")
+		return
+	}
+	if prior, ok := h.results[scenario]; ok {
+		writeJSON(w, http.StatusOK, prior)
+		return
+	}
 	result := normalizeResult(h.driver.Run(r.Context(), request), scenario)
+	h.results[scenario] = result
 	writeJSON(w, http.StatusOK, result)
+}
+
+func validCandidate(candidate Candidate) bool {
+	return candidateRefPattern.MatchString(candidate.Ref) && commitPattern.MatchString(candidate.Commit) &&
+		versionPattern.MatchString(candidate.Version) && digestPattern.MatchString(candidate.CentralImageDigest) &&
+		digestPattern.MatchString(candidate.AgentImageDigest) && digestPattern.MatchString(candidate.CentralChartDigest) &&
+		digestPattern.MatchString(candidate.AgentChartDigest)
 }
 
 func normalizeResult(result ScenarioResult, scenario string) ScenarioResult {

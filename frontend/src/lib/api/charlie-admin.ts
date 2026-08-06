@@ -114,6 +114,28 @@ export interface CharlieAutomationView {
   defaultsRevision: number;
   serviceIdentityEnabled: boolean;
 }
+export interface CharlieAlertChannel {
+  id: string;
+  name: string;
+  type: "slack" | "pagerduty" | "msteams" | "webhook" | string;
+  enabled: boolean;
+  destinationConfigured: boolean;
+}
+export interface CharlieAlertPolicy {
+  enabled: boolean;
+  minimumSeverity: "info" | "low" | "medium" | "warning" | "high" | "critical";
+  dedupeWindowSeconds: number;
+  escalationAfterSeconds: number;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  quietHoursTimezone: string;
+  revision: number;
+  channelIds: string[];
+  channels: CharlieAlertChannel[];
+  availableChannels: CharlieAlertChannel[];
+  inAppEnabled: true;
+}
 export interface CharlieActionPolicy {
   capability: string;
   effect: string;
@@ -317,6 +339,35 @@ export async function getCharlieAutomation(): Promise<CharlieAutomationView> {
     };
   }
   throw new Error('Charlie trigger-rule response is unavailable');
+}
+export async function getCharlieAlertPolicy(): Promise<CharlieAlertPolicy> {
+  const { data } = await api.get("/admin/charlie/alert-policy/");
+  return payload(data);
+}
+export async function updateCharlieAlertPolicy(
+  input: CharlieAlertPolicy,
+): Promise<CharlieAlertPolicy> {
+  try {
+    const { data } = await api.put("/admin/charlie/alert-policy/", {
+      revision: input.revision,
+      enabled: input.enabled,
+      minimum_severity: input.minimumSeverity,
+      dedupe_window_seconds: input.dedupeWindowSeconds,
+      escalation_after_seconds: input.escalationAfterSeconds,
+      quiet_hours_enabled: input.quietHoursEnabled,
+      quiet_hours_start: input.quietHoursStart,
+      quiet_hours_end: input.quietHoursEnd,
+      quiet_hours_timezone: input.quietHoursTimezone,
+      channel_ids: input.channelIds,
+    });
+    return payload(data);
+  } catch (error) {
+    const status = (error as { response?: { status?: number } }).response?.status;
+    if (status === 409) {
+      throw new Error("This alert policy changed. Refresh before trying again.");
+    }
+    throw new Error("Astronomer could not confirm the alert-policy update.");
+  }
 }
 export async function updateCharlieAutomation(
   input: CharlieAutomationView,

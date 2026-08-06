@@ -66,6 +66,153 @@ components:
                 - product_enabled
                 - expected_revision
             type: object
+        AlertDeliveryProfile:
+            additionalProperties: false
+            description: Product-neutral, advisory-only alert material. The consuming product owns delivery policy, recipients, channels, thresholds, credentials, authorization, and execution.
+            properties:
+                advisory_only:
+                    const: true
+                    type: boolean
+                alert_id:
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                    type: string
+                deduplication_key:
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                deep_link_reference:
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                finding_ref:
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+                    type: string
+                reason_code:
+                    enum:
+                        - capability_destructive
+                        - product_disabled
+                        - deployment_disabled
+                        - stale_leadership
+                        - disclosure_drift
+                        - product_rbac_denied
+                        - scope_denied
+                        - read_only
+                        - non_auto_eligible
+                        - approval_required
+                        - approval_expired
+                        - approval_rejected
+                        - allowlist_denied
+                        - safety_budget_exceeded
+                        - cooldown_active
+                        - maintenance_window
+                        - precondition_failed
+                        - circuit_breaker_open
+                        - idempotency_conflict
+                        - ambiguous_prior_attempt
+                        - execution_failed
+                        - central_unavailable
+                        - audit_unavailable
+                        - verification_failed
+                        - no_safe_action
+                    type: string
+                safe_next_checks:
+                    items:
+                        maxLength: 512
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                schema:
+                    const: charlie.alert-delivery/v1
+                    type: string
+                severity:
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                    type: string
+                timeline:
+                    additionalProperties: false
+                    properties:
+                        first_seen_at:
+                            format: date-time
+                            type: string
+                        last_seen_at:
+                            format: date-time
+                            type: string
+                        latest_transition:
+                            enum:
+                                - created
+                                - deduplicated
+                                - acknowledged
+                                - remediation_started
+                                - verification_requested
+                                - dismissed
+                                - resolved
+                                - reopened
+                            type: string
+                        repeat_count:
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                        state:
+                            enum:
+                                - initial
+                                - repeated
+                                - terminal
+                            type: string
+                    required:
+                        - state
+                        - repeat_count
+                        - first_seen_at
+                        - last_seen_at
+                        - latest_transition
+                    type: object
+                verification_plan:
+                    additionalProperties: false
+                    properties:
+                        method:
+                            pattern: ^[a-z][a-z0-9_.:-]{0,127}$
+                            type: string
+                        steps:
+                            items:
+                                maxLength: 512
+                                minLength: 1
+                                type: string
+                            maxItems: 16
+                            minItems: 1
+                            type: array
+                    required:
+                        - method
+                        - steps
+                    type: object
+                workflow_kind:
+                    enum:
+                        - review_required
+                        - manual_remediation
+                        - verification
+                        - closed
+                    type: string
+            required:
+                - schema
+                - advisory_only
+                - alert_id
+                - finding_ref
+                - severity
+                - deduplication_key
+                - expires_at
+                - timeline
+                - reason_code
+                - safe_next_checks
+                - verification_plan
+                - deep_link_reference
+                - workflow_kind
+            title: AlertDeliveryProfile
+            type: object
         Approval:
             additionalProperties: false
             properties:
@@ -227,6 +374,7 @@ components:
                 - ambiguous_prior_attempt
                 - execution_failed
                 - central_unavailable
+                - audit_unavailable
                 - verification_failed
                 - no_safe_action
             type: string
@@ -561,6 +709,7 @@ components:
                 - ambiguous_prior_attempt
                 - execution_failed
                 - central_unavailable
+                - audit_unavailable
                 - verification_failed
                 - no_safe_action
             type: string
@@ -1215,6 +1364,26 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/FindingEnvelope'
                     description: Finding envelope
+                default:
+                    $ref: '#/components/responses/Error'
+        parameters:
+            - in: path
+              name: finding_id
+              required: true
+              schema:
+                $ref: '#/components/schemas/OpaqueId'
+            - $ref: '#/components/parameters/AuthorizationRef'
+    /findings/{finding_id}/alert-delivery:
+        get:
+            description: Returns bounded advisory material only. The product owns recipients, channels, thresholds, credentials, authorization, and all execution decisions.
+            operationId: getBridgeFindingAlertDelivery
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AlertDeliveryProfile'
+                    description: Advisory-only alert-delivery profile
                 default:
                     $ref: '#/components/responses/Error'
         parameters:

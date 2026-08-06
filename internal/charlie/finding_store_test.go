@@ -67,7 +67,7 @@ func TestDBFindingStoreDeduplicatesRedactsAndAlertsAfterDurability(t *testing.T)
 	}
 }
 
-func TestDBFindingStoreSuppressesRepeatAlertInsideCooldown(t *testing.T) {
+func TestDBFindingStoreDefersRepeatDedupeToAlertPolicy(t *testing.T) {
 	now := time.Unix(20000, 0).UTC()
 	connection := readySessionConnection()
 	fingerprint := stableFingerprint("same")
@@ -79,8 +79,8 @@ func TestDBFindingStoreSuppressesRepeatAlertInsideCooldown(t *testing.T) {
 	store, _ := NewDBFindingStore(fake)
 	store.now = func() time.Time { return now }
 	durable, err := store.UpsertBlockedFinding(context.Background(), FindingInput{InstallationID: connection.InstallationID.String(), Severity: "warning", Mode: ModeApproval}, FindingRecommendation{ExecutionBlockCode: DeniedApprovalRequired}, fingerprint)
-	if err != nil || durable.Notify || durable.RepeatCount != 4 {
-		t.Fatalf("repeat alert was not suppressed: durable=%#v err=%v", durable, err)
+	if err != nil || !durable.Notify || durable.RepeatCount != 4 {
+		t.Fatalf("repeat alert did not reach product policy: durable=%#v err=%v", durable, err)
 	}
 }
 

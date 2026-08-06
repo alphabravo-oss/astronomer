@@ -19,6 +19,7 @@ type Querier interface {
 	ActivateCharlieConnection(ctx context.Context, arg ActivateCharlieConnectionParams) (CharlieConnection, error)
 	// Alert Rule Channels (M2M)
 	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
+	AddCharlieAlertPolicyChannel(ctx context.Context, arg AddCharlieAlertPolicyChannelParams) error
 	AddCharlieFindingResource(ctx context.Context, arg AddCharlieFindingResourceParams) error
 	AddCharlieSessionResource(ctx context.Context, arg AddCharlieSessionResourceParams) error
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
@@ -66,10 +67,12 @@ type Querier interface {
 	CharlieAgentFleetList(ctx context.Context, arg CharlieAgentFleetListParams) ([]CharlieAgentFleetListRow, error)
 	CharlieAgentFleetSummary(ctx context.Context, staleSeconds int32) (CharlieAgentFleetSummaryRow, error)
 	CharlieAgentReconnectStats(ctx context.Context, arg CharlieAgentReconnectStatsParams) (CharlieAgentReconnectStatsRow, error)
+	CharlieAlertDeliveryAllowed(ctx context.Context, id uuid.UUID) (bool, error)
 	CharlieTunnelHealth(ctx context.Context, since time.Time) (CharlieTunnelHealthRow, error)
 	CharlieTunnelRecentErrors(ctx context.Context, arg CharlieTunnelRecentErrorsParams) ([]TunnelLocatorEvent, error)
 	CharlieTunnelReplicaDistribution(ctx context.Context) ([]CharlieTunnelReplicaDistributionRow, error)
 	ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharlieActionReceiptParams) (CharlieActionReceipt, error)
+	ClaimCharlieAlertDelivery(ctx context.Context, id uuid.UUID) (CharlieAlertDelivery, error)
 	ClaimCharlieAmbiguousReceipt(ctx context.Context, arg ClaimCharlieAmbiguousReceiptParams) (CharlieActionReceipt, error)
 	ClaimCharlieTriggerEvent(ctx context.Context, id uuid.UUID) (CharlieTriggerEvent, error)
 	ClaimDueCharlieTriggerEvents(ctx context.Context, batchSize int32) ([]CharlieTriggerEvent, error)
@@ -292,6 +295,7 @@ type Querier interface {
 	CreateCatalogOperationEvent(ctx context.Context, arg CreateCatalogOperationEventParams) (CatalogOperationEvent, error)
 	CreateCharlieActionApproval(ctx context.Context, arg CreateCharlieActionApprovalParams) (CharlieActionApproval, error)
 	CreateCharlieActionDeferral(ctx context.Context, arg CreateCharlieActionDeferralParams) (CharlieActionDeferral, error)
+	CreateCharlieAlertDeliveryWithOutbox(ctx context.Context, arg CreateCharlieAlertDeliveryWithOutboxParams) (CreateCharlieAlertDeliveryWithOutboxRow, error)
 	CreateCharlieConnection(ctx context.Context, arg CreateCharlieConnectionParams) (CharlieConnection, error)
 	CreateCharlieDelegation(ctx context.Context, arg CreateCharlieDelegationParams) (CharlieDelegation, error)
 	CreateCharlieSession(ctx context.Context, arg CreateCharlieSessionParams) (CharlieSession, error)
@@ -483,6 +487,7 @@ type Querier interface {
 	DeleteBackupSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error
 	DeleteBlessedChartsBySource(ctx context.Context, source string) error
+	DeleteCharlieAlertPolicyChannels(ctx context.Context, connectionID uuid.UUID) error
 	DeleteCharlieFindingMetadataBefore(ctx context.Context, before time.Time) (int64, error)
 	DeleteCharlieSessionMetadataBefore(ctx context.Context, before time.Time) (int64, error)
 	DeleteCloudCredential(ctx context.Context, id uuid.UUID) error
@@ -712,6 +717,10 @@ type Querier interface {
 	GetCharlieActionApprovalByApprovalID(ctx context.Context, approvalID string) (CharlieActionApproval, error)
 	GetCharlieActionReceipt(ctx context.Context, charlieActionID string) (CharlieActionReceipt, error)
 	GetCharlieActionSafetySnapshot(ctx context.Context, arg GetCharlieActionSafetySnapshotParams) (GetCharlieActionSafetySnapshotRow, error)
+	GetCharlieAlertDelivery(ctx context.Context, id uuid.UUID) (CharlieAlertDelivery, error)
+	// Charlie finding notification policy is product-owned. It references local
+	// notification channels by ID and never stores destination credentials.
+	GetCharlieAlertPolicy(ctx context.Context, connectionID uuid.UUID) (CharlieAlertPolicy, error)
 	GetCharlieAutomationPolicy(ctx context.Context, arg GetCharlieAutomationPolicyParams) (CharlieAutomationPolicy, error)
 	// Charlie integration metadata only. Content, raw evidence, model output, tool
 	// arguments/results, and reusable central credentials do not belong here.
@@ -1156,6 +1165,9 @@ type Querier interface {
 	ListCatalogsForProject(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]NotificationChannel, error)
 	ListCharlieAccessibleSessionCandidates(ctx context.Context, arg ListCharlieAccessibleSessionCandidatesParams) ([]CharlieSession, error)
+	ListCharlieAlertAvailableChannels(ctx context.Context) ([]NotificationChannel, error)
+	ListCharlieAlertPolicyChannels(ctx context.Context, connectionID uuid.UUID) ([]NotificationChannel, error)
+	ListCharlieAlertReconcileCandidates(ctx context.Context, limit int32) ([]ListCharlieAlertReconcileCandidatesRow, error)
 	ListCharlieAmbiguousReceipts(ctx context.Context, limit int32) ([]CharlieActionReceipt, error)
 	ListCharlieApprovalCandidateSessions(ctx context.Context) ([]CharlieSession, error)
 	ListCharlieAutomationPolicies(ctx context.Context, connectionID uuid.UUID) ([]CharlieAutomationPolicy, error)
@@ -1723,6 +1735,8 @@ type Querier interface {
 	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 	MarkCatalogOperationRunning(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	MarkCatalogOperationSuperseded(ctx context.Context, arg MarkCatalogOperationSupersededParams) (CatalogOperation, error)
+	MarkCharlieAlertDeliveryDelivered(ctx context.Context, id uuid.UUID) error
+	MarkCharlieAlertDeliveryRetry(ctx context.Context, arg MarkCharlieAlertDeliveryRetryParams) error
 	MarkCloudCredentialMaterializationApplied(ctx context.Context, id uuid.UUID) error
 	MarkCloudCredentialMaterializationFailed(ctx context.Context, arg MarkCloudCredentialMaterializationFailedParams) error
 	// Stamp the first CONNECT that authenticates with the DURABLE agent token
@@ -1979,6 +1993,7 @@ type Querier interface {
 	// leave last_error stamped via StampGitOpsSourceError.
 	StampGitOpsSourceSync(ctx context.Context, arg StampGitOpsSourceSyncParams) error
 	SuppressActiveCharlieTriggerEvent(ctx context.Context, arg SuppressActiveCharlieTriggerEventParams) (CharlieTriggerEvent, error)
+	SuppressCharlieAlertDelivery(ctx context.Context, arg SuppressCharlieAlertDeliveryParams) error
 	// Cluster tombstone — the final phase of the reconciler. We never hard-delete
 	// the cluster row; setting decommissioned_at preserves the id for audit_archive
 	// referential integrity and lets the UI render historical references.
@@ -2160,6 +2175,7 @@ type Querier interface {
 	UpsertApiserverAllowlist(ctx context.Context, arg UpsertApiserverAllowlistParams) (ApiserverAllowlist, error)
 	UpsertArgoCDClusterProxyToken(ctx context.Context, arg UpsertArgoCDClusterProxyTokenParams) (ArgocdClusterProxyToken, error)
 	UpsertAuthoredConstraint(ctx context.Context, arg UpsertAuthoredConstraintParams) (AuthoredConstraint, error)
+	UpsertCharlieAlertPolicy(ctx context.Context, arg UpsertCharlieAlertPolicyParams) (CharlieAlertPolicy, error)
 	UpsertCharlieApprovalFinding(ctx context.Context, arg UpsertCharlieApprovalFindingParams) (CharlieFinding, error)
 	UpsertCharlieAutomationPolicy(ctx context.Context, arg UpsertCharlieAutomationPolicyParams) (CharlieAutomationPolicy, error)
 	UpsertCharlieFinding(ctx context.Context, arg UpsertCharlieFindingParams) (CharlieFinding, error)

@@ -130,7 +130,7 @@
         "allowlist_denied", "safety_budget_exceeded", "cooldown_active",
         "maintenance_window", "precondition_failed", "circuit_breaker_open",
         "idempotency_conflict", "ambiguous_prior_attempt", "execution_failed",
-        "central_unavailable", "verification_failed", "no_safe_action"
+        "central_unavailable", "audit_unavailable", "verification_failed", "no_safe_action"
       ]
     }
   }

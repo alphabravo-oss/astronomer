@@ -14,6 +14,7 @@ const (
 	DeniedDestructive           DenialCode = "destructive_capability"
 	DeniedDisclosureChanged     DenialCode = "disclosure_changed"
 	DeniedAuthorization         DenialCode = "authorization_denied"
+	DeniedAuditUnavailable      DenialCode = "audit_unavailable"
 	DeniedReadOnlyWrite         DenialCode = "read_only_write"
 	DeniedApprovalRequired      DenialCode = "approval_required"
 	DeniedApprovalInvalid       DenialCode = "approval_invalid"
@@ -43,6 +44,7 @@ var authorityDenialCodes = [...]DenialCode{
 	DeniedDestructive,
 	DeniedDisclosureChanged,
 	DeniedAuthorization,
+	DeniedAuditUnavailable,
 	DeniedReadOnlyWrite,
 	DeniedApprovalRequired,
 	DeniedApprovalInvalid,
@@ -92,6 +94,7 @@ const (
 	ReasonAmbiguousPriorAttempt DenialCode = "ambiguous_prior_attempt"
 	ReasonExecutionFailed       DenialCode = "execution_failed"
 	ReasonCentralUnavailable    DenialCode = "central_unavailable"
+	ReasonAuditUnavailable      DenialCode = DeniedAuditUnavailable
 	ReasonVerificationFailed    DenialCode = "verification_failed"
 	ReasonNoSafeAction          DenialCode = "no_safe_action"
 )
@@ -122,6 +125,7 @@ var boundedNonExecutionReasons = [...]DenialCode{
 	ReasonAmbiguousPriorAttempt,
 	ReasonExecutionFailed,
 	ReasonCentralUnavailable,
+	ReasonAuditUnavailable,
 	ReasonVerificationFailed,
 	ReasonNoSafeAction,
 }

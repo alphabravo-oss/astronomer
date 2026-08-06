@@ -323,6 +323,23 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/FindingEnvelope"}
         default: {$ref: "#/components/responses/Error"}
+  /findings/{finding_id}/alert-delivery:
+    parameters:
+      - name: finding_id
+        in: path
+        required: true
+        schema: {$ref: "#/components/schemas/OpaqueId"}
+      - $ref: "#/components/parameters/AuthorizationRef"
+    get:
+      operationId: getBridgeFindingAlertDelivery
+      description: Returns bounded advisory material only. The product owns recipients, channels, thresholds, credentials, authorization, and all execution decisions.
+      responses:
+        "200":
+          description: Advisory-only alert-delivery profile
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AlertDeliveryProfile"}
+        default: {$ref: "#/components/responses/Error"}
   /findings/{finding_id}/transitions:
     parameters:
       - name: finding_id
@@ -722,6 +739,8 @@ components:
         updated_at: {type: string, format: date-time}
     FindingEnvelope:
       $ref: "./schemas/finding-v1.schema.json"
+    AlertDeliveryProfile:
+      $ref: "./schemas/alert-delivery-v1.schema.json"
     FindingLifecycleEvent:
       type: object
       additionalProperties: false
@@ -759,4 +778,4 @@ components:
           additionalProperties: {type: string, maxLength: 256}
     BlockCode:
       type: string
-      enum: [capability_destructive, product_disabled, deployment_disabled, stale_leadership, disclosure_drift, product_rbac_denied, scope_denied, read_only, non_auto_eligible, approval_required, approval_expired, approval_rejected, allowlist_denied, safety_budget_exceeded, cooldown_active, maintenance_window, precondition_failed, circuit_breaker_open, idempotency_conflict, ambiguous_prior_attempt, execution_failed, central_unavailable, verification_failed, no_safe_action]
+      enum: [capability_destructive, product_disabled, deployment_disabled, stale_leadership, disclosure_drift, product_rbac_denied, scope_denied, read_only, non_auto_eligible, approval_required, approval_expired, approval_rejected, allowlist_denied, safety_budget_exceeded, cooldown_active, maintenance_window, precondition_failed, circuit_breaker_open, idempotency_conflict, ambiguous_prior_attempt, execution_failed, central_unavailable, audit_unavailable, verification_failed, no_safe_action]

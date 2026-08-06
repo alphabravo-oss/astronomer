@@ -35,6 +35,29 @@ type charlieAdminFake struct {
 	actionPolicy         charlie.AdminActionPolicy
 	policyName           string
 	policyInput          charlie.AdminActionPolicyInput
+	alertPolicy          charlie.AdminAlertPolicyView
+	alertPolicyErr       error
+	alertPolicyInput     charlie.AdminAlertPolicyInput
+	alertPolicyActor     uuid.UUID
+}
+
+func (f *charlieAdminFake) AlertPolicy(context.Context) (charlie.AdminAlertPolicyView, error) {
+	return f.alertPolicy, nil
+}
+func (f *charlieAdminFake) UpdateAlertPolicy(_ context.Context, input charlie.AdminAlertPolicyInput, actor uuid.UUID) (charlie.AdminAlertPolicyView, error) {
+	f.alertPolicyInput, f.alertPolicyActor = input, actor
+	return f.alertPolicy, f.alertPolicyErr
+}
+
+func TestCharlieAdminAlertPolicyRejectsStaleRevision(t *testing.T) {
+	fake := &charlieAdminFake{alertPolicyErr: charlie.ErrAdminConflict}
+	h := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+	body := `{"revision":3,"enabled":true,"minimum_severity":"high","dedupe_window_seconds":900,"escalation_after_seconds":0,"quiet_hours_enabled":false,"quiet_hours_start":"22:00","quiet_hours_end":"07:00","quiet_hours_timezone":"UTC","channel_ids":[]}`
+	recorder := httptest.NewRecorder()
+	h.UpdateAlertPolicy(recorder, authenticatedCharlieRequest(http.MethodPut, "/", body, uuid.New(), "jwt"))
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "conflict") {
+		t.Fatalf("stale alert policy response=%d body=%s", recorder.Code, recorder.Body.String())
+	}
 }
 
 func (f *charlieAdminFake) UpdateActionPolicy(_ context.Context, name string, input charlie.AdminActionPolicyInput) (charlie.AdminActionPolicy, error) {
@@ -91,6 +114,35 @@ func TestCharlieAdminStatusReturnsOnlySafeMetadata(t *testing.T) {
 	for _, prohibited := range []string{"private_key", "enrollment", "artifact_pull", "central_url", "local_trust"} {
 		if strings.Contains(strings.ToLower(recorder.Body.String()), prohibited) {
 			t.Fatalf("status leaked prohibited field %q: %s", prohibited, recorder.Body.String())
+		}
+	}
+}
+
+func TestCharlieAdminAlertPolicyUsesOnlyProductOwnedRoutingFields(t *testing.T) {
+	actor, channelID := uuid.New(), uuid.New()
+	fake := &charlieAdminFake{alertPolicy: charlie.AdminAlertPolicyView{Enabled: true, MinimumSeverity: "high", Revision: 2, ChannelIDs: []string{channelID.String()}, InAppEnabled: true}}
+	writer := &charlieAuditWriterFake{}
+	h := NewCharlieAdminHandler(fake, writer)
+	body := `{"revision":1,"enabled":true,"minimum_severity":"high","dedupe_window_seconds":900,"escalation_after_seconds":3600,"quiet_hours_enabled":true,"quiet_hours_start":"22:00","quiet_hours_end":"07:00","quiet_hours_timezone":"UTC","channel_ids":["` + channelID.String() + `"]}`
+	recorder := httptest.NewRecorder()
+	h.UpdateAlertPolicy(recorder, authenticatedCharlieRequest(http.MethodPut, "/", body, actor, "jwt"))
+	if recorder.Code != http.StatusOK || fake.alertPolicyActor != actor || fake.alertPolicyInput.MinimumSeverity != "high" || fake.alertPolicyInput.Revision != 1 {
+		t.Fatalf("alert policy response=%d actor=%s input=%#v", recorder.Code, fake.alertPolicyActor, fake.alertPolicyInput)
+	}
+	for _, forbidden := range []string{"approval", "capability", "api_key", "secret"} {
+		if strings.Contains(strings.ToLower(recorder.Body.String()), forbidden) {
+			t.Fatalf("alert policy leaked authority/credential field %q: %s", forbidden, recorder.Body.String())
+		}
+	}
+	audit := string(writer.row.Detail)
+	for _, forbidden := range []string{channelID.String(), "destination", "configuration", "credential", "channel_ids"} {
+		if strings.Contains(strings.ToLower(audit), strings.ToLower(forbidden)) {
+			t.Fatalf("alert-policy audit leaked channel routing detail %q: %s", forbidden, audit)
+		}
+	}
+	for _, expected := range []string{`"minimum_severity":"high"`, `"channel_count":1`, `"revision":2`} {
+		if !strings.Contains(audit, expected) {
+			t.Fatalf("alert-policy audit lacks bounded field %s: %s", expected, audit)
 		}
 	}
 }
