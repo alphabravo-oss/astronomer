@@ -8,6 +8,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
@@ -29,6 +30,22 @@ func TestCharlieMetricLabelsAreFixedVocabulary(t *testing.T) {
 	}
 	if got := mcpOutcomeLabel("secret-error-body"); got != "failed" {
 		t.Fatalf("untrusted MCP outcome became a label: %q", got)
+	}
+}
+
+func TestCharlieCounterFamiliesExistAtZero(t *testing.T) {
+	collectors := map[string]prometheus.Collector{
+		"bridge":   charlieBridgeCalls,
+		"actions":  charlieActions,
+		"triggers": charlieTriggers,
+		"sse":      charlieSSEEvents,
+		"mcp":      charlieMCPCalls,
+		"listener": charlieMCPListenerEvents,
+	}
+	for name, collector := range collectors {
+		if got := testutil.CollectAndCount(collector); got == 0 {
+			t.Fatalf("%s counter family is absent before its first event", name)
+		}
 	}
 }
 

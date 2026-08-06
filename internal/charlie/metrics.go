@@ -84,6 +84,16 @@ func init() {
 			}
 		}
 	}
+	// CounterVec collectors do not emit a metric family until at least one label
+	// tuple has been instantiated. Materialize one bounded zero-value tuple for
+	// every Charlie counter family so a fresh deployment can distinguish a real
+	// zero from missing observability. Add(0) is intentionally side-effect free.
+	charlieBridgeCalls.WithLabelValues("unknown", "failed").Add(0)
+	charlieActions.WithLabelValues("unknown", "unknown", "unknown", "none").Add(0)
+	charlieTriggers.WithLabelValues("custom", "inactive").Add(0)
+	charlieSSEEvents.WithLabelValues("opened").Add(0)
+	charlieMCPCalls.WithLabelValues("unknown", "invalid").Add(0)
+	charlieMCPListenerEvents.WithLabelValues("activated").Add(0)
 }
 
 func observeConnectionExpiries(connection sqlc.CharlieConnection, now time.Time) {
