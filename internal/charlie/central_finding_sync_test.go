@@ -78,6 +78,7 @@ func (f centralSyncAuthorizer) CanReadIncidentResources(_ context.Context, actor
 
 type centralSyncBridge struct {
 	responses [][]BridgeFindingSummary
+	scopes    map[string]BridgeFindingScope
 	calls     int
 	err       error
 }
@@ -93,6 +94,17 @@ func (f *centralSyncBridge) ListFindings(context.Context, string) ([]BridgeFindi
 	result := f.responses[0]
 	f.responses = f.responses[1:]
 	return result, nil
+}
+
+func (f *centralSyncBridge) GetFindingScope(_ context.Context, findingID, _ string) (BridgeFindingScope, error) {
+	if f.err != nil {
+		return BridgeFindingScope{}, f.err
+	}
+	scope, ok := f.scopes[findingID]
+	if !ok {
+		return BridgeFindingScope{}, errors.New("scope unavailable")
+	}
+	return scope, nil
 }
 
 type centralSyncStore struct {
@@ -148,6 +160,11 @@ func syncedSummary(id, session, severity, status, block string, updated time.Tim
 	}
 }
 
+func syncedScope(id, session, block, resourceID string) BridgeFindingScope {
+	return BridgeFindingScope{FindingID: id, SessionID: session, BlockCode: block,
+		ResourceDigest: findingResourceDigest(resourceID), RecommendedCapability: "astronomer.argocd.self_management_sync"}
+}
+
 func TestCentralFindingSyncScopesTwoUsersSessionsAndDeployments(t *testing.T) {
 	queries, sessions, actorA, actorB, sessionA, sessionB := centralSyncFixture(t)
 	otherConnectionSession := sessionA
@@ -160,7 +177,10 @@ func TestCentralFindingSyncScopesTwoUsersSessionsAndDeployments(t *testing.T) {
 		syncedSummary("finding-a", sessionA.CharlieSessionID, "medium", "open", "read_only", now),
 		syncedSummary("finding-b", sessionB.CharlieSessionID, "critical", "open", "read_only", now),
 		syncedSummary("finding-unknown", "removed-session", "critical", "open", "read_only", now),
-	}}}
+	}}, scopes: map[string]BridgeFindingScope{
+		"finding-a": syncedScope("finding-a", sessionA.CharlieSessionID, "read_only", "deployment-a"),
+		"finding-b": syncedScope("finding-b", sessionB.CharlieSessionID, "read_only", "deployment-b"),
+	}}
 	store := &centralSyncStore{}
 	service, _ := NewCentralFindingSyncService(queries, sessions, bridge, store, &fakeFindingPublisher{}, func() bool { return true })
 	if err := service.SyncForActor(context.Background(), actorA); err != nil {
@@ -188,14 +208,16 @@ func TestCentralReadOnlyMediumFindingBecomesActionableAndDeduplicatesReplay(t *t
 	queries, sessions, actorA, _, sessionA, _ := centralSyncFixture(t)
 	now := time.Unix(2000, 0)
 	summary := syncedSummary("finding-read-only", sessionA.CharlieSessionID, "medium", "open", "read_only", now)
-	bridge := &centralSyncBridge{responses: [][]BridgeFindingSummary{{summary, summary}}}
+	bridge := &centralSyncBridge{responses: [][]BridgeFindingSummary{{summary, summary}}, scopes: map[string]BridgeFindingScope{
+		"finding-read-only": syncedScope("finding-read-only", sessionA.CharlieSessionID, "read_only", "deployment-a"),
+	}}
 	store := &centralSyncStore{result: DurableFinding{ID: uuid.NewString(), Status: "open", RepeatCount: 1, Notify: true}}
 	publisher := &fakeFindingPublisher{}
 	service, _ := NewCentralFindingSyncService(queries, sessions, bridge, store, publisher, func() bool { return true })
 	if err := service.SyncForActor(context.Background(), actorA); err != nil {
 		t.Fatal(err)
 	}
-	if len(store.summaries) != 1 || store.modes[0] != ModeReadOnly || len(publisher.alerts) != 1 || publisher.alerts[0].Severity != "medium" || publisher.alerts[0].BlockCode != "read_only" {
+	if len(store.summaries) != 1 || store.modes[0] != ModeReadOnly || len(publisher.alerts) != 1 || publisher.alerts[0].Severity != "medium" || publisher.alerts[0].BlockCode != "read_only" || publisher.alerts[0].ResourceID != "deployment-a" {
 		t.Fatalf("read-only finding was not actionable and deduplicated: store=%#v alerts=%#v", store.summaries, publisher.alerts)
 	}
 }

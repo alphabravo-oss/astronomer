@@ -2,6 +2,7 @@ package charlie
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 type RuntimeBridge struct{ runtime *contract.Runtime }
 
 var bridgeFindingOpaqueIDPattern = regexp.MustCompile(opaqueIDPattern)
+var bridgeFindingCapabilityPattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
 
 // BridgeFindingSummary is the complete background-sync contract. It contains
 // only lifecycle metadata and the opaque session linkage needed to recover the
@@ -34,6 +36,16 @@ type BridgeFindingSummary struct {
 	Status           string    `json:"status"`
 	BlockCode        string    `json:"block_code"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	// The fields below are populated only after a separately authorized detail
+	// read. They never participate in the strict background-list wire decoder.
+	ResourceDigest        string `json:"-"`
+	RecommendedCapability string `json:"-"`
+}
+
+// BridgeFindingScope is the only central detail admitted into background
+// finding synchronization. Human/model content is deliberately discarded.
+type BridgeFindingScope struct {
+	FindingID, SessionID, BlockCode, ResourceDigest, RecommendedCapability string
 }
 
 func NewRuntimeBridge(runtime *contract.Runtime) (*RuntimeBridge, error) {
@@ -284,6 +296,44 @@ func (b *RuntimeBridge) GetFinding(ctx context.Context, findingID, authorization
 		return nil, err
 	}
 	return response, nil
+}
+
+func (b *RuntimeBridge) GetFindingScope(ctx context.Context, findingID, authorizationRef string) (BridgeFindingScope, error) {
+	raw, err := b.GetFinding(ctx, findingID, authorizationRef)
+	if err != nil {
+		return BridgeFindingScope{}, err
+	}
+	return decodeBridgeFindingScope(raw)
+}
+
+func decodeBridgeFindingScope(raw json.RawMessage) (BridgeFindingScope, error) {
+	var envelope struct {
+		Finding struct {
+			FindingID             string   `json:"finding_id"`
+			SessionID             string   `json:"session_id"`
+			BlockCode             string   `json:"block_code"`
+			AffectedResources     []string `json:"affected_resources"`
+			RecommendedCapability *string  `json:"recommended_capability"`
+		} `json:"finding"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Finding.RecommendedCapability == nil || len(envelope.Finding.AffectedResources) != 1 {
+		return BridgeFindingScope{}, fmt.Errorf("Charlie finding scope is invalid")
+	}
+	resource := envelope.Finding.AffectedResources[0]
+	capability := strings.TrimSpace(*envelope.Finding.RecommendedCapability)
+	if !strings.HasPrefix(resource, "sha256:") || !isLowerHexDigest(strings.TrimPrefix(resource, "sha256:")) ||
+		!bridgeFindingOpaqueIDPattern.MatchString(envelope.Finding.FindingID) ||
+		!bridgeFindingOpaqueIDPattern.MatchString(envelope.Finding.SessionID) ||
+		!validCentralFindingBlockCode(envelope.Finding.BlockCode) || !bridgeFindingCapabilityPattern.MatchString(capability) {
+		return BridgeFindingScope{}, fmt.Errorf("Charlie finding scope is invalid")
+	}
+	return BridgeFindingScope{FindingID: envelope.Finding.FindingID, SessionID: envelope.Finding.SessionID,
+		BlockCode: envelope.Finding.BlockCode, ResourceDigest: strings.TrimPrefix(resource, "sha256:"),
+		RecommendedCapability: capability}, nil
+}
+
+func findingResourceDigest(resourceID string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(resourceID)))
 }
 
 func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, transition string) (json.RawMessage, error) {
