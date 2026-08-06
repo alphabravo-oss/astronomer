@@ -501,6 +501,10 @@ func (i *AgentInstaller) Resume(ctx context.Context, spec AgentInstallSpec) erro
 			_ = rollbacks[index](ctx)
 		}
 	}
+	if err := appendStep(i.reconcileNetworkPolicy(ctx, defaultDenyPolicy(names, spec.InstallationID))); err != nil {
+		rollbackAll()
+		return err
+	}
 	if err := appendStep(i.reconcileNetworkPolicy(ctx, productAccessPolicy(i, names, spec.InstallationID))); err != nil {
 		rollbackAll()
 		return err
@@ -1238,7 +1242,66 @@ func (i *AgentInstaller) deleteRuntimeResources(ctx context.Context, names Agent
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return i.waitRuntimeStopped(ctx)
+	if err := i.waitRuntimeStopped(ctx); err != nil {
+		return err
+	}
+	return i.deleteAgentChartSurface(ctx, names, installationID)
+}
+
+// deleteAgentChartSurface removes the non-workload resources rendered by the
+// generic agent chart. The Argo Application intentionally has no cascading
+// finalizer, so deleting it alone can orphan Services, a PDB, and chart-owned
+// NetworkPolicies. Every deletion is restricted to the exact release identity;
+// an operator-owned object at one of these names fails the disable closed.
+func (i *AgentInstaller) deleteAgentChartSurface(ctx context.Context, names AgentResourceNames, installationID uuid.UUID) error {
+	chartOwned := func(labels map[string]string) bool {
+		return labels["app.kubernetes.io/instance"] == names.Application &&
+			labels["app.kubernetes.io/name"] == charlieAgentWorkloadName &&
+			labels["app.kubernetes.io/managed-by"] == "Helm"
+	}
+	for _, name := range []string{charlieAgentWorkloadName + "-bridge", charlieAgentWorkloadName + "-headless"} {
+		resource, err := i.kube.CoreV1().Services(i.agentNamespace).Get(ctx, name, metav1.GetOptions{})
+		if err == nil {
+			if !chartOwned(resource.Labels) {
+				return fmt.Errorf("refuse to delete operator-owned Charlie agent Service")
+			}
+			err = i.kube.CoreV1().Services(i.agentNamespace).Delete(ctx, name, metav1.DeleteOptions{})
+		}
+		if err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	pdb, err := i.kube.PolicyV1().PodDisruptionBudgets(i.agentNamespace).Get(ctx, charlieAgentWorkloadName, metav1.GetOptions{})
+	if err == nil {
+		if !chartOwned(pdb.Labels) {
+			return fmt.Errorf("refuse to delete operator-owned Charlie agent PodDisruptionBudget")
+		}
+		err = i.kube.PolicyV1().PodDisruptionBudgets(i.agentNamespace).Delete(ctx, charlieAgentWorkloadName, metav1.DeleteOptions{})
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	policy, err := i.kube.NetworkingV1().NetworkPolicies(i.agentNamespace).Get(ctx, charlieAgentWorkloadName, metav1.GetOptions{})
+	if err == nil {
+		if !chartOwned(policy.Labels) {
+			return fmt.Errorf("refuse to delete operator-owned Charlie agent NetworkPolicy")
+		}
+		err = i.kube.NetworkingV1().NetworkPolicies(i.agentNamespace).Delete(ctx, charlieAgentWorkloadName, metav1.DeleteOptions{})
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	defaultDeny, err := i.kube.NetworkingV1().NetworkPolicies(i.agentNamespace).Get(ctx, names.DefaultDeny, metav1.GetOptions{})
+	if err == nil {
+		if defaultDeny.Labels[installationOwnerLabel] != installationID.String() {
+			return fmt.Errorf("refuse to delete operator-owned Charlie default-deny NetworkPolicy")
+		}
+		err = i.kube.NetworkingV1().NetworkPolicies(i.agentNamespace).Delete(ctx, names.DefaultDeny, metav1.DeleteOptions{})
+	}
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (i *AgentInstaller) waitRuntimeStopped(ctx context.Context) error {

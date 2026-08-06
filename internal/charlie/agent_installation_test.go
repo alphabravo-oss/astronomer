@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -713,6 +715,28 @@ func TestAgentInstallerSuspendAndResumeRemoveOnlyRuntimeSurface(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	chartLabels := map[string]string{
+		"app.kubernetes.io/instance":   receipt.Names.Application,
+		"app.kubernetes.io/name":       charlieAgentWorkloadName,
+		"app.kubernetes.io/managed-by": "Helm",
+	}
+	for _, name := range []string{charlieAgentWorkloadName + "-bridge", charlieAgentWorkloadName + "-headless"} {
+		if _, err := kube.CoreV1().Services(DefaultCharlieAgentNamespace).Create(context.Background(), &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: DefaultCharlieAgentNamespace, Labels: chartLabels},
+		}, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := kube.PolicyV1().PodDisruptionBudgets(DefaultCharlieAgentNamespace).Create(context.Background(), &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName, Namespace: DefaultCharlieAgentNamespace, Labels: chartLabels},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kube.NetworkingV1().NetworkPolicies(DefaultCharlieAgentNamespace).Create(context.Background(), &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName, Namespace: DefaultCharlieAgentNamespace, Labels: chartLabels},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	if err := installer.Suspend(context.Background(), spec); err != nil {
 		t.Fatal(err)
 	}
@@ -728,6 +752,20 @@ func TestAgentInstallerSuspendAndResumeRemoveOnlyRuntimeSurface(t *testing.T) {
 	}
 	if _, err := kube.AppsV1().StatefulSets(DefaultCharlieAgentNamespace).Get(context.Background(), charlieAgentWorkloadName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("agent workload survived suspend: %v", err)
+	}
+	for _, name := range []string{charlieAgentWorkloadName + "-bridge", charlieAgentWorkloadName + "-headless"} {
+		if _, err := kube.CoreV1().Services(DefaultCharlieAgentNamespace).Get(context.Background(), name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+			t.Fatalf("agent Service %s survived suspend: %v", name, err)
+		}
+	}
+	if _, err := kube.PolicyV1().PodDisruptionBudgets(DefaultCharlieAgentNamespace).Get(context.Background(), charlieAgentWorkloadName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("agent PodDisruptionBudget survived suspend: %v", err)
+	}
+	if _, err := kube.NetworkingV1().NetworkPolicies(DefaultCharlieAgentNamespace).Get(context.Background(), charlieAgentWorkloadName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("agent chart NetworkPolicy survived suspend: %v", err)
+	}
+	if _, err := kube.NetworkingV1().NetworkPolicies(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.DefaultDeny, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("default-deny NetworkPolicy survived suspend: %v", err)
 	}
 	if _, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.Enrollment, metav1.GetOptions{}); err != nil {
 		t.Fatalf("durable installation secret was removed: %v", err)
@@ -750,7 +788,31 @@ func TestAgentInstallerSuspendAndResumeRemoveOnlyRuntimeSurface(t *testing.T) {
 	if _, err := kube.NetworkingV1().NetworkPolicies("astronomer").Get(context.Background(), receipt.Names.ProductAccess, metav1.GetOptions{}); err != nil {
 		t.Fatalf("product access policy was not restored: %v", err)
 	}
+	if _, err := kube.NetworkingV1().NetworkPolicies(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.DefaultDeny, metav1.GetOptions{}); err != nil {
+		t.Fatalf("default-deny policy was not restored: %v", err)
+	}
 	if got := strings.Join(metadata.events, ","); got != "uninstalled,reconnected" {
 		t.Fatalf("lifecycle metadata=%s", got)
+	}
+}
+
+func TestAgentInstallerSuspendRefusesOperatorOwnedChartSurface(t *testing.T) {
+	installer, kube, _, _ := testAgentInstaller(t)
+	spec := testAgentInstallSpec(t)
+	if _, err := installer.Install(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{
+		Name: charlieAgentWorkloadName + "-bridge", Namespace: DefaultCharlieAgentNamespace,
+		Labels: map[string]string{"app.kubernetes.io/managed-by": "operator"},
+	}}
+	if _, err := kube.CoreV1().Services(DefaultCharlieAgentNamespace).Create(context.Background(), service, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := installer.Suspend(context.Background(), spec); err == nil || !strings.Contains(err.Error(), "operator-owned Charlie agent Service") {
+		t.Fatalf("operator-owned chart surface was not rejected: %v", err)
+	}
+	if _, err := kube.CoreV1().Services(DefaultCharlieAgentNamespace).Get(context.Background(), service.Name, metav1.GetOptions{}); err != nil {
+		t.Fatalf("operator-owned Service was mutated: %v", err)
 	}
 }
