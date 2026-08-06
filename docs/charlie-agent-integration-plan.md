@@ -1801,6 +1801,67 @@ the minimum authorized evidence and correlate, in order:
   Live deployment and mode-boundary evidence remains recorded separately below
   and is not implied by these repository results.
 
+#### Live isolation, fail-closed upgrade, alert, and RAG qualification — 2026-08-06
+
+- Astronomer commits `0ddff69`, `04a89e0`, and `7703daf` are pushed on
+  `feat/charlie-core-integration`. The live server/migrate images carry exact
+  revision `7703daf5131f6106abcf40febea5cd5f4dde46c2`, canonical product version
+  `0.3.5`, and Argo is `Synced/Healthy`; the citation-capable frontend carries
+  exact revision `04a89e0cc3930907cf2b93a5c200c30f2cd91c9e`.
+- Charlie remains a separate service at commit
+  `cd23111ee271491905d93004a1473027541c56ea`. Only its generic product agent is
+  present beside Astronomer. The live agent/chart is `1.0.19`, pinned to image
+  digest
+  `sha256:0eccf46a97c4a6230aa8d44dcb286146b21042688d7d496894914080b0a41e60`
+  and chart digest
+  `sha256:6542ce6761baf89e860293896b06994cc59d7a506744d9e443e62fd2bb93e5fb`;
+  two replicas are ready with one fenced leader and one standby.
+- A live feature lifecycle cycle proved the cold boundary used by operators:
+  feature disable returned local status but runtime session routes returned
+  `404`, `astronomer_charlie_mcp_listener_active` became zero, and the generic
+  product agent scaled to zero. Re-enable recreated two ready agents but retained
+  `disabled/disabled` and the emergency fence. An administrator separately
+  restored and acknowledged only `read_only/read_only`; no authority was inferred
+  from central history, package presence, or process readiness.
+- The first live disable exposed a control-recovery defect: emergency disable had
+  correctly closed work, but it also removed the transport needed to suspend the
+  agent. Commit `0ddff69` keeps a control-only configuration transport while the
+  work transport, listeners, sessions, claims, triggers, findings, and MCP calls
+  remain closed. A managed-bridge regression proves the distinction.
+- Live ceiling checks allowed `read_only -> approval`, rejected
+  `approval -> auto` with `409` while allowlist review and exact target grants
+  were missing, and explicitly restored acknowledged `read_only`. No automatic
+  work ran. The catalogue continues to omit destructive/irreversible operations,
+  and every write path rechecks live RBAC, scope, approval or automation identity,
+  safety, preconditions, fencing, idempotency, and post-verification.
+- The product notification badge/feed showed the committed actionable finding,
+  the exact no-action reason, and an authorized deep link to
+  `/dashboard/charlie?tab=findings&finding=...`. Feature, package, mode,
+  disclosure, and authority mutations appeared in append-only audit with coded
+  outcomes; a database sentinel scan found no API keys, passwords, bearer tokens,
+  prompts, or message bodies.
+- An expired artifact credential failed closed and was recovered by a fresh
+  signed generation. The 1.0.19 rollout then demonstrated two independent
+  product guards. Astronomer rejected the newer artifacts while its reviewed
+  contract still pinned 1.0.18. After the JSON pin changed, the runtime stayed
+  degraded/disabled because a compiled constant was still 1.0.18. Commit
+  `7703daf` adds a regression binding `AgentChartVersion` to the pin. Only a new
+  coherent signed generation activated; replacement reset disclosure and mode,
+  and the administrator again selected `read_only` explicitly.
+- Charlie `cd23111` adds optional bounded citations to `bridge/v1`; Astronomer
+  pins that exact contract and maps only valid `{id,title,source}` fields into
+  chat. A real browser-style session traversed Astronomer, the private bridge,
+  agent/OpenCode `1.18.13`, Charlie's Responses gateway, `gpt-5.6-luna`, and
+  `text-embedding-3-small` pgvector retrieval. Product version `0.3.5` selected
+  one release; retrieval was `grounded`/semantic `ok` with three citations. The
+  assistant named the exact agent-fleet/tunnel tools and preserved the downstream
+  Kubernetes prohibition. The deep-linked chat rendered the Charlie-managed
+  source section and titles. General passthrough remains citation-free.
+- Focused Charlie Go/bridge/OpenCode/type tests, `make gen-check`, full
+  `make verify`, and the race suite pass. Focused Astronomer contract/Go/frontend
+  tests, type checking, lint, and generated-contract checks pass. All transient
+  one-time package files were deleted after the coherent generation was active.
+
 #### Internal-Charlie air gap
 
 - [ ] **A14-017** Install an internal Charlie from its signed transfer kit with
