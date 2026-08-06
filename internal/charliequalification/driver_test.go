@@ -143,6 +143,36 @@ func TestCleanupFailsWhenCountersDoNotReturnToBaseline(t *testing.T) {
 	}
 }
 
+func TestCleanupTransitionAllowsOnlyBoundedControlClaims(t *testing.T) {
+	before := CounterSet{Runtime: map[string]uint64{}, Downstream: map[string]uint64{}}
+	for _, key := range runtimeKeys {
+		before.Runtime[key] = 10
+	}
+	for _, key := range downstreamKeys {
+		before.Downstream[key] = 20
+	}
+	after := CounterSet{Runtime: map[string]uint64{}, Downstream: map[string]uint64{}}
+	for key, value := range before.Runtime {
+		after.Runtime[key] = value
+	}
+	for key, value := range before.Downstream {
+		after.Downstream[key] = value
+	}
+	after.Runtime["work_claims"] += 2
+	if !cleanupTransitionSafe(before, after) {
+		t.Fatal("bounded control-command claims were rejected during cleanup")
+	}
+	after.Runtime["model_calls"]++
+	if cleanupTransitionSafe(before, after) {
+		t.Fatal("cleanup accepted non-control model work")
+	}
+	after.Runtime["model_calls"]--
+	after.Runtime["work_claims"] += 3
+	if cleanupTransitionSafe(before, after) {
+		t.Fatal("cleanup accepted an unbounded control-claim increase")
+	}
+}
+
 func TestCountersUnchangedObservesEntireDwellAndRejectsDelayedIncrement(t *testing.T) {
 	state := newLiveState()
 	server := httptest.NewTLSServer(http.HandlerFunc(state.serveHTTP))

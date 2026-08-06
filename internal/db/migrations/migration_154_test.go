@@ -42,12 +42,20 @@ func TestMigration154BackfillsAndConstrainsApprovalDecisions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close(context.Background())
+	t.Cleanup(func() {
+		if err := conn.Close(context.Background()); err != nil {
+			t.Errorf("close migration test connection: %v", err)
+		}
+	})
 	schema := "charlie_approval_idem_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	if _, err = conn.Exec(ctx, fmt.Sprintf("CREATE SCHEMA %s; SET search_path TO %s", schema, schema)); err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Exec(context.Background(), fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", schema))
+	t.Cleanup(func() {
+		if _, err := conn.Exec(context.Background(), fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", schema)); err != nil {
+			t.Errorf("drop migration test schema: %v", err)
+		}
+	})
 	if _, err = conn.Exec(ctx, `CREATE TABLE charlie_action_approvals (
 		id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 		connection_id uuid NOT NULL,

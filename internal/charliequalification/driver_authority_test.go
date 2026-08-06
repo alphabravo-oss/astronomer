@@ -640,7 +640,8 @@ func (s *authorityLiveState) createSession(w http.ResponseWriter, r *http.Reques
 	match := func(stimulus SessionStimulus) bool {
 		return stimulus.ClientSessionID == body.ClientSessionID && stimulus.Intent == body.Intent && stimulus.ResourceType == body.Resources[0].Type && stimulus.ResourceID == body.Resources[0].ID
 	}
-	stimulus, localID := SessionStimulus{}, ""
+	var stimulus SessionStimulus
+	var localID string
 	if match(s.autoAction.Stimulus) {
 		stimulus, localID = s.autoAction.Stimulus, "30000000-0000-4000-8000-000000000001"
 	} else if match(s.autoPending.Stimulus) {

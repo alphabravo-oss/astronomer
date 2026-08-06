@@ -2246,6 +2246,65 @@ unchecked qualification gates.
   tests, type checking, lint, and generated-contract checks pass. All transient
   one-time package files were deleted after the coherent generation was active.
 
+#### Charlie 1.0.29 integrated qualification addendum — 2026-08-06
+
+- Charlie commit `a30a1496994b70767aba573a3238d95bbc9e0486` is pushed on
+  `main`, deployed separately at `charlie.dev.alphabravo.io`, and publishes the
+  generic agent at immutable image digest
+  `sha256:6cf23828b424070cffc92d19c1bcfda7dd61522e5a4a4f7c5ad61022a5a21b35`
+  and chart digest
+  `sha256:a9e0e01504c771c8015718b5b4f205012b969c70ba159dc10f70a8ce00cdbaf8`.
+  Astronomer commit `283f44c21ea5cdc9f4ae00c370262dbaec638b9a` is the exact
+  live server candidate; two `1.0.29` product-agent replicas are ready and the
+  deployment is explicitly acknowledged `read_only/read_only`.
+- Real read-only qualification passed five grounded/version-isolated RAG
+  assertions, three general-knowledge passthrough assertions with no fabricated
+  citation, three mixed-catalog discovery assertions, and three malformed
+  discovery fail-closed assertions. These calls traversed Astronomer's product
+  API, private Product Bridge, generic agent, Charlie central, pgvector
+  retrieval, and the configured embedding/generation providers.
+- Cold feature-off qualification passed all nine assertions: durable state was
+  applied, product-agent process/listener/timer surfaces were absent, observed
+  DNS/TCP/UDP packets were zero, and runtime plus downstream-boundary counters
+  remained unchanged. Authoritative central-disabled and emergency-disabled
+  qualification each passed state, control-protocol-only, runtime-counter, and
+  downstream-counter assertions. A real active non-superuser with no Charlie
+  RBAC received `403`; the temporary account was deleted immediately afterward.
+- The current `unactivated` scenario remains open because directly scaling the
+  StatefulSet is intentionally repaired by Argo auto-sync. The final proof must
+  suspend the owner-bound Application through a reviewed lifecycle operation,
+  observe zero product-agent activity, and restore it without bypassing Argo.
+- The live run found an expired short-lived OCI artifact credential. Argo
+  reported `Unknown` and refused to certify any authority rollout while the
+  already-running agents remained healthy at the least-authority read-only
+  ceiling. A fresh signed same-version replacement generation was consumed and
+  installed at `disabled/disabled`, restored `Synced/Healthy`, and was promoted
+  only after an administrator explicitly selected and acknowledged read-only.
+  No expired credential or prior authority was reused.
+- Cancelled admin status requests could previously remain queued behind a long
+  mode reconciliation. The candidate now uses a context-aware serialized
+  transition gate, drops cancelled waiters before admission, and has a race
+  regression proving the queue recovers. The live qualification driver likewise
+  waits for authoritative mode convergence, disclosure acknowledgement, both
+  replicas, and complete metrics rather than treating a PATCH response as proof.
+- Real pending approvals were created through the model/action path. Returning
+  from approval to the required read-only qualification baseline correctly
+  revoked their product session delegations, so the old harness strategy of
+  reusing pre-staged approvals cannot prove approve/reject/expiry. That is a
+  proof-harness incompatibility, not permission leakage: the approvals remained
+  pending in Charlie but were no longer visible or actionable through the
+  revoked Astronomer authorization reference. Approval/auto live gates remain
+  unchecked until each scenario creates its fresh single-resource session only
+  after entering the target mode and cleans it up before restoring read-only.
+- Astronomer backend verification passes migration safety, sqlc drift, build,
+  vet, zero-issue Go lint, the complete Go test suite, the complete Go race
+  suite, OpenAPI route/request-field contracts, generated frontend OpenAPI
+  types, embedded specification drift, error-code documentation, and route
+  metadata. The live API-server agent-identity acceptance remains an explicit
+  skip unless `AGENT_IDENTITY_TEST_CONTEXT` is supplied. Frontend verification
+  independently passes 99 test files/789 tests, type checking, production build,
+  and dependency audit; Helm lint/render/contract verification also passes.
+
 #### Internal-Charlie air gap
 
 - [ ] **A14-017** Install an internal Charlie from its signed transfer kit with

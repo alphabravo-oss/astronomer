@@ -804,3 +804,25 @@ func TestEmergencyClearKeepsLatchWhenRemoteDisableRetryFails(t *testing.T) {
 		t.Fatalf("failed remote disable weakened the latch: state=%+v bridge_calls=%d mode=%s err=%v", got, bridge.calls, bridge.lastMode, err)
 	}
 }
+
+func TestModeTransitionQueueDropsCancelledWaiter(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	controller, err := NewModeController(store, &fakeModeBridge{}, &authorityAuditFake{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !controller.acquireTransition(context.Background()) {
+		t.Fatal("failed to hold qualification transition")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if _, err = controller.Reconcile(ctx); err == nil || !strings.Contains(err.Error(), "cancelled before admission") {
+		controller.releaseTransition()
+		t.Fatalf("cancelled transition waiter was admitted: %v", err)
+	}
+	controller.releaseTransition()
+	if !controller.acquireTransition(context.Background()) {
+		t.Fatal("transition queue did not recover after cancellation")
+	}
+	controller.releaseTransition()
+}

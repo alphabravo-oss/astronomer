@@ -662,21 +662,31 @@ func (d *LiveDriver) enterAuthorityMode(ctx context.Context, original statusEnve
 	if desired != "approval" && desired != "auto" {
 		return errors.New("qualification authority mode is invalid")
 	}
-	if _, err := d.setMode(ctx, desired, original.Data.Mode.Revision, false); err != nil {
-		return err
-	}
-	current, err := d.status(ctx)
-	if err != nil || current.Data.Mode.Requested != desired || current.Data.Mode.Authoritative != desired || current.Data.Mode.EmergencyDisabled || strings.TrimSpace(current.Data.Mode.DisclosureDigest) == "" {
+	// Mode changes reconcile through the deployment controller and may return a
+	// transient conflict even after the requested revision was accepted. Treat
+	// the converged authoritative state as proof; never treat the PATCH response
+	// itself as proof that a higher authority mode is active.
+	_, _ = d.setMode(ctx, desired, original.Data.Mode.Revision, false)
+	current, err := d.waitForStatus(ctx, func(status statusEnvelope) bool {
+		return status.Data.Mode.Requested == desired && status.Data.Mode.Authoritative == desired &&
+			!status.Data.Mode.EmergencyDisabled && strings.TrimSpace(status.Data.Mode.DisclosureDigest) != ""
+	})
+	if err != nil {
 		return errors.New("qualification authority mode was not verified")
 	}
 	if !current.Data.Connection.DisclosureAcknowledged || current.Data.Connection.DisclosureDigest != current.Data.Mode.DisclosureDigest {
-		if _, err = d.api(ctx, http.MethodPatch, "/api/v1/admin/charlie/mode/", d.adminToken, map[string]any{"acknowledge_disclosure_digest": current.Data.Mode.DisclosureDigest}, nil); err != nil {
-			return err
-		}
-		current, err = d.status(ctx)
+		_, _ = d.api(ctx, http.MethodPatch, "/api/v1/admin/charlie/mode/", d.adminToken, map[string]any{"acknowledge_disclosure_digest": current.Data.Mode.DisclosureDigest}, nil)
+		current, err = d.waitForStatus(ctx, func(status statusEnvelope) bool {
+			return status.Data.Mode.Requested == desired && status.Data.Mode.Authoritative == desired &&
+				!status.Data.Mode.EmergencyDisabled && status.Data.Connection.DisclosureAcknowledged &&
+				status.Data.Connection.DisclosureDigest == status.Data.Mode.DisclosureDigest
+		})
 	}
 	if err != nil || current.Data.Mode.Requested != desired || current.Data.Mode.Authoritative != desired || current.Data.Mode.EmergencyDisabled || !current.Data.Connection.DisclosureAcknowledged || current.Data.Connection.DisclosureDigest != current.Data.Mode.DisclosureDigest {
 		return errors.New("qualification authority disclosure was not acknowledged")
+	}
+	if !d.waitForAgentMetrics(ctx, int(current.Data.Agent.DesiredReplicas)) {
+		return errors.New("qualification agents did not converge on the authority mode")
 	}
 	return nil
 }
@@ -1330,7 +1340,7 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
-	if err != nil {
+	if err != nil || !completeCounters(baselineCounters) {
 		return Unsupported(scenario)
 	}
 	if d.isolationObserver == nil {
@@ -1347,10 +1357,11 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		cleanupCounters, counterErr := d.Counters(cleanupCtx)
 		settingErr := d.restoreFeatureSetting(cleanupCtx, original)
-		baselineErr := d.restoreBaseline(originalMode, baselineCounters)
-		if settingErr != nil || baselineErr != nil {
-			result = Unsupported(scenario)
+		baselineErr := d.restoreBaseline(originalMode, cleanupCounters)
+		if counterErr != nil || settingErr != nil || baselineErr != nil {
+			markCleanupFailed(&result, scenario)
 		}
 	}()
 	var applied settingEnvelope
@@ -1358,8 +1369,12 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 	if applyErr != nil || string(applied.Data.Value) != "false" {
 		return Unsupported(scenario)
 	}
+	quietCounters, counterErr := d.Counters(ctx)
+	if counterErr != nil || !completeCounters(quietCounters) {
+		return Unsupported(scenario)
+	}
 	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
-	if observeErr != nil || !coldIsolationProved(observation, IsolationColdFeatureDisabled) || !d.countersUnchanged(ctx, baselineCounters) {
+	if observeErr != nil || !coldIsolationProved(observation, IsolationColdFeatureDisabled) || !d.countersUnchanged(ctx, quietCounters) {
 		return Unsupported(scenario)
 	}
 	return Passed(scenario, "state_applied", "process_absent", "listener_absent", "timer_absent", "dns_packets_zero", "tcp_packets_zero", "udp_packets_zero", "runtime_counters_unchanged", "downstream_counters_unchanged")
@@ -1428,7 +1443,7 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
-	if err != nil {
+	if err != nil || !completeCounters(baselineCounters) {
 		return Unsupported(scenario)
 	}
 	replicas, err := d.agentScaler.Replicas(ctx)
@@ -1445,15 +1460,16 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
+		cleanupCounters, counterErr := d.Counters(cleanupCtx)
 		scaleErr := d.agentScaler.Scale(cleanupCtx, replicas)
 		var readyErr error
 		if scaleErr == nil {
 			readyErr = d.agentScaler.WaitReady(cleanupCtx, replicas)
 		}
-		baselineErr := d.restoreBaseline(original, baselineCounters)
+		baselineErr := d.restoreBaseline(original, cleanupCounters)
 		finalReplicas, replicasErr := d.agentScaler.Replicas(cleanupCtx)
-		if scaleErr != nil || readyErr != nil || baselineErr != nil || replicasErr != nil || finalReplicas != replicas {
-			result = Unsupported(scenario)
+		if counterErr != nil || scaleErr != nil || readyErr != nil || baselineErr != nil || replicasErr != nil || finalReplicas != replicas {
+			markCleanupFailed(&result, scenario)
 		}
 	}()
 	if d.agentScaler.Scale(ctx, 0) != nil {
@@ -1462,8 +1478,12 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 	if d.agentScaler.WaitReady(ctx, 0) != nil {
 		return Unsupported(scenario)
 	}
+	quietCounters, counterErr := d.Counters(ctx)
+	if counterErr != nil || !completeCounters(quietCounters) {
+		return Unsupported(scenario)
+	}
 	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
-	if observeErr != nil || !coldIsolationProved(observation, IsolationColdConnectionDisabled) || !d.countersUnchanged(ctx, baselineCounters) {
+	if observeErr != nil || !coldIsolationProved(observation, IsolationColdConnectionDisabled) || !d.countersUnchanged(ctx, quietCounters) {
 		return Unsupported(scenario)
 	}
 	return Passed(scenario, "state_applied", "process_absent", "listener_absent", "timer_absent", "dns_packets_zero", "tcp_packets_zero", "udp_packets_zero", "runtime_counters_unchanged", "downstream_counters_unchanged")
@@ -1475,7 +1495,7 @@ func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (resu
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
-	if err != nil {
+	if err != nil || !completeCounters(baselineCounters) {
 		return Unsupported(scenario)
 	}
 	if d.isolationObserver == nil {
@@ -1486,22 +1506,33 @@ func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (resu
 		return Unsupported(scenario)
 	}
 	defer func() {
-		if d.restoreBaseline(original, baselineCounters) != nil {
-			result = Unsupported(scenario)
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		cleanupCounters, counterErr := d.Counters(cleanupCtx)
+		baselineErr := d.restoreBaseline(original, cleanupCounters)
+		if counterErr != nil || baselineErr != nil {
+			markCleanupFailed(&result, scenario)
 		}
 	}()
-	if _, err = d.setMode(ctx, "disabled", original.Data.Mode.Revision, false); err != nil {
+	_, _ = d.setMode(ctx, "disabled", original.Data.Mode.Revision, false)
+	_, statusErr := d.waitForStatus(ctx, func(status statusEnvelope) bool {
+		return !status.Data.Mode.EmergencyDisabled && status.Data.Mode.Requested == "disabled" && status.Data.Mode.Authoritative == "disabled"
+	})
+	if statusErr != nil {
 		return Unsupported(scenario)
 	}
-	applied, statusErr := d.status(ctx)
-	if statusErr != nil || applied.Data.Mode.Requested != "disabled" || applied.Data.Mode.Authoritative != "disabled" {
-		return Unsupported(scenario)
+	result = isolationScenarioResult(scenario, true, false, false)
+	if !d.waitForAgentMetrics(ctx, int(original.Data.Agent.DesiredReplicas)) {
+		return result
+	}
+	quietCounters, counterErr := d.Counters(ctx)
+	if counterErr != nil || !completeCounters(quietCounters) {
+		return result
 	}
 	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
-	if observeErr != nil || !controlProtocolOnly(observation) || !d.countersUnchanged(ctx, baselineCounters) {
-		return Unsupported(scenario)
-	}
-	return Passed(scenario, "state_applied", "control_protocol_only", "runtime_counters_unchanged", "downstream_counters_unchanged")
+	controlOnly := observeErr == nil && controlProtocolOnly(observation)
+	countersUnchanged := controlOnly && d.countersUnchanged(ctx, quietCounters)
+	return isolationScenarioResult(scenario, true, controlOnly, countersUnchanged)
 }
 
 func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (result ScenarioResult) {
@@ -1510,7 +1541,7 @@ func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (re
 		return Unsupported(scenario)
 	}
 	baselineCounters, err := d.Counters(ctx)
-	if err != nil {
+	if err != nil || !completeCounters(baselineCounters) {
 		return Unsupported(scenario)
 	}
 	if d.isolationObserver == nil {
@@ -1521,22 +1552,54 @@ func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (re
 		return Unsupported(scenario)
 	}
 	defer func() {
-		if d.restoreBaseline(original, baselineCounters) != nil {
-			result = Unsupported(scenario)
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		cleanupCounters, counterErr := d.Counters(cleanupCtx)
+		baselineErr := d.restoreBaseline(original, cleanupCounters)
+		if counterErr != nil || baselineErr != nil {
+			markCleanupFailed(&result, scenario)
 		}
 	}()
-	if _, err = d.setMode(ctx, "disabled", original.Data.Mode.Revision, true); err != nil {
+	_, _ = d.setMode(ctx, "disabled", original.Data.Mode.Revision, true)
+	_, err = d.waitForStatus(ctx, func(status statusEnvelope) bool {
+		return status.Data.Mode.EmergencyDisabled && status.Data.Mode.Authoritative == "disabled"
+	})
+	if err != nil {
 		return Unsupported(scenario)
 	}
-	applied, err := d.status(ctx)
-	if err != nil || !applied.Data.Mode.EmergencyDisabled || applied.Data.Mode.Authoritative != "disabled" {
-		return Unsupported(scenario)
+	result = isolationScenarioResult(scenario, true, false, false)
+	if !d.waitForAgentMetrics(ctx, int(original.Data.Agent.DesiredReplicas)) {
+		return result
+	}
+	quietCounters, counterErr := d.Counters(ctx)
+	if counterErr != nil || !completeCounters(quietCounters) {
+		return result
 	}
 	observation, observeErr := preparedObservation.Observe(ctx, d.noCallDwell)
-	if observeErr != nil || !controlProtocolOnly(observation) || !d.countersUnchanged(ctx, baselineCounters) {
-		return Unsupported(scenario)
+	controlOnly := observeErr == nil && controlProtocolOnly(observation)
+	countersUnchanged := controlOnly && d.countersUnchanged(ctx, quietCounters)
+	return isolationScenarioResult(scenario, true, controlOnly, countersUnchanged)
+}
+
+func isolationScenarioResult(scenario string, stateApplied, controlOnly, countersUnchanged bool) ScenarioResult {
+	return ScenarioResult{
+		Scenario: scenario,
+		Passed:   stateApplied && controlOnly && countersUnchanged,
+		Assertions: []Assertion{
+			{Name: "state_applied", Passed: stateApplied},
+			{Name: "control_protocol_only", Passed: controlOnly},
+			{Name: "runtime_counters_unchanged", Passed: countersUnchanged},
+			{Name: "downstream_counters_unchanged", Passed: countersUnchanged},
+		},
 	}
-	return Passed(scenario, "state_applied", "control_protocol_only", "runtime_counters_unchanged", "downstream_counters_unchanged")
+}
+
+func markCleanupFailed(result *ScenarioResult, scenario string) {
+	if result.Scenario == "" {
+		*result = Unsupported(scenario)
+		return
+	}
+	result.Passed = false
 }
 
 type modeEnvelope struct {
@@ -1573,18 +1636,27 @@ func (d *LiveDriver) restoreMode(original statusEnvelope) error {
 		if _, err = d.setMode(ctx, "disabled", current.Data.Mode.Revision, false); err != nil {
 			return err
 		}
-		current, err = d.status(ctx)
-		if err != nil || current.Data.Mode.EmergencyDisabled {
+		current, err = d.waitForStatus(ctx, func(status statusEnvelope) bool {
+			return !status.Data.Mode.EmergencyDisabled
+		})
+		if err != nil {
 			return errors.New("emergency latch cleanup failed")
 		}
 	}
+	modeTransitioned := false
 	if current.Data.Mode.Requested != original.Data.Mode.Requested || current.Data.Mode.Authoritative != original.Data.Mode.Authoritative {
 		if _, err = d.setMode(ctx, original.Data.Mode.Requested, current.Data.Mode.Revision, false); err != nil {
 			return err
 		}
+		modeTransitioned = true
 	}
-	restored, err := d.status(ctx)
-	if err != nil || restored.Data.Mode.EmergencyDisabled || restored.Data.Mode.Requested != original.Data.Mode.Requested || restored.Data.Mode.Authoritative != original.Data.Mode.Authoritative || restored.Data.Mode.DisclosureDigest != original.Data.Mode.DisclosureDigest || restored.Data.Connection.DisclosureDigest != original.Data.Connection.DisclosureDigest {
+	restored := current
+	if modeTransitioned {
+		restored, err = d.waitForStatus(ctx, func(status statusEnvelope) bool {
+			return restorationCoreMatches(status, original)
+		})
+	}
+	if err != nil || !restorationCoreMatches(restored, original) {
 		return errors.New("Charlie mode cleanup did not restore disclosure baseline")
 	}
 	if _, err = d.api(ctx, http.MethodPatch, "/api/v1/admin/charlie/mode/", d.adminToken, map[string]any{"acknowledge_disclosure_digest": original.Data.Connection.DisclosureDigest}, nil); err != nil {
@@ -1597,16 +1669,100 @@ func (d *LiveDriver) restoreMode(original statusEnvelope) error {
 	return nil
 }
 
+func restorationCoreMatches(current, original statusEnvelope) bool {
+	return !current.Data.Mode.EmergencyDisabled &&
+		current.Data.Mode.Requested == original.Data.Mode.Requested && current.Data.Mode.Authoritative == original.Data.Mode.Authoritative &&
+		current.Data.Mode.DisclosureDigest == original.Data.Mode.DisclosureDigest && current.Data.Connection.DisclosureDigest == original.Data.Connection.DisclosureDigest &&
+		current.Data.Connection.Connected == original.Data.Connection.Connected &&
+		current.Data.Agent.DesiredReplicas == original.Data.Agent.DesiredReplicas && current.Data.Agent.ReadyReplicas == original.Data.Agent.ReadyReplicas
+}
+
+func (d *LiveDriver) waitForStatus(ctx context.Context, accept func(statusEnvelope) bool) (statusEnvelope, error) {
+	for {
+		current, err := d.status(ctx)
+		if err == nil && accept(current) {
+			return current, nil
+		}
+		timer := time.NewTimer(d.proofPoll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return statusEnvelope{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
 func (d *LiveDriver) restoreBaseline(original statusEnvelope, counters CounterSet) error {
 	if err := d.restoreMode(original); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if !d.countersUnchanged(ctx, counters) {
+	after, err := d.Counters(ctx)
+	if err != nil || !cleanupTransitionSafe(counters, after) {
+		return errors.New("Charlie cleanup counters contained non-control work")
+	}
+	if !d.countersUnchanged(ctx, after) {
 		return errors.New("Charlie cleanup counters did not match baseline")
 	}
 	return nil
+}
+
+func cleanupTransitionSafe(before, after CounterSet) bool {
+	if !completeCounters(before) || !completeCounters(after) {
+		return false
+	}
+	for _, key := range runtimeKeys {
+		if key == "work_claims" {
+			continue
+		}
+		if before.Runtime[key] != after.Runtime[key] {
+			return false
+		}
+	}
+	beforeClaims, afterClaims := before.Runtime["work_claims"], after.Runtime["work_claims"]
+	if afterClaims < beforeClaims || afterClaims-beforeClaims > 4 {
+		return false
+	}
+	return sameCounterKeys(before.Downstream, after.Downstream, downstreamKeys)
+}
+
+func (d *LiveDriver) waitForAgentMetrics(ctx context.Context, replicas int) bool {
+	// A mode-ceiling change rolls the agent StatefulSet asynchronously. Give the
+	// controller a bounded opportunity to observe the new template before
+	// accepting a ready count, then require both readiness and complete metrics.
+	stabilization := 5 * d.proofPoll
+	if stabilization > 5*time.Second {
+		stabilization = 5 * time.Second
+	}
+	timer := time.NewTimer(stabilization)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		return false
+	case <-timer.C:
+	}
+	if d.agentScaler != nil && d.agentScaler.WaitReady(ctx, replicas) != nil {
+		return false
+	}
+	deadline := time.Now().Add(d.proofTimeout)
+	for {
+		counters, err := d.Counters(ctx)
+		if err == nil && completeCounters(counters) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		poll := time.NewTimer(d.proofPoll)
+		select {
+		case <-ctx.Done():
+			poll.Stop()
+			return false
+		case <-poll.C:
+		}
+	}
 }
 
 func (d *LiveDriver) countersUnchanged(ctx context.Context, before CounterSet) bool {

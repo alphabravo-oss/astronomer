@@ -3,7 +3,6 @@ package charlie
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,20 +66,20 @@ func notifyActivationChanged(ctx context.Context, bridge AgentModeBridge) {
 }
 
 type ModeController struct {
-	store        ModeStore
-	bridge       AgentModeBridge
-	writes       *WriteFence
-	audit        AuthorityMutationAuditor
-	rollout      ModeCeilingRollout
-	transitionMu sync.Mutex
-	ticker       func(time.Duration) runtimeTicker
+	store      ModeStore
+	bridge     AgentModeBridge
+	writes     *WriteFence
+	audit      AuthorityMutationAuditor
+	rollout    ModeCeilingRollout
+	transition chan struct{}
+	ticker     func(time.Duration) runtimeTicker
 }
 
 func NewModeController(store ModeStore, bridge AgentModeBridge, auditor AuthorityMutationAuditor) (*ModeController, error) {
 	if store == nil || bridge == nil || auditor == nil {
 		return nil, fmt.Errorf("Charlie mode control requires local state, the product bridge, and durable audit")
 	}
-	controller := &ModeController{store: store, bridge: bridge, writes: NewWriteFence(), audit: auditor, ticker: newRuntimeTicker}
+	controller := &ModeController{store: store, bridge: bridge, writes: NewWriteFence(), audit: auditor, transition: make(chan struct{}, 1), ticker: newRuntimeTicker}
 	// Test and embedded bridge implementations may own their rollout directly;
 	// production wires the Kubernetes/Argo reconciler explicitly.
 	if rollout, ok := bridge.(ModeCeilingRollout); ok {
@@ -101,6 +100,22 @@ func (c *ModeController) SetModeCeilingRollout(rollout ModeCeilingRollout) {
 	}
 }
 
+func (c *ModeController) acquireTransition(ctx context.Context) bool {
+	if c == nil || c.transition == nil {
+		return false
+	}
+	select {
+	case c.transition <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (c *ModeController) releaseTransition() {
+	<-c.transition
+}
+
 // EffectiveMode returns the least authority reported by the product-local and
 // Charlie-authoritative states. Drift can only reduce authority.
 func EffectiveMode(requested, verified Mode, emergency bool) Mode {
@@ -114,8 +129,10 @@ func EffectiveMode(requested, verified Mode, emergency bool) Mode {
 }
 
 func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevision int64, prerequisites ModePrerequisites) (ModeState, error) {
-	c.transitionMu.Lock()
-	defer c.transitionMu.Unlock()
+	if !c.acquireTransition(ctx) {
+		return ModeState{}, fmt.Errorf("Charlie mode request was cancelled before admission")
+	}
+	defer c.releaseTransition()
 	if !validMode(desired) || expectedRevision < 0 {
 		logModeTransitionFailure(ctx, "mode.request_invalid")
 		return ModeState{}, fmt.Errorf("Charlie mode request is invalid")
@@ -230,8 +247,10 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 // change can therefore suspend or reduce authority immediately, while a more
 // permissive remote mode remains bounded by EffectiveMode.
 func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
-	c.transitionMu.Lock()
-	defer c.transitionMu.Unlock()
+	if !c.acquireTransition(ctx) {
+		return ModeState{}, fmt.Errorf("Charlie mode reconciliation was cancelled before admission")
+	}
+	defer c.releaseTransition()
 	current, err := c.store.LoadModeState(ctx)
 	if err != nil {
 		return ModeState{}, fmt.Errorf("load Charlie mode state: %w", err)
@@ -459,8 +478,10 @@ func logModeTransitionFailure(ctx context.Context, code string) {
 // agent cannot keep sessions, triggers, findings, approvals, claims, or MCP
 // calls active. Remote disable is attempted only after the local commit.
 func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
-	c.transitionMu.Lock()
-	defer c.transitionMu.Unlock()
+	if !c.acquireTransition(ctx) {
+		return ModeState{}, fmt.Errorf("Charlie emergency disable was cancelled before admission")
+	}
+	defer c.releaseTransition()
 	// Close admission before reading or mutating mode state. Any write that won
 	// the admission race is registered and will be cancelled and drained below;
 	// every later write is rejected.
@@ -517,8 +538,10 @@ func (c *ModeController) EmergencyDisable(ctx context.Context, actorID string) (
 // operation retries only that authority-reducing transition and verifies its
 // readback. It never restores the prior authority mode.
 func (c *ModeController) ClearEmergencyDisable(ctx context.Context, actorID string) (ModeState, error) {
-	c.transitionMu.Lock()
-	defer c.transitionMu.Unlock()
+	if !c.acquireTransition(ctx) {
+		return ModeState{}, fmt.Errorf("Charlie emergency disable recovery was cancelled before admission")
+	}
+	defer c.releaseTransition()
 	current, err := c.store.LoadModeState(ctx)
 	if err != nil || !current.Active || !current.EmergencyDisabled {
 		return ModeState{}, fmt.Errorf("Charlie emergency disable is not active")
