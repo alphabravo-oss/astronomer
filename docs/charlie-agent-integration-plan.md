@@ -1658,6 +1658,50 @@ the minimum authorized evidence and correlate, in order:
 
 #### Connected qualification evidence — 2026-08-05
 
+##### Agent 1.0.20 exact replacement and fail-closed authority addendum — 2026-08-06
+
+- Charlie runtime commit `8bed231` released agent/chart `1.0.20`; Charlie plan
+  commit `004de7f` records the advisory/execution-channel isolation contract.
+  Astronomer commit `c87790d` pins the exact 1.0.20 contract and was deployed as
+  server, migrate, worker, and frontend tag `charlie-c87790d` after the full Go
+  race suite, Go lint with zero issues, 99 frontend files/786 tests, TypeScript
+  checking, frontend lint with zero errors, production build, and pinned-contract
+  verification passed.
+- Charlie issued one short-lived signed replacement package that pinned image
+  digest
+  `sha256:c712bb094a79865a34169ebc97a4144fb3c6e5a712eb5df67e31d65571baf019`
+  and chart digest
+  `sha256:7b20944a332bc0612513a725bd2acdae21531a00a3f28db7fc930af8df65a461`.
+  Its public signing key was independently fetched through the TLS-protected
+  signing-key endpoint and matched to the package fingerprint before Astronomer
+  validated and consumed the package. Package/key/request/login files were mode
+  `0600` in private temporary directories and removed from both hosts after
+  consumption.
+- Consumption staged the new connection and reconciled the signed artifacts,
+  but did not activate it. The explicit `agent/upgrade` operation required the
+  2/2-ready replacement, atomically activated generation 29, deactivated the
+  prior connection, and pruned the superseded owner-bound Secrets. Only the
+  current package's repository, enrollment, artifact-pull, bridge, MCP, and CA
+  Secrets remained.
+- Activation deliberately did not restore authority. The new active connection
+  began with requested `disabled`, no acknowledged disclosure, and the inherited
+  authoritative readback as a lower-ceiling mismatch. An exact disclosure
+  acknowledgement was a separate audited operation; a subsequent explicit mode
+  request at revision `76` produced authoritative `read_only/read_only` revision
+  `77`, with emergency disable false. At no point did package import, pod
+  readiness, restart, or activation alone raise effective authority.
+- Direct mTLS status reads from both individual agent replicas proved agent
+  `1.0.20`, central healthy, both activation bits true, effective `read_only`,
+  revision `77`, and fencing epoch `28`. Ordinal 1's instance matched the leased
+  leader; ordinal 0 observed that leader and was therefore the standby. Both
+  pods were ready with zero restarts, and the self-management and Charlie agent
+  Applications were `Synced/Healthy`.
+- Public Astronomer and the separately deployed Charlie UI both returned HTTP
+  `200`. This is positive exact-upgrade, HA identity, staged activation,
+  authority-restoration, artifact-pruning, and secret-cleanup evidence. It does
+  not check the broader A14 isolation/mode/alert matrices, destructive corpus,
+  packet quiescence, or automatic-action qualifications.
+
 ##### Feature-lifecycle isolation and recovery addendum — 2026-08-06
 
 - Astronomer commits `c0c692b` and `163f046` corrected two fail-closed recovery
