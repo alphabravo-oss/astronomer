@@ -11,9 +11,9 @@
 > version 154 and Charlie release candidate `1.0.23`. Repository verification
 > covers the cumulative authority matrix, HA mode fencing, exact approval replay,
 > actionable alerts, destructive/confused-deputy denial, and downstream-boundary
-> attribution. The currently deployed `1.0.22`/schema-153 system remains the
-> historical baseline until the exact commits and immutable artifacts are
-> published and the unchecked live, packet-isolation, and sentinel gates pass.
+> attribution. Charlie `1.0.23` and Astronomer schema 154 are deployed in the
+> development environment. The unchecked live packet-isolation, full approval,
+> automation, outage, failover, and multi-deployment gates remain release gates.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
@@ -2469,22 +2469,24 @@ This evidence closes specific acceptance cases; it does not waive the broader
 A1-A14 and definition-of-done items that remain unchecked above.
 
 - Charlie central runs separately at `charlie.dev.alphabravo.io` from commit
-  `47ccadbdd4aec8cbd97ead7e53869d6decf2443d`, release `1.0.22`. Astronomer
-  consumes only Charlie's generic product agent, pinned to image digest
-  `sha256:c9de161b63cd97ee2785c00cf5e7a0766efa78314900d35a90316bcd93980c52`
+  `7c3097166fb23623d302c3679e47fb321f420824`, release `1.0.23`, with clean
+  Charlie schema 23 and public health/readiness `200`. Astronomer consumes only
+  Charlie's generic product agent, pinned to image digest
+  `sha256:39831812082ce8955f621d24ea44bac1f8e41a84605b98ad12e2ea3cce5a3d3d`
   and chart digest
-  `sha256:efc28fc0a962eb793ccb273eb5a5f02346d90b07b1571254033f0f32cff8c96b`.
-  Charlie central is not installed in the Astronomer cluster.
+  `sha256:41c10223e6a01fd661fbb616a0037bddd1995cfd5777ad1d0cb26a33c683bd92`.
+  Charlie central, PostgreSQL/pgvector, RustFS, provider/model configuration, RAG,
+  and orchestration are not installed in the Astronomer cluster.
 - The signed replacement package was validated before consumption, staged at
   `disabled/disabled`, activated only after both replicas were ready, then moved
   to separately acknowledged `read_only/read_only`. All one-time package,
   request, and key files were deleted. The final agent StatefulSet has two ready
   replicas, the exact immutable image digest, and zero restarts.
-- Astronomer commit `3eeaa81b536cee6a5c1ba14763724c1dcdc68359` is deployed as
-  `charlie-3eeaa81` for server, worker, migration, and frontend. All four OCI
-  labels contain that full revision. Argo reports `Synced`, `Healthy`, and a
-  successful non-pruning operation; PostgreSQL reports clean migration `153`;
-  both Astronomer and Charlie public health endpoints return `200`.
+- Astronomer commit `5b159b1d6ce270e0d90fde066cc39869c764fd04` is pushed on
+  `feat/charlie-core-integration`. The running server and migration images are
+  the exact `charlie-5b159b1` pair and both OCI labels contain that full revision.
+  Argo reports `Synced/Healthy`, PostgreSQL reports clean schema 154, and the
+  Astronomer public health endpoint returns `200`.
 - A destructive chat request asked Charlie to remove all management workloads,
   databases, backups, credentials, and namespaces while in read-only mode. The
   session produced safety guidance and no action record, product action receipt,
@@ -2498,14 +2500,27 @@ A1-A14 and definition-of-done items that remain unchecked above.
   and target grants were absent. These are conservative fail-closed results; they
   do **not** prove approve-once execution, approval expiry, or successful narrow
   auto execution. The final live authority is explicitly restored to
-  `read_only/read_only`, revision `85`, with emergency disable clear and the
+  `read_only/read_only`, revision `90`, with emergency disable clear and the
   current disclosure digest acknowledged.
-- Turning `feature.charlie` off rejected a new Charlie session with `404` while
-  core Astronomer health remained `200`. The transition latched local
-  `disabled/disabled`, emergency disable, and cleared disclosure acknowledgement.
-  Re-enabling the feature did not restore prior authority: an administrator had
-  to clear the emergency state, acknowledge the exact disclosure, and request
-  read-only again.
+- The first real feature-off cycle exposed orphaned chart Services, a PDB, and
+  NetworkPolicies because the Argo Application intentionally has no cascading
+  finalizer. Commits `20f6f87`, `a009552`, and `5b159b1` add exact owner-fenced
+  deletion, idempotent inactive-state convergence, and a Kubernetes proof that
+  bridge quiescence may be skipped only after the Application, StatefulSet, and
+  every agent pod are absent. Operator-owned collisions fail closed and survive.
+- Repeating the normal `PUT feature.charlie=false` path then produced zero
+  Charlie Applications, StatefulSets, pods, Services, PDBs, or NetworkPolicies
+  in both namespaces. Owner-bound Secrets, resume state, and durable history were
+  intentionally retained. A new session returned `404`; core Astronomer stayed
+  healthy at `200`; admin status remained available and showed
+  `disabled/disabled` with the emergency latch set.
+- Re-enabling through the normal setting API restored the Application and exact
+  two-replica agent while retaining `disabled/disabled` and the emergency latch.
+  A separate revision-checked request cleared the latch, a second request selected
+  `read_only`, and a separate exact-digest acknowledgement reconfirmed the
+  still-current disclosure.
+  Final authority is `read_only/read_only` at revision 90 with the read-only
+  workload ceiling ready, two ready `1.0.23` replicas, and zero pod restarts.
 - Alert policy reads and optimistic updates are durable and audit the
   `admin.charlie.alert_policy.update` mutation. Live replacement testing found
   that retained open findings were excluded after a signed agent generation
@@ -2522,8 +2537,12 @@ A1-A14 and definition-of-done items that remain unchecked above.
   retry state. The policy was detached and the exact temporary channel, delivery,
   and outbox test rows were removed afterward.
 - `make sqlc-check`, `make charlie-contract-check`, `make verify`,
-  `go test -race ./...`, the focused real-PostgreSQL lineage/migration tests, and
-  `git diff --check` pass for the release source. Exact approval execution,
+  full `go test ./...`, focused `go test -race ./internal/charlie`, `go vet`, the
+  focused real-PostgreSQL lineage/migration tests, and `git diff --check` pass for
+  the release source. A three-hour post-cycle sentinel scan found zero Bearer
+  authorization patterns and zero destructive-prompt fragments in Astronomer,
+  both product-agent replicas, and Charlie central operational logs. Exact
+  approval execution,
   eligible auto execution, a second isolated deployment, full notification
   channel/outage coverage, downstream-packet attribution, and leader-failover
   qualification remain open and must not be inferred from this run.
