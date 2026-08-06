@@ -197,9 +197,6 @@ func (s *PGCentralFindingStore) UpsertCentralFinding(ctx context.Context, connec
 		return DurableFinding{}, fmt.Errorf("load Charlie finding replay state: %w", priorErr)
 	}
 	if priorErr == nil {
-		if !prior.SessionID.Valid || prior.SessionID.Bytes != session.ID {
-			return DurableFinding{}, fmt.Errorf("Charlie finding session linkage changed")
-		}
 		if centralFindingReplay(prior, summary) {
 			return durableCentralFinding(prior, false), nil
 		}

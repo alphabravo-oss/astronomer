@@ -964,8 +964,11 @@ INSERT INTO charlie_findings (
 )
 ON CONFLICT (connection_id, dedupe_fingerprint) WHERE status IN ('open', 'acknowledged')
 DO UPDATE SET
+	 session_id = EXCLUDED.session_id,
+	 source = EXCLUDED.source,
     severity = EXCLUDED.severity,
     execution_block_code = EXCLUDED.execution_block_code,
+	 dedupe_fingerprint = EXCLUDED.dedupe_fingerprint,
     title = EXCLUDED.title,
     summary = EXCLUDED.summary,
     recommended_action_label = EXCLUDED.recommended_action_label,
@@ -1055,8 +1058,7 @@ DO UPDATE SET
     verification_summary = EXCLUDED.verification_summary,
     repeat_count = GREATEST(charlie_findings.repeat_count, EXCLUDED.repeat_count),
     updated_at = EXCLUDED.updated_at
-WHERE charlie_findings.session_id = EXCLUDED.session_id
-  AND charlie_findings.updated_at < EXCLUDED.updated_at
+WHERE charlie_findings.updated_at < EXCLUDED.updated_at
 RETURNING *;
 
 -- name: GetActiveCharlieFindingByFingerprint :one
