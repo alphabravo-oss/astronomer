@@ -57,7 +57,7 @@ CREATE TABLE charlie_alert_deliveries (
     CONSTRAINT charlie_alert_delivery_status CHECK (status IN ('queued', 'delivering', 'retry', 'delivered', 'suppressed', 'dead')),
     CONSTRAINT charlie_alert_delivery_attempts CHECK (attempt_count >= 0 AND maximum_attempts BETWEEN 1 AND 20),
     CONSTRAINT charlie_alert_delivery_revision CHECK (policy_revision > 0),
-    CONSTRAINT charlie_alert_delivery_deep_link CHECK (deep_link ~ '^/dashboard/charlie\\?tab=findings&finding=[0-9a-f-]{36}$'),
+    CONSTRAINT charlie_alert_delivery_deep_link CHECK (deep_link ~ '^/dashboard/charlie\?tab=findings&finding=[0-9a-f-]{36}$'),
     UNIQUE (finding_id, notification_channel_id, delivery_kind, dedupe_bucket)
 );
 
