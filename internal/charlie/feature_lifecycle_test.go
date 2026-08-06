@@ -111,3 +111,19 @@ func TestFeatureDisableQuiescesBeforeAuthorizedAgentSuspension(t *testing.T) {
 		t.Fatalf("suspends=%d shutdowns=%d", installer.suspendCalls, runtime.shutdowns)
 	}
 }
+
+func TestFeatureDisableRepeatsSuspensionForInactiveInstallation(t *testing.T) {
+	installer := &featureInstallerFake{}
+	lifecycle := &FeatureLifecycle{
+		connection: func(context.Context) (sqlc.CharlieConnection, error) {
+			return sqlc.CharlieConnection{ID: uuid.New(), InstallationID: uuid.New(), Active: false, HealthState: "inactive"}, nil
+		},
+		installer: installer, runtime: &featureRuntimeFake{}, writes: NewWriteFence(), timeout: time.Second, auditor: &authorityAuditFake{},
+	}
+	if err := lifecycle.Disable(t.Context(), "actor-a"); err != nil {
+		t.Fatal(err)
+	}
+	if installer.suspendCalls != 1 {
+		t.Fatalf("inactive cleanup suspends=%d", installer.suspendCalls)
+	}
+}

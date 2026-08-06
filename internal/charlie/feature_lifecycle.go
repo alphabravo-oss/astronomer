@@ -98,12 +98,16 @@ func (l *FeatureLifecycle) Disable(parent context.Context, actorID string) error
 			return fmt.Errorf("stop Charlie MCP listener: %w", err)
 		}
 	}
-	if connection.HealthState == "inactive" || connection.HealthState == "disconnected" {
+	if connection.HealthState == "disconnected" {
 		return nil
 	}
 	if l.installer == nil {
 		return fmt.Errorf("Charlie agent suspension is unavailable")
 	}
+	// Repeat suspension for an already-inactive installation. A prior server can
+	// have removed the Argo Application and workload before it learned how to
+	// delete every chart-owned Service/PDB/NetworkPolicy. Idempotent disable must
+	// converge that stale surface to zero instead of trusting metadata alone.
 	if err := l.installer.Suspend(ctx, adminInstallSpec(connection)); err != nil {
 		return fmt.Errorf("suspend Charlie agent runtime: %w", err)
 	}
