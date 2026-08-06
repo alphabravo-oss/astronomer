@@ -24,6 +24,8 @@ var (
 	ErrReplacementPackageNeeded = errors.New("a new signed Charlie onboarding package is required")
 )
 
+const adminStatusReconcileTimeout = 2 * time.Second
+
 type AdminConnectionView struct {
 	Connected              bool   `json:"connected"`
 	ProductID              string `json:"product_id,omitempty"`
@@ -359,8 +361,13 @@ func safeAdminAlertDeliveryProof(row sqlc.CharlieAlertDelivery) AdminAlertDelive
 func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 	// Status is also an immediate reconciliation boundary so an administrator
 	// never has to wait for the background interval after a central policy edit.
+	// The periodic reconciler owns long-running rollouts; an administrator read
+	// must remain bounded if Kubernetes is degraded or another transition holds
+	// the authority fence.
 	if s != nil && s.mode != nil {
-		_, _ = s.mode.Reconcile(ctx)
+		reconcileCtx, cancel := context.WithTimeout(ctx, adminStatusReconcileTimeout)
+		_, _ = s.mode.Reconcile(reconcileCtx)
+		cancel()
 	}
 	connection, err := s.connection(ctx)
 	if errors.Is(err, ErrAdminNotConfigured) {

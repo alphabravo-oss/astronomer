@@ -175,7 +175,11 @@ func createReadyModeCeilingWorkload(t *testing.T, kube kubernetes.Interface, mod
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: charlieAgentWorkloadName, Namespace: DefaultCharlieAgentNamespace, UID: uid, Generation: 2},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{container}}}},
-		Status:     appsv1.StatefulSetStatus{ObservedGeneration: 2, CurrentReplicas: 2, UpdatedReplicas: 2, ReadyReplicas: 2, CurrentRevision: "revision-2", UpdateRevision: "revision-2"},
+		// Kubernetes may omit the optional currentReplicas counter even after a
+		// StatefulSet is fully observed. The aggregate, updated, ready, and
+		// revision fields are the authoritative rollout proof.
+		Status: appsv1.StatefulSetStatus{ObservedGeneration: 2, Replicas: 2, UpdatedReplicas: 2, ReadyReplicas: 2,
+			CurrentRevision: "revision-2", UpdateRevision: "revision-2"},
 	}
 	if !twoPods {
 		statefulSet.Status.ReadyReplicas = 1

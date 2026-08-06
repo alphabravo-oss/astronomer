@@ -147,7 +147,7 @@ func (i *AgentInstaller) modeCeilingReady(ctx context.Context, spec AgentInstall
 	}
 	statefulSet, err := i.kube.AppsV1().StatefulSets(i.agentNamespace).Get(ctx, charlieAgentWorkloadName, metav1.GetOptions{})
 	if err != nil || statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas != 2 || statefulSet.Generation < 1 || statefulSet.Status.ObservedGeneration < statefulSet.Generation ||
-		statefulSet.Status.UpdatedReplicas != 2 || statefulSet.Status.ReadyReplicas != 2 || statefulSet.Status.CurrentReplicas != 2 || statefulSet.Status.CurrentRevision == "" || statefulSet.Status.CurrentRevision != statefulSet.Status.UpdateRevision ||
+		statefulSet.Status.Replicas != 2 || statefulSet.Status.UpdatedReplicas != 2 || statefulSet.Status.ReadyReplicas != 2 || statefulSet.Status.CurrentRevision == "" || statefulSet.Status.CurrentRevision != statefulSet.Status.UpdateRevision ||
 		len(statefulSet.Spec.Template.Spec.Containers) != 1 || containerModeCeiling(statefulSet.Spec.Template.Spec.Containers[0]) != desired {
 		return false
 	}
