@@ -8,9 +8,11 @@
 > integrated UI or a live deployment.
 >
 > **Implementation branch:** `feat/charlie-core-integration`, implementation
-> base through commit `d966b87` and schema version 149 on 2026-08-06. The
-> Charlie `1.0.21` contract alignment remains in progress until its generated
-> contracts, repository tests, commit, deployment, and live evidence complete.
+> base through commit `bae05f2` and live schema version 151 on 2026-08-06.
+> Charlie `1.0.21` contract alignment, repository verification, immutable-agent
+> replacement, and read-only authority restoration are complete; the unchecked
+> cross-mode, packet-isolation, alert-delivery, and destructive-corpus gates
+> below remain release work.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
@@ -1744,6 +1746,55 @@ the minimum authorized evidence and correlate, in order:
   authority-restoration, artifact-pruning, and secret-cleanup evidence. It does
   not check the broader A14 isolation/mode/alert matrices, destructive corpus,
   packet quiescence, or automatic-action qualifications.
+
+##### Agent 1.0.21 advisory-isolation replacement addendum — 2026-08-06
+
+- Astronomer commit `bae05f2` pins Charlie source commit
+  `b9a488b66fbbda0e4a43ce707be123e1e4366474`, chart `1.0.21`, and the strict
+  advisory finding contract that contains no approval ID, signed manifest,
+  reusable authorization, action arguments, or execution authority. The exact
+  approvals API remains a separate authenticated execution lane. Focused Go and
+  race tests, the API and pinned-contract gates, generated OpenAPI drift check,
+  and focused frontend test/type/lint/build gates passed before deployment.
+- Astronomer consumed a short-lived signed replacement package that pinned image
+  digest
+  `sha256:4798c34a695b173eb9d687f1084b6cc3d135277efb59b775e1b6e3ca92e82b4c`
+  and chart digest
+  `sha256:c20dc013b39a32db51123e153654e4ba52521e38899b1c9230a3108beb65a4a6`.
+  The public signing key and package fingerprint matched before validation and
+  consumption. The staged connection started `disabled/disabled`; it did not
+  inherit the old connection's read-only ceiling.
+- Replacement activation initially returned `409` while the composite Argo,
+  StatefulSet, bridge, central enrollment, leader/standby, protocol, health, and
+  artifact predicate was still converging. The unchanged bounded retry returned
+  `200` only after every predicate passed. Activation atomically made 1.0.21 the
+  sole active connection and left 1.0.20 inactive at `disabled/disabled`; no
+  readiness or authority check was relaxed.
+- The active connection was then changed by two distinct audited administrator
+  operations: acknowledge the exact current disclosure, followed by request
+  `read_only` at the exact optimistic revision. Final state is active/ready
+  `read_only/read_only` revision `78`, disclosure acknowledged, and emergency
+  disable false. Approval and automation were never enabled during the upgrade.
+- The live agent Application and Astronomer self-management Application are
+  `Synced/Healthy/Succeeded`. Both digest-pinned agent pods are ready with zero
+  restarts; server, worker, and frontend run exact tag `charlie-bae05f2`; both
+  public health paths and the Charlie UI return HTTP `200`. Agent-log sentinel
+  inspection found no bearer, authorization, API-key, token, package, or
+  credential material. Durable audit contains coded onboarding, replacement,
+  disclosure, requested-mode, and verified-mode outcomes.
+- The configured bootstrap password Secret had drifted from the existing live
+  administrator credential. Rather than reset an account, password, or token
+  row, the operator minted one five-minute in-memory access JWT from the existing
+  deployment signing Secret, bound it to the existing active administrator UUID,
+  and used the normal authentication, superuser, RBAC, rate-limit, and durable
+  audit handlers. The JWT and all mode-`0600` package/request files were deleted
+  from both hosts immediately after activation. This was an explicit deployment
+  break-glass deviation, not a Charlie capability; bootstrap credential drift
+  must be repaired through the normal Astronomer credential-rotation procedure.
+- This addendum proves the exact 1.0.21 replacement and advisory/execution-lane
+  boundary only. It does not close A-ALERT-003 through A-ALERT-006 or the broad
+  A14 disabled-packet, cumulative-mode, destructive-action, notification-outage,
+  or complete content-sentinel matrices.
 
 ##### Feature-lifecycle isolation and recovery addendum — 2026-08-06
 
