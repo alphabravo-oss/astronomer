@@ -51,8 +51,13 @@ func TestHookRequiresAuthAndNormalizesUnsupportedResult(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		t.Fatal(err)
 	}
-	if response.Code != http.StatusOK || result.Passed || len(result.Assertions) != 1 || result.Assertions[0].Passed {
+	if response.Code != http.StatusOK || result.Passed || len(result.Assertions) != len(requiredAssertions["feature_false"]) {
 		t.Fatalf("unsupported result was accidentally promoted: %#v", result)
+	}
+	for _, assertion := range result.Assertions {
+		if assertion.Passed {
+			t.Fatalf("unsupported assertion was accidentally promoted: %#v", result)
+		}
 	}
 }
 

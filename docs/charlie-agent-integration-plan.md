@@ -228,6 +228,30 @@ controls connection/mode/policy administration; the hidden automation service
 identity receives only named capabilities and scopes. None of these permissions
 alone grants the underlying management-resource action, and deny always wins.
 
+#### Mode, role, and action-authority separation
+
+Do not implement Read only, Approval required, or Automation as Astronomer roles.
+They are installation-wide maximum workflow ceilings. Astronomer roles answer
+who may use, inspect, approve, or administer Charlie; existing target-resource
+RBAC answers what that actor may access; the mode answers which workflow Charlie
+may consider. The final action decision is the intersection of all three plus
+disclosure and safety policy.
+
+| Control | Purpose | Explicit non-effect |
+| --- | --- | --- |
+| Feature/connection state | Starts or stops the isolated Charlie subsystem | Enabling never grants read or write authority. |
+| Operational mode | Caps the most powerful workflow available to the deployment/session | Selecting `approval` or `auto` never creates product RBAC or approves an action. |
+| `charlie:create/read` | Allows an actor to use authorized Charlie surfaces | It does not authorize reading an affected Astronomer resource. |
+| `charlie:approve` | Allows an otherwise eligible actor to decide one exact pending action | It does not authorize the underlying action or make an ineligible/destructive action approvable. |
+| `charlie:manage` | Allows integration, mode, disclosure, and policy administration | It does not grant session, target-resource, approval, or execution permission. |
+| Automation service identity | Supplies live product authorization for specifically granted background capabilities/scopes | It is not a superuser and cannot inherit an interactive user's access. |
+| Existing Astronomer target RBAC | Authorizes one actor and one exact management-plane resource/verb | It cannot raise Charlie's current mode or bypass disclosure/safety gates. |
+
+The UI and APIs must always display mode, actor/identity, target authorization,
+and the resulting decision as separate fields. An alert, finding, chat message,
+notification click, acknowledgement, mode selection, or model response is data;
+none is accepted as an authority token.
+
 ### Isolation and actionable-alert invariant
 
 - [x] The feature gate prevents Charlie route, UI, worker, trigger, finding,
@@ -345,6 +369,113 @@ finding. Central and product audit records correlate by opaque deployment,
 session, finding, approval, and action IDs while logging only coded outcomes,
 counts, timings, and content-safe metadata.
 
+#### Advisory lane and execution lane separation
+
+Charlie findings, alerts, chat replies, and recommendations are advisory data,
+not delayed commands. Astronomer must keep their ingestion and presentation path
+structurally separate from the Product MCP write-dispatch path:
+
+```text
+diagnosis -> durable Charlie finding -> authorized Astronomer alert -> user review
+                                                               |
+                                                               +-> manual checks
+                                                               +-> separate exact approval request
+
+exact approval or automation grant -> fresh live authorization -> action reservation
+                                  -> required audit admission -> typed adapter
+                                  -> product verification -> durable result
+```
+
+The alert may reference an opaque pending approval, but it must never carry an
+executable manifest, signed authority, product authorization reference, exact
+arguments, or a replayable action request. Opening, clicking, acknowledging,
+dismissing, assigning, snoozing, or resolving an alert cannot enter the execution
+lane. “Approve” is a distinct authenticated and CSRF-protected operation that
+loads the current server-side manifest, rechecks the actor and target, shows the
+exact bounded impact, and requires an explicit confirmation.
+
+Alerts are useful in every active mode without weakening it. In `read_only`, a
+material issue produces diagnosis, operator checks, and verification guidance
+only. In `approval`, an eligible safe action may additionally expose one exact
+approve/reject workflow. In `auto`, Charlie performs only an exact allowlisted
+action under the automation identity; a safe non-auto action remains eligible
+for the same human approval workflow, and everything else remains manual
+guidance. Disabled states produce no runtime diagnosis or alert traffic.
+
+Astronomer owns alert visibility, routing, escalation, quiet hours, recipient
+preferences, and configurable trigger thresholds. Notifications must be
+deduplicated, severity-aware, bounded, deep-linked, and useful during a Charlie
+or notification-channel outage because the durable finding remains the source
+of truth. A notification delivery failure may delay visibility but cannot lose,
+approve, execute, or resolve the finding.
+
+Required operational logging is deny-first. Before any authority increase or
+product write, Astronomer must durably admit a content-free audit record or
+reservation in the same transactional boundary that authorizes dispatch. If
+that required admission fails, no write is sent. Ordinary service logs use typed
+event/outcome/reason codes, opaque correlation IDs, bounded counts and durations,
+and an allowlist of fields; raw prompts, evidence, model/tool bodies,
+arguments/results, secrets, authorization references, provider errors, resource
+values, and arbitrary exception text are forbidden. Read-only diagnosis may
+degrade safely when an optional telemetry sink is unavailable, but it must never
+silently claim an action, approval, notification, or audit write succeeded.
+
+- [ ] **A-ALERT-001** Make finding/notification payload schemas structurally
+  incapable of carrying an executable manifest, authority token, product
+  authorization reference, exact tool arguments, or reusable action request.
+- [ ] **A-ALERT-002** Prove every notification interaction other than the
+  separately authenticated exact-approval endpoint has zero action-dispatch
+  side effects, including replay, concurrent clicks, stale cards, and forged UI
+  payloads.
+- [ ] **A-ALERT-003** Add configurable severity, dedupe, escalation, quiet-hour,
+  recipient, and channel policy without moving thresholds or user-notification
+  credentials into Charlie central.
+- [ ] **A-ALERT-004** Make required product audit admission fail closed before
+  every authority increase and write dispatch; prove audit outage causes no
+  Product MCP write and leaves one actionable, retry-safe coded outcome.
+- [ ] **A-ALERT-005** Centralize typed allowlisted operational log fields across
+  the Astronomer API, workers, Product Bridge client, Product MCP, qualification
+  tooling, and notification delivery; prove secret/content sentinels never reach
+  logs, audit, metrics, traces, crash output, or support bundles.
+- [ ] **A-ALERT-006** Prove alert behavior by effective state: none while feature
+  or connection disabled; control-status only in wire `disabled`; manual guidance
+  in `read_only`; exact approve/reject or manual guidance in `approval`; verified
+  automatic result, exact fallback approval, or manual guidance in `auto`.
+
+#### Required isolation, authority, and alert acceptance matrix
+
+- [ ] Prove feature false and connection disabled are cold states: all Charlie
+  routes/workers/listeners/schedulers are unregistered or stopped, the agent is
+  absent, and packet/counter observation records zero Charlie runtime egress.
+- [ ] Prove enabled wire mode `disabled` accepts only the signed control protocol
+  and cannot create a session, finding, alert, evidence request, MCP call, or
+  model/RAG request.
+- [ ] For each user role and target-RBAC combination, prove `read_only` performs
+  only authorized reads and turns every material proposed write into one
+  authorized, deduplicated manual-remediation finding with zero action receipt.
+- [ ] For each user role and target-RBAC combination, prove `approval` retains
+  read-only behavior and dispatches only after an eligible actor approves one
+  exact, current, unexpired action; reject, expiry, revocation, replay, silence,
+  alert acknowledgement, and mode change execute nothing.
+- [ ] Prove `auto` retains both lower workflows: an exact allowlisted action uses
+  only the narrow automation identity, an otherwise-eligible safe action becomes
+  an exact approval, and every other material diagnosis becomes actionable
+  manual guidance. No blocked condition is silently dropped.
+- [ ] Run a destructive/confused-deputy corpus in every mode and role combination
+  covering shell, exec, raw SQL, generic HTTP/proxy, Secret/credential access,
+  delete, downstream-cluster transport, forged authority fields, model/prompt
+  injection, target substitution, and replay; assert denial before dispatch,
+  zero product side effect, and a content-free coded audit outcome.
+- [ ] Inject audit, finding-delivery, alert-delivery, and post-verification
+  failures. Required audit failure must fail closed before a write; notification
+  failure must retain the durable finding for retry; ambiguous action results
+  must reconcile rather than execute again.
+- [ ] Secret/content sentinel tests must cover success, denial, malformed input,
+  provider/agent/central outage, timeout, cancellation, panic recovery, and
+  support-bundle paths and prove no prompts, evidence, arguments/results,
+  credentials, raw errors, or sensitive resource values reach logs, audit,
+  metrics, traces, or notifications.
+
 ## 4. Data model and public interfaces
 
 ### 4.1 Migration 147
@@ -424,6 +555,36 @@ blindly retried.
   duplicated locally;
 - no prompt, model reasoning, raw tool result, credential, Secret value, or
   unredacted log content.
+
+### 4.1a Cross-system correlation ownership and retention
+
+The same opaque correlation value may appear on both sides of the Product
+Bridge, but that does not make the underlying record jointly owned. Each side
+deletes only its own record under its own retention rule; a missing remote
+record is a normal expired/not-found state and never authorizes reconstruction
+from logs or audit. Correlation fields are identifiers only and must never be
+used as bearer credentials or RBAC evidence.
+
+| Correlation | Authoritative owner | Astronomer record | Charlie record | Retention and deletion rule |
+| --- | --- | --- | --- | --- |
+| installation/package | Astronomer owns the active local installation and trust material; Charlie owns the signed onboarding package and credential lineage | `charlie_connections`, immutable package digest, public fingerprints, local encrypted trust | onboarding package, enrollment/runtime credential lineage | Charlie expires or revokes the package/credentials. Astronomer retains the active connection until verified disconnect, then deletes local trust through the explicit disconnect workflow. Neither side copies the other's secret. |
+| deployment | Charlie owns the central deployment scope; Astronomer owns its local product-installation binding | deployment ID on `charlie_connections` | `scopes` and integration rows | Charlie scope lifecycle controls central cascade. Astronomer removes its binding only after credential revocation is verified; local audit remains under platform audit retention. |
+| route | Charlie | route ID/revision pin only | gateway route and immutable revision | Charlie route/configuration retention applies. Astronomer replaces only the pin after a newly validated package or configuration readback and stores no model/provider/RAG configuration. |
+| session | Charlie owns encrypted conversation/history; Astronomer owns user/resource authorization metadata | `charlie_sessions` plus constrained resource rows, with no message content | `agent_sessions` and encrypted messages/history | Charlie assigns an explicit history expiry of 1-30 days and purges the encrypted session tree. Astronomer removes terminal local metadata after 30 days. Audit records are not cascaded with either session. |
+| turn/event cursor | Charlie | last acknowledged event ID and central revision only | turn commands and append-only transport/session events | Charlie turn data expires with its session. Astronomer's cursor expires with local session metadata. Reconnect resumes from the cursor; it never recreates content from audit. |
+| finding | Charlie owns detailed evidence/workflow; Astronomer owns notification visibility and bounded summary | `charlie_findings`, affected resources, notification/alert correlation | `agent_findings` and append-only finding events | Charlie enforces the finding's explicit 1-90-day expiry. Astronomer expires the card at the advertised deadline and deletes terminal summary metadata after 90 days. |
+| approval | Charlie | opaque approval ID, eligibility/state projection, and product decision correlation only | exact encrypted approval, argument/authority digests, expiry, consume-once state | Charlie expires the exact approval independently and deletes it with session history. Astronomer never stores the signed manifest or exact arguments; its projection expires with the finding/session metadata. |
+| action | Charlie owns the proposal/authority decision; Astronomer owns product-side admission and effect receipt | `charlie_action_receipts`, digest, fence, product operation ID, state | `agent_actions` and `agent_action_reservations` | Charlie deletes action content with session history. Astronomer retains the content-free receipt with local session metadata for 30 days; ambiguous receipts are reconciled, never blindly replayed. |
+| product operation | Astronomer subsystem that performed the idempotent operation | existing Argo/task/workload operation row keyed by the Charlie receipt operation ID | opaque operation/result correlation only | The owning Astronomer subsystem's normal operational retention applies. Charlie cannot delete, retry, or reinterpret the product operation record. |
+| request/idempotency | Receiver of each mutation | finding-decision, approval-decision, receipt, and lifecycle request IDs | command, finding transition, approval, and action request IDs | Retained with the receiver's parent workflow record. Reuse with different scope/content is a conflict; identical replay returns prior state without a second side effect. |
+| audit | Each system independently | normal Astronomer append-only audit with opaque/hash-only correlations | Charlie content-free lifecycle/retention audit | Astronomer follows `audit_log_retention_months`; Charlie follows its central audit policy. Business-record deletion never deletes the other system's audit and audit cannot restore expired content. |
+
+The integrated live gate must select one session and trace its installation,
+deployment, route, turn, finding/approval/action when present, request, product
+operation, and both audit correlations without decrypting or printing content.
+It must then prove that each record is readable only from its owner and that an
+expired/deleted record is reported as unavailable rather than synthesized from
+the peer.
 
 ### 4.2 Browser-facing Astronomer APIs
 
@@ -609,7 +770,7 @@ contract.
 - [x] RBAC table tests cover superuser, viewer, scoped operator, approver without
   target access, target operator without approve, service identity, and revoked
   bindings.
-- [ ] `make check-migrations && make sqlc-check` exits 0.
+- [x] `make check-migrations && make sqlc-check` exits 0.
 
 ### Phase A3 — Onboarding verification and local trust
 
@@ -1122,13 +1283,13 @@ quota, audit, and task semantics as the normal Astronomer API.
 
 **Verify**
 
-- [ ] Frontend unit tests cover every state and permission combination.
+- [x] Frontend unit tests cover every state and permission combination.
 - [x] Playwright covers global launch from at least installation health,
   management component, alert, cluster-agent, backup, and self-management GitOps
   pages; context chips match the route resource and never imply downstream access.
 - [x] Deep links survive refresh and browser back/forward.
 - [x] Accessibility scan has no serious/critical violations.
-- [ ] Frontend tests cover each non-execution reason and assert its legal user
+- [x] Frontend tests cover each non-execution reason and assert its legal user
   decisions, confirmation flow, stale/expired behavior, and zero implicit action.
 
 ### Phase A11 — Administration experience
@@ -1323,7 +1484,7 @@ the minimum authorized evidence and correlate, in order:
 - [x] A table-driven test covers every A12-029 reason in all applicable modes
   and asserts the exact finding state, alert eligibility, available decisions,
   absence/presence of an approval link, and zero implicit side effects.
-- [ ] Multi-user tests prove only currently resource-authorized users receive or
+- [x] Multi-user tests prove only currently resource-authorized users receive or
   open the finding/alert and that permission revocation closes subsequent detail
   and decision requests.
 - [ ] Decision concurrency/replay tests prove acknowledge, dismiss, resolve,
@@ -1885,61 +2046,74 @@ the minimum authorized evidence and correlate, in order:
 
 ### Global drawer
 
-- [ ] Closed state does not fetch conversation content.
-- [ ] Opening restores the user's last private session only after authorization.
-- [ ] New-chat clearly displays current mode and attached context.
-- [ ] Context can be removed before the first network request.
-- [ ] Waiting approval, agent failover, central unavailable, and MCP denial are
+- [x] Closed state does not fetch conversation content.
+- [x] Opening restores the user's last private session only after authorization.
+- [x] New-chat clearly displays current mode and attached context.
+- [x] Context can be removed before the first network request.
+- [x] Waiting approval, agent failover, central unavailable, and MCP denial are
   visually distinct.
-- [ ] Disabled, read-only finding, approval required, auto blocked, destructive
+- [x] Disabled, read-only finding, approval required, auto blocked, destructive
   denial, failed verification, and emergency-stop states are visually distinct.
-- [ ] Tool cards never display redacted/secret arguments.
-- [ ] Closing the drawer does not abort a turn; an explicit Abort action does.
-- [ ] Mobile layout preserves streaming, context, and approvals without
+- [x] Tool cards never display redacted/secret arguments.
+- [x] Closing the drawer does not abort a turn; an explicit Abort action does.
+- [x] Mobile layout preserves streaming, context, and approvals without
   horizontal overflow.
-- [ ] User-facing mode copy says `read_only`, `approval_required`, or
+- [x] User-facing mode copy says `read_only`, `approval_required`, or
   `automation`, describes each as a cumulative hard ceiling, and never exposes
   the internal `approval`/`auto` values as a promise of authority.
 
 ### Investigations and approvals
 
-- [ ] Investigation list supports status, severity, cluster, source, and time
+- [x] Investigation list supports status, severity, cluster, source, and time
   filters represented in URL search parameters; `cluster` means an Astronomer
   cluster-agent connection record, not downstream resource access.
-- [ ] Investigation detail links to the originating Astronomer resource.
-- [ ] Finding list/detail deep-links preserve status, severity, source, affected
+- [x] Investigation detail links to the originating Astronomer resource.
+- [x] Finding list/detail deep-links preserve status, severity, source, affected
   resource, execution-block reason, and time filters.
-- [ ] Repeated events show a count/timeline rather than duplicated incidents.
-- [ ] Approval detail shows bounded non-authoritative capability, effect, risk,
+- [x] Repeated events show a count/timeline rather than duplicated incidents.
+- [x] Approval detail shows bounded non-authoritative capability, effect, risk,
   target summary, expiry, eligibility, and required permission. The browser
   never receives signed manifests, signatures, exact arguments, authorization
   references, or authority digests.
-- [ ] Approval submission supports a bounded rationale and handles stale or
+- [x] Approval submission supports a bounded rationale and handles stale or
   conflicting exact-action decisions.
-- [ ] Resolved/expired approvals cannot be resubmitted.
-- [ ] Finding actions require live authorization; acknowledge/dismiss/resolve are
+- [x] Resolved/expired approvals cannot be resubmitted.
+- [x] Finding actions require live authorization; acknowledge/dismiss/resolve are
   idempotent and “Approve” opens a separate exact-action confirmation.
-- [ ] Every blocked-automation finding shows the coded reason and only valid
+- [x] Every blocked-automation finding shows the coded reason and only valid
   decisions; exact approval is offered only for a reversible, disclosed,
   currently eligible action, while all other cases provide safe manual checks.
 
 ### Administration
 
-- [ ] Package upload is clearly separate from provider/model/RAG administration,
+- [x] Package upload is clearly separate from provider/model/RAG administration,
   which remains in Charlie.
-- [ ] Agent install cannot be enabled before signature/digest/trust validation.
-- [ ] Auto mode cannot be enabled before MCP discovery acknowledgement,
+- [x] Agent install cannot be enabled before signature/digest/trust validation.
+- [x] Auto mode cannot be enabled before MCP discovery acknowledgement,
   automation identity configuration, and explicit allowlist review.
-- [ ] Auto mode cannot include destructive/non-auto-eligible capabilities and
+- [x] Auto mode cannot include destructive/non-auto-eligible capabilities and
   requires visible budgets, cooldowns, preconditions, verification, and circuit
   breaker settings.
 - [x] Emergency disable remains available during degraded central/agent states and
   the UI distinguishes requested from verified central mode.
-- [ ] Diagnostics state exactly which boundary failed and provide a safe next
+- [x] Diagnostics state exactly which boundary failed and provide a safe next
   action without exposing secrets.
-- [ ] Disabled administration is local-only and visibly reports the agent,
+- [x] Disabled administration is local-only and visibly reports the agent,
   bridge, MCP listener, schedulers, and network paths as quiesced without polling
   them.
+
+Acceptance evidence on 2026-08-06 is checked in with the implementation:
+`charlie-shell.test.tsx` covers the closed-fetch boundary, authorized private
+restore, context removal, cumulative mode copy, close-versus-explicit-abort,
+and lifecycle states; `message-parts.test.tsx` covers bounded tool and exact
+approval rendering; `charlie-admin-page.test.tsx` covers feature/permission
+states, package secrecy and trust gates, modes, automation safety, diagnostics,
+and local-only disabled behavior; `dashboard/charlie/index.test.tsx` covers the
+complete hub filter, deep-link, finding, permission, and terminal-approval
+matrix. The Chromium/mobile Charlie smoke and axe scenario covers responsive
+layout, focus order, context, streaming, and approvals. The full frontend gate
+passed 99 files/786 tests plus type checking, lint with no errors, and a
+production build; focused acceptance reruns passed 14/14 tests.
 
 ## 7. Verification commands
 

@@ -54,6 +54,32 @@ export const useCharlie = () => {
   return v;
 };
 
+const productModeCopy = {
+  disabled: {
+    label: "disabled",
+    ceiling: "Hard ceiling: no Charlie sessions, triggers, approvals, or actions are allowed.",
+  },
+  read_only: {
+    label: "read_only",
+    ceiling: "Hard ceiling: authorized investigation and findings only; Charlie cannot write.",
+  },
+  approval: {
+    label: "approval_required",
+    ceiling: "Hard ceiling: includes read_only; every exact write still requires current human approval.",
+  },
+  auto: {
+    label: "automation",
+    ceiling: "Hard ceiling: includes read_only and approval_required; only explicitly allowed safe writes may run automatically.",
+  },
+} as const;
+
+function productModePresentation(mode: string | undefined) {
+  return productModeCopy[mode as keyof typeof productModeCopy] ?? {
+    label: "unknown",
+    ceiling: "Hard ceiling is unavailable; Charlie must not assume write authority.",
+  };
+}
+
 export function CharlieShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -265,15 +291,17 @@ function CharlieDrawer() {
   const messages = [...local, ...(history.data ?? [])].filter(
     (m, i, a) => a.findIndex((x) => x.id === m.id) === i,
   );
+  const mode = productModePresentation(overview.data?.mode);
   return (
     <DrawerShell
       title="Charlie"
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
           <span>AI assistance within your authorized Astronomer scope</span>
-          <span className="rounded-full border px-2 py-0.5 font-medium" aria-label={`Current Charlie mode: ${overview.data?.mode ?? "unknown"}`}>
-            {(overview.data?.mode ?? "unknown").replace("_", " ")}
+          <span className="rounded-full border px-2 py-0.5 font-medium" aria-label={`Current Charlie mode: ${mode.label}`}>
+            {mode.label}
           </span>
+          <span className="basis-full text-xs text-muted-foreground">{mode.ceiling}</span>
         </span>
       }
       onClose={() => setOpen(false)}

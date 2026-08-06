@@ -474,7 +474,8 @@ test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async
   await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
   const drawer = page.getByRole('dialog', { name: 'Charlie' });
   await expect(drawer).toBeVisible();
-  await expect(page.getByLabel('Current Charlie mode: approval')).toBeVisible();
+  await expect(page.getByLabel('Current Charlie mode: approval_required')).toBeVisible();
+  await expect(drawer.getByText(/Hard ceiling: includes read_only/)).toBeVisible();
   await expect(page.getByText('The selected alert is under investigation.')).toBeVisible();
   const viewportWidth = page.viewportSize()?.width ?? 0;
   const drawerBox = await drawer.boundingBox();

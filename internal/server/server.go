@@ -1326,6 +1326,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		charlieAdminHandler      *handler.CharlieAdminHandler
 		charlieAdminService      *charlie.AdminService
 		managedCharlieBridge     *charlie.ManagedBridge
+		charlieFindingEvents     handler.CharlieFindingEventAuthorizer
 		charlieWriteFence        = charlie.NewDistributedWriteFence(database.Pool())
 	)
 	charlieBindings := charlieLiveBindings{queries: queries, bindings: appmiddleware.NewSQLCRBACQuerierWithCache(queries, nil)}
@@ -1393,6 +1394,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return nil, findingErr
 			}
 			charlieFindingsHandler = handler.NewCharlieFindingHandler(findingAccess)
+			charlieFindingEvents = findingAccess
 		}
 	}
 	var adminInstaller charlie.AdminAgentInstaller
@@ -1844,6 +1846,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	deps.EventStream.SetAuth(jwtManager, queries)
 	deps.EventStream.SetStreamTickets(deps.StreamTicketStore)
 	deps.EventStream.SetAuthorization(rbacEngine, rbacQuerier)
+	deps.EventStream.SetCharlieFindingAuthorization(charlieFindingEvents)
 	// Group-sync admin re-sync mutates the user's bindings; share the
 	// same RBAC cache invalidator the SSO + user handlers use so the
 	// effect is immediate on the next authenticated request.

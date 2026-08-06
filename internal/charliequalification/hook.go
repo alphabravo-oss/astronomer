@@ -29,8 +29,10 @@ var (
 )
 
 var requiredAssertions = map[string][]string{
-	"feature_false": {"state_applied"}, "unactivated": {"state_applied"},
-	"central_disabled": {"state_applied"}, "emergency_disabled": {"state_applied"},
+	"feature_false":              {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"unactivated":                {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"central_disabled":           {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
+	"emergency_disabled":         {"state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged"},
 	"read_denial":                {"authorization_denied", "product_calls_zero"},
 	"approval_expiry":            {"approval_expired", "product_calls_zero"},
 	"approval_once":              {"approval_consumed_once", "product_call_once"},

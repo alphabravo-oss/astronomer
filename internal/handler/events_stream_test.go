@@ -198,6 +198,89 @@ type mutableStreamRBACQuerier struct {
 	bindings []rbac.RoleBinding
 }
 
+type mutableCharlieFindingEventAuthorizer struct {
+	mu      sync.Mutex
+	allowed map[uuid.UUID]map[uuid.UUID]bool
+	checked chan uuid.UUID
+}
+
+func (a *mutableCharlieFindingEventAuthorizer) CanReceiveFinding(_ context.Context, actorID, findingID uuid.UUID) bool {
+	a.mu.Lock()
+	allowed := a.allowed[actorID][findingID]
+	a.mu.Unlock()
+	select {
+	case a.checked <- findingID:
+	default:
+	}
+	return allowed
+}
+
+func (a *mutableCharlieFindingEventAuthorizer) set(actorID, findingID uuid.UUID, allowed bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.allowed[actorID] == nil {
+		a.allowed[actorID] = make(map[uuid.UUID]bool)
+	}
+	a.allowed[actorID][findingID] = allowed
+}
+
+func TestEventStream_CharlieFindingDeliveryUsesLiveFindingAuthorization(t *testing.T) {
+	bus := events.NewBus()
+	h := NewEventStreamHandler(bus)
+	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-charlie-stream", 15)
+	h.SetAuth(jwtMgr, nil)
+	actorID, allowedFinding, deniedFinding := uuid.New(), uuid.New(), uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(actorID)
+	if err != nil {
+		t.Fatalf("token: %v", err)
+	}
+	authorizer := &mutableCharlieFindingEventAuthorizer{
+		allowed: make(map[uuid.UUID]map[uuid.UUID]bool),
+		checked: make(chan uuid.UUID, 4),
+	}
+	authorizer.set(actorID, allowedFinding, true)
+	h.SetAuthorization(rbac.NewEngine(), stubStreamRBACQuerier{})
+	h.SetCharlieFindingAuthorization(authorizer)
+
+	rec, wait := runStream(t, h, 500*time.Millisecond, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+	})
+	time.Sleep(50 * time.Millisecond)
+	events.PublishChanged(bus, "charlie_finding", "", allowedFinding.String(), map[string]any{"delivery": "before-revoke"})
+	select {
+	case <-authorizer.checked:
+	case <-time.After(time.Second):
+		t.Fatal("authorized Charlie finding was not checked")
+	}
+	authorizer.set(actorID, allowedFinding, false)
+	events.PublishChanged(bus, "charlie_finding", "", allowedFinding.String(), map[string]any{"delivery": "after-revoke"})
+	events.PublishChanged(bus, "charlie_finding", "", deniedFinding.String(), map[string]any{"delivery": "other-user"})
+	bus.Publish(events.TypeCharlieFindingChanged, map[string]any{"id": "not-a-uuid", "delivery": "malformed"})
+	wait()
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"delivery":"before-revoke"`) {
+		t.Fatalf("authorized restricted user did not receive Charlie finding: %q", body)
+	}
+	for _, forbidden := range []string{"after-revoke", "other-user", "malformed"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("Charlie finding %q crossed live delivery authorization: %q", forbidden, body)
+		}
+	}
+}
+
+func TestEventStream_CharlieFindingFailsClosedWithoutAuthorizer(t *testing.T) {
+	bus := events.NewBus()
+	h := NewEventStreamHandler(bus)
+	rec, wait := runStream(t, h, 200*time.Millisecond, nil)
+	time.Sleep(50 * time.Millisecond)
+	events.PublishChanged(bus, "charlie_finding", "", uuid.NewString(), map[string]any{"delivery": "must-drop"})
+	wait()
+	if strings.Contains(rec.Body.String(), "must-drop") {
+		t.Fatalf("Charlie finding was delivered without its authorization boundary: %q", rec.Body.String())
+	}
+}
+
 func (s *mutableStreamRBACQuerier) GetUserBindings(context.Context, string) ([]rbac.RoleBinding, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

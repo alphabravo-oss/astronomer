@@ -79,6 +79,15 @@ type FindingView struct {
 	Remote    json.RawMessage               `json:"remote,omitempty"`
 }
 
+// CanReceiveFinding is the event-stream delivery boundary. It deliberately
+// performs the same current feature, connection, private-session, and resource
+// authorization checks as list/detail/decision requests without fetching
+// central content or issuing a delegation.
+func (s *FindingAccessService) CanReceiveFinding(ctx context.Context, actorID, findingID uuid.UUID) bool {
+	_, _, _, err := s.authorizeFinding(ctx, actorID, findingID)
+	return err == nil
+}
+
 func (s *FindingAccessService) List(ctx context.Context, actorID uuid.UUID, status string, offset, limit int32) ([]FindingView, error) {
 	connection, err := s.authorizeConnection(ctx, actorID)
 	if err != nil {

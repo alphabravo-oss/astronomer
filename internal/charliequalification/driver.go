@@ -193,6 +193,10 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 	if err != nil {
 		return Unsupported(scenario)
 	}
+	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
 	var original settingEnvelope
 	if _, err = d.api(ctx, http.MethodGet, "/api/v1/admin/settings/feature.charlie/", d.adminToken, nil, &original); err != nil {
 		return Unsupported(scenario)
@@ -201,8 +205,8 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		settingErr := d.restoreFeatureSetting(cleanupCtx, original)
-		modeErr := d.restoreMode(originalMode)
-		if settingErr != nil || modeErr != nil {
+		baselineErr := d.restoreBaseline(originalMode, baselineCounters)
+		if settingErr != nil || baselineErr != nil {
 			result = Unsupported(scenario)
 		}
 	}()
@@ -211,7 +215,10 @@ func (d *LiveDriver) featureFalse(ctx context.Context, scenario string) (result 
 	if applyErr != nil || string(applied.Data.Value) != "false" {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied")
+	if !d.countersUnchanged(ctx, baselineCounters) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 func (d *LiveDriver) restoreFeatureSetting(ctx context.Context, original settingEnvelope) error {
@@ -239,14 +246,16 @@ func (d *LiveDriver) restoreFeatureSetting(ctx context.Context, original setting
 type statusEnvelope struct {
 	Data struct {
 		Connection struct {
-			Connected              bool `json:"connected"`
-			DisclosureAcknowledged bool `json:"disclosure_acknowledged"`
+			Connected              bool   `json:"connected"`
+			DisclosureAcknowledged bool   `json:"disclosure_acknowledged"`
+			DisclosureDigest       string `json:"disclosure_digest"`
 		} `json:"connection"`
 		Mode struct {
 			Requested         string `json:"requested"`
 			Authoritative     string `json:"authoritative"`
 			Revision          int64  `json:"revision"`
 			EmergencyDisabled bool   `json:"emergency_disabled"`
+			DisclosureDigest  string `json:"disclosure_digest"`
 		} `json:"mode"`
 		Agent struct {
 			DesiredReplicas int32  `json:"desired_replicas"`
@@ -274,6 +283,10 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 	if !versionMatches && !digestMatches {
 		return Unsupported(scenario)
 	}
+	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
 	replicas, err := d.agentScaler.Replicas(ctx)
 	if err != nil || replicas < 1 {
 		return Unsupported(scenario)
@@ -286,8 +299,9 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 		if scaleErr == nil {
 			readyErr = d.agentScaler.WaitReady(cleanupCtx, replicas)
 		}
-		modeErr := d.restoreMode(original)
-		if scaleErr != nil || readyErr != nil || modeErr != nil {
+		baselineErr := d.restoreBaseline(original, baselineCounters)
+		finalReplicas, replicasErr := d.agentScaler.Replicas(cleanupCtx)
+		if scaleErr != nil || readyErr != nil || baselineErr != nil || replicasErr != nil || finalReplicas != replicas {
 			result = Unsupported(scenario)
 		}
 	}()
@@ -297,7 +311,10 @@ func (d *LiveDriver) unactivated(ctx context.Context, request ScenarioRequest) (
 	if d.agentScaler.WaitReady(ctx, 0) != nil {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied")
+	if !d.countersUnchanged(ctx, baselineCounters) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (result ScenarioResult) {
@@ -305,8 +322,12 @@ func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (resu
 	if err != nil {
 		return Unsupported(scenario)
 	}
+	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
 	defer func() {
-		if d.restoreMode(original) != nil {
+		if d.restoreBaseline(original, baselineCounters) != nil {
 			result = Unsupported(scenario)
 		}
 	}()
@@ -317,7 +338,10 @@ func (d *LiveDriver) centralDisabled(ctx context.Context, scenario string) (resu
 	if statusErr != nil || applied.Data.Mode.Requested != "disabled" || applied.Data.Mode.Authoritative != "disabled" {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied")
+	if !d.countersUnchanged(ctx, baselineCounters) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (result ScenarioResult) {
@@ -325,8 +349,12 @@ func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (re
 	if err != nil {
 		return Unsupported(scenario)
 	}
+	baselineCounters, err := d.Counters(ctx)
+	if err != nil {
+		return Unsupported(scenario)
+	}
 	defer func() {
-		if d.restoreMode(original) != nil {
+		if d.restoreBaseline(original, baselineCounters) != nil {
 			result = Unsupported(scenario)
 		}
 	}()
@@ -337,7 +365,10 @@ func (d *LiveDriver) emergencyDisabled(ctx context.Context, scenario string) (re
 	if err != nil || !applied.Data.Mode.EmergencyDisabled || applied.Data.Mode.Authoritative != "disabled" {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "state_applied")
+	if !d.countersUnchanged(ctx, baselineCounters) {
+		return Unsupported(scenario)
+	}
+	return Passed(scenario, "state_applied", "runtime_counters_unchanged", "downstream_counters_unchanged")
 }
 
 type modeEnvelope struct {
@@ -357,7 +388,7 @@ func (d *LiveDriver) setMode(ctx context.Context, mode string, revision int64, e
 
 func (d *LiveDriver) qualificationBaseline(ctx context.Context) (statusEnvelope, error) {
 	status, err := d.status(ctx)
-	if err != nil || !status.Data.Connection.Connected || status.Data.Mode.EmergencyDisabled || status.Data.Mode.Requested != "read_only" || status.Data.Mode.Authoritative != "read_only" || !status.Data.Connection.DisclosureAcknowledged {
+	if err != nil || !status.Data.Connection.Connected || status.Data.Mode.EmergencyDisabled || status.Data.Mode.Requested != "read_only" || status.Data.Mode.Authoritative != "read_only" || !status.Data.Connection.DisclosureAcknowledged || strings.TrimSpace(status.Data.Mode.DisclosureDigest) == "" || status.Data.Connection.DisclosureDigest != status.Data.Mode.DisclosureDigest {
 		return statusEnvelope{}, errors.New("qualification requires an acknowledged read-only baseline")
 	}
 	return status, nil
@@ -384,11 +415,35 @@ func (d *LiveDriver) restoreMode(original statusEnvelope) error {
 			return err
 		}
 	}
+	restored, err := d.status(ctx)
+	if err != nil || restored.Data.Mode.EmergencyDisabled || restored.Data.Mode.Requested != original.Data.Mode.Requested || restored.Data.Mode.Authoritative != original.Data.Mode.Authoritative || restored.Data.Mode.DisclosureDigest != original.Data.Mode.DisclosureDigest || restored.Data.Connection.DisclosureDigest != original.Data.Connection.DisclosureDigest {
+		return errors.New("Charlie mode cleanup did not restore disclosure baseline")
+	}
+	if _, err = d.api(ctx, http.MethodPatch, "/api/v1/admin/charlie/mode/", d.adminToken, map[string]any{"acknowledge_disclosure_digest": original.Data.Connection.DisclosureDigest}, nil); err != nil {
+		return err
+	}
 	final, err := d.status(ctx)
-	if err != nil || final.Data.Mode.EmergencyDisabled || final.Data.Mode.Requested != original.Data.Mode.Requested || final.Data.Mode.Authoritative != original.Data.Mode.Authoritative || final.Data.Connection.Connected != original.Data.Connection.Connected || final.Data.Connection.DisclosureAcknowledged != original.Data.Connection.DisclosureAcknowledged {
+	if err != nil || final.Data.Mode.EmergencyDisabled || final.Data.Mode.Requested != original.Data.Mode.Requested || final.Data.Mode.Authoritative != original.Data.Mode.Authoritative || final.Data.Mode.DisclosureDigest != original.Data.Mode.DisclosureDigest || final.Data.Connection.DisclosureDigest != original.Data.Connection.DisclosureDigest || final.Data.Connection.Connected != original.Data.Connection.Connected || final.Data.Connection.DisclosureAcknowledged != original.Data.Connection.DisclosureAcknowledged || final.Data.Agent.DesiredReplicas != original.Data.Agent.DesiredReplicas || final.Data.Agent.ReadyReplicas != original.Data.Agent.ReadyReplicas {
 		return errors.New("Charlie mode cleanup did not restore baseline")
 	}
 	return nil
+}
+
+func (d *LiveDriver) restoreBaseline(original statusEnvelope, counters CounterSet) error {
+	if err := d.restoreMode(original); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if !d.countersUnchanged(ctx, counters) {
+		return errors.New("Charlie cleanup counters did not match baseline")
+	}
+	return nil
+}
+
+func (d *LiveDriver) countersUnchanged(ctx context.Context, before CounterSet) bool {
+	after, err := d.Counters(ctx)
+	return err == nil && sameCounterKeys(before.Runtime, after.Runtime, runtimeKeys) && sameCounterKeys(before.Downstream, after.Downstream, downstreamKeys)
 }
 
 func (d *LiveDriver) readDenial(ctx context.Context, scenario string) ScenarioResult {
@@ -408,7 +463,11 @@ func (d *LiveDriver) readDenial(ctx context.Context, scenario string) ScenarioRe
 }
 
 func sameCounterMap(before, after map[string]uint64) bool {
-	for _, key := range downstreamKeys {
+	return sameCounterKeys(before, after, downstreamKeys)
+}
+
+func sameCounterKeys(before, after map[string]uint64, keys []string) bool {
+	for _, key := range keys {
 		if before[key] != after[key] {
 			return false
 		}

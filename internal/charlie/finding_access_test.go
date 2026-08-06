@@ -323,3 +323,31 @@ func TestFindingAccessDoesNotLeakPrivateSessionFindingToResourceReader(t *testin
 		t.Fatalf("private session finding leaked to another resource reader: views=%#v err=%v", views, err)
 	}
 }
+
+func TestFindingEventAndDecisionRecheckCurrentUserResourceAuthorization(t *testing.T) {
+	store, authorizer, bridge, audit, publisher, ownerID := findingAccessFixture()
+	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+	findingID := store.rows[0].ID
+
+	if !service.CanReceiveFinding(context.Background(), ownerID, findingID) {
+		t.Fatal("currently authorized owner could not receive finding event")
+	}
+	if service.CanReceiveFinding(context.Background(), uuid.New(), findingID) {
+		t.Fatal("private finding event was visible to another resource-authorized user")
+	}
+
+	authorizer.resourcePass["replica-a"] = false
+	if service.CanReceiveFinding(context.Background(), ownerID, findingID) {
+		t.Fatal("revoked owner retained finding event access")
+	}
+	if _, err := service.Get(context.Background(), ownerID, findingID); err == nil {
+		t.Fatal("revoked owner retained finding detail access")
+	}
+	if _, err := service.Transition(context.Background(), ownerID, findingID, uuid.New(), "acknowledge"); err == nil {
+		t.Fatal("revoked owner retained finding decision access")
+	}
+	if bridge.getCalls != 0 || bridge.transitionCalls != 0 || store.transition.ID != uuid.Nil || len(publisher.alerts) != 0 {
+		t.Fatalf("revoked access reached Charlie or durable workflow: bridge_get=%d bridge_transition=%d transition=%#v alerts=%d",
+			bridge.getCalls, bridge.transitionCalls, store.transition, len(publisher.alerts))
+	}
+}

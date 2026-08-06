@@ -10,7 +10,10 @@ The hook can change the Charlie feature or authority mode and can scale the
 Charlie product-agent StatefulSet. Run it only in a dedicated qualification
 window. Every invocation requires the exact acknowledgement
 `I_UNDERSTAND_CHARLIE_LIVE_EFFECTS`; each implemented scenario captures its
-baseline and attempts a bounded restoration before returning.
+baseline and attempts a bounded restoration before returning. Restoration is
+part of the verdict: a scenario fails unless the original mode, exact
+disclosure digest and acknowledgement, agent replica state, and complete
+runtime/downstream counter baseline are all restored.
 
 ## Build and configure
 
@@ -73,6 +76,14 @@ versioned assertion catalog deliberately return `passed: false`; they are
 reserved qualification contracts, not simulated successes. A release record
 may check only a scenario whose complete assertion set passed and whose
 before/after counters prove the required absence of side effects.
+
+The four inert-state scenarios (`feature_false`, `unactivated`,
+`central_disabled`, and `emergency_disabled`) compare every configured runtime
+and downstream-boundary counter against the captured baseline, both while the
+state is applied and after cleanup. Mode cleanup restores the prior mode first,
+verifies that its disclosure digest is exactly the captured digest, and then
+submits a separate acknowledgement for that digest. A stale acknowledgement or
+digest drift cannot satisfy cleanup.
 
 Stop the hook immediately after qualification and revoke/delete its short-lived
 tokens and test TLS material.

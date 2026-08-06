@@ -185,7 +185,8 @@ describe("Charlie global shell accessibility", () => {
       </QueryClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
-    expect(await screen.findByLabelText("Current Charlie mode: approval")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Current Charlie mode: approval_required")).toBeInTheDocument();
+    expect(screen.getByText(/Hard ceiling: includes read_only; every exact write still requires current human approval/)).toBeInTheDocument();
     await waitFor(() => expect(getCharlieHistory).toHaveBeenCalledWith("private-user"));
     expect(subscribeCharlieSessionEvents).toHaveBeenCalledWith(
       "private-user",
