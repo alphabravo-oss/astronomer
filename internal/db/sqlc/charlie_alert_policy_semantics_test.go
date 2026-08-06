@@ -100,7 +100,11 @@ func TestCharlieAlertReconcileCandidatesRequireFindingScope(t *testing.T) {
 	for _, statement := range []string{`
 CREATE TABLE charlie_connections (
     id uuid PRIMARY KEY, active boolean NOT NULL, emergency_disabled boolean NOT NULL,
-    requested_mode text NOT NULL, verified_mode text NOT NULL
+    requested_mode text NOT NULL, verified_mode text NOT NULL,
+    installation_id uuid NOT NULL, product_id text NOT NULL, product_slug text NOT NULL,
+    deployment_id text NOT NULL, route_id text NOT NULL, central_url text NOT NULL,
+    central_ca_fingerprint text NOT NULL, signing_key_id text NOT NULL,
+    signing_key_fingerprint text NOT NULL, logical_agent_id text NOT NULL
 )`, `CREATE TABLE charlie_alert_policies (
     connection_id uuid PRIMARY KEY, enabled boolean NOT NULL, minimum_severity text NOT NULL,
     escalation_after_seconds integer NOT NULL
@@ -119,12 +123,12 @@ CREATE TABLE charlie_connections (
 			t.Fatal(err)
 		}
 	}
-	connectionID, findingID, channelID := uuid.New(), uuid.New(), uuid.New()
+	connectionID, findingID, channelID, installationID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	for _, seed := range []struct {
 		statement string
 		args      []any
 	}{
-		{`INSERT INTO charlie_connections VALUES ($1, true, false, 'read_only', 'read_only')`, []any{connectionID}},
+		{`INSERT INTO charlie_connections VALUES ($1, true, false, 'read_only', 'read_only', $2, 'product-a', 'astronomer', 'deployment-a', 'route-a', 'https://charlie.example', 'ca-a', 'key-a', 'fingerprint-a', 'logical-a')`, []any{connectionID, installationID}},
 		{`INSERT INTO charlie_alert_policies VALUES ($1, true, 'medium', 3600)`, []any{connectionID}},
 		{`INSERT INTO charlie_findings VALUES ($1, $2, 'high', 'open', 'approval_required', 1, now())`, []any{findingID, connectionID}},
 		{`INSERT INTO charlie_alert_policy_channels VALUES ($1, $2)`, []any{connectionID, channelID}},
@@ -151,5 +155,33 @@ CREATE TABLE charlie_connections (
 	}
 	if len(rows) != 1 || rows[0].FindingID != findingID || rows[0].ResourceType != "management_component" || rows[0].ResourceID != "astronomer-server" {
 		t.Fatalf("scoped finding candidate mismatch: %+v", rows)
+	}
+
+	// Credential replacement keeps the historical finding bound to its source
+	// generation, but the current generation owns notification policy and
+	// delivery. Exact immutable lineage admits the retained finding.
+	replacementID := uuid.New()
+	if _, err = conn.Exec(ctx, `UPDATE charlie_connections SET active=false WHERE id=$1`, connectionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = conn.Exec(ctx, `INSERT INTO charlie_connections VALUES ($1, true, false, 'read_only', 'read_only', $2, 'product-a', 'astronomer', 'deployment-a', 'route-a', 'https://charlie.example', 'ca-a', 'key-a', 'fingerprint-a', 'logical-a')`, replacementID, installationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = conn.Exec(ctx, `INSERT INTO charlie_alert_policies VALUES ($1, true, 'medium', 3600)`, replacementID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = conn.Exec(ctx, `INSERT INTO charlie_alert_policy_channels VALUES ($1, $2)`, replacementID, channelID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = queries.ListCharlieAlertReconcileCandidates(ctx, 10)
+	if err != nil || len(rows) != 1 || rows[0].FindingID != findingID {
+		t.Fatalf("same-lineage replacement lost retained finding: rows=%+v err=%v", rows, err)
+	}
+	if _, err = conn.Exec(ctx, `UPDATE charlie_connections SET product_id='product-b' WHERE id=$1`, replacementID); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = queries.ListCharlieAlertReconcileCandidates(ctx, 10)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("cross-product replacement admitted retained finding: rows=%+v err=%v", rows, err)
 	}
 }

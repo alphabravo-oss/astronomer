@@ -1258,9 +1258,21 @@ WHERE id = $1 AND status = 'delivering';
 -- name: CharlieAlertDeliveryAllowed :one
 SELECT EXISTS (
     SELECT 1 FROM charlie_alert_deliveries d
+    JOIN charlie_findings f ON f.id = d.finding_id
+    JOIN charlie_connections source ON source.id = f.connection_id
     JOIN charlie_connections c ON c.id = d.connection_id
         AND c.active = true AND c.emergency_disabled = false
         AND c.requested_mode <> 'disabled' AND c.verified_mode <> 'disabled'
+        AND source.installation_id = c.installation_id
+        AND source.product_id = c.product_id
+        AND source.product_slug = c.product_slug
+        AND source.deployment_id = c.deployment_id
+        AND source.route_id = c.route_id
+        AND source.central_url = c.central_url
+        AND source.central_ca_fingerprint = c.central_ca_fingerprint
+        AND source.signing_key_id = c.signing_key_id
+        AND source.signing_key_fingerprint = c.signing_key_fingerprint
+        AND source.logical_agent_id = c.logical_agent_id
     JOIN charlie_alert_policies p ON p.connection_id = d.connection_id AND p.enabled = true
     JOIN charlie_alert_policy_channels pc ON pc.connection_id = p.connection_id
         AND pc.notification_channel_id = d.notification_channel_id
@@ -1274,8 +1286,19 @@ SELECT EXISTS (
 SELECT f.id AS finding_id, f.severity, f.status, f.execution_block_code,
        f.repeat_count, scope.resource_type, scope.resource_id
 FROM charlie_findings f
-JOIN charlie_connections c ON c.id = f.connection_id AND c.active = true AND c.emergency_disabled = false
+JOIN charlie_connections source ON source.id = f.connection_id
+JOIN charlie_connections c ON c.active = true AND c.emergency_disabled = false
     AND c.requested_mode <> 'disabled' AND c.verified_mode <> 'disabled'
+    AND source.installation_id = c.installation_id
+    AND source.product_id = c.product_id
+    AND source.product_slug = c.product_slug
+    AND source.deployment_id = c.deployment_id
+    AND source.route_id = c.route_id
+    AND source.central_url = c.central_url
+    AND source.central_ca_fingerprint = c.central_ca_fingerprint
+    AND source.signing_key_id = c.signing_key_id
+    AND source.signing_key_fingerprint = c.signing_key_fingerprint
+    AND source.logical_agent_id = c.logical_agent_id
 JOIN charlie_alert_policies p ON p.connection_id = c.id AND p.enabled = true
 JOIN LATERAL (
     SELECT resource_type, resource_id FROM charlie_finding_resources

@@ -131,7 +131,14 @@ func HandleCharlieAlertDispatch(ctx context.Context, task *asynq.Task) error {
 		}
 		return markCharlieAlertFailure(operationCtx, queries, delivery, "finding_unavailable")
 	}
-	if finding.ConnectionID != delivery.ConnectionID || (finding.Status != "open" && finding.Status != "acknowledged") || (delivery.DeliveryKind == "escalation" && finding.Status != "open") {
+	// A retained finding keeps its immutable source connection for provenance.
+	// Signed credential replacement may therefore make the delivery's active
+	// policy connection differ from the finding's source generation. The
+	// CharlieAlertDeliveryAllowed query below admits that case only when every
+	// installation, product, deployment, route, trust, and logical-agent lineage
+	// field still matches; a raw UUID equality check would incorrectly silence
+	// actionable findings after a safe agent upgrade.
+	if (finding.Status != "open" && finding.Status != "acknowledged") || (delivery.DeliveryKind == "escalation" && finding.Status != "open") {
 		return suppressCharlieAlert(operationCtx, queries, id, "finding_inactive")
 	}
 	if !delivery.NotificationChannelID.Valid {
