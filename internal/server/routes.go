@@ -1026,7 +1026,18 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		authenticated := r
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
+			if deps.RemoteQueries != nil {
+				// Authentication failures return before authenticated middleware
+				// can observe the request. Record only Charlie's unauthenticated
+				// mutation denials here, using its content-free audit contract.
+				authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(slog.Default(), deps.RemoteQueries))
+			}
 			authenticated.Use(appmiddleware.RequireAuthWithQueries(deps.JWT, deps.AuthQueries))
+			if deps.RemoteQueries != nil {
+				// Keep the normal mutation auditor immediately after auth so it
+				// receives actor context and still observes write-scope/RBAC denials.
+				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
+			}
 			// Default-deny scope backstop: a read-only API token can never
 			// reach a mutating handler, regardless of whether the specific
 			// subtree opted into a write scope. Wired right after auth so
@@ -1037,9 +1048,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// GET/HEAD/OPTIONS, JWT sessions, and legacy empty-scope tokens
 			// pass through untouched (see RequireWriteScopeForMutations).
 			authenticated.Use(appmiddleware.RequireWriteScopeForMutations(""))
-			if deps.RemoteQueries != nil {
-				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
-			}
 			// Migration 063 — read-side audit. Wire AFTER auth so we
 			// know the actor, and BEFORE per-route handlers so the
 			// middleware sees every authenticated read. Nil-safe: when

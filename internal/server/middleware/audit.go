@@ -128,6 +128,34 @@ func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
 	return AuditLogWithWriter(log, nil)
 }
 
+// CharlieAuthenticationDenialAuditWithWriter sits immediately outside the
+// authentication middleware. It records only unauthenticated Charlie mutation
+// attempts; authenticated requests continue through AuditLogWithWriter where
+// actor context is available. This avoids both the pre-auth blind spot and
+// duplicate success/authorization records.
+func CharlieAuthenticationDenialAuditWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r == nil || !mutatingMethods[r.Method] || !isCharlieAPIPath(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			started := time.Now()
+			sw := &statusWriter{ResponseWriter: w}
+			next.ServeHTTP(sw, r)
+			if sw.status != http.StatusUnauthorized {
+				return
+			}
+			duration := time.Since(started).Milliseconds()
+			log.Info("Charlie HTTP authentication denial audit",
+				"event", "charlie.http.mutation", "outcome_code", "denied",
+				"method", r.Method, "status_code", sw.status, "duration_ms", duration,
+				"request_id", GetRequestID(r.Context()), "correlation_id", GetCorrelationID(r.Context()))
+			writeCharlieAuditLog(r, sw.status, writer, duration, "denied")
+		})
+	}
+}
+
 // AuditLogWithWriter extends AuditLog with best-effort persistence to the
 // partitioned audit_log v1 table. When writer is nil, only structured logs are emitted.
 func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Handler {

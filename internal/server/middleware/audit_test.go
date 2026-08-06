@@ -284,6 +284,47 @@ func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T)
 	}
 }
 
+func TestCharlieAuthenticationDenialAuditRecordsOnlyContentFree401(t *testing.T) {
+	const sentinel = "pre-auth-sensitive-SENTINEL"
+	var buf bytes.Buffer
+	writer := &fakeAuditWriter{}
+	handler := CharlieAuthenticationDenialAuditWithWriter(newTestLogger(&buf), writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"` + sentinel + `"}`))
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/charlie/mode/?prompt="+sentinel, strings.NewReader(`{"prompt":"`+sentinel+`"}`))
+	request.Header.Set("User-Agent", sentinel)
+	request.RemoteAddr = "192.0.2.44:1234"
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+	if writer.lastV1 == nil {
+		t.Fatal("Charlie pre-authentication denial was not audited")
+	}
+	encoded, err := json.Marshal(writer.lastV1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), sentinel) || writer.lastV1.Path != "" || writer.lastV1.IpAddress != nil || writer.lastV1.UserAgent != "" {
+		t.Fatalf("Charlie pre-authentication audit leaked request content or metadata: %s", encoded)
+	}
+	if writer.lastV1.Action != "charlie.http.mutation" || writer.lastV1.StatusCode != http.StatusUnauthorized || !strings.Contains(string(writer.lastV1.Detail), `"outcome_code":"denied"`) {
+		t.Fatalf("unexpected Charlie pre-authentication audit: %+v", writer.lastV1)
+	}
+	if strings.Contains(buf.String(), sentinel) {
+		t.Fatalf("Charlie pre-authentication structured log leaked canary: %s", buf.String())
+	}
+}
+
+func TestCharlieAuthenticationDenialAuditDoesNotDuplicatePostAuthDenial(t *testing.T) {
+	writer := &fakeAuditWriter{}
+	handler := CharlieAuthenticationDenialAuditWithWriter(newTestLogger(&bytes.Buffer{}), writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/admin/charlie/mode/", nil))
+	if writer.lastV1 != nil {
+		t.Fatal("outer authentication auditor duplicated a post-authentication denial")
+	}
+}
+
 func TestAuditLogWithWriter_V1OnlyWriter(t *testing.T) {
 	var buf bytes.Buffer
 	writer := &fakeAuditWriterV1Only{}
