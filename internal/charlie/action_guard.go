@@ -291,7 +291,14 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 		g.recordReceiptOutcome(ctx, envelope, "fenced", result)
 		return result
 	}
-	if err := g.authority.Commit(operationCtx, envelope, descriptor, arguments, facts); err != nil {
+	descriptorSafe, commitErr := g.commitAuthority(operationCtx, envelope, descriptor, arguments, facts)
+	if !descriptorSafe {
+		result := denied(DeniedDestructive, "Charlie rejected an unsafe capability descriptor before authority commit")
+		g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
+		g.recordReceiptOutcome(ctx, envelope, "blocked", result)
+		return result
+	}
+	if commitErr != nil {
 		if operationCtx.Err() != nil {
 			result := denied(DeniedEmergencyDisabled, "Charlie write execution was disabled during authorization commit")
 			g.recordAuditOutcome(ctx, "fenced", envelope, descriptor, result)
@@ -299,7 +306,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 			return result
 		}
 		var deferred *ActionDeferredError
-		if errors.As(err, &deferred) {
+		if errors.As(commitErr, &deferred) {
 			result := ActionResult{Allowed: true, State: "deferred", Result: deferred.Result()}
 			if auditErr := g.auditor.Record(ctx, "deferred", envelope, descriptor, result); auditErr != nil {
 				result = denied(DeniedAuthorization, "The required deferral audit record could not be persisted")
@@ -333,6 +340,13 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 		return result
 	}
 	return g.executeAndVerify(operationCtx, envelope, descriptor, arguments, true)
+}
+
+func (g *ActionGuard) commitAuthority(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, arguments map[string]json.RawMessage, facts AuthorityInput) (bool, error) {
+	if validateV1CapabilityDescriptor(descriptor) != nil {
+		return false, nil
+	}
+	return true, g.authority.Commit(ctx, envelope, descriptor, arguments, facts)
 }
 
 // recordPolicyDenial writes the required action audit and then creates a
@@ -400,6 +414,14 @@ func blockedActionFindingInput(installationID, resourceType, resourceID, capabil
 }
 
 func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvelope, descriptor CapabilityDescriptor, arguments map[string]json.RawMessage, durable bool) ActionResult {
+	if validateV1CapabilityDescriptor(descriptor) != nil {
+		result := denied(DeniedDestructive, "Charlie rejected an unsafe capability descriptor before dispatch")
+		g.recordAuditOutcome(ctx, "denied", envelope, descriptor, result)
+		if durable {
+			g.recordReceiptOutcome(ctx, envelope, "blocked", result)
+		}
+		return result
+	}
 	if durable && ctx.Err() != nil {
 		return g.recordFenced(ctx, envelope, descriptor, "Charlie write execution was disabled before dispatch")
 	}
@@ -529,8 +551,11 @@ func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, m
 		return CapabilityDescriptor{}, nil, DeniedAuthorization
 	}
 	descriptor, ok := capabilityByName(envelope.Capability)
-	if !ok || descriptor.ManagedTargetAccess {
+	if !ok {
 		return CapabilityDescriptor{}, nil, DeniedScope
+	}
+	if validateV1CapabilityDescriptor(descriptor) != nil {
+		return CapabilityDescriptor{}, nil, DeniedDestructive
 	}
 	if availability, ok := g.executor.(CapabilityAvailability); ok && !availability.SupportsCapability(envelope.Capability) {
 		return CapabilityDescriptor{}, nil, DeniedScope

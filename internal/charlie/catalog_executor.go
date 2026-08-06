@@ -6,36 +6,60 @@ import (
 	"fmt"
 )
 
-type CatalogExecutor struct{ adapters map[string]CapabilityExecutor }
+type CatalogExecutor struct {
+	adapters    map[string]CapabilityExecutor
+	descriptors map[string]CapabilityDescriptor
+}
 
 func NewCatalogExecutor(adapters map[string]CapabilityExecutor) (*CatalogExecutor, error) {
+	return newCatalogExecutor(adapters, append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...))
+}
+
+func newCatalogExecutor(adapters map[string]CapabilityExecutor, catalog []CapabilityDescriptor) (*CatalogExecutor, error) {
 	if len(adapters) == 0 {
 		return nil, fmt.Errorf("Charlie capability adapters are unavailable")
 	}
+	descriptors := make(map[string]CapabilityDescriptor, len(catalog))
+	for _, descriptor := range catalog {
+		if validateV1CapabilityDescriptor(descriptor) != nil {
+			return nil, fmt.Errorf("Charlie capability catalog contains an unsafe descriptor")
+		}
+		if _, duplicate := descriptors[descriptor.Name]; duplicate {
+			return nil, fmt.Errorf("Charlie capability catalog contains a duplicate descriptor")
+		}
+		descriptor.AcceptedFields = append([]string(nil), descriptor.AcceptedFields...)
+		descriptors[descriptor.Name] = descriptor
+	}
 	copyAdapters := make(map[string]CapabilityExecutor, len(adapters))
 	for name, adapter := range adapters {
-		if _, ok := capabilityByName(name); !ok || adapter == nil {
+		if _, ok := descriptors[name]; !ok || adapter == nil {
 			return nil, fmt.Errorf("Charlie capability adapter registration is invalid")
 		}
 		copyAdapters[name] = adapter
 	}
-	return &CatalogExecutor{adapters: copyAdapters}, nil
+	return &CatalogExecutor{adapters: copyAdapters, descriptors: descriptors}, nil
 }
 
 func (e *CatalogExecutor) Execute(ctx context.Context, capability CapabilityDescriptor, arguments map[string]json.RawMessage) (json.RawMessage, error) {
 	adapter := e.adapters[capability.Name]
-	if adapter == nil {
+	registered, ok := e.descriptors[capability.Name]
+	if adapter == nil || !ok || validateV1CapabilityDescriptor(registered) != nil || !sameCapabilityDescriptor(capability, registered) {
 		return nil, fmt.Errorf("Charlie capability adapter is unavailable")
 	}
-	return adapter.Execute(ctx, capability, arguments)
+	dispatch := registered
+	dispatch.AcceptedFields = append([]string(nil), registered.AcceptedFields...)
+	return adapter.Execute(ctx, dispatch, arguments)
 }
 
 func (e *CatalogExecutor) Verify(ctx context.Context, capability CapabilityDescriptor, arguments map[string]json.RawMessage, result json.RawMessage) (bool, error) {
 	adapter := e.adapters[capability.Name]
-	if adapter == nil {
+	registered, ok := e.descriptors[capability.Name]
+	if adapter == nil || !ok || validateV1CapabilityDescriptor(registered) != nil || !sameCapabilityDescriptor(capability, registered) {
 		return false, fmt.Errorf("Charlie capability adapter is unavailable")
 	}
-	return adapter.Verify(ctx, capability, arguments, result)
+	dispatch := registered
+	dispatch.AcceptedFields = append([]string(nil), registered.AcceptedFields...)
+	return adapter.Verify(ctx, dispatch, arguments, result)
 }
 
 // SupportsCapability keeps discovery and dispatch on the same explicit

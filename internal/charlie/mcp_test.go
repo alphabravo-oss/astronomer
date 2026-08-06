@@ -147,6 +147,47 @@ func TestMCPArgumentsCannotDifferFromSignedEnvelope(t *testing.T) {
 	}
 }
 
+func TestMCPRejectsCallerSuppliedDescriptorSafetyFields(t *testing.T) {
+	facts := allowedWriteFacts(ModeAuto)
+	handler, executor, privateKey := testMCPHandler(t, facts)
+	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+	encodedAction, err := json.Marshal(action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actionFields map[string]any
+	if err := json.Unmarshal(encodedAction, &actionFields); err != nil {
+		t.Fatal(err)
+	}
+	for field, value := range map[string]any{
+		"effect": "read", "risk": "low", "rollback": "fully_reversible", "requires_verification": true,
+		"idempotent": true, "auto_eligible": true, "approval": "approved", "destructive": false,
+	} {
+		t.Run(field, func(t *testing.T) {
+			crafted := make(map[string]any, len(actionFields)+1)
+			for key, item := range actionFields {
+				crafted[key] = item
+			}
+			crafted[field] = value
+			body, _ := json.Marshal(map[string]any{
+				"jsonrpc": "2.0", "id": "call-a", "method": "tools/call",
+				"params": map[string]any{
+					"name":      "astronomer.queue.retry_task",
+					"arguments": map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"},
+					"_meta":     map[string]any{"charlie/action": crafted},
+				},
+			})
+			request := authenticatedMCPRequest(t, string(body))
+			request.Header.Set("Idempotency-Key", "action-a")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusBadRequest || executor.calls != 0 {
+				t.Fatalf("caller-supplied %s reached action guard: status=%d calls=%d body=%s", field, response.Code, executor.calls, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestMCPRequiresHTTPIdempotencyKeyBoundToSignedAction(t *testing.T) {
 	facts := allowedWriteFacts(ModeAuto)
 	handler, executor, privateKey := testMCPHandler(t, facts)

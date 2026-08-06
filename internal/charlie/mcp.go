@@ -245,10 +245,17 @@ func mcpTools() []map[string]any {
 }
 
 func mcpToolsFor(executor CapabilityExecutor) []map[string]any {
-	catalog := append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...)
+	return mcpToolsFromCatalog(append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...), executor)
+}
+
+func mcpToolsFromCatalog(catalog []CapabilityDescriptor, executor CapabilityExecutor) []map[string]any {
+	catalog = append([]CapabilityDescriptor(nil), catalog...)
 	sort.Slice(catalog, func(i, j int) bool { return catalog[i].Name < catalog[j].Name })
 	tools := make([]map[string]any, 0, len(catalog))
 	for _, capability := range catalog {
+		if validateV1CapabilityDescriptor(capability) != nil {
+			continue
+		}
 		if availability, ok := executor.(CapabilityAvailability); ok && !availability.SupportsCapability(capability.Name) {
 			continue
 		}
