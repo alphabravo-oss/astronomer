@@ -21,6 +21,7 @@ const MaxCharlieFindingItems = 100
 type findingAccessQueries interface {
 	delegationQuerier
 	GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
+	GetCharlieConnection(context.Context, uuid.UUID) (sqlc.CharlieConnection, error)
 	GetCharlieFinding(context.Context, uuid.UUID) (sqlc.CharlieFinding, error)
 	GetCharlieFindingDecision(context.Context, uuid.UUID) (sqlc.CharlieFindingDecision, error)
 	GetCharlieSession(context.Context, uuid.UUID) (sqlc.CharlieSession, error)
@@ -103,7 +104,7 @@ func (s *FindingAccessService) List(ctx context.Context, actorID uuid.UUID, stat
 			continue // fail closed per finding without failing the entire list
 		}
 		allowed, authErr := s.authorizer.CanReadIncidentResources(ctx, actorID, findingResourcesAsSession(resources))
-		sessionAllowed := s.findingSessionAuthorized(ctx, actorID, connection.ID, row)
+		sessionAllowed := s.findingSessionAuthorized(ctx, actorID, connection, row)
 		if authErr == nil && allowed && sessionAllowed {
 			result = append(result, FindingView{Finding: row, Resources: resources})
 		}
@@ -143,7 +144,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	}
 	prior, priorErr := s.queries.GetCharlieFindingDecision(ctx, requestID)
 	if priorErr == nil {
-		if prior.FindingID != row.ID || prior.ActorRef != findingActorRef(connection.ID, actorID) || prior.Decision != decision {
+		if prior.FindingID != row.ID || prior.ActorRef != findingActorRef(row.ConnectionID, actorID) || prior.Decision != decision {
 			s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "idempotency_conflict", len(resources))
 			return FindingView{}, fmt.Errorf("Charlie finding transition request was already used")
 		}
@@ -153,7 +154,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 			if authErr != nil {
 				return FindingView{}, authErr
 			}
-			remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(connection.ID, actorID))
+			remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(row.ConnectionID, actorID))
 			if err != nil {
 				s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_replay_failed", len(resources))
 				return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
@@ -175,7 +176,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 		if authErr != nil {
 			return FindingView{}, authErr
 		}
-		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(connection.ID, actorID))
+		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(row.ConnectionID, actorID))
 		if err != nil {
 			s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_rejected", len(resources))
 			return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
@@ -185,7 +186,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 		NextStatus: nextStatus, NextWorkflowState: nextWorkflow,
 		ActorID: pgtype.UUID{Bytes: actorID, Valid: true}, ID: row.ID,
 		ExpectedStatus: row.Status, ExpectedWorkflowState: row.WorkflowState,
-		RequestID: requestID, Decision: decision, ActorRef: findingActorRef(connection.ID, actorID),
+		RequestID: requestID, Decision: decision, ActorRef: findingActorRef(row.ConnectionID, actorID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FindingView{}, fmt.Errorf("Charlie finding changed; refresh and try again")
@@ -205,10 +206,12 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	return FindingView{Finding: updated, Resources: resources, Remote: remote}, nil
 }
 
-// findingActorRef gives Charlie stable per-deployment audit attribution without
-// disclosing Astronomer's user UUID across the product boundary.
-func findingActorRef(connectionID, actorID uuid.UUID) string {
-	digest := sha256.Sum256([]byte(connectionID.String() + "\x00" + actorID.String()))
+// findingActorRef gives Charlie stable finding-lineage audit attribution
+// without disclosing Astronomer's user UUID across the product boundary. A
+// finding retains its source connection generation, so credential replacement
+// cannot change the actor reference used by an in-flight idempotent decision.
+func findingActorRef(sourceConnectionID, actorID uuid.UUID) string {
+	digest := sha256.Sum256([]byte(sourceConnectionID.String() + "\x00" + actorID.String()))
 	return fmt.Sprintf("productuser_%x", digest[:16])
 }
 
@@ -251,7 +254,7 @@ func (s *FindingAccessService) authorizeFinding(ctx context.Context, actorID, fi
 		return sqlc.CharlieConnection{}, sqlc.CharlieFinding{}, nil, fmt.Errorf("Charlie finding access is denied")
 	}
 	row, err := s.queries.GetCharlieFinding(ctx, findingID)
-	if err != nil || row.ConnectionID != connection.ID {
+	if err != nil || !s.connectionLineageAuthorized(ctx, connection, row.ConnectionID) {
 		return sqlc.CharlieConnection{}, sqlc.CharlieFinding{}, nil, fmt.Errorf("Charlie finding access is denied")
 	}
 	resources, err := s.queries.ListCharlieFindingResources(ctx, row.ID)
@@ -263,21 +266,21 @@ func (s *FindingAccessService) authorizeFinding(ctx context.Context, actorID, fi
 		s.audit(ctx, "charlie.finding.authorization", row.ID, actorID, "resource_denied", len(resources))
 		return sqlc.CharlieConnection{}, sqlc.CharlieFinding{}, nil, fmt.Errorf("Charlie finding access is denied")
 	}
-	if !s.findingSessionAuthorized(ctx, actorID, connection.ID, row) {
+	if !s.findingSessionAuthorized(ctx, actorID, connection, row) {
 		s.audit(ctx, "charlie.finding.authorization", row.ID, actorID, "session_denied", len(resources))
 		return sqlc.CharlieConnection{}, sqlc.CharlieFinding{}, nil, fmt.Errorf("Charlie finding access is denied")
 	}
 	return connection, row, resources, nil
 }
 
-func (s *FindingAccessService) findingSessionAuthorized(ctx context.Context, actorID, connectionID uuid.UUID, row sqlc.CharlieFinding) bool {
+func (s *FindingAccessService) findingSessionAuthorized(ctx context.Context, actorID uuid.UUID, connection sqlc.CharlieConnection, row sqlc.CharlieFinding) bool {
 	if !row.SessionID.Valid {
 		// Product-local system findings may intentionally have no session.
 		// A central finding without its required local linkage fails closed.
 		return strings.HasPrefix(row.CharlieFindingID, "local-")
 	}
 	session, err := s.queries.GetCharlieSession(ctx, row.SessionID.Bytes)
-	if err != nil || session.ConnectionID != connectionID || session.State == "aborted" || session.State == "failed" {
+	if err != nil || session.ConnectionID != row.ConnectionID || !s.connectionLineageAuthorized(ctx, connection, session.ConnectionID) || session.State == "aborted" || session.State == "failed" {
 		return false
 	}
 	switch session.Visibility {
@@ -295,7 +298,8 @@ func (s *FindingAccessService) issueFindingDelegation(ctx context.Context, row s
 		return "", fmt.Errorf("Charlie finding detail is unavailable")
 	}
 	session, err := s.queries.GetCharlieSession(ctx, row.SessionID.Bytes)
-	if err != nil || session.ConnectionID != connectionID || session.State == "aborted" || session.State == "failed" {
+	active, activeErr := s.queries.GetCharlieConnection(ctx, connectionID)
+	if err != nil || activeErr != nil || session.ConnectionID != row.ConnectionID || !s.connectionLineageAuthorized(ctx, active, session.ConnectionID) || session.State == "aborted" || session.State == "failed" {
 		return "", fmt.Errorf("Charlie finding detail is unavailable")
 	}
 	delegation, err := IssueDelegation(ctx, s.queries, session.ID, actorID, "user", maxDelegationTTL, s.now().UTC())
@@ -303,6 +307,26 @@ func (s *FindingAccessService) issueFindingDelegation(ctx context.Context, row s
 		return "", fmt.Errorf("Charlie finding authorization is unavailable")
 	}
 	return delegation.Reference, nil
+}
+
+// connectionLineageAuthorized permits retained findings and sessions only
+// across signed credential generations of the same product installation. The
+// source row remains immutable for provenance; no historical object is rebound
+// to the replacement credential row.
+func (s *FindingAccessService) connectionLineageAuthorized(ctx context.Context, active sqlc.CharlieConnection, sourceID uuid.UUID) bool {
+	if sourceID == active.ID {
+		return true
+	}
+	source, err := s.queries.GetCharlieConnection(ctx, sourceID)
+	if err != nil {
+		return false
+	}
+	return source.InstallationID == active.InstallationID &&
+		source.ProductID == active.ProductID && source.ProductSlug == active.ProductSlug &&
+		source.DeploymentID == active.DeploymentID && source.RouteID == active.RouteID &&
+		source.CentralUrl == active.CentralUrl && source.CentralCaFingerprint == active.CentralCaFingerprint &&
+		source.SigningKeyID == active.SigningKeyID && source.SigningKeyFingerprint == active.SigningKeyFingerprint &&
+		source.LogicalAgentID == active.LogicalAgentID
 }
 
 func findingResourcesAsSession(resources []sqlc.CharlieFindingResource) []sqlc.CharlieSessionResource {

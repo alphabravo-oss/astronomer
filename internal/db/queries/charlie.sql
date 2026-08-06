@@ -1076,10 +1076,21 @@ WHERE connection_id = sqlc.arg(connection_id)
   AND status IN ('open', 'acknowledged');
 
 -- name: ListCharlieFindings :many
-SELECT * FROM charlie_findings
-WHERE connection_id = sqlc.arg(connection_id)
-  AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))
-ORDER BY updated_at DESC, id
+SELECT f.* FROM charlie_findings f
+JOIN charlie_connections source ON source.id = f.connection_id
+JOIN charlie_connections active ON active.id = sqlc.arg(connection_id)
+WHERE source.installation_id = active.installation_id
+  AND source.product_id = active.product_id
+  AND source.product_slug = active.product_slug
+  AND source.deployment_id = active.deployment_id
+  AND source.route_id = active.route_id
+  AND source.central_url = active.central_url
+  AND source.central_ca_fingerprint = active.central_ca_fingerprint
+  AND source.signing_key_id = active.signing_key_id
+  AND source.signing_key_fingerprint = active.signing_key_fingerprint
+  AND source.logical_agent_id = active.logical_agent_id
+  AND (sqlc.narg(status)::text IS NULL OR f.status = sqlc.narg(status))
+ORDER BY f.updated_at DESC, f.id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: ExpireCharlieFindings :execrows

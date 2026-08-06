@@ -3368,10 +3368,21 @@ func (q *Queries) ListCharlieFindingSyncCandidateSessions(ctx context.Context, c
 }
 
 const listCharlieFindings = `-- name: ListCharlieFindings :many
-SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state FROM charlie_findings
-WHERE connection_id = $1
-  AND ($2::text IS NULL OR status = $2)
-ORDER BY updated_at DESC, id
+SELECT f.id, f.connection_id, f.charlie_finding_id, f.approval_id, f.session_id, f.source, f.severity, f.status, f.effective_mode, f.execution_block_code, f.dedupe_fingerprint, f.title, f.summary, f.recommended_action_label, f.risk_impact, f.verification_summary, f.repeat_count, f.expires_at, f.acknowledged_by_id, f.acknowledged_at, f.dismissed_by_id, f.dismissed_at, f.resolved_by_id, f.resolved_at, f.alert_event_id, f.created_at, f.updated_at, f.workflow_state FROM charlie_findings f
+JOIN charlie_connections source ON source.id = f.connection_id
+JOIN charlie_connections active ON active.id = $1
+WHERE source.installation_id = active.installation_id
+  AND source.product_id = active.product_id
+  AND source.product_slug = active.product_slug
+  AND source.deployment_id = active.deployment_id
+  AND source.route_id = active.route_id
+  AND source.central_url = active.central_url
+  AND source.central_ca_fingerprint = active.central_ca_fingerprint
+  AND source.signing_key_id = active.signing_key_id
+  AND source.signing_key_fingerprint = active.signing_key_fingerprint
+  AND source.logical_agent_id = active.logical_agent_id
+  AND ($2::text IS NULL OR f.status = $2)
+ORDER BY f.updated_at DESC, f.id
 LIMIT $4 OFFSET $3
 `
 

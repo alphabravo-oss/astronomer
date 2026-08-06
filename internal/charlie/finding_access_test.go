@@ -16,6 +16,7 @@ import (
 
 type findingAccessFake struct {
 	connection  sqlc.CharlieConnection
+	connections map[uuid.UUID]sqlc.CharlieConnection
 	rows        []sqlc.CharlieFinding
 	resources   map[uuid.UUID][]sqlc.CharlieFindingResource
 	session     sqlc.CharlieSession
@@ -27,6 +28,16 @@ type findingAccessFake struct {
 
 func (f *findingAccessFake) GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
 	return f.connection, nil
+}
+func (f *findingAccessFake) GetCharlieConnection(_ context.Context, id uuid.UUID) (sqlc.CharlieConnection, error) {
+	if id == f.connection.ID {
+		return f.connection, nil
+	}
+	connection, ok := f.connections[id]
+	if !ok {
+		return sqlc.CharlieConnection{}, pgx.ErrNoRows
+	}
+	return connection, nil
 }
 func (f *findingAccessFake) GetCharlieFinding(_ context.Context, id uuid.UUID) (sqlc.CharlieFinding, error) {
 	for _, row := range f.rows {
@@ -129,10 +140,11 @@ func findingAccessFixture() (*findingAccessFake, *findingAccessAuthorizerFake, *
 	connection := readySessionConnection()
 	actorID, sessionID, findingID := uuid.New(), uuid.New(), uuid.New()
 	store := &findingAccessFake{
-		connection: connection,
-		rows:       []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", WorkflowState: "manual_remediation_required", ExecutionBlockCode: "read_only", RepeatCount: 2}},
-		resources:  map[uuid.UUID][]sqlc.CharlieFindingResource{findingID: {{FindingID: findingID, ResourceType: "tunnel", ResourceID: "replica-a", RequiredVerb: "read"}}},
-		decisions:  make(map[uuid.UUID]sqlc.CharlieFindingDecision),
+		connection:  connection,
+		connections: map[uuid.UUID]sqlc.CharlieConnection{connection.ID: connection},
+		rows:        []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", WorkflowState: "manual_remediation_required", ExecutionBlockCode: "read_only", RepeatCount: 2}},
+		resources:   map[uuid.UUID][]sqlc.CharlieFindingResource{findingID: {{FindingID: findingID, ResourceType: "tunnel", ResourceID: "replica-a", RequiredVerb: "read"}}},
+		decisions:   make(map[uuid.UUID]sqlc.CharlieFindingDecision),
 		session: sqlc.CharlieSession{
 			ID: sessionID, ConnectionID: connection.ID, CharlieSessionID: "central-session",
 			OwnerUserID: pgtype.UUID{Bytes: actorID, Valid: true}, Source: "user", Visibility: "private", State: "active",
@@ -164,6 +176,47 @@ func TestFindingAccessFetchesCentralDetailOnlyAfterLiveAuthorization(t *testing.
 	authorizer.resourcePass["replica-a"] = false
 	if _, err := service.Get(context.Background(), actorID, store.rows[0].ID); err == nil || bridge.getCalls != 1 {
 		t.Fatal("revoked resource authorization still reached Charlie")
+	}
+}
+
+func TestFindingAccessSurvivesSignedConnectionReplacementWithoutRebindingProvenance(t *testing.T) {
+	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+	source := store.connection
+	replacement := source
+	replacement.ID = uuid.New()
+	store.connection = replacement
+	store.connections[replacement.ID] = replacement
+	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+
+	if _, err := service.Get(context.Background(), actorID, store.rows[0].ID); err != nil {
+		t.Fatalf("same-lineage replacement hid retained finding: %v", err)
+	}
+	requestID := uuid.New()
+	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, requestID, "acknowledge"); err != nil {
+		t.Fatalf("same-lineage replacement blocked retained finding decision: %v", err)
+	}
+	if store.transition.ActorRef != findingActorRef(source.ID, actorID) || store.transition.ActorRef == findingActorRef(replacement.ID, actorID) {
+		t.Fatalf("replacement changed retained finding actor reference: %q", store.transition.ActorRef)
+	}
+	if store.rows[0].ConnectionID != source.ID || store.session.ConnectionID != source.ID {
+		t.Fatal("replacement rebound immutable finding/session provenance")
+	}
+}
+
+func TestFindingAccessRejectsConnectionFromDifferentDeploymentLineage(t *testing.T) {
+	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+	replacement := store.connection
+	replacement.ID = uuid.New()
+	replacement.DeploymentID = "scope_other"
+	store.connection = replacement
+	store.connections[replacement.ID] = replacement
+	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+
+	if _, err := service.Get(context.Background(), actorID, store.rows[0].ID); err == nil {
+		t.Fatal("different deployment lineage accessed retained finding")
+	}
+	if bridge.getCalls != 0 || store.delegations != 0 {
+		t.Fatal("cross-deployment denial reached delegation or Charlie bridge")
 	}
 }
 
