@@ -283,7 +283,7 @@ func TestAnswerQualificationScenariosUseRealSessionHistoryAndExactCounters(t *te
 			}
 			state.mu.Lock()
 			defer state.mu.Unlock()
-			if state.requested != "read_only" || state.authority != "read_only" || !state.acknowledged || state.runtime["model_calls"] != 2 || state.runtime["rag_queries"] != 1 || state.runtime["sessions"] != 1 || state.runtime["tool_calls"] != 0 {
+			if state.requested != "read_only" || state.authority != "read_only" || !state.acknowledged || state.runtime["model_calls"] != 2 || state.runtime["rag_queries"] != 1 || state.runtime["sessions"] != 1 || state.runtime["work_claims"] != 1 || state.runtime["tool_calls"] != 0 {
 				t.Fatalf("answer proof did not retain exact read-only counters: mode=%s/%s counters=%#v", state.requested, state.authority, state.runtime)
 			}
 		})
@@ -701,6 +701,7 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 		turnID = "turn-rag-answer"
 		s.runtime["model_calls"] += 2
 		s.runtime["rag_queries"]++
+		s.runtime["work_claims"]++
 		s.history[localSessionID] = []historyItem{
 			{ItemID: "history-rag-user", Kind: "user_message", Content: stimulus.Message},
 			{ItemID: "history-rag-assistant", Kind: "assistant_message", Content: "Answer " + s.ragAnswer.CorrectedRevisionMarker + " for " + s.ragAnswer.ProductVersionMarker, Citations: []historyCitation{{ID: s.ragAnswer.CitationID, Title: s.ragAnswer.CitationTitle, Source: s.ragAnswer.CitationSource}}},
@@ -709,6 +710,7 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 		turnID = "turn-general-answer"
 		s.runtime["model_calls"] += 2
 		s.runtime["rag_queries"]++
+		s.runtime["work_claims"]++
 		s.history[localSessionID] = []historyItem{
 			{ItemID: "history-general-user", Kind: "user_message", Content: stimulus.Message},
 			{ItemID: "history-general-assistant", Kind: "assistant_message", Content: "Answer " + s.generalAnswer.ExpectedAnswerMarker},

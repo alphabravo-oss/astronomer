@@ -975,6 +975,10 @@ func exactAnswerCounterDelta(before, after CounterSet, modelCalls, ragQueries ui
 			expected = ragQueries
 		case "sessions":
 			expected = 1
+		case "work_claims":
+			// One accepted explicit message creates exactly one agent turn and
+			// therefore exactly one durable work claim.
+			expected = 1
 		}
 		if after.Runtime[key] < before.Runtime[key] || after.Runtime[key]-before.Runtime[key] != expected {
 			return false
@@ -995,6 +999,8 @@ func countersExceededAnswerDelta(before, after CounterSet, modelCalls, ragQuerie
 		case "rag_queries":
 			maximum = ragQueries
 		case "sessions":
+			maximum = 1
+		case "work_claims":
 			maximum = 1
 		}
 		if after.Runtime[key] < before.Runtime[key] || after.Runtime[key]-before.Runtime[key] > maximum {
