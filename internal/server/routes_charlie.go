@@ -72,6 +72,8 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 		r.With(gate, limited, sessionLimits, read).Get("/charlie/findings/", deps.CharlieFindings.List)
 		r.With(gate, limited, sessionLimits, read).Get("/charlie/findings/{finding_id}/", deps.CharlieFindings.Get)
 		r.With(gate, limited, sessionLimits, update).Post("/charlie/findings/{finding_id}/acknowledge/", deps.CharlieFindings.Acknowledge)
+		r.With(gate, limited, sessionLimits, update).Post("/charlie/findings/{finding_id}/start-remediation/", deps.CharlieFindings.StartRemediation)
+		r.With(gate, limited, sessionLimits, update).Post("/charlie/findings/{finding_id}/request-verification/", deps.CharlieFindings.RequestVerification)
 		r.With(gate, limited, sessionLimits, update).Post("/charlie/findings/{finding_id}/dismiss/", deps.CharlieFindings.Dismiss)
 		r.With(gate, limited, sessionLimits, update).Post("/charlie/findings/{finding_id}/resolve/", deps.CharlieFindings.Resolve)
 	}

@@ -114,7 +114,7 @@ func (s *CentralFindingSyncService) SyncForActor(ctx context.Context, actorID uu
 			if durable.Notify && s.active() {
 				alert := FindingAlert{
 					FindingID: durable.ID, Severity: summary.Severity,
-					Status: centralFindingStatus(summary.Status), ResourceType: target.ResourceType,
+					Status: centralFindingStatus(summary.Status, summary.WorkflowState), ResourceType: target.ResourceType,
 					ResourceID: target.ResourceID, BlockCode: summary.BlockCode,
 					RepeatCount: durable.RepeatCount,
 				}
@@ -201,7 +201,7 @@ func (s *PGCentralFindingStore) UpsertCentralFinding(ctx context.Context, connec
 			return durableCentralFinding(prior, false), nil
 		}
 	}
-	status := centralFindingStatus(summary.Status)
+	status := centralFindingStatus(summary.Status, summary.WorkflowState)
 	title, localSummary := centralFindingDisplay(summary.Severity, summary.BlockCode)
 	source := "user"
 	if session.Source == "event" {
@@ -211,6 +211,7 @@ func (s *PGCentralFindingStore) UpsertCentralFinding(ctx context.Context, connec
 		ConnectionID: connectionID, CharlieFindingID: summary.FindingID,
 		SessionID: pgtype.UUID{Bytes: session.ID, Valid: true}, Source: source,
 		Severity: summary.Severity, Status: status, EffectiveMode: string(mode),
+		WorkflowState:      summary.WorkflowState,
 		ExecutionBlockCode: summary.BlockCode,
 		DedupeFingerprint:  stableFingerprint("central", connectionID.String(), session.ID.String(), summary.DeduplicationKey),
 		CentralRepeatCount: summary.RepeatCount,
@@ -280,7 +281,10 @@ func centralFindingMode(blockCode string, fallback Mode) Mode {
 	return fallback
 }
 
-func centralFindingStatus(status string) string {
+func centralFindingStatus(status, workflow string) string {
+	if workflow == "expired" {
+		return "expired"
+	}
 	if status == "reopened" {
 		return "open"
 	}

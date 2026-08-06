@@ -58,3 +58,20 @@ func TestExactFindingResourceRejectsMissingAndAmbiguousDigests(t *testing.T) {
 		t.Fatal("ambiguous resource digest was accepted")
 	}
 }
+
+func TestCentralFindingWorkflowRejectsInconsistentAuthorityLabels(t *testing.T) {
+	base := BridgeFindingSummary{Status: "open", WorkflowState: "manual_remediation_required", BlockCode: "read_only"}
+	if !validCentralFindingWorkflow(base) {
+		t.Fatal("valid manual workflow rejected")
+	}
+	for _, unsafe := range []BridgeFindingSummary{
+		{Status: "open", WorkflowState: "approval_pending", BlockCode: "read_only"},
+		{Status: "open", WorkflowState: "verification_pending", BlockCode: "verification_failed"},
+		{Status: "resolved", WorkflowState: "rejected", BlockCode: "read_only"},
+		{Status: "open", WorkflowState: "resolved", BlockCode: "read_only"},
+	} {
+		if validCentralFindingWorkflow(unsafe) {
+			t.Fatalf("inconsistent central workflow accepted: %#v", unsafe)
+		}
+	}
+}

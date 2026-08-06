@@ -183,12 +183,14 @@ const (
 
 // Defines values for FindingLifecycleEventTransition.
 const (
-	FindingLifecycleEventTransitionAcknowledged FindingLifecycleEventTransition = "acknowledged"
-	FindingLifecycleEventTransitionCreated      FindingLifecycleEventTransition = "created"
-	FindingLifecycleEventTransitionDeduplicated FindingLifecycleEventTransition = "deduplicated"
-	FindingLifecycleEventTransitionDismissed    FindingLifecycleEventTransition = "dismissed"
-	FindingLifecycleEventTransitionReopened     FindingLifecycleEventTransition = "reopened"
-	FindingLifecycleEventTransitionResolved     FindingLifecycleEventTransition = "resolved"
+	FindingLifecycleEventTransitionAcknowledged          FindingLifecycleEventTransition = "acknowledged"
+	FindingLifecycleEventTransitionCreated               FindingLifecycleEventTransition = "created"
+	FindingLifecycleEventTransitionDeduplicated          FindingLifecycleEventTransition = "deduplicated"
+	FindingLifecycleEventTransitionDismissed             FindingLifecycleEventTransition = "dismissed"
+	FindingLifecycleEventTransitionRemediationStarted    FindingLifecycleEventTransition = "remediation_started"
+	FindingLifecycleEventTransitionReopened              FindingLifecycleEventTransition = "reopened"
+	FindingLifecycleEventTransitionResolved              FindingLifecycleEventTransition = "resolved"
+	FindingLifecycleEventTransitionVerificationRequested FindingLifecycleEventTransition = "verification_requested"
 )
 
 // Defines values for FindingSummarySeverity.
@@ -209,12 +211,38 @@ const (
 	FindingSummaryStatusResolved     FindingSummaryStatus = "resolved"
 )
 
+// Defines values for FindingSummaryWorkflowState.
+const (
+	FindingSummaryWorkflowStateApprovalPending           FindingSummaryWorkflowState = "approval_pending"
+	FindingSummaryWorkflowStateDismissed                 FindingSummaryWorkflowState = "dismissed"
+	FindingSummaryWorkflowStateExpired                   FindingSummaryWorkflowState = "expired"
+	FindingSummaryWorkflowStateManualRemediationRequired FindingSummaryWorkflowState = "manual_remediation_required"
+	FindingSummaryWorkflowStateRejected                  FindingSummaryWorkflowState = "rejected"
+	FindingSummaryWorkflowStateRemediationInProgress     FindingSummaryWorkflowState = "remediation_in_progress"
+	FindingSummaryWorkflowStateResolved                  FindingSummaryWorkflowState = "resolved"
+	FindingSummaryWorkflowStateVerificationPending       FindingSummaryWorkflowState = "verification_pending"
+)
+
 // Defines values for FindingTransitionTransition.
 const (
-	FindingTransitionTransitionAcknowledge FindingTransitionTransition = "acknowledge"
-	FindingTransitionTransitionDismiss     FindingTransitionTransition = "dismiss"
-	FindingTransitionTransitionReopen      FindingTransitionTransition = "reopen"
-	FindingTransitionTransitionResolve     FindingTransitionTransition = "resolve"
+	FindingTransitionTransitionAcknowledge         FindingTransitionTransition = "acknowledge"
+	FindingTransitionTransitionDismiss             FindingTransitionTransition = "dismiss"
+	FindingTransitionTransitionReopen              FindingTransitionTransition = "reopen"
+	FindingTransitionTransitionRequestVerification FindingTransitionTransition = "request_verification"
+	FindingTransitionTransitionResolve             FindingTransitionTransition = "resolve"
+	FindingTransitionTransitionStartRemediation    FindingTransitionTransition = "start_remediation"
+)
+
+// Defines values for FindingWorkflowState.
+const (
+	FindingWorkflowStateApprovalPending           FindingWorkflowState = "approval_pending"
+	FindingWorkflowStateDismissed                 FindingWorkflowState = "dismissed"
+	FindingWorkflowStateExpired                   FindingWorkflowState = "expired"
+	FindingWorkflowStateManualRemediationRequired FindingWorkflowState = "manual_remediation_required"
+	FindingWorkflowStateRejected                  FindingWorkflowState = "rejected"
+	FindingWorkflowStateRemediationInProgress     FindingWorkflowState = "remediation_in_progress"
+	FindingWorkflowStateResolved                  FindingWorkflowState = "resolved"
+	FindingWorkflowStateVerificationPending       FindingWorkflowState = "verification_pending"
 )
 
 // Defines values for HealthStatus.
@@ -493,6 +521,7 @@ type FindingFinding struct {
 	Status                FindingFindingStatus   `json:"status"`
 	UpdatedAt             time.Time              `json:"updated_at"`
 	VerificationSteps     []string               `json:"verification_steps"`
+	Workflow              FindingWorkflow        `json:"workflow"`
 }
 
 // FindingFindingSeverity defines model for FindingFinding.Severity.
@@ -503,30 +532,41 @@ type FindingFindingStatus string
 
 // FindingLifecycleEvent defines model for FindingLifecycleEvent.
 type FindingLifecycleEvent struct {
-	ActorRef   FindingOpaqueId                 `json:"actor_ref"`
-	EventId    FindingOpaqueId                 `json:"event_id"`
-	OccurredAt time.Time                       `json:"occurred_at"`
-	Reason     *string                         `json:"reason,omitempty"`
-	Transition FindingLifecycleEventTransition `json:"transition"`
+	ActorRef      FindingOpaqueId                 `json:"actor_ref"`
+	EventId       FindingOpaqueId                 `json:"event_id"`
+	OccurredAt    time.Time                       `json:"occurred_at"`
+	Reason        *string                         `json:"reason,omitempty"`
+	Transition    FindingLifecycleEventTransition `json:"transition"`
+	WorkflowState FindingWorkflowState            `json:"workflow_state"`
 }
 
 // FindingLifecycleEventTransition defines model for FindingLifecycleEvent.Transition.
 type FindingLifecycleEventTransition string
+
+// FindingManualRemediation defines model for FindingManualRemediation.
+type FindingManualRemediation struct {
+	ExpectedImpact string              `json:"expected_impact"`
+	Preconditions  *[]string           `json:"preconditions,omitempty"`
+	Rollback       *string             `json:"rollback,omitempty"`
+	Steps          []string            `json:"steps"`
+	Verification   FindingVerification `json:"verification"`
+}
 
 // FindingOpaqueId defines model for FindingOpaqueId.
 type FindingOpaqueId = string
 
 // FindingSummary defines model for FindingSummary.
 type FindingSummary struct {
-	BlockCode        BlockCode              `json:"block_code"`
-	DeduplicationKey string                 `json:"deduplication_key"`
-	FindingId        OpaqueId               `json:"finding_id"`
-	InvestigationId  OpaqueId               `json:"investigation_id"`
-	RepeatCount      int                    `json:"repeat_count"`
-	SessionId        OpaqueId               `json:"session_id"`
-	Severity         FindingSummarySeverity `json:"severity"`
-	Status           FindingSummaryStatus   `json:"status"`
-	UpdatedAt        time.Time              `json:"updated_at"`
+	BlockCode        BlockCode                   `json:"block_code"`
+	DeduplicationKey string                      `json:"deduplication_key"`
+	FindingId        OpaqueId                    `json:"finding_id"`
+	InvestigationId  OpaqueId                    `json:"investigation_id"`
+	RepeatCount      int                         `json:"repeat_count"`
+	SessionId        OpaqueId                    `json:"session_id"`
+	Severity         FindingSummarySeverity      `json:"severity"`
+	Status           FindingSummaryStatus        `json:"status"`
+	UpdatedAt        time.Time                   `json:"updated_at"`
+	WorkflowState    FindingSummaryWorkflowState `json:"workflow_state"`
 }
 
 // FindingSummarySeverity defines model for FindingSummary.Severity.
@@ -534,6 +574,9 @@ type FindingSummarySeverity string
 
 // FindingSummaryStatus defines model for FindingSummary.Status.
 type FindingSummaryStatus string
+
+// FindingSummaryWorkflowState defines model for FindingSummary.WorkflowState.
+type FindingSummaryWorkflowState string
 
 // FindingTransition defines model for FindingTransition.
 type FindingTransition struct {
@@ -545,6 +588,22 @@ type FindingTransition struct {
 
 // FindingTransitionTransition defines model for FindingTransition.Transition.
 type FindingTransitionTransition string
+
+// FindingVerification defines model for FindingVerification.
+type FindingVerification struct {
+	Method string   `json:"method"`
+	Steps  []string `json:"steps"`
+}
+
+// FindingWorkflow defines model for FindingWorkflow.
+type FindingWorkflow struct {
+	ApprovalId        *FindingOpaqueId          `json:"approval_id,omitempty"`
+	ManualRemediation *FindingManualRemediation `json:"manual_remediation,omitempty"`
+	State             FindingWorkflowState      `json:"state"`
+}
+
+// FindingWorkflowState defines model for FindingWorkflowState.
+type FindingWorkflowState string
 
 // Health defines model for Health.
 type Health struct {

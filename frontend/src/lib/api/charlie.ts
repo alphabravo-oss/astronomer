@@ -104,12 +104,38 @@ export interface CharlieFinding {
   repeatCount?: number;
   createdAt?: string;
   updatedAt?: string;
+  workflowState:
+    | "approval_pending"
+    | "manual_remediation_required"
+    | "remediation_in_progress"
+    | "verification_pending"
+    | "resolved"
+    | "rejected"
+    | "dismissed"
+    | "expired";
+  availableDecisions: Array<
+    | "open_exact_approval"
+    | "reject_exact_approval"
+    | "acknowledge"
+    | "start_remediation"
+    | "request_verification"
+    | "dismiss"
+    | "resolve"
+  >;
   evidence?: Array<{
     label: string;
     summary: string;
     citation?: CharlieCitation;
   }>;
   operatorChecks?: string[];
+  manualRemediation?: {
+    preconditions: string[];
+    steps: string[];
+    expectedImpact: string;
+    rollback?: string;
+    verificationMethod: string;
+    verificationSteps: string[];
+  };
   proposedAction?: {
     capability: string;
     target: string;
@@ -168,6 +194,19 @@ interface CharlieCentralFinding {
   evidence_summary?: string[];
   operatorChecks?: string[];
   operator_checks?: string[];
+  workflow?: {
+    state?: CharlieFinding["workflowState"];
+    manualRemediation?: CharlieManualRemediationWire;
+    manual_remediation?: CharlieManualRemediationWire;
+  };
+}
+interface CharlieManualRemediationWire {
+  preconditions?: string[];
+  steps?: string[];
+  expectedImpact?: string;
+  expected_impact?: string;
+  rollback?: string;
+  verification?: { method?: string; steps?: string[] };
 }
 interface CharlieProposedActionWire {
   label?: string;
@@ -202,6 +241,10 @@ interface CharlieFindingWire {
   created_at?: string;
   updatedAt?: string;
   updated_at?: string;
+  workflowState?: CharlieFinding["workflowState"];
+  workflow_state?: CharlieFinding["workflowState"];
+  availableDecisions?: CharlieFinding["availableDecisions"];
+  available_decisions?: CharlieFinding["availableDecisions"];
 }
 
 function mapCharlieSession(value: CharlieWireSession): CharlieSession {
@@ -238,6 +281,9 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     };
   const severity = value.severity === "info" ? "low" : value.severity;
   const proposedWire = value.proposedAction ?? value.proposed_action;
+  const manualWire =
+    central.workflow?.manualRemediation ??
+    central.workflow?.manual_remediation;
   const recommended =
     central.recommendedCapability ?? central.recommended_capability;
   const proposed =
@@ -287,6 +333,10 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
     repeatCount: value.repeatCount ?? value.repeat_count ?? 1,
     createdAt: value.createdAt ?? value.created_at,
     updatedAt: value.updatedAt ?? value.updated_at,
+    workflowState:
+      value.workflowState ?? value.workflow_state ?? "manual_remediation_required",
+    availableDecisions:
+      value.availableDecisions ?? value.available_decisions ?? [],
     evidence: (central.evidenceSummary ?? central.evidence_summary ?? []).map(
       (summary: string, index: number) => ({
         label: `Evidence ${index + 1}`,
@@ -294,6 +344,17 @@ function mapCharlieFinding(value: CharlieFindingWire): CharlieFinding {
       }),
     ),
     operatorChecks: central.operatorChecks ?? central.operator_checks ?? [],
+    manualRemediation: manualWire
+      ? {
+          preconditions: manualWire.preconditions ?? [],
+          steps: manualWire.steps ?? [],
+          expectedImpact:
+            manualWire.expectedImpact ?? manualWire.expected_impact ?? "",
+          rollback: manualWire.rollback,
+          verificationMethod: manualWire.verification?.method ?? "",
+          verificationSteps: manualWire.verification?.steps ?? [],
+        }
+      : undefined,
     proposedAction: proposed,
   };
 }
@@ -428,9 +489,15 @@ export async function getCharlieFinding(id: string): Promise<CharlieFinding> {
 }
 export async function transitionCharlieFinding(
   id: string,
-  action: "acknowledge" | "dismiss" | "resolve",
+  action:
+    | "acknowledge"
+    | "start_remediation"
+    | "request_verification"
+    | "dismiss"
+    | "resolve",
 ) {
-  await api.post(`/charlie/findings/${encodeURIComponent(id)}/${action}/`, {
+  const path = action.replaceAll("_", "-");
+  await api.post(`/charlie/findings/${encodeURIComponent(id)}/${path}/`, {
     request_id: crypto.randomUUID(),
   });
 }

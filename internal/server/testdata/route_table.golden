@@ -520,7 +520,9 @@ POST /api/v1/catalog/repositories/{id}/test-connection
 POST /api/v1/charlie/approvals/{approval_id}/decision
 POST /api/v1/charlie/findings/{finding_id}/acknowledge
 POST /api/v1/charlie/findings/{finding_id}/dismiss
+POST /api/v1/charlie/findings/{finding_id}/request-verification
 POST /api/v1/charlie/findings/{finding_id}/resolve
+POST /api/v1/charlie/findings/{finding_id}/start-remediation
 POST /api/v1/charlie/sessions
 POST /api/v1/charlie/sessions/{session_id}/abort
 POST /api/v1/charlie/sessions/{session_id}/messages

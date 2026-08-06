@@ -130,15 +130,16 @@ func (s *FindingAccessService) Get(ctx context.Context, actorID, findingID uuid.
 	return view, nil
 }
 
-func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingID, requestID uuid.UUID, next string) (FindingView, error) {
-	if requestID == uuid.Nil || !validFindingTransition(next) {
+func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingID, requestID uuid.UUID, decision string) (FindingView, error) {
+	if requestID == uuid.Nil || !validFindingDecision(decision) {
 		return FindingView{}, fmt.Errorf("Charlie finding transition is invalid")
 	}
 	connection, row, resources, err := s.authorizeFinding(ctx, actorID, findingID)
 	if err != nil {
 		return FindingView{}, err
 	}
-	if !allowedFindingTransition(row.Status, next) {
+	nextStatus, nextWorkflow, allowed := findingDecisionTarget(row, decision, s.now().UTC())
+	if !allowed {
 		return FindingView{}, fmt.Errorf("Charlie finding transition is invalid")
 	}
 	var remote json.RawMessage
@@ -147,13 +148,15 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 		if authErr != nil {
 			return FindingView{}, authErr
 		}
-		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, next)
+		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision)
 		if err != nil {
 			return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
 		}
 	}
 	updated, err := s.queries.TransitionCharlieFinding(ctx, sqlc.TransitionCharlieFindingParams{
-		NextStatus: next, ActorID: pgtype.UUID{Bytes: actorID, Valid: true}, ID: row.ID, ExpectedStatus: row.Status,
+		NextStatus: nextStatus, NextWorkflowState: nextWorkflow,
+		ActorID: pgtype.UUID{Bytes: actorID, Valid: true}, ID: row.ID,
+		ExpectedStatus: row.Status, ExpectedWorkflowState: row.WorkflowState,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FindingView{}, fmt.Errorf("Charlie finding changed; refresh and try again")
@@ -163,7 +166,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	}
 	alert := FindingAlert{FindingID: updated.ID.String(), Severity: NormalizeFindingSeverity(updated.Severity), Status: updated.Status, ResourceType: resources[0].ResourceType, ResourceID: resources[0].ResourceID, BlockCode: updated.ExecutionBlockCode, RepeatCount: int(updated.RepeatCount)}
 	s.publisher.PublishCharlieFindingLifecycle(ctx, alert)
-	s.audit(ctx, "charlie.finding."+next, updated.ID, actorID, "completed", len(resources))
+	s.audit(ctx, "charlie.finding."+decision, updated.ID, actorID, "completed", len(resources))
 	return FindingView{Finding: updated, Resources: resources, Remote: remote}, nil
 }
 
@@ -259,15 +262,29 @@ func validFindingStatusFilter(value string) bool {
 	return value == "" || value == "open" || value == "acknowledged" || value == "dismissed" || value == "resolved" || value == "expired"
 }
 
-func validFindingTransition(value string) bool {
-	return value == "acknowledged" || value == "dismissed" || value == "resolved"
+func validFindingDecision(value string) bool {
+	return value == "acknowledge" || value == "start_remediation" || value == "request_verification" ||
+		value == "dismiss" || value == "resolve"
 }
 
-func allowedFindingTransition(current, next string) bool {
-	if current == "open" {
-		return validFindingTransition(next)
+func findingDecisionTarget(row sqlc.CharlieFinding, decision string, now time.Time) (string, string, bool) {
+	if !FindingWorkflowAllows(row, decision, now) {
+		return "", "", false
 	}
-	return current == "acknowledged" && (next == "dismissed" || next == "resolved")
+	switch decision {
+	case "acknowledge":
+		return "acknowledged", row.WorkflowState, true
+	case "start_remediation":
+		return "acknowledged", string(FindingWorkflowRemediationInProgress), true
+	case "request_verification":
+		return "acknowledged", string(FindingWorkflowVerificationPending), true
+	case "dismiss":
+		return "dismissed", string(FindingWorkflowDismissed), true
+	case "resolve":
+		return "resolved", string(FindingWorkflowResolved), true
+	default:
+		return "", "", false
+	}
 }
 
 func NormalizeFindingSeverity(value string) string {

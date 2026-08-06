@@ -69,15 +69,23 @@ func (h *CharlieFindingHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CharlieFindingHandler) Acknowledge(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "acknowledged")
+	h.transition(w, r, "acknowledge")
+}
+
+func (h *CharlieFindingHandler) StartRemediation(w http.ResponseWriter, r *http.Request) {
+	h.transition(w, r, "start_remediation")
+}
+
+func (h *CharlieFindingHandler) RequestVerification(w http.ResponseWriter, r *http.Request) {
+	h.transition(w, r, "request_verification")
 }
 
 func (h *CharlieFindingHandler) Dismiss(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "dismissed")
+	h.transition(w, r, "dismiss")
 }
 
 func (h *CharlieFindingHandler) Resolve(w http.ResponseWriter, r *http.Request) {
-	h.transition(w, r, "resolved")
+	h.transition(w, r, "resolve")
 }
 
 func (h *CharlieFindingHandler) transition(w http.ResponseWriter, r *http.Request, next string) {
@@ -118,11 +126,13 @@ func charlieFindingActorAndID(w http.ResponseWriter, r *http.Request) (*appmiddl
 func safeCharlieFinding(view charlie.FindingView, includeDetail bool) map[string]any {
 	row := view.Finding
 	severity := charlie.NormalizeFindingSeverity(row.Severity)
+	workflow := charlie.FindingWorkflowFor(row, time.Now().UTC())
 	item := map[string]any{
 		"id": row.ID, "title": row.Title, "severity": severity, "state": row.Status,
 		"summary": row.Summary, "reason_no_action": row.ExecutionBlockCode,
 		"repeat_count": row.RepeatCount, "source": row.Source,
 		"created_at": row.CreatedAt, "updated_at": row.UpdatedAt,
+		"workflow_state": workflow.State, "available_decisions": workflow.Decisions,
 	}
 	if row.SessionID.Valid {
 		item["session_id"] = uuid.UUID(row.SessionID.Bytes)

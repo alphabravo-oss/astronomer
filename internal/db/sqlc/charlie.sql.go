@@ -2108,6 +2108,7 @@ func (q *Queries) EnsureCharlieAutomationBinding(ctx context.Context, arg Ensure
 const expireCharlieFindings = `-- name: ExpireCharlieFindings :execrows
 UPDATE charlie_findings
 SET status = 'expired',
+    workflow_state = 'expired',
     execution_block_code = CASE WHEN approval_id IS NOT NULL THEN 'approval_expired' ELSE execution_block_code END,
     summary = CASE WHEN approval_id IS NOT NULL THEN 'The exact approval expired. No action was authorized.' ELSE summary END,
     updated_at = now()
@@ -2296,7 +2297,7 @@ func (q *Queries) GetActiveCharlieDelegationByHash(ctx context.Context, authoriz
 }
 
 const getActiveCharlieFindingByFingerprint = `-- name: GetActiveCharlieFindingByFingerprint :one
-SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at FROM charlie_findings
+SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state FROM charlie_findings
 WHERE connection_id = $1
   AND dedupe_fingerprint = $2
   AND status IN ('open', 'acknowledged')
@@ -2338,6 +2339,7 @@ func (q *Queries) GetActiveCharlieFindingByFingerprint(ctx context.Context, arg 
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
@@ -2737,7 +2739,7 @@ func (q *Queries) GetCharlieConnectionByPackageID(ctx context.Context, onboardin
 }
 
 const getCharlieFinding = `-- name: GetCharlieFinding :one
-SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at FROM charlie_findings WHERE id = $1
+SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state FROM charlie_findings WHERE id = $1
 `
 
 func (q *Queries) GetCharlieFinding(ctx context.Context, id uuid.UUID) (CharlieFinding, error) {
@@ -2771,12 +2773,13 @@ func (q *Queries) GetCharlieFinding(ctx context.Context, id uuid.UUID) (CharlieF
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
 
 const getCharlieFindingByApprovalID = `-- name: GetCharlieFindingByApprovalID :one
-SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at FROM charlie_findings WHERE approval_id = $1
+SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state FROM charlie_findings WHERE approval_id = $1
 `
 
 func (q *Queries) GetCharlieFindingByApprovalID(ctx context.Context, approvalID pgtype.Text) (CharlieFinding, error) {
@@ -2810,12 +2813,13 @@ func (q *Queries) GetCharlieFindingByApprovalID(ctx context.Context, approvalID 
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
 
 const getCharlieFindingByCentralID = `-- name: GetCharlieFindingByCentralID :one
-SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at FROM charlie_findings
+SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state FROM charlie_findings
 WHERE connection_id = $1
   AND charlie_finding_id = $2
 `
@@ -2856,6 +2860,7 @@ func (q *Queries) GetCharlieFindingByCentralID(ctx context.Context, arg GetCharl
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
@@ -3344,7 +3349,7 @@ func (q *Queries) ListCharlieFindingSyncCandidateSessions(ctx context.Context, c
 }
 
 const listCharlieFindings = `-- name: ListCharlieFindings :many
-SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at FROM charlie_findings
+SELECT id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state FROM charlie_findings
 WHERE connection_id = $1
   AND ($2::text IS NULL OR status = $2)
 ORDER BY updated_at DESC, id
@@ -3400,6 +3405,7 @@ func (q *Queries) ListCharlieFindings(ctx context.Context, arg ListCharlieFindin
 			&i.AlertEventID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.WorkflowState,
 		); err != nil {
 			return nil, err
 		}
@@ -4332,30 +4338,37 @@ func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg Transi
 const transitionCharlieFinding = `-- name: TransitionCharlieFinding :one
 UPDATE charlie_findings
 SET status = $1,
-    acknowledged_by_id = CASE WHEN $1::text = 'acknowledged' THEN $2 ELSE acknowledged_by_id END,
+    workflow_state = $2,
+    acknowledged_by_id = CASE WHEN $1::text = 'acknowledged' THEN $3 ELSE acknowledged_by_id END,
     acknowledged_at = CASE WHEN $1::text = 'acknowledged' THEN now() ELSE acknowledged_at END,
-    dismissed_by_id = CASE WHEN $1::text = 'dismissed' THEN $2 ELSE dismissed_by_id END,
+    dismissed_by_id = CASE WHEN $1::text = 'dismissed' THEN $3 ELSE dismissed_by_id END,
     dismissed_at = CASE WHEN $1::text = 'dismissed' THEN now() ELSE dismissed_at END,
-    resolved_by_id = CASE WHEN $1::text = 'resolved' THEN $2 ELSE resolved_by_id END,
+    resolved_by_id = CASE WHEN $1::text = 'resolved' THEN $3 ELSE resolved_by_id END,
     resolved_at = CASE WHEN $1::text = 'resolved' THEN now() ELSE resolved_at END,
     updated_at = now()
-WHERE id = $3 AND status = $4
-RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at
+WHERE id = $4
+  AND status = $5
+  AND workflow_state = $6
+RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
 `
 
 type TransitionCharlieFindingParams struct {
-	NextStatus     string      `json:"next_status"`
-	ActorID        pgtype.UUID `json:"actor_id"`
-	ID             uuid.UUID   `json:"id"`
-	ExpectedStatus string      `json:"expected_status"`
+	NextStatus            string      `json:"next_status"`
+	NextWorkflowState     string      `json:"next_workflow_state"`
+	ActorID               pgtype.UUID `json:"actor_id"`
+	ID                    uuid.UUID   `json:"id"`
+	ExpectedStatus        string      `json:"expected_status"`
+	ExpectedWorkflowState string      `json:"expected_workflow_state"`
 }
 
 func (q *Queries) TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (CharlieFinding, error) {
 	row := q.db.QueryRow(ctx, transitionCharlieFinding,
 		arg.NextStatus,
+		arg.NextWorkflowState,
 		arg.ActorID,
 		arg.ID,
 		arg.ExpectedStatus,
+		arg.ExpectedWorkflowState,
 	)
 	var i CharlieFinding
 	err := row.Scan(
@@ -4386,6 +4399,7 @@ func (q *Queries) TransitionCharlieFinding(ctx context.Context, arg TransitionCh
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
@@ -4396,6 +4410,11 @@ SET status = CASE
         WHEN $1::text = 'rejected' THEN 'resolved'
         WHEN $1::text = 'expired' THEN 'expired'
         ELSE status
+    END,
+    workflow_state = CASE
+        WHEN $1::text = 'rejected' THEN 'rejected'
+        WHEN $1::text = 'expired' THEN 'expired'
+        ELSE workflow_state
     END,
     execution_block_code = CASE
         WHEN $1::text = 'rejected' THEN 'approval_rejected'
@@ -4411,7 +4430,7 @@ SET status = CASE
 WHERE approval_id = $2
   AND status IN ('open', 'acknowledged')
   AND $1::text IN ('rejected', 'expired')
-RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at
+RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
 `
 
 type TransitionCharlieFindingForApprovalParams struct {
@@ -4450,6 +4469,7 @@ func (q *Queries) TransitionCharlieFindingForApproval(ctx context.Context, arg T
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
@@ -4852,12 +4872,12 @@ func (q *Queries) UpsertAgentOperationalStatus(ctx context.Context, arg UpsertAg
 const upsertCharlieApprovalFinding = `-- name: UpsertCharlieApprovalFinding :one
 INSERT INTO charlie_findings (
     connection_id, charlie_finding_id, approval_id, session_id, source,
-    severity, status, effective_mode, execution_block_code,
+    severity, status, effective_mode, workflow_state, execution_block_code,
     dedupe_fingerprint, title, summary, recommended_action_label,
     risk_impact, verification_summary, expires_at
 ) VALUES (
     $1, $2, $3,
-    $4, 'user', 'warning', 'open', 'approval',
+    $4, 'user', 'warning', 'open', 'approval', 'approval_pending',
     'approval_required', $5,
     $6, $7, $8,
     $9, $10, $11
@@ -4868,7 +4888,7 @@ WHERE charlie_findings.connection_id = EXCLUDED.connection_id
   AND charlie_findings.session_id = EXCLUDED.session_id
   AND charlie_findings.dedupe_fingerprint = EXCLUDED.dedupe_fingerprint
   AND charlie_findings.expires_at = EXCLUDED.expires_at
-RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at
+RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
 `
 
 type UpsertCharlieApprovalFindingParams struct {
@@ -4928,6 +4948,7 @@ func (q *Queries) UpsertCharlieApprovalFinding(ctx context.Context, arg UpsertCh
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
@@ -4992,11 +5013,12 @@ func (q *Queries) UpsertCharlieAutomationPolicy(ctx context.Context, arg UpsertC
 const upsertCharlieFinding = `-- name: UpsertCharlieFinding :one
 INSERT INTO charlie_findings (
     connection_id, charlie_finding_id, session_id, source, severity, status,
-    effective_mode, execution_block_code, dedupe_fingerprint, title, summary,
+    effective_mode, workflow_state, execution_block_code, dedupe_fingerprint, title, summary,
     recommended_action_label, risk_impact, verification_summary, expires_at
 ) VALUES (
     $1, $2, $3,
     $4, $5, 'open', $6,
+    'manual_remediation_required',
     $7, $8, $9,
     $10, $11, $12,
     $13, $14
@@ -5013,7 +5035,7 @@ DO UPDATE SET
     expires_at = EXCLUDED.expires_at,
     repeat_count = charlie_findings.repeat_count + 1,
     updated_at = now()
-RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at
+RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
 `
 
 type UpsertCharlieFindingParams struct {
@@ -5079,6 +5101,7 @@ func (q *Queries) UpsertCharlieFinding(ctx context.Context, arg UpsertCharlieFin
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }
@@ -5086,14 +5109,15 @@ func (q *Queries) UpsertCharlieFinding(ctx context.Context, arg UpsertCharlieFin
 const upsertSyncedCharlieFinding = `-- name: UpsertSyncedCharlieFinding :one
 INSERT INTO charlie_findings (
     connection_id, charlie_finding_id, session_id, source, severity, status,
-    effective_mode, execution_block_code, dedupe_fingerprint, title, summary,
+    effective_mode, workflow_state, execution_block_code, dedupe_fingerprint, title, summary,
     recommended_action_label, risk_impact, verification_summary, repeat_count, updated_at
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6, $7,
-    $8, $9, $10,
-    $11, $12, '',
-    $13, $14, $15
+    $8,
+    $9, $10, $11,
+    $12, $13, '',
+    $14, $15, $16
 )
 ON CONFLICT (connection_id, charlie_finding_id)
 DO UPDATE SET
@@ -5102,6 +5126,7 @@ DO UPDATE SET
     severity = EXCLUDED.severity,
     status = EXCLUDED.status,
     effective_mode = EXCLUDED.effective_mode,
+    workflow_state = EXCLUDED.workflow_state,
     execution_block_code = EXCLUDED.execution_block_code,
     dedupe_fingerprint = EXCLUDED.dedupe_fingerprint,
     title = EXCLUDED.title,
@@ -5111,7 +5136,7 @@ DO UPDATE SET
     repeat_count = GREATEST(charlie_findings.repeat_count, EXCLUDED.repeat_count),
     updated_at = EXCLUDED.updated_at
 WHERE charlie_findings.updated_at < EXCLUDED.updated_at
-RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at
+RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
 `
 
 type UpsertSyncedCharlieFindingParams struct {
@@ -5122,6 +5147,7 @@ type UpsertSyncedCharlieFindingParams struct {
 	Severity               string      `json:"severity"`
 	Status                 string      `json:"status"`
 	EffectiveMode          string      `json:"effective_mode"`
+	WorkflowState          string      `json:"workflow_state"`
 	ExecutionBlockCode     string      `json:"execution_block_code"`
 	DedupeFingerprint      string      `json:"dedupe_fingerprint"`
 	Title                  string      `json:"title"`
@@ -5141,6 +5167,7 @@ func (q *Queries) UpsertSyncedCharlieFinding(ctx context.Context, arg UpsertSync
 		arg.Severity,
 		arg.Status,
 		arg.EffectiveMode,
+		arg.WorkflowState,
 		arg.ExecutionBlockCode,
 		arg.DedupeFingerprint,
 		arg.Title,
@@ -5179,6 +5206,7 @@ func (q *Queries) UpsertSyncedCharlieFinding(ctx context.Context, arg UpsertSync
 		&i.AlertEventID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WorkflowState,
 	)
 	return i, err
 }

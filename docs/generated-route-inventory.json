@@ -2698,6 +2698,21 @@
   },
   {
     "method": "POST",
+    "pattern": "/api/v1/*/charlie/findings/{finding_id}/request-verification/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "record manual completion and request product-owned current-state verification",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:update plus live authorization for every affected resource",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "durable metadata-only finding lifecycle audit and event; grants no execution authority",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-finding-request-verification"
+  },
+  {
+    "method": "POST",
     "pattern": "/api/v1/*/charlie/findings/{finding_id}/resolve/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "resolve one actionable Charlie finding",
@@ -2710,6 +2725,21 @@
       "TestBrowserCookieMutatingRoutesRequireCSRF"
     ],
     "security_registry_id": "charlie-finding-resolve"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/findings/{finding_id}/start-remediation/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "record product-owned manual remediation in progress without execution authority",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:update plus live authorization for every affected resource",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "durable metadata-only finding lifecycle audit and event",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-finding-start-remediation"
   },
   {
     "method": "GET",

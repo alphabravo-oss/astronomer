@@ -696,7 +696,7 @@ components:
     FindingSummary:
       type: object
       additionalProperties: false
-      required: [finding_id, session_id, investigation_id, deduplication_key, repeat_count, severity, status, block_code, updated_at]
+      required: [finding_id, session_id, investigation_id, deduplication_key, repeat_count, severity, status, workflow_state, block_code, updated_at]
       properties:
         finding_id: {$ref: "#/components/schemas/OpaqueId"}
         session_id: {$ref: "#/components/schemas/OpaqueId"}
@@ -705,6 +705,7 @@ components:
         repeat_count: {type: integer, minimum: 1}
         severity: {type: string, enum: [info, low, medium, high, critical]}
         status: {type: string, enum: [open, acknowledged, dismissed, resolved, reopened]}
+        workflow_state: {type: string, enum: [approval_pending, manual_remediation_required, remediation_in_progress, verification_pending, resolved, rejected, dismissed, expired]}
         block_code: {$ref: "#/components/schemas/BlockCode"}
         updated_at: {type: string, format: date-time}
     FindingEnvelope:
@@ -712,10 +713,11 @@ components:
     FindingLifecycleEvent:
       type: object
       additionalProperties: false
-      required: [event_id, transition, actor_ref, occurred_at]
+      required: [event_id, transition, workflow_state, actor_ref, occurred_at]
       properties:
         event_id: {$ref: "#/components/schemas/OpaqueId"}
-        transition: {type: string, enum: [created, deduplicated, acknowledged, dismissed, resolved, reopened]}
+        transition: {type: string, enum: [created, deduplicated, acknowledged, remediation_started, verification_requested, dismissed, resolved, reopened]}
+        workflow_state: {type: string, enum: [approval_pending, manual_remediation_required, remediation_in_progress, verification_pending, resolved, rejected, dismissed, expired]}
         actor_ref: {$ref: "#/components/schemas/OpaqueId"}
         reason: {type: string, maxLength: 512}
         occurred_at: {type: string, format: date-time}
@@ -725,7 +727,7 @@ components:
       required: [request_id, transition, actor_ref]
       properties:
         request_id: {$ref: "#/components/schemas/OpaqueId"}
-        transition: {type: string, enum: [acknowledge, dismiss, resolve, reopen]}
+        transition: {type: string, enum: [acknowledge, start_remediation, request_verification, dismiss, resolve, reopen]}
         actor_ref: {$ref: "#/components/schemas/OpaqueId"}
         reason: {type: string, maxLength: 512}
     ErrorEnvelope:

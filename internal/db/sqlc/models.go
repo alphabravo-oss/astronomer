@@ -703,6 +703,7 @@ type CharlieFinding struct {
 	AlertEventID           pgtype.UUID        `json:"alert_event_id"`
 	CreatedAt              time.Time          `json:"created_at"`
 	UpdatedAt              time.Time          `json:"updated_at"`
+	WorkflowState          string             `json:"workflow_state"`
 }
 
 type CharlieFindingResource struct {

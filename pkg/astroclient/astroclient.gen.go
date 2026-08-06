@@ -254,6 +254,17 @@ const (
 	CharlieContextSearchResultTypeTunnel                    CharlieContextSearchResultType = "tunnel"
 )
 
+// Defines values for CharlieFindingDetailAvailableDecisions.
+const (
+	CharlieFindingDetailAvailableDecisionsAcknowledge         CharlieFindingDetailAvailableDecisions = "acknowledge"
+	CharlieFindingDetailAvailableDecisionsDismiss             CharlieFindingDetailAvailableDecisions = "dismiss"
+	CharlieFindingDetailAvailableDecisionsOpenExactApproval   CharlieFindingDetailAvailableDecisions = "open_exact_approval"
+	CharlieFindingDetailAvailableDecisionsRejectExactApproval CharlieFindingDetailAvailableDecisions = "reject_exact_approval"
+	CharlieFindingDetailAvailableDecisionsRequestVerification CharlieFindingDetailAvailableDecisions = "request_verification"
+	CharlieFindingDetailAvailableDecisionsResolve             CharlieFindingDetailAvailableDecisions = "resolve"
+	CharlieFindingDetailAvailableDecisionsStartRemediation    CharlieFindingDetailAvailableDecisions = "start_remediation"
+)
+
 // Defines values for CharlieFindingDetailProposedActionMode.
 const (
 	CharlieFindingDetailProposedActionModeApproval CharlieFindingDetailProposedActionMode = "approval"
@@ -279,6 +290,18 @@ const (
 	CharlieFindingDetailStateResolved     CharlieFindingDetailState = "resolved"
 )
 
+// Defines values for CharlieFindingDetailWorkflowState.
+const (
+	CharlieFindingDetailWorkflowStateApprovalPending           CharlieFindingDetailWorkflowState = "approval_pending"
+	CharlieFindingDetailWorkflowStateDismissed                 CharlieFindingDetailWorkflowState = "dismissed"
+	CharlieFindingDetailWorkflowStateExpired                   CharlieFindingDetailWorkflowState = "expired"
+	CharlieFindingDetailWorkflowStateManualRemediationRequired CharlieFindingDetailWorkflowState = "manual_remediation_required"
+	CharlieFindingDetailWorkflowStateRejected                  CharlieFindingDetailWorkflowState = "rejected"
+	CharlieFindingDetailWorkflowStateRemediationInProgress     CharlieFindingDetailWorkflowState = "remediation_in_progress"
+	CharlieFindingDetailWorkflowStateResolved                  CharlieFindingDetailWorkflowState = "resolved"
+	CharlieFindingDetailWorkflowStateVerificationPending       CharlieFindingDetailWorkflowState = "verification_pending"
+)
+
 // Defines values for CharlieFindingResourceRequiredVerb.
 const (
 	CharlieFindingResourceRequiredVerbRead CharlieFindingResourceRequiredVerb = "read"
@@ -294,6 +317,17 @@ const (
 	CharlieFindingResourceTypeManagementComponent       CharlieFindingResourceType = "management_component"
 	CharlieFindingResourceTypeSelfManagementApplication CharlieFindingResourceType = "self_management_application"
 	CharlieFindingResourceTypeTunnel                    CharlieFindingResourceType = "tunnel"
+)
+
+// Defines values for CharlieFindingSummaryAvailableDecisions.
+const (
+	CharlieFindingSummaryAvailableDecisionsAcknowledge         CharlieFindingSummaryAvailableDecisions = "acknowledge"
+	CharlieFindingSummaryAvailableDecisionsDismiss             CharlieFindingSummaryAvailableDecisions = "dismiss"
+	CharlieFindingSummaryAvailableDecisionsOpenExactApproval   CharlieFindingSummaryAvailableDecisions = "open_exact_approval"
+	CharlieFindingSummaryAvailableDecisionsRejectExactApproval CharlieFindingSummaryAvailableDecisions = "reject_exact_approval"
+	CharlieFindingSummaryAvailableDecisionsRequestVerification CharlieFindingSummaryAvailableDecisions = "request_verification"
+	CharlieFindingSummaryAvailableDecisionsResolve             CharlieFindingSummaryAvailableDecisions = "resolve"
+	CharlieFindingSummaryAvailableDecisionsStartRemediation    CharlieFindingSummaryAvailableDecisions = "start_remediation"
 )
 
 // Defines values for CharlieFindingSummarySeverity.
@@ -312,6 +346,18 @@ const (
 	CharlieFindingSummaryStateExpired      CharlieFindingSummaryState = "expired"
 	CharlieFindingSummaryStateOpen         CharlieFindingSummaryState = "open"
 	CharlieFindingSummaryStateResolved     CharlieFindingSummaryState = "resolved"
+)
+
+// Defines values for CharlieFindingSummaryWorkflowState.
+const (
+	CharlieFindingSummaryWorkflowStateApprovalPending           CharlieFindingSummaryWorkflowState = "approval_pending"
+	CharlieFindingSummaryWorkflowStateDismissed                 CharlieFindingSummaryWorkflowState = "dismissed"
+	CharlieFindingSummaryWorkflowStateExpired                   CharlieFindingSummaryWorkflowState = "expired"
+	CharlieFindingSummaryWorkflowStateManualRemediationRequired CharlieFindingSummaryWorkflowState = "manual_remediation_required"
+	CharlieFindingSummaryWorkflowStateRejected                  CharlieFindingSummaryWorkflowState = "rejected"
+	CharlieFindingSummaryWorkflowStateRemediationInProgress     CharlieFindingSummaryWorkflowState = "remediation_in_progress"
+	CharlieFindingSummaryWorkflowStateResolved                  CharlieFindingSummaryWorkflowState = "resolved"
+	CharlieFindingSummaryWorkflowStateVerificationPending       CharlieFindingSummaryWorkflowState = "verification_pending"
 )
 
 // Defines values for CharlieModeRequestMode.
@@ -347,6 +393,12 @@ const (
 const (
 	CharlieOperationStatusEffectRead  CharlieOperationStatusEffect = "read"
 	CharlieOperationStatusEffectWrite CharlieOperationStatusEffect = "write"
+)
+
+// Defines values for CharlieSessionMetadataSource.
+const (
+	CharlieSessionMetadataSourceEvent CharlieSessionMetadataSource = "event"
+	CharlieSessionMetadataSourceUser  CharlieSessionMetadataSource = "user"
 )
 
 // Defines values for CharlieSessionMetadataState.
@@ -1541,6 +1593,9 @@ type CharlieContextSearchResultType string
 type CharlieFindingDetail struct {
 	AffectedResource CharlieFindingResource `json:"affected_resource"`
 
+	// AvailableDecisions Exact currently legal decisions. Clients must not infer or add decisions from model content.
+	AvailableDecisions []CharlieFindingDetailAvailableDecisions `json:"available_decisions"`
+
 	// Detail On-demand Charlie-managed evidence returned only after current product authorization.
 	Detail         *map[string]interface{} `json:"detail,omitempty"`
 	Id             openapi_types.UUID      `json:"id"`
@@ -1562,7 +1617,13 @@ type CharlieFindingDetail struct {
 	Title               string                       `json:"title"`
 	UpdatedAt           time.Time                    `json:"updated_at"`
 	VerificationSummary *string                      `json:"verification_summary,omitempty"`
+
+	// WorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+	WorkflowState CharlieFindingDetailWorkflowState `json:"workflow_state"`
 }
+
+// CharlieFindingDetailAvailableDecisions defines model for CharlieFindingDetail.AvailableDecisions.
+type CharlieFindingDetailAvailableDecisions string
 
 // CharlieFindingDetailProposedActionMode defines model for CharlieFindingDetail.ProposedAction.Mode.
 type CharlieFindingDetailProposedActionMode string
@@ -1572,6 +1633,9 @@ type CharlieFindingDetailSeverity string
 
 // CharlieFindingDetailState defines model for CharlieFindingDetail.State.
 type CharlieFindingDetailState string
+
+// CharlieFindingDetailWorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+type CharlieFindingDetailWorkflowState string
 
 // CharlieFindingResource defines model for CharlieFindingResource.
 type CharlieFindingResource struct {
@@ -1588,22 +1652,34 @@ type CharlieFindingResourceType string
 
 // CharlieFindingSummary defines model for CharlieFindingSummary.
 type CharlieFindingSummary struct {
-	AffectedResource CharlieFindingResource        `json:"affected_resource"`
-	Id               openapi_types.UUID            `json:"id"`
-	ReasonNoAction   string                        `json:"reason_no_action"`
-	RepeatCount      int                           `json:"repeat_count"`
-	Severity         CharlieFindingSummarySeverity `json:"severity"`
-	State            CharlieFindingSummaryState    `json:"state"`
-	Summary          string                        `json:"summary"`
-	Title            string                        `json:"title"`
-	UpdatedAt        time.Time                     `json:"updated_at"`
+	AffectedResource CharlieFindingResource `json:"affected_resource"`
+
+	// AvailableDecisions Exact currently legal decisions. Clients must not infer or add decisions from model content.
+	AvailableDecisions []CharlieFindingSummaryAvailableDecisions `json:"available_decisions"`
+	Id                 openapi_types.UUID                        `json:"id"`
+	ReasonNoAction     string                                    `json:"reason_no_action"`
+	RepeatCount        int                                       `json:"repeat_count"`
+	Severity           CharlieFindingSummarySeverity             `json:"severity"`
+	State              CharlieFindingSummaryState                `json:"state"`
+	Summary            string                                    `json:"summary"`
+	Title              string                                    `json:"title"`
+	UpdatedAt          time.Time                                 `json:"updated_at"`
+
+	// WorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+	WorkflowState CharlieFindingSummaryWorkflowState `json:"workflow_state"`
 }
+
+// CharlieFindingSummaryAvailableDecisions defines model for CharlieFindingSummary.AvailableDecisions.
+type CharlieFindingSummaryAvailableDecisions string
 
 // CharlieFindingSummarySeverity defines model for CharlieFindingSummary.Severity.
 type CharlieFindingSummarySeverity string
 
 // CharlieFindingSummaryState defines model for CharlieFindingSummary.State.
 type CharlieFindingSummaryState string
+
+// CharlieFindingSummaryWorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+type CharlieFindingSummaryWorkflowState string
 
 // CharlieFindingTransitionRequest defines model for CharlieFindingTransitionRequest.
 type CharlieFindingTransitionRequest struct {
@@ -1712,12 +1788,18 @@ type CharlieSessionCreateRequest struct {
 type CharlieSessionMetadata struct {
 	CentralRevision      int64                            `json:"central_revision"`
 	ClientSessionId      openapi_types.UUID               `json:"client_session_id"`
+	CreatedAt            time.Time                        `json:"created_at"`
 	Id                   openapi_types.UUID               `json:"id"`
 	Intent               string                           `json:"intent"`
 	ResourceScopeSummary string                           `json:"resource_scope_summary"`
+	Source               CharlieSessionMetadataSource     `json:"source"`
 	State                CharlieSessionMetadataState      `json:"state"`
+	UpdatedAt            time.Time                        `json:"updated_at"`
 	Visibility           CharlieSessionMetadataVisibility `json:"visibility"`
 }
+
+// CharlieSessionMetadataSource defines model for CharlieSessionMetadata.Source.
+type CharlieSessionMetadataSource string
 
 // CharlieSessionMetadataState defines model for CharlieSessionMetadata.State.
 type CharlieSessionMetadataState string
@@ -4765,8 +4847,14 @@ type AcknowledgeCharlieFindingJSONRequestBody = CharlieFindingTransitionRequest
 // DismissCharlieFindingJSONRequestBody defines body for DismissCharlieFinding for application/json ContentType.
 type DismissCharlieFindingJSONRequestBody = CharlieFindingTransitionRequest
 
+// RequestCharlieFindingVerificationJSONRequestBody defines body for RequestCharlieFindingVerification for application/json ContentType.
+type RequestCharlieFindingVerificationJSONRequestBody = CharlieFindingTransitionRequest
+
 // ResolveCharlieFindingJSONRequestBody defines body for ResolveCharlieFinding for application/json ContentType.
 type ResolveCharlieFindingJSONRequestBody = CharlieFindingTransitionRequest
+
+// StartCharlieFindingRemediationJSONRequestBody defines body for StartCharlieFindingRemediation for application/json ContentType.
+type StartCharlieFindingRemediationJSONRequestBody = CharlieFindingTransitionRequest
 
 // CreateCharlieSessionJSONRequestBody defines body for CreateCharlieSession for application/json ContentType.
 type CreateCharlieSessionJSONRequestBody = CharlieSessionCreateRequest
@@ -10441,10 +10529,20 @@ type ClientInterface interface {
 
 	DismissCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RequestCharlieFindingVerificationWithBody request with any body
+	RequestCharlieFindingVerificationWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RequestCharlieFindingVerification(ctx context.Context, findingId openapi_types.UUID, body RequestCharlieFindingVerificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ResolveCharlieFindingWithBody request with any body
 	ResolveCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	ResolveCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartCharlieFindingRemediationWithBody request with any body
+	StartCharlieFindingRemediationWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	StartCharlieFindingRemediation(ctx context.Context, findingId openapi_types.UUID, body StartCharlieFindingRemediationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCharlieOperationStatus request
 	GetCharlieOperationStatus(ctx context.Context, operationId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -14269,6 +14367,30 @@ func (c *Client) DismissCharlieFinding(ctx context.Context, findingId openapi_ty
 	return c.Client.Do(req)
 }
 
+func (c *Client) RequestCharlieFindingVerificationWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestCharlieFindingVerificationRequestWithBody(c.Server, findingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RequestCharlieFindingVerification(ctx context.Context, findingId openapi_types.UUID, body RequestCharlieFindingVerificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestCharlieFindingVerificationRequest(c.Server, findingId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ResolveCharlieFindingWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewResolveCharlieFindingRequestWithBody(c.Server, findingId, contentType, body)
 	if err != nil {
@@ -14283,6 +14405,30 @@ func (c *Client) ResolveCharlieFindingWithBody(ctx context.Context, findingId op
 
 func (c *Client) ResolveCharlieFinding(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewResolveCharlieFindingRequest(c.Server, findingId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StartCharlieFindingRemediationWithBody(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartCharlieFindingRemediationRequestWithBody(c.Server, findingId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StartCharlieFindingRemediation(ctx context.Context, findingId openapi_types.UUID, body StartCharlieFindingRemediationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartCharlieFindingRemediationRequest(c.Server, findingId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -26877,6 +27023,53 @@ func NewDismissCharlieFindingRequestWithBody(server string, findingId openapi_ty
 	return req, nil
 }
 
+// NewRequestCharlieFindingVerificationRequest calls the generic RequestCharlieFindingVerification builder with application/json body
+func NewRequestCharlieFindingVerificationRequest(server string, findingId openapi_types.UUID, body RequestCharlieFindingVerificationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRequestCharlieFindingVerificationRequestWithBody(server, findingId, "application/json", bodyReader)
+}
+
+// NewRequestCharlieFindingVerificationRequestWithBody generates requests for RequestCharlieFindingVerification with any type of body
+func NewRequestCharlieFindingVerificationRequestWithBody(server string, findingId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/request-verification/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewResolveCharlieFindingRequest calls the generic ResolveCharlieFinding builder with application/json body
 func NewResolveCharlieFindingRequest(server string, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -26905,6 +27098,53 @@ func NewResolveCharlieFindingRequestWithBody(server string, findingId openapi_ty
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/resolve/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewStartCharlieFindingRemediationRequest calls the generic StartCharlieFindingRemediation builder with application/json body
+func NewStartCharlieFindingRemediationRequest(server string, findingId openapi_types.UUID, body StartCharlieFindingRemediationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartCharlieFindingRemediationRequestWithBody(server, findingId, "application/json", bodyReader)
+}
+
+// NewStartCharlieFindingRemediationRequestWithBody generates requests for StartCharlieFindingRemediation with any type of body
+func NewStartCharlieFindingRemediationRequestWithBody(server string, findingId openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "finding_id", runtime.ParamLocationPath, findingId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/charlie/findings/%s/start-remediation/", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -42202,10 +42442,20 @@ type ClientWithResponsesInterface interface {
 
 	DismissCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body DismissCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*DismissCharlieFindingResponse, error)
 
+	// RequestCharlieFindingVerificationWithBodyWithResponse request with any body
+	RequestCharlieFindingVerificationWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestCharlieFindingVerificationResponse, error)
+
+	RequestCharlieFindingVerificationWithResponse(ctx context.Context, findingId openapi_types.UUID, body RequestCharlieFindingVerificationJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestCharlieFindingVerificationResponse, error)
+
 	// ResolveCharlieFindingWithBodyWithResponse request with any body
 	ResolveCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error)
 
 	ResolveCharlieFindingWithResponse(ctx context.Context, findingId openapi_types.UUID, body ResolveCharlieFindingJSONRequestBody, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error)
+
+	// StartCharlieFindingRemediationWithBodyWithResponse request with any body
+	StartCharlieFindingRemediationWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartCharlieFindingRemediationResponse, error)
+
+	StartCharlieFindingRemediationWithResponse(ctx context.Context, findingId openapi_types.UUID, body StartCharlieFindingRemediationJSONRequestBody, reqEditors ...RequestEditorFn) (*StartCharlieFindingRemediationResponse, error)
 
 	// GetCharlieOperationStatusWithResponse request
 	GetCharlieOperationStatusWithResponse(ctx context.Context, operationId string, reqEditors ...RequestEditorFn) (*GetCharlieOperationStatusResponse, error)
@@ -47877,6 +48127,34 @@ func (r DismissCharlieFindingResponse) StatusCode() int {
 	return 0
 }
 
+type RequestCharlieFindingVerificationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Finding CharlieFindingDetail `json:"finding"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r RequestCharlieFindingVerificationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RequestCharlieFindingVerificationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ResolveCharlieFindingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -47899,6 +48177,34 @@ func (r ResolveCharlieFindingResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ResolveCharlieFindingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type StartCharlieFindingRemediationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Finding CharlieFindingDetail `json:"finding"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r StartCharlieFindingRemediationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartCharlieFindingRemediationResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -47934,11 +48240,13 @@ type ListCharlieSessionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Sessions []CharlieSessionMetadata `json:"sessions"`
+		Mode     ListCharlieSessions200Mode `json:"mode"`
+		Sessions []CharlieSessionMetadata   `json:"sessions"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
 }
+type ListCharlieSessions200Mode string
 
 // Status returns HTTPResponse.Status
 func (r ListCharlieSessionsResponse) Status() string {
@@ -58288,6 +58596,23 @@ func (c *ClientWithResponses) DismissCharlieFindingWithResponse(ctx context.Cont
 	return ParseDismissCharlieFindingResponse(rsp)
 }
 
+// RequestCharlieFindingVerificationWithBodyWithResponse request with arbitrary body returning *RequestCharlieFindingVerificationResponse
+func (c *ClientWithResponses) RequestCharlieFindingVerificationWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestCharlieFindingVerificationResponse, error) {
+	rsp, err := c.RequestCharlieFindingVerificationWithBody(ctx, findingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestCharlieFindingVerificationResponse(rsp)
+}
+
+func (c *ClientWithResponses) RequestCharlieFindingVerificationWithResponse(ctx context.Context, findingId openapi_types.UUID, body RequestCharlieFindingVerificationJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestCharlieFindingVerificationResponse, error) {
+	rsp, err := c.RequestCharlieFindingVerification(ctx, findingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestCharlieFindingVerificationResponse(rsp)
+}
+
 // ResolveCharlieFindingWithBodyWithResponse request with arbitrary body returning *ResolveCharlieFindingResponse
 func (c *ClientWithResponses) ResolveCharlieFindingWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResolveCharlieFindingResponse, error) {
 	rsp, err := c.ResolveCharlieFindingWithBody(ctx, findingId, contentType, body, reqEditors...)
@@ -58303,6 +58628,23 @@ func (c *ClientWithResponses) ResolveCharlieFindingWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseResolveCharlieFindingResponse(rsp)
+}
+
+// StartCharlieFindingRemediationWithBodyWithResponse request with arbitrary body returning *StartCharlieFindingRemediationResponse
+func (c *ClientWithResponses) StartCharlieFindingRemediationWithBodyWithResponse(ctx context.Context, findingId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartCharlieFindingRemediationResponse, error) {
+	rsp, err := c.StartCharlieFindingRemediationWithBody(ctx, findingId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartCharlieFindingRemediationResponse(rsp)
+}
+
+func (c *ClientWithResponses) StartCharlieFindingRemediationWithResponse(ctx context.Context, findingId openapi_types.UUID, body StartCharlieFindingRemediationJSONRequestBody, reqEditors ...RequestEditorFn) (*StartCharlieFindingRemediationResponse, error) {
+	rsp, err := c.StartCharlieFindingRemediation(ctx, findingId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartCharlieFindingRemediationResponse(rsp)
 }
 
 // GetCharlieOperationStatusWithResponse request returning *GetCharlieOperationStatusResponse
@@ -69462,6 +69804,62 @@ func ParseDismissCharlieFindingResponse(rsp *http.Response) (*DismissCharlieFind
 	return response, nil
 }
 
+// ParseRequestCharlieFindingVerificationResponse parses an HTTP response from a RequestCharlieFindingVerificationWithResponse call
+func ParseRequestCharlieFindingVerificationResponse(rsp *http.Response) (*RequestCharlieFindingVerificationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RequestCharlieFindingVerificationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseResolveCharlieFindingResponse parses an HTTP response from a ResolveCharlieFindingWithResponse call
 func ParseResolveCharlieFindingResponse(rsp *http.Response) (*ResolveCharlieFindingResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -69471,6 +69869,62 @@ func ParseResolveCharlieFindingResponse(rsp *http.Response) (*ResolveCharlieFind
 	}
 
 	response := &ResolveCharlieFindingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartCharlieFindingRemediationResponse parses an HTTP response from a StartCharlieFindingRemediationWithResponse call
+func ParseStartCharlieFindingRemediationResponse(rsp *http.Response) (*StartCharlieFindingRemediationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartCharlieFindingRemediationResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -69581,7 +70035,8 @@ func ParseListCharlieSessionsResponse(rsp *http.Response) (*ListCharlieSessionsR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Sessions []CharlieSessionMetadata `json:"sessions"`
+			Mode     ListCharlieSessions200Mode `json:"mode"`
+			Sessions []CharlieSessionMetadata   `json:"sessions"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

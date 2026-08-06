@@ -26,6 +26,12 @@ import {
   transitionCharlieFinding,
   type CharlieApproval,
 } from "@/lib/api/charlie";
+import {
+  findingLifecycleDecisions,
+  findingDecisionLabel,
+  findingWorkflowLabel,
+  findingWorkflowGuidance,
+} from "@/components/charlie/finding-workflow";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuthStore } from "@/lib/store";
@@ -402,7 +408,7 @@ function Findings({
 }) {
   const qc = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const canTriage = can(user, "charlie", "read");
+  const canTriage = can(user, "charlie", "update");
   const q = useQuery({
     queryKey: queryKeys.charlie.findings,
     queryFn: listCharlieFindings,
@@ -420,7 +426,7 @@ function Findings({
       a,
     }: {
       id: string;
-      a: "acknowledge" | "dismiss" | "resolve";
+      a: "acknowledge" | "start_remediation" | "request_verification" | "dismiss" | "resolve";
     }) => transitionCharlieFinding(id, a),
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.findings });
@@ -510,6 +516,12 @@ function Findings({
           d.data && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">{d.data.title}</h2>
+              <p className="text-sm text-foreground/70">
+                Workflow: {findingWorkflowLabel(d.data)}
+              </p>
+              <p className="rounded bg-muted p-3 text-sm">
+                {findingWorkflowGuidance(d.data)}
+              </p>
               <SafeMarkdown>{d.data.summary}</SafeMarkdown>
               <p className="text-sm">
                 Confidence:{" "}
@@ -561,6 +573,42 @@ function Findings({
                       <li key={i}>{check.slice(0, 500)}</li>
                     ))}
                   </ul>
+                </section>
+              ) : null}
+              {d.data.manualRemediation ? (
+                <section className="space-y-2 rounded border p-3 text-sm">
+                  <h3 className="font-medium">Manual remediation</h3>
+                  {d.data.manualRemediation.preconditions.length ? (
+                    <div>
+                      <b className="text-xs">Preconditions</b>
+                      <ul className="list-disc pl-5">
+                        {d.data.manualRemediation.preconditions.slice(0, 16).map((value, index) => (
+                          <li key={index}>{value.slice(0, 256)}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <div>
+                    <b className="text-xs">Steps</b>
+                    <ol className="list-decimal pl-5">
+                      {d.data.manualRemediation.steps.slice(0, 16).map((value, index) => (
+                        <li key={index}>{value.slice(0, 512)}</li>
+                      ))}
+                    </ol>
+                  </div>
+                  <p><b>Expected impact:</b> {d.data.manualRemediation.expectedImpact.slice(0, 1024)}</p>
+                  {d.data.manualRemediation.rollback ? (
+                    <p><b>Rollback:</b> {d.data.manualRemediation.rollback.slice(0, 1024)}</p>
+                  ) : null}
+                  <div>
+                    <b className="text-xs">Verification ({d.data.manualRemediation.verificationMethod.slice(0, 128)})</b>
+                    <ul className="list-disc pl-5">
+                      {d.data.manualRemediation.verificationSteps.slice(0, 16).map((value, index) => (
+                        <li key={index}>{value.slice(0, 512)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <p className="text-foreground/70">Recording progress or completion does not authorize Charlie to execute.</p>
                 </section>
               ) : null}
               {d.data.proposedAction && (
@@ -631,33 +679,24 @@ function Findings({
                     )}
                 </div>
               )}
-              {canTriage && ["open", "acknowledged"].includes(d.data.state) ? (
+              {canTriage && findingLifecycleDecisions(d.data).length ? (
                 <div className="flex flex-wrap gap-2">
-                  {([
-                    ...(d.data.state === "open" ? ["acknowledge" as const] : []),
-                    "dismiss" as const,
-                    "resolve" as const,
-                  ]).map((a) => (
+                  {findingLifecycleDecisions(d.data).map((a) => (
                     <button
                       key={a}
                       disabled={action.isPending}
                       onClick={() => action.mutate({ id: d.data.id, a })}
                       className="rounded-md border px-3 py-2 text-sm capitalize"
                     >
-                      {a}
+                      {findingDecisionLabel(a)}
                     </button>
                   ))}
                 </div>
               ) : !canTriage ? (
                 <p className="text-sm text-foreground/70">
-                  Requires charlie:read to update finding lifecycle.
+                  Requires charlie:update to update finding lifecycle.
                 </p>
-              ) : (
-                <p className="text-sm text-foreground/70">
-                  This finding is {d.data.state}; no further lifecycle action is
-                  available.
-                </p>
-              )}
+              ) : null}
               {action.isError && (
                 <p role="alert" className="text-sm text-status-error">
                   The finding was not changed. Access may have changed or

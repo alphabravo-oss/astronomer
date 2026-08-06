@@ -206,7 +206,7 @@ components:
     CharlieFindingSummary:
       type: object
       additionalProperties: false
-      required: [id, title, severity, state, summary, reason_no_action, repeat_count, updated_at, affected_resource]
+      required: [id, title, severity, state, summary, reason_no_action, repeat_count, updated_at, affected_resource, workflow_state, available_decisions]
       properties:
         id: {type: string, format: uuid}
         title: {type: string, maxLength: 256}
@@ -217,6 +217,18 @@ components:
         repeat_count: {type: integer, minimum: 1}
         updated_at: {type: string, format: date-time}
         affected_resource: {$ref: '#/components/schemas/CharlieFindingResource'}
+        workflow_state:
+          type: string
+          enum: [approval_pending, manual_remediation_required, remediation_in_progress, verification_pending, resolved, rejected, dismissed, expired]
+          description: Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+        available_decisions:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          items:
+            type: string
+            enum: [open_exact_approval, reject_exact_approval, acknowledge, start_remediation, request_verification, dismiss, resolve]
+          description: Exact currently legal decisions. Clients must not infer or add decisions from model content.
     CharlieFindingDetail:
       allOf:
         - {$ref: '#/components/schemas/CharlieFindingSummary'}
@@ -18101,6 +18113,42 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
       responses:
         '200': {description: Finding dismissed., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/{finding_id}/start-remediation/:
+    post:
+      operationId: startCharlieFindingRemediation
+      summary: Record that product-owned manual remediation has started
+      description: This lifecycle decision grants no Charlie execution authority.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Remediation marked in progress., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/{finding_id}/request-verification/:
+    post:
+      operationId: requestCharlieFindingVerification
+      summary: Record manual completion and request product-owned verification
+      description: Astronomer re-reads current state before resolution; this lifecycle decision grants no Charlie execution authority.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Verification requested., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}

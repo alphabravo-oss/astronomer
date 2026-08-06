@@ -7,6 +7,7 @@ import {
   getCharlieFinding,
   listCharlieFindings,
   listCharlieSessions,
+  transitionCharlieFinding,
 } from "./charlie";
 const mockedApi = api as Mocked<typeof api>;
 
@@ -102,6 +103,18 @@ describe("Charlie browser gateway mapping", () => {
                 operatorChecks: ["check health"],
                 preconditions: ["healthy backup"],
                 expectedResult: "ready",
+                workflow: {
+                  state: "manual_remediation_required",
+                  manual_remediation: {
+                    preconditions: ["authorized operator"],
+                    steps: ["review current state"],
+                    expected_impact: "restore health",
+                    verification: {
+                      method: "product.current_state",
+                      steps: ["re-read current state"],
+                    },
+                  },
+                },
               },
             },
           },
@@ -114,6 +127,10 @@ describe("Charlie browser gateway mapping", () => {
         affectedResource: expect.objectContaining({ id: "a" }),
         confidence: 0.8,
         operatorChecks: ["check health"],
+        manualRemediation: expect.objectContaining({
+          steps: ["review current state"],
+          verificationMethod: "product.current_state",
+        }),
         proposedAction: expect.objectContaining({
           capability: "Restart",
           eligible: true,
@@ -139,6 +156,14 @@ describe("Charlie browser gateway mapping", () => {
         decision: "approve",
         rationale: "bounded rationale",
       }),
+    );
+  });
+  it("maps workflow decisions to fixed product-owned paths", async () => {
+    mockedApi.post.mockResolvedValue({ data: {} });
+    await transitionCharlieFinding("finding/a", "request_verification");
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      "/charlie/findings/finding%2Fa/request-verification/",
+      expect.objectContaining({ request_id: expect.any(String) }),
     );
   });
   it("turns stale approval conflicts into a precise safe error", async () => {

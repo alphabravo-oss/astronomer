@@ -686,11 +686,14 @@ components:
                     maxItems: 16
                     minItems: 1
                     type: array
+                workflow:
+                    $ref: '#/components/schemas/FindingWorkflow'
             required:
                 - finding_id
                 - deduplication_key
                 - severity
                 - status
+                - workflow
                 - affected_resources
                 - evidence_summary
                 - diagnosis
@@ -722,15 +725,53 @@ components:
                         - created
                         - deduplicated
                         - acknowledged
+                        - remediation_started
+                        - verification_requested
                         - dismissed
                         - resolved
                         - reopened
                     type: string
+                workflow_state:
+                    $ref: '#/components/schemas/FindingWorkflowState'
             required:
                 - event_id
                 - transition
+                - workflow_state
                 - actor_ref
                 - occurred_at
+            type: object
+        FindingManualRemediation:
+            additionalProperties: false
+            properties:
+                expected_impact:
+                    maxLength: 1024
+                    minLength: 1
+                    type: string
+                preconditions:
+                    items:
+                        maxLength: 256
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    type: array
+                rollback:
+                    maxLength: 1024
+                    minLength: 1
+                    type: string
+                steps:
+                    items:
+                        maxLength: 512
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                verification:
+                    $ref: '#/components/schemas/FindingVerification'
+            required:
+                - steps
+                - expected_impact
+                - verification
             type: object
         FindingOpaqueId:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
@@ -771,6 +812,17 @@ components:
                 updated_at:
                     format: date-time
                     type: string
+                workflow_state:
+                    enum:
+                        - approval_pending
+                        - manual_remediation_required
+                        - remediation_in_progress
+                        - verification_pending
+                        - resolved
+                        - rejected
+                        - dismissed
+                        - expired
+                    type: string
             required:
                 - finding_id
                 - session_id
@@ -779,6 +831,7 @@ components:
                 - repeat_count
                 - severity
                 - status
+                - workflow_state
                 - block_code
                 - updated_at
             type: object
@@ -795,6 +848,8 @@ components:
                 transition:
                     enum:
                         - acknowledge
+                        - start_remediation
+                        - request_verification
                         - dismiss
                         - resolve
                         - reopen
@@ -804,6 +859,47 @@ components:
                 - transition
                 - actor_ref
             type: object
+        FindingVerification:
+            additionalProperties: false
+            properties:
+                method:
+                    pattern: ^[a-z][a-z0-9_.:-]{0,127}$
+                    type: string
+                steps:
+                    items:
+                        maxLength: 512
+                        minLength: 1
+                        type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+            required:
+                - method
+                - steps
+            type: object
+        FindingWorkflow:
+            additionalProperties: false
+            properties:
+                approval_id:
+                    $ref: '#/components/schemas/FindingOpaqueId'
+                manual_remediation:
+                    $ref: '#/components/schemas/FindingManualRemediation'
+                state:
+                    $ref: '#/components/schemas/FindingWorkflowState'
+            required:
+                - state
+            type: object
+        FindingWorkflowState:
+            enum:
+                - approval_pending
+                - manual_remediation_required
+                - remediation_in_progress
+                - verification_pending
+                - resolved
+                - rejected
+                - dismissed
+                - expired
+            type: string
         Health:
             additionalProperties: false
             properties:

@@ -780,6 +780,9 @@ type Finding struct {
 
 	// VerificationSteps corresponds to the JSON schema field "verification_steps".
 	VerificationSteps []string `json:"verification_steps" yaml:"verification_steps" mapstructure:"verification_steps"`
+
+	// Workflow corresponds to the JSON schema field "workflow".
+	Workflow Workflow `json:"workflow" yaml:"workflow" mapstructure:"workflow"`
 }
 
 type FindingSeverity string
@@ -1002,6 +1005,9 @@ func (j *Finding) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["verification_steps"]; raw != nil && !ok {
 		return fmt.Errorf("field verification_steps in Finding: required")
 	}
+	if _, ok := raw["workflow"]; raw != nil && !ok {
+		return fmt.Errorf("field workflow in Finding: required")
+	}
 	type Plain Finding
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
@@ -1085,6 +1091,9 @@ type LifecycleEvent struct {
 
 	// Transition corresponds to the JSON schema field "transition".
 	Transition LifecycleEventTransition `json:"transition" yaml:"transition" mapstructure:"transition"`
+
+	// WorkflowState corresponds to the JSON schema field "workflow_state".
+	WorkflowState WorkflowState `json:"workflow_state" yaml:"workflow_state" mapstructure:"workflow_state"`
 }
 
 type LifecycleEventTransition string
@@ -1093,13 +1102,17 @@ const LifecycleEventTransitionAcknowledged LifecycleEventTransition = "acknowled
 const LifecycleEventTransitionCreated LifecycleEventTransition = "created"
 const LifecycleEventTransitionDeduplicated LifecycleEventTransition = "deduplicated"
 const LifecycleEventTransitionDismissed LifecycleEventTransition = "dismissed"
+const LifecycleEventTransitionRemediationStarted LifecycleEventTransition = "remediation_started"
 const LifecycleEventTransitionReopened LifecycleEventTransition = "reopened"
 const LifecycleEventTransitionResolved LifecycleEventTransition = "resolved"
+const LifecycleEventTransitionVerificationRequested LifecycleEventTransition = "verification_requested"
 
 var enumValues_LifecycleEventTransition = []interface{}{
 	"created",
 	"deduplicated",
 	"acknowledged",
+	"remediation_started",
+	"verification_requested",
 	"dismissed",
 	"resolved",
 	"reopened",
@@ -1143,6 +1156,9 @@ func (j *LifecycleEvent) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["transition"]; raw != nil && !ok {
 		return fmt.Errorf("field transition in LifecycleEvent: required")
 	}
+	if _, ok := raw["workflow_state"]; raw != nil && !ok {
+		return fmt.Errorf("field workflow_state in LifecycleEvent: required")
+	}
 	type Plain LifecycleEvent
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
@@ -1152,6 +1168,68 @@ func (j *LifecycleEvent) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s length: must be <= %d", "reason", 512)
 	}
 	*j = LifecycleEvent(plain)
+	return nil
+}
+
+type ManualRemediation struct {
+	// ExpectedImpact corresponds to the JSON schema field "expected_impact".
+	ExpectedImpact string `json:"expected_impact" yaml:"expected_impact" mapstructure:"expected_impact"`
+
+	// Preconditions corresponds to the JSON schema field "preconditions".
+	Preconditions []string `json:"preconditions,omitempty,omitzero" yaml:"preconditions,omitempty" mapstructure:"preconditions,omitempty"`
+
+	// Rollback corresponds to the JSON schema field "rollback".
+	Rollback *string `json:"rollback,omitempty,omitzero" yaml:"rollback,omitempty" mapstructure:"rollback,omitempty"`
+
+	// Steps corresponds to the JSON schema field "steps".
+	Steps []string `json:"steps" yaml:"steps" mapstructure:"steps"`
+
+	// Verification corresponds to the JSON schema field "verification".
+	Verification Verification `json:"verification" yaml:"verification" mapstructure:"verification"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ManualRemediation) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["expected_impact"]; raw != nil && !ok {
+		return fmt.Errorf("field expected_impact in ManualRemediation: required")
+	}
+	if _, ok := raw["steps"]; raw != nil && !ok {
+		return fmt.Errorf("field steps in ManualRemediation: required")
+	}
+	if _, ok := raw["verification"]; raw != nil && !ok {
+		return fmt.Errorf("field verification in ManualRemediation: required")
+	}
+	type Plain ManualRemediation
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if utf8.RuneCountInString(string(plain.ExpectedImpact)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "expected_impact", 1)
+	}
+	if utf8.RuneCountInString(string(plain.ExpectedImpact)) > 1024 {
+		return fmt.Errorf("field %s length: must be <= %d", "expected_impact", 1024)
+	}
+	if len(plain.Preconditions) > 16 {
+		return fmt.Errorf("field %s length: must be <= %d", "preconditions", 16)
+	}
+	if plain.Rollback != nil && utf8.RuneCountInString(string(*plain.Rollback)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "rollback", 1)
+	}
+	if plain.Rollback != nil && utf8.RuneCountInString(string(*plain.Rollback)) > 1024 {
+		return fmt.Errorf("field %s length: must be <= %d", "rollback", 1024)
+	}
+	if plain.Steps != nil && len(plain.Steps) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "steps", 1)
+	}
+	if len(plain.Steps) > 16 {
+		return fmt.Errorf("field %s length: must be <= %d", "steps", 16)
+	}
+	*j = ManualRemediation(plain)
 	return nil
 }
 
@@ -1558,5 +1636,114 @@ func (j *OpaqueId) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s pattern match: must match %s", "", `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 	}
 	*j = OpaqueId(plain)
+	return nil
+}
+
+type Verification struct {
+	// Method corresponds to the JSON schema field "method".
+	Method string `json:"method" yaml:"method" mapstructure:"method"`
+
+	// Steps corresponds to the JSON schema field "steps".
+	Steps []string `json:"steps" yaml:"steps" mapstructure:"steps"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *Verification) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["method"]; raw != nil && !ok {
+		return fmt.Errorf("field method in Verification: required")
+	}
+	if _, ok := raw["steps"]; raw != nil && !ok {
+		return fmt.Errorf("field steps in Verification: required")
+	}
+	type Plain Verification
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if matched, _ := regexp.MatchString(`^[a-z][a-z0-9_.:-]{0,127}$`, string(plain.Method)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "Method", `^[a-z][a-z0-9_.:-]{0,127}$`)
+	}
+	if plain.Steps != nil && len(plain.Steps) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "steps", 1)
+	}
+	if len(plain.Steps) > 16 {
+		return fmt.Errorf("field %s length: must be <= %d", "steps", 16)
+	}
+	*j = Verification(plain)
+	return nil
+}
+
+type Workflow struct {
+	// ApprovalId corresponds to the JSON schema field "approval_id".
+	ApprovalId *OpaqueId `json:"approval_id,omitempty,omitzero" yaml:"approval_id,omitempty" mapstructure:"approval_id,omitempty"`
+
+	// ManualRemediation corresponds to the JSON schema field "manual_remediation".
+	ManualRemediation *ManualRemediation `json:"manual_remediation,omitempty,omitzero" yaml:"manual_remediation,omitempty" mapstructure:"manual_remediation,omitempty"`
+
+	// State corresponds to the JSON schema field "state".
+	State WorkflowState `json:"state" yaml:"state" mapstructure:"state"`
+}
+
+type WorkflowState string
+
+const WorkflowStateApprovalPending WorkflowState = "approval_pending"
+const WorkflowStateDismissed WorkflowState = "dismissed"
+const WorkflowStateExpired WorkflowState = "expired"
+const WorkflowStateManualRemediationRequired WorkflowState = "manual_remediation_required"
+const WorkflowStateRejected WorkflowState = "rejected"
+const WorkflowStateRemediationInProgress WorkflowState = "remediation_in_progress"
+const WorkflowStateResolved WorkflowState = "resolved"
+const WorkflowStateVerificationPending WorkflowState = "verification_pending"
+
+var enumValues_WorkflowState = []interface{}{
+	"approval_pending",
+	"manual_remediation_required",
+	"remediation_in_progress",
+	"verification_pending",
+	"resolved",
+	"rejected",
+	"dismissed",
+	"expired",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *WorkflowState) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_WorkflowState {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_WorkflowState, v)
+	}
+	*j = WorkflowState(v)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *Workflow) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["state"]; raw != nil && !ok {
+		return fmt.Errorf("field state in Workflow: required")
+	}
+	type Plain Workflow
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = Workflow(plain)
 	return nil
 }

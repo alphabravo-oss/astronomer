@@ -269,7 +269,12 @@ func (f *Fake) RuntimeCalls() int {
 }
 
 func findingSummary() map[string]any {
-	return map[string]any{"finding_id": "finding-0001", "severity": "medium", "status": "open", "block_code": "approval_required", "updated_at": fixedTime}
+	return map[string]any{
+		"finding_id": "finding-0001", "session_id": "session-0001", "investigation_id": "investigation-0001",
+		"deduplication_key": "00000000000000000000000000000001", "repeat_count": 1,
+		"severity": "medium", "status": "open", "workflow_state": "approval_pending",
+		"block_code": "approval_required", "updated_at": fixedTime,
+	}
 }
 
 func findingEnvelope() map[string]any {
@@ -277,13 +282,15 @@ func findingEnvelope() map[string]any {
 		"schema": "charlie.finding/v1",
 		"finding": map[string]any{
 			"finding_id": "finding-0001", "deduplication_key": "00000000000000000000000000000001",
-			"severity": "medium", "status": "open", "affected_resources": []string{"resource-0001"},
-			"evidence_summary": []string{}, "diagnosis": "Deterministic fixture diagnosis.", "confidence": 1,
+			"severity": "medium", "status": "open",
+			"workflow":           map[string]any{"state": "approval_pending", "approval_id": "approval-0001"},
+			"affected_resources": []string{"resource-0001"},
+			"evidence_summary":   []string{}, "diagnosis": "Deterministic fixture diagnosis.", "confidence": 1,
 			"block_code": "approval_required", "risk_impact": "No action executed.",
 			"operator_checks": []string{"Review the fixture resource."}, "verification_steps": []string{"Re-read fixture state."},
 			"investigation_id": "investigation-0001", "session_id": "session-0001", "created_at": fixedTime, "updated_at": fixedTime,
 		},
-		"lifecycle": []map[string]any{{"event_id": "lifecycle-0001", "transition": "created", "actor_ref": "agent-0001", "occurred_at": fixedTime}},
+		"lifecycle": []map[string]any{{"event_id": "lifecycle-0001", "transition": "created", "workflow_state": "approval_pending", "actor_ref": "agent-0001", "occurred_at": fixedTime}},
 		"storage":   map[string]any{"encryption_required": true, "retention_days": 1, "expires_at": "2026-08-06T00:00:00Z"},
 	}
 }

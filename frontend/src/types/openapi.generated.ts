@@ -608,6 +608,8 @@ export interface OpenAPIComponents {
           "repeat_count": number;
           "updated_at": string;
           "affected_resource": OpenAPIComponents['schemas']['CharlieFindingResource'];
+          "workflow_state": "approval_pending" | "manual_remediation_required" | "remediation_in_progress" | "verification_pending" | "resolved" | "rejected" | "dismissed" | "expired";
+          "available_decisions": Array<"open_exact_approval" | "reject_exact_approval" | "acknowledge" | "start_remediation" | "request_verification" | "dismiss" | "resolve">;
         };
     CharlieFindingTransitionRequest: {
           "request_id": string;

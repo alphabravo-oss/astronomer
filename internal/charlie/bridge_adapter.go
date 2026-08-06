@@ -34,6 +34,7 @@ type BridgeFindingSummary struct {
 	RepeatCount      int32     `json:"repeat_count"`
 	Severity         string    `json:"severity"`
 	Status           string    `json:"status"`
+	WorkflowState    string    `json:"workflow_state"`
 	BlockCode        string    `json:"block_code"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	// The fields below are populated only after a separately authorized detail
@@ -247,10 +248,32 @@ func validBridgeFindingSummary(finding BridgeFindingSummary) bool {
 		!bridgeFindingOpaqueIDPattern.MatchString(finding.InvestigationID) ||
 		!isLowerHexDigest(finding.DeduplicationKey) || finding.RepeatCount < 1 ||
 		finding.UpdatedAt.IsZero() || !validCentralFindingSeverity(finding.Severity) ||
-		!validCentralFindingStatus(finding.Status) || !validCentralFindingBlockCode(finding.BlockCode) {
+		!validCentralFindingStatus(finding.Status) || !validCentralFindingWorkflow(finding) ||
+		!validCentralFindingBlockCode(finding.BlockCode) {
 		return false
 	}
 	return true
+}
+
+func validCentralFindingWorkflow(finding BridgeFindingSummary) bool {
+	switch finding.WorkflowState {
+	case "approval_pending":
+		return (finding.Status == "open" || finding.Status == "acknowledged") && finding.BlockCode == "approval_required"
+	case "manual_remediation_required":
+		return finding.Status == "open" || finding.Status == "acknowledged" || finding.Status == "reopened"
+	case "remediation_in_progress", "verification_pending":
+		return finding.Status == "acknowledged"
+	case "resolved":
+		return finding.Status == "resolved"
+	case "rejected":
+		return finding.Status == "resolved" && finding.BlockCode == "approval_rejected"
+	case "dismissed":
+		return finding.Status == "dismissed"
+	case "expired":
+		return true
+	default:
+		return false
+	}
 }
 
 func isLowerHexDigest(value string) bool {
@@ -336,16 +359,15 @@ func findingResourceDigest(resourceID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(resourceID)))
 }
 
-func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, transition string) (json.RawMessage, error) {
+func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, decision string) (json.RawMessage, error) {
 	path, err := opaqueBridgePath("/findings/", findingID)
 	if err != nil {
 		return nil, err
 	}
-	bridgeTransition := map[string]string{"acknowledged": "acknowledge", "dismissed": "dismiss", "resolved": "resolve"}[transition]
-	if bridgeTransition == "" {
+	if !validFindingDecision(decision) {
 		return nil, fmt.Errorf("Charlie finding transition is invalid")
 	}
-	request := map[string]string{"request_id": requestID.String(), "transition": bridgeTransition, "actor_ref": "product-user"}
+	request := map[string]string{"request_id": requestID.String(), "transition": decision, "actor_ref": "product-user"}
 	var response json.RawMessage
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/transitions", requestID.String(), authorizationRef, request, &response); err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
@@ -46,8 +47,9 @@ func (f *findingAccessFake) ListCharlieFindings(context.Context, sqlc.ListCharli
 func (f *findingAccessFake) TransitionCharlieFinding(_ context.Context, p sqlc.TransitionCharlieFindingParams) (sqlc.CharlieFinding, error) {
 	f.transition = p
 	for i := range f.rows {
-		if f.rows[i].ID == p.ID && f.rows[i].Status == p.ExpectedStatus {
+		if f.rows[i].ID == p.ID && f.rows[i].Status == p.ExpectedStatus && f.rows[i].WorkflowState == p.ExpectedWorkflowState {
 			f.rows[i].Status = p.NextStatus
+			f.rows[i].WorkflowState = p.NextWorkflowState
 			return f.rows[i], nil
 		}
 	}
@@ -118,7 +120,7 @@ func findingAccessFixture() (*findingAccessFake, *findingAccessAuthorizerFake, *
 	actorID, sessionID, findingID := uuid.New(), uuid.New(), uuid.New()
 	store := &findingAccessFake{
 		connection: connection,
-		rows:       []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", ExecutionBlockCode: "approval_required", RepeatCount: 2}},
+		rows:       []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", WorkflowState: "manual_remediation_required", ExecutionBlockCode: "read_only", RepeatCount: 2}},
 		resources:  map[uuid.UUID][]sqlc.CharlieFindingResource{findingID: {{FindingID: findingID, ResourceType: "tunnel", ResourceID: "replica-a", RequiredVerb: "read"}}},
 		session: sqlc.CharlieSession{
 			ID: sessionID, ConnectionID: connection.ID, CharlieSessionID: "central-session",
@@ -157,12 +159,30 @@ func TestFindingAccessFetchesCentralDetailOnlyAfterLiveAuthorization(t *testing.
 func TestFindingAccessTransitionsCentralThenCommitsAndPublishes(t *testing.T) {
 	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
 	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
-	view, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "acknowledged")
-	if err != nil || bridge.transitionCalls != 1 || bridge.next != "acknowledged" || store.transition.ExpectedStatus != "open" || view.Finding.Status != "acknowledged" {
+	view, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "start_remediation")
+	if err != nil || bridge.transitionCalls != 1 || bridge.next != "start_remediation" || store.transition.ExpectedStatus != "open" ||
+		store.transition.ExpectedWorkflowState != "manual_remediation_required" || store.transition.NextWorkflowState != "remediation_in_progress" ||
+		view.Finding.Status != "acknowledged" {
 		t.Fatalf("finding transition incomplete: view=%#v transition=%#v err=%v", view, store.transition, err)
 	}
 	if len(publisher.alerts) != 1 || publisher.alerts[0].Severity != "medium" || publisher.alerts[0].ResourceID != "replica-a" {
 		t.Fatalf("durable lifecycle did not publish bounded alert: %#v", publisher.alerts)
+	}
+}
+
+func TestFindingAccessRejectsGenericLifecycleTransitionForExactPendingApproval(t *testing.T) {
+	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+	store.rows[0].ApprovalID = pgtype.Text{String: "approval-a", Valid: true}
+	store.rows[0].ExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}
+	store.rows[0].WorkflowState = "approval_pending"
+	store.rows[0].ExecutionBlockCode = "approval_required"
+	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "resolve"); err == nil {
+		t.Fatal("generic resolution bypassed the exact pending approval workflow")
+	}
+	if bridge.transitionCalls != 0 || store.transition.ID != uuid.Nil || len(audit.entries) != 0 || len(publisher.alerts) != 0 {
+		t.Fatalf("rejected transition produced side effects: bridge=%d transition=%#v audit=%d alerts=%d",
+			bridge.transitionCalls, store.transition, len(audit.entries), len(publisher.alerts))
 	}
 }
 

@@ -153,10 +153,22 @@ func centralSyncFixture(t *testing.T) (*centralSyncSessionQueries, *SessionAcces
 }
 
 func syncedSummary(id, session, severity, status, block string, updated time.Time) BridgeFindingSummary {
+	workflow := "manual_remediation_required"
+	switch status {
+	case "acknowledged":
+		workflow = "remediation_in_progress"
+	case "dismissed":
+		workflow = "dismissed"
+	case "resolved":
+		workflow = "resolved"
+	}
+	if block == "approval_required" {
+		workflow = "approval_pending"
+	}
 	return BridgeFindingSummary{
 		FindingID: id, SessionID: session, InvestigationID: "investigation-" + id,
 		DeduplicationKey: stableFingerprint("central-fixture", id, session), RepeatCount: 1,
-		Severity: severity, Status: status, BlockCode: block, UpdatedAt: updated.UTC(),
+		Severity: severity, Status: status, WorkflowState: workflow, BlockCode: block, UpdatedAt: updated.UTC(),
 	}
 }
 
@@ -269,7 +281,7 @@ func TestCentralFindingNotificationEscalationCooldownAndClosedStates(t *testing.
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := shouldNotifyCentralFinding(test.prior, test.err, test.summary, centralFindingStatus(test.summary.Status), now); got != test.want {
+			if got := shouldNotifyCentralFinding(test.prior, test.err, test.summary, centralFindingStatus(test.summary.Status, test.summary.WorkflowState), now); got != test.want {
 				t.Fatalf("notify=%v want %v", got, test.want)
 			}
 		})
@@ -288,7 +300,7 @@ func TestCentralFindingReplayRejectsSameOrOlderCentralRevision(t *testing.T) {
 
 func TestCentralFindingSummaryRejectsContentAndDisplayUsesNoCentralCanary(t *testing.T) {
 	canary := "central-detail-content-canary"
-	decoder := json.NewDecoder(bytes.NewBufferString(`[{"finding_id":"f","session_id":"s","investigation_id":"i","deduplication_key":"` + strings.Repeat("a", 64) + `","repeat_count":1,"severity":"high","status":"open","block_code":"read_only","updated_at":"2026-08-05T00:00:00Z","summary":"` + canary + `"}]`))
+	decoder := json.NewDecoder(bytes.NewBufferString(`[{"finding_id":"f","session_id":"s","investigation_id":"i","deduplication_key":"` + strings.Repeat("a", 64) + `","repeat_count":1,"severity":"high","status":"open","workflow_state":"manual_remediation_required","block_code":"read_only","updated_at":"2026-08-05T00:00:00Z","summary":"` + canary + `"}]`))
 	decoder.DisallowUnknownFields()
 	var summaries []BridgeFindingSummary
 	if err := decoder.Decode(&summaries); err == nil {

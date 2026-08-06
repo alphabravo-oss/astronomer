@@ -953,11 +953,12 @@ RETURNING *;
 -- name: UpsertCharlieFinding :one
 INSERT INTO charlie_findings (
     connection_id, charlie_finding_id, session_id, source, severity, status,
-    effective_mode, execution_block_code, dedupe_fingerprint, title, summary,
+    effective_mode, workflow_state, execution_block_code, dedupe_fingerprint, title, summary,
     recommended_action_label, risk_impact, verification_summary, expires_at
 ) VALUES (
     sqlc.arg(connection_id), sqlc.arg(charlie_finding_id), sqlc.narg(session_id),
     sqlc.arg(source), sqlc.arg(severity), 'open', sqlc.arg(effective_mode),
+    'manual_remediation_required',
     sqlc.arg(execution_block_code), sqlc.arg(dedupe_fingerprint), sqlc.arg(title),
     sqlc.arg(summary), sqlc.arg(recommended_action_label), sqlc.arg(risk_impact),
     sqlc.arg(verification_summary), sqlc.narg(expires_at)
@@ -979,12 +980,12 @@ RETURNING *;
 -- name: UpsertCharlieApprovalFinding :one
 INSERT INTO charlie_findings (
     connection_id, charlie_finding_id, approval_id, session_id, source,
-    severity, status, effective_mode, execution_block_code,
+    severity, status, effective_mode, workflow_state, execution_block_code,
     dedupe_fingerprint, title, summary, recommended_action_label,
     risk_impact, verification_summary, expires_at
 ) VALUES (
     sqlc.arg(connection_id), sqlc.arg(charlie_finding_id), sqlc.arg(approval_id),
-    sqlc.arg(session_id), 'user', 'warning', 'open', 'approval',
+    sqlc.arg(session_id), 'user', 'warning', 'open', 'approval', 'approval_pending',
     'approval_required', sqlc.arg(dedupe_fingerprint),
     sqlc.arg(title), sqlc.arg(summary), sqlc.arg(recommended_action_label),
     sqlc.arg(risk_impact), sqlc.arg(verification_summary), sqlc.arg(expires_at)
@@ -1003,6 +1004,11 @@ SET status = CASE
         WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'resolved'
         WHEN sqlc.arg(approval_state)::text = 'expired' THEN 'expired'
         ELSE status
+    END,
+    workflow_state = CASE
+        WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'rejected'
+        WHEN sqlc.arg(approval_state)::text = 'expired' THEN 'expired'
+        ELSE workflow_state
     END,
     execution_block_code = CASE
         WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'approval_rejected'
@@ -1034,11 +1040,12 @@ WHERE connection_id = sqlc.arg(connection_id)
 -- name: UpsertSyncedCharlieFinding :one
 INSERT INTO charlie_findings (
     connection_id, charlie_finding_id, session_id, source, severity, status,
-    effective_mode, execution_block_code, dedupe_fingerprint, title, summary,
+    effective_mode, workflow_state, execution_block_code, dedupe_fingerprint, title, summary,
     recommended_action_label, risk_impact, verification_summary, repeat_count, updated_at
 ) VALUES (
     sqlc.arg(connection_id), sqlc.arg(charlie_finding_id), sqlc.arg(session_id),
     sqlc.arg(source), sqlc.arg(severity), sqlc.arg(status), sqlc.arg(effective_mode),
+    sqlc.arg(workflow_state),
     sqlc.arg(execution_block_code), sqlc.arg(dedupe_fingerprint), sqlc.arg(title),
     sqlc.arg(summary), sqlc.arg(recommended_action_label), '',
     sqlc.arg(verification_summary), sqlc.arg(central_repeat_count), sqlc.arg(central_updated_at)
@@ -1050,6 +1057,7 @@ DO UPDATE SET
     severity = EXCLUDED.severity,
     status = EXCLUDED.status,
     effective_mode = EXCLUDED.effective_mode,
+    workflow_state = EXCLUDED.workflow_state,
     execution_block_code = EXCLUDED.execution_block_code,
     dedupe_fingerprint = EXCLUDED.dedupe_fingerprint,
     title = EXCLUDED.title,
@@ -1077,6 +1085,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- name: ExpireCharlieFindings :execrows
 UPDATE charlie_findings
 SET status = 'expired',
+    workflow_state = 'expired',
     execution_block_code = CASE WHEN approval_id IS NOT NULL THEN 'approval_expired' ELSE execution_block_code END,
     summary = CASE WHEN approval_id IS NOT NULL THEN 'The exact approval expired. No action was authorized.' ELSE summary END,
     updated_at = now()
@@ -1097,6 +1106,7 @@ WHERE state IN ('completed', 'aborted', 'failed')
 -- name: TransitionCharlieFinding :one
 UPDATE charlie_findings
 SET status = sqlc.arg(next_status),
+    workflow_state = sqlc.arg(next_workflow_state),
     acknowledged_by_id = CASE WHEN sqlc.arg(next_status)::text = 'acknowledged' THEN sqlc.narg(actor_id) ELSE acknowledged_by_id END,
     acknowledged_at = CASE WHEN sqlc.arg(next_status)::text = 'acknowledged' THEN now() ELSE acknowledged_at END,
     dismissed_by_id = CASE WHEN sqlc.arg(next_status)::text = 'dismissed' THEN sqlc.narg(actor_id) ELSE dismissed_by_id END,
@@ -1104,7 +1114,9 @@ SET status = sqlc.arg(next_status),
     resolved_by_id = CASE WHEN sqlc.arg(next_status)::text = 'resolved' THEN sqlc.narg(actor_id) ELSE resolved_by_id END,
     resolved_at = CASE WHEN sqlc.arg(next_status)::text = 'resolved' THEN now() ELSE resolved_at END,
     updated_at = now()
-WHERE id = sqlc.arg(id) AND status = sqlc.arg(expected_status)
+WHERE id = sqlc.arg(id)
+  AND status = sqlc.arg(expected_status)
+  AND workflow_state = sqlc.arg(expected_workflow_state)
 RETURNING *;
 
 -- name: AddCharlieFindingResource :exec

@@ -16,6 +16,8 @@ function finding(
     reasonNoAction,
     affectedResource: { type: "installation", id: "deployment-a", requiredVerb: "read" },
     summary: "bounded",
+    workflowState: "manual_remediation_required",
+    availableDecisions: ["acknowledge", "start_remediation", "dismiss"],
   };
 }
 

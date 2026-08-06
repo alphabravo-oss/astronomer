@@ -1013,6 +1013,14 @@
   },
   {
     "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/request-verification"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/start-remediation"
+  },
+  {
+    "method": "POST",
     "pattern": "/api/v1/charlie/findings/{finding_id}/dismiss"
   },
   {
