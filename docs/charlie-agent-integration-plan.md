@@ -8,15 +8,17 @@
 > integrated UI or a live deployment.
 >
 > **Implementation branch:** `feat/charlie-core-integration`; source schema
-> version 154 and Charlie release candidate `1.0.28`. Repository verification
+> version 154 and Charlie release candidate `1.0.29`. Repository verification
 > covers the cumulative authority matrix, HA mode fencing, exact approval replay,
 > actionable alerts, destructive/confused-deputy denial, and downstream-boundary
-> attribution. Charlie `1.0.28` and Astronomer schema 154 are the current
+> attribution. Charlie `1.0.29` and Astronomer schema 154 are the current
 > development qualification candidates. The unchecked live packet-isolation, full approval,
 > automation, outage, failover, and multi-deployment gates remain release gates.
-> Charlie `1.0.28` also makes Product Bridge session creation idle: Astronomer
+> Charlie `1.0.29` also makes Product Bridge session creation idle: Astronomer
 > creates the authorized session first, and each explicit user message starts
 > exactly one RAG/model turn that inherits the session's bounded product context.
+> Retrieval remains passthrough-capable: Astronomer renders only citations that
+> Charlie proves the assistant explicitly referenced, never every candidate hit.
 >
 > **Cross-repository dependency:**
 > `../../charlie/docs/product-agent-integration-platform-plan.md` defines the
