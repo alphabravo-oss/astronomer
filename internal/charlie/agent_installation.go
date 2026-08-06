@@ -124,7 +124,10 @@ func (p PGAgentMetadataLifecycle) MarkReconnected(ctx context.Context, connectio
 	if p.Pool == nil {
 		return fmt.Errorf("Charlie metadata store is unavailable")
 	}
-	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET health_state='installing', last_error_code='', reconciliation_due_at=now(), updated_at=now() WHERE id=$1 AND health_state='inactive'`, connectionID)
+	// Resume reactivates only the retained connection row. Suspend already forced
+	// requested/verified mode to disabled and left the emergency latch engaged,
+	// so making the row addressable again does not restore any authority.
+	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET active=true, health_state='installing', last_error_code='', reconciliation_due_at=now(), updated_at=now() WHERE id=$1 AND active=false AND health_state='inactive'`, connectionID)
 	if err != nil {
 		return err
 	}
