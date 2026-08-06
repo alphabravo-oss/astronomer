@@ -65,3 +65,29 @@ func TestManagedBridgeRejectsPartialConfiguration(t *testing.T) {
 		t.Fatal("partial Product Bridge configuration was accepted")
 	}
 }
+
+func TestManagedBridgeOperationalDisabledPermitsOnlyConfigurationPlane(t *testing.T) {
+	connection := sqlc.CharlieConnection{
+		ID: uuid.New(), InstallationID: uuid.New(), Active: true, OnboardingState: "active",
+		RequestedMode: string(ModeDisabled), VerifiedMode: string(ModeDisabled),
+		LocalTrustMaterialEncrypted: "present",
+	}
+	connections := &mutableBridgeConnection{row: connection}
+	bridge, err := NewManagedBridge(ManagedBridgeConfig{
+		AgentNamespace: "astronomer-charlie", Certificate: "/does/not/exist", PrivateKey: "/does/not/exist",
+		ServerCA: "/does/not/exist", SigningKey: "/does/not/exist",
+	}, gateFeature(true), connections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bridge.runtimeBridge(context.Background()); err == nil || bridge.runtime != nil {
+		t.Fatal("wire-disabled integration constructed an intelligence/work transport")
+	}
+	if configured, ok := bridge.configurationConnection(context.Background()); !ok || configured.ID != connection.ID {
+		t.Fatal("wire-disabled enabled connection lost its signed configuration control plane")
+	}
+	connections.row.Active = false
+	if _, ok := bridge.configurationConnection(context.Background()); ok {
+		t.Fatal("inactive connection retained a configuration network path")
+	}
+}

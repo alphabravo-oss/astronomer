@@ -34,35 +34,37 @@ func FindingWorkflowFor(row sqlc.CharlieFinding, now time.Time) FindingWorkflow 
 	case "expired":
 		return noDecisionFindingWorkflow(FindingWorkflowExpired)
 	case "resolved":
-		if row.ExecutionBlockCode == "approval_rejected" {
+		if row.ExecutionBlockCode == string(ReasonApprovalRejected) {
 			return noDecisionFindingWorkflow(FindingWorkflowRejected)
 		}
 		return noDecisionFindingWorkflow(FindingWorkflowResolved)
 	}
-	if row.ExecutionBlockCode == "approval_expired" {
-		return noDecisionFindingWorkflow(FindingWorkflowExpired)
+	reason := DenialCode(row.ExecutionBlockCode)
+	reason, normalized := NormalizeNonExecutionReason(reason)
+	if !normalized || !IsActionableNonExecutionReason(reason) || !activeFindingMode(Mode(row.EffectiveMode)) {
+		return noDecisionFindingWorkflow(FindingWorkflowManualRemediationRequired)
 	}
-	if row.ExecutionBlockCode == "approval_rejected" {
-		return noDecisionFindingWorkflow(FindingWorkflowRejected)
+	if reason == ReasonApprovalExpired {
+		return manualFindingWorkflow(row.Status)
+	}
+	if reason == ReasonApprovalRejected {
+		return manualFindingWorkflow(row.Status)
 	}
 	if row.WorkflowState == string(FindingWorkflowApprovalPending) ||
-		(row.WorkflowState == "" && row.ExecutionBlockCode == "approval_required" && row.ApprovalID.Valid) {
+		(row.WorkflowState == "" && reason == ReasonApprovalRequired && row.ApprovalID.Valid) {
 		if !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(now.UTC()) {
 			return noDecisionFindingWorkflow(FindingWorkflowExpired)
 		}
-		if row.ExecutionBlockCode != "approval_required" || !row.ApprovalID.Valid {
-			return noDecisionFindingWorkflow(FindingWorkflowExpired)
+		if reason != ReasonApprovalRequired || !row.ApprovalID.Valid ||
+			(Mode(row.EffectiveMode) != ModeApproval && Mode(row.EffectiveMode) != ModeAuto) {
+			return manualFindingWorkflow(row.Status)
 		}
 		return FindingWorkflow{State: FindingWorkflowApprovalPending,
 			Decisions: []string{"open_exact_approval", "reject_exact_approval"}}
 	}
 	switch FindingWorkflowState(row.WorkflowState) {
 	case FindingWorkflowManualRemediationRequired:
-		decisions := []string{"start_remediation", "dismiss"}
-		if row.Status == "open" {
-			decisions = append([]string{"acknowledge"}, decisions...)
-		}
-		return FindingWorkflow{State: FindingWorkflowManualRemediationRequired, Decisions: decisions}
+		return manualFindingWorkflow(row.Status)
 	case FindingWorkflowRemediationInProgress:
 		return FindingWorkflow{State: FindingWorkflowRemediationInProgress,
 			Decisions: []string{"request_verification", "dismiss"}}
@@ -70,7 +72,7 @@ func FindingWorkflowFor(row sqlc.CharlieFinding, now time.Time) FindingWorkflow 
 		return FindingWorkflow{State: FindingWorkflowVerificationPending,
 			Decisions: []string{"start_remediation", "dismiss", "resolve"}}
 	}
-	if row.ExecutionBlockCode == "verification_failed" {
+	if reason == ReasonVerificationFailed {
 		return FindingWorkflow{State: FindingWorkflowVerificationPending,
 			Decisions: []string{"start_remediation", "dismiss", "resolve"}}
 	}
@@ -80,6 +82,18 @@ func FindingWorkflowFor(row sqlc.CharlieFinding, now time.Time) FindingWorkflow 
 	}
 	return FindingWorkflow{State: FindingWorkflowManualRemediationRequired,
 		Decisions: []string{"acknowledge", "start_remediation", "dismiss"}}
+}
+
+func manualFindingWorkflow(status string) FindingWorkflow {
+	decisions := []string{"start_remediation", "dismiss"}
+	if status == "open" || status == "reopened" {
+		decisions = append([]string{"acknowledge"}, decisions...)
+	}
+	return FindingWorkflow{State: FindingWorkflowManualRemediationRequired, Decisions: decisions}
+}
+
+func activeFindingMode(mode Mode) bool {
+	return mode == ModeReadOnly || mode == ModeApproval || mode == ModeAuto
 }
 
 func noDecisionFindingWorkflow(state FindingWorkflowState) FindingWorkflow {

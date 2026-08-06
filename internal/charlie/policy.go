@@ -28,7 +28,152 @@ const (
 	DeniedVerification          DenialCode = "verification_required"
 	DeniedStaleFencing          DenialCode = "stale_fencing_epoch"
 	DeniedAmbiguousPriorAttempt DenialCode = "ambiguous_prior_attempt"
+	DeniedMaintenance           DenialCode = "maintenance_window"
 )
+
+// authorityDenialCodes is the complete policy-decision vocabulary persisted
+// by charlie.action.denied and emitted by the bounded operational serializer.
+// Keep it synchronized with audit_contract.json; the contract test enforces
+// exact set equality so a new denial cannot silently miss audit coverage.
+var authorityDenialCodes = [...]DenialCode{
+	DeniedFeatureDisabled,
+	DeniedConnectionInactive,
+	DeniedEmergencyDisabled,
+	DeniedModeDisabled,
+	DeniedDestructive,
+	DeniedDisclosureChanged,
+	DeniedAuthorization,
+	DeniedReadOnlyWrite,
+	DeniedApprovalRequired,
+	DeniedApprovalInvalid,
+	DeniedNotAutoEligible,
+	DeniedNotAllowlisted,
+	DeniedScope,
+	DeniedBudget,
+	DeniedCooldown,
+	DeniedCircuitOpen,
+	DeniedPrecondition,
+	DeniedIdempotency,
+	DeniedVerification,
+	DeniedStaleFencing,
+	DeniedAmbiguousPriorAttempt,
+	DeniedMaintenance,
+}
+
+func isAuthorityDenialCode(code DenialCode) bool {
+	for _, candidate := range authorityDenialCodes {
+		if code == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+const (
+	ReasonCapabilityDestructive DenialCode = "capability_destructive"
+	ReasonProductDisabled       DenialCode = "product_disabled"
+	ReasonDeploymentDisabled    DenialCode = "deployment_disabled"
+	ReasonStaleLeadership       DenialCode = "stale_leadership"
+	ReasonDisclosureDrift       DenialCode = "disclosure_drift"
+	ReasonProductRBACDenied     DenialCode = "product_rbac_denied"
+	ReasonScopeDenied           DenialCode = "scope_denied"
+	ReasonReadOnly              DenialCode = "read_only"
+	ReasonNonAutoEligible       DenialCode = "non_auto_eligible"
+	ReasonApprovalRequired      DenialCode = "approval_required"
+	ReasonApprovalExpired       DenialCode = "approval_expired"
+	ReasonApprovalRejected      DenialCode = "approval_rejected"
+	ReasonAllowlistDenied       DenialCode = "allowlist_denied"
+	ReasonSafetyBudgetExceeded  DenialCode = "safety_budget_exceeded"
+	ReasonCooldownActive        DenialCode = "cooldown_active"
+	ReasonMaintenanceWindow     DenialCode = "maintenance_window"
+	ReasonPreconditionFailed    DenialCode = "precondition_failed"
+	ReasonCircuitBreakerOpen    DenialCode = "circuit_breaker_open"
+	ReasonIdempotencyConflict   DenialCode = "idempotency_conflict"
+	ReasonAmbiguousPriorAttempt DenialCode = "ambiguous_prior_attempt"
+	ReasonExecutionFailed       DenialCode = "execution_failed"
+	ReasonCentralUnavailable    DenialCode = "central_unavailable"
+	ReasonVerificationFailed    DenialCode = "verification_failed"
+	ReasonNoSafeAction          DenialCode = "no_safe_action"
+)
+
+// boundedNonExecutionReasons is the complete wire/storage vocabulary. Keep
+// policy decisions, central finding validation, alerts, and workflow rendering
+// on this one closed set so model or upstream text can never invent controls.
+var boundedNonExecutionReasons = [...]DenialCode{
+	ReasonCapabilityDestructive,
+	ReasonProductDisabled,
+	ReasonDeploymentDisabled,
+	ReasonStaleLeadership,
+	ReasonDisclosureDrift,
+	ReasonProductRBACDenied,
+	ReasonScopeDenied,
+	ReasonReadOnly,
+	ReasonNonAutoEligible,
+	ReasonApprovalRequired,
+	ReasonApprovalExpired,
+	ReasonApprovalRejected,
+	ReasonAllowlistDenied,
+	ReasonSafetyBudgetExceeded,
+	ReasonCooldownActive,
+	ReasonMaintenanceWindow,
+	ReasonPreconditionFailed,
+	ReasonCircuitBreakerOpen,
+	ReasonIdempotencyConflict,
+	ReasonAmbiguousPriorAttempt,
+	ReasonExecutionFailed,
+	ReasonCentralUnavailable,
+	ReasonVerificationFailed,
+	ReasonNoSafeAction,
+}
+
+func IsBoundedNonExecutionReason(code DenialCode) bool {
+	for _, candidate := range boundedNonExecutionReasons {
+		if code == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func IsActionableNonExecutionReason(code DenialCode) bool {
+	return IsBoundedNonExecutionReason(code) && code != ReasonProductDisabled && code != ReasonDeploymentDisabled
+}
+
+func NormalizeNonExecutionReason(code DenialCode) (DenialCode, bool) {
+	if IsBoundedNonExecutionReason(code) {
+		return code, true
+	}
+	switch code {
+	case DeniedDestructive:
+		return ReasonCapabilityDestructive, true
+	case DeniedDisclosureChanged:
+		return ReasonDisclosureDrift, true
+	case DeniedAuthorization:
+		return ReasonProductRBACDenied, true
+	case DeniedReadOnlyWrite:
+		return ReasonReadOnly, true
+	case DeniedApprovalInvalid:
+		return ReasonNoSafeAction, true
+	case DeniedNotAutoEligible:
+		return ReasonNonAutoEligible, true
+	case DeniedNotAllowlisted:
+		return ReasonAllowlistDenied, true
+	case DeniedBudget:
+		return ReasonSafetyBudgetExceeded, true
+	case DeniedCircuitOpen:
+		return ReasonCircuitBreakerOpen, true
+	case DeniedIdempotency:
+		return ReasonIdempotencyConflict, true
+	case DeniedVerification:
+		return ReasonVerificationFailed, true
+	case DeniedStaleFencing:
+		return ReasonStaleLeadership, true
+	case DeniedScope, DeniedApprovalRequired, DeniedCooldown, DeniedPrecondition, DeniedAmbiguousPriorAttempt:
+		return code, true
+	default:
+		return "", false
+	}
+}
 
 type Mode string
 
@@ -82,6 +227,7 @@ type AuthorityInput struct {
 	FencingEpoch          int64
 	CurrentFencingEpoch   int64
 	AmbiguousPriorAttempt bool
+	MaintenanceClear      bool
 }
 
 type AuthorityDecision struct {
@@ -132,6 +278,9 @@ func DecideAuthority(in AuthorityInput, now time.Time) AuthorityDecision {
 	}
 	if in.AmbiguousPriorAttempt {
 		return deny(DeniedAmbiguousPriorAttempt)
+	}
+	if !in.MaintenanceClear {
+		return deny(DeniedMaintenance)
 	}
 	if !in.PreconditionsMet {
 		return deny(DeniedPrecondition)
@@ -195,7 +344,8 @@ type FindingRecommendation struct {
 // read-only/approval/auto modes. Disabled/inactive integrations remain inert
 // and therefore do not create findings or alerts.
 func BlockedFinding(decision AuthorityDecision, title, summary, action, verification string) FindingRecommendation {
-	if decision.Allowed || decision.Code == DeniedFeatureDisabled || decision.Code == DeniedConnectionInactive || decision.Code == DeniedEmergencyDisabled || decision.Code == DeniedModeDisabled {
+	reason, normalized := NormalizeNonExecutionReason(decision.Code)
+	if decision.Allowed || !normalized || !IsActionableNonExecutionReason(reason) {
 		return FindingRecommendation{}
 	}
 	return FindingRecommendation{
@@ -203,7 +353,7 @@ func BlockedFinding(decision AuthorityDecision, title, summary, action, verifica
 		Summary:            summary,
 		RecommendedAction:  action,
 		Verification:       verification,
-		ExecutionBlockCode: decision.Code,
+		ExecutionBlockCode: reason,
 		Actionable:         true,
 	}
 }

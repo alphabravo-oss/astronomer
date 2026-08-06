@@ -292,7 +292,7 @@ func centralFindingStatus(status, workflow string) string {
 }
 
 func centralFindingActionable(status, blockCode string) bool {
-	return (status == "open" || status == "acknowledged") && blockCode != "product_disabled" && blockCode != "deployment_disabled"
+	return (status == "open" || status == "acknowledged") && IsActionableNonExecutionReason(DenialCode(blockCode))
 }
 
 func validCentralFindingSeverity(value string) bool {
@@ -304,14 +304,5 @@ func validCentralFindingStatus(value string) bool {
 }
 
 func validCentralFindingBlockCode(value string) bool {
-	switch value {
-	case "allowlist_denied", "approval_expired", "approval_rejected", "approval_required",
-		"capability_destructive", "central_unavailable", "circuit_breaker_open", "deployment_disabled",
-		"disclosure_drift", "no_safe_action", "non_auto_eligible", "precondition_failed",
-		"product_disabled", "product_rbac_denied", "read_only", "safety_budget_exceeded",
-		"scope_denied", "stale_leadership", "verification_failed":
-		return true
-	default:
-		return false
-	}
+	return IsBoundedNonExecutionReason(DenialCode(value))
 }

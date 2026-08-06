@@ -53,7 +53,7 @@ func TestFindingServicePersistsBeforePublishingActionableAlert(t *testing.T) {
 		t.Fatalf("finding was not durably published: result=%+v store=%d alerts=%v", result, store.calls, publisher.alerts)
 	}
 	alert := publisher.alerts[0]
-	if alert.BlockCode != string(DeniedReadOnlyWrite) || alert.RepeatCount != 3 || alert.ResourceID != "cluster-a" {
+	if alert.BlockCode != string(ReasonReadOnly) || alert.RepeatCount != 3 || alert.ResourceID != "cluster-a" {
 		t.Fatalf("alert is not actionable/bounded: %+v", alert)
 	}
 }

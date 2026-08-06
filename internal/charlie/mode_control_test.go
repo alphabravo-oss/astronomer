@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -40,7 +41,7 @@ func (f *fakeModeStore) SetVerifiedMode(_ context.Context, connectionID string, 
 func TestModeReconcilePersistsNewAuthoritativeSnapshotWithoutRaisingLocalCeiling(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{state: ModeState{Active: true, Requested: ModeAuto, Verified: ModeAuto, Revision: 9, DisclosureDigest: "disclosure-b"}}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 
 	got, err := controller.Reconcile(context.Background())
 	if err != nil {
@@ -57,7 +58,7 @@ func TestModeReconcilePersistsNewAuthoritativeSnapshotWithoutRaisingLocalCeiling
 func TestModeReconcileCentralSuspensionClearsDisclosure(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{state: ModeState{Active: false, Requested: ModeReadOnly, Verified: ModeReadOnly, Revision: 8, DisclosureDigest: "stale-disclosure"}}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 
 	got, err := controller.Reconcile(context.Background())
 	if err != nil {
@@ -75,7 +76,7 @@ func TestModeReconcileRejectsRevisionDrift(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := &fakeModeStore{state: activeModeState()}
-			controller, _ := NewModeController(store, &fakeModeBridge{state: remote})
+			controller, _ := NewModeController(store, &fakeModeBridge{state: remote}, &authorityAuditFake{})
 			if _, err := controller.Reconcile(context.Background()); err == nil || store.verifyCalls != 0 {
 				t.Fatal("revision drift was accepted")
 			}
@@ -88,7 +89,7 @@ func TestModeReconcileDoesNotContactRemoteDuringEmergencyDisable(t *testing.T) {
 	state.EmergencyDisabled = true
 	store := &fakeModeStore{state: state}
 	bridge := &fakeModeBridge{error: errors.New("must not be called")}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	got, err := controller.Reconcile(context.Background())
 	if err != nil || !got.EmergencyDisabled {
 		t.Fatalf("emergency state was not preserved: state=%+v err=%v", got, err)
@@ -98,7 +99,7 @@ func TestModeReconcileDoesNotContactRemoteDuringEmergencyDisable(t *testing.T) {
 func TestModeReconcilerStopsWithContext(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{state: activeModeState()}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { controller.Run(ctx, time.Millisecond); close(done) }()
@@ -107,6 +108,23 @@ func TestModeReconcilerStopsWithContext(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("mode reconciler did not stop")
+	}
+}
+
+func TestModeReconcilerCanceledBeforeStartCreatesNoTimerOrRemoteRead(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: activeModeState()}
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
+	timers := 0
+	controller.ticker = func(time.Duration) runtimeTicker {
+		timers++
+		return &fakeRuntimeTicker{channel: make(chan time.Time)}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	controller.Run(ctx, time.Second)
+	if timers != 0 || bridge.statusCalls != 0 {
+		t.Fatalf("timers=%d remote_calls=%d", timers, bridge.statusCalls)
 	}
 }
 func (f *fakeModeStore) SetEmergencyDisabled(_ context.Context, connectionID, _ string) (ModeState, error) {
@@ -132,11 +150,12 @@ func (f *fakeModeStore) ClearEmergencyDisabled(_ context.Context, connectionID, 
 }
 
 type fakeModeBridge struct {
-	state    ModeState
-	error    error
-	setError error
-	calls    int
-	lastMode Mode
+	state       ModeState
+	error       error
+	setError    error
+	calls       int
+	statusCalls int
+	lastMode    Mode
 }
 
 func (f *fakeModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (ModeState, error) {
@@ -156,7 +175,17 @@ func (f *fakeModeBridge) SetMode(_ context.Context, mode Mode, revision int64) (
 	}
 	return f.state, nil
 }
-func (f *fakeModeBridge) Status(context.Context) (ModeState, error) { return f.state, f.error }
+func (f *fakeModeBridge) Status(context.Context) (ModeState, error) {
+	f.statusCalls++
+	return f.state, f.error
+}
+
+type notifyingModeBridge struct {
+	*fakeModeBridge
+	notifications int
+}
+
+func (b *notifyingModeBridge) activationChanged(context.Context) { b.notifications++ }
 
 func activeModeState() ModeState {
 	return ModeState{ConnectionID: "connection-a", Active: true, Requested: ModeReadOnly, Verified: ModeReadOnly, Revision: 4, DisclosureDigest: "disclosure-a"}
@@ -182,13 +211,70 @@ func TestEffectiveModeUsesLeastAuthority(t *testing.T) {
 func TestModeRequestRequiresAuthoritativeReadback(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{state: ModeState{ConnectionID: "connection-a"}}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	state, err := controller.Request(context.Background(), ModeApproval, 4, ModePrerequisites{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if state.Verified != ModeApproval || state.Requested != ModeApproval || state.Revision != 6 || bridge.calls != 1 {
 		t.Fatalf("mode not authoritatively verified: %+v bridge=%d", state, bridge.calls)
+	}
+}
+
+func TestModeMutationNotifiesRuntimeAfterEachDurableAuthorityChange(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &notifyingModeBridge{fakeModeBridge: &fakeModeBridge{state: ModeState{ConnectionID: "connection-a", Active: true}}}
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
+	if _, err := controller.Request(t.Context(), ModeApproval, 4, ModePrerequisites{}); err != nil {
+		t.Fatal(err)
+	}
+	if bridge.notifications != 2 || store.verifyCalls != 1 {
+		t.Fatalf("notifications=%d durable_verifications=%d", bridge.notifications, store.verifyCalls)
+	}
+
+	store.error = errors.New("persist failed")
+	if _, err := controller.Request(t.Context(), ModeReadOnly, store.state.Revision, ModePrerequisites{}); err == nil {
+		t.Fatal("mode mutation unexpectedly survived durable persistence failure")
+	}
+	if bridge.notifications != 2 {
+		t.Fatalf("failed persistence notified runtime: %d", bridge.notifications)
+	}
+}
+
+func TestModeDisableNotifiesRuntimeBeforeUnavailableRemoteConfirmation(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &notifyingModeBridge{fakeModeBridge: &fakeModeBridge{
+		state: ModeState{ConnectionID: "connection-a", Active: true}, setError: errors.New("offline"),
+	}}
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
+	if _, err := controller.Request(t.Context(), ModeDisabled, 4, ModePrerequisites{}); err == nil {
+		t.Fatal("remote outage unexpectedly confirmed disabled mode")
+	}
+	if bridge.notifications != 1 || store.state.Requested != ModeDisabled {
+		t.Fatalf("notifications=%d requested=%s", bridge.notifications, store.state.Requested)
+	}
+}
+
+func TestModeAuditFailureCannotWidenOrReconcileAuthority(t *testing.T) {
+	failing := &authorityAuditFake{err: errors.New("database-SENTINEL")}
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: ModeState{ConnectionID: "connection-a", Active: true, Requested: ModeApproval, Verified: ModeApproval, Revision: 5, DisclosureDigest: "disclosure-b"}}
+	controller, _ := NewModeController(store, bridge, failing)
+
+	if _, err := controller.Request(context.Background(), ModeApproval, 4, ModePrerequisites{}); err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("mode audit failure was not bounded: %v", err)
+	}
+	if store.requestCalls != 0 || store.verifyCalls != 0 || bridge.calls != 0 {
+		t.Fatalf("audit failure changed mode authority: requests=%d verifies=%d bridge=%d", store.requestCalls, store.verifyCalls, bridge.calls)
+	}
+
+	widening := activeModeState()
+	widening.Requested = ModeAuto
+	store = &fakeModeStore{state: widening}
+	bridge = &fakeModeBridge{state: ModeState{ConnectionID: "connection-a", Active: true, Requested: ModeAuto, Verified: ModeAuto, Revision: 6, DisclosureDigest: "disclosure-b"}}
+	controller, _ = NewModeController(store, bridge, failing)
+	if _, err := controller.Reconcile(context.Background()); err == nil || store.verifyCalls != 0 {
+		t.Fatalf("audit failure admitted reconciled authority: verifies=%d err=%v", store.verifyCalls, err)
 	}
 }
 
@@ -211,7 +297,7 @@ func (equalRevisionModeBridge) Status(context.Context) (ModeState, error) {
 
 func TestModeRequestAcceptsEqualAuthoritativeRevision(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
-	controller, _ := NewModeController(store, equalRevisionModeBridge{})
+	controller, _ := NewModeController(store, equalRevisionModeBridge{}, &authorityAuditFake{})
 	state, err := controller.Request(context.Background(), ModeDisabled, 4, ModePrerequisites{})
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +313,7 @@ func TestModeRequestRetriesPendingLocalRequestWithoutAdvancingRevision(t *testin
 	state.Verified = ModeReadOnly
 	state.Revision = 5
 	store := &fakeModeStore{state: state}
-	controller, _ := NewModeController(store, equalRevisionModeBridge{})
+	controller, _ := NewModeController(store, equalRevisionModeBridge{}, &authorityAuditFake{})
 	got, err := controller.Request(context.Background(), ModeDisabled, 5, ModePrerequisites{})
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +333,7 @@ func TestAutoModeRequiresAllReviewedPrerequisites(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			store := &fakeModeStore{state: activeModeState()}
 			bridge := &fakeModeBridge{}
-			controller, _ := NewModeController(store, bridge)
+			controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 			if _, err := controller.Request(context.Background(), ModeAuto, 4, prerequisites); err == nil || bridge.calls != 0 {
 				t.Fatal("auto mode enabled without prerequisites")
 			}
@@ -258,7 +344,7 @@ func TestAutoModeRequiresAllReviewedPrerequisites(t *testing.T) {
 func TestRemoteFailureCannotEscalateVerifiedMode(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{error: errors.New("unavailable")}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	state, err := controller.Request(context.Background(), ModeAuto, 4, ModePrerequisites{DisclosureAcknowledged: true, AutomationAllowlistReady: true, AutomationIdentityReady: true, AutomationTargetReady: true})
 	if err == nil {
 		t.Fatal("remote failure was hidden")
@@ -271,7 +357,7 @@ func TestRemoteFailureCannotEscalateVerifiedMode(t *testing.T) {
 func TestEmergencyDisableCommitsLocallyBeforeRemoteAndStaysClosedOnOutage(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{error: errors.New("unavailable")}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	state, err := controller.EmergencyDisable(context.Background(), "admin-a")
 	if err == nil {
 		t.Fatal("pending remote confirmation was not reported")
@@ -281,10 +367,21 @@ func TestEmergencyDisableCommitsLocallyBeforeRemoteAndStaysClosedOnOutage(t *tes
 	}
 }
 
+func TestEmergencyDisableRemainsAvailableWhenAuditStorageFails(t *testing.T) {
+	store := &fakeModeStore{state: activeModeState()}
+	bridge := &fakeModeBridge{state: activeModeState()}
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{err: errors.New("database-SENTINEL")})
+
+	state, err := controller.EmergencyDisable(context.Background(), "admin-a")
+	if err != nil || !state.EmergencyDisabled || store.emergencyCalls != 1 || bridge.calls != 1 || bridge.lastMode != ModeDisabled {
+		t.Fatalf("audit outage blocked emergency disable: state=%+v local=%d remote=%d mode=%s err=%v", state, store.emergencyCalls, bridge.calls, bridge.lastMode, err)
+	}
+}
+
 func TestEmergencyDisableCancelsAndDrainsRegisteredWrite(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	fence := NewWriteFence()
 	controller.SetWriteFence(fence)
 	writeCtx, release, err := fence.Begin(context.Background())
@@ -310,7 +407,7 @@ func TestEmergencyDisableCancelsAndDrainsRegisteredWrite(t *testing.T) {
 func TestEmergencyDisableReturnsPendingStateUntilNonCancellableWriteDrains(t *testing.T) {
 	store := &fakeModeStore{state: activeModeState()}
 	bridge := &fakeModeBridge{}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	fence := NewWriteFence()
 	controller.SetWriteFence(fence)
 	_, release, err := fence.Begin(context.Background())
@@ -335,7 +432,7 @@ func TestEmergencyDisableIsIdempotentAfterFeatureSuspension(t *testing.T) {
 	state.Verified = ModeDisabled
 	store := &fakeModeStore{state: state}
 	bridge := &fakeModeBridge{}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	got, err := controller.EmergencyDisable(context.Background(), "admin-a")
 	if err != nil || !got.EmergencyDisabled || store.emergencyCalls != 0 || bridge.calls != 0 {
 		t.Fatalf("idempotent disabled state=%+v store_calls=%d bridge_calls=%d err=%v", got, store.emergencyCalls, bridge.calls, err)
@@ -348,7 +445,7 @@ func TestEmergencyClearReconcilesRemoteDisabledAndRestoresNoAuthority(t *testing
 	state.Requested = ModeDisabled
 	store := &fakeModeStore{state: state}
 	bridge := &fakeModeBridge{state: ModeState{Requested: ModeAuto, Verified: ModeAuto}}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	cleared, err := controller.ClearEmergencyDisable(context.Background(), "admin-a")
 	if err != nil {
 		t.Fatal(err)
@@ -367,7 +464,7 @@ func TestEmergencyClearKeepsLatchWhenRemoteDisableRetryFails(t *testing.T) {
 		state:    ModeState{Requested: ModeAuto, Verified: ModeAuto},
 		setError: errors.New("remote unavailable"),
 	}
-	controller, _ := NewModeController(store, bridge)
+	controller, _ := NewModeController(store, bridge, &authorityAuditFake{})
 	got, err := controller.ClearEmergencyDisable(context.Background(), "admin-a")
 	if err == nil || !got.EmergencyDisabled || store.clearCalls != 0 || bridge.calls != 1 || bridge.lastMode != ModeDisabled {
 		t.Fatalf("failed remote disable weakened the latch: state=%+v bridge_calls=%d mode=%s err=%v", got, bridge.calls, bridge.lastMode, err)

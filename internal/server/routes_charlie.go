@@ -43,7 +43,9 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 		r.With(gate, admin, manage, adminLimited).Post("/admin/charlie/trigger-events/{event_id}/retry/", deps.CharlieAdmin.RetryTriggerEvent)
 		r.With(gate, admin, manage, adminLimited).Get("/admin/charlie/access/", deps.CharlieAdmin.Access)
 		r.With(gate, admin, manage, adminLimited).Put("/admin/charlie/access/", deps.CharlieAdmin.UpdateAccess)
-		r.With(gate, admin, manage, adminLimited).Post("/admin/charlie/diagnostics/run/", deps.CharlieAdmin.Diagnostics)
+		// Diagnostics remains reachable after disable, but its handler is forced
+		// onto the database-only projection and cannot contact the agent/central.
+		r.With(admin, manage, adminLimited).Post("/admin/charlie/diagnostics/run/", deps.CharlieAdmin.Diagnostics)
 	}
 
 	read := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCharlie, rbac.VerbRead)

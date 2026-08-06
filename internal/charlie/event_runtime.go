@@ -32,6 +32,8 @@ type EventRuntime struct {
 	now       func() time.Time
 	sweeper   *TriggerSweeper
 	retention *RetentionService
+	ticker    func(time.Duration) runtimeTicker
+	subscribe func(context.Context) <-chan events.Event
 }
 
 func NewEventRuntime(bus *events.Bus, queries eventRuntimeQueries, active func() bool) (*EventRuntime, error) {
@@ -42,7 +44,8 @@ func NewEventRuntime(bus *events.Bus, queries eventRuntimeQueries, active func()
 	if err != nil {
 		return nil, err
 	}
-	runtime := &EventRuntime{bus: bus, queries: queries, ingestor: ingestor, active: active, now: time.Now}
+	runtime := &EventRuntime{bus: bus, queries: queries, ingestor: ingestor, active: active, now: time.Now,
+		ticker: newRuntimeTicker, subscribe: bus.Subscribe}
 	if sweepQueries, ok := queries.(triggerSweepQueries); ok {
 		runtime.sweeper = NewTriggerSweeper(sweepQueries, ingestor, active)
 	}
@@ -56,19 +59,17 @@ func (r *EventRuntime) Run(ctx context.Context) {
 	if r == nil {
 		return
 	}
-	ticker := time.NewTicker(2 * time.Second)
+	if !r.active() {
+		return
+	}
+	ticker := r.ticker(2 * time.Second)
 	defer ticker.Stop()
 	for {
 		if !r.active() {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				continue
-			}
+			return
 		}
 		activeCtx, cancel := context.WithCancel(ctx)
-		stream := r.bus.Subscribe(activeCtx)
+		stream := r.subscribe(activeCtx)
 		run := true
 		nextSweep := time.Time{}
 		nextRetention := time.Time{}
@@ -77,9 +78,10 @@ func (r *EventRuntime) Run(ctx context.Context) {
 			case <-ctx.Done():
 				cancel()
 				return
-			case <-ticker.C:
+			case <-ticker.C():
 				if !r.active() {
-					run = false
+					cancel()
+					return
 				} else if r.sweeper != nil && !r.now().Before(nextSweep) {
 					r.sweeper.now = r.now
 					_ = r.sweeper.Sweep(ctx)

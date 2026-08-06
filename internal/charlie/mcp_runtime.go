@@ -55,6 +55,7 @@ type MCPRuntime struct {
 	listener   *MCPListener
 	connection string
 	material   string
+	ticker     func(time.Duration) runtimeTicker
 }
 
 func NewMCPRuntime(config MCPRuntimeConfig, features featureReader, queries mcpRuntimeQueries, bindings LiveBindingResolver, safety LiveActionSafety, executor CapabilityExecutor, logger *slog.Logger) (*MCPRuntime, error) {
@@ -75,7 +76,7 @@ func NewMCPRuntime(config MCPRuntimeConfig, features featureReader, queries mcpR
 	if config.WriteFence == nil {
 		config.WriteFence = NewWriteFence()
 	}
-	runtime := &MCPRuntime{config: config, features: features, queries: queries, bindings: bindings, safety: safety, executor: executor, logger: logger}
+	runtime := &MCPRuntime{config: config, features: features, queries: queries, bindings: bindings, safety: safety, executor: executor, logger: logger, ticker: newRuntimeTicker}
 	reconcileAudit, err := NewDBReceiptReconcileAuditor(queries)
 	if err != nil {
 		return nil, err
@@ -93,7 +94,10 @@ func (r *MCPRuntime) Run(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
-	ticker := time.NewTicker(r.config.PollInterval)
+	if !EvaluateActivation(ctx, r.features, r.queries).Runnable {
+		return r.Shutdown(ctx)
+	}
+	ticker := r.ticker(r.config.PollInterval)
 	defer ticker.Stop()
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -102,17 +106,20 @@ func (r *MCPRuntime) Run(ctx context.Context) error {
 	}()
 	for {
 		if err := r.reconcile(ctx); err != nil {
-			r.logger.Debug("Charlie MCP listener remains inactive", "reason", "reconciliation_failed")
+			LogRuntimeEvent(ctx, r.logger, "inactive_reconciliation_failed")
+		}
+		if !EvaluateActivation(ctx, r.features, r.queries).Runnable {
+			return nil
 		}
 		if r.receipts != nil {
 			if err := r.receipts.RunOnce(ctx); err != nil {
-				r.logger.Warn("Charlie action receipt reconciliation is pending", "reason", "reconciliation_failed")
+				LogRuntimeEvent(ctx, r.logger, "reconciliation_pending")
 			}
 		}
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-ticker.C():
 		}
 	}
 }
@@ -121,7 +128,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	r.lifecycle.Lock()
 	defer r.lifecycle.Unlock()
 	activation := EvaluateActivation(ctx, r.features, r.queries)
-	if !activation.Configurable {
+	if !activation.Runnable {
 		r.config.WriteFence.Close()
 		shutdownErr := r.shutdownLocked(ctx)
 		_, drainErr := r.config.WriteFence.CloseAndWait(ctx)
@@ -147,11 +154,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 			activation.Connection = connection
 		}
 	}
-	if activation.Runnable {
-		r.config.WriteFence.Open()
-	} else if _, err := r.config.WriteFence.CloseAndWait(ctx); err != nil {
-		return err
-	}
+	r.config.WriteFence.Open()
 	connectionKey := activation.Connection.ID.String()
 	material, err := mcpMaterialDigest(r.config)
 	if err != nil {
@@ -229,7 +232,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	} else {
 		observeMCPListener("activated")
 	}
-	r.logger.Info("Charlie MCP private listener activated", "addr", r.config.Listener.Address)
+	LogRuntimeEvent(ctx, r.logger, "activated")
 	return nil
 }
 
@@ -244,7 +247,7 @@ func (r *MCPRuntime) serve(listener *MCPListener) {
 	r.mu.Unlock()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		observeMCPListener("serve_failed")
-		r.logger.Warn("Charlie MCP private listener stopped", "reason", "listener_error")
+		LogRuntimeEvent(context.Background(), r.logger, "listener_stopped")
 	}
 }
 

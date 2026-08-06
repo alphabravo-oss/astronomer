@@ -128,8 +128,10 @@
         "stale_leadership", "disclosure_drift", "product_rbac_denied",
         "scope_denied", "read_only", "non_auto_eligible",
         "approval_required", "approval_expired", "approval_rejected",
-        "allowlist_denied", "safety_budget_exceeded", "precondition_failed",
-        "circuit_breaker_open", "central_unavailable", "verification_failed", "no_safe_action"
+        "allowlist_denied", "safety_budget_exceeded", "cooldown_active",
+        "maintenance_window", "precondition_failed", "circuit_breaker_open",
+        "idempotency_conflict", "ambiguous_prior_attempt", "execution_failed",
+        "central_unavailable", "verification_failed", "no_safe_action"
       ]
     }
   }

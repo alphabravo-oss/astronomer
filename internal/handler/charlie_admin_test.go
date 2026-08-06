@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,19 +16,25 @@ import (
 
 type charlieAdminFake struct {
 	CharlieAdminBackend
-	status         charlie.AdminStatusView
-	uninstallCalls int
-	uninstallActor uuid.UUID
-	mode           charlie.AdminModeView
-	modeInput      charlie.Mode
-	emergency      bool
-	triggerEvents  []charlie.AdminTriggerEventView
-	retryEvent     charlie.AdminTriggerEventView
-	retrySource    uuid.UUID
-	retryRequest   uuid.UUID
-	actionPolicy   charlie.AdminActionPolicy
-	policyName     string
-	policyInput    charlie.AdminActionPolicyInput
+	status               charlie.AdminStatusView
+	localStatus          charlie.AdminStatusView
+	statusCalls          int
+	localCalls           int
+	diagnosticCalls      int
+	localDiagnosticCalls int
+	uninstallCalls       int
+	uninstallActor       uuid.UUID
+	mode                 charlie.AdminModeView
+	modeInput            charlie.Mode
+	modeCalls            int
+	emergency            bool
+	triggerEvents        []charlie.AdminTriggerEventView
+	retryEvent           charlie.AdminTriggerEventView
+	retrySource          uuid.UUID
+	retryRequest         uuid.UUID
+	actionPolicy         charlie.AdminActionPolicy
+	policyName           string
+	policyInput          charlie.AdminActionPolicyInput
 }
 
 func (f *charlieAdminFake) UpdateActionPolicy(_ context.Context, name string, input charlie.AdminActionPolicyInput) (charlie.AdminActionPolicy, error) {
@@ -44,7 +51,20 @@ func (f *charlieAdminFake) RetryTriggerEvent(_ context.Context, source, request 
 }
 
 func (f *charlieAdminFake) Status(context.Context) (charlie.AdminStatusView, error) {
+	f.statusCalls++
 	return f.status, nil
+}
+func (f *charlieAdminFake) LocalStatus(context.Context) (charlie.AdminStatusView, error) {
+	f.localCalls++
+	return f.localStatus, nil
+}
+func (f *charlieAdminFake) Diagnostics(context.Context, string) (charlie.AdminDiagnosticsView, error) {
+	f.diagnosticCalls++
+	return charlie.AdminDiagnosticsView{Overall: "healthy"}, nil
+}
+func (f *charlieAdminFake) LocalDiagnostics(context.Context, string) (charlie.AdminDiagnosticsView, error) {
+	f.localDiagnosticCalls++
+	return charlie.AdminDiagnosticsView{Overall: "inactive"}, nil
 }
 func (f *charlieAdminFake) Uninstall(_ context.Context, actor uuid.UUID) error {
 	f.uninstallCalls++
@@ -52,6 +72,7 @@ func (f *charlieAdminFake) Uninstall(_ context.Context, actor uuid.UUID) error {
 	return nil
 }
 func (f *charlieAdminFake) UpdateMode(_ context.Context, mode charlie.Mode, _ int64, emergency bool, _ uuid.UUID) (charlie.AdminModeView, error) {
+	f.modeCalls++
 	f.modeInput, f.emergency = mode, emergency
 	return f.mode, nil
 }
@@ -61,7 +82,7 @@ func TestCharlieAdminStatusReturnsOnlySafeMetadata(t *testing.T) {
 		Connected: true, ProductID: "astronomer", DeploymentID: "deployment-a", RouteID: "route-a",
 		SigningFingerprint: strings.Repeat("a", 64), PackageDigest: strings.Repeat("b", 64),
 	}}}
-	handler := NewCharlieAdminHandler(fake, nil)
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
 	recorder := httptest.NewRecorder()
 	handler.Status(recorder, authenticatedCharlieRequest(http.MethodGet, "/", "", uuid.New(), "jwt"))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "deployment-a") {
@@ -74,9 +95,30 @@ func TestCharlieAdminStatusReturnsOnlySafeMetadata(t *testing.T) {
 	}
 }
 
+func TestCharlieAdminDisabledStatusAndDiagnosticsAreLocalOnly(t *testing.T) {
+	fake := &charlieAdminFake{
+		status:      charlie.AdminStatusView{Connection: charlie.AdminConnectionView{DeploymentID: "remote-should-not-run"}},
+		localStatus: charlie.AdminStatusView{Connection: charlie.AdminConnectionView{DeploymentID: "durable-local"}},
+	}
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+	handler.SetSettingsCache(NewSettingsCache(nil, time.Minute))
+
+	status := httptest.NewRecorder()
+	handler.Status(status, authenticatedCharlieRequest(http.MethodGet, "/", "", uuid.New(), "jwt"))
+	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), "durable-local") || fake.localCalls != 1 || fake.statusCalls != 0 {
+		t.Fatalf("disabled status was not local-only: code=%d local=%d remote=%d body=%s", status.Code, fake.localCalls, fake.statusCalls, status.Body.String())
+	}
+
+	diagnostics := httptest.NewRecorder()
+	handler.Diagnostics(diagnostics, authenticatedCharlieRequest(http.MethodPost, "/", "{}", uuid.New(), "jwt"))
+	if diagnostics.Code != http.StatusOK || !strings.Contains(diagnostics.Body.String(), "inactive") || fake.localDiagnosticCalls != 1 || fake.diagnosticCalls != 0 {
+		t.Fatalf("disabled diagnostics were not local-only: code=%d local=%d remote=%d body=%s", diagnostics.Code, fake.localDiagnosticCalls, fake.diagnosticCalls, diagnostics.Body.String())
+	}
+}
+
 func TestCharlieAdminDestructiveActionsRequireBrowserAndExactConfirmation(t *testing.T) {
 	fake := &charlieAdminFake{}
-	handler := NewCharlieAdminHandler(fake, nil)
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
 
 	wrong := httptest.NewRecorder()
 	handler.Uninstall(wrong, authenticatedCharlieRequest(http.MethodPost, "/", `{"confirmation":"uninstall"}`, uuid.New(), "jwt"))
@@ -100,7 +142,7 @@ func TestCharlieAdminDestructiveActionsRequireBrowserAndExactConfirmation(t *tes
 
 func TestCharlieAdminEmergencyDisableIsExplicit(t *testing.T) {
 	fake := &charlieAdminFake{mode: charlie.AdminModeView{Requested: charlie.ModeDisabled, Authoritative: charlie.ModeDisabled, EmergencyDisabled: true}}
-	handler := NewCharlieAdminHandler(fake, nil)
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
 	recorder := httptest.NewRecorder()
 	handler.Mode(recorder, authenticatedCharlieRequest(http.MethodPatch, "/", `{"mode":"disabled","revision":7,"emergency_disable":true}`, uuid.New(), "jwt"))
 	if recorder.Code != http.StatusOK || fake.modeInput != charlie.ModeDisabled || !fake.emergency {
@@ -108,9 +150,30 @@ func TestCharlieAdminEmergencyDisableIsExplicit(t *testing.T) {
 	}
 }
 
+func TestCharlieAdminAuditFailureBlocksAuthorityWideningButNotEmergencyDisable(t *testing.T) {
+	fake := &charlieAdminFake{mode: charlie.AdminModeView{Requested: charlie.ModeAuto, Authoritative: charlie.ModeAuto}}
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{err: errors.New("database-SENTINEL")})
+
+	widen := httptest.NewRecorder()
+	handler.Mode(widen, authenticatedCharlieRequest(http.MethodPatch, "/", `{"mode":"auto","revision":7}`, uuid.New(), "jwt"))
+	if widen.Code != http.StatusServiceUnavailable || fake.modeCalls != 0 {
+		t.Fatalf("audit failure admitted authority widening: status=%d calls=%d body=%s", widen.Code, fake.modeCalls, widen.Body.String())
+	}
+	if strings.Contains(widen.Body.String(), "database-SENTINEL") {
+		t.Fatalf("storage failure leaked to caller: %s", widen.Body.String())
+	}
+
+	fake.mode = charlie.AdminModeView{Requested: charlie.ModeDisabled, Authoritative: charlie.ModeDisabled, EmergencyDisabled: true}
+	disable := httptest.NewRecorder()
+	handler.Mode(disable, authenticatedCharlieRequest(http.MethodPatch, "/", `{"mode":"disabled","revision":8,"emergency_disable":true}`, uuid.New(), "jwt"))
+	if disable.Code != http.StatusOK || fake.modeCalls != 1 || !fake.emergency || fake.modeInput != charlie.ModeDisabled {
+		t.Fatalf("audit failure blocked emergency disable: status=%d calls=%d mode=%s emergency=%t body=%s", disable.Code, fake.modeCalls, fake.modeInput, fake.emergency, disable.Body.String())
+	}
+}
+
 func TestCharlieAdminActionPolicyUsesBoundedStructuredInput(t *testing.T) {
 	fake := &charlieAdminFake{actionPolicy: charlie.AdminActionPolicy{Capability: "astronomer.queue.retry_task", Enabled: true, Revision: 2}}
-	handler := NewCharlieAdminHandler(fake, nil)
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
 	recorder := httptest.NewRecorder()
 	request := authenticatedCharlieRequest(http.MethodPut, "/", `{"enabled":true,"max_actions_per_incident":1,"max_actions_per_window":2,"budget_window_seconds":900,"cooldown_seconds":300}`, uuid.New(), "jwt")
 	route := chi.NewRouteContext()
@@ -124,7 +187,7 @@ func TestCharlieAdminActionPolicyUsesBoundedStructuredInput(t *testing.T) {
 
 func TestCharlieAdminEmergencyDisableRemainsAvailableWhenFeatureIsOff(t *testing.T) {
 	fake := &charlieAdminFake{mode: charlie.AdminModeView{Requested: charlie.ModeDisabled, Authoritative: charlie.ModeDisabled, EmergencyDisabled: true}}
-	handler := NewCharlieAdminHandler(fake, nil)
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
 	handler.SetSettingsCache(NewSettingsCache(nil, time.Minute))
 	emergency := httptest.NewRecorder()
 	handler.Mode(emergency, authenticatedCharlieRequest(http.MethodPatch, "/", `{"mode":"disabled","revision":7,"emergency_disable":true}`, uuid.New(), "jwt"))
@@ -155,7 +218,7 @@ func TestCharlieAdminDeadLetterListAndRetryAreBrowserOnlyAndBounded(t *testing.T
 		triggerEvents: []charlie.AdminTriggerEventView{{ID: sourceID.String(), State: "dead", EventType: "queue_terminal_failure", LastErrorCode: "bridge_unavailable"}},
 		retryEvent:    charlie.AdminTriggerEventView{ID: retryID.String(), RetryOfEventID: sourceID.String(), State: "pending", EventType: "queue_terminal_failure"},
 	}
-	handler := NewCharlieAdminHandler(fake, nil)
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
 
 	list := httptest.NewRecorder()
 	handler.ListTriggerEvents(list, authenticatedCharlieRequest(http.MethodGet, "/?state=dead&limit=20", "", uuid.New(), "jwt"))

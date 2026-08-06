@@ -61,7 +61,7 @@ func (e *ActionDeferredError) Result() json.RawMessage {
 }
 
 func (s *ProductActionSafety) Evaluate(ctx context.Context, action ActionEnvelope, capability CapabilityDescriptor, arguments map[string]json.RawMessage) (SafetyFacts, error) {
-	facts := SafetyFacts{ScopeAllowed: true, CooldownClear: true, CircuitClosed: true, PreconditionsMet: true}
+	facts := SafetyFacts{ScopeAllowed: true, CooldownClear: true, CircuitClosed: true, PreconditionsMet: true, MaintenanceClear: true}
 	if capability.Effect != EffectWrite {
 		return facts, nil
 	}
@@ -75,7 +75,7 @@ func (s *ProductActionSafety) Evaluate(ctx context.Context, action ActionEnvelop
 	}
 	if blocked && window != nil && window.OnBlock == maintenance.OnBlockRefuse {
 		maintenance.RecordBlocked(maintenance.OpCharlieAction, window.Mode)
-		facts.PreconditionsMet = false
+		facts.MaintenanceClear = false
 	}
 
 	policy, policyErr := s.queries.GetCharlieAutomationPolicy(ctx, sqlc.GetCharlieAutomationPolicyParams{

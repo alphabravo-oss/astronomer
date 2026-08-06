@@ -201,6 +201,7 @@ type AdminService struct {
 	mode      *ModeController
 	now       func() time.Time
 	triggers  *TriggerAdminService
+	auditor   AuthorityMutationAuditor
 }
 
 func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *ManagedBridge) (*AdminService, error) {
@@ -208,13 +209,14 @@ func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *
 		return nil, ErrAdminUnavailable
 	}
 	queries := sqlc.New(pool)
-	triggerAdmin, err := NewTriggerAdminService(queries)
+	auditor := NewDBLifecycleAuditor(queries)
+	triggerAdmin, err := NewTriggerAdminService(queries, auditor)
 	if err != nil {
 		return nil, err
 	}
-	service := &AdminService{pool: pool, queries: queries, installer: installer, bridge: bridge, now: time.Now, triggers: triggerAdmin}
+	service := &AdminService{pool: pool, queries: queries, installer: installer, bridge: bridge, now: time.Now, triggers: triggerAdmin, auditor: auditor}
 	if bridge != nil {
-		controller, err := NewModeController(PGModeStore{Pool: pool}, NewManagedModeBridge(bridge))
+		controller, err := NewModeController(PGModeStore{Pool: pool}, NewManagedModeBridge(bridge), auditor)
 		if err != nil {
 			return nil, err
 		}
@@ -298,6 +300,40 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 		}
 	}
 	view.Mode = s.enrichMode(ctx, view.Mode)
+	return view, nil
+}
+
+// LocalStatus returns only the durable product-owned projection. It never
+// reconciles central authority, contacts the product agent, or asks the
+// Kubernetes installer for live state. The feature-disabled administration
+// surface uses this method so a page refresh cannot reactivate transport.
+func (s *AdminService) LocalStatus(ctx context.Context) (AdminStatusView, error) {
+	connection, err := s.connection(ctx)
+	if errors.Is(err, ErrAdminNotConfigured) {
+		return emptyAdminStatus(), nil
+	}
+	if err != nil {
+		return AdminStatusView{}, err
+	}
+	view := AdminStatusView{
+		Connection: safeAdminConnection(connection),
+		Agent:      safeAdminAgent(connection),
+		Mode:       safeAdminMode(connection),
+	}
+	// Persisted runtime state is historical while the feature is off. Report it
+	// as quiesced rather than implying that the agent was polled or is running.
+	view.Agent.ApplicationState = "inactive"
+	view.Agent.ReadyReplicas = 0
+	view.Agent.LeaderReplica = ""
+	view.Agent.StandbyReplicas = []string{}
+	for index := range view.Agent.Replicas {
+		view.Agent.Replicas[index].Role = "unknown"
+		view.Agent.Replicas[index].State = "unknown"
+		view.Agent.Replicas[index].LastHeartbeatAt = ""
+	}
+	view.Mode.Requested = ModeDisabled
+	view.Mode.Authoritative = ModeDisabled
+	view.Mode.Effects = modeEffects(ModeDisabled)
 	return view, nil
 }
 
@@ -471,6 +507,9 @@ func (s *AdminService) Install(ctx context.Context) (AdminAgentView, error) {
 	if err != nil {
 		return AdminAgentView{}, err
 	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.agent.install", ResourceType: "charlie_connection", ResourceID: connection.ID.String()}); err != nil {
+		return AdminAgentView{}, err
+	}
 	if connection.Active && connection.OnboardingState == "active" {
 		if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
 			if err := pruner.PruneSupersededSecrets(ctx, adminInstallSpec(connection)); err != nil {
@@ -555,6 +594,9 @@ func (s *AdminService) ReplacementAction(ctx context.Context, action string) (Ad
 		now = s.now().UTC()
 	}
 	if err := validateReplacementAction(current, next, action, now); err != nil {
+		return AdminAgentView{}, err
+	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.agent." + action, ResourceType: "charlie_connection", ResourceID: next.ID.String()}); err != nil {
 		return AdminAgentView{}, err
 	}
 	nextSpec := adminInstallSpec(next)
@@ -669,6 +711,9 @@ func (s *AdminService) Uninstall(ctx context.Context, actor uuid.UUID) error {
 	if actor == uuid.Nil {
 		return ErrAdminConflict
 	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.agent.uninstall", ResourceType: "charlie_connection", ResourceID: connection.ID.String(), ActorID: actor}); err != nil {
+		return err
+	}
 	if connection.HealthState == "inactive" {
 		if err := s.installer.Uninstall(ctx, adminInstallSpec(connection)); err != nil {
 			return fmt.Errorf("%w: uninstall cleanup was not confirmed", ErrAdminConflict)
@@ -700,6 +745,9 @@ func (s *AdminService) Disconnect(ctx context.Context, actor uuid.UUID) error {
 	}
 	if actor == uuid.Nil {
 		return ErrAdminConflict
+	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.disconnect", ResourceType: "charlie_connection", ResourceID: connection.ID.String(), ActorID: actor}); err != nil {
+		return err
 	}
 	confirmation := "disconnect:" + connection.InstallationID.String()
 	if connection.HealthState == "inactive" {
@@ -767,11 +815,18 @@ func (s *AdminService) AcknowledgeDisclosure(ctx context.Context, digest string)
 	if len(digest) < 64 || len(digest) > 71 {
 		return AdminModeView{}, ErrAdminConflict
 	}
+	connection, err := s.connection(ctx)
+	if err != nil {
+		return AdminModeView{}, err
+	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.disclosure.acknowledge", ResourceType: "charlie_connection", ResourceID: connection.ID.String()}); err != nil {
+		return AdminModeView{}, err
+	}
 	result, err := s.pool.Exec(ctx, `UPDATE charlie_connections SET acknowledged_disclosure_digest=$1, updated_at=now() WHERE active=true AND disclosure_digest=$1`, digest)
 	if err != nil || result.RowsAffected() != 1 {
 		return AdminModeView{}, ErrAdminConflict
 	}
-	connection, err := s.connection(ctx)
+	connection, err = s.connection(ctx)
 	if err != nil {
 		return AdminModeView{}, err
 	}
@@ -917,6 +972,9 @@ func (s *AdminService) UpdateActionPolicy(ctx context.Context, capability string
 			return AdminActionPolicy{}, ErrAdminConflict
 		}
 	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.action_policy.update", ResourceType: "charlie_action_policy", ResourceID: digestBytes([]byte(capability))}); err != nil {
+		return AdminActionPolicy{}, err
+	}
 	if _, err = s.queries.UpsertCharlieAutomationPolicy(ctx, sqlc.UpsertCharlieAutomationPolicyParams{
 		ConnectionID: connection.ID, Capability: capability, Enabled: input.Enabled,
 		MaxActionsPerIncident: input.MaxActionsPerIncident, MaxActionsPerWindow: input.MaxActionsPerWindow,
@@ -1001,6 +1059,12 @@ func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input Ad
 	if err := validateAdminTrigger(input); err != nil {
 		return AdminTriggerRule{}, err
 	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{
+		Action: "admin.charlie.trigger.update", ResourceType: "charlie_trigger_rule", ResourceID: id.String(),
+		Fields: map[string]any{"enabled": input.Enabled, "suppressed": input.Suppressed},
+	}); err != nil {
+		return AdminTriggerRule{}, err
+	}
 	selectors, _ := json.Marshal(triggerSelectors{Scopes: normalizedScopes(input.Scopes), MinimumAgentVersion: strings.TrimSpace(input.MinimumAgentVersion), Suppressed: input.Suppressed})
 	thresholds, _ := json.Marshal(map[string]any{
 		"count": input.FlapCount, "grace_period_seconds": input.GracePeriodSeconds,
@@ -1033,6 +1097,12 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 	if err != nil || !identity.IsActive || !identity.IsService {
 		return AdminTriggerRule{}, ErrAdminUnavailable
 	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{
+		Action: "admin.charlie.trigger.create", ResourceType: "charlie_trigger_rule", ResourceID: digestBytes([]byte(strings.TrimSpace(input.Name))), ActorID: actor,
+		Fields: map[string]any{"enabled": input.Enabled, "suppressed": input.Suppressed},
+	}); err != nil {
+		return AdminTriggerRule{}, err
+	}
 	selectors, _ := json.Marshal(triggerSelectors{Scopes: normalizedScopes(input.Scopes), MinimumAgentVersion: strings.TrimSpace(input.MinimumAgentVersion), Suppressed: input.Suppressed})
 	thresholds, _ := json.Marshal(map[string]any{
 		"count": input.FlapCount, "grace_period_seconds": input.GracePeriodSeconds,
@@ -1056,6 +1126,9 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 func (s *AdminService) DeleteTrigger(ctx context.Context, id uuid.UUID) error {
 	connection, err := s.connection(ctx)
 	if err != nil {
+		return err
+	}
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.trigger.delete", ResourceType: "charlie_trigger_rule", ResourceID: id.String()}); err != nil {
 		return err
 	}
 	result, err := s.pool.Exec(ctx, `DELETE FROM charlie_trigger_rules WHERE id=$1 AND connection_id=$2`, id, connection.ID)
@@ -1116,6 +1189,11 @@ func max32(left, right int32) int32 {
 }
 
 func (s *AdminService) SetAutomationIdentity(ctx context.Context, enabled bool) (AdminAccessView, error) {
+	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{
+		Action: "admin.charlie.access.update", ResourceType: "charlie_automation_identity", ResourceID: "automation_identity", Fields: map[string]any{"enabled": enabled},
+	}); err != nil {
+		return AdminAccessView{}, err
+	}
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return AdminAccessView{}, ErrAdminUnavailable
@@ -1149,6 +1227,13 @@ func (s *AdminService) SetAutomationIdentity(ctx context.Context, enabled bool) 
 }
 
 func uuidToPG(id uuid.UUID) (value pgtype.UUID) { value.Bytes, value.Valid = id, true; return }
+
+func (s *AdminService) requireAuthorityAudit(ctx context.Context, event AuthorityMutationAudit) error {
+	if s == nil || requireAuthorityMutationAudit(ctx, s.auditor, event) != nil {
+		return ErrAdminUnavailable
+	}
+	return nil
+}
 
 func (s *AdminService) automationState(ctx context.Context) (enabled, hasTargetGrants bool, err error) {
 	row := s.pool.QueryRow(ctx, `
@@ -1327,6 +1412,32 @@ func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (A
 		}
 	}
 	return AdminDiagnosticsView{Overall: overall, Checks: checks, CorrelationID: correlationID}, nil
+}
+
+// LocalDiagnostics is the feature-disabled diagnostic contract. Even if the
+// last persisted connection was active, it deliberately performs database-only
+// reads and reports all runtime/network checks as inactive.
+func (s *AdminService) LocalDiagnostics(ctx context.Context, correlationID string) (AdminDiagnosticsView, error) {
+	checked := s.now().UTC().Format(time.RFC3339)
+	checks := []AdminDiagnosticCheck{}
+	add := func(id, label, state, summary string) {
+		checks = append(checks, AdminDiagnosticCheck{ID: id, Label: label, State: state, Summary: summary, NextAction: diagnosticNextAction(id, state), CheckedAt: checked})
+	}
+	if _, err := s.connection(ctx); err != nil {
+		state := "unavailable"
+		summary := "Charlie configuration is not available."
+		if errors.Is(err, ErrAdminNotConfigured) {
+			state = "inactive"
+			summary = "Charlie is not configured; no product-agent or central request was made."
+		}
+		add("local_config", "Local database and configuration", state, summary)
+	} else {
+		add("local_config", "Local database and configuration", "healthy", "Local Charlie metadata is readable and contains no runtime credentials in this response.")
+	}
+	for _, check := range inactiveDiagnosticChecks() {
+		add(check.ID, check.Label, "inactive", check.Summary)
+	}
+	return AdminDiagnosticsView{Overall: "inactive", Checks: checks, CorrelationID: correlationID}, nil
 }
 
 func inactiveDiagnosticChecks() []AdminDiagnosticCheck {

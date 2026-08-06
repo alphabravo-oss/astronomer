@@ -85,6 +85,7 @@ type SessionService struct {
 	bridge     SessionBridge
 	context    SessionContextProvider
 	authorizer SessionAccessAuthorizer
+	auditor    AuthorityMutationAuditor
 	active     func() bool
 	now        func() time.Time
 }
@@ -106,11 +107,11 @@ type CreatedSession struct {
 	Replayed         bool
 }
 
-func NewSessionService(queries sessionQueries, bridge SessionBridge, contextProvider SessionContextProvider, authorizer SessionAccessAuthorizer, active func() bool) (*SessionService, error) {
-	if queries == nil || bridge == nil || contextProvider == nil || authorizer == nil || active == nil {
+func NewSessionService(queries sessionQueries, bridge SessionBridge, contextProvider SessionContextProvider, authorizer SessionAccessAuthorizer, auditor AuthorityMutationAuditor, active func() bool) (*SessionService, error) {
+	if queries == nil || bridge == nil || contextProvider == nil || authorizer == nil || auditor == nil || active == nil {
 		return nil, fmt.Errorf("Charlie sessions require local persistence, product bridge, context, live authorization, and activation")
 	}
-	return &SessionService{queries: queries, bridge: bridge, context: contextProvider, authorizer: authorizer, active: active, now: time.Now}, nil
+	return &SessionService{queries: queries, bridge: bridge, context: contextProvider, authorizer: authorizer, auditor: auditor, active: active, now: time.Now}, nil
 }
 
 func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (CreatedSession, error) {
@@ -144,6 +145,12 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return CreatedSession{}, fmt.Errorf("load Charlie session: %w", err)
 	}
+	if err := requireAuthorityMutationAudit(ctx, s.auditor, AuthorityMutationAudit{
+		Action: "charlie.session.created", ResourceType: "charlie_session", ResourceID: input.ClientSessionID.String(), ActorID: input.OwnerID,
+		Fields: map[string]any{"visibility": "private", "resource_count": len(input.Resources)},
+	}); err != nil {
+		return CreatedSession{}, fmt.Errorf("Charlie session audit is unavailable")
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		intent := sessionIntentSummary(input.Intent)
 		local, err = s.queries.CreateCharlieSession(ctx, sqlc.CreateCharlieSessionParams{
@@ -162,7 +169,7 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 		}
 	}
 
-	delegation, err := IssueDelegation(ctx, s.queries, local.ID, input.OwnerID, input.ActorType, maxDelegationTTL, s.now().UTC())
+	delegation, err := IssueDelegation(ctx, s.queries, s.auditor, local.ID, input.OwnerID, input.ActorType, maxDelegationTTL, s.now().UTC())
 	if err != nil {
 		return CreatedSession{}, err
 	}

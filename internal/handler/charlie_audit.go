@@ -1,9 +1,9 @@
 package handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"regexp"
 
@@ -20,24 +20,42 @@ var charlieAuditDigestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 // agents, resource names, or caller-supplied detail. All detail fields must be
 // accepted by the same embedded contract used by runtime lifecycle audits.
 func recordCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any) {
+	if err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "completed"); err != nil {
+		logCharlieAdminAuditFailure(r)
+	}
+}
+
+// requireCharlieAdminAudit durably records a content-free mutation intent.
+// Callers must not perform the associated authority change if this returns an
+// error. Emergency disable deliberately remains on the best-effort path.
+func requireCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any) error {
+	err := persistCharlieAdminAudit(r, writer, action, resourceType, resourceID, fields, "authorized")
+	if err != nil {
+		logCharlieAdminAuditFailure(r)
+	}
+	return err
+}
+
+func persistCharlieAdminAudit(r *http.Request, writer any, action, resourceType, resourceID string, fields map[string]any, outcome string) error {
 	if r == nil || writer == nil {
-		return
+		return fmt.Errorf("Charlie administrator audit is unavailable")
 	}
 	w, ok := writer.(auditWriterV1)
 	if !ok || w == nil {
-		return
+		return fmt.Errorf("Charlie administrator audit is unavailable")
 	}
-	if fields == nil {
-		fields = map[string]any{}
+	detailFields := make(map[string]any, len(fields)+1)
+	for key, value := range fields {
+		detailFields[key] = value
 	}
-	fields["outcome_code"] = "completed"
+	detailFields["outcome_code"] = outcome
 	var err error
 	if !validCharlieAuditResourceID(resourceID) {
 		err = fmt.Errorf("Charlie administrator audit resource is invalid")
 	}
 	var detail []byte
 	if err == nil {
-		detail, err = charlie.EncodeCharlieAuditDetail(action, resourceType, fields)
+		detail, err = charlie.EncodeCharlieAuditDetail(action, resourceType, detailFields)
 	}
 	if err == nil {
 		err = w.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
@@ -46,13 +64,19 @@ func recordCharlieAdminAudit(r *http.Request, writer any, action, resourceType, 
 			StatusCode: http.StatusOK, RequestID: appmiddleware.GetRequestID(r.Context()), Detail: detail, ActionClass: "mutation",
 		})
 	}
-	if err != nil {
-		slog.WarnContext(r.Context(), "Charlie administrator audit persistence failed", slog.String("failure_code", "charlie.admin_audit_persist_failed"))
+	return err
+}
+
+func logCharlieAdminAuditFailure(r *http.Request) {
+	ctx := context.Background()
+	if r != nil {
+		ctx = r.Context()
 	}
+	charlie.LogOperationalFailure(ctx, nil, "charlie.admin_audit_persist_failed", "")
 }
 
 func validCharlieAuditResourceID(value string) bool {
-	if value == "current" || value == "automation_identity" || charlieAuditDigestPattern.MatchString(value) {
+	if value == "current" || value == "automation_identity" || value == "feature.charlie" || charlieAuditDigestPattern.MatchString(value) {
 		return true
 	}
 	_, err := uuid.Parse(value)

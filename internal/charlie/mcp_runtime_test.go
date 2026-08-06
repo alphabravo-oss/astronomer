@@ -18,9 +18,11 @@ import (
 )
 
 type mcpRuntimeFakeQueries struct {
-	connection sqlc.CharlieConnection
-	user       sqlc.User
-	role       sqlc.GlobalRole
+	connection    sqlc.CharlieConnection
+	user          sqlc.User
+	role          sqlc.GlobalRole
+	activeReads   int
+	receiptClaims int
 }
 
 type mcpRuntimeFindingRecorder struct{}
@@ -34,6 +36,7 @@ func (f *mcpRuntimeFakeQueries) CreateAuditLogV1(context.Context, sqlc.CreateAud
 }
 
 func (f *mcpRuntimeFakeQueries) GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
+	f.activeReads++
 	if !f.connection.Active {
 		return sqlc.CharlieConnection{}, errors.New("inactive")
 	}
@@ -67,6 +70,7 @@ func (f *mcpRuntimeFakeQueries) TransitionCharlieActionReceipt(context.Context, 
 	return sqlc.CharlieActionReceipt{}, nil
 }
 func (f *mcpRuntimeFakeQueries) ClaimCharlieAmbiguousReceipt(context.Context, sqlc.ClaimCharlieAmbiguousReceiptParams) (sqlc.CharlieActionReceipt, error) {
+	f.receiptClaims++
 	return sqlc.CharlieActionReceipt{}, pgx.ErrNoRows
 }
 func (f *mcpRuntimeFakeQueries) GetUserByUsername(context.Context, string) (sqlc.User, error) {
@@ -156,7 +160,7 @@ func TestMCPRuntimeBindsOnlyWhileLiveAndStopsOnEmergencyDisable(t *testing.T) {
 	}
 }
 
-func TestMCPRuntimeKeepsPrivateListenerFencedWhileModeDisabled(t *testing.T) {
+func TestMCPRuntimeOperationalDisabledHasNoWorkListener(t *testing.T) {
 	runtime, queries := mcpRuntimeFixture(t)
 	queries.connection.RequestedMode = string(ModeDisabled)
 	queries.connection.VerifiedMode = string(ModeDisabled)
@@ -166,11 +170,50 @@ func TestMCPRuntimeKeepsPrivateListenerFencedWhileModeDisabled(t *testing.T) {
 	runtime.mu.Lock()
 	serving := runtime.listener != nil
 	runtime.mu.Unlock()
-	if !serving {
-		t.Fatal("disabled enrolled integration did not retain its private listener for later activation")
+	if serving {
+		t.Fatal("wire-disabled integration retained a Product MCP work listener")
 	}
 	if state := runtime.config.WriteFence.State(); !state.Closed || !state.Drained {
 		t.Fatalf("disabled discovery opened product writes: %+v", state)
+	}
+}
+
+type fakeRuntimeTicker struct{ channel chan time.Time }
+
+func (t *fakeRuntimeTicker) C() <-chan time.Time { return t.channel }
+func (t *fakeRuntimeTicker) Stop()               {}
+
+func TestMCPRuntimeQuiescentStatesCreateNoTimerListenerOrReceiptConsumer(t *testing.T) {
+	tests := []struct {
+		name                string
+		mutate              func(*MCPRuntime, *mcpRuntimeFakeQueries)
+		wantConnectionReads int
+	}{
+		{name: "feature false", mutate: func(runtime *MCPRuntime, _ *mcpRuntimeFakeQueries) { runtime.features = gateFeature(false) }, wantConnectionReads: 0},
+		{name: "connection inactive", mutate: func(_ *MCPRuntime, queries *mcpRuntimeFakeQueries) { queries.connection.Active = false }, wantConnectionReads: 1},
+		{name: "operational disabled", mutate: func(_ *MCPRuntime, queries *mcpRuntimeFakeQueries) {
+			queries.connection.RequestedMode, queries.connection.VerifiedMode = string(ModeDisabled), string(ModeDisabled)
+		}, wantConnectionReads: 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runtime, queries := mcpRuntimeFixture(t)
+			timerCalls := 0
+			runtime.ticker = func(time.Duration) runtimeTicker {
+				timerCalls++
+				return &fakeRuntimeTicker{channel: make(chan time.Time)}
+			}
+			test.mutate(runtime, queries)
+			if err := runtime.Run(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			runtime.mu.Lock()
+			serving := runtime.listener != nil
+			runtime.mu.Unlock()
+			if timerCalls != 0 || serving || queries.receiptClaims != 0 || queries.activeReads != test.wantConnectionReads {
+				t.Fatalf("timer=%d listener=%v receipt_claims=%d connection_reads=%d", timerCalls, serving, queries.receiptClaims, queries.activeReads)
+			}
+		})
 	}
 }
 

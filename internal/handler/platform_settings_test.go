@@ -31,6 +31,7 @@ type fakeSettingsQuerier struct {
 	userErr  error
 	rows     map[string]sqlc.PlatformSetting
 	auditOps []string
+	auditErr error
 }
 
 type fakeCharlieSettingsLifecycle struct {
@@ -121,7 +122,7 @@ func (f *fakeSettingsQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Creat
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.auditOps = append(f.auditOps, arg.Action)
-	return nil
+	return f.auditErr
 }
 
 // authedRequest builds an httptest request with an injected authenticated user.
@@ -288,6 +289,27 @@ func TestCharlieFeatureEnableRollsBackWhenRuntimeRestoreFails(t *testing.T) {
 	}
 	if _, err := q.GetPlatformSetting(context.Background(), "feature.charlie"); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("failed enable left feature active: %v", err)
+	}
+}
+
+func TestCharlieFeatureEnableAuditFailurePersistsNoFeatureState(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	q.auditErr = errors.New("database-SENTINEL")
+	h := NewPlatformSettingsHandler(q)
+	resumeCalls := 0
+	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{enable: func(context.Context, string) error {
+		resumeCalls++
+		return nil
+	}})
+	req := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/feature.charlie/", callerID, []byte(`{"value":true}`)), "key", "feature.charlie")
+	w := httptest.NewRecorder()
+	h.Update(w, req)
+	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), "database-SENTINEL") {
+		t.Fatalf("feature audit failure was not bounded: status=%d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := q.GetPlatformSetting(context.Background(), "feature.charlie"); !errors.Is(err, pgx.ErrNoRows) || resumeCalls != 0 {
+		t.Fatalf("feature audit failure changed state: setting_err=%v resumes=%d", err, resumeCalls)
 	}
 }
 

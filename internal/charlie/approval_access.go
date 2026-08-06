@@ -53,7 +53,7 @@ type ApprovalLifecycleAudit struct {
 }
 
 type ApprovalLifecycleAuditor interface {
-	RecordCharlieApprovalLifecycle(context.Context, ApprovalLifecycleAudit)
+	RecordCharlieApprovalLifecycle(context.Context, ApprovalLifecycleAudit) error
 }
 
 // ApprovalView contains only bounded, non-authoritative display metadata. The
@@ -170,6 +170,12 @@ func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, a
 		s.audit(ctx, candidate, actorID, decision, reason)
 		return ApprovalView{}, fmt.Errorf("Charlie approval is not eligible")
 	}
+	// Persist the exact, content-free decision intent before reserving local
+	// authority or asking Charlie to consume the approval. A missing audit trail
+	// must never leave either side believing that authority was granted.
+	if err := s.requireAudit(ctx, candidate, actorID, decision, "authorized"); err != nil {
+		return ApprovalView{}, fmt.Errorf("Charlie approval audit could not be persisted")
+	}
 	manifest := candidate.approval.Manifest
 	row, err := s.queries.CreateCharlieActionApproval(ctx, sqlc.CreateCharlieActionApprovalParams{
 		ConnectionID: candidate.connection.ID, SessionID: candidate.session.ID,
@@ -261,6 +267,10 @@ func (s *ApprovalAccessService) listForSession(ctx context.Context, actorID, ses
 		if string(approval.Manifest.SessionId) != local.CharlieSessionID {
 			continue
 		}
+		if state := string(approval.State); state == "rejected" || state == "expired" {
+			_ = s.transitionApprovalFinding(ctx, string(approval.ApprovalId), state)
+			continue
+		}
 		item, verifyErr := s.verifyCandidate(ctx, actorID, connection, local, resources, authorizationRef, approval)
 		if verifyErr == nil && s.ensureApprovalFinding(ctx, item) == nil {
 			result = append(result, item)
@@ -312,7 +322,10 @@ func (s *ApprovalAccessService) transitionApprovalFinding(ctx context.Context, a
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		existing, loadErr := s.queries.GetCharlieFindingByApprovalID(ctx, pgtype.Text{String: approvalID, Valid: true})
-		if loadErr == nil && ((state == "rejected" && existing.Status == "resolved" && existing.ExecutionBlockCode == "approval_rejected") || (state == "expired" && existing.Status == "expired" && existing.ExecutionBlockCode == "approval_expired")) {
+		if loadErr == nil && (existing.Status == "open" || existing.Status == "acknowledged") &&
+			existing.WorkflowState == string(FindingWorkflowManualRemediationRequired) &&
+			((state == "rejected" && existing.ExecutionBlockCode == string(ReasonApprovalRejected)) ||
+				(state == "expired" && existing.ExecutionBlockCode == string(ReasonApprovalExpired))) {
 			return nil
 		}
 	}
@@ -451,10 +464,15 @@ func (s *ApprovalAccessService) rejectLocal(ctx context.Context, id uuid.UUID) {
 }
 
 func (s *ApprovalAccessService) audit(ctx context.Context, item verifiedApproval, actorID uuid.UUID, decision, outcome string) {
-	if s != nil && s.auditor != nil {
-		s.auditor.RecordCharlieApprovalLifecycle(ctx, ApprovalLifecycleAudit{
-			ApprovalID: string(item.approval.ApprovalId), ActionID: string(item.approval.ActionId), SessionID: item.session.ID,
-			ActorID: actorID, Capability: item.descriptor.Name, Decision: decision, OutcomeCode: outcome, ManifestDigest: item.manifestDigest,
-		})
+	_ = s.requireAudit(ctx, item, actorID, decision, outcome)
+}
+
+func (s *ApprovalAccessService) requireAudit(ctx context.Context, item verifiedApproval, actorID uuid.UUID, decision, outcome string) error {
+	if s == nil || s.auditor == nil {
+		return fmt.Errorf("Charlie approval audit is unavailable")
 	}
+	return s.auditor.RecordCharlieApprovalLifecycle(ctx, ApprovalLifecycleAudit{
+		ApprovalID: string(item.approval.ApprovalId), ActionID: string(item.approval.ActionId), SessionID: item.session.ID,
+		ActorID: actorID, Capability: item.descriptor.Name, Decision: decision, OutcomeCode: outcome, ManifestDigest: item.manifestDigest,
+	})
 }

@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,16 @@ type triggerAdminFake struct {
 	rows       []sqlc.CharlieTriggerEvent
 	list       sqlc.ListCharlieTriggerEventsForAdminParams
 	retry      sqlc.RetryDeadCharlieTriggerEventWithOutboxParams
+}
+
+type authorityAuditFake struct {
+	err    error
+	events []AuthorityMutationAudit
+}
+
+func (f *authorityAuditFake) RecordCharlieAuthorityMutation(_ context.Context, event AuthorityMutationAudit) error {
+	f.events = append(f.events, event)
+	return f.err
 }
 
 func (f *triggerAdminFake) GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error) {
@@ -49,7 +60,7 @@ func TestTriggerAdminListsBoundedUIStateWithoutStoredMetadata(t *testing.T) {
 			AttemptCount: 8, LastErrorCode: "bridge_unavailable", FirstOccurredAt: now, LastOccurredAt: now, UpdatedAt: now,
 		}},
 	}
-	service, _ := NewTriggerAdminService(fake)
+	service, _ := NewTriggerAdminService(fake, &authorityAuditFake{})
 	items, err := service.List(context.Background(), "dead", 0, 20)
 	if err != nil || len(items) != 1 || items[0].ID != eventID.String() || fake.list.ConnectionID != connectionID || !fake.list.EventState.Valid || fake.list.EventState.String != "dead" {
 		t.Fatalf("dead-letter list items=%#v query=%#v err=%v", items, fake.list, err)
@@ -70,7 +81,7 @@ func TestTriggerAdminRetryUsesFreshIdempotentAttemptAndRetainsSource(t *testing.
 		connection: connection,
 		rows:       []sqlc.CharlieTriggerEvent{{ID: sourceID, RuleID: uuid.New(), EventType: "queue_terminal_failure", ResourceType: "workflow", ResourceID: "queue-a", State: "dead", RepeatCount: 4, FirstOccurredAt: time.Now(), LastOccurredAt: time.Now()}},
 	}
-	service, _ := NewTriggerAdminService(fake)
+	service, _ := NewTriggerAdminService(fake, &authorityAuditFake{})
 	view, err := service.Retry(context.Background(), sourceID, requestID)
 	if err != nil || view.ID != requestID.String() || view.RetryOfEventID != sourceID.String() || view.State != "pending" {
 		t.Fatalf("retry view=%#v err=%v", view, err)
@@ -84,8 +95,22 @@ func TestTriggerAdminRetryFailsClosedWhileDisabled(t *testing.T) {
 	connection := readySessionConnection()
 	connection.RequestedMode, connection.VerifiedMode = "disabled", "disabled"
 	fake := &triggerAdminFake{connection: connection, rows: []sqlc.CharlieTriggerEvent{{ID: uuid.New()}}}
-	service, _ := NewTriggerAdminService(fake)
+	service, _ := NewTriggerAdminService(fake, &authorityAuditFake{})
 	if _, err := service.Retry(context.Background(), uuid.New(), uuid.New()); err == nil || fake.retry.RequestID != uuid.Nil {
 		t.Fatalf("disabled retry was not inert: query=%#v err=%v", fake.retry, err)
+	}
+}
+
+func TestTriggerAdminAuditFailureCreatesNoRetry(t *testing.T) {
+	connection := readySessionConnection()
+	connection.RequestedMode, connection.VerifiedMode = "read_only", "read_only"
+	fake := &triggerAdminFake{connection: connection, rows: []sqlc.CharlieTriggerEvent{{ID: uuid.New()}}}
+	service, _ := NewTriggerAdminService(fake, &authorityAuditFake{err: errors.New("database-SENTINEL")})
+
+	if _, err := service.Retry(context.Background(), uuid.New(), uuid.New()); err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("retry audit failure was not bounded: %v", err)
+	}
+	if fake.retry.RequestID != uuid.Nil {
+		t.Fatalf("audit failure created trigger retry: %#v", fake.retry)
 	}
 }

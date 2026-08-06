@@ -173,11 +173,12 @@ const CARDS: SettingsCard[] = [
 
 function SettingsHubPage() {
   // Most cards are superuser-only. Charlie is the deliberate exception: its
-  // feature flag and global charlie:manage grant expose exactly that one card.
+  // global charlie:manage grant exposes exactly that one card even while the
+  // integration is disabled, because enablement begins from local settings.
   const { isSuperuser, ready } = useIsSuperuser();
   const { data: featureFlags } = useFeatureFlags();
   const user = useAuthStore((state) => state.user);
-  const canManageCharlie = hasCharlieManagement(user, featureFlags?.['feature.charlie'] === true);
+  const canManageCharlie = hasCharlieManagement(user);
 
   // While auth hydrates (!ready) render the header only — don't flash the full
   // grid to a user who will turn out to lack all administration access.

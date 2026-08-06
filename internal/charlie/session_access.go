@@ -71,6 +71,7 @@ type SessionAccessService struct {
 	authorizer SessionAccessAuthorizer
 	bridge     SessionContentBridge
 	auditor    SessionLifecycleAuditor
+	authority  AuthorityMutationAuditor
 	active     func() bool
 	now        func() time.Time
 }
@@ -94,10 +95,11 @@ func (s *SessionAccessService) CurrentMode(ctx context.Context, actorID uuid.UUI
 }
 
 func NewSessionAccessService(queries sessionAccessQueries, authorizer SessionAccessAuthorizer, bridge SessionContentBridge, auditor SessionLifecycleAuditor, active func() bool) (*SessionAccessService, error) {
-	if queries == nil || authorizer == nil || bridge == nil || auditor == nil || active == nil {
+	authority, authorityOK := auditor.(AuthorityMutationAuditor)
+	if queries == nil || authorizer == nil || bridge == nil || auditor == nil || !authorityOK || authority == nil || active == nil {
 		return nil, fmt.Errorf("Charlie session access requires local state, live authorization, bridge, audit, and activation")
 	}
-	return &SessionAccessService{queries: queries, authorizer: authorizer, bridge: bridge, auditor: auditor, active: active, now: time.Now}, nil
+	return &SessionAccessService{queries: queries, authorizer: authorizer, bridge: bridge, auditor: auditor, authority: authority, active: active, now: time.Now}, nil
 }
 
 type SessionView struct {
@@ -346,7 +348,7 @@ func (s *SessionAccessService) authorize(ctx context.Context, actorID, sessionID
 	if err != nil {
 		return sqlc.CharlieSession{}, nil, "", err
 	}
-	delegation, err := IssueDelegation(ctx, s.queries, local.ID, actorID, "user", maxDelegationTTL, s.now().UTC())
+	delegation, err := IssueDelegation(ctx, s.queries, s.authority, local.ID, actorID, "user", maxDelegationTTL, s.now().UTC())
 	if err != nil {
 		return sqlc.CharlieSession{}, nil, "", fmt.Errorf("Charlie session authorization is unavailable")
 	}

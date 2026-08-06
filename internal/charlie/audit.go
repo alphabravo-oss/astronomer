@@ -10,6 +10,8 @@ const (
 	AuditResourceApproval    = "charlie_approval"
 	AuditResourceMCPDecision = "charlie_mcp_decision"
 	AuditResourceFinding     = "charlie_finding"
+	AuditResourceFeature     = "charlie_feature"
+	AuditResourceDelegation  = "charlie_delegation"
 )
 
 var AuditActions = []string{
@@ -24,6 +26,9 @@ var AuditActions = []string{
 	"charlie.mode.requested",
 	"charlie.mode.verified",
 	"charlie.mode.emergency_disabled",
+	"charlie.feature.enabled",
+	"charlie.feature.disabled",
+	"charlie.delegation.issued",
 	"charlie.session.created",
 	"charlie.session.aborted",
 	"charlie.trigger.dispatched",

@@ -74,6 +74,9 @@ func NewFindingService(store FindingStore, publisher FindingAlertPublisher) (*Fi
 // bounded alert. It never dispatches an action. Inert/disabled decisions do not
 // create findings, so a disabled integration remains silent and isolated.
 func (s *FindingService) RecordBlocked(ctx context.Context, input FindingInput) (DurableFinding, error) {
+	if input.Mode == ModeDisabled {
+		return DurableFinding{}, nil
+	}
 	recommendation := BlockedFinding(input.Decision, input.Title, input.Summary, input.RecommendedAction, input.Verification)
 	if !recommendation.Actionable {
 		return DurableFinding{}, nil
@@ -90,7 +93,7 @@ func (s *FindingService) RecordBlocked(ctx context.Context, input FindingInput) 
 		alert := FindingAlert{
 			FindingID: durable.ID, Severity: input.Severity, Status: durable.Status,
 			ResourceType: input.ResourceType, ResourceID: input.ResourceID,
-			BlockCode: string(input.Decision.Code), RepeatCount: durable.RepeatCount,
+			BlockCode: string(recommendation.ExecutionBlockCode), RepeatCount: durable.RepeatCount,
 		}
 		if err := s.publisher.PublishCharlieFinding(ctx, alert); err != nil {
 			return durable, fmt.Errorf("Charlie finding alert publication is unavailable")
@@ -104,6 +107,9 @@ func validFindingInput(input FindingInput) bool {
 		return false
 	}
 	if input.Severity != "info" && input.Severity != "low" && input.Severity != "medium" && input.Severity != "warning" && input.Severity != "high" && input.Severity != "critical" {
+		return false
+	}
+	if reason, ok := NormalizeNonExecutionReason(input.Decision.Code); input.Decision.Allowed || !ok || !IsActionableNonExecutionReason(reason) {
 		return false
 	}
 	for _, value := range []string{input.InstallationID, input.ResourceType, input.ResourceID, input.NormalizedDiagnosis, input.RecommendedCapability} {

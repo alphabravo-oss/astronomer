@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -172,6 +173,7 @@ func TestStatusWriter_ExplicitWriteHeader(t *testing.T) {
 
 type fakeAuditWriter struct {
 	lastV1 *sqlc.CreateAuditLogV1Params
+	err    error
 }
 
 type fakeAuditWriterV1Only struct {
@@ -180,7 +182,7 @@ type fakeAuditWriterV1Only struct {
 
 func (f *fakeAuditWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	f.lastV1 = &arg
-	return nil
+	return f.err
 }
 
 func (f *fakeAuditWriterV1Only) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
@@ -258,7 +260,7 @@ func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T)
 	req.RemoteAddr = "203.0.113.99:1234"
 	req.Header.Set("User-Agent", "agent-SENTINEL")
 	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: uuid.NewString(), AuthMethod: "jwt"})
-	ctx = context.WithValue(ctx, contextKey("request_id"), "req-charlie-safe")
+	ctx = context.WithValue(ctx, contextKey("request_id"), "request-correlation-SENTINEL")
 	req = req.WithContext(ctx)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -273,7 +275,7 @@ func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T)
 		t.Fatalf("Charlie audit retained request metadata: %+v", row)
 	}
 	serialized := buf.String() + string(row.Detail) + row.Path + row.ResourceID + row.UserAgent
-	for _, sentinel := range []string{"resource-SENTINEL", "query-SENTINEL", "body-SENTINEL", "agent-SENTINEL", "response-SENTINEL", "203.0.113.99"} {
+	for _, sentinel := range []string{"resource-SENTINEL", "query-SENTINEL", "body-SENTINEL", "agent-SENTINEL", "response-SENTINEL", "request-correlation-SENTINEL", "203.0.113.99"} {
 		if strings.Contains(serialized, sentinel) {
 			t.Fatalf("Charlie audit leaked %q: %s", sentinel, serialized)
 		}
@@ -322,6 +324,28 @@ func TestCharlieAuthenticationDenialAuditDoesNotDuplicatePostAuthDenial(t *testi
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/admin/charlie/mode/", nil))
 	if writer.lastV1 != nil {
 		t.Fatal("outer authentication auditor duplicated a post-authentication denial")
+	}
+}
+
+func TestCharlieHTTPAuditFailuresUseBoundedOperationalSerializer(t *testing.T) {
+	const canary = "database-and-correlation-SENTINEL"
+	var output bytes.Buffer
+	prior := slog.Default()
+	slog.SetDefault(newTestLogger(&output))
+	t.Cleanup(func() { slog.SetDefault(prior) })
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/charlie", nil)
+	request = request.WithContext(context.WithValue(request.Context(), requestIDKey, canary))
+	writeCharlieAuditLog(request, http.StatusOK, &fakeAuditWriter{err: errors.New(canary)}, 1, "success")
+	if !strings.Contains(output.String(), "charlie.http_audit_persist_failed") || strings.Contains(output.String(), canary) {
+		t.Fatalf("unsafe Charlie HTTP persistence failure log: %s", output.String())
+	}
+
+	output.Reset()
+	request.Method = "TRACE-SENTINEL"
+	writeCharlieAuditLog(request, http.StatusOK, &fakeAuditWriter{}, 1, "success")
+	if !strings.Contains(output.String(), "charlie.http_audit_encode_failed") || strings.Contains(output.String(), canary) || strings.Contains(output.String(), request.Method) {
+		t.Fatalf("unsafe Charlie HTTP encoding failure log: %s", output.String())
 	}
 }
 

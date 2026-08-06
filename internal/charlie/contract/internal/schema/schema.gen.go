@@ -110,14 +110,19 @@ func (j *ArgumentProperty) UnmarshalJSON(value []byte) error {
 type BlockCode string
 
 const BlockCodeAllowlistDenied BlockCode = "allowlist_denied"
+const BlockCodeAmbiguousPriorAttempt BlockCode = "ambiguous_prior_attempt"
 const BlockCodeApprovalExpired BlockCode = "approval_expired"
 const BlockCodeApprovalRejected BlockCode = "approval_rejected"
 const BlockCodeApprovalRequired BlockCode = "approval_required"
 const BlockCodeCapabilityDestructive BlockCode = "capability_destructive"
 const BlockCodeCentralUnavailable BlockCode = "central_unavailable"
 const BlockCodeCircuitBreakerOpen BlockCode = "circuit_breaker_open"
+const BlockCodeCooldownActive BlockCode = "cooldown_active"
 const BlockCodeDeploymentDisabled BlockCode = "deployment_disabled"
 const BlockCodeDisclosureDrift BlockCode = "disclosure_drift"
+const BlockCodeExecutionFailed BlockCode = "execution_failed"
+const BlockCodeIdempotencyConflict BlockCode = "idempotency_conflict"
+const BlockCodeMaintenanceWindow BlockCode = "maintenance_window"
 const BlockCodeNoSafeAction BlockCode = "no_safe_action"
 const BlockCodeNonAutoEligible BlockCode = "non_auto_eligible"
 const BlockCodePreconditionFailed BlockCode = "precondition_failed"
@@ -144,8 +149,13 @@ var enumValues_BlockCode = []interface{}{
 	"approval_rejected",
 	"allowlist_denied",
 	"safety_budget_exceeded",
+	"cooldown_active",
+	"maintenance_window",
 	"precondition_failed",
 	"circuit_breaker_open",
+	"idempotency_conflict",
+	"ambiguous_prior_attempt",
+	"execution_failed",
 	"central_unavailable",
 	"verification_failed",
 	"no_safe_action",

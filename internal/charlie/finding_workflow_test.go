@@ -22,14 +22,14 @@ func TestFindingWorkflowHasOneBoundedDecisionSetForEveryNonExecutionReason(t *te
 	}
 	for _, reason := range manualReasons {
 		t.Run(reason, func(t *testing.T) {
-			workflow := FindingWorkflowFor(sqlc.CharlieFinding{Status: "open", ExecutionBlockCode: reason}, now)
+			workflow := FindingWorkflowFor(sqlc.CharlieFinding{Status: "open", EffectiveMode: string(ModeReadOnly), ExecutionBlockCode: reason}, now)
 			if workflow.State != FindingWorkflowManualRemediationRequired || len(workflow.Decisions) != 3 ||
-				!FindingWorkflowAllows(sqlc.CharlieFinding{Status: "open", ExecutionBlockCode: reason}, "dismiss", now) {
+				!FindingWorkflowAllows(sqlc.CharlieFinding{Status: "open", EffectiveMode: string(ModeReadOnly), ExecutionBlockCode: reason}, "dismiss", now) {
 				t.Fatalf("workflow = %#v", workflow)
 			}
 		})
 	}
-	verification := FindingWorkflowFor(sqlc.CharlieFinding{Status: "open", ExecutionBlockCode: "verification_failed"}, now)
+	verification := FindingWorkflowFor(sqlc.CharlieFinding{Status: "open", EffectiveMode: string(ModeAuto), ExecutionBlockCode: "verification_failed"}, now)
 	if verification.State != FindingWorkflowVerificationPending || !slices.Contains(verification.Decisions, "start_remediation") || !slices.Contains(verification.Decisions, "resolve") {
 		t.Fatalf("verification workflow = %#v", verification)
 	}
@@ -46,7 +46,7 @@ func TestFindingWorkflowUsesPersistedCentralWorkflowWithoutInferringAuthority(t 
 		{FindingWorkflowVerificationPending, "resolve"},
 	}
 	for _, test := range tests {
-		row := sqlc.CharlieFinding{Status: "acknowledged", WorkflowState: string(test.state), ExecutionBlockCode: "read_only"}
+		row := sqlc.CharlieFinding{Status: "acknowledged", EffectiveMode: string(ModeReadOnly), WorkflowState: string(test.state), ExecutionBlockCode: "read_only"}
 		workflow := FindingWorkflowFor(row, now)
 		if workflow.State != test.state || !slices.Contains(workflow.Decisions, test.decision) {
 			t.Fatalf("state %s produced %#v", test.state, workflow)
@@ -57,8 +57,9 @@ func TestFindingWorkflowUsesPersistedCentralWorkflowWithoutInferringAuthority(t 
 func TestFindingWorkflowApprovalRequiresCurrentExactLink(t *testing.T) {
 	now := time.Unix(20_000, 0).UTC()
 	row := sqlc.CharlieFinding{Status: "open", ExecutionBlockCode: "approval_required",
-		ApprovalID: pgtype.Text{String: "approval-a", Valid: true},
-		ExpiresAt:  pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true}}
+		EffectiveMode: string(ModeApproval),
+		ApprovalID:    pgtype.Text{String: "approval-a", Valid: true},
+		ExpiresAt:     pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true}}
 	workflow := FindingWorkflowFor(row, now)
 	if workflow.State != FindingWorkflowApprovalPending || len(workflow.Decisions) != 2 || FindingWorkflowAllows(row, "resolve", now) {
 		t.Fatalf("approval workflow = %#v", workflow)
@@ -66,6 +67,20 @@ func TestFindingWorkflowApprovalRequiresCurrentExactLink(t *testing.T) {
 	row.ExpiresAt.Time = now.Add(-time.Second)
 	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowExpired || len(got.Decisions) != 0 || FindingWorkflowAllows(row, "open_exact_approval", now) {
 		t.Fatalf("expired approval retained authority: %#v", got)
+	}
+	row.ExecutionBlockCode = string(ReasonApprovalExpired)
+	row.WorkflowState = string(FindingWorkflowManualRemediationRequired)
+	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowManualRemediationRequired ||
+		FindingWorkflowAllows(row, "open_exact_approval", now) || !FindingWorkflowAllows(row, "start_remediation", now) {
+		t.Fatalf("persisted expired approval did not offer safe manual remediation: %#v", got)
+	}
+	row.ExecutionBlockCode = string(ReasonApprovalRequired)
+	row.WorkflowState = ""
+	row.ExpiresAt.Time = now.Add(time.Minute)
+	row.ApprovalID = pgtype.Text{}
+	if got := FindingWorkflowFor(row, now); got.State != FindingWorkflowManualRemediationRequired ||
+		FindingWorkflowAllows(row, "open_exact_approval", now) || FindingWorkflowAllows(row, "reject_exact_approval", now) {
+		t.Fatalf("missing approval link retained execution control: %#v", got)
 	}
 }
 
@@ -75,7 +90,7 @@ func TestFindingWorkflowTerminalAndLifecycleStatesHaveNoHiddenAuthority(t *testi
 		row  sqlc.CharlieFinding
 		want FindingWorkflowState
 	}{
-		{sqlc.CharlieFinding{Status: "acknowledged", ExecutionBlockCode: "read_only"}, FindingWorkflowRemediationInProgress},
+		{sqlc.CharlieFinding{Status: "acknowledged", EffectiveMode: string(ModeReadOnly), ExecutionBlockCode: "read_only"}, FindingWorkflowRemediationInProgress},
 		{sqlc.CharlieFinding{Status: "resolved", ExecutionBlockCode: "read_only"}, FindingWorkflowResolved},
 		{sqlc.CharlieFinding{Status: "resolved", ExecutionBlockCode: "approval_rejected"}, FindingWorkflowRejected},
 		{sqlc.CharlieFinding{Status: "dismissed"}, FindingWorkflowDismissed},

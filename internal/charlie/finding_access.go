@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -59,6 +58,7 @@ type FindingAccessService struct {
 	authorizer SessionAccessAuthorizer
 	bridge     FindingContentBridge
 	auditor    FindingLifecycleAuditor
+	authority  AuthorityMutationAuditor
 	publisher  FindingLifecyclePublisher
 	syncer     FindingSummarySyncer
 	active     func() bool
@@ -66,10 +66,11 @@ type FindingAccessService struct {
 }
 
 func NewFindingAccessService(queries findingAccessQueries, authorizer SessionAccessAuthorizer, bridge FindingContentBridge, auditor FindingLifecycleAuditor, publisher FindingLifecyclePublisher, syncer FindingSummarySyncer, active func() bool) (*FindingAccessService, error) {
-	if queries == nil || authorizer == nil || bridge == nil || auditor == nil || publisher == nil || syncer == nil || active == nil {
+	authority, authorityOK := auditor.(AuthorityMutationAuditor)
+	if queries == nil || authorizer == nil || bridge == nil || auditor == nil || !authorityOK || authority == nil || publisher == nil || syncer == nil || active == nil {
 		return nil, fmt.Errorf("Charlie finding access requires local state, live authorization, bridge, sync, audit, publication, and activation")
 	}
-	return &FindingAccessService{queries: queries, authorizer: authorizer, bridge: bridge, auditor: auditor, publisher: publisher, syncer: syncer, active: active, now: time.Now}, nil
+	return &FindingAccessService{queries: queries, authorizer: authorizer, bridge: bridge, auditor: auditor, authority: authority, publisher: publisher, syncer: syncer, active: active, now: time.Now}, nil
 }
 
 type FindingView struct {
@@ -142,6 +143,12 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	if err != nil {
 		return FindingView{}, err
 	}
+	if err := requireAuthorityMutationAudit(ctx, s.authority, AuthorityMutationAudit{
+		Action: findingDecisionAuditAction(decision), ResourceType: "charlie_finding", ResourceID: row.ID.String(), ActorID: actorID,
+		Fields: map[string]any{"resource_count": len(resources)},
+	}); err != nil {
+		return FindingView{}, fmt.Errorf("Charlie finding transition audit is unavailable")
+	}
 	prior, priorErr := s.queries.GetCharlieFindingDecision(ctx, requestID)
 	if priorErr == nil {
 		if prior.FindingID != row.ID || prior.ActorRef != findingActorRef(row.ConnectionID, actorID) || prior.Decision != decision {
@@ -193,7 +200,7 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	}
 	if err != nil {
 		s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_committed_local_failed", len(resources))
-		slog.WarnContext(ctx, "Charlie finding local transition failed after central acceptance", slog.String("failure_code", "charlie.finding_local_commit_failed"))
+		LogOperationalFailure(ctx, nil, "charlie.finding_local_commit_failed", "")
 		return FindingView{}, fmt.Errorf("Charlie finding transition could not be committed")
 	}
 	updated, err := s.queries.GetCharlieFinding(ctx, row.ID)
@@ -302,7 +309,7 @@ func (s *FindingAccessService) issueFindingDelegation(ctx context.Context, row s
 	if err != nil || activeErr != nil || session.ConnectionID != row.ConnectionID || !s.connectionLineageAuthorized(ctx, active, session.ConnectionID) || session.State == "aborted" || session.State == "failed" {
 		return "", fmt.Errorf("Charlie finding detail is unavailable")
 	}
-	delegation, err := IssueDelegation(ctx, s.queries, session.ID, actorID, "user", maxDelegationTTL, s.now().UTC())
+	delegation, err := IssueDelegation(ctx, s.queries, s.authority, session.ID, actorID, "user", maxDelegationTTL, s.now().UTC())
 	if err != nil {
 		return "", fmt.Errorf("Charlie finding authorization is unavailable")
 	}

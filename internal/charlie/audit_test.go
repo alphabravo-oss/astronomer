@@ -18,6 +18,7 @@ func TestCharlieAuditVocabularyIsBoundedAndCanonical(t *testing.T) {
 		AuditResourceConnection, AuditResourceCertificate, AuditResourceAgent,
 		AuditResourceMode, AuditResourceSession, AuditResourceTrigger,
 		AuditResourceApproval, AuditResourceMCPDecision, AuditResourceFinding,
+		AuditResourceFeature, AuditResourceDelegation,
 	} {
 		if resource == "" || len(resource) > 64 {
 			t.Fatalf("invalid Charlie audit resource %q", resource)

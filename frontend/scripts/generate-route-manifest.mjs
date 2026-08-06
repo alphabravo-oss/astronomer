@@ -24,11 +24,11 @@ const frontendRoot = path.resolve(scriptDir, '..');
 const routesDir = path.join(frontendRoot, 'src/routes');
 const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.generated.json');
 
-// Appendix A counts 107 pages with the `[[...slug]]` optional catch-all
+// The current route inventory counts 111 pages with the `[[...slug]]` optional catch-all
 // (custom-resources) as ONE page; its TanStack port is an `index.tsx` +
 // `$.tsx` PAIR, and the manifest crawls both the empty and the populated
-// splat variant — hence 108 URLs for 107 inventory pages.
-const EXPECTED_ROUTE_COUNT = 108;
+// splat variant — hence 112 URLs for 111 inventory pages.
+const EXPECTED_ROUTE_COUNT = 112;
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to

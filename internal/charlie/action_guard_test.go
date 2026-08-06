@@ -184,7 +184,7 @@ func allowedWriteFacts(mode Mode) AuthorityInput {
 		FindingResourceType: "management_component", FindingResourceID: "resource-a",
 		ApprovalPresent: true, ApprovalExact: true, ApprovalExpiresAt: time.Now().Add(time.Minute),
 		AutoEligible: true, Allowlisted: true, ScopeAllowed: true, BudgetAvailable: true,
-		CooldownClear: true, CircuitClosed: true, PreconditionsMet: true,
+		CooldownClear: true, CircuitClosed: true, PreconditionsMet: true, MaintenanceClear: true,
 		IdempotencyKeyPresent: true, VerificationDeclared: true, FencingEpoch: 7, CurrentFencingEpoch: 7,
 	}
 }
@@ -420,6 +420,7 @@ func TestEveryWriteCapabilityUsesCompleteSafetyEnvelope(t *testing.T) {
 				{"approval_missing", DeniedApprovalRequired, func(v *AuthorityInput) { v.ApprovalPresent = false }},
 				{"rbac_denied", DeniedAuthorization, func(v *AuthorityInput) { v.LiveAuthorized = false }},
 				{"stale_epoch", DeniedStaleFencing, func(v *AuthorityInput) { v.CurrentFencingEpoch++ }},
+				{"maintenance", DeniedMaintenance, func(v *AuthorityInput) { v.MaintenanceClear = false }},
 				{"precondition", DeniedPrecondition, func(v *AuthorityInput) { v.PreconditionsMet = false }},
 			} {
 				denial := denial
@@ -733,26 +734,30 @@ func TestActionGuardFailsClosedWhenLiveAuthorityUnavailable(t *testing.T) {
 }
 
 func TestActionGuardDoesNotDispatchWhenDurableAuditFails(t *testing.T) {
-	facts := allowedWriteFacts(ModeApproval)
-	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
-	receipts := &fakeReceipts{}
-	executor := &fakeCapabilityExecutor{verified: true}
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	auditor := &fakeActionAuditor{failAt: "dispatched"}
-	guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
-	action.ApprovalID = "approval-a"
-	payload, _ := json.Marshal(action.signed())
-	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
-	result := guard.Execute(context.Background(), action)
-	if result.Allowed || executor.calls != 0 || stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) {
-		t.Fatalf("audit failure reached side effect: result=%+v calls=%d transitions=%v", result, executor.calls, receipts.transitions)
+	for _, phase := range []string{"approved", "dispatched"} {
+		t.Run(phase, func(t *testing.T) {
+			facts := allowedWriteFacts(ModeApproval)
+			authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+			receipts := &fakeReceipts{}
+			executor := &fakeCapabilityExecutor{verified: true}
+			publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			auditor := &fakeActionAuditor{failAt: phase}
+			guard, err := NewActionGuard(publicKey, authority, receipts, executor, auditor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
+			action.ApprovalID = "approval-a"
+			payload, _ := json.Marshal(action.signed())
+			action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+			result := guard.Execute(context.Background(), action)
+			if result.Allowed || authority.commitCalls != 0 || executor.calls != 0 || stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) {
+				t.Fatalf("audit failure reached consumption/dispatch: phase=%s result=%+v commits=%d calls=%d transitions=%v", phase, result, authority.commitCalls, executor.calls, receipts.transitions)
+			}
+		})
 	}
 }
 

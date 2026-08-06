@@ -105,7 +105,7 @@ func TestSessionCreatePersistsAuthorizationBeforeBoundedBridgeCall(t *testing.T)
 	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
 	bridge := &sessionBridgeFake{receipt: BridgeSessionReceipt{SessionID: "central-session", Revision: 7}}
 	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr-1"}}
-	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return true })
+	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,12 +136,28 @@ func TestSessionCreatePersistsAuthorizationBeforeBoundedBridgeCall(t *testing.T)
 	}
 }
 
+func TestSessionCreateAuditFailurePersistsNoSessionOrDelegation(t *testing.T) {
+	connection := readySessionConnection()
+	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
+	bridge := &sessionBridgeFake{}
+	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr-1"}}
+	service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{err: errors.New("database-SENTINEL")}, func() bool { return true })
+
+	_, err := service.Create(context.Background(), validSessionInput())
+	if err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("session audit failure was not bounded: %v", err)
+	}
+	if queries.created != 0 || queries.delegation.SessionID != uuid.Nil || bridge.calls != 0 {
+		t.Fatalf("audit failure created session authority: sessions=%d delegation=%+v bridge=%d", queries.created, queries.delegation, bridge.calls)
+	}
+}
+
 func TestSessionCreateKeepsLongInitialObjectiveAndPersistsBoundedIntent(t *testing.T) {
 	connection := readySessionConnection()
 	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
 	bridge := &sessionBridgeFake{receipt: BridgeSessionReceipt{SessionID: "central-session", Revision: 1}}
 	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr-long"}}
-	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return true })
+	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +198,7 @@ func TestSessionCreateIsInertAndRejectsOutOfScopeResources(t *testing.T) {
 			queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
 			bridge := &sessionBridgeFake{receipt: BridgeSessionReceipt{SessionID: "central", Revision: 1}}
 			provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr"}}
-			service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return tc.active })
+			service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return tc.active })
 			input := validSessionInput()
 			tc.mutate(&input)
 			if _, err := service.Create(context.Background(), input); err == nil {
@@ -205,7 +221,7 @@ func TestSessionCreateReplayEnforcesOwnerWithoutBridge(t *testing.T) {
 	queries := &sessionQueriesFake{connection: connection, session: existing}
 	bridge := &sessionBridgeFake{}
 	provider := contextProviderFake{value: SREContext{}}
-	service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return true })
+	service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
 
 	result, err := service.Create(context.Background(), input)
 	if err != nil || !result.Replayed || bridge.calls != 0 || queries.created != 0 {
@@ -232,7 +248,7 @@ func TestSessionCreateRejectsWrongInstallationContextAndInvalidReceipt(t *testin
 		t.Run(name, func(t *testing.T) {
 			queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
 			bridge := &sessionBridgeFake{receipt: tc.receipt}
-			service, _ := NewSessionService(queries, bridge, tc.provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return true })
+			service, _ := NewSessionService(queries, bridge, tc.provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
 			_, err := service.Create(context.Background(), input)
 			if err == nil || queries.revoked != 1 || queries.failed != tc.wantFailed {
 				t.Fatalf("unsafe context/receipt not cleaned up: err=%v revoked=%d failed=%d", err, queries.revoked, queries.failed)
@@ -246,7 +262,7 @@ func TestSessionCreateDoesNotWrapBridgeContent(t *testing.T) {
 	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
 	bridge := &sessionBridgeFake{err: errors.New("sensitive upstream response")}
 	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr"}}
-	service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return true })
+	service, _ := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
 	_, err := service.Create(context.Background(), validSessionInput())
 	if err == nil || err.Error() == bridge.err.Error() {
 		t.Fatal("expected a stable product-side error")

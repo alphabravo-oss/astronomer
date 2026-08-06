@@ -119,7 +119,7 @@ func liveAuthorityFixture(mode Mode) (*fakeLiveAuthorityQueries, fakeBindings, *
 		},
 		active: map[uuid.UUID]bool{principalID: true, approverID: true, automationID: true},
 	}
-	safety := &fakeSafety{facts: SafetyFacts{Allowlisted: true, ScopeAllowed: true, BudgetAvailable: true, CooldownClear: true, CircuitClosed: true, PreconditionsMet: true}}
+	safety := &fakeSafety{facts: SafetyFacts{Allowlisted: true, ScopeAllowed: true, BudgetAvailable: true, CooldownClear: true, CircuitClosed: true, PreconditionsMet: true, MaintenanceClear: true}}
 	return queries, bindings, safety, action, capability, automationID, approverID
 }
 

@@ -141,7 +141,7 @@ func TestProductActionSafetyMaintenanceRefuseAndDefer(t *testing.T) {
 	}
 	safety.windows = fixedSafetyWindows{windows: []maintenance.Window{window}}
 	facts, err := safety.Evaluate(context.Background(), action, capability, arguments)
-	if err != nil || facts.PreconditionsMet {
+	if err != nil || facts.MaintenanceClear || !facts.PreconditionsMet {
 		t.Fatalf("maintenance refusal not enforced: facts=%+v err=%v", facts, err)
 	}
 

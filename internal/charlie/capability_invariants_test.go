@@ -59,7 +59,7 @@ func TestDestructiveDescriptorWinsOverApprovalAndAutomationFacts(t *testing.T) {
 		Destructive: true, DisclosureCurrent: true, LiveAuthorized: true,
 		ApprovalRequested: true, ApprovalPresent: true, ApprovalExact: true, ApprovalExpiresAt: time.Now().Add(time.Hour),
 		AutoEligible: true, Allowlisted: true, ScopeAllowed: true, BudgetAvailable: true, CooldownClear: true, CircuitClosed: true,
-		PreconditionsMet: true, IdempotencyKeyPresent: true, VerificationDeclared: true, FencingEpoch: 1, CurrentFencingEpoch: 1,
+		PreconditionsMet: true, MaintenanceClear: true, IdempotencyKeyPresent: true, VerificationDeclared: true, FencingEpoch: 1, CurrentFencingEpoch: 1,
 	}, time.Now())
 	if decision.Allowed || decision.Code != DeniedDestructive {
 		t.Fatalf("approval or automation metadata admitted destructive action: %+v", decision)

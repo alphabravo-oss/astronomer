@@ -85,15 +85,21 @@ type OnboardingConsumer struct {
 	BridgeServerDNS string
 	MCPServerDNS    string
 	Now             func() time.Time
+	Auditor         AuthorityMutationAuditor
 }
 
 func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnboarding, actorID uuid.UUID) (OnboardingStatus, error) {
-	if c == nil || c.Store == nil || c.Secrets == nil || c.Encryptor == nil {
+	if c == nil || c.Store == nil || c.Secrets == nil || c.Encryptor == nil || c.Auditor == nil {
 		return OnboardingStatus{}, failOnboarding("onboarding.dependencies_unavailable", fmt.Errorf("Charlie onboarding dependencies are unavailable"))
 	}
 	now := time.Now().UTC()
 	if c.Now != nil {
 		now = c.Now().UTC()
+	}
+	if err := requireAuthorityMutationAudit(ctx, c.Auditor, AuthorityMutationAudit{
+		Action: "charlie.connection.onboarding_validated", ResourceType: "charlie_connection", ResourceID: digestBytes([]byte(validated.PackageID)), ActorID: actorID,
+	}); err != nil {
+		return OnboardingStatus{}, failOnboarding("onboarding.audit_unavailable", fmt.Errorf("Charlie onboarding audit is unavailable"))
 	}
 	var result OnboardingStatus
 	var rollbacks []func(context.Context) error

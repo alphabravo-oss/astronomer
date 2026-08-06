@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,10 +155,16 @@ func (f *contentBridgeFake) StreamSessionEvents(_ context.Context, _, _, cursor 
 	return f.err
 }
 
-type sessionAuditFake struct{ events []SessionLifecycleAudit }
+type sessionAuditFake struct {
+	events []SessionLifecycleAudit
+	err    error
+}
 
 func (f *sessionAuditFake) RecordCharlieSessionLifecycle(_ context.Context, event SessionLifecycleAudit) {
 	f.events = append(f.events, event)
+}
+func (f *sessionAuditFake) RecordCharlieAuthorityMutation(context.Context, AuthorityMutationAudit) error {
+	return f.err
 }
 
 func readyPrivateAccess(owner uuid.UUID) (*sessionAccessQueriesFake, uuid.UUID) {
@@ -202,6 +209,20 @@ func TestPrivateSessionOwnerIsolationAndLiveRecheck(t *testing.T) {
 	}
 	if bridge.historyCalls != 0 {
 		t.Fatal("revoked binding reached Charlie content")
+	}
+}
+
+func TestSessionAccessAuditFailureMintsNoDelegation(t *testing.T) {
+	owner := uuid.New()
+	queries, sessionID := readyPrivateAccess(owner)
+	bridge := &contentBridgeFake{}
+	service, _ := NewSessionAccessService(queries, &sessionAuthorizerFake{use: true}, bridge, &sessionAuditFake{err: errors.New("database-SENTINEL")}, func() bool { return true })
+
+	if _, err := service.Get(context.Background(), owner, sessionID); err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("session delegation audit failure was not bounded: %v", err)
+	}
+	if len(queries.created) != 0 || bridge.getCalls != 0 {
+		t.Fatalf("audit failure minted session authority: delegations=%d bridge=%d", len(queries.created), bridge.getCalls)
 	}
 }
 

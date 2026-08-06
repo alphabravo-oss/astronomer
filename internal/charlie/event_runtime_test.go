@@ -99,6 +99,42 @@ func TestEventRuntimeInactiveIgnoresEventsBeforePersistence(t *testing.T) {
 	}
 }
 
+func TestEventRuntimeInactiveConstructsNoConsumerOrTimer(t *testing.T) {
+	tests := []struct {
+		name     string
+		features gateFeature
+		mutate   func(*eventRuntimeFake)
+	}{
+		{name: "feature false", features: gateFeature(false), mutate: func(*eventRuntimeFake) {}},
+		{name: "connection inactive", features: gateFeature(true), mutate: func(store *eventRuntimeFake) { store.connection.Active = false }},
+		{name: "operational disabled", features: gateFeature(true), mutate: func(store *eventRuntimeFake) {
+			store.connection.RequestedMode, store.connection.VerifiedMode = string(ModeDisabled), string(ModeDisabled)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &eventRuntimeFake{connection: readySessionConnection()}
+			test.mutate(store)
+			runtime, _ := NewEventRuntime(events.NewBus(), store, func() bool {
+				return EvaluateActivation(context.Background(), test.features, store).Runnable
+			})
+			timers, consumers := 0, 0
+			runtime.ticker = func(time.Duration) runtimeTicker {
+				timers++
+				return &fakeRuntimeTicker{channel: make(chan time.Time)}
+			}
+			runtime.subscribe = func(context.Context) <-chan events.Event {
+				consumers++
+				return make(chan events.Event)
+			}
+			runtime.Run(context.Background())
+			if timers != 0 || consumers != 0 || len(store.recorded) != 0 || len(store.created) != 0 {
+				t.Fatalf("timers=%d consumers=%d recorded=%d created=%d", timers, consumers, len(store.recorded), len(store.created))
+			}
+		})
+	}
+}
+
 func TestEventRuntimeTriggersOnlyUnscopedHighManagementAlerts(t *testing.T) {
 	now := time.Unix(70000, 0).UTC()
 	ruleID, alertID := uuid.New(), uuid.New()

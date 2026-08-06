@@ -114,10 +114,18 @@ func (f *findingBridgeFake) TransitionFinding(_ context.Context, _, auth string,
 	return json.RawMessage(`{"status":"acknowledged"}`), nil
 }
 
-type findingAuditFake struct{ entries []FindingLifecycleAudit }
+type findingAuditFake struct {
+	entries      []FindingLifecycleAudit
+	authority    []AuthorityMutationAudit
+	authorityErr error
+}
 
 func (f *findingAuditFake) RecordCharlieFindingLifecycle(_ context.Context, event FindingLifecycleAudit) {
 	f.entries = append(f.entries, event)
+}
+func (f *findingAuditFake) RecordCharlieAuthorityMutation(_ context.Context, event AuthorityMutationAudit) error {
+	f.authority = append(f.authority, event)
+	return f.authorityErr
 }
 
 type findingLifecyclePublisherFake struct{ alerts []FindingAlert }
@@ -142,7 +150,7 @@ func findingAccessFixture() (*findingAccessFake, *findingAccessAuthorizerFake, *
 	store := &findingAccessFake{
 		connection:  connection,
 		connections: map[uuid.UUID]sqlc.CharlieConnection{connection.ID: connection},
-		rows:        []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", WorkflowState: "manual_remediation_required", ExecutionBlockCode: "read_only", RepeatCount: 2}},
+		rows:        []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", EffectiveMode: string(ModeReadOnly), WorkflowState: "manual_remediation_required", ExecutionBlockCode: "read_only", RepeatCount: 2}},
 		resources:   map[uuid.UUID][]sqlc.CharlieFindingResource{findingID: {{FindingID: findingID, ResourceType: "tunnel", ResourceID: "replica-a", RequiredVerb: "read"}}},
 		decisions:   make(map[uuid.UUID]sqlc.CharlieFindingDecision),
 		session: sqlc.CharlieSession{
@@ -231,6 +239,21 @@ func TestFindingAccessTransitionsCentralThenCommitsAndPublishes(t *testing.T) {
 	}
 	if len(publisher.alerts) != 1 || publisher.alerts[0].Severity != "medium" || publisher.alerts[0].ResourceID != "replica-a" {
 		t.Fatalf("durable lifecycle did not publish bounded alert: %#v", publisher.alerts)
+	}
+}
+
+func TestFindingAccessAuditFailureCreatesNoDelegationDispatchOrTransition(t *testing.T) {
+	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+	audit.authorityErr = errors.New("database-SENTINEL")
+	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+
+	_, err := service.Transition(context.Background(), actorID, store.rows[0].ID, uuid.New(), "start_remediation")
+	if err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("audit failure was missing or leaked storage detail: %v", err)
+	}
+	if len(audit.authority) != 1 || store.delegations != 0 || bridge.transitionCalls != 0 || store.transition.ID != uuid.Nil || len(publisher.alerts) != 0 || len(audit.entries) != 0 {
+		t.Fatalf("audit failure produced side effects: authority=%d delegations=%d bridge=%d transition=%#v alerts=%d lifecycle=%d",
+			len(audit.authority), store.delegations, bridge.transitionCalls, store.transition, len(publisher.alerts), len(audit.entries))
 	}
 }
 

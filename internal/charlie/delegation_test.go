@@ -35,7 +35,7 @@ func TestDelegationIsOpaqueReturnedOnceAndHashOnlyAtRest(t *testing.T) {
 	fake := &delegationFake{}
 	now := time.Now().UTC()
 	sessionID, principalID := uuid.New(), uuid.New()
-	issued, err := IssueDelegation(context.Background(), fake, sessionID, principalID, "user", 5*time.Minute, now)
+	issued, err := IssueDelegation(context.Background(), fake, &authorityAuditFake{}, sessionID, principalID, "user", 5*time.Minute, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestDelegationIsOpaqueReturnedOnceAndHashOnlyAtRest(t *testing.T) {
 
 func TestDelegationRejectsUnsafeTTLAndChangedBinding(t *testing.T) {
 	fake := &delegationFake{}
-	if _, err := IssueDelegation(context.Background(), fake, uuid.New(), uuid.New(), "user", time.Hour, time.Now()); err == nil {
+	if _, err := IssueDelegation(context.Background(), fake, &authorityAuditFake{}, uuid.New(), uuid.New(), "user", time.Hour, time.Now()); err == nil {
 		t.Fatal("unbounded delegation TTL accepted")
 	}
 	if _, err := ValidateDelegation(context.Background(), fake, "wrong", DelegationExpectation{}); err == nil {
@@ -74,6 +74,17 @@ func TestDelegationRejectsUnsafeTTLAndChangedBinding(t *testing.T) {
 	}
 	if _, err := ValidateDelegation(context.Background(), fake, reference, DelegationExpectation{SessionID: uuid.New(), PrincipalID: fake.row.PrincipalID, PrincipalType: "user"}); err == nil {
 		t.Fatal("changed session binding accepted")
+	}
+}
+
+func TestDelegationAuditFailurePersistsNoAuthority(t *testing.T) {
+	fake := &delegationFake{}
+	_, err := IssueDelegation(context.Background(), fake, &authorityAuditFake{err: errors.New("database-SENTINEL")}, uuid.New(), uuid.New(), "user", 5*time.Minute, time.Now())
+	if err == nil || err.Error() != "Charlie delegation audit is unavailable" {
+		t.Fatalf("delegation audit failure was not bounded: %v", err)
+	}
+	if fake.created.SessionID != uuid.Nil {
+		t.Fatalf("audit failure persisted delegation: %+v", fake.created)
 	}
 }
 

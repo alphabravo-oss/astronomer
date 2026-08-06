@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +116,7 @@ func triggerDispatchFixture() (*triggerDispatchFake, *investigationBridgeFake, *
 
 func TestTriggerDispatchCreatesOneIncidentSessionAndPublishesAfterCommit(t *testing.T) {
 	store, bridge, publisher := triggerDispatchFixture()
-	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, func() bool { return true })
+	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, &authorityAuditFake{}, func() bool { return true })
 	dispatcher.now = func() time.Time { return time.Unix(1000, 0) }
 	if err := dispatcher.Dispatch(context.Background(), store.event.ID); err != nil {
 		t.Fatal(err)
@@ -131,11 +132,24 @@ func TestTriggerDispatchCreatesOneIncidentSessionAndPublishesAfterCommit(t *test
 	}
 }
 
+func TestTriggerDispatchAuditFailureClaimsNoWorkOrDelegation(t *testing.T) {
+	store, bridge, publisher := triggerDispatchFixture()
+	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, &authorityAuditFake{err: errors.New("database-SENTINEL")}, func() bool { return true })
+
+	err := dispatcher.Dispatch(context.Background(), store.event.ID)
+	if err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("trigger audit failure was not bounded: %v", err)
+	}
+	if store.event.State != "pending" || store.created != 0 || store.delegations != 0 || bridge.calls != 0 || len(store.transitions) != 0 {
+		t.Fatalf("audit failure changed trigger authority: store=%#v bridge_calls=%d", store, bridge.calls)
+	}
+}
+
 func TestTriggerDispatchRetryAndDeadLetterAreBounded(t *testing.T) {
 	store, bridge, publisher := triggerDispatchFixture()
 	store.rule.Thresholds = json.RawMessage(`{"maximum_attempts":2,"dead_letter_enabled":true}`)
 	bridge.err = errors.New("central unavailable")
-	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, func() bool { return true })
+	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, &authorityAuditFake{}, func() bool { return true })
 	dispatcher.now = func() time.Time { return time.Unix(1000, 0) }
 	if err := dispatcher.Dispatch(context.Background(), store.event.ID); err == nil || store.event.State != "retry" || store.event.LastErrorCode != "bridge_unavailable" {
 		t.Fatalf("transient failure not scheduled: event=%#v err=%v", store.event, err)
@@ -154,7 +168,7 @@ func TestTriggerDispatchRetryAndDeadLetterAreBounded(t *testing.T) {
 
 func TestTriggerDispatchInactiveOrReplayDoesNothing(t *testing.T) {
 	store, bridge, publisher := triggerDispatchFixture()
-	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, func() bool { return false })
+	dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, &authorityAuditFake{}, func() bool { return false })
 	if err := dispatcher.Dispatch(context.Background(), store.event.ID); err != nil || bridge.calls != 0 || store.created != 0 {
 		t.Fatal("inactive trigger contacted bridge")
 	}
@@ -175,7 +189,7 @@ func TestTriggerDispatchNeverRevivesTerminalOrAmbiguousSession(t *testing.T) {
 				ClientSessionID: store.event.ID, Source: "event",
 				Visibility: "incident", State: state,
 			}
-			dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, func() bool { return true })
+			dispatcher, _ := NewTriggerDispatcher(store, bridge, publisher, &authorityAuditFake{}, func() bool { return true })
 			if err := dispatcher.Dispatch(context.Background(), store.event.ID); err != nil {
 				t.Fatal(err)
 			}

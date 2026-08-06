@@ -33,6 +33,7 @@ type SafetyFacts struct {
 	CircuitClosed         bool
 	PreconditionsMet      bool
 	AmbiguousPriorAttempt bool
+	MaintenanceClear      bool
 }
 
 type LiveActionSafety interface {
@@ -53,7 +54,7 @@ type DenyAutoSafety struct{}
 func (DenyAutoSafety) Evaluate(context.Context, ActionEnvelope, CapabilityDescriptor, map[string]json.RawMessage) (SafetyFacts, error) {
 	return SafetyFacts{
 		Allowlisted: false, ScopeAllowed: true, BudgetAvailable: false,
-		CooldownClear: true, CircuitClosed: true, PreconditionsMet: true,
+		CooldownClear: true, CircuitClosed: true, PreconditionsMet: true, MaintenanceClear: true,
 	}, nil
 }
 
@@ -132,6 +133,7 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		Allowlisted:         safety.Allowlisted, ScopeAllowed: safety.ScopeAllowed && !capability.ManagedTargetAccess,
 		BudgetAvailable: safety.BudgetAvailable, CooldownClear: safety.CooldownClear,
 		CircuitClosed: safety.CircuitClosed, PreconditionsMet: safety.PreconditionsMet,
+		MaintenanceClear:      safety.MaintenanceClear,
 		IdempotencyKeyPresent: action.IdempotencyKey == action.ActionID,
 		VerificationDeclared:  capability.Effect == EffectRead || capability.RequiresVerification,
 		FencingEpoch:          action.FencingEpoch, CurrentFencingEpoch: connection.FencingEpoch,

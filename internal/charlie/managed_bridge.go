@@ -44,6 +44,36 @@ type ManagedBridge struct {
 	configurationRuntime      *contract.Runtime
 	configurationConnectionID uuid.UUID
 	configurationMaterial     string
+	activationChanged         func(context.Context)
+}
+
+// SetActivationChanged connects signed mode mutations to the process runtime
+// owner. The callback is invoked only after local durable authority changes.
+func (m *ManagedBridge) SetActivationChanged(changed func(context.Context)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activationChanged = changed
+}
+
+func (m *ManagedBridge) notifyActivationChanged(ctx context.Context) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	changed := m.activationChanged
+	m.mu.Unlock()
+	if changed != nil {
+		changed(ctx)
+	}
+}
+
+func (b *managedModeBridge) activationChanged(ctx context.Context) {
+	if b != nil && b.bridge != nil {
+		b.bridge.notifyActivationChanged(ctx)
+	}
 }
 
 func NewManagedBridge(config ManagedBridgeConfig, features featureReader, queries activeConnectionReader) (*ManagedBridge, error) {
@@ -66,6 +96,7 @@ func (m *ManagedBridge) Close() {
 func (m *ManagedBridge) runtimeBridge(ctx context.Context) (*RuntimeBridge, error) {
 	activation := EvaluateActivation(ctx, m.features, m.queries)
 	if !activation.Runnable {
+		m.notifyActivationChanged(ctx)
 		m.Close()
 		return nil, fmt.Errorf("Charlie runtime is inactive")
 	}
@@ -117,20 +148,17 @@ func (m *ManagedBridge) closeLocked() {
 	m.configurationConnectionID, m.configurationMaterial = uuid.Nil, ""
 }
 
-type latestConnectionReader interface {
-	GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
-}
-
 func (m *ManagedBridge) configurationConnection(ctx context.Context) (sqlc.CharlieConnection, bool) {
-	if m == nil || m.features == nil || !m.features.BoolValue(ctx, "feature.charlie", false) {
+	if m == nil {
 		return sqlc.CharlieConnection{}, false
 	}
-	reader, ok := m.queries.(latestConnectionReader)
-	if !ok {
+	activation := EvaluateActivation(ctx, m.features, m.queries)
+	if !activation.Configurable {
+		m.notifyActivationChanged(ctx)
 		return sqlc.CharlieConnection{}, false
 	}
-	connection, err := reader.GetLatestCharlieConnection(ctx)
-	if err != nil || (connection.OnboardingState != "consumed" && connection.OnboardingState != "active") ||
+	connection := activation.Connection
+	if connection.OnboardingState != "active" ||
 		connection.HealthState == "disconnected" || strings.TrimSpace(connection.LocalTrustMaterialEncrypted) == "" {
 		return sqlc.CharlieConnection{}, false
 	}

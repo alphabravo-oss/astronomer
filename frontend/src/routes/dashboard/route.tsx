@@ -205,7 +205,6 @@ const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: '/dashboard/monitoring', flag: 'feature.monitoring' },
   { prefix: '/dashboard/security', flag: 'feature.security' },
   { prefix: '/dashboard/charlie', flag: 'feature.charlie' },
-  { prefix: '/dashboard/settings/charlie', flag: 'feature.charlie' },
 ];
 
 function disabledFeatureForPath(pathname: string, flags?: FeatureFlags): FeatureFlagKey | null {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ type fakeOnboardingStore struct {
 	created        []sqlc.CreateCharlieConnectionParams
 	automationUser sqlc.User
 	triggerRules   []sqlc.CreateCharlieTriggerRuleParams
+	transactions   int
 }
 
 func TestOnboardingExpiryMetadataUsesEarliestCredentialAndCertificateDeadline(t *testing.T) {
@@ -45,6 +47,7 @@ func TestOnboardingExpiryMetadataUsesEarliestCredentialAndCertificateDeadline(t 
 }
 
 func (s *fakeOnboardingStore) WithinOnboardingTransaction(ctx context.Context, callback func(OnboardingTransaction) error) error {
+	s.transactions++
 	previous := s.connection
 	previousAdvanceCalls := s.advanceCalls
 	previousCreated := len(s.created)
@@ -197,6 +200,7 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 		BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc",
 		MCPServerDNS:    "astronomer-charlie-mcp.astronomer.svc",
 		Now:             func() time.Time { return fixture.now },
+		Auditor:         &authorityAuditFake{},
 	}
 
 	if _, err := consumer.Consume(context.Background(), validated, uuid.New()); err == nil {
@@ -254,5 +258,30 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 		if stringContains(string(serialized), secret) {
 			t.Fatal("onboarding secret/private key leaked into DB metadata or API serialization")
 		}
+	}
+}
+
+func TestOnboardingAuditFailureCreatesNoStateOrExternalMaterial(t *testing.T) {
+	fixture := newOnboardingFixture(t)
+	validated, err := ValidateOnboardingPackage(fixture.signed(t), fixture.confirmation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _ := auth.GenerateKey()
+	encryptor, _ := auth.NewEncryptor(key)
+	store := &fakeOnboardingStore{installationID: uuid.New()}
+	events := []string{}
+	consumer := &OnboardingConsumer{
+		Store: store, Secrets: &fakeAgentSecretWriter{events: &events}, Installer: &fakeAgentInstaller{events: &events}, Encryptor: encryptor,
+		BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc", MCPServerDNS: "astronomer-charlie-mcp.astronomer.svc",
+		Auditor: &authorityAuditFake{err: errors.New("database-SENTINEL")},
+	}
+
+	_, err = consumer.Consume(context.Background(), validated, uuid.New())
+	if err == nil || strings.Contains(err.Error(), "database-SENTINEL") || OnboardingFailureCode(err) != "onboarding.audit_unavailable" {
+		t.Fatalf("onboarding audit failure was not bounded: code=%s err=%v", OnboardingFailureCode(err), err)
+	}
+	if store.transactions != 0 || store.connection != nil || len(events) != 0 {
+		t.Fatalf("audit failure changed onboarding state: transactions=%d connection=%+v events=%v", store.transactions, store.connection, events)
 	}
 }

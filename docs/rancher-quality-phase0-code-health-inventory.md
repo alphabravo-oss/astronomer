@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 400
-- Frontend source lines: 111811
-- Go source files under `internal/` excluding generated sqlc and tests: 540
-- Go source files scanned for sqlc query references excluding generated sqlc: 17026
-- sqlc query declarations: 993
-- Component files scanned: 123
+- Frontend source files: 402
+- Frontend source lines: 112110
+- Go source files under `internal/` excluding generated sqlc and tests: 548
+- Go source files scanned for sqlc query references excluding generated sqlc: 17045
+- sqlc query declarations: 994
+- Component files scanned: 124
 - Helm top-level values scanned: 33
 
 ## Hard Gates
@@ -94,19 +94,19 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2101`](internal/server/routes.go:2101)
-- `copyStringMap` in [`internal/charlie/agent_installation.go:1291`](internal/charlie/agent_installation.go:1291), [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
-- `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:291`](internal/charlie/contract/fakebridge/fake.go:291), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2109`](internal/server/routes.go:2109)
+- `copyStringMap` in [`internal/charlie/agent_installation.go:1294`](internal/charlie/agent_installation.go:1294), [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
+- `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac.go:1110`](internal/handler/rbac.go:1110), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
-- `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:120`](internal/handler/charlie_onboarding.go:120), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
+- `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:117`](internal/handler/charlie_onboarding.go:117), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
 - `nullableTime` in [`internal/charlie/fleet_capability_adapter.go:198`](internal/charlie/fleet_capability_adapter.go:198), [`internal/handler/alerting.go:2144`](internal/handler/alerting.go:2144)
-- `objectMeta` in [`internal/charlie/agent_installation.go:725`](internal/charlie/agent_installation.go:725), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
+- `objectMeta` in [`internal/charlie/agent_installation.go:728`](internal/charlie/agent_installation.go:728), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
-- `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:165`](internal/server/middleware/read_audit.go:165)
-- `writeError` in [`internal/charlie/contract/fakebridge/fake.go:307`](internal/charlie/contract/fakebridge/fake.go:307), [`internal/charliequalification/hook.go:216`](internal/charliequalification/hook.go:216)
-- `writeJSON` in [`internal/charlie/contract/fakebridge/fake.go:301`](internal/charlie/contract/fakebridge/fake.go:301), [`internal/charliequalification/hook.go:210`](internal/charliequalification/hook.go:210), [`internal/handler/response.go:161`](internal/handler/response.go:161)
+- `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
+- `writeError` in [`internal/charlie/contract/fakebridge/fake.go:314`](internal/charlie/contract/fakebridge/fake.go:314), [`internal/charliequalification/hook.go:216`](internal/charliequalification/hook.go:216)
+- `writeJSON` in [`internal/charlie/contract/fakebridge/fake.go:308`](internal/charlie/contract/fakebridge/fake.go:308), [`internal/charliequalification/hook.go:210`](internal/charliequalification/hook.go:210), [`internal/handler/response.go:161`](internal/handler/response.go:161)
 
 ### Dead-Code Candidates
 

@@ -11,7 +11,7 @@ func permittedWrite(_ time.Time) AuthorityInput {
 		Effect: EffectWrite, DisclosureCurrent: true, LiveAuthorized: true,
 		AutoEligible: true, Allowlisted: true, ScopeAllowed: true,
 		BudgetAvailable: true, CooldownClear: true, CircuitClosed: true,
-		PreconditionsMet: true, IdempotencyKeyPresent: true,
+		PreconditionsMet: true, MaintenanceClear: true, IdempotencyKeyPresent: true,
 		VerificationDeclared: true, FencingEpoch: 7, CurrentFencingEpoch: 7,
 	}
 }
@@ -62,7 +62,8 @@ func TestDecideAuthorityDenialPrecedence(t *testing.T) {
 		{"idempotency", DeniedIdempotency, func(v *AuthorityInput) { v.IdempotencyKeyPresent = false; v.FencingEpoch = 0 }},
 		{"verification", DeniedVerification, func(v *AuthorityInput) { v.VerificationDeclared = false; v.FencingEpoch = 0 }},
 		{"fencing", DeniedStaleFencing, func(v *AuthorityInput) { v.FencingEpoch = 6; v.AmbiguousPriorAttempt = true }},
-		{"ambiguous", DeniedAmbiguousPriorAttempt, func(v *AuthorityInput) { v.AmbiguousPriorAttempt = true; v.PreconditionsMet = false }},
+		{"ambiguous", DeniedAmbiguousPriorAttempt, func(v *AuthorityInput) { v.AmbiguousPriorAttempt = true; v.MaintenanceClear = false }},
+		{"maintenance", DeniedMaintenance, func(v *AuthorityInput) { v.MaintenanceClear = false; v.PreconditionsMet = false }},
 		{"precondition", DeniedPrecondition, func(v *AuthorityInput) { v.PreconditionsMet = false; v.AutoEligible = false }},
 		{"eligibility", DeniedNotAutoEligible, func(v *AuthorityInput) { v.AutoEligible = false; v.Allowlisted = false }},
 		{"allowlist", DeniedNotAllowlisted, func(v *AuthorityInput) { v.Allowlisted = false; v.ScopeAllowed = false }},
@@ -104,6 +105,7 @@ func TestDecideAuthorityExhaustiveDenyPrecedenceByMode(t *testing.T) {
 		{"verification", DeniedVerification, func(v *AuthorityInput) { v.VerificationDeclared = false }},
 		{"fencing", DeniedStaleFencing, func(v *AuthorityInput) { v.CurrentFencingEpoch++ }},
 		{"ambiguous", DeniedAmbiguousPriorAttempt, func(v *AuthorityInput) { v.AmbiguousPriorAttempt = true }},
+		{"maintenance", DeniedMaintenance, func(v *AuthorityInput) { v.MaintenanceClear = false }},
 		{"precondition", DeniedPrecondition, func(v *AuthorityInput) { v.PreconditionsMet = false }},
 	}
 	matrices := []struct {
@@ -250,7 +252,7 @@ func TestBlockedFindingIsActionableOnlyForActiveDiagnosis(t *testing.T) {
 		}
 	}
 	got := BlockedFinding(AuthorityDecision{Code: DeniedReadOnlyWrite}, "issue", "summary", "fix", "verify")
-	if !got.Actionable || got.ExecutionBlockCode != DeniedReadOnlyWrite || got.RecommendedAction != "fix" {
+	if !got.Actionable || got.ExecutionBlockCode != ReasonReadOnly || got.RecommendedAction != "fix" {
 		t.Fatalf("blocked diagnosis did not produce actionable finding: %+v", got)
 	}
 }

@@ -1,7 +1,9 @@
 package charlie
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,13 @@ func TestAdminInstallSpecUsesPersistedSignedReplicaCount(t *testing.T) {
 	spec := adminInstallSpec(sqlc.CharlieConnection{ReplicaCount: 7})
 	if spec.ReplicaCount != 7 {
 		t.Fatalf("admin readiness expected replicas = %d, want 7", spec.ReplicaCount)
+	}
+}
+
+func TestAdminServiceAuditFailurePrecedesAutomationAuthorityMutation(t *testing.T) {
+	service := &AdminService{auditor: &authorityAuditFake{err: errors.New("database-SENTINEL")}}
+	if _, err := service.SetAutomationIdentity(context.Background(), true); err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
+		t.Fatalf("admin authority audit failure was not bounded: %v", err)
 	}
 }
 

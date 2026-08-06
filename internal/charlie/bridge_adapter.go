@@ -256,21 +256,38 @@ func validBridgeFindingSummary(finding BridgeFindingSummary) bool {
 }
 
 func validCentralFindingWorkflow(finding BridgeFindingSummary) bool {
+	if !validCentralFindingBlockCode(finding.BlockCode) {
+		return false
+	}
+	reason := DenialCode(finding.BlockCode)
+	if !IsActionableNonExecutionReason(reason) {
+		return (finding.WorkflowState == "resolved" && finding.Status == "resolved") ||
+			(finding.WorkflowState == "dismissed" && finding.Status == "dismissed") ||
+			(finding.WorkflowState == "expired" && finding.Status == "resolved")
+	}
+	if reason == ReasonApprovalExpired || reason == ReasonApprovalRejected {
+		if finding.WorkflowState == "manual_remediation_required" {
+			return finding.Status == "open" || finding.Status == "acknowledged" || finding.Status == "reopened"
+		}
+		return (reason == ReasonApprovalExpired && finding.WorkflowState == "expired") ||
+			(reason == ReasonApprovalRejected && finding.WorkflowState == "rejected" && finding.Status == "resolved")
+	}
 	switch finding.WorkflowState {
 	case "approval_pending":
-		return (finding.Status == "open" || finding.Status == "acknowledged") && finding.BlockCode == "approval_required"
+		return (finding.Status == "open" || finding.Status == "acknowledged") && reason == ReasonApprovalRequired
 	case "manual_remediation_required":
-		return finding.Status == "open" || finding.Status == "acknowledged" || finding.Status == "reopened"
+		return IsActionableNonExecutionReason(reason) && reason != ReasonApprovalRequired &&
+			(finding.Status == "open" || finding.Status == "acknowledged" || finding.Status == "reopened")
 	case "remediation_in_progress", "verification_pending":
 		return finding.Status == "acknowledged"
 	case "resolved":
 		return finding.Status == "resolved"
 	case "rejected":
-		return finding.Status == "resolved" && finding.BlockCode == "approval_rejected"
+		return finding.Status == "resolved" && reason == ReasonApprovalRejected
 	case "dismissed":
 		return finding.Status == "dismissed"
 	case "expired":
-		return true
+		return finding.Status == "resolved" || finding.Status == "dismissed" || reason == ReasonApprovalExpired
 	default:
 		return false
 	}

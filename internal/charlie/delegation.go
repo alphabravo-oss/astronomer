@@ -33,9 +33,9 @@ type IssuedDelegation struct {
 // IssueDelegation returns an opaque reference once and stores only its hash.
 // It contains no RBAC snapshot; the MCP boundary must call ValidateDelegation
 // and then perform a live exact-target permission check for every invocation.
-func IssueDelegation(ctx context.Context, q delegationQuerier, sessionID, principalID uuid.UUID, principalType string, ttl time.Duration, now time.Time) (IssuedDelegation, error) {
-	if q == nil {
-		return IssuedDelegation{}, fmt.Errorf("Charlie delegation store is unavailable")
+func IssueDelegation(ctx context.Context, q delegationQuerier, auditor AuthorityMutationAuditor, sessionID, principalID uuid.UUID, principalType string, ttl time.Duration, now time.Time) (IssuedDelegation, error) {
+	if q == nil || auditor == nil {
+		return IssuedDelegation{}, fmt.Errorf("Charlie delegation dependencies are unavailable")
 	}
 	if sessionID == uuid.Nil || principalID == uuid.Nil {
 		return IssuedDelegation{}, fmt.Errorf("Charlie delegation requires session and principal")
@@ -45,6 +45,11 @@ func IssueDelegation(ctx context.Context, q delegationQuerier, sessionID, princi
 	}
 	if ttl < minDelegationTTL || ttl > maxDelegationTTL {
 		return IssuedDelegation{}, fmt.Errorf("Charlie delegation TTL must be between %s and %s", minDelegationTTL, maxDelegationTTL)
+	}
+	if err := requireAuthorityMutationAudit(ctx, auditor, AuthorityMutationAudit{
+		Action: "charlie.delegation.issued", ResourceType: "charlie_delegation", ResourceID: sessionID.String(), ActorID: principalID,
+	}); err != nil {
+		return IssuedDelegation{}, fmt.Errorf("Charlie delegation audit is unavailable")
 	}
 
 	var random [32]byte

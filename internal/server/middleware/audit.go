@@ -147,10 +147,7 @@ func CharlieAuthenticationDenialAuditWithWriter(log *slog.Logger, writer any) fu
 				return
 			}
 			duration := time.Since(started).Milliseconds()
-			log.Info("Charlie HTTP authentication denial audit",
-				"event", "charlie.http.mutation", "outcome_code", "denied",
-				"method", r.Method, "status_code", sw.status, "duration_ms", duration,
-				"request_id", GetRequestID(r.Context()), "correlation_id", GetCorrelationID(r.Context()))
+			charlie.LogHTTPAudit(r.Context(), log, r.Method, sw.status, duration, GetRequestID(r.Context()), GetCorrelationID(r.Context()))
 			writeCharlieAuditLog(r, sw.status, writer, duration, "denied")
 		})
 	}
@@ -193,10 +190,7 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			if isCharlieAPIPath(r.URL.Path) {
 				duration := time.Since(start).Milliseconds()
 				outcome := charlieHTTPOutcome(sw.status)
-				log.Info("Charlie HTTP mutation audit",
-					"event", "charlie.http.mutation", "outcome_code", outcome,
-					"method", r.Method, "status_code", sw.status, "duration_ms", duration,
-					"request_id", GetRequestID(r.Context()), "correlation_id", GetCorrelationID(r.Context()))
+				charlie.LogHTTPAudit(r.Context(), log, r.Method, sw.status, duration, GetRequestID(r.Context()), GetCorrelationID(r.Context()))
 				writeCharlieAuditLog(r, sw.status, writer, duration, outcome)
 				return
 			}
@@ -249,13 +243,16 @@ func writeCharlieAuditLog(r *http.Request, status int, writer any, duration int6
 		"outcome_code": outcome, "method": r.Method, "status_code": status, "duration_ms": duration,
 	})
 	if err != nil {
+		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_encode_failed", GetCorrelationID(r.Context()))
 		return
 	}
-	_ = writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
+	if err := writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
 		Source: "http", CorrelationID: GetCorrelationID(r.Context()), UserID: AuthenticatedUserUUID(r.Context()),
 		ActorAuthMethod: authMethod(r.Context()), Action: "charlie.http.mutation", ResourceType: "charlie_http_request",
 		StatusCode: int32(status), DurationMs: duration, RequestID: GetRequestID(r.Context()), Detail: detail, ActionClass: "mutation",
-	})
+	}); err != nil {
+		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_persist_failed", GetCorrelationID(r.Context()))
+	}
 }
 
 func writeAuditLog(r *http.Request, status int, writer any, resourceType, resourceID string, start time.Time) {

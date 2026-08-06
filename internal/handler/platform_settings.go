@@ -350,6 +350,12 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	charlieEnabled := false
 	if key == "feature.charlie" {
 		_ = json.Unmarshal(req.Value, &charlieEnabled)
+		if charlieEnabled {
+			if err := requireCharlieAdminAudit(r, h.queries, "charlie.feature.enabled", "charlie_feature", "feature.charlie", map[string]any{"enabled": true}); err != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie feature authority audit is unavailable")
+				return
+			}
+		}
 		if !charlieEnabled && h.charlieLifecycle != nil {
 			if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
 				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())

@@ -542,13 +542,13 @@ contract.
   MCP Service and exact product access policy, and retains only owner-bound
   secrets/resume state plus durable audit/history. Re-enable restores the
   captured runtime in disabled/installing mode without restoring authority.
-- [ ] **A1-011** Use one backend-owned connection-runtime gate for feature false
+- [x] **A1-011** Use one backend-owned connection-runtime gate for feature false
   and inactive connection. Apply it before constructing or starting the agent
   runtime, Product Bridge client, SSE stream, MCP listener, scheduler,
   dispatcher, consumer, retry loop, or central-authority reconciler; individual
   callers must not infer activation. Apply a second deny-first work-authority
   gate to operational `disabled`, emergency disabled, and all higher-mode work.
-- [ ] **A1-012** Make feature/connection disable drain writes, stop every Charlie
+- [x] **A1-012** Make feature/connection disable drain writes, stop every Charlie
   process/listener/timer/socket, and reach zero network activity. For an enabled
   connection at operational wire mode `disabled`, retain only a signed,
   replay-protected control heartbeat and typed enable/rotate/disconnect/uninstall
@@ -799,7 +799,7 @@ contract.
 - [x] **A6-019a** Derive destructive classification from the product-owned typed
   catalog and deny it before mode, approval, allowlist, or model-supplied facts
   are considered; catalog and authority-policy tests pin this precedence.
-- [ ] **A6-019b** Add registration and dispatch invariants that reject a
+- [x] **A6-019b** Add registration and dispatch invariants that reject a
   destructive/irreversible descriptor entirely, even when Charlie labels it
   reversible, supplies an approval, requests `automation`, or spoofs effect,
   risk, rollback, verification, or idempotency fields.
@@ -824,7 +824,7 @@ contract.
   have no downstream-agent tunnel dependency or capability.
 - [x] A mode-inclusion matrix proves each higher ceiling preserves every lower
   read/decision workflow without widening RBAC, target scope, or execution.
-- [ ] Crafted destructive requests fail at catalog registration, discovery,
+- [x] Crafted destructive requests fail at catalog registration, discovery,
   pre-receipt evaluation, and final dispatch in every mode and create no side
   effect, budget consumption, or reusable approval.
 
@@ -1090,7 +1090,7 @@ quota, audit, and task semantics as the normal Astronomer API.
   `investigations`, `findings`, and `approvals` tabs and session/incident/finding
   IDs in the URL.
 - [x] **A10-015** Preserve selected tab/filter/context in TanStack search params.
-- [ ] **A10-016** Add responsive, keyboard, screen-reader, reduced-motion, and
+- [x] **A10-016** Add responsive, keyboard, screen-reader, reduced-motion, and
   contrast tests.
 - [x] **A10-017** Surface open/acknowledged actionable medium-or-higher Charlie
   findings through Astronomer's existing notification/alert system with dedupe,
@@ -1127,7 +1127,7 @@ quota, audit, and task semantics as the normal Astronomer API.
   management component, alert, cluster-agent, backup, and self-management GitOps
   pages; context chips match the route resource and never imply downstream access.
 - [x] Deep links survive refresh and browser back/forward.
-- [ ] Accessibility scan has no serious/critical violations.
+- [x] Accessibility scan has no serious/critical violations.
 - [ ] Frontend tests cover each non-execution reason and assert its legal user
   decisions, confirmation flow, stale/expired behavior, and zero implicit action.
 
@@ -1176,7 +1176,7 @@ quota, audit, and task semantics as the normal Astronomer API.
   values `read_only`, `approval`, and `auto`. Explain that each is a maximum
   authority ceiling, show what lower workflows remain available, and never label
   the selection as a grant.
-- [ ] **A11-013** In disabled state, render connection/configuration from local
+- [x] **A11-013** In disabled state, render connection/configuration from local
   data and show the agent/runtime/network paths as quiesced. A status-page refresh
   must not poll Product Bridge or Charlie central until activation is requested.
 
@@ -1186,7 +1186,7 @@ quota, audit, and task semantics as the normal Astronomer API.
 - [x] Non-admin users cannot call admin APIs directly.
 - [x] No read response or DOM text contains onboarding, registry, certificate
   private key, enrollment, or runtime token material.
-- [ ] Administration tests prove disabled status is local-only.
+- [x] Administration tests prove disabled status is local-only.
 - [x] Administration tests prove the three product mode labels/effects match the
   cumulative backend decision matrix while sending only stable wire values.
 
@@ -1296,13 +1296,13 @@ the minimum authorized evidence and correlate, in order:
   alert storms, expire stale recommendations, and reopen on verified recurrence.
 - [x] **A12-028** Publish finding lifecycle to the existing Astronomer alert/event
   bus only after durable local correlation is committed.
-- [ ] **A12-029** Normalize every non-execution outcome into one bounded reason
+- [x] **A12-029** Normalize every non-execution outcome into one bounded reason
   vocabulary, including read-only ceiling, approval required/rejected/expired,
   non-auto-eligible, allowlist, RBAC, target scope, disclosure drift, budget,
   cooldown, maintenance window, precondition, circuit breaker, fencing,
   idempotency conflict, ambiguous prior attempt, failed execution, and failed
   verification. Unknown reasons fail closed and offer no execution control.
-- [ ] **A12-030** For every material diagnosis in an active non-disabled mode
+- [x] **A12-030** For every material diagnosis in an active non-disabled mode
   where automatic execution is not allowed, durably create/update one authorized
   actionable finding and alert. Disabled remains inert and creates no new work.
   Include the coded block reason, impact, bounded evidence summary, affected
@@ -1320,7 +1320,7 @@ the minimum authorized evidence and correlate, in order:
 
 **Additional verification for non-execution workflows**
 
-- [ ] A table-driven test covers every A12-029 reason in all applicable modes
+- [x] A table-driven test covers every A12-029 reason in all applicable modes
   and asserts the exact finding state, alert eligibility, available decisions,
   absence/presence of an approval link, and zero implicit side effects.
 - [ ] Multi-user tests prove only currently resource-authorized users receive or
@@ -1376,17 +1376,17 @@ the minimum authorized evidence and correlate, in order:
   verification, and an incident-wide stop-after-failure rule.
 - [x] **A13-014** Add retention/deletion rules for local finding summaries and
   central detail, plus alert dedupe/cardinality and notification-delivery metrics.
-- [ ] **A13-015** Define a machine-readable audit coverage matrix for connection,
+- [x] **A13-015** Define a machine-readable audit coverage matrix for connection,
   onboarding, trust, install/uninstall/upgrade/rollback/rotation, mode and
   emergency disable, session and visibility, trigger and finding lifecycle,
   approval decisions, bridge/MCP authorization, action admission/execution/
   verification/replay, disclosure drift, fencing, and every denial code.
-- [ ] **A13-016** Route every Charlie audit and operational log through one
+- [x] **A13-016** Route every Charlie audit and operational log through one
   allowlist serializer. Permit only stable event/action names, coded outcomes,
   bounded enum fields, opaque correlation IDs, safe counts/timings, revisions,
   and public fingerprints/digests; reject unknown fields rather than applying a
   best-effort blacklist.
-- [ ] **A13-017** Prohibit prompts, responses, reasoning, evidence, citations,
+- [x] **A13-017** Prohibit prompts, responses, reasoning, evidence, citations,
   tool arguments/results, resource names, user-entered rationale, raw errors,
   URLs, authorization references, tokens, credentials, private certificate
   material, onboarding bodies, Secret data, and model/provider/RAG content from
@@ -1395,7 +1395,7 @@ the minimum authorized evidence and correlate, in order:
   deployment, route, session, turn, finding, approval, action, operation, request,
   and audit IDs without logging their associated content. Document which system
   owns each record and its retention/deletion behavior.
-- [ ] **A13-019** Make audit persistence a fail-closed precondition for authority
+- [x] **A13-019** Make audit persistence a fail-closed precondition for authority
   changes, approval consumption, and write dispatch. If a required audit record
   cannot be durably committed, perform no side effect and emit only a bounded
   local failure metric/log.
@@ -1407,12 +1407,12 @@ the minimum authorized evidence and correlate, in order:
 - [x] Server/worker cannot reach central Charlie directly.
 - [x] Only agent pods can reach MCP and only Astronomer server/worker pods can
   reach Product Bridge.
-- [ ] The A13-015 matrix has one success, denial, failure, replay, and redaction
+- [x] The A13-015 matrix has one success, denial, failure, replay, and redaction
   assertion for every applicable lifecycle transition and denial code.
 - [ ] Property/fuzz tests inject secret and content sentinels into every inbound,
   outbound, error, cancellation, timeout, and malformed-response path and prove
   they are absent from all audit/log/metric/trace/event/diagnostic/support sinks.
-- [ ] Audit-storage failure tests prove no approval is consumed and no write is
+- [x] Audit-storage failure tests prove no approval is consumed and no write is
   dispatched without its required durable, content-free audit record.
 - [ ] Every runbook is exercised by a game-day or deterministic test.
 
@@ -1754,12 +1754,52 @@ the minimum authorized evidence and correlate, in order:
   address were absent. Argo was `Synced/Healthy`, schema remained clean at
   `151`, Charlie remained `read_only/read_only` revision `61`, and the generic
   1.0.18 agent remained two-ready-replica healthy.
-- Both revisions passed the complete race-enabled Go suite; zero-issue lint and
-  the SQLC generated check also passed. A13-015 through A13-019 remain open
-  until every listed lifecycle/denial and every log/metric/trace/event/
-  diagnostic/support sink has exhaustive assertions, opaque cross-system
-  ownership/retention is documented, and audit-storage failure proves
-  authority changes and write dispatch fail closed.
+- Both revisions passed the complete race-enabled Go suite and zero-issue lint.
+  The subsequent release work closes A13-015, A13-016, A13-017, and A13-019
+  with the checked-in audit contract, closed serializer, sink canaries, and
+  fail-closed persistence tests. A13-018 remains open until the cross-system
+  ownership and retention map is complete and live correlation is exercised.
+
+#### Cold isolation, safety, and actionable-alert implementation addendum — 2026-08-06
+
+- The Charlie integration is now owned by one generation-serialized runtime
+  lifecycle. A cold `feature.charlie=false` state constructs no bridge client,
+  stream, dispatcher, scheduler, reconciler, timer, listener, or network path.
+  Signed feature enable starts a fresh generation; feature disable, connection
+  deactivation, operational disable, emergency stop, or authority fall drains
+  and closes the permitted work plane without a server restart.
+- Feature disable quiesces local admission before suspending the installed
+  product agent. Operational wire mode `disabled` is a separate control-only
+  state; `read_only`, `approval_required`, and `automation` remain cumulative
+  ceilings rather than roles or sources of privilege.
+- Every Charlie write now requires a content-free durable audit precondition
+  before an authority change, approval consumption, reservation, or dispatch.
+  The action guard re-reads live feature, connection, emergency, mode,
+  disclosure, RBAC, scope, approval, allowlist, budget, cooldown, maintenance,
+  precondition, circuit, fencing, idempotency, and verification state. Unknown,
+  destructive, irreversible, and non-catalogued work is rejected before
+  execution.
+- Non-executed material diagnoses use the existing notification surface as
+  deduplicated actionable findings with stable block codes, authorized deep
+  links, bounded manual checks, or a separately confirmed exact approval only
+  when currently eligible. Acknowledge, dismiss, resolve, reject, and expiry do
+  not grant authority or retry an action; rejected and expired approvals remain
+  in `manual_remediation_required` rather than becoming dead cards.
+- The audit contract and tests enumerate the complete denial vocabulary and
+  reject unknown fields. Operational logging is emitted only through the
+  Charlie serializer, hashes external request/correlation identifiers, and has
+  static, table/property, fuzz, sentinel, and audit-storage-failure canaries.
+- Charlie central is pinned to exact commit
+  `5beadfe55dd9798356c2dc72e127a88f28a049b4`. Its schema-15 upgrade seals
+  existing v11 durable content before removing plaintext and is live separately
+  at `charlie.dev.alphabravo.io`; Astronomer still communicates only through the
+  colocated generic product agent.
+- Repository qualification passed the full race-enabled Go suite, zero-issue
+  Go lint, migration and API-contract checks, 778 frontend unit tests, frontend
+  type/lint/build/code-health gates, 46 desktop/mobile browser tests, and all
+  112 generated application routes plus two detector-honesty browser tests.
+  Live deployment and mode-boundary evidence remains recorded separately below
+  and is not implied by these repository results.
 
 #### Internal-Charlie air gap
 

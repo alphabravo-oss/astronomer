@@ -50,6 +50,21 @@ func TestCharlieAdminAuditUsesOnlyAllowlistedContentFreeFields(t *testing.T) {
 	}
 }
 
+func TestRequiredCharlieAdminAuditPersistsIntentWithoutMutatingFields(t *testing.T) {
+	writer := &charlieAuditWriterFake{}
+	request := authenticatedCharlieRequest(http.MethodPatch, "/", "", uuid.New(), "jwt")
+	fields := map[string]any{"mode": "auto", "revision": int64(8)}
+	if err := requireCharlieAdminAudit(request, writer, "admin.charlie.mode.update", "charlie_connection", "current", fields); err != nil {
+		t.Fatalf("required admin audit failed: %v", err)
+	}
+	if !strings.Contains(string(writer.row.Detail), `"outcome_code":"authorized"`) {
+		t.Fatalf("required admin audit lacks intent outcome: %s", writer.row.Detail)
+	}
+	if _, mutated := fields["outcome_code"]; mutated {
+		t.Fatal("admin audit mutated caller-owned detail fields")
+	}
+}
+
 func TestCharlieAdminAuditRejectsArbitraryResourceAndLogsOnlyFailureCode(t *testing.T) {
 	var output bytes.Buffer
 	prior := slog.Default()

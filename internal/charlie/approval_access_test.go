@@ -11,6 +11,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -127,10 +128,11 @@ func (f *approvalAccessStoreFake) TransitionCharlieFindingForApproval(_ context.
 	}
 	switch arg.ApprovalState {
 	case "rejected":
-		f.finding.Status, f.finding.ExecutionBlockCode = "resolved", "approval_rejected"
+		f.finding.ExecutionBlockCode = "approval_rejected"
 	case "expired":
-		f.finding.Status, f.finding.ExecutionBlockCode = "expired", "approval_expired"
+		f.finding.ExecutionBlockCode = "approval_expired"
 	}
+	f.finding.WorkflowState = string(FindingWorkflowManualRemediationRequired)
 	return f.finding, nil
 }
 func (f *approvalAccessStoreFake) AddCharlieFindingResource(_ context.Context, arg sqlc.AddCharlieFindingResourceParams) error {
@@ -207,10 +209,15 @@ func (f approvalBindingsFake) CanReadIncidentResources(context.Context, uuid.UUI
 type approvalAuditFake struct {
 	events   []ApprovalLifecycleAudit
 	findings []FindingAlert
+	err      error
 }
 
-func (f *approvalAuditFake) RecordCharlieApprovalLifecycle(_ context.Context, event ApprovalLifecycleAudit) {
+func (f *approvalAuditFake) RecordCharlieApprovalLifecycle(_ context.Context, event ApprovalLifecycleAudit) error {
 	f.events = append(f.events, event)
+	return f.err
+}
+func (f *approvalAuditFake) RecordCharlieAuthorityMutation(context.Context, AuthorityMutationAudit) error {
+	return f.err
 }
 func (*approvalAuditFake) RecordCharlieSessionLifecycle(context.Context, SessionLifecycleAudit) {}
 func (f *approvalAuditFake) PublishCharlieFindingLifecycle(_ context.Context, alert FindingAlert) {
@@ -283,8 +290,27 @@ func TestApprovalAccessPersistsExactFindingAndUpdatesItOnRejection(t *testing.T)
 		t.Fatalf("approval finding scope = %#v", store.findingResources)
 	}
 	view, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "reject", "not now")
-	if err != nil || view.State != "denied" || store.finding.Status != "resolved" || store.finding.ExecutionBlockCode != "approval_rejected" {
+	if err != nil || view.State != "denied" || store.finding.Status != "open" ||
+		store.finding.WorkflowState != string(FindingWorkflowManualRemediationRequired) ||
+		store.finding.ExecutionBlockCode != "approval_rejected" {
 		t.Fatalf("rejection lifecycle view=%#v finding=%#v err=%v", view, store.finding, err)
+	}
+}
+
+func TestApprovalAccessTurnsExpiredApprovalIntoManualRemediation(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	if items, err := service.List(context.Background(), actorID); err != nil || len(items) != 1 {
+		t.Fatalf("initial approval list = %#v err=%v", items, err)
+	}
+	bridge.approval.State = "expired"
+	if items, err := service.List(context.Background(), actorID); err != nil || len(items) != 0 {
+		t.Fatalf("expired approval remained actionable: %#v err=%v", items, err)
+	}
+	workflow := FindingWorkflowFor(store.finding, time.Now().UTC())
+	if store.finding.Status != "open" || store.finding.ExecutionBlockCode != string(ReasonApprovalExpired) ||
+		workflow.State != FindingWorkflowManualRemediationRequired ||
+		slices.Contains(workflow.Decisions, "open_exact_approval") || !slices.Contains(workflow.Decisions, "start_remediation") {
+		t.Fatalf("expired approval did not become bounded manual remediation: finding=%#v workflow=%#v", store.finding, workflow)
 	}
 }
 
@@ -299,6 +325,18 @@ func TestApprovalAccessApprovesExactSignedActionOnce(t *testing.T) {
 	}
 	if _, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", "retry"); err != nil || bridge.decides != 1 {
 		t.Fatalf("safe replay reached central bridge: calls=%d err=%v", bridge.decides, err)
+	}
+}
+
+func TestApprovalAccessAuditFailureConsumesNoApprovalOrAuthority(t *testing.T) {
+	service, store, bridge, actorID := approvalAccessFixture(t)
+	service.auditor = &approvalAuditFake{err: errors.New("database-SENTINEL")}
+
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", uuid.New(), "approve", "bounded retry"); err == nil {
+		t.Fatal("approval succeeded without a durable audit intent")
+	}
+	if store.created != 0 || store.approval.ID != uuid.Nil || bridge.decides != 0 {
+		t.Fatalf("audit failure changed authority: reservations=%d approval=%s bridge_calls=%d", store.created, store.approval.ID, bridge.decides)
 	}
 }
 

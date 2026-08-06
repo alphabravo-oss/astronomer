@@ -38,13 +38,16 @@ type AdminTriggerEventView struct {
 	UpdatedAt      string `json:"updated_at"`
 }
 
-type TriggerAdminService struct{ queries triggerAdminQueries }
+type TriggerAdminService struct {
+	queries triggerAdminQueries
+	auditor AuthorityMutationAuditor
+}
 
-func NewTriggerAdminService(queries triggerAdminQueries) (*TriggerAdminService, error) {
-	if queries == nil {
+func NewTriggerAdminService(queries triggerAdminQueries, auditor AuthorityMutationAuditor) (*TriggerAdminService, error) {
+	if queries == nil || auditor == nil {
 		return nil, ErrAdminUnavailable
 	}
-	return &TriggerAdminService{queries: queries}, nil
+	return &TriggerAdminService{queries: queries, auditor: auditor}, nil
 }
 
 func (s *TriggerAdminService) List(ctx context.Context, state string, offset, limit int32) ([]AdminTriggerEventView, error) {
@@ -82,6 +85,11 @@ func (s *TriggerAdminService) Retry(ctx context.Context, eventID, requestID uuid
 	}
 	if !connection.Active || connection.EmergencyDisabled || EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled) == ModeDisabled {
 		return AdminTriggerEventView{}, fmt.Errorf("%w: Charlie must be active before retrying trigger work", ErrAdminConflict)
+	}
+	if err := requireAuthorityMutationAudit(ctx, s.auditor, AuthorityMutationAudit{
+		Action: "admin.charlie.trigger.retry", ResourceType: "charlie_trigger_event", ResourceID: eventID.String(),
+	}); err != nil {
+		return AdminTriggerEventView{}, ErrAdminUnavailable
 	}
 	row, err := s.queries.RetryDeadCharlieTriggerEventWithOutbox(ctx, sqlc.RetryDeadCharlieTriggerEventWithOutboxParams{
 		RetryOfEventID: eventID, ConnectionID: connection.ID, RequestID: requestID,

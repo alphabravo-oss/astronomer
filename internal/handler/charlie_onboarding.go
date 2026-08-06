@@ -66,10 +66,7 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 	}
 	status, err := h.consumer.Consume(r.Context(), validated, actorID)
 	if err != nil {
-		h.log.Warn("Charlie onboarding consume failed",
-			slog.String("failure_code", charlie.OnboardingFailureCode(err)),
-			slog.String("correlation_id", appmiddleware.GetCorrelationID(r.Context())),
-		)
+		charlie.LogOperationalFailure(r.Context(), h.log, charlie.OnboardingFailureCode(err), appmiddleware.GetCorrelationID(r.Context()))
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie onboarding could not be consumed safely")
 		return
 	}

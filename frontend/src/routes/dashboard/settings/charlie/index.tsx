@@ -30,7 +30,6 @@ import { useFeatureFlags } from "@/lib/hooks";
 import { useAuthStore } from "@/lib/store";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import {
-  EmptyState,
   PermissionState,
   StatePanel,
 } from "@/components/ui/empty-state";
@@ -112,7 +111,7 @@ export function CharlieAdminContent() {
   const user = useAuthStore((s) => s.user);
   const params = useSearchParams();
   const router = useRouter();
-  const tab = normalizeCharlieAdminTab(params.get("tab"));
+  const requestedTab = normalizeCharlieAdminTab(params.get("tab"));
   if (flags.isError)
     return (
       <Unavailable
@@ -120,15 +119,7 @@ export function CharlieAdminContent() {
         retry={() => void flags.refetch()}
       />
     );
-  if (flags.data?.["feature.charlie"] === false)
-    return (
-      <EmptyState
-        icon={Sparkles}
-        title="Charlie is disabled"
-        description="Enable the Charlie feature flag before configuring the integration."
-      />
-    );
-  if (flags.data?.["feature.charlie"] !== true)
+  if (flags.data?.["feature.charlie"] !== true && flags.data?.["feature.charlie"] !== false)
     return (
       <StatePanel
         icon={Loader2}
@@ -136,17 +127,22 @@ export function CharlieAdminContent() {
         title="Loading Charlie settings"
       />
     );
-  if (!canManageCharlie(user, true))
+  if (!canManageCharlie(user))
     return (
       <PermissionState
         title="Charlie administration restricted"
         description="Requires the global charlie:manage permission. Read and approval permissions do not grant configuration access."
       />
     );
+  const featureEnabled = flags.data?.["feature.charlie"] === true;
+  const activeTabs: readonly CharlieAdminTab[] = featureEnabled
+    ? CHARLIE_ADMIN_TABS
+    : ["connection", "diagnostics"];
+  const tab = activeTabs.includes(requestedTab) ? requestedTab : "connection";
   const select = (next: CharlieAdminTab) =>
     router.push(`/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`);
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const next = adjacentTab(CHARLIE_ADMIN_TABS, tab, event.key);
+    const next = adjacentTab(activeTabs, tab, event.key);
     if (!next) return;
     event.preventDefault();
     select(next);
@@ -170,12 +166,20 @@ export function CharlieAdminContent() {
           </p>
         </div>
       </div>
+      {!featureEnabled && (
+        <StatePanel
+          icon={Sparkles}
+          tone="warning"
+          title="Charlie is disabled"
+          description="Only locally stored connection metadata and network-quiesced diagnostics are available. Astronomer makes no product-agent or Charlie central request until an administrator explicitly enables the feature."
+        />
+      )}
       <div
         role="tablist"
         aria-label="Charlie administration"
         className="flex overflow-x-auto border-b border-border"
       >
-        {CHARLIE_ADMIN_TABS.map((value) => (
+        {activeTabs.map((value) => (
           <button
             key={value}
             id={`charlie-admin-tab-${value}`}
@@ -203,7 +207,7 @@ export function CharlieAdminContent() {
         tabIndex={0}
         aria-labelledby={`charlie-admin-tab-${tab}`}
       >
-        {tab === "connection" && <ConnectionTab />}
+        {tab === "connection" && <ConnectionTab localOnly={!featureEnabled} />}
         {tab === "agent" && <AgentTab />}
         {tab === "mode" && <ModeTab />}
         {tab === "automation" && <AutomationTab />}
@@ -264,7 +268,7 @@ const emptyOnboarding: CharlieOnboardingInput = {
   expectedDeploymentId: "",
   expectedRouteId: "",
 };
-export function ConnectionTab() {
+export function ConnectionTab({ localOnly = false }: { localOnly?: boolean } = {}) {
   const qc = useQueryClient();
   const connection = useQuery({
     queryKey: queryKeys.charlie.adminConnection,
@@ -422,7 +426,7 @@ export function ConnectionTab() {
           </button>
         )}
       </Section>
-      <Section
+      {!localOnly && <Section
         title="Connect or replace Charlie"
         description="Upload a signed onboarding package. It is held only in memory and sent to local validation; package contents are never rendered or persisted by the browser."
       >
@@ -569,7 +573,7 @@ export function ConnectionTab() {
             </button>
           </div>
         )}
-      </Section>
+      </Section>}
       <ConfirmDialog
         open={confirm === "consume"}
         onClose={() => setConfirm(null)}

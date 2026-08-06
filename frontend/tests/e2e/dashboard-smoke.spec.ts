@@ -124,6 +124,13 @@ function paginated<T>(data: T[]) {
 }
 
 async function mockApi(page: Page, user = adminUser) {
+  let generalSettings = {
+    platformName: 'Astronomer',
+    agentHeartbeatInterval: 30,
+    defaultSessionTimeout: 60,
+    enableAuditLogging: true,
+    metricsCollection: true,
+  };
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -287,17 +294,10 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === '/settings/general') {
       if (method === 'PUT') {
-        return route.fulfill({ json: apiResponse(await request.postDataJSON()) });
+        generalSettings = await request.postDataJSON();
+        return route.fulfill({ json: apiResponse(generalSettings) });
       }
-      return route.fulfill({
-        json: apiResponse({
-          platformName: 'Astronomer',
-          agentHeartbeatInterval: 30,
-          defaultSessionTimeout: 60,
-          enableAuditLogging: true,
-          metricsCollection: true,
-        }),
-      });
+      return route.fulfill({ json: apiResponse(generalSettings) });
     }
     if (path === '/settings/sso' || path === '/settings/tokens') {
       return route.fulfill({ json: apiResponse([]) });
@@ -400,11 +400,12 @@ test('settings general form remains usable on responsive viewports', async ({ co
 
   await expect(page.getByRole('heading', { name: /^Settings$/ })).toBeVisible();
   await page.getByRole('button', { name: /^General$/ }).click();
+  await page.getByRole('button', { name: /^Edit$/ }).click();
   await page.getByLabel('Platform Name').fill('Astronomer Control Plane');
   await page.getByLabel('Agent Heartbeat Interval').selectOption('60');
   await page.getByLabel('Default Session Timeout').selectOption('480');
   await page.getByRole('button', { name: /save settings/i }).click();
-  await expect(page.getByLabel('Platform Name')).toHaveValue('Astronomer Control Plane');
+  await expect(page.getByText('Astronomer Control Plane', { exact: true })).toBeVisible();
 });
 
 test('Charlie launcher exposes only bounded route context across product surfaces', async ({ context, page }) => {
@@ -468,6 +469,7 @@ test('Charlie hub separates private conversations from authorized shared inciden
 
 test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async ({ context, page }) => {
   await seedAuth(context, page, adminUser);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/dashboard/alerting');
   await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
   const drawer = page.getByRole('dialog', { name: 'Charlie' });
@@ -479,6 +481,17 @@ test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async
   expect(drawerBox).not.toBeNull();
   expect(drawerBox!.width).toBeLessThanOrEqual(viewportWidth);
   expect(await drawer.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  const composer = page.getByLabel('Message Charlie');
+  await composer.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.locator('[role="dialog"] :focus')).toHaveCount(1);
+  // Send is disabled until the composer has content, so the hub link is the
+  // final enabled control in the drawer's tab order.
+  const lastFocusable = drawer.getByRole('link', { name: 'Open Charlie hub' });
+  await lastFocusable.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'New chat' })).toBeFocused();
+  await expect.poll(() => page.getByRole('button', { name: 'Send' }).evaluate((element) => getComputedStyle(element).transitionProperty)).toBe('none');
   const drawerA11y = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
   expect(drawerA11y.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
 

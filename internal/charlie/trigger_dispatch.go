@@ -53,15 +53,16 @@ type TriggerDispatcher struct {
 	queries   triggerDispatchQueries
 	bridge    InvestigationBridge
 	publisher TriggerLifecyclePublisher
+	auditor   AuthorityMutationAuditor
 	active    func() bool
 	now       func() time.Time
 }
 
-func NewTriggerDispatcher(queries triggerDispatchQueries, bridge InvestigationBridge, publisher TriggerLifecyclePublisher, active func() bool) (*TriggerDispatcher, error) {
-	if queries == nil || bridge == nil || publisher == nil || active == nil {
+func NewTriggerDispatcher(queries triggerDispatchQueries, bridge InvestigationBridge, publisher TriggerLifecyclePublisher, auditor AuthorityMutationAuditor, active func() bool) (*TriggerDispatcher, error) {
+	if queries == nil || bridge == nil || publisher == nil || auditor == nil || active == nil {
 		return nil, fmt.Errorf("Charlie trigger dispatch requires durable state, bridge, publication, and activation")
 	}
-	return &TriggerDispatcher{queries: queries, bridge: bridge, publisher: publisher, active: active, now: time.Now}, nil
+	return &TriggerDispatcher{queries: queries, bridge: bridge, publisher: publisher, auditor: auditor, active: active, now: time.Now}, nil
 }
 
 // Dispatch handles one task-outbox payload. It claims only the referenced row,
@@ -70,6 +71,11 @@ func NewTriggerDispatcher(queries triggerDispatchQueries, bridge InvestigationBr
 func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) error {
 	if eventID == uuid.Nil || !d.active() {
 		return nil
+	}
+	if err := requireAuthorityMutationAudit(ctx, d.auditor, AuthorityMutationAudit{
+		Action: "charlie.trigger.dispatched", ResourceType: "charlie_trigger", ResourceID: eventID.String(), Fields: map[string]any{"attempt": 1},
+	}); err != nil {
+		return fmt.Errorf("Charlie trigger dispatch audit is unavailable")
 	}
 	event, err := d.queries.ClaimCharlieTriggerEvent(ctx, eventID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -110,7 +116,7 @@ func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) err
 		return d.fail(ctx, event, "local_session_terminal")
 	}
 	if local.CharlieSessionID == "" {
-		delegation, delegationErr := IssueDelegation(ctx, d.queries, local.ID, rule.ServiceIdentityID, "service", maxDelegationTTL, d.now().UTC())
+		delegation, delegationErr := IssueDelegation(ctx, d.queries, d.auditor, local.ID, rule.ServiceIdentityID, "service", maxDelegationTTL, d.now().UTC())
 		if delegationErr != nil {
 			return d.retry(ctx, event, rule, "delegation_unavailable")
 		}

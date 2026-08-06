@@ -22,9 +22,10 @@ export function normalizeCharlieAdminTab(
 
 export function canManageCharlie(
   user: User | null | undefined,
-  enabled: boolean,
 ): boolean {
-  return enabled && can(user, "charlie", "manage");
+  // Feature/connection state controls runtime authority, not access to the
+  // local administration surface needed to inspect or enable it.
+  return can(user, "charlie", "manage");
 }
 
 export function mergeCharlieSearch(

@@ -40,11 +40,10 @@ describe("Charlie administration boundaries", () => {
     const current = new URLSearchParams("tab=findings&filter=open&context=cluster-a&finding=f-1");
     expect(mergeCharlieSearch(current, {tab:"approvals",approval:"a-1"})).toBe("tab=approvals&filter=open&context=cluster-a&finding=f-1&approval=a-1");
   });
-  it("requires both the feature and charlie:manage", () => {
+  it("requires charlie:manage but remains available while runtime is disabled", () => {
     const admin = { id: "u", isSuperuser: true } as unknown as User;
-    expect(canManageCharlie(admin, true)).toBe(true);
-    expect(canManageCharlie(admin, false)).toBe(false);
-    expect(canManageCharlie({ id: "u" } as User, true)).toBe(false);
+    expect(canManageCharlie(admin)).toBe(true);
+    expect(canManageCharlie({ id: "u" } as User)).toBe(false);
   });
   it("rejects hidden or invalid automation defaults before transport", () => {
     expect(automationValidationIssues({ rules: [{

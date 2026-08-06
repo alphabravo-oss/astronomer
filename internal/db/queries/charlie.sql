@@ -1001,13 +1001,11 @@ RETURNING *;
 -- name: TransitionCharlieFindingForApproval :one
 UPDATE charlie_findings
 SET status = CASE
-        WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'resolved'
-        WHEN sqlc.arg(approval_state)::text = 'expired' THEN 'expired'
+        WHEN sqlc.arg(approval_state)::text IN ('rejected', 'expired') THEN status
         ELSE status
     END,
     workflow_state = CASE
-        WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'rejected'
-        WHEN sqlc.arg(approval_state)::text = 'expired' THEN 'expired'
+        WHEN sqlc.arg(approval_state)::text IN ('rejected', 'expired') THEN 'manual_remediation_required'
         ELSE workflow_state
     END,
     execution_block_code = CASE
@@ -1016,9 +1014,13 @@ SET status = CASE
         ELSE execution_block_code
     END,
     summary = CASE
-        WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'The exact approval was rejected. No action was authorized.'
-        WHEN sqlc.arg(approval_state)::text = 'expired' THEN 'The exact approval expired. No action was authorized.'
+        WHEN sqlc.arg(approval_state)::text = 'rejected' THEN 'The exact approval was rejected. No action was authorized; bounded manual checks remain available.'
+        WHEN sqlc.arg(approval_state)::text = 'expired' THEN 'The exact approval expired. No action was authorized; bounded manual checks remain available.'
         ELSE summary
+    END,
+    recommended_action_label = CASE
+        WHEN sqlc.arg(approval_state)::text IN ('rejected', 'expired') THEN 'Follow bounded manual checks'
+        ELSE recommended_action_label
     END,
     updated_at = now()
 WHERE approval_id = sqlc.arg(approval_id)

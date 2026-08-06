@@ -48,7 +48,7 @@ func withFindingParam(r *http.Request, findingID uuid.UUID) *http.Request {
 func findingHandlerFixture() (*CharlieFindingHandler, *charlieFindingAccessFake, uuid.UUID, uuid.UUID) {
 	actor, findingID := uuid.New(), uuid.New()
 	access := &charlieFindingAccessFake{views: []charlie.FindingView{{
-		Finding:   sqlc.CharlieFinding{ID: findingID, Title: "Tunnel imbalance", Severity: "warning", Status: "open", WorkflowState: "manual_remediation_required", Summary: "Review replica distribution", ExecutionBlockCode: "read_only", RepeatCount: 2, UpdatedAt: time.Unix(100, 0)},
+		Finding:   sqlc.CharlieFinding{ID: findingID, Title: "Tunnel imbalance", Severity: "warning", Status: "open", EffectiveMode: "read_only", WorkflowState: "manual_remediation_required", Summary: "Review replica distribution", ExecutionBlockCode: "read_only", RepeatCount: 2, UpdatedAt: time.Unix(100, 0)},
 		Resources: []sqlc.CharlieFindingResource{{FindingID: findingID, ResourceType: "tunnel", ResourceID: "replica-a", RequiredVerb: "read"}},
 	}}}
 	return NewCharlieFindingHandler(access), access, actor, findingID

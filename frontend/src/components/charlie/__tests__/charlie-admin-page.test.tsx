@@ -206,7 +206,22 @@ describe("Charlie administration acceptance", () => {
     feature.value = { data: { "feature.charlie": false }, isError: false, refetch: vi.fn() };
     const disabled = renderWithClient(<CharlieAdminPage />);
     expect(screen.getByText("Charlie is disabled")).toBeInTheDocument();
+    expect(await screen.findByText("Current connection")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Connection" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Diagnostics" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Agent" })).toBeNull();
+    expect(screen.queryByText("Connect or replace Charlie")).toBeNull();
+    expect(api.getCharlieAgent).not.toHaveBeenCalled();
+    expect(api.getCharlieMode).not.toHaveBeenCalled();
+    expect(api.getCharlieAutomation).not.toHaveBeenCalled();
+    expect(api.getCharlieAccess).not.toHaveBeenCalled();
     disabled.unmount();
+
+    navigation.params = new URLSearchParams("tab=diagnostics");
+    const diagnostics = renderWithClient(<CharlieAdminPage />);
+    expect(await screen.findByText("Independent diagnostic checks")).toBeInTheDocument();
+    expect(api.getCharlieDiagnostics).toHaveBeenCalledTimes(1);
+    diagnostics.unmount();
 
     feature.value = { data: undefined, isError: false, refetch: vi.fn() };
     const loading = renderWithClient(<CharlieAdminPage />);
@@ -220,6 +235,7 @@ describe("Charlie administration acceptance", () => {
     denied.unmount();
 
     auth.user = { id: "admin", isSuperuser: true } as User;
+    navigation.params = new URLSearchParams("tab=connection&context=cluster-a");
     renderWithClient(<CharlieAdminPage />);
     expect(await screen.findByRole("tab", { name: "Connection" })).toHaveAttribute("tabindex", "0");
   });
