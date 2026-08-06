@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -534,8 +535,127 @@ func (s *AdminService) activateConnection(ctx context.Context, connectionID uuid
 	return tx.Commit(ctx)
 }
 
-func (s *AdminService) ReplacementAction(context.Context, string) (AdminAgentView, error) {
-	return AdminAgentView{}, ErrReplacementPackageNeeded
+func (s *AdminService) ReplacementAction(ctx context.Context, action string) (AdminAgentView, error) {
+	if s == nil || s.pool == nil || s.queries == nil || s.installer == nil {
+		return AdminAgentView{}, ErrAdminUnavailable
+	}
+	current, err := s.queries.GetActiveCharlieConnection(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AdminAgentView{}, ErrReplacementPackageNeeded
+	}
+	if err != nil {
+		return AdminAgentView{}, ErrAdminUnavailable
+	}
+	next, err := s.queries.GetLatestCharlieConnection(ctx)
+	if err != nil {
+		return AdminAgentView{}, ErrAdminUnavailable
+	}
+	now := time.Now().UTC()
+	if s.now != nil {
+		now = s.now().UTC()
+	}
+	if err := validateReplacementAction(current, next, action, now); err != nil {
+		return AdminAgentView{}, err
+	}
+	nextSpec := adminInstallSpec(next)
+	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
+		if err := pruner.PruneSupersededRepositories(ctx, nextSpec); err != nil {
+			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie repository cleanup is incomplete", ErrAdminConflict)
+		}
+	}
+	installation, err := s.installer.Status(ctx, nextSpec)
+	if err != nil || !installation.Ready() {
+		return AdminAgentView{}, fmt.Errorf("%w: replacement Charlie agent readiness is incomplete", ErrAdminConflict)
+	}
+	if err := s.activateReplacement(ctx, current.ID, next.ID); err != nil {
+		return AdminAgentView{}, fmt.Errorf("%w: replacement activation raced or changed", ErrAdminConflict)
+	}
+	if pruner, ok := s.installer.(supersededAgentMaterialPruner); ok {
+		if err := pruner.PruneSupersededSecrets(ctx, nextSpec); err != nil {
+			return AdminAgentView{}, fmt.Errorf("%w: superseded Charlie material cleanup is incomplete", ErrAdminConflict)
+		}
+	}
+	status, err := s.Status(ctx)
+	return status.Agent, err
+}
+
+func validateReplacementAction(current, next sqlc.CharlieConnection, action string, now time.Time) error {
+	if !current.Active || current.OnboardingState != "active" || next.Active || next.OnboardingState != "consumed" ||
+		current.ID == next.ID || !next.CreatedAt.After(current.CreatedAt) ||
+		current.InstallationID != next.InstallationID || current.ProductID != next.ProductID ||
+		current.ProductSlug != next.ProductSlug || current.DeploymentID != next.DeploymentID ||
+		current.RouteID != next.RouteID || current.CentralUrl != next.CentralUrl ||
+		current.CentralCaFingerprint != next.CentralCaFingerprint ||
+		current.SigningKeyID != next.SigningKeyID || current.SigningKeyFingerprint != next.SigningKeyFingerprint ||
+		current.LogicalAgentID != next.LogicalAgentID || current.ReplicaCount != next.ReplicaCount ||
+		current.BridgeServiceName != next.BridgeServiceName || current.McpServiceName != next.McpServiceName ||
+		current.OnboardingPackageID == next.OnboardingPackageID ||
+		current.OnboardingPackageDigest == next.OnboardingPackageDigest || strings.TrimSpace(next.AgentSecretHmac) == "" ||
+		!next.OnboardingPackageExpiresAt.After(now) || !next.EnrollmentCredentialsExpiresAt.After(now) ||
+		!next.ArtifactCredentialExpiresAt.After(now) || !next.CertificateExpiresAt.After(now) {
+		return ErrReplacementPackageNeeded
+	}
+	currentVersion, currentErr := semver.NewVersion(current.ChartVersion)
+	nextVersion, nextErr := semver.NewVersion(next.ChartVersion)
+	if currentErr != nil || nextErr != nil {
+		return ErrReplacementPackageNeeded
+	}
+	sameArtifacts := current.ChartDigest == next.ChartDigest && current.ImageDigest == next.ImageDigest
+	switch action {
+	case "upgrade":
+		if sameArtifacts || !nextVersion.GreaterThan(currentVersion) {
+			return ErrReplacementPackageNeeded
+		}
+	case "rollback":
+		if sameArtifacts || !nextVersion.LessThan(currentVersion) {
+			return ErrReplacementPackageNeeded
+		}
+	case "rotate":
+		if !sameArtifacts || !nextVersion.Equal(currentVersion) {
+			return ErrReplacementPackageNeeded
+		}
+	default:
+		return ErrAdminConflict
+	}
+	return nil
+}
+
+func (s *AdminService) activateReplacement(ctx context.Context, currentID, nextID uuid.UUID) error {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := s.queries.WithTx(tx)
+	locked, err := queries.LockCharlieConnectionActivation(ctx, nextID)
+	if err != nil {
+		return err
+	}
+	lockedIDs := make(map[uuid.UUID]struct{}, len(locked))
+	for _, id := range locked {
+		lockedIDs[id] = struct{}{}
+	}
+	if _, ok := lockedIDs[currentID]; !ok {
+		return pgx.ErrNoRows
+	}
+	if _, ok := lockedIDs[nextID]; !ok {
+		return pgx.ErrNoRows
+	}
+	current, err := queries.GetActiveCharlieConnection(ctx)
+	if err != nil || current.ID != currentID || current.OnboardingState != "active" {
+		return pgx.ErrNoRows
+	}
+	latest, err := queries.GetLatestCharlieConnection(ctx)
+	if err != nil || latest.ID != nextID || latest.OnboardingState != "consumed" || latest.Active {
+		return pgx.ErrNoRows
+	}
+	if err := queries.DeactivateCharlieConnectionsForReplacement(ctx, nextID); err != nil {
+		return err
+	}
+	if _, err := queries.ActivateCharlieConnection(ctx, sqlc.ActivateCharlieConnectionParams{ID: nextID, HealthState: "ready"}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *AdminService) Uninstall(ctx context.Context, actor uuid.UUID) error {
