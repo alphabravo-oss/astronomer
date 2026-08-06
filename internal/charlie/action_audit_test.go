@@ -34,6 +34,9 @@ func TestDBActionAuditorPersistsContentFreeDigests(t *testing.T) {
 		t.Fatalf("audit rows=%d", len(queries.rows))
 	}
 	row := queries.rows[0]
+	if row.Path != "" {
+		t.Fatalf("Charlie audit retained HTTP/MCP path: %q", row.Path)
+	}
 	serialized := row.CorrelationID + row.ResourceID + string(row.Detail)
 	if strings.Contains(serialized, "SENTINEL") || strings.Contains(serialized, `"secret"`) {
 		t.Fatalf("audit leaked action content: %s", serialized)

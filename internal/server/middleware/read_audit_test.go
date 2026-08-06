@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -203,6 +204,49 @@ func TestReadAuditMiddleware_EmitsForMatchedPath(t *testing.T) {
 	// Bodies must NOT be captured.
 	if _, hasBody := detail["body"]; hasBody {
 		t.Error("request body must not be in audit row")
+	}
+}
+
+func TestReadAuditMiddleware_CharlieReadIsContentFree(t *testing.T) {
+	const sentinel = "charlie-read-sensitive-SENTINEL"
+	store := &fakePolicyStore{rows: []sqlc.ReadAuditPolicy{
+		policy("policy-"+sentinel, "*", "GET", 1.0),
+	}}
+	eval := NewPolicyEvaluator(store)
+	enq := &fakeEnqueuer{}
+
+	r := chi.NewRouter()
+	r.Use(ReadAudit(eval, enq))
+	r.Get("/api/v1/admin/charlie/findings/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/charlie/findings/"+sentinel+"?prompt="+sentinel, nil)
+	request.Header.Set("User-Agent", sentinel)
+	request.RemoteAddr = "192.0.2.42:1234"
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+
+	waitFor(t, func() bool { return enq.count() == 1 }, time.Second)
+	enq.mu.Lock()
+	row := enq.rows[0]
+	enq.mu.Unlock()
+	encoded, err := json.Marshal(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), sentinel) || row.Path != "" || row.IpAddress != nil || row.UserAgent != "" {
+		t.Fatalf("Charlie read audit leaked request content or metadata: %s", encoded)
+	}
+	if row.Action != "charlie.http.read" || row.ResourceType != "charlie_http_request" || row.ActionClass != "read" {
+		t.Fatalf("unexpected Charlie read audit envelope: %+v", row)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail["outcome_code"] != "denied" || detail["method"] != "GET" || int(detail["status_code"].(float64)) != http.StatusForbidden {
+		t.Fatalf("unexpected Charlie read detail: %#v", detail)
 	}
 }
 

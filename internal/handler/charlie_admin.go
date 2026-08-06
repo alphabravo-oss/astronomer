@@ -67,7 +67,7 @@ type charlieAdminActionRequest struct {
 }
 
 func (h *CharlieAdminHandler) Install(w http.ResponseWriter, r *http.Request) {
-	actor, ok := h.actor(w, r)
+	_, ok := h.actor(w, r)
 	if !ok {
 		return
 	}
@@ -76,7 +76,7 @@ func (h *CharlieAdminHandler) Install(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.agent.install", "charlie_connection", "current", "Charlie", map[string]any{"actor_id": actor.ID})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.agent.install", "charlie_connection", "current", nil)
 	RespondJSON(w, http.StatusOK, view)
 }
 
@@ -90,7 +90,7 @@ func (h *CharlieAdminHandler) ReplacementAction(action string) http.HandlerFunc 
 			h.respondError(w, r, err)
 			return
 		}
-		recordAudit(r, h.audit, "admin.charlie.agent."+action, "charlie_connection", "current", "Charlie", nil)
+		recordCharlieAdminAudit(r, h.audit, "admin.charlie.agent."+action, "charlie_connection", "current", nil)
 		RespondJSON(w, http.StatusOK, view)
 	}
 }
@@ -112,7 +112,7 @@ func (h *CharlieAdminHandler) Uninstall(w http.ResponseWriter, r *http.Request) 
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.agent.uninstall", "charlie_connection", "current", "Charlie", map[string]any{"confirmation": "matched"})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.agent.uninstall", "charlie_connection", "current", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -133,7 +133,7 @@ func (h *CharlieAdminHandler) Disconnect(w http.ResponseWriter, r *http.Request)
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.disconnect", "charlie_connection", "current", "Charlie", map[string]any{"confirmation": "matched"})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.disconnect", "charlie_connection", "current", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -168,7 +168,7 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, r, err)
 			return
 		}
-		recordAudit(r, h.audit, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", "Charlie", map[string]any{"digest": "matched"})
+		recordCharlieAdminAudit(r, h.audit, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", nil)
 		RespondJSON(w, http.StatusOK, view)
 		return
 	}
@@ -185,7 +185,7 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 	if request.EmergencyDisable {
 		action = "admin.charlie.mode.emergency_disable"
 	}
-	recordAudit(r, h.audit, action, "charlie_connection", "current", "Charlie", map[string]any{"mode": string(request.Mode), "revision": *request.Revision})
+	recordCharlieAdminAudit(r, h.audit, action, "charlie_connection", "current", map[string]any{"mode": string(request.Mode), "revision": *request.Revision})
 	RespondJSON(w, http.StatusOK, view)
 }
 
@@ -215,11 +215,7 @@ func (h *CharlieAdminHandler) UpdateActionPolicy(w http.ResponseWriter, r *http.
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.action_policy.update", "charlie_action_policy", view.Capability, view.Capability, map[string]any{
-		"enabled": view.Enabled, "revision": view.Revision,
-		"max_actions_per_incident": view.MaxActionsPerIncident, "max_actions_per_window": view.MaxActionsPerWindow,
-		"budget_window_seconds": view.BudgetWindowSeconds, "cooldown_seconds": view.CooldownSeconds,
-	})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.action_policy.update", "charlie_action_policy", charlieAuditOpaque(view.Capability), nil)
 	RespondJSON(w, http.StatusOK, view)
 }
 
@@ -237,7 +233,7 @@ func (h *CharlieAdminHandler) CreateTrigger(w http.ResponseWriter, r *http.Reque
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.trigger.create", "charlie_trigger_rule", view.ID, view.Name, nil)
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.create", "charlie_trigger_rule", view.ID, map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed})
 	RespondJSON(w, http.StatusCreated, view)
 }
 
@@ -259,7 +255,7 @@ func (h *CharlieAdminHandler) UpdateTrigger(w http.ResponseWriter, r *http.Reque
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.trigger.update", "charlie_trigger_rule", view.ID, view.Name, map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.update", "charlie_trigger_rule", view.ID, map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed})
 	RespondJSON(w, http.StatusOK, view)
 }
 
@@ -284,7 +280,7 @@ func (h *CharlieAdminHandler) DeleteTrigger(w http.ResponseWriter, r *http.Reque
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.trigger.delete", "charlie_trigger_rule", id.String(), "", map[string]any{"confirmation": "matched"})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.delete", "charlie_trigger_rule", id.String(), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -340,7 +336,7 @@ func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.R
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.trigger.retry", "charlie_trigger_event", view.ID, view.EventType, map[string]any{"retry_of_event_id": eventID.String()})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.retry", "charlie_trigger_event", view.ID, nil)
 	RespondJSON(w, http.StatusAccepted, map[string]any{"event": view})
 }
 
@@ -373,7 +369,7 @@ func (h *CharlieAdminHandler) UpdateAccess(w http.ResponseWriter, r *http.Reques
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.access.update", "charlie_automation_identity", charlie.AutomationUsername, charlie.AutomationUsername, map[string]any{"enabled": *request.AutomationServiceIdentityEnabled})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.access.update", "charlie_automation_identity", "automation_identity", map[string]any{"enabled": *request.AutomationServiceIdentityEnabled})
 	RespondJSON(w, http.StatusOK, view)
 }
 
@@ -391,7 +387,7 @@ func (h *CharlieAdminHandler) Diagnostics(w http.ResponseWriter, r *http.Request
 		h.respondError(w, r, err)
 		return
 	}
-	recordAudit(r, h.audit, "admin.charlie.diagnostics.run", "charlie_connection", "current", "Charlie", map[string]any{"overall": view.Overall})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.diagnostics.run", "charlie_connection", "current", map[string]any{"overall": view.Overall})
 	RespondJSON(w, http.StatusOK, view)
 }
 

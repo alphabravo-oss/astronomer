@@ -2,7 +2,6 @@ package charlie
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -30,11 +29,12 @@ func (a *DBActionAuditor) Record(ctx context.Context, phase string, envelope Act
 	if len(result.Result) > 0 {
 		resultDigest = digestBytes(result.Result)
 	}
-	detail, err := json.Marshal(map[string]any{
+	action := "charlie.action." + phase
+	detail, err := EncodeCharlieAuditDetail(action, "charlie_action", map[string]any{
 		"phase": phase, "action_digest": digestBytes([]byte(envelope.ActionID)),
 		"argument_digest": digestBytes([]byte(envelope.ArgumentDigest)), "authorization_digest": digestBytes([]byte(envelope.AuthorizationRef)),
-		"capability_digest": digestBytes([]byte(envelope.Capability)), "effect": capability.Effect,
-		"state": result.State, "denial_code": result.Code, "result_digest": resultDigest,
+		"capability_digest": digestBytes([]byte(envelope.Capability)), "effect": string(capability.Effect),
+		"state": result.State, "denial_code": string(result.Code), "result_digest": resultDigest,
 		"mode_revision": envelope.ModeRevision, "policy_revision": envelope.PolicyRevision, "fencing_epoch": envelope.FencingEpoch,
 	})
 	if err != nil {
@@ -46,8 +46,8 @@ func (a *DBActionAuditor) Record(ctx context.Context, phase string, envelope Act
 	}
 	return a.queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
 		Source: "charlie_mcp", CorrelationID: digestBytes([]byte(envelope.ActionID)), ActorAuthMethod: "charlie_mtls_signed_action",
-		Action: "charlie.action." + phase, ResourceType: "charlie_action", ResourceID: digestBytes([]byte(envelope.ActionID)),
-		HTTPMethod: "MCP", Path: "/mcp", StatusCode: actionAuditStatus(result), Detail: detail, ActionClass: actionClass,
+		Action: action, ResourceType: "charlie_action", ResourceID: digestBytes([]byte(envelope.ActionID)),
+		HTTPMethod: "MCP", StatusCode: actionAuditStatus(result), Detail: detail, ActionClass: actionClass,
 	})
 }
 

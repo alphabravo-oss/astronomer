@@ -83,6 +83,7 @@ type verifiedApproval struct {
 	resource       contract.ApprovalManifestResource
 	eligible       bool
 	reason         string
+	auditReason    string
 }
 
 // ApprovalAccessService is the product authority boundary for human approval.
@@ -163,8 +164,8 @@ func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, a
 	candidate, err := s.findForActor(ctx, actorID, approvalID)
 	if err != nil || !candidate.eligible {
 		reason := "authorization_denied"
-		if err == nil && candidate.reason != "" {
-			reason = candidate.reason
+		if err == nil && candidate.auditReason != "" {
+			reason = candidate.auditReason
 		}
 		s.audit(ctx, candidate, actorID, decision, reason)
 		return ApprovalView{}, fmt.Errorf("Charlie approval is not eligible")
@@ -355,6 +356,7 @@ func (s *ApprovalAccessService) verifyCandidate(ctx context.Context, actorID uui
 	bindings, active, err := s.bindings.CurrentBindings(ctx, actorID)
 	if err != nil || !active {
 		item.reason = "Your Astronomer account is inactive."
+		item.auditReason = "actor_inactive"
 		return item, nil
 	}
 	approves := s.engine.CheckPermission(bindings, rbac.ResourceCharlie, rbac.VerbApprove, uuid.Nil, uuid.Nil)
@@ -362,8 +364,10 @@ func (s *ApprovalAccessService) verifyCandidate(ctx context.Context, actorID uui
 	item.eligible = approves && target
 	if !approves {
 		item.reason = "Requires charlie:approve."
+		item.auditReason = "approval_permission_denied"
 	} else if !target {
 		item.reason = "Requires the underlying " + descriptor.RBACResource + ":" + descriptor.RBACVerb + " permission."
+		item.auditReason = "target_permission_denied"
 	}
 	return item, nil
 }

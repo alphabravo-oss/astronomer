@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -244,6 +245,42 @@ func TestAuditLogWithWriter_PersistsAuditRow(t *testing.T) {
 	}
 	if writer.lastV1.HTTPMethod != http.MethodPost {
 		t.Fatalf("audit v1 http_method = %q", writer.lastV1.HTTPMethod)
+	}
+}
+
+func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T) {
+	var buf bytes.Buffer
+	writer := &fakeAuditWriter{}
+	handler := AuditLogWithWriter(newTestLogger(&buf), writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "response-SENTINEL", http.StatusForbidden)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/charlie/findings/resource-SENTINEL/acknowledge/?prompt=query-SENTINEL", strings.NewReader("body-SENTINEL"))
+	req.RemoteAddr = "203.0.113.99:1234"
+	req.Header.Set("User-Agent", "agent-SENTINEL")
+	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: uuid.NewString(), AuthMethod: "jwt"})
+	ctx = context.WithValue(ctx, contextKey("request_id"), "req-charlie-safe")
+	req = req.WithContext(ctx)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if writer.lastV1 == nil {
+		t.Fatal("expected content-free Charlie audit row")
+	}
+	row := writer.lastV1
+	if row.Action != "charlie.http.mutation" || row.ResourceType != "charlie_http_request" || row.StatusCode != http.StatusForbidden {
+		t.Fatalf("unexpected Charlie audit identity: %+v", row)
+	}
+	if row.Path != "" || row.ResourceID != "" || row.ResourceName != "" || row.UserAgent != "" || row.IpAddress != nil {
+		t.Fatalf("Charlie audit retained request metadata: %+v", row)
+	}
+	serialized := buf.String() + string(row.Detail) + row.Path + row.ResourceID + row.UserAgent
+	for _, sentinel := range []string{"resource-SENTINEL", "query-SENTINEL", "body-SENTINEL", "agent-SENTINEL", "response-SENTINEL", "203.0.113.99"} {
+		if strings.Contains(serialized, sentinel) {
+			t.Fatalf("Charlie audit leaked %q: %s", sentinel, serialized)
+		}
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil || detail["outcome_code"] != "denied" || detail["method"] != http.MethodPost {
+		t.Fatalf("invalid bounded Charlie audit detail: %s err=%v", row.Detail, err)
 	}
 }
 

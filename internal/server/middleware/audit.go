@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -153,6 +154,24 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			start := time.Now()
 			sw := &statusWriter{ResponseWriter: w}
 			next.ServeHTTP(sw, r)
+			if sw.status == 0 {
+				sw.status = http.StatusOK
+			}
+
+			// Charlie's operational audit contract deliberately excludes paths,
+			// query values, IPs, user agents, resource values, and arbitrary
+			// details. Domain handlers write their own typed lifecycle records;
+			// this row records only the bounded HTTP outcome.
+			if isCharlieAPIPath(r.URL.Path) {
+				duration := time.Since(start).Milliseconds()
+				outcome := charlieHTTPOutcome(sw.status)
+				log.Info("Charlie HTTP mutation audit",
+					"event", "charlie.http.mutation", "outcome_code", outcome,
+					"method", r.Method, "status_code", sw.status, "duration_ms", duration,
+					"request_id", GetRequestID(r.Context()), "correlation_id", GetCorrelationID(r.Context()))
+				writeCharlieAuditLog(r, sw.status, writer, duration, outcome)
+				return
+			}
 
 			// Record every mutating request, including denials and failures.
 			// Dropping 4xx (401/403/409) / 5xx here would leave DENIED/FAILED
@@ -173,6 +192,42 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			writeAuditLog(r, sw.status, writer, resourceType, resourceID, start)
 		})
 	}
+}
+
+func isCharlieAPIPath(path string) bool {
+	return path == "/api/v1/charlie" || path == "/api/v1/admin/charlie" ||
+		strings.HasPrefix(path, "/api/v1/charlie/") || strings.HasPrefix(path, "/api/v1/admin/charlie/")
+}
+
+func charlieHTTPOutcome(status int) string {
+	switch {
+	case status >= 200 && status < 400:
+		return "success"
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return "denied"
+	case status >= 400 && status < 500:
+		return "rejected"
+	default:
+		return "failed"
+	}
+}
+
+func writeCharlieAuditLog(r *http.Request, status int, writer any, duration int64, outcome string) {
+	writerV1, ok := writer.(AuditWriterV1)
+	if !ok || writerV1 == nil || r == nil {
+		return
+	}
+	detail, err := charlie.EncodeCharlieAuditDetail("charlie.http.mutation", "charlie_http_request", map[string]any{
+		"outcome_code": outcome, "method": r.Method, "status_code": status, "duration_ms": duration,
+	})
+	if err != nil {
+		return
+	}
+	_ = writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
+		Source: "http", CorrelationID: GetCorrelationID(r.Context()), UserID: AuthenticatedUserUUID(r.Context()),
+		ActorAuthMethod: authMethod(r.Context()), Action: "charlie.http.mutation", ResourceType: "charlie_http_request",
+		StatusCode: int32(status), DurationMs: duration, RequestID: GetRequestID(r.Context()), Detail: detail, ActionClass: "mutation",
+	})
 }
 
 func writeAuditLog(r *http.Request, status int, writer any, resourceType, resourceID string, start time.Time) {

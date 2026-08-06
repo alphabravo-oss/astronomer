@@ -171,7 +171,8 @@ func NewDBReceiptReconcileAuditor(queries actionAuditQueries) (*DBReceiptReconci
 }
 
 func (a *DBReceiptReconcileAuditor) RecordReceiptReconciliation(ctx context.Context, receipt sqlc.CharlieActionReceipt, outcome string) error {
-	detail, err := json.Marshal(map[string]any{
+	action := "charlie.action.reconciled_" + outcome
+	detail, err := EncodeCharlieAuditDetail(action, "charlie_action", map[string]any{
 		"outcome": outcome, "attempt": receipt.Attempt, "fencing_epoch": receipt.FencingEpoch,
 		"action_digest": digestBytes([]byte(receipt.CharlieActionID)), "capability": receipt.Capability,
 	})
@@ -184,8 +185,8 @@ func (a *DBReceiptReconcileAuditor) RecordReceiptReconciliation(ctx context.Cont
 	}
 	return a.queries.CreateAuditLogV1(ctx, sqlc.CreateAuditLogV1Params{
 		Source: "charlie_mcp", CorrelationID: receipt.AuditCorrelationID.String(), ActorAuthMethod: "charlie_reconciler",
-		Action: "charlie.action.reconciled_" + outcome, ResourceType: "charlie_action",
-		ResourceID: digestBytes([]byte(receipt.CharlieActionID)), HTTPMethod: "RECONCILE", Path: "/mcp",
+		Action: action, ResourceType: "charlie_action",
+		ResourceID: digestBytes([]byte(receipt.CharlieActionID)), HTTPMethod: "RECONCILE",
 		StatusCode: status, Detail: detail, ActionClass: "system",
 	})
 }

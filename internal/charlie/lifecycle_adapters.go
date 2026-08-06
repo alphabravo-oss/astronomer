@@ -2,7 +2,6 @@ package charlie
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -51,8 +50,8 @@ func (a *DBLifecycleAuditor) record(ctx context.Context, action, resourceType st
 		return
 	}
 	detail["outcome_code"] = outcome
-	encoded, err := json.Marshal(detail)
-	if err != nil || len(encoded) > 2048 {
+	encoded, err := EncodeCharlieAuditDetail(action, resourceType, detail)
+	if err != nil {
 		slog.WarnContext(ctx, "Charlie lifecycle audit encoding failed", slog.String("failure_code", "charlie.lifecycle_audit_encode_failed"))
 		return
 	}

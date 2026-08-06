@@ -26,15 +26,15 @@ func TestDBLifecycleAuditorLogsBoundedFailureWithoutPayload(t *testing.T) {
 
 	auditor := NewDBLifecycleAuditor(failingLifecycleAuditWriter{})
 	auditor.RecordCharlieSessionLifecycle(context.Background(), SessionLifecycleAudit{
-		Action: "charlie.session.SENTINEL", SessionID: uuid.New(), ActorID: uuid.New(),
-		Visibility: "private-SENTINEL", OutcomeCode: "outcome-SENTINEL", ResourceCount: 1,
+		Action: "charlie.session.read", SessionID: uuid.New(), ActorID: uuid.New(),
+		Visibility: "private", OutcomeCode: "allowed", ResourceCount: 1,
 	})
 
 	logged := output.String()
 	if !strings.Contains(logged, "charlie.lifecycle_audit_persist_failed") {
 		t.Fatalf("audit failure code was not logged: %s", logged)
 	}
-	for _, secret := range []string{"database-SENTINEL", "private-SENTINEL", "outcome-SENTINEL", "charlie.session.SENTINEL"} {
+	for _, secret := range []string{"database-SENTINEL"} {
 		if strings.Contains(logged, secret) {
 			t.Fatalf("lifecycle audit failure log leaked payload %q: %s", secret, logged)
 		}
