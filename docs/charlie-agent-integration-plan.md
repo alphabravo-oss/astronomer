@@ -1110,12 +1110,12 @@ quota, audit, and task semantics as the normal Astronomer API.
 - [x] **A10-019** Let an authorized user acknowledge/dismiss/resolve a finding or,
   in approval mode, open the exact approval flow; never turn a recommendation
   click into implicit execution.
-- [ ] **A10-020** Render the applicable decision set on every actionable
+- [x] **A10-020** Render the applicable decision set on every actionable
   non-execution finding: acknowledge, dismiss, resolve, review exact approval,
   approve, deny, or follow bounded manual checks. Explain why unavailable
   decisions are unavailable; do not present destructive or policy-ineligible
   work as approvable.
-- [ ] **A10-021** In `automation`, distinguish an automatically eligible action,
+- [x] **A10-021** In `automation`, distinguish an automatically eligible action,
   an exact human-decision action, and a non-executable recommendation. The UI
   must never imply that a blocked automatic action will run, that acknowledging
   a finding approves it, or that changing mode retries it.
@@ -1308,12 +1308,12 @@ the minimum authorized evidence and correlate, in order:
   Include the coded block reason, impact, bounded evidence summary, affected
   resource, safe operator checks, verification plan, repeat/timeline metadata,
   and exactly the user decisions valid for that state.
-- [ ] **A12-031** Implement the decision workflow for blocked automation: offer
+- [x] **A12-031** Implement the decision workflow for blocked automation: offer
   exact approve/deny only when the same disclosed reversible action remains
   eligible for human approval; otherwise offer acknowledge/dismiss/resolve and
   bounded manual checks. Re-evaluate mode, expiry, RBAC, target scope, and safety
   at decision time; no finding action implicitly executes or widens authority.
-- [ ] **A12-032** Audit and publish each finding decision as a content-free,
+- [x] **A12-032** Audit and publish each finding decision as a content-free,
   idempotent lifecycle transition. Notification delivery retries may not
   duplicate the finding, approval, decision, or action, and a delivery failure
   may not lose the durable operator workflow.
@@ -1676,6 +1676,56 @@ the minimum authorized evidence and correlate, in order:
   only), 749 frontend tests, frontend production build, dependency audit, and
   Helm lint/render/contracts passed. The explicit live agent-identity acceptance
   remained skipped because `AGENT_IDENTITY_TEST_CONTEXT` was not set.
+
+#### Agent 1.0.18 actionable-decision and replacement-lineage addendum
+
+- Charlie commit `0fc7044` completed all six Product Bridge finding transitions
+  and published signed agent/chart `1.0.18`. Astronomer commits `b334661`,
+  `f2802e5`, and `dc9c617` added replay-safe product decisions, pinned the exact
+  1.0.18 contract, and preserved finding/session provenance across signed agent
+  replacement generations.
+- The live Astronomer migration advanced cleanly to schema `151`. Argo reported
+  the exact server/migrate pair `charlie-dc9c617` as `Synced/Healthy`, with no
+  dirty migration state.
+- Charlie OCI supplied immutable agent image digest
+  `sha256:6d48abf1c75742e53467c6d05e1b22536d6ab9b54fdbb419b969eef661eb6e59`
+  and chart digest
+  `sha256:0c51726ec9b9c54533fef608c2422cdb2cb2ea7d96e88c77ee84b3954e41729f`.
+  The product reported two ready replicas, one fenced leader, one standby,
+  agent/chart `1.0.18`, and fencing epoch `23`.
+- Astronomer rejected the first activation attempt because its local release
+  contract still declared 1.0.17 even though the signed artifact digests were
+  newer. No replacement invariant was weakened: Astronomer pinned 1.0.18,
+  consumed a fresh signed one-time generation, waited for exact artifact
+  readiness, and then activated it. Activation reset authority to
+  `disabled/disabled`; an administrator separately acknowledged disclosure
+  digest `sha256:11bb481770f495346d72eda2bcf2dc3ca637ca89e86ada6691536a0463c7bb26`
+  and restored only `read_only/read_only` revision `61`.
+- Replacement initially made a retained finding unreachable because the finding
+  correctly retained its source credential-generation ID while authorization
+  compared it to the new active row ID. Commit `dc9c617` now authorizes retained
+  findings and sessions only when source and active rows share the complete
+  signed installation/product/deployment/route/central/signer/logical-agent
+  lineage. It never rewrites historical provenance. Regression tests prove the
+  same lineage remains accessible and a different deployment is denied before
+  delegation or Product Bridge access.
+- Request `bfa19b24-574a-40cc-a1dc-e7acf58df0e7` then replayed the previously
+  central-committed acknowledgement. The first post-fix call returned `200` and
+  atomically wrote one local decision ledger row; the identical retry returned
+  `200` through the replay path. Local audit contains exactly one `completed`
+  and one `replayed` content-free `charlie.finding.acknowledged` event. Charlie
+  central retains exactly one lifecycle event for that request, and Astronomer
+  has zero Charlie action receipts for the qualification window.
+- The resulting read-only finding is `acknowledged` in
+  `manual_remediation_required` and exposes only `start_remediation` and
+  `dismiss`. Authorized detail contains a bounded diagnosis, risk impact,
+  evidence summary, operator check, manual prerequisites/steps/expected impact,
+  and product-current-state verification. Recording lifecycle progress does not
+  authorize execution.
+- The full race-enabled Astronomer test suite, focused Charlie/SQLC tests,
+  generated-query check, and zero-issue Go lint passed. Charlie's full
+  `make verify` passed before artifact publication. Every transient signed
+  onboarding package file was deleted from both servers after activation.
 
 #### Internal-Charlie air gap
 
