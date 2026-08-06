@@ -35,6 +35,8 @@ var AuditActions = []string{
 	"charlie.mcp.denied",
 	"charlie.finding.created",
 	"charlie.finding.acknowledged",
+	"charlie.finding.remediation_started",
+	"charlie.finding.verification_requested",
 	"charlie.finding.dismissed",
 	"charlie.finding.resolved",
 }

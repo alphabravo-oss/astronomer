@@ -1104,20 +1104,33 @@ WHERE state IN ('completed', 'aborted', 'failed')
   AND updated_at < sqlc.arg(before);
 
 -- name: TransitionCharlieFinding :one
-UPDATE charlie_findings
-SET status = sqlc.arg(next_status),
-    workflow_state = sqlc.arg(next_workflow_state),
-    acknowledged_by_id = CASE WHEN sqlc.arg(next_status)::text = 'acknowledged' THEN sqlc.narg(actor_id) ELSE acknowledged_by_id END,
-    acknowledged_at = CASE WHEN sqlc.arg(next_status)::text = 'acknowledged' THEN now() ELSE acknowledged_at END,
-    dismissed_by_id = CASE WHEN sqlc.arg(next_status)::text = 'dismissed' THEN sqlc.narg(actor_id) ELSE dismissed_by_id END,
-    dismissed_at = CASE WHEN sqlc.arg(next_status)::text = 'dismissed' THEN now() ELSE dismissed_at END,
-    resolved_by_id = CASE WHEN sqlc.arg(next_status)::text = 'resolved' THEN sqlc.narg(actor_id) ELSE resolved_by_id END,
-    resolved_at = CASE WHEN sqlc.arg(next_status)::text = 'resolved' THEN now() ELSE resolved_at END,
-    updated_at = now()
-WHERE id = sqlc.arg(id)
-  AND status = sqlc.arg(expected_status)
-  AND workflow_state = sqlc.arg(expected_workflow_state)
-RETURNING *;
+WITH transitioned AS (
+    UPDATE charlie_findings
+    SET status = sqlc.arg(next_status)::varchar,
+        workflow_state = sqlc.arg(next_workflow_state)::varchar,
+        acknowledged_by_id = CASE WHEN sqlc.arg(next_status)::text = 'acknowledged' THEN sqlc.arg(actor_id) ELSE acknowledged_by_id END,
+        acknowledged_at = CASE WHEN sqlc.arg(next_status)::text = 'acknowledged' THEN now() ELSE acknowledged_at END,
+        dismissed_by_id = CASE WHEN sqlc.arg(next_status)::text = 'dismissed' THEN sqlc.arg(actor_id) ELSE dismissed_by_id END,
+        dismissed_at = CASE WHEN sqlc.arg(next_status)::text = 'dismissed' THEN now() ELSE dismissed_at END,
+        resolved_by_id = CASE WHEN sqlc.arg(next_status)::text = 'resolved' THEN sqlc.arg(actor_id) ELSE resolved_by_id END,
+        resolved_at = CASE WHEN sqlc.arg(next_status)::text = 'resolved' THEN now() ELSE resolved_at END,
+        updated_at = now()
+    WHERE id = sqlc.arg(id)
+      AND status = sqlc.arg(expected_status)
+      AND workflow_state = sqlc.arg(expected_workflow_state)
+    RETURNING *
+), recorded AS (
+    INSERT INTO charlie_finding_decisions (
+        request_id, finding_id, actor_ref, decision, result_status, result_workflow_state
+    )
+    SELECT sqlc.arg(request_id), id, sqlc.arg(actor_ref), sqlc.arg(decision), status, workflow_state
+    FROM transitioned
+    RETURNING request_id
+)
+SELECT request_id FROM recorded;
+
+-- name: GetCharlieFindingDecision :one
+SELECT * FROM charlie_finding_decisions WHERE request_id = $1;
 
 -- name: AddCharlieFindingResource :exec
 INSERT INTO charlie_finding_resources (finding_id, resource_type, resource_id, required_verb)

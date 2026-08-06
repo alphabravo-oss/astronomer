@@ -706,6 +706,16 @@ type CharlieFinding struct {
 	WorkflowState          string             `json:"workflow_state"`
 }
 
+type CharlieFindingDecision struct {
+	RequestID           uuid.UUID `json:"request_id"`
+	FindingID           uuid.UUID `json:"finding_id"`
+	ActorRef            string    `json:"actor_ref"`
+	Decision            string    `json:"decision"`
+	ResultStatus        string    `json:"result_status"`
+	ResultWorkflowState string    `json:"result_workflow_state"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
 type CharlieFindingResource struct {
 	FindingID    uuid.UUID `json:"finding_id"`
 	ResourceType string    `json:"resource_type"`

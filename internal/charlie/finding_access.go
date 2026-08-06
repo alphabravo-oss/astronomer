@@ -2,9 +2,11 @@ package charlie
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -20,10 +22,11 @@ type findingAccessQueries interface {
 	delegationQuerier
 	GetActiveCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
 	GetCharlieFinding(context.Context, uuid.UUID) (sqlc.CharlieFinding, error)
+	GetCharlieFindingDecision(context.Context, uuid.UUID) (sqlc.CharlieFindingDecision, error)
 	GetCharlieSession(context.Context, uuid.UUID) (sqlc.CharlieSession, error)
 	ListCharlieFindingResources(context.Context, uuid.UUID) ([]sqlc.CharlieFindingResource, error)
 	ListCharlieFindings(context.Context, sqlc.ListCharlieFindingsParams) ([]sqlc.CharlieFinding, error)
-	TransitionCharlieFinding(context.Context, sqlc.TransitionCharlieFindingParams) (sqlc.CharlieFinding, error)
+	TransitionCharlieFinding(context.Context, sqlc.TransitionCharlieFindingParams) (uuid.UUID, error)
 }
 
 // FindingContentBridge is the optional on-demand detail boundary. Astronomer
@@ -31,7 +34,7 @@ type findingAccessQueries interface {
 // is fetched only after current product authorization succeeds.
 type FindingContentBridge interface {
 	GetFinding(context.Context, string, string) (json.RawMessage, error)
-	TransitionFinding(context.Context, string, string, uuid.UUID, string) (json.RawMessage, error)
+	TransitionFinding(context.Context, string, string, uuid.UUID, string, string) (json.RawMessage, error)
 }
 
 type FindingLifecycleAudit struct {
@@ -138,6 +141,30 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 	if err != nil {
 		return FindingView{}, err
 	}
+	prior, priorErr := s.queries.GetCharlieFindingDecision(ctx, requestID)
+	if priorErr == nil {
+		if prior.FindingID != row.ID || prior.ActorRef != findingActorRef(connection.ID, actorID) || prior.Decision != decision {
+			s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "idempotency_conflict", len(resources))
+			return FindingView{}, fmt.Errorf("Charlie finding transition request was already used")
+		}
+		var remote json.RawMessage
+		if shouldFetchCentralFinding(row) {
+			authorizationRef, authErr := s.issueFindingDelegation(ctx, row, actorID, connection.ID)
+			if authErr != nil {
+				return FindingView{}, authErr
+			}
+			remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(connection.ID, actorID))
+			if err != nil {
+				s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_replay_failed", len(resources))
+				return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
+			}
+		}
+		s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "replayed", len(resources))
+		return FindingView{Finding: row, Resources: resources, Remote: remote}, nil
+	}
+	if !errors.Is(priorErr, pgx.ErrNoRows) {
+		return FindingView{}, fmt.Errorf("Charlie finding transition history is unavailable")
+	}
 	nextStatus, nextWorkflow, allowed := findingDecisionTarget(row, decision, s.now().UTC())
 	if !allowed {
 		return FindingView{}, fmt.Errorf("Charlie finding transition is invalid")
@@ -148,26 +175,58 @@ func (s *FindingAccessService) Transition(ctx context.Context, actorID, findingI
 		if authErr != nil {
 			return FindingView{}, authErr
 		}
-		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision)
+		remote, err = s.bridge.TransitionFinding(ctx, row.CharlieFindingID, authorizationRef, requestID, decision, findingActorRef(connection.ID, actorID))
 		if err != nil {
+			s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_rejected", len(resources))
 			return FindingView{}, fmt.Errorf("Charlie finding transition is unavailable")
 		}
 	}
-	updated, err := s.queries.TransitionCharlieFinding(ctx, sqlc.TransitionCharlieFindingParams{
+	_, err = s.queries.TransitionCharlieFinding(ctx, sqlc.TransitionCharlieFindingParams{
 		NextStatus: nextStatus, NextWorkflowState: nextWorkflow,
 		ActorID: pgtype.UUID{Bytes: actorID, Valid: true}, ID: row.ID,
 		ExpectedStatus: row.Status, ExpectedWorkflowState: row.WorkflowState,
+		RequestID: requestID, Decision: decision, ActorRef: findingActorRef(connection.ID, actorID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FindingView{}, fmt.Errorf("Charlie finding changed; refresh and try again")
 	}
 	if err != nil {
+		s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_committed_local_failed", len(resources))
+		slog.WarnContext(ctx, "Charlie finding local transition failed after central acceptance", slog.String("failure_code", "charlie.finding_local_commit_failed"))
 		return FindingView{}, fmt.Errorf("Charlie finding transition could not be committed")
+	}
+	updated, err := s.queries.GetCharlieFinding(ctx, row.ID)
+	if err != nil {
+		return FindingView{}, fmt.Errorf("Charlie finding transition was committed but could not be read")
 	}
 	alert := FindingAlert{FindingID: updated.ID.String(), Severity: NormalizeFindingSeverity(updated.Severity), Status: updated.Status, ResourceType: resources[0].ResourceType, ResourceID: resources[0].ResourceID, BlockCode: updated.ExecutionBlockCode, RepeatCount: int(updated.RepeatCount)}
 	s.publisher.PublishCharlieFindingLifecycle(ctx, alert)
-	s.audit(ctx, "charlie.finding."+decision, updated.ID, actorID, "completed", len(resources))
+	s.audit(ctx, findingDecisionAuditAction(decision), updated.ID, actorID, "completed", len(resources))
 	return FindingView{Finding: updated, Resources: resources, Remote: remote}, nil
+}
+
+// findingActorRef gives Charlie stable per-deployment audit attribution without
+// disclosing Astronomer's user UUID across the product boundary.
+func findingActorRef(connectionID, actorID uuid.UUID) string {
+	digest := sha256.Sum256([]byte(connectionID.String() + "\x00" + actorID.String()))
+	return fmt.Sprintf("productuser_%x", digest[:16])
+}
+
+func findingDecisionAuditAction(decision string) string {
+	switch decision {
+	case "acknowledge":
+		return "charlie.finding.acknowledged"
+	case "start_remediation":
+		return "charlie.finding.remediation_started"
+	case "request_verification":
+		return "charlie.finding.verification_requested"
+	case "dismiss":
+		return "charlie.finding.dismissed"
+	case "resolve":
+		return "charlie.finding.resolved"
+	default:
+		return "charlie.finding.transition_denied"
+	}
 }
 
 func (s *FindingAccessService) authorizeConnection(ctx context.Context, actorID uuid.UUID) (sqlc.CharlieConnection, error) {

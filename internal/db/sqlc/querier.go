@@ -722,6 +722,7 @@ type Querier interface {
 	GetCharlieFinding(ctx context.Context, id uuid.UUID) (CharlieFinding, error)
 	GetCharlieFindingByApprovalID(ctx context.Context, approvalID pgtype.Text) (CharlieFinding, error)
 	GetCharlieFindingByCentralID(ctx context.Context, arg GetCharlieFindingByCentralIDParams) (CharlieFinding, error)
+	GetCharlieFindingDecision(ctx context.Context, requestID uuid.UUID) (CharlieFindingDecision, error)
 	GetCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
 	GetCharlieSessionByCentralID(ctx context.Context, charlieSessionID string) (CharlieSession, error)
 	GetCharlieSessionByClientID(ctx context.Context, arg GetCharlieSessionByClientIDParams) (CharlieSession, error)
@@ -2010,7 +2011,7 @@ type Querier interface {
 	TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLastUsedParams) error
 	TransitionCharlieActionApproval(ctx context.Context, arg TransitionCharlieActionApprovalParams) (CharlieActionApproval, error)
 	TransitionCharlieActionReceipt(ctx context.Context, arg TransitionCharlieActionReceiptParams) (CharlieActionReceipt, error)
-	TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (CharlieFinding, error)
+	TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (uuid.UUID, error)
 	TransitionCharlieFindingForApproval(ctx context.Context, arg TransitionCharlieFindingForApprovalParams) (CharlieFinding, error)
 	TransitionCharlieTriggerEvent(ctx context.Context, arg TransitionCharlieTriggerEventParams) (CharlieTriggerEvent, error)
 	UnassignClusterGroup(ctx context.Context, id uuid.UUID) error

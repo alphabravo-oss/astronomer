@@ -339,12 +339,12 @@ func (m *ManagedBridge) GetFindingScope(ctx context.Context, findingID, authoriz
 	return bridge.GetFindingScope(ctx, findingID, authorizationRef)
 }
 
-func (m *ManagedBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, transition string) (result json.RawMessage, err error) {
+func (m *ManagedBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, transition, actorRef string) (result json.RawMessage, err error) {
 	started := time.Now()
 	defer func() { observeBridgeCall("transition_finding", started, err) }()
 	bridge, err := m.runtimeBridge(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return bridge.TransitionFinding(ctx, findingID, authorizationRef, requestID, transition)
+	return bridge.TransitionFinding(ctx, findingID, authorizationRef, requestID, transition, actorRef)
 }

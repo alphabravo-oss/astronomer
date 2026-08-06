@@ -359,7 +359,7 @@ func findingResourceDigest(resourceID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(resourceID)))
 }
 
-func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, decision string) (json.RawMessage, error) {
+func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, decision, actorRef string) (json.RawMessage, error) {
 	path, err := opaqueBridgePath("/findings/", findingID)
 	if err != nil {
 		return nil, err
@@ -367,7 +367,10 @@ func (b *RuntimeBridge) TransitionFinding(ctx context.Context, findingID, author
 	if !validFindingDecision(decision) {
 		return nil, fmt.Errorf("Charlie finding transition is invalid")
 	}
-	request := map[string]string{"request_id": requestID.String(), "transition": decision, "actor_ref": "product-user"}
+	if !bridgeFindingOpaqueIDPattern.MatchString(actorRef) {
+		return nil, fmt.Errorf("Charlie finding actor reference is invalid")
+	}
+	request := map[string]string{"request_id": requestID.String(), "transition": decision, "actor_ref": actorRef}
 	var response json.RawMessage
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/transitions", requestID.String(), authorizationRef, request, &response); err != nil {
 		return nil, err

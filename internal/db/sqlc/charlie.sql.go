@@ -2865,6 +2865,25 @@ func (q *Queries) GetCharlieFindingByCentralID(ctx context.Context, arg GetCharl
 	return i, err
 }
 
+const getCharlieFindingDecision = `-- name: GetCharlieFindingDecision :one
+SELECT request_id, finding_id, actor_ref, decision, result_status, result_workflow_state, created_at FROM charlie_finding_decisions WHERE request_id = $1
+`
+
+func (q *Queries) GetCharlieFindingDecision(ctx context.Context, requestID uuid.UUID) (CharlieFindingDecision, error) {
+	row := q.db.QueryRow(ctx, getCharlieFindingDecision, requestID)
+	var i CharlieFindingDecision
+	err := row.Scan(
+		&i.RequestID,
+		&i.FindingID,
+		&i.ActorRef,
+		&i.Decision,
+		&i.ResultStatus,
+		&i.ResultWorkflowState,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getCharlieSession = `-- name: GetCharlieSession :one
 SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions WHERE id = $1
 `
@@ -4336,20 +4355,30 @@ func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg Transi
 }
 
 const transitionCharlieFinding = `-- name: TransitionCharlieFinding :one
-UPDATE charlie_findings
-SET status = $1,
-    workflow_state = $2,
-    acknowledged_by_id = CASE WHEN $1::text = 'acknowledged' THEN $3 ELSE acknowledged_by_id END,
-    acknowledged_at = CASE WHEN $1::text = 'acknowledged' THEN now() ELSE acknowledged_at END,
-    dismissed_by_id = CASE WHEN $1::text = 'dismissed' THEN $3 ELSE dismissed_by_id END,
-    dismissed_at = CASE WHEN $1::text = 'dismissed' THEN now() ELSE dismissed_at END,
-    resolved_by_id = CASE WHEN $1::text = 'resolved' THEN $3 ELSE resolved_by_id END,
-    resolved_at = CASE WHEN $1::text = 'resolved' THEN now() ELSE resolved_at END,
-    updated_at = now()
-WHERE id = $4
-  AND status = $5
-  AND workflow_state = $6
-RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
+WITH transitioned AS (
+    UPDATE charlie_findings
+    SET status = $1::varchar,
+        workflow_state = $2::varchar,
+        acknowledged_by_id = CASE WHEN $1::text = 'acknowledged' THEN $3 ELSE acknowledged_by_id END,
+        acknowledged_at = CASE WHEN $1::text = 'acknowledged' THEN now() ELSE acknowledged_at END,
+        dismissed_by_id = CASE WHEN $1::text = 'dismissed' THEN $3 ELSE dismissed_by_id END,
+        dismissed_at = CASE WHEN $1::text = 'dismissed' THEN now() ELSE dismissed_at END,
+        resolved_by_id = CASE WHEN $1::text = 'resolved' THEN $3 ELSE resolved_by_id END,
+        resolved_at = CASE WHEN $1::text = 'resolved' THEN now() ELSE resolved_at END,
+        updated_at = now()
+    WHERE id = $4
+      AND status = $5
+      AND workflow_state = $6
+    RETURNING id, connection_id, charlie_finding_id, approval_id, session_id, source, severity, status, effective_mode, execution_block_code, dedupe_fingerprint, title, summary, recommended_action_label, risk_impact, verification_summary, repeat_count, expires_at, acknowledged_by_id, acknowledged_at, dismissed_by_id, dismissed_at, resolved_by_id, resolved_at, alert_event_id, created_at, updated_at, workflow_state
+), recorded AS (
+    INSERT INTO charlie_finding_decisions (
+        request_id, finding_id, actor_ref, decision, result_status, result_workflow_state
+    )
+    SELECT $7, id, $8, $9, status, workflow_state
+    FROM transitioned
+    RETURNING request_id
+)
+SELECT request_id FROM recorded
 `
 
 type TransitionCharlieFindingParams struct {
@@ -4359,9 +4388,12 @@ type TransitionCharlieFindingParams struct {
 	ID                    uuid.UUID   `json:"id"`
 	ExpectedStatus        string      `json:"expected_status"`
 	ExpectedWorkflowState string      `json:"expected_workflow_state"`
+	RequestID             uuid.UUID   `json:"request_id"`
+	ActorRef              string      `json:"actor_ref"`
+	Decision              string      `json:"decision"`
 }
 
-func (q *Queries) TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (CharlieFinding, error) {
+func (q *Queries) TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, transitionCharlieFinding,
 		arg.NextStatus,
 		arg.NextWorkflowState,
@@ -4369,39 +4401,13 @@ func (q *Queries) TransitionCharlieFinding(ctx context.Context, arg TransitionCh
 		arg.ID,
 		arg.ExpectedStatus,
 		arg.ExpectedWorkflowState,
+		arg.RequestID,
+		arg.ActorRef,
+		arg.Decision,
 	)
-	var i CharlieFinding
-	err := row.Scan(
-		&i.ID,
-		&i.ConnectionID,
-		&i.CharlieFindingID,
-		&i.ApprovalID,
-		&i.SessionID,
-		&i.Source,
-		&i.Severity,
-		&i.Status,
-		&i.EffectiveMode,
-		&i.ExecutionBlockCode,
-		&i.DedupeFingerprint,
-		&i.Title,
-		&i.Summary,
-		&i.RecommendedActionLabel,
-		&i.RiskImpact,
-		&i.VerificationSummary,
-		&i.RepeatCount,
-		&i.ExpiresAt,
-		&i.AcknowledgedByID,
-		&i.AcknowledgedAt,
-		&i.DismissedByID,
-		&i.DismissedAt,
-		&i.ResolvedByID,
-		&i.ResolvedAt,
-		&i.AlertEventID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.WorkflowState,
-	)
-	return i, err
+	var request_id uuid.UUID
+	err := row.Scan(&request_id)
+	return request_id, err
 }
 
 const transitionCharlieFindingForApproval = `-- name: TransitionCharlieFindingForApproval :one

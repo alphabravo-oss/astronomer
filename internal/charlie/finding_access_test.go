@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ type findingAccessFake struct {
 	resources   map[uuid.UUID][]sqlc.CharlieFindingResource
 	session     sqlc.CharlieSession
 	transition  sqlc.TransitionCharlieFindingParams
+	decisions   map[uuid.UUID]sqlc.CharlieFindingDecision
 	delegations int
 	lists       int
 }
@@ -44,16 +46,24 @@ func (f *findingAccessFake) ListCharlieFindings(context.Context, sqlc.ListCharli
 	f.lists++
 	return f.rows, nil
 }
-func (f *findingAccessFake) TransitionCharlieFinding(_ context.Context, p sqlc.TransitionCharlieFindingParams) (sqlc.CharlieFinding, error) {
+func (f *findingAccessFake) GetCharlieFindingDecision(_ context.Context, requestID uuid.UUID) (sqlc.CharlieFindingDecision, error) {
+	decision, ok := f.decisions[requestID]
+	if !ok {
+		return sqlc.CharlieFindingDecision{}, pgx.ErrNoRows
+	}
+	return decision, nil
+}
+func (f *findingAccessFake) TransitionCharlieFinding(_ context.Context, p sqlc.TransitionCharlieFindingParams) (uuid.UUID, error) {
 	f.transition = p
 	for i := range f.rows {
 		if f.rows[i].ID == p.ID && f.rows[i].Status == p.ExpectedStatus && f.rows[i].WorkflowState == p.ExpectedWorkflowState {
 			f.rows[i].Status = p.NextStatus
 			f.rows[i].WorkflowState = p.NextWorkflowState
-			return f.rows[i], nil
+			f.decisions[p.RequestID] = sqlc.CharlieFindingDecision{RequestID: p.RequestID, FindingID: p.ID, ActorRef: p.ActorRef, Decision: p.Decision, ResultStatus: p.NextStatus, ResultWorkflowState: p.NextWorkflowState}
+			return p.RequestID, nil
 		}
 	}
-	return sqlc.CharlieFinding{}, pgx.ErrNoRows
+	return uuid.Nil, pgx.ErrNoRows
 }
 func (f *findingAccessFake) CreateCharlieDelegation(_ context.Context, p sqlc.CreateCharlieDelegationParams) (sqlc.CharlieDelegation, error) {
 	f.delegations++
@@ -87,7 +97,7 @@ func (f *findingBridgeFake) GetFinding(_ context.Context, _, auth string) (json.
 	f.authRef = auth
 	return json.RawMessage(`{"schema":"charlie.finding/v1"}`), nil
 }
-func (f *findingBridgeFake) TransitionFinding(_ context.Context, _, auth string, _ uuid.UUID, next string) (json.RawMessage, error) {
+func (f *findingBridgeFake) TransitionFinding(_ context.Context, _, auth string, _ uuid.UUID, next, _ string) (json.RawMessage, error) {
 	f.transitionCalls++
 	f.authRef, f.next = auth, next
 	return json.RawMessage(`{"status":"acknowledged"}`), nil
@@ -122,6 +132,7 @@ func findingAccessFixture() (*findingAccessFake, *findingAccessAuthorizerFake, *
 		connection: connection,
 		rows:       []sqlc.CharlieFinding{{ID: findingID, ConnectionID: connection.ID, CharlieFindingID: "finding-central", SessionID: pgtype.UUID{Bytes: sessionID, Valid: true}, Severity: "warning", Status: "open", WorkflowState: "manual_remediation_required", ExecutionBlockCode: "read_only", RepeatCount: 2}},
 		resources:  map[uuid.UUID][]sqlc.CharlieFindingResource{findingID: {{FindingID: findingID, ResourceType: "tunnel", ResourceID: "replica-a", RequiredVerb: "read"}}},
+		decisions:  make(map[uuid.UUID]sqlc.CharlieFindingDecision),
 		session: sqlc.CharlieSession{
 			ID: sessionID, ConnectionID: connection.ID, CharlieSessionID: "central-session",
 			OwnerUserID: pgtype.UUID{Bytes: actorID, Valid: true}, Source: "user", Visibility: "private", State: "active",
@@ -167,6 +178,29 @@ func TestFindingAccessTransitionsCentralThenCommitsAndPublishes(t *testing.T) {
 	}
 	if len(publisher.alerts) != 1 || publisher.alerts[0].Severity != "medium" || publisher.alerts[0].ResourceID != "replica-a" {
 		t.Fatalf("durable lifecycle did not publish bounded alert: %#v", publisher.alerts)
+	}
+}
+
+func TestFindingAccessReplaysCommittedDecisionWithoutRepublishing(t *testing.T) {
+	store, authorizer, bridge, audit, publisher, actorID := findingAccessFixture()
+	service, _ := NewFindingAccessService(store, authorizer, bridge, audit, publisher, &findingSyncerFake{}, func() bool { return true })
+	requestID := uuid.New()
+	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, requestID, "acknowledge"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Transition(context.Background(), actorID, store.rows[0].ID, requestID, "acknowledge"); err != nil {
+		t.Fatalf("idempotent replay failed: %v", err)
+	}
+	if bridge.transitionCalls != 2 || len(publisher.alerts) != 1 || len(audit.entries) != 2 || audit.entries[1].OutcomeCode != "replayed" {
+		t.Fatalf("replay side effects bridge=%d alerts=%d audits=%#v", bridge.transitionCalls, len(publisher.alerts), audit.entries)
+	}
+}
+
+func TestFindingActorRefIsStableOpaqueAndDeploymentScoped(t *testing.T) {
+	connection, actor := uuid.New(), uuid.New()
+	got := findingActorRef(connection, actor)
+	if got != findingActorRef(connection, actor) || got == findingActorRef(uuid.New(), actor) || strings.Contains(got, actor.String()) {
+		t.Fatalf("finding actor reference is not stable and opaque: %q", got)
 	}
 }
 
