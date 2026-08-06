@@ -128,7 +128,7 @@ func TestOperationalObserverRejectsDelayedRuntimeWork(t *testing.T) {
 					values["charlie_agent_downstream_central_control_connection_attempts_total"] = 1
 					values["charlie_agent_downstream_central_control_requests_total"] = 1
 					values["charlie_agent_downstream_central_control_responses_total"] = 1
-					values["charlie_agent_work_claims_total"] = workDelta
+					values["charlie_agent_work_claim_requests_total"] = workDelta
 				}
 				for name := range isolationMetricNames {
 					_, _ = fmt.Fprintf(w, "%s %d\n", name, values[name])
@@ -158,7 +158,7 @@ func TestOperationalObserverRejectsDelayedRuntimeWork(t *testing.T) {
 func TestOperationalObserverRejectsLabeledOrMalformedFixedMetric(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		for name := range isolationMetricNames {
-			if name == "charlie_agent_work_claims_total" {
+			if name == "charlie_agent_work_claim_requests_total" {
 				_, _ = fmt.Fprintf(w, "%s{arbitrary=%q} 0\n", name, "forbidden")
 				continue
 			}

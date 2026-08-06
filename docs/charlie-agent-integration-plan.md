@@ -8,10 +8,10 @@
 > integrated UI or a live deployment.
 >
 > **Implementation branch:** `feat/charlie-core-integration`; source schema
-> version 154 and Charlie release candidate `1.0.26`. Repository verification
+> version 154 and Charlie release candidate `1.0.27`. Repository verification
 > covers the cumulative authority matrix, HA mode fencing, exact approval replay,
 > actionable alerts, destructive/confused-deputy denial, and downstream-boundary
-> attribution. Charlie `1.0.26` and Astronomer schema 154 are the current
+> attribution. Charlie `1.0.27` and Astronomer schema 154 are the current
 > development qualification candidates. The unchecked live packet-isolation, full approval,
 > automation, outage, failover, and multi-deployment gates remain release gates.
 >
