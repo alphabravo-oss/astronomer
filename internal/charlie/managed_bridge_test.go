@@ -86,6 +86,15 @@ func TestManagedBridgeOperationalDisabledPermitsOnlyConfigurationPlane(t *testin
 	if configured, ok := bridge.configurationConnection(context.Background()); !ok || configured.ID != connection.ID {
 		t.Fatal("wire-disabled enabled connection lost its signed configuration control plane")
 	}
+	connections.row.EmergencyDisabled = true
+	connections.row.RequestedMode = string(ModeAuto)
+	connections.row.VerifiedMode = string(ModeAuto)
+	if configured, ok := bridge.configurationConnection(context.Background()); !ok || configured.ID != connection.ID {
+		t.Fatal("emergency-disabled connection lost the control-only transport needed to confirm disable and suspend")
+	}
+	if _, err := bridge.runtimeBridge(context.Background()); err == nil || bridge.runtime != nil {
+		t.Fatal("emergency-disabled integration constructed an intelligence/work transport")
+	}
 	connections.row.Active = false
 	if _, ok := bridge.configurationConnection(context.Background()); ok {
 		t.Fatal("inactive connection retained a configuration network path")

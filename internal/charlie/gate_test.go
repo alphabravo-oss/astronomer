@@ -34,7 +34,8 @@ func TestActivationFailsClosedForEveryIncompleteState(t *testing.T) {
 		{"no connection store", gateFeature(true), nil, ActivationUnconfigured, false},
 		{"connection read failed", gateFeature(true), gateConnection{err: errors.New("db")}, ActivationUnconfigured, false},
 		{"install incomplete", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "secrets_written"}}, ActivationInstalling, false},
-		{"emergency", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", EmergencyDisabled: true, RequestedMode: "auto", VerifiedMode: "auto"}}, ActivationEmergencyStop, false},
+		{"emergency", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", EmergencyDisabled: true, RequestedMode: "auto", VerifiedMode: "auto"}}, ActivationEmergencyStop, true},
+		{"emergency inactive", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: false, OnboardingState: "active", EmergencyDisabled: true, RequestedMode: "auto", VerifiedMode: "auto"}}, ActivationEmergencyStop, false},
 		{"mode disabled", gateFeature(true), gateConnection{row: sqlc.CharlieConnection{Active: true, OnboardingState: "active", RequestedMode: "disabled", VerifiedMode: "disabled"}}, ActivationInactive, true},
 	}
 	for _, tc := range cases {

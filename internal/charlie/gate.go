@@ -49,7 +49,13 @@ func EvaluateActivation(ctx context.Context, features featureReader, connections
 		return activationResult(Activation{State: ActivationUnconfigured, HealthOnly: true})
 	}
 	if connection.EmergencyDisabled {
-		return activationResult(Activation{State: ActivationEmergencyStop, HealthOnly: true, Connection: connection})
+		// Emergency disable is an execution boundary, not a control-plane
+		// transport boundary. Keep the narrowly scoped configuration channel
+		// available for an active installation so the product can confirm remote
+		// disable, settle streams, suspend the agent, and later perform the
+		// explicit disabled-mode recovery handshake. Runtime sessions, evidence,
+		// findings, triggers, and tools remain gated by Runnable=false.
+		return activationResult(Activation{State: ActivationEmergencyStop, Configurable: connection.Active, HealthOnly: true, Connection: connection})
 	}
 	if connection.OnboardingState != "active" {
 		return activationResult(Activation{State: ActivationInstalling, HealthOnly: true, Connection: connection})
