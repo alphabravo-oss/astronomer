@@ -150,6 +150,32 @@ func TestModeReconcileCentralDowngradeCancelsAndDrainsAdmittedWrite(t *testing.T
 	}
 }
 
+func TestModeReconcileSameExecutableModeReopensAfterNewRevisionReadback(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeApproval, ModeApproval
+	store := &fakeModeStore{state: state}
+	remote := ModeState{ConnectionID: state.ConnectionID, Active: true, Requested: ModeApproval,
+		Verified: ModeApproval, Revision: 5, DisclosureDigest: "disclosure-b"}
+	bridge := &fakeModeBridge{state: remote}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge}, &authorityAuditFake{})
+	controller.writes.Close()
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(_ context.Context, target ModeCeilingTarget) error {
+		if target.Desired != ModeApproval || target.ExpectedRevision != 5 ||
+			!controller.writes.State().Closed || store.state.Verified != ModeApproval || store.state.Revision != 5 {
+			t.Fatalf("same-mode rollout escaped the fenced revision boundary: target=%+v state=%+v fence=%+v",
+				target, store.state, controller.writes.State())
+		}
+		return nil
+	}))
+
+	got, err := controller.Reconcile(t.Context())
+	if err != nil || got.Verified != ModeApproval || got.Revision != 5 || bridge.statusCalls != 2 ||
+		controller.writes.State().Closed {
+		t.Fatalf("same executable mode did not reopen after exact readback: state=%+v statuses=%d fence=%+v err=%v",
+			got, bridge.statusCalls, controller.writes.State(), err)
+	}
+}
+
 func TestModeReconcileUpwardRestorationRequiresFreshReadbackBeforeOpen(t *testing.T) {
 	state := activeModeState()
 	state.Requested, state.Verified = ModeAuto, ModeApproval

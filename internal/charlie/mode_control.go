@@ -358,6 +358,16 @@ func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
 		if loadErr != nil || !sameLocalModeSnapshot(final, latest) {
 			return final, fmt.Errorf("Charlie mode state changed during agent rollout")
 		}
+		// A newer central revision can preserve an executable effective mode
+		// (for example, an audited safety-policy update while approval mode
+		// remains active). The reconciliation fence is required while the new
+		// revision is persisted and rolled out, but it must be reopened after
+		// exact readback succeeds. Lower read-only and disabled ceilings stay
+		// closed.
+		if safeCeiling == ModeApproval || safeCeiling == ModeAuto {
+			release()
+			c.writes.Open()
+		}
 		return final, nil
 	}
 
