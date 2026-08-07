@@ -533,6 +533,10 @@ func (g *ActionGuard) executeAndVerify(ctx context.Context, envelope ActionEnvel
 	}
 	if durable {
 		if err := g.receipts.Transition(ctx, envelope, "dispatched", ActionResult{Allowed: true, State: "dispatched"}); err != nil {
+			g.logPersistenceFailure(ctx, receiptTransitionFailureCode(err))
+			if ctx.Err() != nil {
+				return g.recordFenced(ctx, envelope, descriptor, "Charlie write execution was disabled during dispatch persistence")
+			}
 			result := denied(DeniedAmbiguousPriorAttempt, "Dispatch state could not be recorded safely")
 			g.recordAuditOutcome(ctx, "failed", envelope, descriptor, result)
 			return result

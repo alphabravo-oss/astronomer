@@ -36,6 +36,32 @@ type DBActionReceiptStore struct {
 	now        func() time.Time
 }
 
+var (
+	errReceiptTransitionLoad    = errors.New("Charlie receipt transition load failed")
+	errReceiptTransitionBinding = errors.New("Charlie receipt transition binding failed")
+	errReceiptTransitionState   = errors.New("Charlie receipt transition state failed")
+	errReceiptTransitionEncode  = errors.New("Charlie receipt transition encoding failed")
+	errReceiptTransitionEncrypt = errors.New("Charlie receipt transition encryption failed")
+	errReceiptTransitionPersist = errors.New("Charlie receipt transition persistence failed")
+)
+
+func receiptTransitionFailureCode(err error) string {
+	switch {
+	case errors.Is(err, errReceiptTransitionLoad):
+		return "charlie.action_receipt_transition_load_failed"
+	case errors.Is(err, errReceiptTransitionBinding):
+		return "charlie.action_receipt_transition_binding_failed"
+	case errors.Is(err, errReceiptTransitionState):
+		return "charlie.action_receipt_transition_state_failed"
+	case errors.Is(err, errReceiptTransitionEncode):
+		return "charlie.action_receipt_transition_encode_failed"
+	case errors.Is(err, errReceiptTransitionEncrypt):
+		return "charlie.action_receipt_transition_encrypt_failed"
+	default:
+		return "charlie.action_receipt_transition_persist_failed"
+	}
+}
+
 func NewDBActionReceiptStore(queries actionReceiptQueries, cipher actionReceiptCipher, leaseOwner string) (*DBActionReceiptStore, error) {
 	if queries == nil || cipher == nil || leaseOwner == "" || len(leaseOwner) > 128 {
 		return nil, fmt.Errorf("Charlie action receipts require a store, encryption, and bounded server identity")
@@ -107,22 +133,22 @@ func (s *DBActionReceiptStore) Claim(ctx context.Context, action ActionEnvelope,
 func (s *DBActionReceiptStore) Transition(ctx context.Context, action ActionEnvelope, next string, result ActionResult) error {
 	receipt, err := s.queries.GetCharlieActionReceipt(ctx, action.ActionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w", errReceiptTransitionLoad)
 	}
 	if receipt.ArgumentDigest != action.ArgumentDigest || receipt.AuthorizationHash != HashDelegation(action.AuthorizationRef) || receipt.FencingEpoch != action.FencingEpoch || receipt.LeaseOwner != s.leaseOwner {
-		return fmt.Errorf("Charlie action receipt binding changed")
+		return fmt.Errorf("%w", errReceiptTransitionBinding)
 	}
 	if !validReceiptTransition(receipt.State, next) {
-		return fmt.Errorf("Charlie action receipt transition is invalid")
+		return fmt.Errorf("%w", errReceiptTransitionState)
 	}
 	bounded := result
 	encoded, err := json.Marshal(bounded)
 	if err != nil || len(encoded) == 0 || len(encoded) > maxActionResult+(16<<10) {
-		return fmt.Errorf("Charlie action receipt result exceeds its safe bound")
+		return fmt.Errorf("%w", errReceiptTransitionEncode)
 	}
 	resultEncrypted, err := s.cipher.Encrypt(string(encoded))
 	if err != nil || resultEncrypted == "" {
-		return fmt.Errorf("encrypt Charlie action receipt result")
+		return fmt.Errorf("%w", errReceiptTransitionEncrypt)
 	}
 	_, err = s.queries.TransitionCharlieActionReceipt(ctx, sqlc.TransitionCharlieActionReceiptParams{
 		NextState: next, ResultDigest: digestBytes(encoded), ResultStatus: result.State,
@@ -130,7 +156,10 @@ func (s *DBActionReceiptStore) Transition(ctx context.Context, action ActionEnve
 		ID:              receipt.ID, ExpectedState: receipt.State, LeaseOwner: s.leaseOwner,
 		FencingEpoch: action.FencingEpoch,
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("%w", errReceiptTransitionPersist)
+	}
+	return nil
 }
 
 func (s *DBActionReceiptStore) decryptResult(receipt sqlc.CharlieActionReceipt) (ActionResult, error) {
