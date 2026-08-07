@@ -191,6 +191,15 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 		})
 	}()
 	descriptor, arguments, code := g.validate(envelope)
+	// Product operation identifiers are execution authority, not model input.
+	// The signed Charlie action ID and matching Idempotency-Key header are the
+	// canonical single-use identity. Replace the disclosed argument only after
+	// its signature/digest has been verified, before any authority, receipt, or
+	// adapter consumes it. This prevents a model-selected correlation label from
+	// controlling product-side idempotency while keeping adapter APIs uniform.
+	if code == "" && descriptor.Effect == EffectWrite {
+		arguments = bindTrustedOperationID(arguments, envelope.ActionID)
+	}
 	operationCtx := ctx
 	if code == "" && descriptor.Effect == EffectWrite {
 		var releaseWrite func()
@@ -738,14 +747,17 @@ func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, m
 	if validateCapabilityArguments(descriptor, arguments) != nil {
 		return CapabilityDescriptor{}, nil, DeniedScope
 	}
-	if descriptor.Effect == EffectWrite {
-		operation, ok := arguments["operation_id"]
-		var operationID string
-		if !ok || json.Unmarshal(operation, &operationID) != nil || operationID != envelope.ActionID {
-			return CapabilityDescriptor{}, nil, DeniedIdempotency
-		}
-	}
 	return descriptor, arguments, ""
+}
+
+func bindTrustedOperationID(arguments map[string]json.RawMessage, actionID string) map[string]json.RawMessage {
+	bound := make(map[string]json.RawMessage, len(arguments))
+	for name, value := range arguments {
+		bound[name] = append(json.RawMessage(nil), value...)
+	}
+	encoded, _ := json.Marshal(actionID)
+	bound["operation_id"] = encoded
+	return bound
 }
 
 // capabilityArgumentDigest binds the canonical arguments to the exact

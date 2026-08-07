@@ -70,6 +70,7 @@ func (f *fakeReceipts) Transition(ctx context.Context, _ ActionEnvelope, state s
 type fakeCapabilityExecutor struct {
 	calls          int
 	verifyCalls    int
+	arguments      map[string]json.RawMessage
 	result         json.RawMessage
 	error          error
 	verified       bool
@@ -221,8 +222,9 @@ func (f *fakeActionAuditor) Record(ctx context.Context, phase string, _ ActionEn
 	return f.error
 }
 
-func (f *fakeCapabilityExecutor) Execute(ctx context.Context, _ CapabilityDescriptor, _ map[string]json.RawMessage) (json.RawMessage, error) {
+func (f *fakeCapabilityExecutor) Execute(ctx context.Context, _ CapabilityDescriptor, arguments map[string]json.RawMessage) (json.RawMessage, error) {
 	f.calls++
+	f.arguments = arguments
 	if f.waitForContext {
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -332,6 +334,29 @@ func TestActionGuardExecutesBoundedWriteOnceAndVerifies(t *testing.T) {
 	want := []string{"dispatched", "succeeded"}
 	if stringSlice(receipts.transitions) != stringSlice(want) {
 		t.Fatalf("transitions=%v", receipts.transitions)
+	}
+}
+
+func TestActionGuardBindsProductOperationToSignedActionID(t *testing.T) {
+	facts := allowedWriteFacts(ModeApproval)
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+	receipts := &fakeReceipts{}
+	executor := &fakeCapabilityExecutor{verified: true}
+	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
+	action := signedTestAction(t, privateKey, "astronomer.argocd.self_management_sync", map[string]any{
+		"resource_id": "resource-a", "application": "astronomer-self-manage", "operation_id": "model-correlation-label",
+	})
+
+	result := guard.Execute(context.Background(), action)
+	if !result.Allowed || result.State != "succeeded" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	var operationID string
+	if err := json.Unmarshal(executor.arguments["operation_id"], &operationID); err != nil {
+		t.Fatal(err)
+	}
+	if operationID != action.ActionID {
+		t.Fatalf("adapter operation_id = %q, want signed action ID %q", operationID, action.ActionID)
 	}
 }
 
