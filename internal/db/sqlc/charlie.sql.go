@@ -4876,8 +4876,8 @@ SET state = $1,
     result_digest = $2,
     result_status = $3,
     result_encrypted = $4,
-    dispatched_at = CASE WHEN $1::text = 'dispatched' THEN now() ELSE dispatched_at END,
-    verified_at = CASE WHEN $1::text IN ('succeeded', 'failed') THEN now() ELSE verified_at END,
+    dispatched_at = CASE WHEN $1::varchar = 'dispatched' THEN now() ELSE dispatched_at END,
+    verified_at = CASE WHEN $1::varchar IN ('succeeded', 'failed') THEN now() ELSE verified_at END,
     updated_at = now()
 WHERE id = $5
   AND state = $6

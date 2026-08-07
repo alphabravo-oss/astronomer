@@ -582,8 +582,8 @@ SET state = sqlc.arg(next_state),
     result_digest = sqlc.arg(result_digest),
     result_status = sqlc.arg(result_status),
     result_encrypted = sqlc.arg(result_encrypted),
-    dispatched_at = CASE WHEN sqlc.arg(next_state)::text = 'dispatched' THEN now() ELSE dispatched_at END,
-    verified_at = CASE WHEN sqlc.arg(next_state)::text IN ('succeeded', 'failed') THEN now() ELSE verified_at END,
+    dispatched_at = CASE WHEN sqlc.arg(next_state)::varchar = 'dispatched' THEN now() ELSE dispatched_at END,
+    verified_at = CASE WHEN sqlc.arg(next_state)::varchar IN ('succeeded', 'failed') THEN now() ELSE verified_at END,
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND state = sqlc.arg(expected_state)
