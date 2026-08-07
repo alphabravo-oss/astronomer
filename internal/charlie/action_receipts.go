@@ -56,6 +56,8 @@ func (s *DBActionReceiptStore) Claim(ctx context.Context, action ActionEnvelope,
 	if err != nil || session.ConnectionID != connection.ID || (session.State != "active" && session.State != "waiting_approval") {
 		return ReceiptClaim{}, fmt.Errorf("Charlie session binding changed")
 	}
+	leaseExpiresAt := s.now().UTC().Add(45 * time.Second)
+	auditCorrelationID := uuid.New()
 	_, err = s.queries.ClaimCharlieActionReceipt(ctx, sqlc.ClaimCharlieActionReceiptParams{
 		ConnectionID: connection.ID, SessionID: session.ID,
 		CharlieActionID: action.ActionID, TurnID: action.TurnID,
@@ -63,22 +65,30 @@ func (s *DBActionReceiptStore) Claim(ctx context.Context, action ActionEnvelope,
 		ArgumentDigest: action.ArgumentDigest, ArgumentsEncrypted: argumentsEncrypted,
 		AuthorizationHash: HashDelegation(action.AuthorizationRef),
 		FencingEpoch:      action.FencingEpoch, ProductIdempotencyKey: action.IdempotencyKey,
-		LeaseOwner: s.leaseOwner, LeaseExpiresAt: s.now().UTC().Add(45 * time.Second),
-		AuditCorrelationID: uuid.New(),
+		LeaseOwner: s.leaseOwner, LeaseExpiresAt: leaseExpiresAt,
+		AuditCorrelationID: auditCorrelationID,
 		ResourceDigest:     resourceDigest(capability.Name, argumentsForResourceDigest(action.Arguments)),
 	})
 	if err == nil {
 		return ReceiptClaim{Disposition: ReceiptClaimed}, nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return ReceiptClaim{}, err
-	}
+	claimErr := err
 	existing, err := s.queries.GetCharlieActionReceipt(ctx, action.ActionID)
 	if err != nil {
+		if !errors.Is(claimErr, pgx.ErrNoRows) {
+			return ReceiptClaim{}, claimErr
+		}
 		return ReceiptClaim{}, err
 	}
 	if existing.ConnectionID != connection.ID || existing.SessionID != session.ID || existing.TurnID != action.TurnID || existing.Capability != capability.Name || existing.Effect != string(capability.Effect) || existing.ArgumentDigest != action.ArgumentDigest || existing.AuthorizationHash != HashDelegation(action.AuthorizationRef) || existing.FencingEpoch != action.FencingEpoch || existing.ProductIdempotencyKey != action.IdempotencyKey || existing.ResourceDigest != resourceDigest(capability.Name, argumentsForResourceDigest(action.Arguments)) {
 		return ReceiptClaim{Disposition: ReceiptConflict}, nil
+	}
+	// PostgreSQL may commit an INSERT while the caller loses the RETURNING row
+	// (for example when a context is cancelled during row decoding). The unique
+	// audit correlation ID proves this exact call owns that committed claim. A
+	// concurrent or prior claim has a different ID and remains ambiguous.
+	if existing.State == "claimed" && existing.LeaseOwner == s.leaseOwner && existing.AuditCorrelationID == auditCorrelationID {
+		return ReceiptClaim{Disposition: ReceiptClaimed}, nil
 	}
 	switch existing.State {
 	case "succeeded", "failed", "blocked", "fenced", "deferred":

@@ -123,6 +123,11 @@ func (r *AmbiguousReceiptReconciler) decryptArguments(receipt sqlc.CharlieAction
 	if err != nil || digestBytes(canonical) != receipt.ArgumentDigest || !receiptArgumentsMatchDescriptor(descriptor, arguments) || validateCapabilityArguments(descriptor, arguments) != nil {
 		return nil, fmt.Errorf("Charlie receipt argument integrity failed")
 	}
+	// The persisted arguments remain the exact signed model proposal so their
+	// digest can be revalidated. Product adapters, including post-crash
+	// verification, always receive Charlie's signed action ID as the trusted
+	// operation identity.
+	arguments = bindTrustedOperationID(arguments, receipt.CharlieActionID)
 	return arguments, nil
 }
 

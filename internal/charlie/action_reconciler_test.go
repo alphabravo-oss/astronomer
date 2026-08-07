@@ -41,17 +41,19 @@ func (f *reconcileQueriesFake) TransitionCharlieActionReceipt(_ context.Context,
 }
 
 type reconcileExecutorFake struct {
-	verified     bool
-	verifyCalls  int
-	executeCalls int
+	verified        bool
+	verifyCalls     int
+	executeCalls    int
+	verifyArguments map[string]json.RawMessage
 }
 
 func (f *reconcileExecutorFake) Execute(context.Context, CapabilityDescriptor, map[string]json.RawMessage) (json.RawMessage, error) {
 	f.executeCalls++
 	return nil, nil
 }
-func (f *reconcileExecutorFake) Verify(context.Context, CapabilityDescriptor, map[string]json.RawMessage, json.RawMessage) (bool, error) {
+func (f *reconcileExecutorFake) Verify(_ context.Context, _ CapabilityDescriptor, arguments map[string]json.RawMessage, _ json.RawMessage) (bool, error) {
 	f.verifyCalls++
+	f.verifyArguments = arguments
 	return f.verified, nil
 }
 
@@ -69,7 +71,7 @@ func (f *reconcileAuditFake) RecordReceiptReconciliation(_ context.Context, _ sq
 func reconcilerFixture(t *testing.T, verified bool, age time.Duration) (*AmbiguousReceiptReconciler, *reconcileQueriesFake, *reconcileExecutorFake, *reconcileAuditFake) {
 	t.Helper()
 	now := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
-	arguments := json.RawMessage(`{"resource_id":"resource-a","task_id":"task-a","operation_id":"action-a"}`)
+	arguments := json.RawMessage(`{"resource_id":"resource-a","task_id":"task-a","operation_id":"model-selected-label"}`)
 	canonical, _, err := canonicalArguments(arguments)
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +100,10 @@ func TestAmbiguousReceiptReconcilerVerifiesWithoutRedispatch(t *testing.T) {
 	}
 	if executor.executeCalls != 0 || executor.verifyCalls != 1 || queries.transition.NextState != "succeeded" || auditor.outcome != "succeeded" {
 		t.Fatalf("unsafe reconciliation: execute=%d verify=%d transition=%+v audit=%+v", executor.executeCalls, executor.verifyCalls, queries.transition, auditor)
+	}
+	var operationID string
+	if err := json.Unmarshal(executor.verifyArguments["operation_id"], &operationID); err != nil || operationID != queries.receipt.CharlieActionID {
+		t.Fatalf("reconciliation used untrusted operation ID %q: %v", operationID, err)
 	}
 	plain, err := receiptTestCipher{}.Decrypt(queries.transition.ResultEncrypted)
 	if err != nil || !json.Valid([]byte(plain)) || queries.transition.ResultDigest != digestBytes([]byte(plain)) {

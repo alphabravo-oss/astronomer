@@ -24,12 +24,13 @@ func (receiptTestCipher) Decrypt(value string) (string, error) {
 }
 
 type fakeReceiptQueries struct {
-	connection sqlc.CharlieConnection
-	session    sqlc.CharlieSession
-	receipt    sqlc.CharlieActionReceipt
-	claimErr   error
-	transition sqlc.TransitionCharlieActionReceiptParams
-	claimCalls int
+	connection             sqlc.CharlieConnection
+	session                sqlc.CharlieSession
+	receipt                sqlc.CharlieActionReceipt
+	claimErr               error
+	commitClaimBeforeError bool
+	transition             sqlc.TransitionCharlieActionReceiptParams
+	claimCalls             int
 }
 
 func (f *fakeReceiptQueries) GetCharlieConnectionByDeploymentID(context.Context, string) (sqlc.CharlieConnection, error) {
@@ -40,7 +41,7 @@ func (f *fakeReceiptQueries) GetCharlieSessionByCentralID(context.Context, strin
 }
 func (f *fakeReceiptQueries) ClaimCharlieActionReceipt(_ context.Context, arg sqlc.ClaimCharlieActionReceiptParams) (sqlc.CharlieActionReceipt, error) {
 	f.claimCalls++
-	if f.claimErr != nil {
+	if f.claimErr != nil && !f.commitClaimBeforeError {
 		return sqlc.CharlieActionReceipt{}, f.claimErr
 	}
 	f.receipt = sqlc.CharlieActionReceipt{
@@ -51,7 +52,10 @@ func (f *fakeReceiptQueries) ClaimCharlieActionReceipt(_ context.Context, arg sq
 		AuthorizationHash:  arg.AuthorizationHash, FencingEpoch: arg.FencingEpoch,
 		ProductIdempotencyKey: arg.ProductIdempotencyKey, State: "claimed",
 		LeaseOwner: arg.LeaseOwner, LeaseExpiresAt: arg.LeaseExpiresAt,
-		ResourceDigest: arg.ResourceDigest,
+		ResourceDigest: arg.ResourceDigest, AuditCorrelationID: arg.AuditCorrelationID,
+	}
+	if f.claimErr != nil {
+		return sqlc.CharlieActionReceipt{}, f.claimErr
 	}
 	return f.receipt, nil
 }
@@ -95,6 +99,24 @@ func TestDBActionReceiptClaimBindsDeploymentSessionAuthorityAndFence(t *testing.
 	receipt := queries.receipt
 	if receipt.ConnectionID != queries.connection.ID || receipt.SessionID != queries.session.ID || receipt.AuthorizationHash != HashDelegation(action.AuthorizationRef) || receipt.FencingEpoch != 7 || receipt.LeaseOwner != "server-a" || !receipt.LeaseExpiresAt.Equal(store.now().Add(45*time.Second)) {
 		t.Fatalf("receipt binding incomplete: %+v", receipt)
+	}
+}
+
+func TestDBActionReceiptRecoversItsCommittedClaimWhenReturningIsLost(t *testing.T) {
+	queries, action, capability := receiptFixture()
+	queries.claimErr = context.Canceled
+	queries.commitClaimBeforeError = true
+	store, _ := NewDBActionReceiptStore(queries, receiptTestCipher{}, "server-a")
+	claim, err := store.Claim(context.Background(), action, capability)
+	if err != nil || claim.Disposition != ReceiptClaimed {
+		t.Fatalf("committed claim=%+v err=%v", claim, err)
+	}
+	queries.receipt.AuditCorrelationID = uuid.New()
+	queries.commitClaimBeforeError = false
+	queries.claimErr = pgx.ErrNoRows
+	claim, err = store.Claim(context.Background(), action, capability)
+	if err != nil || claim.Disposition != ReceiptAmbiguous {
+		t.Fatalf("foreign committed claim=%+v err=%v", claim, err)
 	}
 }
 
