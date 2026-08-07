@@ -13,6 +13,11 @@ import (
 )
 
 func TestCharlieMetricLabelsAreFixedVocabulary(t *testing.T) {
+	for _, operation := range []string{"list_approvals", "decide_approval"} {
+		if got := bridgeOperationLabel(operation); got != operation {
+			t.Fatalf("known bridge operation %q became %q", operation, got)
+		}
+	}
 	if got := bridgeOperationLabel("prompt-secret-canary"); got != "unknown" {
 		t.Fatalf("untrusted bridge operation became a label: %q", got)
 	}

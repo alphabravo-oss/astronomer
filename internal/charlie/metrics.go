@@ -247,7 +247,7 @@ func observeTrigger(rule, outcome string) {
 
 func bridgeOperationLabel(value string) string {
 	switch value {
-	case "create_session", "get_session", "get_history", "create_message", "abort_session", "stream_events", "create_investigation", "get_finding", "transition_finding":
+	case "create_session", "get_session", "get_history", "create_message", "abort_session", "stream_events", "list_approvals", "decide_approval", "create_investigation", "get_finding", "transition_finding":
 		return value
 	default:
 		return "unknown"
