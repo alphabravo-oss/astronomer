@@ -49,6 +49,7 @@ server through this resource/action contract.
 | `network_policies` | Global network policy template CRUD and policy-template management. |
 | `custom_resources` | k8s-proxy access to custom resources (CRDs / non-core apigroups under `apis/<group>/<version>/...`). Lets operators grant or withhold CRD access deliberately instead of having it collapse into the generic `clusters` permission. |
 | `audit_ingest` | Machine-only write side of kube-apiserver audit collection: the per-cluster agent POSTing batched audit events. Separate from `audit_logs` (reading that evidence back) so an agent ingest credential cannot also satisfy `clusters:update`. |
+| `charlie` | Optional Charlie SRE assistant sessions, findings, approvals, and integration administration. Charlie permission never substitutes for the underlying target-resource permission. |
 | `*` | Owner/admin wildcard. Allowed only in built-in owner/admin roles or explicit break-glass grants. |
 
 ## Verbs
@@ -68,6 +69,7 @@ server through this resource/action contract.
 | `proxy` | Forward traffic to a Kubernetes, service, pod, Argo, or agent-backed proxy target. |
 | `sync` | Trigger Argo CD sync, rollback, or deployment convergence action. |
 | `manage` | High-risk compound action that spans several lower-level verbs or controls lifecycle state. |
+| `approve` | Decide one exact, expiring Charlie action. The approver must also hold the underlying target-resource permission at dispatch time. |
 | `*` | Owner/admin wildcard. Allowed only in built-in owner/admin roles or explicit break-glass grants. |
 
 ## UI To Permission Map

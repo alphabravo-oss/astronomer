@@ -56,6 +56,8 @@ const WIRE_TYPES = [
   'snapshot.changed',
   // P4.9 coverage-completion publishers.
   'alerting.changed',
+  'charlie_finding.changed',
+  'charlie_investigation.changed',
   'security_policy.changed',
   'security_scan.changed',
   'network_access.changed',
@@ -106,6 +108,8 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   // P4.9 — the shared fixture carries no `kind`, so alerting.changed hits
   // its whole-domain fallback here; per-kind rows are asserted separately.
   'alerting.changed': [qk.alerting.all, qk.anomalyBaselines.all],
+  'charlie_finding.changed': [qk.charlie.findings, qk.charlie.overview, qk.charlie.finding(EID)],
+  'charlie_investigation.changed': [qk.charlie.sessions, qk.charlie.overview],
   'security_policy.changed': [qk.security.policies],
   'security_scan.changed': [qk.security.scansAll],
   'network_access.changed': [

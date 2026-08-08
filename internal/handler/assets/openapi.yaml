@@ -48,6 +48,629 @@ components:
         ArgoCD cluster Secret. It is hash-validated, expiration/revocation
         checked, and bound to the cluster ID in the request path.
   schemas:
+    CharlieOnboardingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - package
+        - signing_public_key
+        - confirmed_signing_key_id
+        - confirmed_signing_fingerprint
+        - expected_deployment_id
+        - expected_route_id
+      properties:
+        package:
+          type: object
+          writeOnly: true
+          description: Signed charlie.onboarding/v1 package; may contain one-time credentials.
+        signing_public_key:
+          type: string
+          writeOnly: true
+          description: Base64url Ed25519 public key confirmed out of band by the operator.
+        confirmed_signing_key_id:
+          type: string
+        confirmed_signing_fingerprint:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        expected_deployment_id:
+          type: string
+        expected_route_id:
+          type: string
+    CharlieOnboardingStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - package_id
+        - product_id
+        - product_slug
+        - deployment_id
+        - logical_agent_id
+        - integration_id
+        - mcp_url
+        - route_id
+        - allowed_route_ids
+        - schema
+        - central_api_version
+        - central_trust_fingerprint
+        - signing_key_id
+        - signing_fingerprint
+        - package_digest
+        - artifact
+        - replica_count
+        - issued_at
+        - expires_at
+        - state
+        - idempotent
+      properties:
+        package_id:
+          type: string
+        product_id: {type: string}
+        product_slug: {type: string, enum: [astronomer]}
+        deployment_id:
+          type: string
+        logical_agent_id: {type: string}
+        integration_id: {type: string}
+        mcp_url: {type: string, format: uri}
+        route_id:
+          type: string
+        allowed_route_ids: {type: array, items: {type: string}}
+        schema: {type: string, enum: [charlie.onboarding/v1]}
+        central_api_version: {type: string, enum: [charlie/v1]}
+        central_trust_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        signing_key_id: {type: string}
+        signing_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        package_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+        artifact:
+          type: object
+          additionalProperties: false
+          required: [image, manifest_digest, chart, chart_digest]
+          properties:
+            image: {type: string}
+            manifest_digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+            chart: {type: string}
+            chart_digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        replica_count: {type: integer, minimum: 2, maximum: 20}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        state:
+          type: string
+          enum: [validated, consumed]
+        idempotent:
+          type: boolean
+    CharlieSessionResource:
+      type: object
+      additionalProperties: false
+      required: [type, id, required_verb]
+      properties:
+        type:
+          type: string
+          enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, agent_fleet, tunnel]
+        id:
+          type: string
+          maxLength: 255
+        required_verb:
+          type: string
+          const: read
+    CharlieSessionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [client_session_id, intent]
+      properties:
+        client_session_id: {type: string, format: uuid}
+        intent: {type: string, minLength: 1, maxLength: 4096}
+        trigger: {type: string, maxLength: 128}
+        current_ui_context: {type: string, maxLength: 255}
+        resources:
+          type: array
+          maxItems: 25
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CharlieSessionResource'}
+    CharlieMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [client_message_id, message]
+      properties:
+        client_message_id: {type: string, format: uuid}
+        message: {type: string, minLength: 1, maxLength: 32768}
+    CharlieAbortRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id: {type: string, format: uuid}
+    CharlieSessionMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, client_session_id, intent, resource_scope_summary, state, visibility, central_revision, source, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        client_session_id: {type: string, format: uuid}
+        intent: {type: string}
+        resource_scope_summary: {type: string}
+        state:
+          type: string
+          enum: [creating, active, waiting_approval, completed, aborted, failed]
+        visibility: {type: string, enum: [private, incident]}
+        central_revision: {type: integer, format: int64, minimum: 0}
+        source: {type: string, enum: [user, event]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CharlieFindingResource:
+      type: object
+      additionalProperties: false
+      required: [type, id, required_verb]
+      properties:
+        type: {type: string, enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, agent_fleet, tunnel]}
+        id: {type: string, minLength: 1, maxLength: 255}
+        required_verb: {type: string, enum: [read]}
+    CharlieFindingSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, severity, state, summary, reason_no_action, repeat_count, updated_at, affected_resource, workflow_state, available_decisions]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, maxLength: 256}
+        severity: {type: string, enum: [info, low, medium, high, critical]}
+        state: {type: string, enum: [open, acknowledged, dismissed, resolved, expired]}
+        summary: {type: string, maxLength: 2048}
+        reason_no_action: {type: string, maxLength: 64}
+        repeat_count: {type: integer, minimum: 1}
+        updated_at: {type: string, format: date-time}
+        affected_resource: {$ref: '#/components/schemas/CharlieFindingResource'}
+        workflow_state:
+          type: string
+          enum: [approval_pending, manual_remediation_required, remediation_in_progress, verification_pending, resolved, rejected, dismissed, expired]
+          description: Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+        available_decisions:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          items:
+            type: string
+            enum: [acknowledge, start_remediation, request_verification, dismiss, resolve]
+          description: Exact currently legal decisions. Clients must not infer or add decisions from model content.
+    CharlieFindingVerification:
+      type: object
+      additionalProperties: false
+      required: [method, steps]
+      properties:
+        method: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+    CharlieFindingManualRemediation:
+      type: object
+      additionalProperties: false
+      required: [steps, expected_impact, verification]
+      properties:
+        preconditions:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 256}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+        expected_impact: {type: string, minLength: 1, maxLength: 1024}
+        rollback: {type: string, minLength: 1, maxLength: 1024}
+        verification: {$ref: '#/components/schemas/CharlieFindingVerification'}
+    CharlieFindingAdvisoryDetail:
+      type: object
+      additionalProperties: false
+      required: [evidence_summary, diagnosis, confidence, risk_impact, operator_checks, verification_steps]
+      properties:
+        evidence_summary:
+          type: array
+          maxItems: 20
+          items: {type: string, minLength: 1, maxLength: 8192}
+        diagnosis: {type: string, minLength: 1, maxLength: 4096}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        risk_impact: {type: string, minLength: 1, maxLength: 2048}
+        preconditions:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 256}
+        rollback: {type: string, minLength: 1, maxLength: 1024}
+        operator_checks:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+        verification_steps:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 512}
+        manual_remediation: {$ref: '#/components/schemas/CharlieFindingManualRemediation'}
+    CharlieFindingDetail:
+      allOf:
+        - {$ref: '#/components/schemas/CharlieFindingSummary'}
+        - type: object
+          properties:
+            risk_impact: {type: string, maxLength: 1024}
+            verification_summary: {type: string, maxLength: 1024}
+            detail:
+              allOf:
+                - {$ref: '#/components/schemas/CharlieFindingAdvisoryDetail'}
+              description: Strict advisory evidence returned only after current product authorization. It cannot contain approval, manifest, signature, action, argument, or authorization fields.
+    CharlieFindingTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id: {type: string, format: uuid}
+    CharlieAdminConnection:
+      type: object
+      additionalProperties: false
+      required: [connected, disclosure_acknowledged]
+      properties:
+        connected: {type: boolean}
+        product_id: {type: string}
+        product_slug: {type: string}
+        deployment_id: {type: string}
+        route_id: {type: string}
+        central_version: {type: string}
+        signing_key_id: {type: string}
+        signing_fingerprint: {type: string}
+        package_digest: {type: string}
+        disclosure_digest: {type: string}
+        disclosure_acknowledged: {type: boolean}
+        updated_at: {type: string, format: date-time}
+    CharlieAdminAgent:
+      type: object
+      additionalProperties: false
+      required: [application_state, desired_replicas, ready_replicas, standby_replicas, replicas]
+      properties:
+        application_state: {type: string, enum: [not_installed, inactive, installing, ready, degraded, unavailable, disconnected]}
+        desired_replicas: {type: integer, format: int32, minimum: 0}
+        ready_replicas: {type: integer, format: int32, minimum: 0}
+        leader_replica: {type: string}
+        standby_replicas: {type: array, items: {type: string}}
+        replicas:
+          type: array
+          maxItems: 20
+          items: {$ref: '#/components/schemas/CharlieAdminAgentReplica'}
+        fencing_epoch: {type: integer, format: int64, minimum: 0}
+        last_heartbeat_at: {type: string, format: date-time}
+        agent_version: {type: string}
+        chart_version: {type: string}
+        chart_digest: {type: string}
+        image_digest: {type: string}
+    CharlieAdminAgentReplica:
+      type: object
+      additionalProperties: false
+      required: [ordinal, role, state]
+      properties:
+        ordinal: {type: integer, minimum: 0, maximum: 19}
+        instance_id: {type: string, description: Opaque product-agent instance identifier; never a credential.}
+        role: {type: string, enum: [leader, standby, unknown]}
+        state: {type: string, enum: [ready, degraded, unavailable, unknown]}
+        last_heartbeat_at: {type: string, format: date-time}
+        version: {type: string}
+    CharlieAdminMode:
+      type: object
+      additionalProperties: false
+      required: [requested, authoritative, revision, emergency_disabled, effects, auto_readiness, workload_ceiling, workload_ceiling_ready]
+      properties:
+        requested: {type: string, enum: [disabled, read_only, approval, auto]}
+        authoritative: {type: string, enum: [disabled, read_only, approval, auto]}
+        revision: {type: integer, format: int64, minimum: 0}
+        emergency_disabled: {type: boolean}
+        disable_pending: {type: boolean}
+        disclosure_digest: {type: string}
+        acknowledged_disclosure_digest: {type: string}
+        effects: {type: array, items: {type: string}}
+        auto_readiness: {$ref: '#/components/schemas/CharlieAdminAutoReadiness'}
+        workload_ceiling: {type: string, enum: [disabled, read_only, approval, auto], description: Product-owned ceiling currently rendered in the agent Argo workload.}
+        workload_ceiling_ready: {type: boolean, description: True only after a non-pruning rollout and exact readback from both ready product-agent replicas.}
+    CharlieAdminAutoReadiness:
+      type: object
+      additionalProperties: false
+      required: [ready, blockers]
+      properties:
+        ready: {type: boolean}
+        blockers:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, message, next_action]
+            properties:
+              code: {type: string, maxLength: 64}
+              message: {type: string, maxLength: 512}
+              next_action: {type: string, maxLength: 512}
+    CharlieAdminStatus:
+      type: object
+      additionalProperties: false
+      required: [connection, agent, mode]
+      properties:
+        connection: {$ref: '#/components/schemas/CharlieAdminConnection'}
+        agent: {$ref: '#/components/schemas/CharlieAdminAgent'}
+        mode: {$ref: '#/components/schemas/CharlieAdminMode'}
+    CharlieAdminActionRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmation]
+      properties:
+        confirmation: {type: string, minLength: 1, maxLength: 64}
+    CharlieModeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        mode: {type: string, enum: [disabled, read_only, approval, auto]}
+        revision: {type: integer, format: int64, minimum: 0}
+        emergency_disable: {type: boolean}
+        acknowledge_disclosure_digest: {type: string, minLength: 64, maxLength: 71}
+      description: Supply mode and revision together, or acknowledge_disclosure_digest alone.
+    CharlieAdminTriggerRule:
+      type: object
+      additionalProperties: false
+      required: [name, source_type, enabled, severities, scopes, cooldown_seconds, grace_period_seconds, flap_window_seconds, flap_count, fleet_threshold_percent, suppressed, maximum_attempts, dead_letter_enabled]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        source_type: {type: string, minLength: 1, maxLength: 64}
+        enabled: {type: boolean}
+        severities: {type: array, minItems: 1, maxItems: 5, uniqueItems: true, items: {type: string, enum: [info, low, medium, high, critical]}}
+        scopes: {type: array, maxItems: 25, uniqueItems: true, items: {type: string, maxLength: 255}}
+        cooldown_seconds: {type: integer, format: int32, minimum: 1}
+        grace_period_seconds: {type: integer, format: int32, minimum: 1}
+        flap_window_seconds: {type: integer, format: int32, minimum: 1}
+        flap_count: {type: integer, format: int32, minimum: 1}
+        fleet_threshold_percent: {type: integer, format: int32, minimum: 0, maximum: 100}
+        minimum_agent_version: {type: string, maxLength: 64}
+        suppressed: {type: boolean}
+        maximum_attempts: {type: integer, format: int32, minimum: 1}
+        dead_letter_enabled: {type: boolean}
+        service_identity: {type: string, readOnly: true}
+    CharlieAdminAutomation:
+      type: object
+      additionalProperties: false
+      required: [rules, action_policies, defaults_revision, service_identity_enabled]
+      properties:
+        rules: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}
+        action_policies: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/CharlieAdminActionPolicy'}}
+        defaults_revision: {type: integer, format: int64, minimum: 0}
+        service_identity_enabled: {type: boolean}
+    CharlieAdminActionPolicy:
+      type: object
+      additionalProperties: false
+      required: [capability, effect, risk, auto_eligible, central_allowlisted, central_state, enabled, revision, max_actions_per_incident, max_actions_per_window, budget_window_seconds, cooldown_seconds, scope_summary, preconditions, verification, circuit_state]
+      properties:
+        capability: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}
+        effect: {type: string, enum: [write]}
+        risk: {type: string, enum: [low, medium, high, critical]}
+        auto_eligible: {type: boolean}
+        central_allowlisted: {type: boolean}
+        central_state: {type: string, enum: [verified, unavailable]}
+        enabled: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 0}
+        max_actions_per_incident: {type: integer, format: int32, minimum: 1, maximum: 100}
+        max_actions_per_window: {type: integer, format: int32, minimum: 1, maximum: 100}
+        budget_window_seconds: {type: integer, format: int32, minimum: 60, maximum: 86400}
+        cooldown_seconds: {type: integer, format: int32, minimum: 30, maximum: 604800}
+        scope_summary: {type: string, maxLength: 512}
+        preconditions: {type: array, maxItems: 16, items: {type: string, maxLength: 512}}
+        verification: {type: string, maxLength: 512}
+        circuit_state: {type: string, enum: [closed, open, unknown]}
+    CharlieAdminActionPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [enabled, max_actions_per_incident, max_actions_per_window, budget_window_seconds, cooldown_seconds]
+      properties:
+        enabled: {type: boolean}
+        max_actions_per_incident: {type: integer, format: int32, minimum: 1, maximum: 100}
+        max_actions_per_window: {type: integer, format: int32, minimum: 1, maximum: 100}
+        budget_window_seconds: {type: integer, format: int32, minimum: 60, maximum: 86400}
+        cooldown_seconds: {type: integer, format: int32, minimum: 30, maximum: 604800}
+    CharlieAdminAlertChannel:
+      type: object
+      additionalProperties: false
+      required: [id, name, type, enabled, destination_configured]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, maxLength: 128}
+        type: {type: string, enum: [slack, pagerduty, msteams, webhook]}
+        enabled: {type: boolean}
+        destination_configured: {type: boolean, description: Indicates a local destination exists without returning its value.}
+    CharlieAdminAlertPolicy:
+      type: object
+      additionalProperties: false
+      required: [enabled, minimum_severity, dedupe_window_seconds, escalation_after_seconds, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, revision, channel_ids, channels, available_channels, in_app_enabled]
+      properties:
+        enabled: {type: boolean}
+        minimum_severity: {type: string, enum: [info, low, medium, warning, high, critical]}
+        dedupe_window_seconds: {type: integer, format: int32, minimum: 60, maximum: 604800}
+        escalation_after_seconds: {type: integer, format: int32, minimum: 0, maximum: 604800}
+        quiet_hours_enabled: {type: boolean}
+        quiet_hours_start: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        quiet_hours_end: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        quiet_hours_timezone: {type: string, minLength: 1, maxLength: 64}
+        revision: {type: integer, format: int64, minimum: 0}
+        channel_ids: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
+        channels: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/CharlieAdminAlertChannel'}}
+        available_channels: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/CharlieAdminAlertChannel'}}
+        in_app_enabled: {type: boolean, readOnly: true, description: Durable findings remain visible in Astronomer regardless of external routing.}
+    CharlieAdminAlertPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [revision, enabled, minimum_severity, dedupe_window_seconds, escalation_after_seconds, quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, channel_ids]
+      properties:
+        revision: {type: integer, format: int64, minimum: 0, description: Exact revision read by the administrator; zero creates the first policy.}
+        enabled: {type: boolean}
+        minimum_severity: {type: string, enum: [info, low, medium, warning, high, critical]}
+        dedupe_window_seconds: {type: integer, format: int32, minimum: 60, maximum: 604800}
+        escalation_after_seconds: {type: integer, format: int32, minimum: 0, maximum: 604800}
+        quiet_hours_enabled: {type: boolean}
+        quiet_hours_start: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        quiet_hours_end: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        quiet_hours_timezone: {type: string, minLength: 1, maxLength: 64}
+        channel_ids: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
+    CharlieAdminAlertDeliveryProof:
+      type: object
+      additionalProperties: false
+      required: [delivery_id, finding_id, delivery_kind, status, template_identity, deep_link_valid, content_free, attempt_count, maximum_attempts, created_at, updated_at]
+      description: Metadata-only proof. Notification subject, body, destination, channel identity, dedupe bucket, and provider errors are never returned.
+      properties:
+        delivery_id: {type: string, format: uuid}
+        finding_id: {type: string, format: uuid}
+        delivery_kind: {type: string, enum: [initial, escalation]}
+        status: {type: string, enum: [queued, delivering, retry, delivered, suppressed, dead]}
+        template_identity: {type: string, enum: [charlie.finding.initial/v1, charlie.finding.escalation/v1, unrecognized]}
+        deep_link_valid: {type: boolean}
+        content_free: {type: boolean, description: True only when the persisted subject/body exactly match Astronomer's fixed content-free template and finding-bound deep link.}
+        attempt_count: {type: integer, format: int32, minimum: 0}
+        maximum_attempts: {type: integer, format: int32, minimum: 1, maximum: 20}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        delivered_at: {type: string, format: date-time}
+    CharlieAdminAlertDeliveryProofView:
+      type: object
+      additionalProperties: false
+      required: [finding_id, finding_block_code, finding_workflow_state, delivery_count, dedupe_valid, deliveries]
+      properties:
+        finding_id: {type: string, format: uuid}
+        finding_block_code: {type: string, maxLength: 64}
+        finding_workflow_state: {type: string, maxLength: 64}
+        delivery_count: {type: integer, minimum: 0, maximum: 32}
+        dedupe_valid: {type: boolean}
+        deliveries: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/CharlieAdminAlertDeliveryProof'}}
+    CharlieDiscoveryQualificationRequest:
+      type: object
+      additionalProperties: false
+      required: [scenario]
+      properties:
+        scenario: {type: string, enum: [mixed_catalog, malformed_catalog]}
+    CharlieAdminDiscoveryQualification:
+      type: object
+      additionalProperties: false
+      required: [scenario, candidate_enabled, accepted_count, rejected_count, accepted_names, catalog_bound, malformed_rejected]
+      properties:
+        scenario: {type: string, enum: [mixed_catalog, malformed_catalog]}
+        candidate_enabled: {type: boolean, description: Whether this fixed candidate generation is eligible to activate; it does not report or modify current integration activation.}
+        accepted_count: {type: integer, minimum: 0, maximum: 2}
+        rejected_count: {type: integer, minimum: 0, maximum: 1}
+        accepted_names: {type: array, maxItems: 2, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}}
+        disclosure_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+        catalog_bound: {type: boolean}
+        malformed_rejected: {type: boolean}
+    CharlieAdminTriggerEvent:
+      type: object
+      additionalProperties: false
+      required: [id, rule_id, event_type, resource_type, resource_id, state, repeat_count, attempt_count, first_occurred_at, last_occurred_at, updated_at]
+      description: UI-safe lifecycle metadata; summary, fingerprint, session, origin, and outbox payload are intentionally omitted.
+      properties:
+        id: {type: string, format: uuid}
+        retry_of_event_id: {type: string, format: uuid}
+        rule_id: {type: string, format: uuid}
+        event_type: {type: string, maxLength: 64}
+        resource_type: {type: string, maxLength: 64}
+        resource_id: {type: string, maxLength: 255}
+        state: {type: string, enum: [pending, dispatching, dispatched, retry, dead, completed, suppressed]}
+        repeat_count: {type: integer, format: int32, minimum: 1}
+        attempt_count: {type: integer, format: int32, minimum: 0}
+        last_error_code: {type: string, maxLength: 64}
+        first_occurred_at: {type: string, format: date-time}
+        last_occurred_at: {type: string, format: date-time}
+        dead_lettered_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CharlieTriggerRetryRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id: {type: string, format: uuid, description: Idempotency key and fresh retry-attempt identifier.}
+    CharlieAdminPermission:
+      type: object
+      additionalProperties: false
+      required: [permission, scope, source]
+      properties:
+        permission: {type: string}
+        scope: {type: string}
+        source: {type: string}
+    CharlieAdminAccess:
+      type: object
+      additionalProperties: false
+      required: [effective_permissions, automation_grants]
+      properties:
+        effective_permissions: {type: array, items: {$ref: '#/components/schemas/CharlieAdminPermission'}}
+        automation_grants: {type: array, items: {$ref: '#/components/schemas/CharlieAdminPermission'}}
+    CharlieAccessRequest:
+      type: object
+      additionalProperties: false
+      required: [automation_service_identity_enabled]
+      properties:
+        automation_service_identity_enabled: {type: boolean}
+    CharlieAdminDiagnosticCheck:
+      type: object
+      additionalProperties: false
+      required: [id, label, state, summary]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        state: {type: string, enum: [healthy, degraded, unavailable, inactive, ready, unknown]}
+        summary: {type: string}
+        checked_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    CharlieAdminDiagnostics:
+      type: object
+      additionalProperties: false
+      required: [overall, checks]
+      properties:
+        overall: {type: string, enum: [healthy, degraded, unavailable, inactive, ready, unknown]}
+        checks: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/CharlieAdminDiagnosticCheck'}}
+        correlation_id: {type: string}
+    CharlieContextSearchResult:
+      type: object
+      additionalProperties: false
+      required: [type, id, required_verb, label, summary]
+      properties:
+        type: {type: string, enum: [installation, management_component, alert, backup, self_management_application, agent_connection_record, agent_fleet, tunnel]}
+        id: {type: string, minLength: 1, maxLength: 255}
+        required_verb: {type: string, const: read}
+        label: {type: string, maxLength: 256}
+        summary: {type: string, maxLength: 1024}
+    CharlieOperationStatus:
+      type: object
+      additionalProperties: false
+      required: [operation_id, capability, effect, state, result_status, created_at, updated_at]
+      properties:
+        operation_id: {type: string}
+        capability: {type: string}
+        effect: {type: string, enum: [read, write]}
+        state: {type: string}
+        result_status: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        dispatched_at: {type: string, format: date-time}
+        verified_at: {type: string, format: date-time}
+    CharlieApprovalSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, state, eligible, capability, target, risk, expiresAt]
+      description: Bounded display metadata only; signed authority material never crosses the browser boundary.
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        title: {type: string, maxLength: 256}
+        state: {type: string, enum: [pending, approved, denied, expired]}
+        eligible: {type: boolean}
+        capability: {type: string}
+        target: {type: string}
+        risk: {type: string}
+        expiresAt: {type: string, format: date-time}
+        reason: {type: string, maxLength: 512}
+    CharlieApprovalDecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id, decision]
+      properties:
+        request_id: {type: string, format: uuid}
+        decision: {type: string, enum: [approve, reject, deny]}
+        rationale: {type: string, maxLength: 512}
     Error:
       type: object
       properties:
@@ -714,6 +1337,8 @@ components:
         feature.security:
           type: boolean
         feature.backups:
+          type: boolean
+        feature.charlie:
           type: boolean
     ExtensionManifest:
       type: object
@@ -4307,6 +4932,12 @@ components:
         Permissive object placeholder so every $ref in this spec resolves.
       additionalProperties: true
   responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Unauthorized:
       description: Missing or invalid token
       content:
@@ -4321,6 +4952,12 @@ components:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: Optional Charlie integration is inactive or unavailable
       content:
         application/json:
           schema:
@@ -17318,6 +17955,742 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/charlie/sessions/:
+    get:
+      operationId: listCharlieSessions
+      summary: List Charlie sessions currently visible to the authenticated user
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Owner-filtered private metadata plus resource-authorized incident metadata; conversation content remains in Charlie.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions, mode]
+                properties:
+                  sessions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieSessionMetadata'}}
+                  mode: {type: string, enum: [disabled, read_only, approval, auto]}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createCharlieSession
+      summary: Create or replay a private Charlie session
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CharlieSessionCreateRequest'}
+      responses:
+        '201':
+          description: Session created after local authorization was persisted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, replayed]
+                properties:
+                  session: {$ref: '#/components/schemas/CharlieSessionMetadata'}
+                  replayed: {type: boolean}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/sessions/{session_id}/:
+    get:
+      operationId: getCharlieSession
+      summary: Fetch an authorized Charlie session on demand
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Local metadata plus authorized central session state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, remote]
+                properties:
+                  session: {$ref: '#/components/schemas/CharlieSessionMetadata'}
+                  remote: {type: object, additionalProperties: true}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/sessions/{session_id}/history/:
+    get:
+      operationId: getCharlieSessionHistory
+      summary: Proxy retention-bounded Charlie history after live authorization
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 128}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200':
+          description: Charlie-managed encrypted history; no local content copy is made.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 100, items: {type: object, additionalProperties: true}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/sessions/{session_id}/events/:
+    get:
+      operationId: streamCharlieSessionEvents
+      summary: Stream live events for one currently authorized Charlie session
+      description: The server rechecks session ownership and disclosed-resource authorization before opening the bounded SSE stream.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: A bounded text/event-stream relayed from Charlie without local content persistence.
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/sessions/{session_id}/messages/:
+    post:
+      operationId: createCharlieSessionMessage
+      summary: Submit one idempotent user turn to Charlie
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CharlieMessageRequest'}
+      responses:
+        '202':
+          description: Central turn receipt, including replay of an existing client message ID.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/sessions/{session_id}/abort/:
+    post:
+      operationId: abortCharlieSession
+      summary: Revoke local session authority before requesting central abort
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: session_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CharlieAbortRequest'}
+      responses:
+        '204': {description: Locally and centrally aborted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/context/search/:
+    get:
+      operationId: searchCharlieContext
+      summary: Search product-owned resources available for explicit Charlie disclosure
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 128}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
+      responses:
+        '200':
+          description: Only resource metadata the caller can currently read.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/CharlieContextSearchResult'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/operations/{operation_id}:
+    get:
+      operationId: getCharlieOperationStatus
+      summary: Fetch metadata-only status for one authorized Charlie action receipt
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: operation_id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 255}}
+      responses:
+        '200':
+          description: Action state with arguments, evidence, credentials, and raw results excluded.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CharlieOperationStatus'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/approvals/:
+    get:
+      operationId: listCharlieApprovals
+      summary: List exact pending Charlie actions the current user may review
+      description: Astronomer verifies each signed manifest and rechecks live session, account, charlie:approve, and target authorization before returning bounded display metadata.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: Current approval candidates; manifest and signature material are not returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/CharlieApprovalSummary'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/approvals/{approval_id}/decision/:
+    post:
+      operationId: decideCharlieApproval
+      summary: Approve or reject one exact signed Charlie action
+      description: The product re-fetches and verifies the signed manifest, rederives scope and permissions, persists the exact authority row, and fails closed if Charlie does not confirm the same digest and state.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: approval_id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieApprovalDecisionRequest'}}}
+      responses:
+        '200':
+          description: Final bounded decision state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approval]
+                properties:
+                  approval: {$ref: '#/components/schemas/CharlieApprovalSummary'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: Approval is stale, ineligible, mismatched, or not confirmed; no action was authorized., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/:
+    get:
+      operationId: listCharlieFindings
+      summary: List bounded actionable Charlie finding summaries
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [open, acknowledged, dismissed, resolved]}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Only findings whose complete affected-resource scope the caller can currently read.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieFindingSummary'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/findings/{finding_id}/:
+    get:
+      operationId: getCharlieFinding
+      summary: Fetch one finding and authorized Charlie-managed evidence on demand
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Bounded local correlation plus optional central detail; central credentials and authorization references are never returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [finding]
+                properties:
+                  finding: {$ref: '#/components/schemas/CharlieFindingDetail'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/findings/{finding_id}/acknowledge/:
+    post:
+      operationId: acknowledgeCharlieFinding
+      summary: Acknowledge one finding without executing its recommendation
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Finding acknowledged., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/{finding_id}/dismiss/:
+    post:
+      operationId: dismissCharlieFinding
+      summary: Dismiss one finding without executing its recommendation
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Finding dismissed., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/{finding_id}/start-remediation/:
+    post:
+      operationId: startCharlieFindingRemediation
+      summary: Record that product-owned manual remediation has started
+      description: This lifecycle decision grants no Charlie execution authority.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Remediation marked in progress., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/{finding_id}/request-verification/:
+    post:
+      operationId: requestCharlieFindingVerification
+      summary: Record manual completion and request product-owned verification
+      description: Astronomer re-reads current state before resolution; this lifecycle decision grants no Charlie execution authority.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Verification requested., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/charlie/findings/{finding_id}/resolve/:
+    post:
+      operationId: resolveCharlieFinding
+      summary: Resolve one finding after independent operator verification
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
+      responses:
+        '200': {description: Finding resolved., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Finding state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/onboarding/validate/:
+    post:
+      operationId: adminCharlieOnboardingValidate
+      summary: Verify a signed Charlie onboarding package locally
+      description: |
+        Validates the pinned schema, expiry, product and route tuple, central
+        CA, artifact digests, credential purposes, and operator-confirmed
+        Ed25519 signature without contacting Charlie central.
+      tags: [platform-admin-settings]
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharlieOnboardingRequest'
+      responses:
+        '200':
+          description: Content-free package verification status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharlieOnboardingStatus'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          description: Onboarding request exceeds 256 KiB.
+        '415':
+          description: Content-Type is not application/json.
+  /api/v1/admin/charlie/onboarding/consume/:
+    post:
+      operationId: adminCharlieOnboardingConsume
+      summary: Transactionally consume a verified Charlie onboarding package
+      description: |
+        Repeats local verification, creates installation-bound local trust,
+        writes agent material directly to a Kubernetes Secret, and consumes the
+        package only after all writes succeed. Replays do not recreate material.
+      tags: [platform-admin-settings]
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharlieOnboardingRequest'
+      responses:
+        '200':
+          description: Content-free package consumption status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharlieOnboardingStatus'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Package could not be consumed safely and remains retryable.
+        '413':
+          description: Onboarding request exceeds 256 KiB.
+        '415':
+          description: Content-Type is not application/json.
+  /api/v1/admin/charlie/status/:
+    get:
+      operationId: adminCharlieStatus
+      summary: Read the redacted aggregate state of the Charlie integration
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Connection, product-agent, and authoritative mode status., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/disconnect/:
+    post:
+      operationId: adminCharlieDisconnect
+      summary: Emergency-disable Charlie and remove the local connection
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
+      responses:
+        '204': {description: Charlie disabled and disconnected.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Charlie could not be safely disabled or disconnected., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/agent/install/:
+    post:
+      operationId: adminCharlieAgentInstall
+      summary: Activate the verified and ready Charlie product agent
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Verified onboarding or product-agent readiness is incomplete., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/agent/upgrade/:
+    post:
+      operationId: adminCharlieAgentUpgrade
+      summary: Replace the Charlie product agent using a new signed onboarding package
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: A new signed replacement package is required., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/agent/rollback/:
+    post:
+      operationId: adminCharlieAgentRollback
+      summary: Roll back the Charlie product agent using a new signed onboarding package
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: A new signed replacement package is required., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/agent/rotate/:
+    post:
+      operationId: adminCharlieAgentRotate
+      summary: Rotate the Charlie product-agent credentials using a new signed onboarding package
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Product-agent installation state., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAgent'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: A new signed replacement package is required., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/agent/uninstall/:
+    post:
+      operationId: adminCharlieAgentUninstall
+      summary: Emergency-disable Charlie and uninstall its product agent
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
+      responses:
+        '204': {description: Charlie disabled and product agent uninstalled.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Charlie could not be safely disabled or uninstalled., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/mode/:
+    patch:
+      operationId: adminCharlieModeUpdate
+      summary: Change Charlie authority mode, emergency-disable it, or acknowledge disclosure
+      description: Mode changes use an optimistic revision. Disclosure acknowledgement is a separate request shape and grants no authority by itself.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieModeRequest'}}}}
+      responses:
+        '200': {description: Current locally safe and centrally authoritative mode., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminMode'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Revision or mode prerequisites changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/trigger-rules/:
+    get:
+      operationId: adminCharlieTriggerRulesList
+      summary: List Charlie automation trigger rules and current identity state
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Bounded automation configuration., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAutomation'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: adminCharlieTriggerRuleCreate
+      summary: Create a Charlie automation trigger rule
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
+      responses:
+        '201': {description: Created trigger rule., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Trigger-rule prerequisites changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/alert-policy/:
+    get:
+      operationId: adminCharlieAlertPolicyGet
+      summary: Get product-owned Charlie finding alert policy
+      description: Returns bounded local thresholds and channel references. Destination values, credentials, approvals, and action authority are never returned.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Current local alert policy and redacted channel choices., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertPolicy'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: adminCharlieAlertPolicyUpdate
+      summary: Replace product-owned Charlie finding alert policy
+      description: Configures severity, dedupe, escalation, quiet hours, and references to local Astronomer notification channels. This endpoint grants no approval or dispatch authority.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertPolicyInput'}}}}
+      responses:
+        '200': {description: Updated local alert policy., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertPolicy'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Channel references or policy bounds changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/alert-deliveries/:
+    get:
+      operationId: adminCharlieAlertDeliveryProofs
+      summary: Read metadata-only delivery proof for one Charlie finding
+      description: Returns only finding/delivery identifiers, lifecycle counts and timestamps, fixed template identity, and server-computed deep-link/content-free verdicts. Raw notification content, channel/destination metadata, dedupe buckets, and provider errors are never returned.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: finding_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Bounded current-deployment delivery proof., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertDeliveryProofView'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/qualification/discovery/:
+    post:
+      operationId: adminCharlieDiscoveryQualification
+      summary: Qualify Astronomer's fixed discovery compiler cases
+      description: Operator-started, non-mutating qualification of one embedded mixed or malformed catalog candidate. Caller-controlled capability data is never accepted and current activation is never changed.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieDiscoveryQualificationRequest'}}}}
+      responses:
+        '200': {description: Fixed discovery generation verdict., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminDiscoveryQualification'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Qualification prerequisites are not active., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/trigger-rules/{rule_id}/:
+    patch:
+      operationId: adminCharlieTriggerRuleUpdate
+      summary: Update or suppress one Charlie automation trigger rule
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: rule_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
+      responses:
+        '200': {description: Updated trigger rule., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Trigger-rule state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    delete:
+      operationId: adminCharlieTriggerRuleDelete
+      summary: Delete one Charlie automation trigger rule
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: rule_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
+      responses:
+        '204': {description: Trigger rule deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Trigger-rule state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /api/v1/admin/charlie/action-policies/{capability}/:
+    put:
+      operationId: adminCharlieActionPolicyUpdate
+      summary: Configure one bounded product-local Charlie automation policy
+      description: Enabling a local policy requires the exact auto-eligible capability to be present in Charlie's independently reviewed central allowlist. This endpoint cannot add to that central allowlist.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: capability, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionPolicyInput'}}}}
+      responses:
+        '200': {description: Current safe action policy., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionPolicy'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Capability is not auto eligible, centrally allowlisted, or policy bounds are invalid., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/trigger-events/:
+    get:
+      operationId: adminCharlieTriggerEventsList
+      summary: List bounded Charlie trigger lifecycle metadata
+      description: Defaults to dead-letter events. Stored summary, fingerprint, origin references, session identifiers, and task payloads are never returned.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: state, in: query, schema: {type: string, default: dead, enum: [pending, dispatching, dispatched, retry, dead, completed, suppressed]}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: UI-safe trigger event metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieAdminTriggerEvent'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/trigger-events/{event_id}/retry/:
+    post:
+      operationId: adminCharlieTriggerEventRetry
+      summary: Create one idempotent retry attempt for a dead-letter trigger
+      description: The dead source event stays immutable. request_id identifies a fresh retry attempt that preserves the source fingerprint and creates a new stable session idempotency boundary.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: event_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieTriggerRetryRequest'}}}
+      responses:
+        '202':
+          description: Retry attempt durably created with its outbox record.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event]
+                properties:
+                  event: {$ref: '#/components/schemas/CharlieAdminTriggerEvent'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Source is not dead, a retry is active, or integration state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/access/:
+    get:
+      operationId: adminCharlieAccessGet
+      summary: Preview the dedicated Charlie automation identity's effective access
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Effective and explicitly granted permissions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAccess'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: adminCharlieAccessUpdate
+      summary: Enable or disable the dedicated Charlie automation identity
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAccessRequest'}}}}
+      responses:
+        '200': {description: Effective and explicitly granted permissions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAccess'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Access state changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/diagnostics/run/:
+    post:
+      operationId: adminCharlieDiagnosticsRun
+      summary: Run bounded redacted Charlie connectivity and policy diagnostics
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Redacted diagnostic checks and correlation ID., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminDiagnostics'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/key-status:
     get:
       operationId: adminKeyStatus

@@ -303,7 +303,7 @@ func snapshotTaskOutboxMetrics(ctx context.Context, pool *pgxpool.Pool) ([]taskO
 SELECT
   status,
   COUNT(*)::bigint,
-  COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - MIN(next_attempt_at)) FILTER (WHERE next_attempt_at <= clock_timestamp()), 0)::float8
+	  COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - (MIN(next_attempt_at) FILTER (WHERE next_attempt_at <= clock_timestamp()))), 0)::float8
 FROM task_outbox
 WHERE status IN ('pending', 'delivering', 'failed', 'dead')
 GROUP BY status

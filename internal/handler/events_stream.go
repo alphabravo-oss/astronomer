@@ -36,11 +36,21 @@ type EventStreamHandler struct {
 	queries middleware.TokenUserQuerier
 	tickets *auth.StreamTicketStore
 	authz   authorizationSupport
+	charlie CharlieFindingEventAuthorizer
 	// keepaliveInterval overrides the 25s heartbeat cadence (tests only).
 	keepaliveInterval time.Duration
 	// bindingRefreshInterval overrides the 5-minute RBAC binding
 	// re-snapshot cadence (tests only).
 	bindingRefreshInterval time.Duration
+}
+
+// CharlieFindingEventAuthorizer rechecks the product-owned finding scope for
+// each delivery. Charlie finding events are intentionally not cluster scoped,
+// so they cannot use the generic cluster_id filter without either hiding them
+// from legitimate users or exposing private finding metadata to unrestricted
+// subscribers.
+type CharlieFindingEventAuthorizer interface {
+	CanReceiveFinding(context.Context, uuid.UUID, uuid.UUID) bool
 }
 
 // NewEventStreamHandler wraps a bus.
@@ -73,6 +83,15 @@ func (h *EventStreamHandler) SetAuthorization(engine *rbac.Engine, querier middl
 	}
 	h.authz.engine = engine
 	h.authz.querier = querier
+}
+
+// SetCharlieFindingAuthorization installs the live, finding-specific delivery
+// boundary. If it is absent, Charlie finding events fail closed.
+func (h *EventStreamHandler) SetCharlieFindingAuthorization(authorizer CharlieFindingEventAuthorizer) {
+	if h == nil {
+		return
+	}
+	h.charlie = authorizer
 }
 
 // authenticateRequest validates the request via a one-use stream ticket or
@@ -163,7 +182,12 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			// sys.* frames are unscoped control-plane signals (no cluster_id)
 			// and are exempt from the SEC-R07 drop — without this, restricted
 			// users' client watchdogs would fire spuriously.
-			if restricted && !isSysEvent(ev.Type) && !eventAllowedForUser(h.authz, bindings, ev) {
+			if ev.Type == events.TypeCharlieFindingChanged {
+				findingID, valid := entityIDFromEventData(ev.Data)
+				if !valid || h.charlie == nil || !h.charlie.CanReceiveFinding(r.Context(), userID, findingID) {
+					continue
+				}
+			} else if restricted && !isSysEvent(ev.Type) && !eventAllowedForUser(h.authz, bindings, ev) {
 				continue
 			}
 			payload, err := json.Marshal(ev)
@@ -179,6 +203,10 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+func entityIDFromEventData(data any) (uuid.UUID, bool) {
+	return uuidFromEventDataField(data, "id")
 }
 
 // snapshotStreamBindings loads the caller's RBAC bindings for SEC-R07
@@ -220,15 +248,19 @@ func eventAllowedForUser(a authorizationSupport, bindings []rbac.RoleBinding, ev
 
 // clusterIDFromEventData extracts cluster_id from common event payload shapes.
 func clusterIDFromEventData(data any) (uuid.UUID, bool) {
+	return uuidFromEventDataField(data, "cluster_id")
+}
+
+func uuidFromEventDataField(data any, field string) (uuid.UUID, bool) {
 	switch v := data.(type) {
 	case map[string]any:
-		return parseClusterIDField(v["cluster_id"])
+		return parseUUIDField(v[field])
 	case json.RawMessage:
 		var m map[string]any
 		if err := json.Unmarshal(v, &m); err != nil {
 			return uuid.Nil, false
 		}
-		return parseClusterIDField(m["cluster_id"])
+		return parseUUIDField(m[field])
 	default:
 		// Best-effort re-marshal for struct payloads.
 		raw, err := json.Marshal(data)
@@ -239,11 +271,11 @@ func clusterIDFromEventData(data any) (uuid.UUID, bool) {
 		if err := json.Unmarshal(raw, &m); err != nil {
 			return uuid.Nil, false
 		}
-		return parseClusterIDField(m["cluster_id"])
+		return parseUUIDField(m[field])
 	}
 }
 
-func parseClusterIDField(v any) (uuid.UUID, bool) {
+func parseUUIDField(v any) (uuid.UUID, bool) {
 	switch t := v.(type) {
 	case string:
 		id, err := uuid.Parse(t)

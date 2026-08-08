@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/alert-delivery-v1.schema.json",
+  "title": "AlertDeliveryProfile",
+  "description": "Product-neutral, advisory-only alert material. The consuming product owns delivery policy, recipients, channels, thresholds, credentials, authorization, and execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "advisory_only", "alert_id", "finding_ref", "severity",
+    "deduplication_key", "expires_at", "timeline", "reason_code",
+    "safe_next_checks", "verification_plan", "deep_link_reference", "workflow_kind"
+  ],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.alert-delivery/v1"},
+    "advisory_only": {"type": "boolean", "const": true},
+    "alert_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "finding_ref": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "critical"]},
+    "deduplication_key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "repeat_count", "first_seen_at", "last_seen_at", "latest_transition"],
+      "properties": {
+        "state": {"type": "string", "enum": ["initial", "repeated", "terminal"]},
+        "repeat_count": {"type": "integer", "minimum": 1, "maximum": 100},
+        "first_seen_at": {"type": "string", "format": "date-time"},
+        "last_seen_at": {"type": "string", "format": "date-time"},
+        "latest_transition": {
+          "type": "string",
+          "enum": ["created", "deduplicated", "acknowledged", "remediation_started", "verification_requested", "dismissed", "resolved", "reopened"]
+        }
+      }
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "capability_destructive", "product_disabled", "deployment_disabled",
+        "stale_leadership", "disclosure_drift", "product_rbac_denied",
+        "scope_denied", "read_only", "non_auto_eligible",
+        "approval_required", "approval_expired", "approval_rejected",
+        "allowlist_denied", "safety_budget_exceeded", "cooldown_active",
+        "maintenance_window", "precondition_failed", "circuit_breaker_open",
+        "idempotency_conflict", "ambiguous_prior_attempt", "execution_failed",
+        "central_unavailable", "audit_unavailable", "verification_failed", "no_safe_action"
+      ]
+    },
+    "safe_next_checks": {
+      "type": "array", "minItems": 1, "maxItems": 16,
+      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+    },
+    "verification_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "steps"],
+      "properties": {
+        "method": {"type": "string", "pattern": "^[a-z][a-z0-9_.:-]{0,127}$"},
+        "steps": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": {"type": "string", "minLength": 1, "maxLength": 512}
+        }
+      }
+    },
+    "deep_link_reference": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "workflow_kind": {"type": "string", "enum": ["review_required", "manual_remediation", "verification", "closed"]}
+  }
+}

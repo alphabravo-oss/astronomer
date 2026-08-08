@@ -59,7 +59,11 @@ const (
 	// own resource keeps that credential from satisfying clusters:update — the
 	// verb that also opens exec tickets and k8s-proxy writes.
 	ResourceAuditIngest Resource = "audit_ingest"
-	ResourceWildcard    Resource = "*"
+	// ResourceCharlie gates the optional, local-agent-mediated Charlie SRE
+	// integration. It never grants access to an underlying management resource;
+	// every Charlie action must also pass that resource's live RBAC check.
+	ResourceCharlie  Resource = "charlie"
+	ResourceWildcard Resource = "*"
 )
 
 var canonicalResources = []Resource{
@@ -93,6 +97,7 @@ var canonicalResources = []Resource{
 	ResourceNetworkPolicies,
 	ResourceCustomResources,
 	ResourceAuditIngest,
+	ResourceCharlie,
 	ResourceWildcard,
 }
 
@@ -100,19 +105,22 @@ var canonicalResources = []Resource{
 type Verb string
 
 const (
-	VerbCreate   Verb = "create"
-	VerbRead     Verb = "read"
-	VerbUpdate   Verb = "update"
-	VerbDelete   Verb = "delete"
-	VerbList     Verb = "list"
-	VerbWatch    Verb = "watch"
-	VerbScale    Verb = "scale"
-	VerbRestart  Verb = "restart"
-	VerbExec     Verb = "exec"
-	VerbLogs     Verb = "logs"
-	VerbProxy    Verb = "proxy"
-	VerbSync     Verb = "sync"
-	VerbManage   Verb = "manage"
+	VerbCreate  Verb = "create"
+	VerbRead    Verb = "read"
+	VerbUpdate  Verb = "update"
+	VerbDelete  Verb = "delete"
+	VerbList    Verb = "list"
+	VerbWatch   Verb = "watch"
+	VerbScale   Verb = "scale"
+	VerbRestart Verb = "restart"
+	VerbExec    Verb = "exec"
+	VerbLogs    Verb = "logs"
+	VerbProxy   Verb = "proxy"
+	VerbSync    Verb = "sync"
+	VerbManage  Verb = "manage"
+	// VerbApprove authorizes deciding one exact, expiring Charlie action. The
+	// target resource verb remains independently mandatory at dispatch time.
+	VerbApprove  Verb = "approve"
 	VerbWildcard Verb = "*"
 )
 
@@ -130,6 +138,7 @@ var canonicalVerbs = []Verb{
 	VerbProxy,
 	VerbSync,
 	VerbManage,
+	VerbApprove,
 	VerbWildcard,
 }
 

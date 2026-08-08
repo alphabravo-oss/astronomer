@@ -1,0 +1,883 @@
+{
+  "version": 1,
+  "coverage_classes": [
+    "success",
+    "denial",
+    "failure",
+    "replay",
+    "redaction"
+  ],
+  "governance": {
+    "owner": "astronomer",
+    "system_of_record": "audit_log",
+    "retention_class": "platform_setting.audit.retention_days",
+    "correlation_rule": "bounded_opaque_or_sha256"
+  },
+  "denial_codes": [
+    "feature_disabled",
+    "connection_inactive",
+    "emergency_disabled",
+    "mode_disabled",
+    "destructive_capability",
+    "disclosure_changed",
+    "authorization_denied",
+    "audit_unavailable",
+    "read_only_write",
+    "approval_required",
+    "approval_invalid",
+    "not_auto_eligible",
+    "not_allowlisted",
+    "scope_denied",
+    "budget_exhausted",
+    "cooldown_active",
+    "circuit_open",
+    "precondition_failed",
+    "idempotency_required",
+    "verification_required",
+    "stale_fencing_epoch",
+    "ambiguous_prior_attempt",
+    "maintenance_window"
+  ],
+  "fields": {
+    "outcome_code": {
+      "kind": "code"
+    },
+    "visibility": {
+      "kind": "enum",
+      "values": [
+        "private",
+        "incident"
+      ]
+    },
+    "resource_count": {
+      "kind": "count"
+    },
+    "approval_digest": {
+      "kind": "digest"
+    },
+    "action_digest": {
+      "kind": "digest"
+    },
+    "manifest_digest": {
+      "kind": "digest"
+    },
+    "capability": {
+      "kind": "code"
+    },
+    "decision": {
+      "kind": "enum",
+      "values": [
+        "approve",
+        "reject"
+      ]
+    },
+    "phase": {
+      "kind": "enum",
+      "values": [
+        "proposed",
+        "denied",
+        "fenced",
+        "replayed",
+        "deferred",
+        "approved",
+        "dispatched",
+        "failed",
+        "succeeded"
+      ]
+    },
+    "argument_digest": {
+      "kind": "digest"
+    },
+    "authorization_digest": {
+      "kind": "digest"
+    },
+    "capability_digest": {
+      "kind": "digest"
+    },
+    "effect": {
+      "kind": "enum",
+      "values": [
+        "read",
+        "write"
+      ]
+    },
+    "state": {
+      "kind": "code",
+      "allow_empty": true
+    },
+    "denial_code": {
+      "kind": "enum",
+      "values": [
+        "feature_disabled",
+        "connection_inactive",
+        "emergency_disabled",
+        "mode_disabled",
+        "destructive_capability",
+        "disclosure_changed",
+        "authorization_denied",
+        "audit_unavailable",
+        "read_only_write",
+        "approval_required",
+        "approval_invalid",
+        "not_auto_eligible",
+        "not_allowlisted",
+        "scope_denied",
+        "budget_exhausted",
+        "cooldown_active",
+        "circuit_open",
+        "precondition_failed",
+        "idempotency_required",
+        "verification_required",
+        "stale_fencing_epoch",
+        "ambiguous_prior_attempt",
+        "maintenance_window"
+      ],
+      "allow_empty": true
+    },
+    "result_digest": {
+      "kind": "digest",
+      "allow_empty": true
+    },
+    "mode_revision": {
+      "kind": "count"
+    },
+    "policy_revision": {
+      "kind": "count"
+    },
+    "fencing_epoch": {
+      "kind": "count"
+    },
+    "outcome": {
+      "kind": "enum",
+      "values": [
+        "succeeded",
+        "failed",
+        "ambiguous"
+      ]
+    },
+    "attempt": {
+      "kind": "count"
+    },
+    "method": {
+      "kind": "enum",
+      "values": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ]
+    },
+    "status_code": {
+      "kind": "count"
+    },
+    "duration_ms": {
+      "kind": "count"
+    },
+    "mode": {
+      "kind": "enum",
+      "values": [
+        "disabled",
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
+    "revision": {
+      "kind": "count"
+    },
+    "enabled": {
+      "kind": "bool"
+    },
+    "suppressed": {
+      "kind": "bool"
+    },
+    "minimum_severity": {
+      "kind": "enum",
+      "values": ["info", "low", "medium", "warning", "high", "critical"]
+    },
+    "dedupe_window_seconds": {
+      "kind": "count"
+    },
+    "escalation_after_seconds": {
+      "kind": "count"
+    },
+    "quiet_hours_enabled": {
+      "kind": "bool"
+    },
+    "channel_count": {
+      "kind": "count"
+    },
+    "delivery_count": {
+      "kind": "count"
+    },
+    "dedupe_valid": {
+      "kind": "bool"
+    },
+    "scenario": {
+      "kind": "enum",
+      "values": ["mixed_catalog", "malformed_catalog"]
+    },
+    "accepted_count": {
+      "kind": "count"
+    },
+    "rejected_count": {
+      "kind": "count"
+    },
+    "candidate_enabled": {
+      "kind": "bool"
+    },
+    "catalog_bound": {
+      "kind": "bool"
+    },
+    "overall": {
+      "kind": "code"
+    }
+  },
+  "events": [
+    {
+      "prefix": "charlie.http.",
+      "actions": [
+        "charlie.http.read",
+        "charlie.http.mutation"
+      ],
+      "resource_type": "charlie_http_request",
+      "allowed_fields": [
+        "outcome_code",
+        "method",
+        "status_code",
+        "duration_ms"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.agent.",
+      "actions": [
+        "admin.charlie.agent.install",
+        "admin.charlie.agent.upgrade",
+        "admin.charlie.agent.rollback",
+        "admin.charlie.agent.rotate",
+        "admin.charlie.agent.uninstall"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.disconnect",
+      "actions": [
+        "admin.charlie.disconnect"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.disclosure.",
+      "actions": [
+        "admin.charlie.disclosure.acknowledge"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.mode.",
+      "actions": [
+        "admin.charlie.mode.update",
+        "admin.charlie.mode.emergency_disable"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code",
+        "mode",
+        "revision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.action_policy.",
+      "actions": [
+        "admin.charlie.action_policy.update"
+      ],
+      "resource_type": "charlie_action_policy",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.alert_policy.",
+      "actions": [
+        "admin.charlie.alert_policy.update"
+      ],
+      "resource_type": "charlie_alert_policy",
+      "allowed_fields": [
+        "outcome_code",
+        "enabled",
+        "minimum_severity",
+        "dedupe_window_seconds",
+        "escalation_after_seconds",
+        "quiet_hours_enabled",
+        "channel_count",
+        "revision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.alert_delivery.",
+      "actions": [
+        "admin.charlie.alert_delivery.read"
+      ],
+      "resource_type": "charlie_finding",
+      "allowed_fields": [
+        "outcome_code",
+        "delivery_count",
+        "dedupe_valid"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.discovery_qualification.",
+      "actions": [
+        "admin.charlie.discovery_qualification.run"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code",
+        "scenario",
+        "accepted_count",
+        "rejected_count",
+        "candidate_enabled",
+        "catalog_bound"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.trigger.",
+      "actions": [
+        "admin.charlie.trigger.create",
+        "admin.charlie.trigger.update",
+        "admin.charlie.trigger.delete"
+      ],
+      "resource_type": "charlie_trigger_rule",
+      "allowed_fields": [
+        "outcome_code",
+        "enabled",
+        "suppressed"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.trigger.",
+      "actions": [
+        "admin.charlie.trigger.retry"
+      ],
+      "resource_type": "charlie_trigger_event",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.access.",
+      "actions": [
+        "admin.charlie.access.update"
+      ],
+      "resource_type": "charlie_automation_identity",
+      "allowed_fields": [
+        "outcome_code",
+        "enabled"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.diagnostics.",
+      "actions": [
+        "admin.charlie.diagnostics.run"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code",
+        "overall"
+      ],
+      "coverage": [
+        "success",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "denial",
+        "replay"
+      ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "charlie.session.",
+      "actions": [
+        "charlie.session.created",
+        "charlie.session.list",
+        "charlie.session.list_visibility",
+        "charlie.session.read",
+        "charlie.session.history",
+        "charlie.session.message_accepted",
+        "charlie.session.aborted",
+        "charlie.session.stream_opened",
+        "charlie.session.stream_closed",
+        "charlie.session.authorization"
+      ],
+      "resource_type": "charlie_session",
+      "allowed_fields": [
+        "outcome_code",
+        "visibility",
+        "resource_count"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.finding.",
+      "actions": [
+        "charlie.finding.created",
+        "charlie.finding.list",
+        "charlie.finding.read",
+        "charlie.finding.authorization",
+        "charlie.finding.acknowledged",
+        "charlie.finding.remediation_started",
+        "charlie.finding.verification_requested",
+        "charlie.finding.dismissed",
+        "charlie.finding.resolved",
+        "charlie.finding.reopened",
+        "charlie.finding.transition_denied"
+      ],
+      "resource_type": "charlie_finding",
+      "allowed_fields": [
+        "outcome_code",
+        "resource_count"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.approval.",
+      "actions": [
+        "charlie.approval.approved",
+        "charlie.approval.rejected",
+        "charlie.approval.expired"
+      ],
+      "resource_type": "charlie_approval",
+      "allowed_fields": [
+        "outcome_code",
+        "approval_digest",
+        "action_digest",
+        "manifest_digest",
+        "capability",
+        "decision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.action.reconciled_",
+      "actions": [
+        "charlie.action.reconciled_succeeded",
+        "charlie.action.reconciled_failed",
+        "charlie.action.reconciled_ambiguous"
+      ],
+      "resource_type": "charlie_action",
+      "allowed_fields": [
+        "outcome",
+        "attempt",
+        "fencing_epoch",
+        "action_digest",
+        "capability"
+      ],
+      "coverage": [
+        "success",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [
+        "denial"
+      ],
+      "correlation": "receipt_id"
+    },
+    {
+      "prefix": "charlie.action.",
+      "actions": [
+        "charlie.action.proposed",
+        "charlie.action.denied",
+        "charlie.action.fenced",
+        "charlie.action.replayed",
+        "charlie.action.deferred",
+        "charlie.action.approved",
+        "charlie.action.dispatched",
+        "charlie.action.failed",
+        "charlie.action.succeeded"
+      ],
+      "resource_type": "charlie_action",
+      "allowed_fields": [
+        "phase",
+        "action_digest",
+        "argument_digest",
+        "authorization_digest",
+        "capability_digest",
+        "effect",
+        "state",
+        "denial_code",
+        "result_digest",
+        "mode_revision",
+        "policy_revision",
+        "fencing_epoch"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "action_digest"
+    },
+    {
+      "prefix": "charlie.connection.",
+      "actions": [
+        "charlie.connection.onboarding_validated",
+        "charlie.connection.activated",
+        "charlie.connection.disconnected"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.certificate.",
+      "actions": [
+        "charlie.certificate.issued",
+        "charlie.certificate.rotated"
+      ],
+      "resource_type": "charlie_certificate",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "denial",
+        "replay"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.agent.",
+      "actions": [
+        "charlie.agent.installed",
+        "charlie.agent.upgraded",
+        "charlie.agent.uninstalled"
+      ],
+      "resource_type": "charlie_agent",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.mode.",
+      "actions": [
+        "charlie.mode.requested",
+        "charlie.mode.verified",
+        "charlie.mode.emergency_disabled"
+      ],
+      "resource_type": "charlie_mode",
+      "allowed_fields": [
+        "outcome_code",
+        "mode",
+        "revision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.feature.",
+      "actions": [
+        "charlie.feature.enabled",
+        "charlie.feature.disabled"
+      ],
+      "resource_type": "charlie_feature",
+      "allowed_fields": [
+        "outcome_code",
+        "enabled"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.delegation.",
+      "actions": [
+        "charlie.delegation.issued"
+      ],
+      "resource_type": "charlie_delegation",
+      "allowed_fields": [
+        "outcome_code"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "redaction"
+      ],
+      "not_applicable": [
+        "replay"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.trigger.",
+      "actions": [
+        "charlie.trigger.dispatched",
+        "charlie.trigger.dead_lettered"
+      ],
+      "resource_type": "charlie_trigger",
+      "allowed_fields": [
+        "outcome_code",
+        "attempt"
+      ],
+      "coverage": [
+        "success",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [
+        "denial"
+      ],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.mcp.",
+      "actions": [
+        "charlie.mcp.allowed",
+        "charlie.mcp.denied"
+      ],
+      "resource_type": "charlie_mcp_decision",
+      "allowed_fields": [
+        "outcome_code",
+        "capability_digest",
+        "effect",
+        "denial_code",
+        "mode_revision",
+        "policy_revision",
+        "fencing_epoch"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "action_digest"
+    }
+  ],
+  "forbidden_field_fragments": [
+    "prompt",
+    "message",
+    "reasoning",
+    "evidence",
+    "citation",
+    "argument",
+    "result",
+    "rationale",
+    "error",
+    "url",
+    "path",
+    "query",
+    "authorization_ref",
+    "token",
+    "credential",
+    "certificate",
+    "secret",
+    "body",
+    "provider",
+    "model",
+    "rag",
+    "resource_name",
+    "user_agent",
+    "ip_address"
+  ]
+}

@@ -299,6 +299,19 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
         return [qk.alerting.all, qk.anomalyBaselines.all];
     }
   },
+  // Charlie publishes only after the local, resource-scoped record is
+  // durable. Refresh both the global notification list and the selected
+  // detail immediately; the API still performs live authorization before
+  // returning either view.
+  'charlie_finding.changed': (d) => {
+    const keys: QueryKey[] = [qk.charlie.findings, qk.charlie.overview];
+    const id = entityIdOf(d);
+    if (id) keys.push(qk.charlie.finding(id));
+    return keys;
+  },
+  // Trigger/investigation state is represented in Charlie's session and
+  // overview surfaces. This event contains bounded state/error codes only.
+  'charlie_investigation.changed': () => [qk.charlie.sessions, qk.charlie.overview],
   'security_policy.changed': () => [qk.security.policies],
   // Prefix covers every params variant of the generic scans list.
   'security_scan.changed': () => [qk.security.scansAll],

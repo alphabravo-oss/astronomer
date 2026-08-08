@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/product-adapter-conformance-v1.schema.json",
+  "title": "ProductAdapterConformanceManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "outcome_contract", "matrix", "cases", "adversarial_corpus"],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.product-adapter-conformance/v1"},
+    "outcome_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_names", "stage_outcomes", "final_outcomes"],
+      "properties": {
+        "stage_names": {"const": ["mode_permitted", "actor_authorized", "target_authorized", "approval_valid", "automation_authorized", "safety_admitted", "dispatch_committed", "post_verified"]},
+        "stage_outcomes": {"const": ["allowed", "ask", "deny", "inactive", "expired", "stale", "ambiguous", "failed_verification", "not_reached"]},
+        "final_outcomes": {"const": ["allowed", "ask", "deny", "inactive", "expired", "stale", "ambiguous", "failed_verification"]}
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modes", "identities"],
+      "properties": {
+        "modes": {"const": ["disabled", "read_only", "approval", "auto"]},
+        "identities": {"const": ["interactive_user", "reader", "approver", "administrator", "automation"]}
+      }
+    },
+    "cases": {
+      "type": "array", "minItems": 1, "maxItems": 128,
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "adversarial_corpus": {
+      "type": "array", "minItems": 1, "maxItems": 64,
+      "items": {"$ref": "#/$defs/adversary"}
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$"},
+    "mode": {"type": "string", "enum": ["disabled", "read_only", "approval", "auto"]},
+    "identity": {"type": "string", "enum": ["interactive_user", "reader", "approver", "administrator", "automation"]},
+    "finalOutcome": {"type": "string", "enum": ["allowed", "ask", "deny", "inactive", "expired", "stale", "ambiguous", "failed_verification"]},
+    "stageName": {"type": "string", "enum": ["mode_permitted", "actor_authorized", "target_authorized", "approval_valid", "automation_authorized", "safety_admitted", "dispatch_committed", "post_verified"]},
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_state", "connection_state", "emergency_state", "mode", "identity", "effect", "actor_authorized", "target_authorized", "disclosure_state", "revision_state", "approval_state", "automation_state", "safety_state", "prior_attempt", "verification_state"],
+      "properties": {
+        "feature_state": {"type": "string", "enum": ["unavailable", "disabled", "enabled"]},
+        "connection_state": {"type": "string", "enum": ["absent", "disabled", "enabled"]},
+        "emergency_state": {"type": "string", "enum": ["armed", "tripped"]},
+        "mode": {"$ref": "#/$defs/mode"},
+        "identity": {"$ref": "#/$defs/identity"},
+        "effect": {"type": "string", "enum": ["read", "write"]},
+        "actor_authorized": {"type": "boolean"},
+        "target_authorized": {"type": "boolean"},
+        "disclosure_state": {"type": "string", "enum": ["current", "stale"]},
+        "revision_state": {"type": "string", "enum": ["current", "stale"]},
+        "approval_state": {"type": "string", "enum": ["not_required", "missing", "valid", "rejected", "expired", "forged"]},
+        "automation_state": {"type": "string", "enum": ["not_required", "authorized", "denied"]},
+        "safety_state": {"type": "string", "enum": ["admitted", "denied"]},
+        "prior_attempt": {"type": "string", "enum": ["none", "ambiguous"]},
+        "verification_state": {"type": "string", "enum": ["not_run", "verified", "failed"]}
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "reason_code", "dispatch_calls"],
+      "properties": {
+        "outcome": {"$ref": "#/$defs/finalOutcome"},
+        "reason_code": {"$ref": "#/$defs/id"},
+        "failed_stage": {"$ref": "#/$defs/stageName"},
+        "dispatch_calls": {"type": "integer", "minimum": 0, "maximum": 1}
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "input", "expected"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "input": {"$ref": "#/$defs/input"},
+        "expected": {"$ref": "#/$defs/expected"}
+      }
+    },
+    "adversary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "class", "surface", "attempt", "outcome", "reason_code", "failed_stage"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "class": {"type": "string", "enum": ["shell", "exec", "raw_sql", "generic_http", "proxy", "secret_access", "credential_access", "delete", "downstream_transport", "forged_authority", "prompt_injection", "model_generated_approval", "actor_substitution", "target_substitution", "injected_authority_headers", "stale_action", "replay", "ambiguous_result"]},
+        "surface": {"type": "string", "enum": ["capability_disclosure", "approval_payload", "prompt", "model_output", "action_request", "action_arguments", "product_transport", "action_ticket", "dispatch_reconciliation"]},
+        "attempt": {"type": "string", "enum": ["expose_shell", "expose_exec", "expose_raw_sql", "expose_generic_http", "expose_proxy", "read_secret", "read_credential", "delete_resource", "bypass_product_adapter", "forge_approval", "mint_approval", "substitute_actor", "substitute_target", "inject_authority_headers", "use_stale_revision", "replay_consumed_action", "blind_retry_ambiguous"]},
+        "outcome": {"type": "string", "enum": ["deny", "ambiguous"]},
+        "reason_code": {"$ref": "#/$defs/id"},
+        "failed_stage": {"$ref": "#/$defs/stageName"}
+      }
+    }
+  }
+}

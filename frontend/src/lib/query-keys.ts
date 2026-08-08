@@ -10,6 +10,27 @@ import type * as apiClient from './api';
 // arrays at call sites — add a factory entry instead (enforced by lint).
 
 export const queryKeys = {
+  charlie: {
+    sessions: ['charlie', 'sessions'] as const,
+    overview: ['charlie', 'overview'] as const,
+    activeThread: ['charlie', 'threads', 'active'] as const,
+    threads: ['charlie', 'threads'] as const,
+    threadHistory: (id?: string | null) => ['charlie', 'threads', 'history', id] as const,
+    history: (id?: string | null) => ['charlie', 'history', id] as const,
+    contextSearch: (query: string) => ['charlie', 'context-search', query] as const,
+    findings: ['charlie', 'findings'] as const,
+    finding: (id?: string | null) => ['charlie', 'finding', id] as const,
+    approvals: ['charlie', 'approvals'] as const,
+    adminConnection: ['charlie', 'admin', 'connection'] as const,
+    adminAgent: ['charlie', 'admin', 'agent'] as const,
+    adminMode: ['charlie', 'admin', 'mode'] as const,
+    adminAlertPolicy: ['charlie', 'admin', 'alert-policy'] as const,
+    adminAutomation: ['charlie', 'admin', 'automation'] as const,
+    adminTriggerEvents: (state: string = 'dead') =>
+      ['charlie', 'admin', 'trigger-events', state] as const,
+    adminAccess: ['charlie', 'admin', 'access'] as const,
+    adminDiagnostics: ['charlie', 'admin', 'diagnostics'] as const,
+  },
   featureFlags: ['settings', 'features'] as const,
   clusters: {
     all: ['clusters'] as const,

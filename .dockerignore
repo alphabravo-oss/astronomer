@@ -2,7 +2,14 @@ node_modules
 .next
 **/node_modules
 **/.next
+frontend/.next
+frontend/dist
 out
+.claude
+bin
+keyrotate
+worker
+screenshots
 .env
 .env.*
 .git

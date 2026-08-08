@@ -152,6 +152,7 @@ step "Installing Helm chart into namespace '${NAMESPACE}'"
 helm upgrade --install astronomer deploy/chart \
   --namespace "${NAMESPACE}" --create-namespace \
   -f deploy/chart/values.yaml \
+  -f deploy/chart/values-k3d.yaml \
   --set image.server.registry="${IMG_REGISTRY}" \
   --set image.worker.registry="${IMG_REGISTRY}" \
   --set image.agent.registry="${IMG_REGISTRY}" \

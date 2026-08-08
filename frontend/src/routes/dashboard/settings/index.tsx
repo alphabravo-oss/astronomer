@@ -33,16 +33,28 @@ import {
   Puzzle,
   Radio,
   BarChart3,
+  Sparkles,
 } from 'lucide-react';
+import { useFeatureFlags } from '@/lib/hooks';
+import { useAuthStore } from '@/lib/store';
+import { canManageCharlie as hasCharlieManagement } from '@/components/charlie/admin-utils';
 
 interface SettingsCard {
   href: string;
   title: string;
   description: string;
   icon: React.ElementType;
+  charlie?: boolean;
 }
 
 const CARDS: SettingsCard[] = [
+  {
+    href: '/dashboard/settings/charlie',
+    title: 'Charlie',
+    description: 'Connect and govern Charlie AI, its product agent, automation, access, and diagnostics.',
+    icon: Sparkles,
+    charlie: true,
+  },
   {
     href: '/dashboard/settings/platform',
     title: 'Platform',
@@ -160,16 +172,28 @@ const CARDS: SettingsCard[] = [
 ];
 
 function SettingsHubPage() {
-  // Every card fans out to an admin-only surface guarded by SettingsAuthGate.
-  // Rather than showing all 17 cards to a non-admin who'd bounce off a 403 per
-  // click (afford-then-deny, F-06), show a single "Admins only" state. Direct
-  // deep-links still work — each subpage's SettingsAuthGate enforces access.
+  // Most cards are superuser-only. Charlie is the deliberate exception: its
+  // global charlie:manage grant exposes exactly that one card even while the
+  // integration is disabled, because enablement begins from local settings.
   const { isSuperuser, ready } = useIsSuperuser();
+  const { data: featureFlags } = useFeatureFlags();
+  const user = useAuthStore((state) => state.user);
+  const canManageCharlie = hasCharlieManagement(user);
 
   // While auth hydrates (!ready) render the header only — don't flash the full
-  // 17-card grid to a user who will turn out to be a non-admin. Once ready, a
-  // non-superuser gets a single "Admins only" state instead of afford-then-deny.
-  if (!ready || !isSuperuser) {
+  // grid to a user who will turn out to lack all administration access.
+  if (!ready || (!isSuperuser && featureFlags === undefined)) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">Platform configuration and administration.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSuperuser && !canManageCharlie) {
     return (
       <div className="space-y-6">
         <div>
@@ -178,12 +202,10 @@ function SettingsHubPage() {
             Platform configuration and administration.
           </p>
         </div>
-        {ready && !isSuperuser && (
-          <PermissionState
-            title="Admins only"
-            description="Platform settings are restricted to superusers. Contact an administrator if you need access."
-          />
-        )}
+        <PermissionState
+          title="Administration permission required"
+          description="Platform settings require superuser access, or charlie:manage for the Charlie administration surface."
+        />
       </div>
     );
   }
@@ -198,7 +220,9 @@ function SettingsHubPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {CARDS.map((card) => {
+        {CARDS.filter((card) => isSuperuser
+          ? (!card.charlie || canManageCharlie)
+          : card.charlie && canManageCharlie).map((card) => {
           const Icon = card.icon;
           return (
             <Link

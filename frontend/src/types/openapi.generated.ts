@@ -403,6 +403,388 @@ export interface OpenAPIComponents {
           "detail"?: Record<string, unknown>;
           "createdAt"?: string;
         };
+    CharlieAbortRequest: {
+          "request_id": string;
+        };
+    CharlieAccessRequest: {
+          "automation_service_identity_enabled": boolean;
+        };
+    CharlieAdminAccess: {
+          "effective_permissions": OpenAPIComponents['schemas']['CharlieAdminPermission'][];
+          "automation_grants": OpenAPIComponents['schemas']['CharlieAdminPermission'][];
+        };
+    CharlieAdminActionPolicy: {
+          "capability": string;
+          "effect": "write";
+          "risk": "low" | "medium" | "high" | "critical";
+          "auto_eligible": boolean;
+          "central_allowlisted": boolean;
+          "central_state": "verified" | "unavailable";
+          "enabled": boolean;
+          "revision": number;
+          "max_actions_per_incident": number;
+          "max_actions_per_window": number;
+          "budget_window_seconds": number;
+          "cooldown_seconds": number;
+          "scope_summary": string;
+          "preconditions": string[];
+          "verification": string;
+          "circuit_state": "closed" | "open" | "unknown";
+        };
+    CharlieAdminActionPolicyInput: {
+          "enabled": boolean;
+          "max_actions_per_incident": number;
+          "max_actions_per_window": number;
+          "budget_window_seconds": number;
+          "cooldown_seconds": number;
+        };
+    CharlieAdminActionRequest: {
+          "confirmation": string;
+        };
+    CharlieAdminAgent: {
+          "application_state": "not_installed" | "inactive" | "installing" | "ready" | "degraded" | "unavailable" | "disconnected";
+          "desired_replicas": number;
+          "ready_replicas": number;
+          "leader_replica"?: string;
+          "standby_replicas": string[];
+          "replicas": OpenAPIComponents['schemas']['CharlieAdminAgentReplica'][];
+          "fencing_epoch"?: number;
+          "last_heartbeat_at"?: string;
+          "agent_version"?: string;
+          "chart_version"?: string;
+          "chart_digest"?: string;
+          "image_digest"?: string;
+        };
+    CharlieAdminAgentReplica: {
+          "ordinal": number;
+          "instance_id"?: string;
+          "role": "leader" | "standby" | "unknown";
+          "state": "ready" | "degraded" | "unavailable" | "unknown";
+          "last_heartbeat_at"?: string;
+          "version"?: string;
+        };
+    CharlieAdminAlertChannel: {
+          "id": string;
+          "name": string;
+          "type": "slack" | "pagerduty" | "msteams" | "webhook";
+          "enabled": boolean;
+          "destination_configured": boolean;
+        };
+    CharlieAdminAlertDeliveryProof: {
+          "delivery_id": string;
+          "finding_id": string;
+          "delivery_kind": "initial" | "escalation";
+          "status": "queued" | "delivering" | "retry" | "delivered" | "suppressed" | "dead";
+          "template_identity": "charlie.finding.initial/v1" | "charlie.finding.escalation/v1" | "unrecognized";
+          "deep_link_valid": boolean;
+          "content_free": boolean;
+          "attempt_count": number;
+          "maximum_attempts": number;
+          "created_at": string;
+          "updated_at": string;
+          "delivered_at"?: string;
+        };
+    CharlieAdminAlertDeliveryProofView: {
+          "finding_id": string;
+          "finding_block_code": string;
+          "finding_workflow_state": string;
+          "delivery_count": number;
+          "dedupe_valid": boolean;
+          "deliveries": OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProof'][];
+        };
+    CharlieAdminAlertPolicy: {
+          "enabled": boolean;
+          "minimum_severity": "info" | "low" | "medium" | "warning" | "high" | "critical";
+          "dedupe_window_seconds": number;
+          "escalation_after_seconds": number;
+          "quiet_hours_enabled": boolean;
+          "quiet_hours_start": string;
+          "quiet_hours_end": string;
+          "quiet_hours_timezone": string;
+          "revision": number;
+          "channel_ids": string[];
+          "channels": OpenAPIComponents['schemas']['CharlieAdminAlertChannel'][];
+          "available_channels": OpenAPIComponents['schemas']['CharlieAdminAlertChannel'][];
+          "in_app_enabled": boolean;
+        };
+    CharlieAdminAlertPolicyInput: {
+          "revision": number;
+          "enabled": boolean;
+          "minimum_severity": "info" | "low" | "medium" | "warning" | "high" | "critical";
+          "dedupe_window_seconds": number;
+          "escalation_after_seconds": number;
+          "quiet_hours_enabled": boolean;
+          "quiet_hours_start": string;
+          "quiet_hours_end": string;
+          "quiet_hours_timezone": string;
+          "channel_ids": string[];
+        };
+    CharlieAdminAutoReadiness: {
+          "ready": boolean;
+          "blockers": Array<{
+            "code": string;
+            "message": string;
+            "next_action": string;
+          }>;
+        };
+    CharlieAdminAutomation: {
+          "rules": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'][];
+          "action_policies": OpenAPIComponents['schemas']['CharlieAdminActionPolicy'][];
+          "defaults_revision": number;
+          "service_identity_enabled": boolean;
+        };
+    CharlieAdminConnection: {
+          "connected": boolean;
+          "product_id"?: string;
+          "product_slug"?: string;
+          "deployment_id"?: string;
+          "route_id"?: string;
+          "central_version"?: string;
+          "signing_key_id"?: string;
+          "signing_fingerprint"?: string;
+          "package_digest"?: string;
+          "disclosure_digest"?: string;
+          "disclosure_acknowledged": boolean;
+          "updated_at"?: string;
+        };
+    CharlieAdminDiagnosticCheck: {
+          "id": string;
+          "label": string;
+          "state": "healthy" | "degraded" | "unavailable" | "inactive" | "ready" | "unknown";
+          "summary": string;
+          "checked_at"?: string;
+          "expires_at"?: string;
+        };
+    CharlieAdminDiagnostics: {
+          "overall": "healthy" | "degraded" | "unavailable" | "inactive" | "ready" | "unknown";
+          "checks": OpenAPIComponents['schemas']['CharlieAdminDiagnosticCheck'][];
+          "correlation_id"?: string;
+        };
+    CharlieAdminDiscoveryQualification: {
+          "scenario": "mixed_catalog" | "malformed_catalog";
+          "candidate_enabled": boolean;
+          "accepted_count": number;
+          "rejected_count": number;
+          "accepted_names": string[];
+          "disclosure_digest"?: string;
+          "catalog_bound": boolean;
+          "malformed_rejected": boolean;
+        };
+    CharlieAdminMode: {
+          "requested": "disabled" | "read_only" | "approval" | "auto";
+          "authoritative": "disabled" | "read_only" | "approval" | "auto";
+          "revision": number;
+          "emergency_disabled": boolean;
+          "disable_pending"?: boolean;
+          "disclosure_digest"?: string;
+          "acknowledged_disclosure_digest"?: string;
+          "effects": string[];
+          "auto_readiness": OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
+          "workload_ceiling": "disabled" | "read_only" | "approval" | "auto";
+          "workload_ceiling_ready": boolean;
+        };
+    CharlieAdminPermission: {
+          "permission": string;
+          "scope": string;
+          "source": string;
+        };
+    CharlieAdminStatus: {
+          "connection": OpenAPIComponents['schemas']['CharlieAdminConnection'];
+          "agent": OpenAPIComponents['schemas']['CharlieAdminAgent'];
+          "mode": OpenAPIComponents['schemas']['CharlieAdminMode'];
+        };
+    CharlieAdminTriggerEvent: {
+          "id": string;
+          "retry_of_event_id"?: string;
+          "rule_id": string;
+          "event_type": string;
+          "resource_type": string;
+          "resource_id": string;
+          "state": "pending" | "dispatching" | "dispatched" | "retry" | "dead" | "completed" | "suppressed";
+          "repeat_count": number;
+          "attempt_count": number;
+          "last_error_code"?: string;
+          "first_occurred_at": string;
+          "last_occurred_at": string;
+          "dead_lettered_at"?: string;
+          "updated_at": string;
+        };
+    CharlieAdminTriggerRule: {
+          "id"?: string;
+          "name": string;
+          "source_type": string;
+          "enabled": boolean;
+          "severities": Array<"info" | "low" | "medium" | "high" | "critical">;
+          "scopes": string[];
+          "cooldown_seconds": number;
+          "grace_period_seconds": number;
+          "flap_window_seconds": number;
+          "flap_count": number;
+          "fleet_threshold_percent": number;
+          "minimum_agent_version"?: string;
+          "suppressed": boolean;
+          "maximum_attempts": number;
+          "dead_letter_enabled": boolean;
+          "service_identity"?: string;
+        };
+    CharlieApprovalDecisionRequest: {
+          "request_id": string;
+          "decision": "approve" | "reject" | "deny";
+          "rationale"?: string;
+        };
+    CharlieApprovalSummary: {
+          "id": string;
+          "title": string;
+          "state": "pending" | "approved" | "denied" | "expired";
+          "eligible": boolean;
+          "capability": string;
+          "target": string;
+          "risk": string;
+          "expiresAt": string;
+          "reason"?: string;
+        };
+    CharlieContextSearchResult: {
+          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
+          "id": string;
+          "required_verb": string;
+          "label": string;
+          "summary": string;
+        };
+    CharlieDiscoveryQualificationRequest: {
+          "scenario": "mixed_catalog" | "malformed_catalog";
+        };
+    CharlieFindingAdvisoryDetail: {
+          "evidence_summary": string[];
+          "diagnosis": string;
+          "confidence": number;
+          "risk_impact": string;
+          "preconditions"?: string[];
+          "rollback"?: string;
+          "operator_checks": string[];
+          "verification_steps": string[];
+          "manual_remediation"?: OpenAPIComponents['schemas']['CharlieFindingManualRemediation'];
+        };
+    CharlieFindingDetail: OpenAPIComponents['schemas']['CharlieFindingSummary'] & {
+          "risk_impact"?: string;
+          "verification_summary"?: string;
+          "detail"?: OpenAPIComponents['schemas']['CharlieFindingAdvisoryDetail'];
+        };
+    CharlieFindingManualRemediation: {
+          "preconditions"?: string[];
+          "steps": string[];
+          "expected_impact": string;
+          "rollback"?: string;
+          "verification": OpenAPIComponents['schemas']['CharlieFindingVerification'];
+        };
+    CharlieFindingResource: {
+          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
+          "id": string;
+          "required_verb": "read";
+        };
+    CharlieFindingSummary: {
+          "id": string;
+          "title": string;
+          "severity": "info" | "low" | "medium" | "high" | "critical";
+          "state": "open" | "acknowledged" | "dismissed" | "resolved" | "expired";
+          "summary": string;
+          "reason_no_action": string;
+          "repeat_count": number;
+          "updated_at": string;
+          "affected_resource": OpenAPIComponents['schemas']['CharlieFindingResource'];
+          "workflow_state": "approval_pending" | "manual_remediation_required" | "remediation_in_progress" | "verification_pending" | "resolved" | "rejected" | "dismissed" | "expired";
+          "available_decisions": Array<"acknowledge" | "start_remediation" | "request_verification" | "dismiss" | "resolve">;
+        };
+    CharlieFindingTransitionRequest: {
+          "request_id": string;
+        };
+    CharlieFindingVerification: {
+          "method": string;
+          "steps": string[];
+        };
+    CharlieMessageRequest: {
+          "client_message_id": string;
+          "message": string;
+        };
+    CharlieModeRequest: {
+          "mode"?: "disabled" | "read_only" | "approval" | "auto";
+          "revision"?: number;
+          "emergency_disable"?: boolean;
+          "acknowledge_disclosure_digest"?: string;
+        };
+    CharlieOnboardingRequest: {
+          "package": Record<string, unknown>;
+          "signing_public_key": string;
+          "confirmed_signing_key_id": string;
+          "confirmed_signing_fingerprint": string;
+          "expected_deployment_id": string;
+          "expected_route_id": string;
+        };
+    CharlieOnboardingStatus: {
+          "package_id": string;
+          "product_id": string;
+          "product_slug": "astronomer";
+          "deployment_id": string;
+          "logical_agent_id": string;
+          "integration_id": string;
+          "mcp_url": string;
+          "route_id": string;
+          "allowed_route_ids": string[];
+          "schema": "charlie.onboarding/v1";
+          "central_api_version": "charlie/v1";
+          "central_trust_fingerprint": string;
+          "signing_key_id": string;
+          "signing_fingerprint": string;
+          "package_digest": string;
+          "artifact": {
+            "image": string;
+            "manifest_digest": string;
+            "chart": string;
+            "chart_digest": string;
+          };
+          "replica_count": number;
+          "issued_at": string;
+          "expires_at": string;
+          "state": "validated" | "consumed";
+          "idempotent": boolean;
+        };
+    CharlieOperationStatus: {
+          "operation_id": string;
+          "capability": string;
+          "effect": "read" | "write";
+          "state": string;
+          "result_status": string;
+          "created_at": string;
+          "updated_at": string;
+          "dispatched_at"?: string;
+          "verified_at"?: string;
+        };
+    CharlieSessionCreateRequest: {
+          "client_session_id": string;
+          "intent": string;
+          "trigger"?: string;
+          "current_ui_context"?: string;
+          "resources"?: OpenAPIComponents['schemas']['CharlieSessionResource'][];
+        };
+    CharlieSessionMetadata: {
+          "id": string;
+          "client_session_id": string;
+          "intent": string;
+          "resource_scope_summary": string;
+          "state": "creating" | "active" | "waiting_approval" | "completed" | "aborted" | "failed";
+          "visibility": "private" | "incident";
+          "central_revision": number;
+          "source": "user" | "event";
+          "created_at": string;
+          "updated_at": string;
+        };
+    CharlieSessionResource: {
+          "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
+          "id": string;
+          "required_verb": string;
+        };
+    CharlieTriggerRetryRequest: {
+          "request_id": string;
+        };
     CloudCredential: {
           "id"?: string;
           "project_id"?: string;
@@ -723,6 +1105,7 @@ export interface OpenAPIComponents {
           "feature.argocd"?: boolean;
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
+          "feature.charlie"?: boolean;
         };
     FleetOperationResponse: Record<string, unknown>;
     FleetOperationTargetResponse: Record<string, unknown>;
@@ -1649,6 +2032,50 @@ export type BackupStorageConfigRequest = OpenAPIComponents['schemas']['BackupSto
 export type BackupStorageConfigResponse = OpenAPIComponents['schemas']['BackupStorageConfigResponse'];
 export type CatalogOperation = OpenAPIComponents['schemas']['CatalogOperation'];
 export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperationEvent'];
+export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
+export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];
+export type CharlieAdminAccess = OpenAPIComponents['schemas']['CharlieAdminAccess'];
+export type CharlieAdminActionPolicy = OpenAPIComponents['schemas']['CharlieAdminActionPolicy'];
+export type CharlieAdminActionPolicyInput = OpenAPIComponents['schemas']['CharlieAdminActionPolicyInput'];
+export type CharlieAdminActionRequest = OpenAPIComponents['schemas']['CharlieAdminActionRequest'];
+export type CharlieAdminAgent = OpenAPIComponents['schemas']['CharlieAdminAgent'];
+export type CharlieAdminAgentReplica = OpenAPIComponents['schemas']['CharlieAdminAgentReplica'];
+export type CharlieAdminAlertChannel = OpenAPIComponents['schemas']['CharlieAdminAlertChannel'];
+export type CharlieAdminAlertDeliveryProof = OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProof'];
+export type CharlieAdminAlertDeliveryProofView = OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProofView'];
+export type CharlieAdminAlertPolicy = OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+export type CharlieAdminAlertPolicyInput = OpenAPIComponents['schemas']['CharlieAdminAlertPolicyInput'];
+export type CharlieAdminAutoReadiness = OpenAPIComponents['schemas']['CharlieAdminAutoReadiness'];
+export type CharlieAdminAutomation = OpenAPIComponents['schemas']['CharlieAdminAutomation'];
+export type CharlieAdminConnection = OpenAPIComponents['schemas']['CharlieAdminConnection'];
+export type CharlieAdminDiagnosticCheck = OpenAPIComponents['schemas']['CharlieAdminDiagnosticCheck'];
+export type CharlieAdminDiagnostics = OpenAPIComponents['schemas']['CharlieAdminDiagnostics'];
+export type CharlieAdminDiscoveryQualification = OpenAPIComponents['schemas']['CharlieAdminDiscoveryQualification'];
+export type CharlieAdminMode = OpenAPIComponents['schemas']['CharlieAdminMode'];
+export type CharlieAdminPermission = OpenAPIComponents['schemas']['CharlieAdminPermission'];
+export type CharlieAdminStatus = OpenAPIComponents['schemas']['CharlieAdminStatus'];
+export type CharlieAdminTriggerEvent = OpenAPIComponents['schemas']['CharlieAdminTriggerEvent'];
+export type CharlieAdminTriggerRule = OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+export type CharlieApprovalDecisionRequest = OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
+export type CharlieApprovalSummary = OpenAPIComponents['schemas']['CharlieApprovalSummary'];
+export type CharlieContextSearchResult = OpenAPIComponents['schemas']['CharlieContextSearchResult'];
+export type CharlieDiscoveryQualificationRequest = OpenAPIComponents['schemas']['CharlieDiscoveryQualificationRequest'];
+export type CharlieFindingAdvisoryDetail = OpenAPIComponents['schemas']['CharlieFindingAdvisoryDetail'];
+export type CharlieFindingDetail = OpenAPIComponents['schemas']['CharlieFindingDetail'];
+export type CharlieFindingManualRemediation = OpenAPIComponents['schemas']['CharlieFindingManualRemediation'];
+export type CharlieFindingResource = OpenAPIComponents['schemas']['CharlieFindingResource'];
+export type CharlieFindingSummary = OpenAPIComponents['schemas']['CharlieFindingSummary'];
+export type CharlieFindingTransitionRequest = OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
+export type CharlieFindingVerification = OpenAPIComponents['schemas']['CharlieFindingVerification'];
+export type CharlieMessageRequest = OpenAPIComponents['schemas']['CharlieMessageRequest'];
+export type CharlieModeRequest = OpenAPIComponents['schemas']['CharlieModeRequest'];
+export type CharlieOnboardingRequest = OpenAPIComponents['schemas']['CharlieOnboardingRequest'];
+export type CharlieOnboardingStatus = OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+export type CharlieOperationStatus = OpenAPIComponents['schemas']['CharlieOperationStatus'];
+export type CharlieSessionCreateRequest = OpenAPIComponents['schemas']['CharlieSessionCreateRequest'];
+export type CharlieSessionMetadata = OpenAPIComponents['schemas']['CharlieSessionMetadata'];
+export type CharlieSessionResource = OpenAPIComponents['schemas']['CharlieSessionResource'];
+export type CharlieTriggerRetryRequest = OpenAPIComponents['schemas']['CharlieTriggerRetryRequest'];
 export type CloudCredential = OpenAPIComponents['schemas']['CloudCredential'];
 export type CloudCredentialRequest = OpenAPIComponents['schemas']['CloudCredentialRequest'];
 export type CloudProviderSpec = OpenAPIComponents['schemas']['CloudProviderSpec'];

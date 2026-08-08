@@ -41,31 +41,36 @@ type SettingsRowReader interface {
 	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 }
 
-// FeatureGate returns a chi middleware that 404s when the feature flag
-// at `key` is false. A `nil` reader is treated as "feature enabled"
-// (degenerate test installs / pre-bootstrap window).
-//
-// The default for any feature.* key is `true` — disabled is the
-// operator opt-out, not the default.
+// FeatureGate returns the legacy default-on gate used by existing opt-out
+// features. New opt-in integrations must use FeatureGateDefault with false.
 func FeatureGate(key string, reader FeatureFlagReader) func(http.Handler) http.Handler {
+	return FeatureGateDefault(key, reader, true)
+}
+
+// FeatureGateDefault returns a chi middleware that 404s when the feature flag
+// is false. A nil reader uses fallback. This makes an opt-in surface fail closed
+// during bootstrap or dependency misconfiguration instead of silently appearing.
+func FeatureGateDefault(key string, reader FeatureFlagReader, fallback bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if reader == nil {
+				if fallback {
+					next.ServeHTTP(w, r)
+					return
+				}
+			} else if reader.BoolValue(r.Context(), key, fallback) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if !reader.BoolValue(r.Context(), key, true) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"error": map[string]string{
-						"code":    "feature_disabled",
-						"message": "This feature is not enabled on this Astronomer installation.",
-					},
-				})
-				return
-			}
-			next.ServeHTTP(w, r)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]string{
+					"code":    "feature_disabled",
+					"message": "This feature is not enabled on this Astronomer installation.",
+				},
+			})
 		})
 	}
 }

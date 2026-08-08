@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/onboarding-v1.schema.json",
+  "title": "OnboardingPackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "central_api_version", "package_id", "issued_at", "expires_at",
+    "organization_id", "product_id", "product_slug", "deployment_id", "environment_id",
+    "tenant_id", "logical_agent_id", "replica_count", "route", "integration",
+    "central", "credentials", "artifact", "signing", "signature"
+  ],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.onboarding/v1"},
+    "central_api_version": {"type": "string", "const": "charlie/v1"},
+    "package_id": {"$ref": "#/$defs/opaqueId"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "organization_id": {"$ref": "#/$defs/opaqueId"},
+    "product_id": {"$ref": "#/$defs/opaqueId"},
+    "product_slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+    "deployment_id": {"$ref": "#/$defs/opaqueId"},
+    "environment_id": {"$ref": "#/$defs/opaqueId"},
+    "tenant_id": {"$ref": "#/$defs/opaqueId"},
+    "logical_agent_id": {"$ref": "#/$defs/opaqueId"},
+    "replica_count": {"type": "integer", "minimum": 2, "maximum": 20},
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["route_id", "allowed_route_ids"],
+      "properties": {
+        "route_id": {"$ref": "#/$defs/opaqueId"},
+        "allowed_route_ids": {
+          "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/opaqueId"}
+        }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["integration_id", "mcp_url"],
+      "properties": {
+        "integration_id": {"$ref": "#/$defs/opaqueId"},
+        "mcp_url": {"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048}
+      }
+    },
+    "central": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_url", "ca_bundle_pem", "certificate_sha256"],
+      "properties": {
+        "base_url": {"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048},
+        "ca_bundle_pem": {"type": "string", "minLength": 1, "maxLength": 65536},
+        "certificate_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "credentials": {
+      "type": "array", "minItems": 3, "maxItems": 21,
+      "items": {"$ref": "#/$defs/credential"},
+      "contains": {"properties": {"purpose": {"const": "agent_enrollment"}}, "required": ["purpose"]},
+      "minContains": 2,
+      "maxContains": 20,
+      "allOf": [{
+        "contains": {"properties": {"purpose": {"const": "artifact_pull"}}, "required": ["purpose"]},
+        "minContains": 1,
+        "maxContains": 1
+      }]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "manifest_digest", "chart", "chart_digest"],
+      "properties": {
+        "image": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]+@sha256:[a-f0-9]{64}$", "maxLength": 512},
+        "manifest_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "chart": {"type": "string", "pattern": "^oci://", "maxLength": 512},
+        "chart_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+      }
+    },
+    "signing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "canonicalization", "key_id", "public_key_sha256"],
+      "properties": {
+        "algorithm": {"type": "string", "const": "Ed25519"},
+        "canonicalization": {"type": "string", "const": "RFC8785"},
+        "key_id": {"$ref": "#/$defs/opaqueId"},
+        "public_key_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$", "writeOnly": true}
+  },
+  "$defs": {
+    "opaqueId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "credential", "expires_at"],
+      "properties": {
+        "purpose": {"type": "string", "enum": ["agent_enrollment", "artifact_pull"]},
+        "replica_ordinal": {"type": "integer", "minimum": 0, "maximum": 19},
+        "credential": {"type": "string", "minLength": 32, "maxLength": 4096, "writeOnly": true},
+        "expires_at": {"type": "string", "format": "date-time"}
+      },
+      "allOf": [
+        {"if": {"properties": {"purpose": {"const": "agent_enrollment"}}}, "then": {"required": ["replica_ordinal"]}},
+        {"if": {"properties": {"purpose": {"const": "artifact_pull"}}}, "then": {"not": {"required": ["replica_ordinal"]}}}
+      ]
+    }
+  }
+}

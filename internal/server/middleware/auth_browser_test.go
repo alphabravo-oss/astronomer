@@ -116,3 +116,28 @@ func TestAuthBrowserOrBearer(t *testing.T) {
 		}
 	})
 }
+
+func TestAuthBrowserOrBearerPreservesStreamingFlush(t *testing.T) {
+	jwtMgr := newTestJWTManager()
+	validToken, err := jwtMgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	wrapped := AuthBrowserOrBearer(jwtMgr, nil, "/auth/login")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("browser authentication removed http.Flusher")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher.Flush()
+		called = true
+	}))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/charlie/sessions/id/events/", nil)
+	request.Header.Set("Authorization", "Bearer "+validToken)
+	wrapped.ServeHTTP(recorder, request)
+	if !called || !recorder.Flushed || recorder.Code != http.StatusOK {
+		t.Fatalf("stream was not flushed through authentication: called=%v flushed=%v status=%d", called, recorder.Flushed, recorder.Code)
+	}
+}

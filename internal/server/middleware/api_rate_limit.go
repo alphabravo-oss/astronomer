@@ -56,6 +56,9 @@ const (
 	ClassExecLogs APIRateLimitClass = "exec-logs"
 	// ClassHelm covers helm install/upgrade/uninstall write endpoints.
 	ClassHelm APIRateLimitClass = "helm"
+	// ClassCharlieChat is retained for chart/config compatibility only.
+	// Authenticated Charlie routes no longer apply it.
+	ClassCharlieChat APIRateLimitClass = "charlie-chat"
 )
 
 // APIRateLimitConfig is the per-class tunable. Rate is the long-term
@@ -75,6 +78,8 @@ var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
 	ClassArgoCDProxy: {RatePerSecond: 50.0, Burst: 1000},     // ArgoCD discovery/sync bursts (trusted M2M)
 	ClassExecLogs:    {RatePerSecond: 30.0 / 60.0, Burst: 5}, // 30 new sessions/min
 	ClassHelm:        {RatePerSecond: 5.0 / 60.0, Burst: 2},
+	// Unused on routes (see routes_charlie.go). Kept so config keys still parse.
+	ClassCharlieChat: {RatePerSecond: 1e9, Burst: 1_000_000},
 }
 
 // defaultClusterCeilings is the aggregate (all-users-combined) per-cluster
@@ -226,7 +231,7 @@ func (l *apiRateLimiter) allowBucket(mapKey string, cfg APIRateLimitConfig) rate
 	}
 	// Seconds until the bucket refills to full burst from its current level.
 	if missing := cfg.Burst - d.remaining; missing > 0 && cfg.RatePerSecond > 0 {
-		d.reset = rateLimitResetSeconds(time.Duration(float64(missing)/cfg.RatePerSecond * float64(time.Second)))
+		d.reset = rateLimitResetSeconds(time.Duration(float64(missing) / cfg.RatePerSecond * float64(time.Second)))
 	}
 	return d
 }

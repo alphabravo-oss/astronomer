@@ -33,6 +33,11 @@ classification.
 | `dex_settings.public_clients_encrypted` | encrypted | Fernet ciphertext containing canonical Dex static-client JSON. It becomes authoritative after the explicit quiesced cutover. |
 | `helm_repositories.auth_config_encrypted` | encrypted | Fernet ciphertext over the COMPLETE chart-repository auth_config document (migration 145). Authoritative whenever non-empty; `auth_config` then holds only the non-secret projection (username, charts, allow_catalog). |
 | `monitoring_backends.auth_config_encrypted` | encrypted | Fernet ciphertext over the COMPLETE monitoring-backend auth_config document (migration 146). Authoritative whenever non-empty; `auth_config` then holds only the non-secret projection. The projection is an ALLOW-LIST (`operationPolicies`, `sharedThanos`, `sharedAlertmanager`, `sharedAlertingAssets`, `status`) rather than 145's secret deny-list, because this column is a config bag wrapped around an unbounded operator-authored credential portion. |
+| `charlie_connections.local_trust_material_encrypted` | encrypted | Fernet ciphertext containing only Astronomer-owned local CA/private-key and bridge/MCP TLS material. No Charlie central runtime credential is persisted. |
+| `charlie_action_receipts.arguments_encrypted` | encrypted | Fernet ciphertext containing the bounded, schema-validated action arguments needed only for post-crash postcondition reconciliation; never included in logs, metrics, findings summaries, or support bundles. |
+| `charlie_action_receipts.result_encrypted` | encrypted | Fernet ciphertext containing the bounded terminal action result needed for exact idempotent replay; never included in logs, metrics, findings summaries, or support bundles. |
+| `charlie_delegations.authorization_hash` | hashed | SHA-256 lookup hash for the opaque, short-lived product authorization reference; plaintext is returned once and never stored. |
+| `charlie_connections.agent_secret_hmac` | keyed digest | HMAC used only to reconcile deterministic Kubernetes Secret content without retaining a plaintext or offline-verifiable credential hash. |
 
 ## Legacy Plaintext To Migrate
 
@@ -58,3 +63,5 @@ classification.
 | `cloud_credential_materializations.secret_name` | Kubernetes Secret reference | Target materialized Secret name. |
 | `argocd_cluster_proxy_tokens.token_prefix` | token metadata | Prefix only for display/audit correlation. |
 | `dex_settings.runtime_secret_name` | Kubernetes Secret reference | Stable retained Dex runtime Secret name; contains no credential material. |
+| `charlie_connections.agent_secret_name` | Kubernetes Secret reference | Deterministic name of the agent enrollment/TLS Kubernetes Secret; contains no secret value. |
+| `agent_operational_statuses.credential_state` | credential lifecycle metadata | Bounded enum (`unknown`, `valid`, `expiring`, `expired`, `revoked`) only; no credential value or identifier. |

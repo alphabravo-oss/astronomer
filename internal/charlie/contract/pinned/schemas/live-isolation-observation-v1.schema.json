@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/live-isolation-observation-v1.schema.json",
+  "title": "LiveIsolationObservation",
+  "description": "Content-free, product-neutral measurements collected while a Charlie agent is under a declared isolation condition. This document is evidence, not a pass/fail verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "observation_id",
+    "scope",
+    "isolation_state",
+    "window",
+    "inventory",
+    "packets",
+    "runtime_counters",
+    "downstream_counters",
+    "control_messages"
+  ],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.live-isolation-observation/v1"},
+    "observation_id": {"$ref": "#/$defs/isolationObservationId"},
+    "scope": {
+      "type": "string",
+      "const": "charlie_agent",
+      "description": "All measurements are scoped to the Charlie agent boundary, never to a consuming product or host as a whole."
+    },
+    "isolation_state": {
+      "type": "string",
+      "description": "The configured condition during the complete observation window; it does not assert that isolation succeeded.",
+      "enum": ["cold_feature_disabled", "cold_connection_disabled", "operational_wire_disabled"]
+    },
+    "window": {"$ref": "#/$defs/observationWindow"},
+    "inventory": {"$ref": "#/$defs/inventoryEvidence"},
+    "packets": {"$ref": "#/$defs/packetEvidence"},
+    "runtime_counters": {"$ref": "#/$defs/runtimeCounters"},
+    "downstream_counters": {"$ref": "#/$defs/downstreamCounters"},
+    "control_messages": {"$ref": "#/$defs/controlMessageEvidence"}
+  },
+  "$defs": {
+    "isolationObservationId": {
+      "type": "string",
+      "pattern": "^iso_[A-Za-z0-9_-]{16,80}$",
+      "description": "Opaque observation identifier; the suffix must be randomly generated and must not encode environment data."
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "observationWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at", "ended_at", "duration_ms"],
+      "properties": {
+        "started_at": {"type": "string", "format": "date-time"},
+        "ended_at": {"type": "string", "format": "date-time"},
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900000,
+          "description": "Elapsed observation duration, bounded to fifteen minutes."
+        }
+      }
+    },
+    "inventorySample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "digest", "observed_at"],
+      "properties": {
+        "count": {"$ref": "#/$defs/counter"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "observed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "inventoryEvidence": {
+      "type": "object",
+      "description": "Charlie-agent-scoped inventory summaries. Names, arguments, addresses, ports, and unit definitions are intentionally absent.",
+      "additionalProperties": false,
+      "required": ["processes", "listeners", "timers"],
+      "properties": {
+        "processes": {"$ref": "#/$defs/inventorySample"},
+        "listeners": {"$ref": "#/$defs/inventorySample"},
+        "timers": {"$ref": "#/$defs/inventorySample"}
+      }
+    },
+    "directionalPacketCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ingress_count", "egress_count"],
+      "properties": {
+        "ingress_count": {"$ref": "#/$defs/counter"},
+        "egress_count": {"$ref": "#/$defs/counter"}
+      }
+    },
+    "packetEvidence": {
+      "type": "object",
+      "description": "Agent-boundary packet counts. Packet bytes, DNS names, addresses, and connection endpoints are never represented.",
+      "additionalProperties": false,
+      "required": ["observed_at", "counter_digest", "dns", "tcp", "udp"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "counter_digest": {"$ref": "#/$defs/digest"},
+        "dns": {"$ref": "#/$defs/directionalPacketCounts"},
+        "tcp": {"$ref": "#/$defs/directionalPacketCounts"},
+        "udp": {"$ref": "#/$defs/directionalPacketCounts"}
+      }
+    },
+    "runtimeCounters": {
+      "type": "object",
+      "description": "Fixed Charlie runtime event counters; arbitrary counter names are rejected.",
+      "additionalProperties": false,
+      "required": [
+        "observed_at",
+        "counter_digest",
+        "health_status_reads",
+        "lifecycle_control_requests",
+        "heartbeat_attempts",
+        "heartbeat_successes",
+        "work_claims",
+        "sessions_started",
+        "findings_created",
+        "rag_requests",
+        "model_requests",
+        "capability_calls"
+      ],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "counter_digest": {"$ref": "#/$defs/digest"},
+        "health_status_reads": {"$ref": "#/$defs/counter"},
+        "lifecycle_control_requests": {"$ref": "#/$defs/counter"},
+        "heartbeat_attempts": {"$ref": "#/$defs/counter"},
+        "heartbeat_successes": {"$ref": "#/$defs/counter"},
+        "work_claims": {"$ref": "#/$defs/counter"},
+        "sessions_started": {"$ref": "#/$defs/counter"},
+        "findings_created": {"$ref": "#/$defs/counter"},
+        "rag_requests": {"$ref": "#/$defs/counter"},
+        "model_requests": {"$ref": "#/$defs/counter"},
+        "capability_calls": {"$ref": "#/$defs/counter"}
+      }
+    },
+    "downstreamCounter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connection_attempts", "requests", "responses"],
+      "properties": {
+        "connection_attempts": {"$ref": "#/$defs/counter"},
+        "requests": {"$ref": "#/$defs/counter"},
+        "responses": {"$ref": "#/$defs/counter"}
+      }
+    },
+    "downstreamCounters": {
+      "type": "object",
+      "description": "Fixed product-neutral downstream categories; destinations and transport identifiers are intentionally absent.",
+      "additionalProperties": false,
+      "required": ["observed_at", "counter_digest", "central_control", "central_work", "artifact_registry", "product_mcp", "model_provider"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "counter_digest": {"$ref": "#/$defs/digest"},
+        "central_control": {"$ref": "#/$defs/downstreamCounter"},
+        "central_work": {"$ref": "#/$defs/downstreamCounter"},
+        "artifact_registry": {"$ref": "#/$defs/downstreamCounter"},
+        "product_mcp": {"$ref": "#/$defs/downstreamCounter"},
+        "model_provider": {"$ref": "#/$defs/downstreamCounter"}
+      }
+    },
+    "controlMessageClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction", "classification", "count"],
+      "properties": {
+        "direction": {"type": "string", "enum": ["ingress", "egress"]},
+        "classification": {
+          "type": "string",
+          "enum": [
+            "verified_signed_heartbeat_control",
+            "verified_signed_enable_control",
+            "verified_signed_mode_sync_control",
+            "verified_signed_credential_rotation_control",
+            "verified_signed_disconnect_control",
+            "verified_signed_uninstall_control",
+            "verified_signed_other_control",
+            "invalid_signature_control",
+            "unsigned_control",
+            "non_control"
+          ]
+        },
+        "count": {"$ref": "#/$defs/counter"}
+      }
+    },
+    "controlMessageEvidence": {
+      "type": "object",
+      "description": "Content-free classification of observed wire messages. It records signature verification and control class without message bytes or reusable signature material.",
+      "additionalProperties": false,
+      "required": ["observed_at", "classification_digest", "total_count", "classifications"],
+      "properties": {
+        "observed_at": {"type": "string", "format": "date-time"},
+        "classification_digest": {"$ref": "#/$defs/digest"},
+        "total_count": {"$ref": "#/$defs/counter"},
+        "classifications": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"$ref": "#/$defs/controlMessageClassification"}
+        }
+      }
+    }
+  }
+}

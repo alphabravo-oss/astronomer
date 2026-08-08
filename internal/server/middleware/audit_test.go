@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -171,6 +173,7 @@ func TestStatusWriter_ExplicitWriteHeader(t *testing.T) {
 
 type fakeAuditWriter struct {
 	lastV1 *sqlc.CreateAuditLogV1Params
+	err    error
 }
 
 type fakeAuditWriterV1Only struct {
@@ -179,7 +182,7 @@ type fakeAuditWriterV1Only struct {
 
 func (f *fakeAuditWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	f.lastV1 = &arg
-	return nil
+	return f.err
 }
 
 func (f *fakeAuditWriterV1Only) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
@@ -247,6 +250,105 @@ func TestAuditLogWithWriter_PersistsAuditRow(t *testing.T) {
 	}
 }
 
+func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T) {
+	var buf bytes.Buffer
+	writer := &fakeAuditWriter{}
+	handler := AuditLogWithWriter(newTestLogger(&buf), writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "response-SENTINEL", http.StatusForbidden)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/charlie/findings/resource-SENTINEL/acknowledge/?prompt=query-SENTINEL", strings.NewReader("body-SENTINEL"))
+	req.RemoteAddr = "203.0.113.99:1234"
+	req.Header.Set("User-Agent", "agent-SENTINEL")
+	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: uuid.NewString(), AuthMethod: "jwt"})
+	ctx = context.WithValue(ctx, contextKey("request_id"), "request-correlation-SENTINEL")
+	req = req.WithContext(ctx)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if writer.lastV1 == nil {
+		t.Fatal("expected content-free Charlie audit row")
+	}
+	row := writer.lastV1
+	if row.Action != "charlie.http.mutation" || row.ResourceType != "charlie_http_request" || row.StatusCode != http.StatusForbidden {
+		t.Fatalf("unexpected Charlie audit identity: %+v", row)
+	}
+	if row.Path != "" || row.ResourceID != "" || row.ResourceName != "" || row.UserAgent != "" || row.IpAddress != nil {
+		t.Fatalf("Charlie audit retained request metadata: %+v", row)
+	}
+	serialized := buf.String() + string(row.Detail) + row.Path + row.ResourceID + row.UserAgent
+	for _, sentinel := range []string{"resource-SENTINEL", "query-SENTINEL", "body-SENTINEL", "agent-SENTINEL", "response-SENTINEL", "request-correlation-SENTINEL", "203.0.113.99"} {
+		if strings.Contains(serialized, sentinel) {
+			t.Fatalf("Charlie audit leaked %q: %s", sentinel, serialized)
+		}
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil || detail["outcome_code"] != "denied" || detail["method"] != http.MethodPost {
+		t.Fatalf("invalid bounded Charlie audit detail: %s err=%v", row.Detail, err)
+	}
+}
+
+func TestCharlieAuthenticationDenialAuditRecordsOnlyContentFree401(t *testing.T) {
+	const sentinel = "pre-auth-sensitive-SENTINEL"
+	var buf bytes.Buffer
+	writer := &fakeAuditWriter{}
+	handler := CharlieAuthenticationDenialAuditWithWriter(newTestLogger(&buf), writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"` + sentinel + `"}`))
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/charlie/mode/?prompt="+sentinel, strings.NewReader(`{"prompt":"`+sentinel+`"}`))
+	request.Header.Set("User-Agent", sentinel)
+	request.RemoteAddr = "192.0.2.44:1234"
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+	if writer.lastV1 == nil {
+		t.Fatal("Charlie pre-authentication denial was not audited")
+	}
+	encoded, err := json.Marshal(writer.lastV1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), sentinel) || writer.lastV1.Path != "" || writer.lastV1.IpAddress != nil || writer.lastV1.UserAgent != "" {
+		t.Fatalf("Charlie pre-authentication audit leaked request content or metadata: %s", encoded)
+	}
+	if writer.lastV1.Action != "charlie.http.mutation" || writer.lastV1.StatusCode != http.StatusUnauthorized || !strings.Contains(string(writer.lastV1.Detail), `"outcome_code":"denied"`) {
+		t.Fatalf("unexpected Charlie pre-authentication audit: %+v", writer.lastV1)
+	}
+	if strings.Contains(buf.String(), sentinel) {
+		t.Fatalf("Charlie pre-authentication structured log leaked canary: %s", buf.String())
+	}
+}
+
+func TestCharlieAuthenticationDenialAuditDoesNotDuplicatePostAuthDenial(t *testing.T) {
+	writer := &fakeAuditWriter{}
+	handler := CharlieAuthenticationDenialAuditWithWriter(newTestLogger(&bytes.Buffer{}), writer)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/admin/charlie/mode/", nil))
+	if writer.lastV1 != nil {
+		t.Fatal("outer authentication auditor duplicated a post-authentication denial")
+	}
+}
+
+func TestCharlieHTTPAuditFailuresUseBoundedOperationalSerializer(t *testing.T) {
+	const canary = "database-and-correlation-SENTINEL"
+	var output bytes.Buffer
+	prior := slog.Default()
+	slog.SetDefault(newTestLogger(&output))
+	t.Cleanup(func() { slog.SetDefault(prior) })
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/charlie", nil)
+	request = request.WithContext(context.WithValue(request.Context(), requestIDKey, canary))
+	writeCharlieAuditLog(request, http.StatusOK, &fakeAuditWriter{err: errors.New(canary)}, 1, "success")
+	if !strings.Contains(output.String(), "charlie.http_audit_persist_failed") || strings.Contains(output.String(), canary) {
+		t.Fatalf("unsafe Charlie HTTP persistence failure log: %s", output.String())
+	}
+
+	output.Reset()
+	request.Method = "TRACE-SENTINEL"
+	writeCharlieAuditLog(request, http.StatusOK, &fakeAuditWriter{}, 1, "success")
+	if !strings.Contains(output.String(), "charlie.http_audit_encode_failed") || strings.Contains(output.String(), canary) || strings.Contains(output.String(), request.Method) {
+		t.Fatalf("unsafe Charlie HTTP encoding failure log: %s", output.String())
+	}
+}
+
 func TestAuditLogWithWriter_V1OnlyWriter(t *testing.T) {
 	var buf bytes.Buffer
 	writer := &fakeAuditWriterV1Only{}
@@ -294,5 +396,18 @@ func TestAuditLogWithWriter_SkipAuthPaths(t *testing.T) {
 
 	if writer.lastV1 != nil {
 		t.Fatal("expected skip path not to persist audit row")
+	}
+}
+
+func TestStatusWriterPreservesStreamingFlush(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writer := &statusWriter{ResponseWriter: recorder}
+	flusher, ok := any(writer).(http.Flusher)
+	if !ok {
+		t.Fatal("audit status writer removed http.Flusher")
+	}
+	flusher.Flush()
+	if !recorder.Flushed || writer.status != http.StatusOK {
+		t.Fatalf("stream was not flushed through audit writer: flushed=%v status=%d", recorder.Flushed, writer.status)
 	}
 }

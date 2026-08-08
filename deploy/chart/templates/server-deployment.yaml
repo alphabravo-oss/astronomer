@@ -100,6 +100,8 @@ spec:
             - name: argocd-proxy
               containerPort: 8090
               protocol: TCP
+            # Private mTLS-only MCP endpoint used by the Charlie product agent.
+            # It is never exposed by the public Ingress.
           envFrom:
             - configMapRef:
                 name: {{ include "astronomer.fullname" . }}-config
@@ -130,6 +132,24 @@ spec:
             # disables and non-owning replicas 503). Readiness fails loudly if not.
             - name: SERVER_REPLICAS
               value: {{ .Values.server.replicaCount | quote }}
+            - name: CHARLIE_MCP_LISTEN_ADDRESS
+              value: ":7444"
+            - name: CHARLIE_MCP_TLS_CERT_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/tls.crt
+            - name: CHARLIE_MCP_TLS_KEY_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/tls.key
+            - name: CHARLIE_MCP_CLIENT_CA_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/ca.crt
+            - name: CHARLIE_MCP_ACTION_SIGNING_KEY_FILE
+              value: /var/run/secrets/astronomer/charlie-mcp/action-signing-public-key
+            - name: CHARLIE_BRIDGE_TLS_CERT_FILE
+              value: /var/run/secrets/astronomer/charlie-bridge/tls.crt
+            - name: CHARLIE_BRIDGE_TLS_KEY_FILE
+              value: /var/run/secrets/astronomer/charlie-bridge/tls.key
+            - name: CHARLIE_BRIDGE_CA_FILE
+              value: /var/run/secrets/astronomer/charlie-bridge/ca.crt
+            - name: CHARLIE_AGENT_NAMESPACE
+              value: astronomer-charlie
             # EVENT-01: Publish never waits on Redis. This is the bounded
             # per-pod relay queue; the process also enforces a hard maximum.
             - name: EVENT_RELAY_QUEUE_CAPACITY
@@ -198,6 +218,12 @@ spec:
             - name: tmp
               mountPath: /tmp
               readOnly: false
+            - name: charlie-mcp-tls
+              mountPath: /var/run/secrets/astronomer/charlie-mcp
+              readOnly: true
+            - name: charlie-bridge-tls
+              mountPath: /var/run/secrets/astronomer/charlie-bridge
+              readOnly: true
             {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
             - name: tls-ca-additional
               mountPath: /astronomer/trust/extra
@@ -241,6 +267,14 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
+        - name: charlie-mcp-tls
+          secret:
+            secretName: astronomer-charlie-mcp-tls
+            optional: true
+        - name: charlie-bridge-tls
+          secret:
+            secretName: astronomer-charlie-bridge-client-tls
+            optional: true
         {{- if and .Values.tls.additionalTrustedCAs.enabled .Values.tls.additionalTrustedCAs.existingSecret }}
         - name: tls-ca-additional
           secret:

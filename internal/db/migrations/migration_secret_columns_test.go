@@ -41,6 +41,11 @@ var classifiedSecretColumns = map[string]string{
 	"120_cluster_agent_token_rotation.up.sql:previous_token_hash":                "hashed previous cluster agent token (rotation grace window)",
 	"134_dex_runtime_secret.up.sql:runtime_secret_name":                          "Kubernetes Secret name reference",
 	"134_dex_runtime_secret.up.sql:public_clients_encrypted":                     "encrypted Dex static-client configuration",
+	"147_charlie_agent_integration.up.sql:agent_secret_name":                     "Kubernetes Secret name reference",
+	"147_charlie_agent_integration.up.sql:agent_secret_hmac":                     "keyed HMAC of Kubernetes Secret content",
+	"147_charlie_agent_integration.up.sql:credential_state":                      "non-secret credential lifecycle enum",
+	"147_charlie_agent_integration.up.sql:arguments_encrypted":                   "encrypted bounded Charlie action arguments for postcondition reconciliation",
+	"147_charlie_agent_integration.up.sql:result_encrypted":                      "encrypted bounded Charlie terminal result for exact replay",
 }
 
 var migrationColumnDecl = regexp.MustCompile(`(?i)\b(?:ADD\s+COLUMN(?:\s+IF\s+NOT\s+EXISTS)?\s+)?([a-z][a-z0-9_]*)\s+(TEXT|VARCHAR(?:\([^)]+\))?|CHAR(?:\([^)]+\))?|JSONB|UUID|BYTEA)\b`)

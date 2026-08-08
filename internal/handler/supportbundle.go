@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -53,6 +54,16 @@ type SupportBundleQuerier interface {
 	// L3 engineer needs when triaging a "why are these clusters offline?"
 	// question.
 	ListActiveConnections(ctx context.Context) ([]sqlc.AgentConnection, error)
+}
+
+// supportBundleCharlieQuerier is optional so Charlie remains entirely absent
+// from support-bundle work on installations that have never enabled the
+// feature. It reads only local Astronomer metadata; it never constructs a
+// Product Bridge or Charlie Central client.
+type supportBundleCharlieQuerier interface {
+	GetLatestCharlieConnection(context.Context) (sqlc.CharlieConnection, error)
+	ListCharlieTriggerRules(context.Context, uuid.UUID) ([]sqlc.CharlieTriggerRule, error)
+	ListCharlieFindings(context.Context, sqlc.ListCharlieFindingsParams) ([]sqlc.CharlieFinding, error)
 }
 
 // SupportBundleAsynqInspector is the slice of asynq.Inspector the bundle
@@ -163,10 +174,82 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	h.writeSchemaMigrations(r.Context(), zw, collected)
 	h.writeAsynqQueues(r.Context(), zw, collected)
 	h.writeAgentConnections(r.Context(), zw, collected)
+	h.writeCharlieStatus(r.Context(), zw, collected)
 	h.writeReadme(zw, collected)
 	if err := zw.Close(); err != nil {
 		slog.Warn("failed to finish support bundle", "error", err)
 	}
+}
+
+func (h *SupportBundleHandler) writeCharlieStatus(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	queries, ok := h.queries.(supportBundleCharlieQuerier)
+	if !ok {
+		log.skipped("charlie-status.json", "Charlie metadata store not wired")
+		return
+	}
+	connection, err := queries.GetLatestCharlieConnection(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		log.skipped("charlie-status.json", "Charlie has never been configured")
+		return
+	}
+	if err != nil {
+		log.section("charlie-status.json", err)
+		return
+	}
+	rules, rulesErr := queries.ListCharlieTriggerRules(ctx, connection.ID)
+	findings, findingsErr := queries.ListCharlieFindings(ctx, sqlc.ListCharlieFindingsParams{
+		ConnectionID: connection.ID, PageLimit: 500,
+	})
+	ruleSummary := make([]map[string]any, 0, len(rules))
+	if rulesErr == nil {
+		for _, rule := range rules {
+			ruleSummary = append(ruleSummary, map[string]any{
+				"name": rule.Name, "category": rule.Category, "enabled": rule.Enabled,
+				"minimum_severity": rule.MinimumSeverity, "window_seconds": rule.WindowSeconds,
+				"cooldown_seconds": rule.CooldownSeconds, "mode_ceiling": rule.ModeCeiling,
+			})
+		}
+	}
+	findingCounts := map[string]int{}
+	if findingsErr == nil {
+		for _, finding := range findings {
+			findingCounts[finding.Status+":"+finding.Severity]++
+		}
+	}
+	payload := map[string]any{
+		"configured": true, "active": connection.Active,
+		"emergency_disabled": connection.EmergencyDisabled,
+		"requested_mode":     connection.RequestedMode, "verified_mode": connection.VerifiedMode,
+		"verified_mode_revision": connection.VerifiedModeRevision,
+		"onboarding_state":       connection.OnboardingState, "health_state": connection.HealthState,
+		"last_error_code":                   connection.LastErrorCode,
+		"agent_protocol_version":            connection.AgentProtocolVersion,
+		"chart_version":                     connection.ChartVersion,
+		"leader_present":                    strings.TrimSpace(connection.LeaderInstanceID) != "",
+		"fencing_epoch":                     connection.FencingEpoch,
+		"last_verified_at":                  timestamptzString(connection.LastVerifiedAt),
+		"last_connected_at":                 timestamptzString(connection.LastConnectedAt),
+		"last_rotated_at":                   timestamptzString(connection.LastRotatedAt),
+		"certificate_expires_at":            timeString(connection.CertificateExpiresAt),
+		"enrollment_credentials_expires_at": timeString(connection.EnrollmentCredentialsExpiresAt),
+		"artifact_credential_expires_at":    timeString(connection.ArtifactCredentialExpiresAt),
+		"onboarding_package_expires_at":     timeString(connection.OnboardingPackageExpiresAt),
+		"trigger_rules":                     ruleSummary, "finding_counts": findingCounts,
+	}
+	if rulesErr != nil {
+		payload["trigger_rules_status"] = "unavailable"
+	}
+	if findingsErr != nil {
+		payload["finding_counts_status"] = "unavailable"
+	}
+	log.section("charlie-status.json", writeBundleJSON(zw, "charlie-status.json", payload))
+}
+
+func timeString(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 // ── individual section writers ──────────────────────────────────────────

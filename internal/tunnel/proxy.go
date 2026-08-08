@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
@@ -67,6 +68,7 @@ func NewProxyHandler(hub *Hub, log *slog.Logger) *ProxyHandler {
 // they last until either the client disconnects or the agent closes the
 // upstream stream.
 func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
+	downstreamboundary.RecordContext(r.Context(), downstreamboundary.EntrypointKubernetesProxy, downstreamboundary.OperationKubernetes)
 	clusterID := chi.URLParam(r, "cluster_id")
 	mode := k8sProxyMode(r)
 	if clusterID == "" {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,6 +31,26 @@ type fakeSettingsQuerier struct {
 	userErr  error
 	rows     map[string]sqlc.PlatformSetting
 	auditOps []string
+	auditErr error
+}
+
+type fakeCharlieSettingsLifecycle struct {
+	disable func(context.Context, string) error
+	enable  func(context.Context, string) error
+}
+
+func (f fakeCharlieSettingsLifecycle) Disable(ctx context.Context, actor string) error {
+	if f.disable != nil {
+		return f.disable(ctx, actor)
+	}
+	return nil
+}
+
+func (f fakeCharlieSettingsLifecycle) Enable(ctx context.Context, actor string) error {
+	if f.enable != nil {
+		return f.enable(ctx, actor)
+	}
+	return nil
 }
 
 func newFakeSettingsQuerier(user sqlc.User) *fakeSettingsQuerier {
@@ -101,7 +122,7 @@ func (f *fakeSettingsQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Creat
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.auditOps = append(f.auditOps, arg.Action)
-	return nil
+	return f.auditErr
 }
 
 // authedRequest builds an httptest request with an injected authenticated user.
@@ -221,6 +242,74 @@ func TestSettings_GetSetDeleteCycle(t *testing.T) {
 		if q.auditOps[i] != a {
 			t.Fatalf("audit ops[%d] = %q, want %q", i, q.auditOps[i], a)
 		}
+	}
+}
+
+func TestCharlieFeatureDisableQuiescesBeforePersistingFalse(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	q.rows["feature.charlie"] = sqlc.PlatformSetting{Key: "feature.charlie", Value: json.RawMessage("true")}
+	called := false
+	h := NewPlatformSettingsHandler(q)
+	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{disable: func(ctx context.Context, actor string) error {
+		called = true
+		row, err := q.GetPlatformSetting(ctx, "feature.charlie")
+		if err != nil || string(row.Value) != "true" {
+			t.Fatalf("feature was persisted false before runtime quiesced: row=%s err=%v", row.Value, err)
+		}
+		if actor != callerID.String() {
+			t.Fatalf("actor=%q", actor)
+		}
+		return nil
+	}})
+	req := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/feature.charlie/", callerID, []byte(`{"value":false}`)), "key", "feature.charlie")
+	w := httptest.NewRecorder()
+	h.Update(w, req)
+	if w.Code != http.StatusOK || !called {
+		t.Fatalf("status=%d called=%t body=%s", w.Code, called, w.Body.String())
+	}
+	row, _ := q.GetPlatformSetting(context.Background(), "feature.charlie")
+	if string(row.Value) != "false" {
+		t.Fatalf("feature value=%s", row.Value)
+	}
+}
+
+func TestCharlieFeatureEnableRollsBackWhenRuntimeRestoreFails(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	h := NewPlatformSettingsHandler(q)
+	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{enable: func(context.Context, string) error {
+		return errors.New("resume failed")
+	}})
+	req := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/feature.charlie/", callerID, []byte(`{"value":true}`)), "key", "feature.charlie")
+	w := httptest.NewRecorder()
+	h.Update(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := q.GetPlatformSetting(context.Background(), "feature.charlie"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("failed enable left feature active: %v", err)
+	}
+}
+
+func TestCharlieFeatureEnableAuditFailurePersistsNoFeatureState(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	q.auditErr = errors.New("database-SENTINEL")
+	h := NewPlatformSettingsHandler(q)
+	resumeCalls := 0
+	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{enable: func(context.Context, string) error {
+		resumeCalls++
+		return nil
+	}})
+	req := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/feature.charlie/", callerID, []byte(`{"value":true}`)), "key", "feature.charlie")
+	w := httptest.NewRecorder()
+	h.Update(w, req)
+	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), "database-SENTINEL") {
+		t.Fatalf("feature audit failure was not bounded: status=%d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := q.GetPlatformSetting(context.Background(), "feature.charlie"); !errors.Is(err, pgx.ErrNoRows) || resumeCalls != 0 {
+		t.Fatalf("feature audit failure changed state: setting_err=%v resumes=%d", err, resumeCalls)
 	}
 }
 
@@ -417,6 +506,9 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	}
 	if !flags["feature.projects"] {
 		t.Fatalf("feature.projects default = false, want true")
+	}
+	if flags["feature.charlie"] {
+		t.Fatalf("feature.charlie default = true, want fail-closed false")
 	}
 	if _, ok := flags["telemetry.endpoint"]; ok {
 		t.Fatalf("features leaked telemetry row: %+v", flags)

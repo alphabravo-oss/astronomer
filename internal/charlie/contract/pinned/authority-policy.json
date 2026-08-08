@@ -1,0 +1,49 @@
+{
+  "schema": "charlie.authority/v1",
+  "enablement": {
+    "expression": "product_local_enabled && deployment_enabled",
+    "effective_enabled_requires": ["product_local_enabled", "deployment_enabled"],
+    "local_emergency_disable_precedence": "absolute",
+    "remote_readback_may_enable_local": false
+  },
+  "authorization_ref": {
+    "interpretation_by_charlie": "opaque",
+    "validation_authority": "product_mcp",
+    "validate_live_on_every_call": true,
+    "validated_dimensions": [
+      "principal",
+      "resource_scope",
+      "expiry",
+      "revocation",
+      "capability",
+      "exact_arguments"
+    ],
+    "cached_authorization_is_sufficient": false
+  },
+  "write_execution": {
+    "product_idempotency_required": true,
+    "idempotency_key_source": "action_id",
+    "blind_retry_after_ambiguous_transport": false,
+    "postcondition_reconciliation_required": true,
+    "auto_outside_automatic_authority": "approval_required"
+  },
+  "denial_precedence": [
+    {"order": 10, "code": "capability_destructive", "condition": "disclosure is destructive or irreversible"},
+    {"order": 20, "code": "product_disabled", "condition": "product-local enablement is false"},
+    {"order": 30, "code": "deployment_disabled", "condition": "deployment enablement is false"},
+    {"order": 40, "code": "stale_leadership", "condition": "instance or fencing epoch is stale"},
+    {"order": 50, "code": "disclosure_drift", "condition": "disclosure digest or capability binding differs"},
+    {"order": 60, "code": "product_rbac_denied", "condition": "live product authorization denies principal or capability"},
+    {"order": 70, "code": "scope_denied", "condition": "live product authorization denies resource or exact arguments"},
+    {"order": 80, "code": "read_only", "condition": "requested effect is write in read-only mode"},
+    {"order": 90, "code": "non_auto_eligible", "condition": "a ticket falsely claims automatic authority for a non-auto-eligible capability"},
+    {"order": 100, "code": "approval_required", "condition": "valid approval is required and absent"},
+    {"order": 110, "code": "approval_expired", "condition": "approval expired"},
+    {"order": 120, "code": "approval_rejected", "condition": "approval was rejected"},
+    {"order": 130, "code": "allowlist_denied", "condition": "a ticket falsely claims automatic authority outside the product allowlist"},
+    {"order": 140, "code": "safety_budget_exceeded", "condition": "bounded action or target budget is exhausted"},
+    {"order": 150, "code": "precondition_failed", "condition": "a declared precondition is not satisfied"},
+    {"order": 160, "code": "circuit_breaker_open", "condition": "the execution circuit breaker is open"}
+  ],
+  "combination": "first_matching_denial_wins_and_any_denial_blocks"
+}

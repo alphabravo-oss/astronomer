@@ -150,6 +150,17 @@
       "reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
     },
     {
+      "id": "charlie-alert-policy-admin",
+      "methods": [
+        "PUT"
+      ],
+      "patterns": [
+        "/api/v1/admin/charlie/alert-policy"
+      ],
+      "classification": "covered-rbac-charlie-admin",
+      "reason": "The product-owned Charlie notification policy is feature-gated and requires authenticated admin scope plus charlie:manage at the router. Browser mutations inherit CSRF protection, the handler enforces optimistic revisions, and the mutation is recorded through the bounded Charlie audit contract without exposing recipients, channel configuration, or credentials."
+    },
+    {
       "id": "control-plane-controllers-superuser",
       "methods": [
         "POST",

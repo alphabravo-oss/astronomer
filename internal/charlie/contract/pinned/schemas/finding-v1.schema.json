@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/finding-v1.schema.json",
+  "title": "FindingEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "finding", "lifecycle", "storage"],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.finding/v1"},
+    "finding": {"$ref": "#/$defs/finding"},
+    "lifecycle": {
+      "type": "array", "minItems": 1, "maxItems": 100,
+      "items": {"$ref": "#/$defs/lifecycleEvent"}
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["encryption_required", "retention_days", "expires_at"],
+      "properties": {
+        "encryption_required": {"type": "boolean", "const": true},
+        "retention_days": {"type": "integer", "minimum": 1, "maximum": 90},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  },
+  "$defs": {
+    "opaqueId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id", "deduplication_key", "severity", "status",
+        "workflow",
+        "affected_resources", "evidence_summary", "diagnosis", "confidence",
+        "block_code", "risk_impact", "operator_checks", "verification_steps",
+        "investigation_id", "session_id", "created_at", "updated_at"
+      ],
+      "properties": {
+        "finding_id": {"$ref": "#/$defs/opaqueId"},
+        "deduplication_key": {"type": "string", "minLength": 16, "maxLength": 128},
+        "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "critical"]},
+        "status": {"type": "string", "enum": ["open", "acknowledged", "dismissed", "resolved", "reopened"]},
+        "workflow": {"$ref": "#/$defs/workflow"},
+        "affected_resources": {
+          "type": "array", "minItems": 1, "maxItems": 25, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/opaqueId"}
+        },
+        "evidence_summary": {
+          "type": "array", "maxItems": 20,
+          "items": {"type": "string", "minLength": 1, "maxLength": 8192}
+        },
+        "diagnosis": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "recommended_capability": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$"},
+        "block_code": {"$ref": "#/$defs/blockCode"},
+        "risk_impact": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "preconditions": {
+          "type": "array", "maxItems": 16,
+          "items": {"type": "string", "minLength": 1, "maxLength": 256}
+        },
+        "rollback": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "operator_checks": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "verification_steps": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "investigation_id": {"$ref": "#/$defs/opaqueId"},
+        "session_id": {"$ref": "#/$defs/opaqueId"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {"$ref": "#/$defs/workflowState"},
+        "manual_remediation": {"$ref": "#/$defs/manualRemediation"}
+      }
+    },
+    "workflowState": {
+      "type": "string",
+      "enum": ["approval_pending", "manual_remediation_required", "remediation_in_progress", "verification_pending", "resolved", "rejected", "dismissed", "expired"]
+    },
+    "manualRemediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps", "expected_impact", "verification"],
+      "properties": {
+        "preconditions": {"type": "array", "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 256}},
+        "steps": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+        "expected_impact": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "rollback": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "verification": {"$ref": "#/$defs/verification"}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "steps"],
+      "properties": {
+        "method": {"type": "string", "pattern": "^[a-z][a-z0-9_.:-]{0,127}$"},
+        "steps": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 512}}
+      }
+    },
+    "lifecycleEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "transition", "workflow_state", "actor_ref", "occurred_at"],
+      "properties": {
+        "event_id": {"$ref": "#/$defs/opaqueId"},
+        "transition": {"type": "string", "enum": ["created", "deduplicated", "acknowledged", "remediation_started", "verification_requested", "dismissed", "resolved", "reopened"]},
+        "workflow_state": {"$ref": "#/$defs/workflowState"},
+        "actor_ref": {"$ref": "#/$defs/opaqueId"},
+        "reason": {"type": "string", "maxLength": 512},
+        "occurred_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "blockCode": {
+      "type": "string",
+      "enum": [
+        "capability_destructive", "product_disabled", "deployment_disabled",
+        "stale_leadership", "disclosure_drift", "product_rbac_denied",
+        "scope_denied", "read_only", "non_auto_eligible",
+        "approval_required", "approval_expired", "approval_rejected",
+        "allowlist_denied", "safety_budget_exceeded", "cooldown_active",
+        "maintenance_window", "precondition_failed", "circuit_breaker_open",
+        "idempotency_conflict", "ambiguous_prior_attempt", "execution_failed",
+        "central_unavailable", "audit_unavailable", "verification_failed", "no_safe_action"
+      ]
+    }
+  }
+}

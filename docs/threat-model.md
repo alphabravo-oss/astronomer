@@ -1,6 +1,6 @@
 # Threat Model
 
-Date: 2026-06-14
+Date: 2026-08-05
 
 Astronomer is a high-privilege Kubernetes management plane. The main security objective is to prevent a user, browser, token, proxy, or compromised component from gaining broader cluster access than intended.
 
@@ -19,6 +19,7 @@ Astronomer is a high-privilege Kubernetes management plane. The main security ob
 | Management-plane Helm release | Deployment security boundary for network policy, pod security contexts, bootstrap credentials, ingress/TLS, and backup jobs. |
 | Management backups | Durable copy of Postgres state; must remain encrypted/separated from encryption keys and periodically restore-tested. |
 | Container images, Helm repos, and generated manifests | Supply-chain inputs that can change runtime permissions or code paths. |
+| Optional Charlie product-agent boundary | Keep AI/model output non-authoritative; isolate the separate Charlie service and enforce every read/write through current product-owned policy. |
 
 ## Browser Sessions
 
@@ -71,6 +72,78 @@ Review checks:
 - New tunnel message types must include cluster ID validation and route-level authorization.
 - New Kubernetes passthrough behavior must include tests for method/path/body forwarding and auth/RBAC denial.
 - New agent RBAC rules must be justified in `docs/agent-privilege-profiles.md`.
+
+## Optional Charlie SRE Assistant
+
+Trust boundaries: browser to Astronomer API; Astronomer server/worker to the
+private local Charlie Product Bridge; Charlie product agent to Astronomer's
+private MCP listener; product agent to separately deployed Charlie Central.
+
+Threats:
+
+- Prompt injection or model output being treated as authorization.
+- An enabled feature or permissive Charlie mode bypassing live Astronomer RBAC,
+  resource scope, approval, safety, budget, or fencing checks.
+- Charlie server/worker code bypassing the local product agent and calling
+  Charlie Central directly.
+- The product agent receiving a Kubernetes service-account token, Astronomer API
+  token, kubeconfig, or downstream tunnel capability.
+- Read capability output leaking Secrets, credentials, raw manifests, unbounded
+  logs, prompts, evidence, or cross-user/cross-deployment content.
+- Approval replay, argument substitution, stale mode/disclosure/fencing state,
+  duplicate dispatch during failover, or retry after an ambiguous write.
+- Event storms duplicating investigations or automation acting on a recovered
+  condition.
+- A product-agent compromise using broad egress or MCP access to move laterally.
+
+Controls:
+
+- `feature.charlie=false` is default and a fresh deployment constructs no
+  runtime listener, workload, Service, or network path. Disabling an installed
+  integration atomically closes write admission, cancels/drains registered
+  writes, removes the agent workload and private network surface, and retains
+  only owner-bound resume/secrets plus durable product metadata/audit. Product
+  and central activation are both required; either disable wins locally.
+- The sole runtime path is a fixed cluster-local mTLS Product Bridge with exact
+  DNS/SPIFFE identities. Browser clients never receive bridge, central, MCP, or
+  enrollment credentials; server/worker direct central egress is prohibited.
+- The generic agent has `automountServiceAccountToken: false`, no Role/Binding,
+  no Astronomer API credential, and exact NetworkPolicy paths only.
+- MCP discovery is the complete allowlist. Schemas reject unknown/unbounded
+  inputs; v1 omits destructive, irreversible, shell/exec, arbitrary HTTP/SQL,
+  raw Kubernetes, Secret, and all downstream-cluster operations.
+- Every call rechecks feature/connection/emergency state, least-authority mode,
+  signed action and exact arguments, current user/service identity and RBAC,
+  affected-resource scope, disclosure revision, approval/auto allowlist,
+  safety/preconditions, budgets/cooldowns, idempotency receipt, and fencing
+  epoch. Deny wins; model output grants nothing.
+- Approval binds deployment/session/turn/action/capability/argument digest,
+  approver, target authorization, expiry, and one-time consumption. Writes are
+  durably audited and claimed before dispatch, then product-verified.
+- Conversation/evidence content remains in Charlie. Astronomer stores bounded
+  session/finding/trigger metadata and opaque hashed authorization references.
+  Metrics/logs/audit/support bundles use fixed content-free fields.
+- Trigger decisions and thresholds live in Astronomer, use a durable outbox,
+  deduplicate by stable fingerprint, coalesce repeats, honor grace/cooldown, and
+  create actionable findings when execution is not permitted.
+- Charlie may read Astronomer-owned downstream-agent connection telemetry but
+  no capability proxies through an agent tunnel or queries downstream
+  Kubernetes. Instrumented tunnel-spy tests enforce the boundary.
+
+Review checks:
+
+- Any new Charlie capability must document effect, risk, exact target bounds,
+  input/output limits, RBAC mapping, redaction, precondition, verification,
+  idempotency, rollback, cooldown/budget, and downstream-access proof.
+- Capability/disclosure changes require explicit administrator acknowledgement;
+  auto allowlists do not carry forward implicitly.
+- New Charlie routes require feature, auth, RBAC, rate/concurrency, audit, CSRF,
+  security-inventory, and disabled-state no-I/O tests.
+- Test read-only, approval, auto, emergency disable, identity/RBAC revocation,
+  failover at every write boundary, ambiguous outcomes, multi-deployment
+  isolation, and direct-egress/downstream-tunnel denial before release.
+- Follow [Charlie operations and runbooks](charlie-operations.md) for incidents,
+  rotation, rollback, disconnect, and stop conditions.
 
 ## ArgoCD Cluster Proxy
 

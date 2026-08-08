@@ -42,3 +42,7 @@ rules:
     verbs: [read, list, watch]
   - resource: audit_logs
     verbs: [read, list]
+  # Charlie can diagnose only resources this role can already read. This grant
+  # enables chat/session use; it does not grant approval or target writes.
+  - resource: charlie
+    verbs: [create, read]

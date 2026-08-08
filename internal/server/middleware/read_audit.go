@@ -31,6 +31,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -353,6 +354,9 @@ func ReadAudit(eval *PolicyEvaluator, enq AuditEnqueuer) func(http.Handler) http
 			}
 
 			action := buildReadAuditAction(routePattern)
+			if isCharlieAPIPath(r.URL.Path) {
+				action = "charlie.http.read"
+			}
 			row := buildReadAuditRow(r, sw.status, routePattern, pol, action)
 			queue.enqueue(row)
 		})
@@ -394,6 +398,29 @@ func buildReadAuditAction(routePattern string) string {
 }
 
 func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sqlc.ReadAuditPolicy, action string) sqlc.CreateAuditLogV1Params {
+	if isCharlieAPIPath(r.URL.Path) {
+		detail, err := charlie.EncodeCharlieAuditDetail("charlie.http.read", "charlie_http_request", map[string]any{
+			"outcome_code": charlieHTTPOutcome(status),
+			"method":       r.Method,
+			"status_code":  status,
+			"duration_ms":  int64(0),
+		})
+		if err != nil {
+			detail = []byte(`{}`)
+		}
+		return sqlc.CreateAuditLogV1Params{
+			Source:          "http",
+			CorrelationID:   GetCorrelationID(r.Context()),
+			UserID:          AuthenticatedUserUUID(r.Context()),
+			ActorAuthMethod: authMethod(r.Context()),
+			Action:          "charlie.http.read",
+			ResourceType:    "charlie_http_request",
+			StatusCode:      int32(status),
+			RequestID:       GetRequestID(r.Context()),
+			Detail:          detail,
+			ActionClass:     "read",
+		}
+	}
 	detail := map[string]any{
 		"method":          r.Method,
 		"path_pattern":    routePattern,

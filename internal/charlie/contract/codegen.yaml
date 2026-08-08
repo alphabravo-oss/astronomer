@@ -1,0 +1,10 @@
+package: bridgewire
+output: internal/wire/client.gen.go
+generate:
+  models: true
+  client: true
+  embedded-spec: false
+output-options:
+  skip-prune: true
+compatibility:
+  always-prefix-enum-values: true

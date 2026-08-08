@@ -240,6 +240,34 @@ type RouterDependencies struct {
 	// settings, consumed by the FeatureGate middleware below. Optional
 	// — when nil, every feature-gated route falls through as enabled.
 	SettingsCache *handler.SettingsCache
+	// CharlieOnboarding owns the local-only signed package validation and
+	// consumption endpoints. It is nil unless database encryption and the
+	// in-cluster Kubernetes Secret writer are both available.
+	CharlieOnboarding *handler.CharlieOnboardingHandler
+	// CharlieAdmin owns the fail-closed connection, agent, mode, automation,
+	// access-preview, and diagnostics control plane. It never serves runtime
+	// evidence and is absent unless the local database is available.
+	CharlieAdmin *handler.CharlieAdminHandler
+	// CharlieSessions is the browser-only, live-authorized proxy for private
+	// Charlie chat. Nil keeps every route absent when the optional runtime is
+	// not fully wired.
+	CharlieSessions *handler.CharlieSessionHandler
+	// CharlieThreads is the durable interactive conversation pointer (one active
+	// thread per user). Sessions under a thread remain authorized agent runs.
+	CharlieThreads *handler.CharlieThreadHandler
+	// CharlieApprovals is the browser-facing product authority gate for exact,
+	// signed, single-use write approvals.
+	CharlieApprovals *handler.CharlieApprovalHandler
+	// CharlieContext exposes only live-authorized, bounded product resource
+	// identifiers and labels for the explicit chat context picker.
+	CharlieContext *handler.CharlieContextHandler
+	// CharlieFindings exposes bounded local notification summaries and proxies
+	// central detail only after live product authorization. Nil keeps the
+	// optional surface absent.
+	CharlieFindings *handler.CharlieFindingHandler
+	// CharlieOperations exposes bounded durable action-receipt status only
+	// after the same live session authorization used for history and findings.
+	CharlieOperations *handler.CharlieOperationHandler
 	// Quotas owns /api/v1/admin/quota-plans/* CRUD, the
 	// /admin/quota-usage/ fleet snapshot, and the per-tenant
 	// /projects/{id}/quota/ + /auth/me/quota/ readers. Migration 051.
@@ -332,6 +360,21 @@ type RouterDependencies struct {
 	// chain authenticates against. Unlike SCIM itself this lives INSIDE
 	// the JWT auth chain. Nil-safe: omitted when unwired.
 	SCIMTokenAdmin *handler.SCIMTokenAdminHandler
+}
+
+func apiRequestTimeout(duration time.Duration) func(http.Handler) http.Handler {
+	bounded := chimiddleware.Timeout(duration)
+	return func(next http.Handler) http.Handler {
+		timed := bounded(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimSuffix(r.URL.Path, "/")
+			if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v1/charlie/sessions/") && strings.HasSuffix(path, "/events") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timed.ServeHTTP(w, r)
+		})
+	}
 }
 
 type ArgoCDClusterProxyTokenQuerier interface {
@@ -471,9 +514,10 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
-		// REST-only timeout — does NOT apply to WS routes registered at the
-		// top level (see r.Get("/api/v1/ws/...") below).
-		r.Use(chimiddleware.Timeout(30 * time.Second))
+		// REST-only timeout. Charlie's authenticated event stream is explicitly
+		// exempt because chi's timeout writer cannot expose http.Flusher and
+		// would both break SSE and terminate healthy turns at 30 seconds.
+		r.Use(apiRequestTimeout(30 * time.Second))
 		// /bootstrap/ and /bootstrap/complete/ were removed when the server
 		// switched to the Rancher-style admin-on-first-boot model: the
 		// startup hook in cmd/server/main.go (auth.EnsureBootstrapAdmin)
@@ -985,7 +1029,18 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		authenticated := r
 		if deps.JWT != nil {
 			authenticated = chi.NewRouter()
+			if deps.RemoteQueries != nil {
+				// Authentication failures return before authenticated middleware
+				// can observe the request. Record only Charlie's unauthenticated
+				// mutation denials here, using its content-free audit contract.
+				authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(slog.Default(), deps.RemoteQueries))
+			}
 			authenticated.Use(appmiddleware.RequireAuthWithQueries(deps.JWT, deps.AuthQueries))
+			if deps.RemoteQueries != nil {
+				// Keep the normal mutation auditor immediately after auth so it
+				// receives actor context and still observes write-scope/RBAC denials.
+				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
+			}
 			// Default-deny scope backstop: a read-only API token can never
 			// reach a mutating handler, regardless of whether the specific
 			// subtree opted into a write scope. Wired right after auth so
@@ -996,9 +1051,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// GET/HEAD/OPTIONS, JWT sessions, and legacy empty-scope tokens
 			// pass through untouched (see RequireWriteScopeForMutations).
 			authenticated.Use(appmiddleware.RequireWriteScopeForMutations(""))
-			if deps.RemoteQueries != nil {
-				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
-			}
 			// Migration 063 — read-side audit. Wire AFTER auth so we
 			// know the actor, and BEFORE per-route handlers so the
 			// middleware sees every authenticated read. Nil-safe: when
@@ -2168,6 +2220,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerResourcesWorkloadsRoutes(r, deps)
 	registerSecurityRoutes(r, cfg, deps, rateLimit)
 	registerDexRoutes(r, deps)
+	registerCharlieRoutes(r, deps, rateLimit)
 }
 
 // remoteV2PodsHandler is the demonstration endpoint for the new

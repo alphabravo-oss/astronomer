@@ -172,6 +172,7 @@ test.describe('smtp (sentinel secret variant)', () => {
 
     await page.goto('/dashboard/settings/smtp');
 
+    await page.getByRole('button', { name: 'Edit configuration' }).click();
     await expect(page.getByLabel('Host')).toHaveValue('smtp.old.example.com');
     await expect(page.getByText('Stored — type a new value to rotate')).toBeVisible();
 

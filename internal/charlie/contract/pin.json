@@ -1,0 +1,16 @@
+{
+  "schema": "astronomer.charlie-contract-pin/v1",
+  "frozen_at": "2026-08-07T00:00:00Z",
+  "source_repository": "AlphaBravoCompany/charlie",
+  "source_commit": "0d15d9f240125acafe2be820d7a584ffff2254e5",
+  "source_phase": "v1",
+  "bridge_protocol": "bridge/v1",
+  "bridge_openapi_version": "1.0.0",
+  "agent_protocol_version": "1.0.0",
+  "agent_chart_version": "1.0.34",
+  "agent_app_version": "1.0.0",
+  "minimum_central_api_version": "1.0.0",
+  "central_api_base_path": "/charlie/v1",
+  "local_bridge_service": "charlie-agent-bridge.<namespace>.svc:7443",
+  "direct_central_transport_allowed": false
+}

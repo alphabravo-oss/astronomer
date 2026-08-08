@@ -1,0 +1,79 @@
+[
+  {
+    "document_key": "astronomer/0.3.5/playbooks/approval-remediation-loop.md",
+    "title": "Approval Remediation Loop",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "playbooks/approval-remediation-loop.md"
+    },
+    "content": "# Playbook: Approval-mode remediation loop\n\nUse when authoritative mode is **approval** (or auto for allowlisted actions).\n\n## Rules\n\n1. Gather evidence with **read** tools first (pods, logs, events, readiness).\n2. Propose **exactly one** disclosed write with exact arguments from context\n   (workload name, resource_id, operation_id). Do not invent IDs.\n3. A tool proposal is **not** an executed action. Wait for product approval UI.\n4. After success, re-read with `rollout_status` / `pods` / `readiness` to verify.\n5. If denied or mode is read_only, open a finding path / manual steps\u2014never retry\n   around denial with a different target.\n\n## Common remediations\n\n| Symptom | Candidate write | Verify with |\n| --- | --- | --- |\n| Stuck server Deployment | `workload_restart` or `workload_rollout` | `rollout_status`, `pods` |\n| Need more workers | `workload_scale` (replicas 2\u201320) | `workload_get` |\n| Argo out of sync | `argocd.self_management_sync` | `argocd.self_management_status` |\n| Failed queue task | `queue.retry_task` | `queue.failed_tasks` |\n| Tunnel component wedged | `tunnel.restart_component` | `tunnel.health` |\n\n## Never\n\n- Describe approval as already granted\n- Switch to a more powerful tool after denial\n- Restart non-mutable Deployments (only server/worker/frontend)\n"
+  },
+  {
+    "document_key": "astronomer/0.3.5/playbooks/crashloop-management-pod.md",
+    "title": "Crashloop Management Pod",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "playbooks/crashloop-management-pod.md"
+    },
+    "content": "# Playbook: CrashLooping management-plane pod\n\n## Goal\n\nIdentify which Astronomer-owned pod is failing and gather enough evidence for a\nbounded restart proposal (approval mode) or manual operator steps (read_only).\n\n## Tools (in order)\n\n1. `astronomer.installation.readiness` \u2014 are components ready?\n2. `astronomer.management.pods` \u2014 list owned pods; note phase, restarts, container states.\n   - Filter with `component` (e.g. `server`, `worker`) or `phase=Failed` if useful.\n3. `astronomer.management.events` \u2014 recent Warning events for the component.\n4. `astronomer.management.pod_logs` \u2014 redacted tail for the failing pod/container\n   (get names from the pods tool first).\n5. `astronomer.management.rollout_status` \u2014 if a Deployment is stuck mid-rollout.\n6. `astronomer.management.workload_get` \u2014 replica summary for the owner workload.\n\n## Decision\n\n- **read_only**: summarize root cause, paste redacted evidence, recommend operator\n  actions. Do not claim restart.\n- **approval**: if the owner is a mutable Deployment (`server`/`worker`/`frontend`)\n  and evidence supports restart, propose `astronomer.management.workload_restart`\n  with exact workload and resource_id\u2014wait for human approval.\n- **auto**: only if that capability is centrally allowlisted and auto-eligible\n  (restarts are typically **not** auto-eligible).\n\n## Stop conditions\n\n- Pod is not owned by the Astronomer release \u2192 refuse (out of scope).\n- Logs show credentials \u2192 keep redaction; never echo secrets.\n- Downstream cluster symptom \u2192 do not tunnel; give operator-side checks only.\n"
+  },
+  {
+    "document_key": "astronomer/0.3.5/playbooks/readiness-and-database.md",
+    "title": "Readiness And Database",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "playbooks/readiness-and-database.md"
+    },
+    "content": "# Playbook: Installation not ready / database issues\n\n## Goal\n\nSeparate \u201ccomponent not ready\u201d from \u201cschema/database\u201d problems.\n\n## Tools\n\n1. `astronomer.installation.readiness`\n2. `astronomer.installation.summary` \u2014 versions and component health\n3. `astronomer.database.health`\n4. `astronomer.migrations.status`\n5. `astronomer.queue.health` and `astronomer.queue.failed_tasks`\n6. `astronomer.management.pods` / `events` if a specific component is not ready\n7. `astronomer.backups.status` if restore/drill related\n\n## Decision\n\n- Schema **dirty** or version behind expected \u2192 stop recommending app restarts;\n  escalate to migration/operator runbooks.\n- Queue backlog of failed tasks \u2192 list with `failed_tasks`; `queue.retry_task` is\n  a write (approval/auto policy).\n- Component unready with CrashLoop \u2192 follow crashloop playbook.\n"
+  },
+  {
+    "document_key": "astronomer/0.3.5/playbooks/tunnel-and-agent-flaps.md",
+    "title": "Tunnel And Agent Flaps",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "playbooks/tunnel-and-agent-flaps.md"
+    },
+    "content": "# Playbook: Tunnel or fleet agent connection flaps\n\n## Goal\n\nDiagnose management-plane tunnel/hub issues and **fleet agent connectivity\nmetadata** without entering downstream clusters.\n\n## Tools\n\n1. `astronomer.tunnel.health`\n2. `astronomer.tunnel.replica_distribution`\n3. `astronomer.tunnel.recent_errors` (optional `connection_id`, `since`, `limit`)\n4. `astronomer.agent_fleet.summary` then `list` / `get` for a specific `cluster_id`\n5. `astronomer.agent_fleet.connection_history`\n6. `astronomer.agent_fleet.ingestion_health` and `upgrade_status` if upgrades suspected\n\n## Decision\n\n- Prefer diagnosis and findings in **read_only**.\n- `astronomer.tunnel.restart_component` is a write: requires **approval** (or auto\n  only if explicitly allowlisted\u2014usually not).\n- Never claim to have checked downstream pod state; only connection/telemetry\n  held by Astronomer.\n\n## Operator-only follow-ups (do not execute via Charlie)\n\n- Downstream node network, firewall, agent logs on the customer cluster\n- Credential reissue procedures outside the disclosed catalog\n"
+  },
+  {
+    "document_key": "astronomer/0.3.5/reference/mcp-tools.md",
+    "title": "Mcp Tools",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "reference/mcp-tools.md"
+    },
+    "content": "# MCP tool quick reference (0.3.5)\n\nPrefer tools by name. All reads are management-plane only.\n\n## First questions\n\n| User ask | Tool |\n| --- | --- |\n| K8s / Astronomer version | `installation.summary` |\n| Is the install healthy? | `installation.readiness` then `pods` |\n| Which pods? CrashLoop? | `management.pods` |\n| Rollout stuck? | `management.rollout_status` |\n| Logs | `management.pod_logs` (after pods) |\n| Events | `management.events` |\n| Nodes | `management.nodes` |\n| Fleet agents | `agent_fleet.*` + `tunnel.*` |\n\n## Writes (mode-gated)\n\nRestart / rollout / scale / tunnel restart / run_job need **approval** unless\npolicy says otherwise. Auto-eligible by catalog: `argocd.self_management_sync`,\n`queue.retry_task` only (still require mode=auto + central allowlist).\n"
+  },
+  {
+    "document_key": "astronomer/0.3.5/reference/modes-and-authority.md",
+    "title": "Modes And Authority",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "reference/modes-and-authority.md"
+    },
+    "content": "# Modes and authority (0.3.5)\n\nAuthority is **not** chosen by the model. Product mode + disclosure + live RBAC\ngate every tool call.\n\n- **read_only**: diagnose freely with reads; no product writes; produce findings.\n- **approval**: propose exact writes; human must approve once; verify after.\n- **auto**: only allowlisted auto-eligible actions without human click; else fall back to approval/finding.\n- **disabled**: no chat tools.\n\nChat sessions inherit product authoritative mode. Raising mode requires Charlie\nadmin (disclosure acknowledged, not emergency-disabled).\n"
+  },
+  {
+    "document_key": "astronomer/0.3.5/scope.md",
+    "title": "Scope",
+    "content_type": "text/markdown",
+    "metadata": {
+      "product": "astronomer",
+      "product_version": "0.3.5",
+      "path": "scope.md"
+    },
+    "content": "# Astronomer 0.3.5 Charlie SRE scope\n\nCharlie troubleshoots the **Astronomer management-plane installation** and the\nKubernetes resources that run Astronomer itself. It does **not** operate\ndownstream customer clusters.\n\n## In scope\n\n- Installation summary: product version, chart, namespace, release, **kubernetes_version**\n- Readiness, database, migrations, TLS, backups, queues\n- Owned management Deployments/StatefulSets/Pods (release-prefixed)\n- Bounded redacted pod logs, events, nodes, storage, network\n- Argo self-management status\n- Fleet agent **connection metadata** and tunnel health (from Astronomer DB/telemetry only)\n- Bounded writes under mode rules: restart/scale/rollout mutable components,\n  Argo sync, queue retry, backup/restore-drill jobs\n\n## Out of scope\n\n- Downstream kubectl: list pods, logs, exec, apply, delete in customer clusters\n- Generic shell, raw SQL, free-form HTTP, Secret values\n- Destructive catalog operations (none published in v1)\n\n## Authority\n\nLeast-authority intersection of product mode, disclosure, live RBAC, and\n(for writes) approval or auto allowlist:\n\n| Mode | Reads | Writes |\n| --- | --- | --- |\n| disabled | No product tools | No |\n| read_only | Yes | No (findings/guidance only) |\n| approval | Yes | One exact approved write at a time |\n| auto | Yes | Only auto-eligible + allowlisted actions |\n\nWhen a write cannot run, create or cite an actionable finding with checks and a\nproposed safe action\u2014never invent that an action already ran.\n"
+  }
+]

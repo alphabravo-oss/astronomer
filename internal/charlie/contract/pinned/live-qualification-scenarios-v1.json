@@ -1,0 +1,150 @@
+{
+  "schema": "charlie.live-qualification-scenarios/v1",
+  "groups": [
+    {
+      "id": "zero_runtime",
+      "scenarios": [
+        {
+          "id": "feature_false",
+          "timeout_ms": 180000,
+          "required_assertions": ["state_applied", "process_absent", "listener_absent", "timer_absent", "dns_packets_zero", "tcp_packets_zero", "udp_packets_zero", "runtime_counters_unchanged", "downstream_counters_unchanged"]
+        },
+        {
+          "id": "unactivated",
+          "timeout_ms": 180000,
+          "required_assertions": ["state_applied", "process_absent", "listener_absent", "timer_absent", "dns_packets_zero", "tcp_packets_zero", "udp_packets_zero", "runtime_counters_unchanged", "downstream_counters_unchanged"]
+        },
+        {
+          "id": "central_disabled",
+          "timeout_ms": 180000,
+          "required_assertions": ["state_applied", "control_protocol_only", "runtime_counters_unchanged", "downstream_counters_unchanged"]
+        },
+        {
+          "id": "emergency_disabled",
+          "timeout_ms": 180000,
+          "required_assertions": ["state_applied", "control_protocol_only", "runtime_counters_unchanged", "downstream_counters_unchanged"]
+        }
+      ]
+    },
+    {
+      "id": "proof",
+      "scenarios": [
+        {
+          "id": "read_denial",
+          "timeout_ms": 180000,
+          "required_assertions": ["authorization_denied", "product_calls_zero"]
+        },
+        {
+          "id": "approval_expiry",
+          "timeout_ms": 180000,
+          "required_assertions": ["approval_expired", "product_calls_zero"]
+        },
+        {
+          "id": "approval_once",
+          "timeout_ms": 180000,
+          "required_assertions": ["approval_consumed_once", "product_call_once"]
+        },
+        {
+          "id": "approval_replay",
+          "timeout_ms": 180000,
+          "required_assertions": ["approval_replay_denied", "additional_product_calls_zero"]
+        },
+        {
+          "id": "approval_reject",
+          "timeout_ms": 180000,
+          "required_assertions": ["approval_rejected", "product_calls_zero"]
+        },
+        {
+          "id": "auto_allowlisted_success",
+          "timeout_ms": 180000,
+          "required_assertions": ["allowlisted_action_succeeded", "product_call_once"]
+        },
+        {
+          "id": "auto_nonallowlisted_approval",
+          "timeout_ms": 180000,
+          "required_assertions": ["approval_pending", "product_calls_zero"]
+        },
+        {
+          "id": "discovery_mixed_catalog",
+          "timeout_ms": 180000,
+          "required_assertions": ["valid_capability_retained", "malformed_capability_rejected", "catalog_bound"]
+        },
+        {
+          "id": "malformed_discovery",
+          "timeout_ms": 180000,
+          "required_assertions": ["discovery_rejected", "integration_disabled", "product_calls_zero"]
+        },
+        {
+          "id": "versioned_rag_grounded",
+          "timeout_ms": 180000,
+          "required_assertions": ["real_generation", "real_embedding", "corrected_revision", "version_selected", "grounded_citation"]
+        },
+        {
+          "id": "general_answer",
+          "timeout_ms": 180000,
+          "required_assertions": ["real_generation", "general_answer", "no_fabricated_citation"]
+        },
+        {
+          "id": "diagnosis_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free"]
+        },
+        {
+          "id": "approval_pending_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free"]
+        },
+        {
+          "id": "approval_rejected_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free"]
+        },
+        {
+          "id": "approval_expired_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free"]
+        },
+        {
+          "id": "blocked_auto_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free"]
+        },
+        {
+          "id": "failed_precondition_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free"]
+        },
+        {
+          "id": "failed_verification_alert",
+          "timeout_ms": 180000,
+          "required_assertions": ["one_alert", "valid_deep_link", "content_free", "block_code_verification_failed"]
+        },
+        {
+          "id": "leader_kill_failover",
+          "timeout_ms": 300000,
+          "required_assertions": ["leader_identified", "leader_killed", "replacement_elected", "bounded_failover", "epoch_advanced", "sse_resumed", "no_duplicate_action"]
+        },
+        {
+          "id": "clean_install",
+          "timeout_ms": 900000,
+          "required_assertions": ["fresh_database", "migrations_applied", "pgvector_ready", "object_storage_ready", "oci_authenticated", "tls_enforced", "admin_login_succeeded", "development_bypass_absent", "candidate_digests_running"]
+        },
+        {
+          "id": "isolation_matrix",
+          "timeout_ms": 600000,
+          "required_assertions": ["two_deployments_same_product", "second_product_created", "credentials_isolated", "sessions_isolated", "usage_isolated", "findings_isolated", "audit_isolated", "cross_reads_denied"]
+        },
+        {
+          "id": "resilience_matrix",
+          "timeout_ms": 900000,
+          "required_assertions": ["restart_authority_not_increased", "leader_loss_recovered", "central_outage_failed_closed", "product_outage_failed_closed", "credential_rotation_converged", "disclosure_drift_disabled", "emergency_disable_drained", "recovery_required_explicit_enable"]
+        },
+        {
+          "id": "upgrade_rollback",
+          "timeout_ms": 1200000,
+          "required_assertions": ["upgrade_candidate_pinned", "rollback_candidate_pinned", "authority_not_restored", "stale_credentials_rejected", "explicit_reenable_required"]
+        }
+      ]
+    }
+  ]
+}

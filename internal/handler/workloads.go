@@ -25,6 +25,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
+// note: cluster access errors use respondClusterAccessError (cluster_access_errors.go).
+
 type WorkloadHandler struct {
 	requester K8sRequester
 	queries   WorkloadQuerier
@@ -419,7 +421,7 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	workloads, err := h.listWorkloads(r.Context(), clusterID, namespace, kind)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		respondClusterAccessError(w, r, err)
 		return
 	}
 
@@ -454,7 +456,7 @@ func (h *WorkloadHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resource, err := h.getWorkload(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		respondClusterAccessError(w, r, err)
 		return
 	}
 	RespondJSON(w, http.StatusOK, resource)

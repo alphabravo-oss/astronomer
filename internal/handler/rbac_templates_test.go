@@ -64,6 +64,7 @@ func TestListTemplates_ReturnsExpandedCatalogInStableOrder(t *testing.T) {
 		"audit-viewer",
 		"backup-operator",
 		"catalog-admin",
+		"charlie-approver",
 		"compliance-auditor",
 		"compliance-manager",
 		"gitops-admin",

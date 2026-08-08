@@ -44,6 +44,7 @@ export type PermissionVerb =
   | 'logs'
   | 'proxy'
   | 'sync'
+  | 'approve'
   | 'manage';
 
 export type PermissionScope =

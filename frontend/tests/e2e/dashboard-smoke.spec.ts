@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 
 import { CSRF_COOKIE, SESSION_COOKIE, seedAuth } from './helpers/auth';
 
@@ -123,6 +124,13 @@ function paginated<T>(data: T[]) {
 }
 
 async function mockApi(page: Page, user = adminUser) {
+  let generalSettings = {
+    platformName: 'Astronomer',
+    agentHeartbeatInterval: 30,
+    defaultSessionTimeout: 60,
+    enableAuditLogging: true,
+    metricsCollection: true,
+  };
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -167,6 +175,7 @@ async function mockApi(page: Page, user = adminUser) {
           'feature.argocd': true,
           'feature.security': true,
           'feature.backups': true,
+          'feature.charlie': true,
         }),
       });
     }
@@ -187,6 +196,72 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === '/activity' || path === '/alerting/events' || path === '/tools') {
       return route.fulfill({ json: apiResponse([]) });
+    }
+    if (path === '/charlie/sessions' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({
+          mode: 'approval',
+          sessions: [{
+            id: 'session-shared-incident',
+            clientSessionId: 'client-session-shared-incident',
+            intent: 'Investigate agent connection health',
+            resourceScopeSummary: 'agent_connection_record:connection-1',
+            state: 'active',
+            visibility: 'incident',
+            centralRevision: 5,
+            source: 'event',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }, {
+            id: 'session-private-user',
+            clientSessionId: 'client-session-private-user',
+            intent: 'Inspect alert health',
+            resourceScopeSummary: 'alert:active',
+            state: 'active',
+            visibility: 'private',
+            centralRevision: 3,
+            source: 'user',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }],
+        }),
+      });
+    }
+    if (path === '/charlie/sessions/session-private-user/history' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({ messages: [{
+          itemId: 'message-charlie', kind: 'assistant_message',
+          redactedContent: 'The selected alert is under investigation.',
+        }] }),
+      });
+    }
+    if (path === '/charlie/findings' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({ items: [{
+          id: 'f-1', title: 'Bounded finding', severity: 'high', state: 'open',
+          source: 'alert', repeatCount: 2, sessionId: 'session-shared-incident',
+          createdAt: new Date(Date.now() - 60_000).toISOString(), updatedAt: new Date().toISOString(),
+          affectedResource: { type: 'agent_connection_record', id: 'connection-1', requiredVerb: 'read' },
+          summary: 'Review the selected installation.',
+        }] }),
+      });
+    }
+    if (path === '/charlie/findings/f-1') {
+      return route.fulfill({
+        json: apiResponse({
+          finding: {
+            id: 'f-1',
+            title: 'Bounded finding',
+            severity: 'high',
+            state: 'open',
+            affectedResource: { type: 'agent_connection_record', id: 'connection-1', requiredVerb: 'read' },
+            summary: 'Review the selected installation.',
+            confidence: 0.9,
+            operatorChecks: [],
+            evidence: [],
+          },
+        }),
+      });
     }
     if (path === '/catalog/repositories') {
       return route.fulfill({ json: apiResponse([]) });
@@ -219,17 +294,10 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === '/settings/general') {
       if (method === 'PUT') {
-        return route.fulfill({ json: apiResponse(await request.postDataJSON()) });
+        generalSettings = await request.postDataJSON();
+        return route.fulfill({ json: apiResponse(generalSettings) });
       }
-      return route.fulfill({
-        json: apiResponse({
-          platformName: 'Astronomer',
-          agentHeartbeatInterval: 30,
-          defaultSessionTimeout: 60,
-          enableAuditLogging: true,
-          metricsCollection: true,
-        }),
-      });
+      return route.fulfill({ json: apiResponse(generalSettings) });
     }
     if (path === '/settings/sso' || path === '/settings/tokens') {
       return route.fulfill({ json: apiResponse([]) });
@@ -332,9 +400,109 @@ test('settings general form remains usable on responsive viewports', async ({ co
 
   await expect(page.getByRole('heading', { name: /^Settings$/ })).toBeVisible();
   await page.getByRole('button', { name: /^General$/ }).click();
+  await page.getByRole('button', { name: /^Edit$/ }).click();
   await page.getByLabel('Platform Name').fill('Astronomer Control Plane');
   await page.getByLabel('Agent Heartbeat Interval').selectOption('60');
   await page.getByLabel('Default Session Timeout').selectOption('480');
   await page.getByRole('button', { name: /save settings/i }).click();
-  await expect(page.getByLabel('Platform Name')).toHaveValue('Astronomer Control Plane');
+  await expect(page.getByText('Astronomer Control Plane', { exact: true })).toBeVisible();
+});
+
+test('Charlie launcher exposes only bounded route context across product surfaces', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  const cases = [
+    ['/dashboard/clusters/cluster-1', 'Cluster agent connection'],
+    ['/dashboard/clusters/cluster-1/tools', 'Cluster agent connection'],
+    ['/dashboard/alerting', 'Alerts'],
+    ['/dashboard/agents', 'Agent fleet'],
+    ['/dashboard/backups', 'Backups'],
+    ['/dashboard/settings/gitops', 'GitOps'],
+  ] as const;
+
+  for (const [path, contextLabel] of cases) {
+    await page.goto(path);
+    await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
+    await expect(page.getByRole('dialog', { name: 'Charlie' })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Remove ${contextLabel}` })).toBeVisible();
+    await expect(page.getByText(/Logs, metrics, audit details, and broad resource data are never attached automatically/i)).toBeVisible();
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+  }
+});
+
+test('Charlie hub and administration deep links survive refresh and history', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  await page.goto('/dashboard/charlie?tab=findings&filter=open&context=cluster-1&finding=f-1');
+  await expect(page.getByRole('tab', { name: 'findings' })).toHaveAttribute('aria-selected', 'true');
+  await page.reload();
+  await expect(page).toHaveURL(/tab=findings.*filter=open.*context=cluster-1.*finding=f-1/);
+  await page.getByRole('tab', { name: 'approvals' }).click();
+  await expect(page).toHaveURL(/tab=approvals.*filter=open.*context=cluster-1.*finding=f-1/);
+  await page.goBack();
+  await expect(page.getByRole('tab', { name: 'findings' })).toHaveAttribute('aria-selected', 'true');
+
+  await page.goto('/dashboard/settings/charlie?tab=connection');
+  for (const tab of ['connection', 'agent', 'mode', 'automation', 'access', 'diagnostics']) {
+    await page.getByRole('tab', { name: tab }).click();
+    await expect(page).toHaveURL(new RegExp(`tab=${tab}`));
+    await expect(page.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
+  }
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'diagnostics' })).toHaveAttribute('aria-selected', 'true');
+  await page.goBack();
+  await expect(page.getByRole('tab', { name: 'access' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('Charlie hub separates private conversations from authorized shared incidents', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  await page.goto('/dashboard/charlie?tab=conversations');
+  await expect(page.getByText('Inspect alert health')).toBeVisible();
+  await expect(page.getByText('Private chat')).toBeVisible();
+  await expect(page.getByText('Investigate agent connection health')).toHaveCount(0);
+
+  await page.getByRole('tab', { name: 'investigations' }).click();
+  await expect(page.getByText('Investigate agent connection health')).toBeVisible();
+  await expect(page.getByText('Shared incident')).toBeVisible();
+  await expect(page.getByText('Inspect alert health')).toHaveCount(0);
+  await page.getByText('Investigate agent connection health').click();
+  await expect(page.getByText(/you can currently read every affected Astronomer resource/i)).toBeVisible();
+});
+
+test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async ({ context, page }) => {
+  await seedAuth(context, page, adminUser);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/dashboard/alerting');
+  await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Charlie' });
+  await expect(drawer).toBeVisible();
+  await expect(page.getByLabel('Current Charlie mode: approval_required')).toBeVisible();
+  await expect(drawer.getByText(/Hard ceiling: includes read_only/)).toBeVisible();
+  await expect(page.getByText('The selected alert is under investigation.')).toBeVisible();
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  const drawerBox = await drawer.boundingBox();
+  expect(drawerBox).not.toBeNull();
+  expect(drawerBox!.width).toBeLessThanOrEqual(viewportWidth);
+  expect(await drawer.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  const composer = page.getByLabel('Message Charlie');
+  await composer.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.locator('[role="dialog"] :focus')).toHaveCount(1);
+  // Send is disabled until the composer has content, so the hub link is the
+  // final enabled control in the drawer's tab order.
+  const lastFocusable = drawer.getByRole('link', { name: 'Open Charlie hub' });
+  await lastFocusable.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'New chat' })).toBeFocused();
+  await expect.poll(() => page.getByRole('button', { name: 'Send' }).evaluate((element) => getComputedStyle(element).transitionProperty)).toBe('none');
+  const drawerA11y = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+  expect(drawerA11y.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
+
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await page.goto('/dashboard/charlie?tab=findings&status=open&severity=high&source=alert');
+  await expect(page.getByRole('dialog', { name: 'Charlie' })).toHaveCount(0);
+  await expect(page.getByText('Bounded finding')).toBeVisible();
+  await expect(page.getByText('2 occurrences')).toBeVisible();
+  await expect.poll(() => page.locator('main > div').evaluate((element) => getComputedStyle(element).opacity)).toBe('1');
+  const hubA11y = await new AxeBuilder({ page }).include('main').analyze();
+  expect(hubA11y.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
 });

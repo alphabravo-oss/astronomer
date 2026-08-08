@@ -12,6 +12,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -286,6 +287,17 @@ func main() {
 		Queries:  sqlc.New(database.Pool()),
 		Enqueuer: taskOutboxClient,
 	})
+	// The standalone worker participates in the same Postgres advisory
+	// shared/exclusive protocol as every API replica. Its fence is process-local
+	// for admission bookkeeping but coordinates with feature disable and mode
+	// drains through the stable Charlie advisory-lock key.
+	tasks.ConfigureCharlieAlertDispatch(sqlc.New(database.Pool()), charlie.NewDistributedWriteFence(database.Pool()))
+	charlieAlertPlanner, plannerErr := charlie.NewFindingAlertPlanner(database.Pool())
+	if plannerErr != nil {
+		log.Error("failed to configure Charlie alert reconciliation")
+		os.Exit(1)
+	}
+	tasks.ConfigureCharlieAlertReconciler(charlieAlertPlanner)
 	w.RegisterHandlers()
 
 	s, serr := worker.NewScheduler(cfg.RedisURL, log)

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -18,7 +20,28 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
+func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode int) {
+	if len(args) == 0 {
+		return false, 0
+	}
+
+	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
+		_, _ = fmt.Fprintf(stdout, "astronomer-server %s (commit %s, built %s)\n", version.Version, version.GitCommit, version.BuildDate)
+		return true, 0
+	}
+
+	_, _ = fmt.Fprintf(stderr, "unknown argument: %s\n", args[0])
+	return true, 2
+}
+
 func main() {
+	// Command handling must happen before configuration, database, bootstrap,
+	// or embedded-agent initialization. In particular, a provenance probe must
+	// never start a second server process or rotate durable agent credentials.
+	if handled, exitCode := handleCLI(os.Args[1:], os.Stdout, os.Stderr); handled {
+		os.Exit(exitCode)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load config", "error", err)

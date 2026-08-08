@@ -89,6 +89,9 @@ verify_contract_artifacts() {
 verify_api_contract() {
   require_frontend_dependencies
 
+  step "Pinned Charlie Product Bridge contract"
+  run_logged charlie-contract make charlie-contract-check
+
   step "API contract Go build"
   run_logged api-go-build go build ./...
 

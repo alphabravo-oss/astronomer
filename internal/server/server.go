@@ -18,6 +18,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -47,6 +48,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -65,6 +67,90 @@ func (a busPublisherAdapter) Publish(eventType string, data any) {
 type securityCacheTarget struct {
 	jwt  *auth.JWTManager
 	rbac *appmiddleware.RBACCache
+}
+
+type charlieLiveBindings struct {
+	queries  *sqlc.Queries
+	bindings appmiddleware.RBACQuerier
+}
+
+type charlieLiveFeatures struct{ queries *sqlc.Queries }
+
+func (r charlieLiveFeatures) BoolValue(ctx context.Context, key string, _ bool) bool {
+	if r.queries == nil || key != "feature.charlie" {
+		return false
+	}
+	setting, err := r.queries.GetPlatformSetting(ctx, key)
+	if err != nil {
+		return false
+	}
+	var enabled bool
+	if json.Unmarshal(setting.Value, &enabled) != nil {
+		return false
+	}
+	return enabled
+}
+
+func (r charlieLiveBindings) CurrentBindings(ctx context.Context, principal uuid.UUID) ([]rbac.RoleBinding, bool, error) {
+	if r.queries == nil || r.bindings == nil || principal == uuid.Nil {
+		return nil, false, fmt.Errorf("Charlie live RBAC is unavailable")
+	}
+	user, err := r.queries.GetUserByID(ctx, principal)
+	if err != nil || !user.IsActive {
+		return nil, false, err
+	}
+	bindings, err := r.bindings.GetUserBindings(ctx, principal.String())
+	return bindings, err == nil, err
+}
+
+func (r charlieLiveBindings) CanUseCharlie(ctx context.Context, principal uuid.UUID) (bool, error) {
+	bindings, active, err := r.CurrentBindings(ctx, principal)
+	if err != nil || !active {
+		return false, err
+	}
+	engine := rbac.NewEngine()
+	return engine.CheckPermission(bindings, rbac.ResourceCharlie, rbac.VerbRead, uuid.Nil, uuid.Nil) ||
+		engine.CheckPermission(bindings, rbac.ResourceCharlie, rbac.VerbCreate, uuid.Nil, uuid.Nil), nil
+}
+
+func (r charlieLiveBindings) CanReadIncidentResources(ctx context.Context, principal uuid.UUID, resources []sqlc.CharlieSessionResource) (bool, error) {
+	bindings, active, err := r.CurrentBindings(ctx, principal)
+	if err != nil || !active {
+		return false, err
+	}
+	engine := rbac.NewEngine()
+	for _, item := range resources {
+		if item.RequiredVerb != "read" {
+			return false, nil
+		}
+		resource, verb, clusterID, ok := charlieResourcePermission(item)
+		if !ok || !engine.CheckPermission(bindings, resource, verb, clusterID, uuid.Nil) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func charlieResourcePermission(item sqlc.CharlieSessionResource) (rbac.Resource, rbac.Verb, uuid.UUID, bool) {
+	switch item.ResourceType {
+	case "installation":
+		return rbac.ResourceSettings, rbac.VerbRead, uuid.Nil, true
+	case "management_component":
+		return rbac.ResourceMonitoring, rbac.VerbRead, uuid.Nil, true
+	case "alert":
+		return rbac.ResourceAlerts, rbac.VerbRead, uuid.Nil, true
+	case "backup":
+		return rbac.ResourceBackups, rbac.VerbRead, uuid.Nil, true
+	case "self_management_application":
+		return rbac.ResourceArgoCD, rbac.VerbRead, uuid.Nil, true
+	case "agent_fleet", "tunnel":
+		return rbac.ResourceClusters, rbac.VerbList, uuid.Nil, true
+	case "agent_connection_record":
+		clusterID, err := uuid.Parse(item.ResourceID)
+		return rbac.ResourceClusters, rbac.VerbRead, clusterID, err == nil
+	default:
+		return "", "", uuid.Nil, false
+	}
 }
 
 func (t securityCacheTarget) InvalidateJWTJTILocal(jti string) {
@@ -283,6 +369,10 @@ type Server struct {
 	// SSO drives the OAuth login/callback flow. May be nil if no providers
 	// are configured at boot.
 	SSO *auth.SSOManager
+	// charlieRuntime owns dynamically materialized Charlie work generations.
+	// The bridge remains transport-dormant outside an authorized operation.
+	charlieRuntime *charlie.RuntimeLifecycle
+	charlieBridge  *charlie.ManagedBridge
 }
 
 // DB returns the primary application database wrapper when this server was
@@ -1009,6 +1099,36 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		})
 	}
 	localNamespace := detectReleaseNamespace()
+	charlieFeatures := charlieLiveFeatures{queries: queries}
+	var (
+		charlieOnboardingHandler *handler.CharlieOnboardingHandler
+		charlieAgentInstaller    *charlie.AgentInstaller
+	)
+	if localK8s != nil && localDyn != nil && encryptor != nil {
+		secretWriter, err := charlie.NewKubernetesAgentSecretWriter(localK8s, "astronomer-charlie", []byte(cfg.SecretKey))
+		if err != nil {
+			charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.secret_writer_unavailable", "")
+		} else {
+			agentInstaller, installErr := charlie.NewAgentInstaller(localK8s, localDyn, charlie.AgentInstallerConfig{
+				AgentNamespace: "astronomer-charlie", ArgoNamespace: localArgoNamespace,
+				ProductNamespace: localNamespace, Metadata: charlie.PGAgentMetadataLifecycle{Pool: database.Pool()},
+			})
+			if installErr != nil {
+				charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.agent_installer_unavailable", "")
+			} else {
+				charlieAgentInstaller = agentInstaller
+				charlieOnboardingHandler = handler.NewCharlieOnboardingHandler(&charlie.OnboardingConsumer{
+					Store:           charlie.PGOnboardingTransactionStore{Pool: database.Pool()},
+					Secrets:         secretWriter,
+					Installer:       agentInstaller,
+					Encryptor:       encryptor,
+					BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc",
+					MCPServerDNS:    "astronomer-charlie-mcp." + localNamespace + ".svc",
+					Auditor:         charlie.NewDBLifecycleAuditor(queries),
+				})
+			}
+		}
+	}
 
 	// Share the same metrics provider with the workload handler so per-node
 	// CPU/memory usage on the node-detail page comes from the same fetch (and
@@ -1193,6 +1313,133 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	streamTicketHandler := handler.NewStreamTicketHandler(streamTickets)
 	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	settingsCache := handler.NewSettingsCache(queries, 30*time.Second)
+
+	// Charlie browser services and the signed configuration bridge are dormant
+	// gate-checked objects. Listener, consumer, dispatcher, and capability-client
+	// generations are materialized later only through RuntimeLifecycle.
+	var (
+		charlieSessionsHandler   *handler.CharlieSessionHandler
+		charlieThreadsHandler    *handler.CharlieThreadHandler
+		charlieApprovalsHandler  *handler.CharlieApprovalHandler
+		charlieContextHandler    *handler.CharlieContextHandler
+		charlieFindingsHandler   *handler.CharlieFindingHandler
+		charlieOperationsHandler *handler.CharlieOperationHandler
+		charlieAdminHandler      *handler.CharlieAdminHandler
+		charlieAdminService      *charlie.AdminService
+		managedCharlieBridge     *charlie.ManagedBridge
+		charlieFindingEvents     handler.CharlieFindingEventAuthorizer
+		charlieWriteFence        = charlie.NewDistributedWriteFence(database.Pool())
+	)
+	charlieBindings := charlieLiveBindings{queries: queries, bindings: appmiddleware.NewSQLCRBACQuerierWithCache(queries, nil)}
+	agentNamespace := strings.TrimSpace(cfg.CharlieAgentNamespace)
+	if agentNamespace == "" {
+		agentNamespace = charlie.DefaultCharlieAgentNamespace
+	}
+	tasks.ConfigureCharlieTriggerDispatcher(nil)
+	if cfg.CharlieBridgeTLSCertFile != "" || cfg.CharlieBridgeTLSKeyFile != "" || cfg.CharlieBridgeCAFile != "" {
+		var bridgeErr error
+		managedCharlieBridge, bridgeErr = charlie.NewManagedBridge(charlie.ManagedBridgeConfig{
+			AgentNamespace: agentNamespace, Certificate: cfg.CharlieBridgeTLSCertFile,
+			PrivateKey: cfg.CharlieBridgeTLSKeyFile, ServerCA: cfg.CharlieBridgeCAFile, SigningKey: cfg.CharlieMCPActionSigningKeyFile,
+		}, charlieFeatures, queries)
+		if bridgeErr != nil {
+			database.Close()
+			return nil, bridgeErr
+		}
+		{
+			active := func() bool { return managedCharlieBridge.Active(context.Background()) }
+			var discoveryClient discovery.DiscoveryInterface
+			if localK8s != nil {
+				discoveryClient = localK8s.Discovery()
+			}
+			contextProvider, contextErr := charlie.NewProductSessionContextProvider(queries, localNamespace, "astronomer", "", discoveryClient)
+			if contextErr != nil {
+				database.Close()
+				return nil, contextErr
+			}
+			auditor := charlie.NewDBLifecycleAuditor(queries)
+			sessionService, sessionErr := charlie.NewSessionService(queries, managedCharlieBridge, contextProvider, charlieBindings, auditor, active)
+			if sessionErr != nil {
+				database.Close()
+				return nil, sessionErr
+			}
+			sessionAccess, accessErr := charlie.NewSessionAccessService(queries, charlieBindings, managedCharlieBridge, auditor, active)
+			if accessErr != nil {
+				database.Close()
+				return nil, accessErr
+			}
+			charlieSessionsHandler = handler.NewCharlieSessionHandler(sessionService, sessionAccess)
+			threadService, threadErr := charlie.NewThreadService(queries, sessionService, sessionAccess, auditor, active)
+			if threadErr != nil {
+				database.Close()
+				return nil, threadErr
+			}
+			charlieThreadsHandler = handler.NewCharlieThreadHandler(threadService)
+			findingAlertPlanner, plannerErr := charlie.NewFindingAlertPlanner(database.Pool())
+			if plannerErr != nil {
+				database.Close()
+				return nil, plannerErr
+			}
+			findingPublisher := charlie.NewPolicyFindingPublisher(bus, findingAlertPlanner)
+			approvalAccess, approvalErr := charlie.NewApprovalAccessService(queries, sessionAccess, charlieBindings, managedCharlieBridge, auditor, findingPublisher, cfg.CharlieMCPActionSigningKeyFile)
+			if approvalErr != nil {
+				database.Close()
+				return nil, approvalErr
+			}
+			charlieApprovalsHandler = handler.NewCharlieApprovalHandler(approvalAccess)
+			charlieContextHandler = handler.NewCharlieContextHandler(charlie.NewContextSearchService(queries, charlieBindings, active))
+			operationAccess, operationErr := charlie.NewOperationAccessService(queries, sessionAccess)
+			if operationErr != nil {
+				database.Close()
+				return nil, operationErr
+			}
+			charlieOperationsHandler = handler.NewCharlieOperationHandler(operationAccess)
+			centralFindingStore, findingErr := charlie.NewPGCentralFindingStore(database.Pool())
+			if findingErr != nil {
+				database.Close()
+				return nil, findingErr
+			}
+			centralFindingSync, findingErr := charlie.NewCentralFindingSyncService(queries, sessionAccess, managedCharlieBridge, centralFindingStore, findingPublisher, active)
+			if findingErr != nil {
+				database.Close()
+				return nil, findingErr
+			}
+			findingAccess, findingErr := charlie.NewFindingAccessService(queries, charlieBindings, managedCharlieBridge, auditor, findingPublisher, centralFindingSync, active)
+			if findingErr != nil {
+				database.Close()
+				return nil, findingErr
+			}
+			charlieFindingsHandler = handler.NewCharlieFindingHandler(findingAccess)
+			charlieFindingEvents = findingAccess
+		}
+	}
+	var adminInstaller charlie.AdminAgentInstaller
+	var featureInstaller charlie.FeatureAgentLifecycle
+	if charlieAgentInstaller != nil {
+		adminInstaller = charlieAgentInstaller
+	}
+	if localK8s != nil && localDyn != nil && managedCharlieBridge != nil {
+		configuredInstaller, installErr := charlie.NewAgentInstaller(localK8s, localDyn, charlie.AgentInstallerConfig{
+			AgentNamespace: agentNamespace, ArgoNamespace: localArgoNamespace,
+			ProductNamespace: localNamespace, Metadata: charlie.PGAgentMetadataLifecycle{Pool: database.Pool()},
+			Bridge: charlie.NewManagedAgentLifecycleBridge(managedCharlieBridge),
+		})
+		if installErr != nil {
+			charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.admin_lifecycle_unavailable", "")
+		} else {
+			adminInstaller = configuredInstaller
+			featureInstaller = configuredInstaller
+		}
+	}
+	if adminService, adminErr := charlie.NewAdminService(database.Pool(), adminInstaller, managedCharlieBridge); adminErr != nil {
+		charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.admin_service_unavailable", "")
+	} else {
+		charlieAdminService = adminService
+		adminService.SetWriteFence(charlieWriteFence)
+		charlieAdminHandler = handler.NewCharlieAdminHandler(adminService, queries)
+		charlieAdminHandler.SetSettingsCache(settingsCache)
+	}
 
 	deps := RouterDependencies{
 		JWT:                 jwtManager,
@@ -1406,8 +1653,16 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		// DELETE invalidate) and the FeatureGate middleware (reads).
 		// 30s TTL — settings change rarely; the cache makes the
 		// per-request feature check effectively free.
-		PlatformSettings: handler.NewPlatformSettingsHandler(queries),
-		SettingsCache:    handler.NewSettingsCache(queries, 30*time.Second),
+		PlatformSettings:  handler.NewPlatformSettingsHandler(queries),
+		SettingsCache:     settingsCache,
+		CharlieOnboarding: charlieOnboardingHandler,
+		CharlieAdmin:      charlieAdminHandler,
+		CharlieSessions:   charlieSessionsHandler,
+		CharlieThreads:    charlieThreadsHandler,
+		CharlieApprovals:  charlieApprovalsHandler,
+		CharlieContext:    charlieContextHandler,
+		CharlieFindings:   charlieFindingsHandler,
+		CharlieOperations: charlieOperationsHandler,
 		Extensions: func() *handler.ExtensionHandler {
 			h := handler.NewExtensionHandler(queries)
 			h.SetAuditWriter(queries)
@@ -1609,6 +1864,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	deps.EventStream.SetAuth(jwtManager, queries)
 	deps.EventStream.SetStreamTickets(deps.StreamTicketStore)
 	deps.EventStream.SetAuthorization(rbacEngine, rbacQuerier)
+	deps.EventStream.SetCharlieFindingAuthorization(charlieFindingEvents)
 	// Group-sync admin re-sync mutates the user's bindings; share the
 	// same RBAC cache invalidator the SSO + user handlers use so the
 	// effect is immediate on the next authenticated request.
@@ -1711,6 +1967,132 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 
 	router := NewRouter(cfg, deps)
+	leaseOwner := strings.TrimSpace(os.Getenv("HOSTNAME"))
+	if leaseOwner == "" {
+		leaseOwner = "astronomer-server-" + uuid.NewString()
+	}
+	var charlieRuntimeLifecycle *charlie.RuntimeLifecycle
+	if managedCharlieBridge != nil {
+		workFactory := func(factoryCtx context.Context) (charlie.ActivationWork, error) {
+			if !charlie.EvaluateActivation(factoryCtx, charlieFeatures, queries).Runnable {
+				return nil, fmt.Errorf("Charlie product runtime is inactive")
+			}
+			fleetCapabilityAdapter, err := charlie.NewFleetCapabilityAdapter(queries)
+			if err != nil {
+				return nil, err
+			}
+			adapterGroups := []map[string]charlie.CapabilityExecutor{charlie.FleetCapabilityAdapters(fleetCapabilityAdapter)}
+			queueInspector := asynq.NewInspector(redisOpt)
+			fail := func(err error) (charlie.ActivationWork, error) {
+				_ = queueInspector.Close()
+				return nil, err
+			}
+			queueCapabilityAdapter, err := charlie.NewQueueCapabilityAdapter(queueInspector)
+			if err != nil {
+				return fail(err)
+			}
+			adapterGroups = append(adapterGroups, charlie.QueueCapabilityAdapters(queueCapabilityAdapter))
+			releaseName := strings.TrimSpace(os.Getenv("RELEASE_NAME"))
+			if releaseName == "" {
+				releaseName = "astronomer"
+			}
+			operationalAdapter, err := charlie.NewOperationalCapabilityAdapter(charlie.OperationalCapabilityConfig{
+				Database: database, Queries: queries, Kubernetes: localK8s, Queue: queueInspector,
+				Namespace: localNamespace, Release: releaseName, ChartVersion: strings.TrimSpace(os.Getenv("CHART_VERSION")),
+				TLSCertFiles: []string{cfg.CharlieMCPTLSCertFile, cfg.CharlieBridgeTLSCertFile},
+			})
+			if err != nil {
+				return fail(err)
+			}
+			adapterGroups = append(adapterGroups, charlie.OperationalCapabilityAdapters(operationalAdapter))
+			if localK8s != nil && localNamespace != "" {
+				managementAdapter, managementErr := charlie.NewManagementKubernetesAdapter(localK8s, localNamespace, releaseName)
+				if managementErr != nil {
+					return fail(managementErr)
+				}
+				adapterGroups = append(adapterGroups, charlie.ManagementKubernetesCapabilityAdapters(managementAdapter))
+			}
+			if localDyn != nil {
+				argoCapabilityAdapter, argoErr := charlie.NewArgoCDCapabilityAdapter(localDyn, localArgoNamespace, localArgoApplicationName)
+				if argoErr != nil {
+					return fail(argoErr)
+				}
+				adapterGroups = append(adapterGroups, charlie.ArgoCDCapabilityAdapters(argoCapabilityAdapter))
+			}
+			capabilityExecutor, err := charlie.NewCatalogExecutor(charlie.MergeCapabilityAdapters(adapterGroups...))
+			if err != nil {
+				return fail(err)
+			}
+			charlieSafety, err := charlie.NewProductActionSafety(queries, maintenanceEvaluator)
+			if err != nil {
+				return fail(err)
+			}
+			charlieFindingStore, err := charlie.NewDBFindingStore(queries)
+			if err != nil {
+				return fail(err)
+			}
+			findingAlertPlanner, err := charlie.NewFindingAlertPlanner(database.Pool())
+			if err != nil {
+				return fail(err)
+			}
+			charlieFindingRecorder, err := charlie.NewFindingService(charlieFindingStore, charlie.NewPolicyFindingPublisher(bus, findingAlertPlanner))
+			if err != nil {
+				return fail(err)
+			}
+			mcpRuntime, err := charlie.NewMCPRuntime(charlie.MCPRuntimeConfig{
+				Listener: charlie.MCPListenerConfig{
+					Address: cfg.CharlieMCPListenAddress, Certificate: cfg.CharlieMCPTLSCertFile,
+					PrivateKey: cfg.CharlieMCPTLSKeyFile, ClientCA: cfg.CharlieMCPClientCAFile,
+				},
+				ActionSigningKeyFile: cfg.CharlieMCPActionSigningKeyFile,
+				LeaseOwner:           leaseOwner, ReceiptCipher: encryptor, WriteFence: charlieWriteFence,
+				BridgeStatus: managedCharlieBridge, FindingRecorder: charlieFindingRecorder,
+			}, charlieFeatures, queries, charlieBindings, charlieSafety, capabilityExecutor, logger)
+			if err != nil {
+				return fail(err)
+			}
+			auditor := charlie.NewDBLifecycleAuditor(queries)
+			dispatcher, err := charlie.NewTriggerDispatcher(queries, managedCharlieBridge, charlie.NewEventTriggerLifecyclePublisher(bus), auditor, func() bool {
+				return managedCharlieBridge.Active(context.Background())
+			})
+			if err != nil {
+				_ = mcpRuntime.Shutdown(factoryCtx)
+				return fail(err)
+			}
+			eventRuntime, err := charlie.NewEventRuntime(bus, queries, func() bool {
+				return managedCharlieBridge.Active(context.Background())
+			})
+			if err != nil {
+				_ = mcpRuntime.Shutdown(factoryCtx)
+				return fail(err)
+			}
+			return &charlieRuntimeGeneration{mcp: mcpRuntime, events: eventRuntime, dispatcher: dispatcher, inspector: queueInspector}, nil
+		}
+		control := func(controlCtx context.Context) {
+			if charlieAdminService != nil {
+				charlieAdminService.RunModeReconciler(controlCtx, 10*time.Second)
+			}
+		}
+		var lifecycleErr error
+		charlieRuntimeLifecycle, lifecycleErr = charlie.NewRuntimeLifecycle(charlieFeatures, queries, workFactory, control, managedCharlieBridge.Close)
+		if lifecycleErr != nil {
+			database.Close()
+			return nil, lifecycleErr
+		}
+		managedCharlieBridge.SetActivationChanged(func(changeCtx context.Context) {
+			if err := charlieRuntimeLifecycle.Activate(changeCtx); err != nil {
+				charlie.LogOperationalFailure(changeCtx, logger, "runtime.activation_failed", "")
+			}
+		})
+	}
+	if deps.PlatformSettings != nil {
+		lifecycle, lifecycleErr := charlie.NewFeatureLifecycle(database.Pool(), featureInstaller, managedCharlieBridge, charlieRuntimeLifecycle, charlieWriteFence)
+		if lifecycleErr != nil {
+			charlie.LogOperationalFailure(context.Background(), logger, "runtime.feature_dependencies_incomplete", "")
+		} else {
+			deps.PlatformSettings.SetCharlieLifecycle(lifecycle)
+		}
+	}
 
 	s := &Server{
 		handler:               router,
@@ -1721,6 +2103,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		hub:                   hub,
 		Encryptor:             encryptor,
 		SSO:                   ssoManager,
+		charlieRuntime:        charlieRuntimeLifecycle,
+		charlieBridge:         managedCharlieBridge,
 	}
 	s.httpServer = &http.Server{
 		// Wrap with otelhttp so every request emits a server span
@@ -1736,6 +2120,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	reconcileCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
+	if charlieRuntimeLifecycle != nil {
+		if err := charlieRuntimeLifecycle.Start(reconcileCtx); err != nil {
+			database.Close()
+			return nil, err
+		}
+	}
 	// CORR-R06: under multi-replica server, only one pod runs reconcilers.
 	// Atomic claims (CORR-R01) still protect correctness when leadership is
 	// briefly dual or unavailable; this reduces N× list/claim load.
@@ -1803,6 +2193,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		Queries:  queries,
 		Enqueuer: queue,
 	})
+	tasks.ConfigureCharlieAlertDispatch(queries, charlieWriteFence)
+	if alertReconciler, alertErr := charlie.NewFindingAlertPlanner(database.Pool()); alertErr == nil {
+		tasks.ConfigureCharlieAlertReconciler(alertReconciler)
+	} else {
+		database.Close()
+		return nil, alertErr
+	}
 	// Cluster decommission reconciler: needs DB + the tunnel hub for both
 	// MsgDecommission RPC and forced Disconnect after token revoke. When the
 	// hub is unavailable (worker-only process), pass nil — the reconciler
@@ -2128,6 +2525,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	if s.tunnelWorker != nil {
 		s.tunnelWorker.Shutdown()
+	}
+	if s.charlieRuntime != nil {
+		if err := s.charlieRuntime.Shutdown(ctx); err != nil {
+			charlie.LogOperationalFailure(ctx, s.logger, "runtime.shutdown_failed", "")
+		}
+	}
+	if s.charlieBridge != nil {
+		s.charlieBridge.Close()
 	}
 	err := s.httpServer.Shutdown(ctx)
 	if s.cancel != nil {

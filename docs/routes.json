@@ -29,6 +29,102 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/charlie/access"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/charlie/access"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/charlie/action-policies/{capability}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/agent/install"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/agent/rollback"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/agent/rotate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/agent/uninstall"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/agent/upgrade"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/alert-deliveries"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/alert-policy"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/charlie/alert-policy"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/diagnostics/run"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/disconnect"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/admin/charlie/mode"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/onboarding/consume"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/onboarding/validate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/qualification/discovery"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/trigger-events"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/trigger-events/{event_id}/retry"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/trigger-rules"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/charlie/trigger-rules"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/charlie/trigger-rules/{rule_id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/admin/charlie/trigger-rules/{rule_id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/compliance/export"
   },
   {
@@ -906,6 +1002,78 @@
   {
     "method": "POST",
     "pattern": "/api/v1/catalog/repositories/{id}/test-connection"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/approvals"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/approvals/{approval_id}/decision"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/context/search"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/findings"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/findings/{finding_id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/acknowledge"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/dismiss"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/request-verification"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/resolve"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/findings/{finding_id}/start-remediation"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/operations/{operation_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/sessions"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/sessions"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/sessions/{session_id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/sessions/{session_id}/abort"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/sessions/{session_id}/events"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/sessions/{session_id}/history"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/sessions/{session_id}/messages"
   },
   {
     "method": "GET",
