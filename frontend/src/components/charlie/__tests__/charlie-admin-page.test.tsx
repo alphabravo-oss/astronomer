@@ -396,6 +396,7 @@ describe("Charlie administration acceptance", () => {
       revision: 5,
       emergencyDisabled: false,
       effects: [],
+      autoReadiness: { ready: true, blockers: [] },
       workloadCeiling: "auto",
       workloadCeilingReady: true,
     });
@@ -404,6 +405,9 @@ describe("Charlie administration acceptance", () => {
     expect(
       screen.getAllByText(/Includes Read only and Approval required/i).length,
     ).toBeGreaterThan(0);
+    expect(screen.getByTestId("charlie-mode-confirm-allowed")).toHaveTextContent(
+      /What Automation allows/i,
+    );
     fireEvent.change(screen.getByPlaceholderText("CHANGE TO AUTOMATION"), {
       target: { value: "CHANGE TO AUTOMATION" },
     });
@@ -411,6 +415,61 @@ describe("Charlie administration acceptance", () => {
     await waitFor(() =>
       expect(api.updateCharlieMode).toHaveBeenCalledWith("auto", 4),
     );
+    expect(await screen.findByTestId("charlie-mode-transition")).toHaveAttribute(
+      "data-phase",
+      "ready",
+    );
+    expect(screen.getByText(/Mode ready for work/i)).toBeInTheDocument();
+  });
+
+  it("shows validating state until agent ceiling is ready after mode change", async () => {
+    api.getCharlieMode.mockResolvedValue({
+      requested: "approval",
+      authoritative: "approval",
+      revision: 4,
+      emergencyDisabled: false,
+      disablePending: false,
+      disclosureDigest: digest("d"),
+      acknowledgedDisclosureDigest: digest("d"),
+      effects: ["Every write requires exact approval"],
+      autoReadiness: { ready: true, blockers: [] },
+      workloadCeiling: "approval",
+      workloadCeilingReady: true,
+    });
+    api.updateCharlieMode.mockResolvedValue({
+      requested: "read_only",
+      authoritative: "read_only",
+      revision: 5,
+      emergencyDisabled: false,
+      effects: ["Authorized reads only"],
+      workloadCeiling: "read_only",
+      workloadCeilingReady: false,
+    });
+    api.getCharlieAgent.mockResolvedValue({
+      applicationState: "degraded",
+      desiredReplicas: 2,
+      readyReplicas: 1,
+      leaderReplica: "instance-0",
+      standbyReplicas: [],
+      replicas: [
+        { ordinal: 0, instanceId: "instance-0", role: "leader", state: "ready" },
+        { ordinal: 1, role: "standby", state: "unavailable" },
+      ],
+    });
+    renderWithClient(<ModeTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /^read only/i }));
+    fireEvent.change(screen.getByPlaceholderText("CHANGE TO READ ONLY"), {
+      target: { value: "CHANGE TO READ ONLY" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Change mode" }));
+    await waitFor(() =>
+      expect(api.updateCharlieMode).toHaveBeenCalledWith("read_only", 4),
+    );
+    expect(await screen.findByTestId("charlie-mode-transition")).toHaveAttribute(
+      "data-phase",
+      "verifying",
+    );
+    expect(screen.getByText(/Validating product agents/i)).toBeInTheDocument();
   });
 
   it("exposes all automation policy fields and validates new rules before save", async () => {

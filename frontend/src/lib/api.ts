@@ -194,8 +194,22 @@ api.interceptors.response.use(
       }
     }
 
-    const message = error.response?.data?.message || error.message || 'An unexpected error occurred';
-    return Promise.reject(new Error(message));
+    const message =
+      (error.response?.data as { message?: string } | undefined)?.message ||
+      error.message ||
+      'An unexpected error occurred';
+    // Preserve status/code for callers that recover (e.g. Charlie drawer opens a
+    // fresh session on 409). A bare Error() used to drop response metadata and
+    // made every recoverable Charlie failure look like permanent denial.
+    const enriched = new Error(message) as Error & {
+      status?: number;
+      code?: string;
+      response?: typeof error.response;
+    };
+    enriched.status = error.response?.status;
+    enriched.code = (error.response?.data as { code?: string } | undefined)?.code;
+    enriched.response = error.response;
+    return Promise.reject(enriched);
   }
 );
 

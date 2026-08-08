@@ -52,6 +52,14 @@ func (a *ManagementKubernetesAdapter) Execute(ctx context.Context, capability Ca
 			return nil, err
 		}
 		return a.workload(ctx, capability, kind, name)
+	case "astronomer.management.pods":
+		return a.pods(ctx, capability, arguments)
+	case "astronomer.management.rollout_status":
+		kind, name, err := workloadArgument(arguments)
+		if err != nil {
+			return nil, err
+		}
+		return a.rolloutStatus(ctx, capability, kind, name)
 	case "astronomer.management.events":
 		return a.events(ctx, capability, arguments)
 	case "astronomer.management.pod_logs":
@@ -237,6 +245,126 @@ func (a *ManagementKubernetesAdapter) workload(ctx context.Context, capability C
 	return marshalBounded(summary, capability.MaxResponseBytes)
 }
 
+func (a *ManagementKubernetesAdapter) pods(ctx context.Context, capability CapabilityDescriptor, args map[string]json.RawMessage) (json.RawMessage, error) {
+	rows, err := a.kube.CoreV1().Pods(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	component := stringArgument(args, "component")
+	phaseFilter := stringArgument(args, "phase")
+	items := []map[string]any{}
+	for _, pod := range rows.Items {
+		if !a.owned(pod.Labels, pod.Name) {
+			continue
+		}
+		if component != "" && !strings.Contains(pod.Name, component) {
+			continue
+		}
+		if phaseFilter != "" && string(pod.Status.Phase) != phaseFilter {
+			continue
+		}
+		ready := false
+		for _, c := range pod.Status.Conditions {
+			if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
+				ready = true
+			}
+		}
+		restarts := int32(0)
+		containers := make([]map[string]any, 0, len(pod.Spec.Containers))
+		for _, c := range pod.Spec.Containers {
+			restartCount := int32(0)
+			state := "unknown"
+			for _, st := range pod.Status.ContainerStatuses {
+				if st.Name == c.Name {
+					restartCount = st.RestartCount
+					restarts += st.RestartCount
+					switch {
+					case st.State.Running != nil:
+						state = "running"
+					case st.State.Waiting != nil:
+						state = st.State.Waiting.Reason
+						if state == "" {
+							state = "waiting"
+						}
+					case st.State.Terminated != nil:
+						state = st.State.Terminated.Reason
+						if state == "" {
+							state = "terminated"
+						}
+					}
+				}
+			}
+			containers = append(containers, map[string]any{"name": c.Name, "state": state, "restarts": restartCount})
+		}
+		owner := ""
+		for _, ref := range pod.OwnerReferences {
+			if ref.Controller != nil && *ref.Controller {
+				owner = strings.ToLower(ref.Kind) + "/" + ref.Name
+				break
+			}
+		}
+		items = append(items, map[string]any{
+			"name": pod.Name, "phase": pod.Status.Phase, "ready": ready, "restarts": restarts,
+			"node": pod.Spec.NodeName, "owner": owner, "containers": containers,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool { return fmt.Sprint(items[i]["name"]) < fmt.Sprint(items[j]["name"]) })
+	page, size := pagination(args, 50)
+	start := int((page - 1) * size)
+	if start > len(items) {
+		start = len(items)
+	}
+	end := min(start+int(size), len(items))
+	return marshalBounded(map[string]any{"items": items[start:end], "page": page, "page_size": size, "total": len(items)}, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) rolloutStatus(ctx context.Context, capability CapabilityDescriptor, kind, name string) (json.RawMessage, error) {
+	if kind == "deployment" {
+		item, err := a.kube.AppsV1().Deployments(a.namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		if !a.owned(item.Labels, item.Name) {
+			return nil, fmt.Errorf("workload is outside Astronomer")
+		}
+		desired := int32Value(item.Spec.Replicas)
+		complete := item.Status.UpdatedReplicas >= desired && item.Status.ReadyReplicas >= desired &&
+			item.Status.AvailableReplicas >= desired && item.Status.ObservedGeneration >= item.Generation
+		progressing, available := "", ""
+		for _, c := range item.Status.Conditions {
+			switch c.Type {
+			case appsv1.DeploymentProgressing:
+				progressing = string(c.Status) + ":" + c.Reason
+			case appsv1.DeploymentAvailable:
+				available = string(c.Status) + ":" + c.Reason
+			}
+		}
+		return marshalBounded(map[string]any{
+			"workload": "deployment/" + item.Name, "complete": complete,
+			"desired": desired, "ready": item.Status.ReadyReplicas, "updated": item.Status.UpdatedReplicas,
+			"available": item.Status.AvailableReplicas, "unavailable": item.Status.UnavailableReplicas,
+			"generation": item.Generation, "observed_generation": item.Status.ObservedGeneration,
+			"progressing": progressing, "available_condition": available,
+		}, capability.MaxResponseBytes)
+	}
+	item, err := a.kube.AppsV1().StatefulSets(a.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if !a.owned(item.Labels, item.Name) {
+		return nil, fmt.Errorf("workload is outside Astronomer")
+	}
+	desired := int32Value(item.Spec.Replicas)
+	complete := item.Status.ReadyReplicas >= desired && item.Status.UpdatedReplicas >= desired &&
+		item.Status.ObservedGeneration >= item.Generation
+	return marshalBounded(map[string]any{
+		"workload": "statefulset/" + item.Name, "complete": complete,
+		"desired": desired, "ready": item.Status.ReadyReplicas, "current": item.Status.CurrentReplicas,
+		"updated": item.Status.UpdatedReplicas, "generation": item.Generation,
+		"observed_generation": item.Status.ObservedGeneration,
+	}, capability.MaxResponseBytes)
+}
+
 func (a *ManagementKubernetesAdapter) events(ctx context.Context, capability CapabilityDescriptor, args map[string]json.RawMessage) (json.RawMessage, error) {
 	rows, err := a.kube.CoreV1().Events(a.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -298,6 +426,10 @@ func (a *ManagementKubernetesAdapter) nodes(ctx context.Context, capability Capa
 	if err != nil {
 		return nil, err
 	}
+	serverVersion := "unavailable"
+	if info, versionErr := a.kube.Discovery().ServerVersion(); versionErr == nil && info != nil {
+		serverVersion = info.GitVersion
+	}
 	items := make([]map[string]any, 0, len(rows.Items))
 	for _, node := range rows.Items {
 		conditions := map[string]string{}
@@ -306,9 +438,15 @@ func (a *ManagementKubernetesAdapter) nodes(ctx context.Context, capability Capa
 				conditions[string(c.Type)] = string(c.Status)
 			}
 		}
-		items = append(items, map[string]any{"name": node.Name, "capacity_cpu": node.Status.Capacity.Cpu().String(), "capacity_memory": node.Status.Capacity.Memory().String(), "conditions": conditions})
+		items = append(items, map[string]any{
+			"name": node.Name, "capacity_cpu": node.Status.Capacity.Cpu().String(),
+			"capacity_memory": node.Status.Capacity.Memory().String(), "conditions": conditions,
+			"kubelet_version": node.Status.NodeInfo.KubeletVersion,
+			"os_image":        node.Status.NodeInfo.OSImage,
+			"architecture":   node.Status.NodeInfo.Architecture,
+		})
 	}
-	return marshalBounded(map[string]any{"items": items}, capability.MaxResponseBytes)
+	return marshalBounded(map[string]any{"server_version": serverVersion, "items": items}, capability.MaxResponseBytes)
 }
 
 func (a *ManagementKubernetesAdapter) storage(ctx context.Context, capability CapabilityDescriptor) (json.RawMessage, error) {

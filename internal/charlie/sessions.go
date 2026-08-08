@@ -114,10 +114,27 @@ func NewSessionService(queries sessionQueries, bridge SessionBridge, contextProv
 	return &SessionService{queries: queries, bridge: bridge, context: contextProvider, authorizer: authorizer, auditor: auditor, active: active, now: time.Now}, nil
 }
 
+// DefaultInstallationResource is attached when a chat session is opened without
+// an explicit product context picker. Write tools require arguments.resource_id
+// to match a session-scoped resource; without this default, ordinary NL asks
+// like "scale the worker" cannot propose writes because the model has no
+// resource_id a user would ever know.
+const DefaultInstallationResourceID = "local"
+
+func defaultSessionResources(resources []SessionResource) []SessionResource {
+	if len(resources) > 0 {
+		return resources
+	}
+	return []SessionResource{{
+		Type: "installation", ID: DefaultInstallationResourceID, RequiredVerb: "read",
+	}}
+}
+
 func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (CreatedSession, error) {
 	if !s.active() {
 		return CreatedSession{}, fmt.Errorf("Charlie runtime is inactive")
 	}
+	input.Resources = defaultSessionResources(input.Resources)
 	if err := validateCreateSession(input); err != nil {
 		return CreatedSession{}, err
 	}
@@ -250,6 +267,9 @@ func allowedSessionResource(resource SessionResource) bool {
 
 func resourceScopeSummary(resources []SessionResource) string {
 	if len(resources) == 0 {
+		return "installation"
+	}
+	if len(resources) == 1 && resources[0].Type == "installation" && resources[0].ID == DefaultInstallationResourceID {
 		return "installation"
 	}
 	return fmt.Sprintf("%d explicitly attached management-plane resources", len(resources))

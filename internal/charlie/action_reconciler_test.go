@@ -26,7 +26,9 @@ func (f *reconcileQueriesFake) ClaimCharlieAmbiguousReceipt(_ context.Context, _
 		return sqlc.CharlieActionReceipt{}, pgx.ErrNoRows
 	}
 	f.claimed = true
-	f.receipt.State = "verifying"
+	if f.receipt.State != "claimed" {
+		f.receipt.State = "verifying"
+	}
 	return f.receipt, nil
 }
 
@@ -128,6 +130,31 @@ func TestAmbiguousReceiptReconcilerTerminatesExpiredUnverifiedOutcome(t *testing
 	}
 	if executor.executeCalls != 0 || queries.transition.NextState != "failed" || auditor.outcome != "failed" {
 		t.Fatalf("expired unverified receipt did not terminate safely: %+v", queries.transition)
+	}
+}
+
+func TestAmbiguousReceiptReconcilerBlocksExpiredPreDispatchClaimWithoutVerification(t *testing.T) {
+	reconciler, queries, executor, auditor := reconcilerFixture(t, true, time.Minute)
+	queries.receipt.State = "claimed"
+	queries.receipt.DispatchedAt = pgtype.Timestamptz{}
+
+	if err := reconciler.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if executor.executeCalls != 0 || executor.verifyCalls != 0 || queries.transition.NextState != "blocked" ||
+		queries.transition.ExpectedState != "claimed" || queries.transition.ResultStatus != "blocked" ||
+		auditor.outcome != "blocked" {
+		t.Fatalf("stale pre-dispatch claim was not terminally blocked: execute=%d verify=%d transition=%+v audit=%+v",
+			executor.executeCalls, executor.verifyCalls, queries.transition, auditor)
+	}
+	plain, err := receiptTestCipher{}.Decrypt(queries.transition.ResultEncrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result ActionResult
+	if json.Unmarshal([]byte(plain), &result) != nil || result.Allowed || result.Code != DeniedAmbiguousPriorAttempt ||
+		result.State != "blocked" {
+		t.Fatalf("stale pre-dispatch replay result = %+v", result)
 	}
 }
 

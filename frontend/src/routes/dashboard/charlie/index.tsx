@@ -20,12 +20,16 @@ import {
   decideCharlieApproval,
   getCharlieFinding,
   getCharlieHistory,
+  getCharlieOverview,
   listCharlieApprovals,
   listCharlieFindings,
   listCharlieSessions,
+  listCharlieThreads,
+  getCharlieThreadHistory,
   transitionCharlieFinding,
   type CharlieApproval,
 } from "@/lib/api/charlie";
+import { productModePresentation } from "@/components/charlie/charlie-shell";
 import {
   findingLifecycleDecisions,
   findingDecisionLabel,
@@ -61,6 +65,11 @@ function CharlieHub() {
   const params = useSearchParams();
   const router = useRouter();
   const tab = normalizeCharlieTab(params.get("tab"));
+  const overview = useQuery({
+    queryKey: queryKeys.charlie.overview,
+    queryFn: getCharlieOverview,
+  });
+  const mode = productModePresentation(overview.data?.mode);
   const set = (updates: Record<string, string | undefined>) => {
     router.push(`/dashboard/charlie?${mergeCharlieSearch(params, updates)}`);
   };
@@ -73,12 +82,26 @@ function CharlieHub() {
   };
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Charlie</h1>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold">Charlie</h1>
+          <span
+            className={cn(
+              "rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+              mode.badgeClass,
+            )}
+            aria-label={`Current Charlie mode: ${mode.label}`}
+            data-testid="charlie-hub-mode-badge"
+            data-mode={mode.key}
+          >
+            Mode: {mode.label}
+          </span>
+        </div>
         <p className="text-sm text-foreground/70">
           Conversations, investigations, findings, and explicitly authorized
           actions.
         </p>
+        <p className="text-xs text-muted-foreground">{mode.ceiling}</p>
       </div>
       <div
         role="tablist"
@@ -201,17 +224,18 @@ function Conversations({
   onSelect: (id: string) => void;
 }) {
   const q = useQuery({
-    queryKey: queryKeys.charlie.sessions,
-    queryFn: listCharlieSessions,
+    queryKey: queryKeys.charlie.threads,
+    queryFn: listCharlieThreads,
     retry: false,
   });
-  const rows = q.data?.filter((session) => session.visibility === "private") ?? [];
-  const selectedConversation = rows.some((session) => session.id === selected)
+  // Interactive threads only — server list is owner-scoped user chats.
+  const rows = q.data ?? [];
+  const selectedConversation = rows.some((thread) => thread.id === selected)
     ? selected
     : null;
   const h = useQuery({
-    queryKey: queryKeys.charlie.history(selectedConversation),
-    queryFn: () => getCharlieHistory(selectedConversation!),
+    queryKey: queryKeys.charlie.threadHistory(selectedConversation),
+    queryFn: () => getCharlieThreadHistory(selectedConversation!),
     enabled: !!selectedConversation,
     retry: false,
   });
@@ -233,7 +257,7 @@ function Conversations({
               selected === s.id && "border-primary",
             )}
           >
-            <b className="block truncate text-sm">{s.intent}</b>
+            <b className="block truncate text-sm">{s.title || "Chat"}</b>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={s.state} />
               <StatusBadge status="private" label="Private chat" />
@@ -312,7 +336,8 @@ function Investigations({
   const source = params.get("source") ?? "";
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
-  const rows = (q.data?.filter((s) => s.visibility === "incident") ?? [])
+  // Investigations track: system/event sessions only — never private user chats.
+  const rows = (q.data?.filter((s) => s.visibility === "incident" && s.source === "event") ?? [])
     .map((session) => ({ session, finding: findings.data?.find((finding) => finding.sessionId === session.id) }))
     .filter(({ session, finding }) =>
       (!status || session.state === status) &&

@@ -159,12 +159,11 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default to server so a bare /admin/management-logs/ browse (as a real
+	// operator would hit first) still works; explicit component remains preferred.
 	component := strings.TrimSpace(r.URL.Query().Get("component"))
 	if component == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ComponentRequired,
-			"the component query parameter is required (server | worker | agent)")
-
-		return
+		component = "server"
 	}
 	if !allowedComponents[component] {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ComponentInvalid,

@@ -191,11 +191,8 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, "Charlie must be enabled before changing mode or disclosure")
 		return
 	}
-	if request.AcknowledgeDisclosureDigest != "" {
-		if request.Revision != nil || request.Mode != "" || request.EmergencyDisable {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Disclosure acknowledgement must be a separate request")
-			return
-		}
+	// Disclosure-only request (no mode change).
+	if request.AcknowledgeDisclosureDigest != "" && request.Revision == nil && request.Mode == "" && !request.EmergencyDisable {
 		if !h.requireAuthorityAudit(w, r, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", nil) {
 			return
 		}
@@ -212,6 +209,28 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie mode request is invalid")
 		return
 	}
+	// Combined mode raise + optional exact disclosure ack. Operators (and
+	// automation) often need both in one step when raising to auto after a
+	// catalog/mode reconcile cleared the previous acknowledgement. The digest
+	// must still match the live connection disclosure exactly *before* the
+	// mode transition (auto prerequisites require an acknowledged disclosure).
+	// Mode transitions re-read disclosure from central and commonly rewrite it
+	// (approval vs auto catalogs differ), which clears the pre-transition ack
+	// in SetVerifiedMode. After a successful transition we therefore re-ack the
+	// *post*-transition live digest when the operator supplied combined intent.
+	combinedAck := request.AcknowledgeDisclosureDigest != ""
+	if combinedAck {
+		if !h.requireAuthorityAudit(w, r, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", nil) {
+			return
+		}
+		if _, err := h.backend.AcknowledgeDisclosure(r.Context(), request.AcknowledgeDisclosureDigest); err != nil {
+			h.respondError(w, r, err)
+			return
+		}
+		recordCharlieAdminAudit(r, h.audit, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", map[string]any{
+			"with_mode": string(request.Mode),
+		})
+	}
 	fields := map[string]any{"mode": string(request.Mode), "revision": *request.Revision}
 	if !request.EmergencyDisable && !h.requireAuthorityAudit(w, r, "admin.charlie.mode.update", "charlie_connection", "current", fields) {
 		return
@@ -220,6 +239,16 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.respondError(w, r, err)
 		return
+	}
+	if combinedAck && view.DisclosureDigest != "" && view.AcknowledgedDisclosureDigest != view.DisclosureDigest {
+		if reacked, ackErr := h.backend.AcknowledgeDisclosure(r.Context(), view.DisclosureDigest); ackErr == nil {
+			view = reacked
+			recordCharlieAdminAudit(r, h.audit, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", map[string]any{
+				"with_mode":           string(request.Mode),
+				"post_mode_transition": true,
+			})
+		}
+		// Mode already succeeded; leave readiness blockers if post-ack fails.
 	}
 	action := "admin.charlie.mode.update"
 	if request.EmergencyDisable {

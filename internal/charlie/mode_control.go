@@ -227,6 +227,10 @@ func (c *ModeController) Request(ctx context.Context, desired Mode, expectedRevi
 		logModeTransitionFailure(ctx, "mode.local_verification_persist_failed")
 		return requested, fmt.Errorf("persist Charlie verified mode: %w", err)
 	}
+	// Disclosure digests are not patched onto agent env after mode raise.
+	// Agents already re-read disclosure from central heartbeat/bridge status;
+	// a second STS env rewrite would force another full pod rollout for no
+	// authority gain (localModeCeiling already rolled once above).
 	notifyActivationChanged(ctx, c.bridge)
 	final, loadErr := c.store.LoadModeState(ctx)
 	if loadErr != nil || final.ConnectionID != current.ConnectionID || !final.Active || final.EmergencyDisabled ||
@@ -326,6 +330,13 @@ func (c *ModeController) Reconcile(ctx context.Context) (ModeState, error) {
 	newEffective := EffectiveMode(current.Requested, verified, current.EmergencyDisabled)
 	if auditErr := requireAuthorityMutationAudit(ctx, c.audit, event); auditErr != nil {
 		logModeTransitionFailure(ctx, "mode.audit_persist_failed")
+		// Never persist an unaudited executable revision. Otherwise a later
+		// same-revision reconciliation could treat that snapshot as established
+		// authority and reopen the fence without ever admitting the mutation
+		// audit. Read-only/disabled downgrades may still be committed fail-closed.
+		if newEffective == ModeApproval || newEffective == ModeAuto {
+			return current, fmt.Errorf("Charlie mode audit is unavailable")
+		}
 		if modeRank(newEffective) > modeRank(oldEffective) {
 			return current, fmt.Errorf("Charlie mode audit is unavailable")
 		}

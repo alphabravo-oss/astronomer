@@ -770,6 +770,18 @@ type CharlieFindingResource struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+type CharlieInteractiveThread struct {
+	ID               uuid.UUID          `json:"id"`
+	ConnectionID     uuid.UUID          `json:"connection_id"`
+	OwnerUserID      uuid.UUID          `json:"owner_user_id"`
+	Title            string             `json:"title"`
+	State            string             `json:"state"`
+	CurrentSessionID pgtype.UUID        `json:"current_session_id"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
+}
+
 type CharlieSession struct {
 	ID                   uuid.UUID          `json:"id"`
 	ConnectionID         uuid.UUID          `json:"connection_id"`
@@ -786,6 +798,7 @@ type CharlieSession struct {
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
 	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+	ThreadID             pgtype.UUID        `json:"thread_id"`
 }
 
 type CharlieSessionResource struct {
@@ -794,6 +807,13 @@ type CharlieSessionResource struct {
 	ResourceID   string    `json:"resource_id"`
 	RequiredVerb string    `json:"required_verb"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type CharlieThreadSession struct {
+	ThreadID  uuid.UUID `json:"thread_id"`
+	SessionID uuid.UUID `json:"session_id"`
+	Sequence  int32     `json:"sequence"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type CharlieTriggerEvent struct {

@@ -175,13 +175,46 @@ func TestProductLiveAuthorityAutoRequiresExactAutomationIdentity(t *testing.T) {
 	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)
 	arguments := liveWriteArguments("resource-a")
 	facts, err := authority.Evaluate(context.Background(), action, capability, arguments)
-	if err != nil || !facts.LiveAuthorized || !facts.AutoEligible {
+	if err != nil || !facts.LiveAuthorized || !facts.AutoEligible || facts.InteractiveApprovalRequired {
 		t.Fatalf("automation identity denied: %+v err=%v", facts, err)
 	}
-	queries.delegation.PrincipalID = uuid.New()
+	if decision := DecideAuthority(facts, time.Now()); !decision.Allowed {
+		t.Fatalf("automation identity should permit unattended auto: %+v", decision)
+	}
+	// A different service principal with the same grants keeps live RBAC but
+	// must request exact approval instead of unattended auto.
+	otherService := uuid.New()
+	bindings.values[otherService] = bindings.values[automationID]
+	bindings.active[otherService] = true
+	queries.delegation.PrincipalID = otherService
+	queries.delegation.PrincipalType = "service"
 	facts, err = authority.Evaluate(context.Background(), action, capability, arguments)
-	if err == nil && facts.LiveAuthorized {
-		t.Fatal("different service identity received auto authority")
+	if err != nil || !facts.LiveAuthorized || !facts.InteractiveApprovalRequired {
+		t.Fatalf("non-automation principal facts=%+v err=%v", facts, err)
+	}
+	if decision := DecideAuthority(facts, time.Now()); decision.Allowed || decision.Code != DeniedApprovalRequired {
+		t.Fatalf("non-automation auto write should require approval, got %+v", decision)
+	}
+}
+
+func TestProductLiveAuthorityHumanAutoWriteRequiresApprovalNotRBACDenial(t *testing.T) {
+	queries, bindings, safety, action, capability, automationID, _ := liveAuthorityFixture(ModeAuto)
+	// Fixture defaults to human user principal with live target RBAC.
+	queries.delegation.PrincipalType = "user"
+	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)
+	facts, err := authority.Evaluate(context.Background(), action, capability, liveWriteArguments("resource-a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !facts.LiveAuthorized {
+		t.Fatalf("human with target RBAC should stay LiveAuthorized: %+v", facts)
+	}
+	if !facts.InteractiveApprovalRequired {
+		t.Fatalf("human auto write must require interactive approval: %+v", facts)
+	}
+	decision := DecideAuthority(facts, time.Now())
+	if decision.Allowed || decision.Code != DeniedApprovalRequired {
+		t.Fatalf("want approval_required for human auto write, got %+v", decision)
 	}
 }
 

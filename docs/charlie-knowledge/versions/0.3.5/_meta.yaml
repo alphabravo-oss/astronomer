@@ -1,0 +1,25 @@
+product: astronomer
+product_version: "0.3.5"
+kind: charlie-knowledge
+maturity: test-run
+description: >
+  Management-plane SRE scope, playbooks, and MCP tool reference for Charlie
+  against Astronomer product documentation version 0.3.5 (dev test install).
+public_docs: https://github.com/alphabravo-oss/astronomer-docs/tree/main/versions/0.3.5
+release_assets: https://github.com/alphabravo-oss/astronomer-docs/releases/tag/v0.3.5
+# Charlie central (dev) — fill/confirm when publishing
+charlie_central_base_url: https://charlie.dev.alphabravo.io
+product_id: product_1a8a43aab5b28bf94f330d1bff3a23c4
+product_slug: astronomer
+knowledge_collection_id: collection_5274991d6d4f7cd95c6ca50a6ea241f5
+route_id: route_38f122cd1b2244ddbee06bb77d2b4cf4
+deployment_id: scope_d057aaadc05546e5a318aa96
+tenant_id: astronomer-native-179
+environment_id: development
+logical_agent_id: astronomer-native-179-charlie-v1
+# Astronomer product install under test
+astronomer_ui: https://astronomer.dev.alphabravo.io
+install_namespace: astronomer
+agent_namespace: astronomer-charlie
+chart_version: "0.3.5"
+app_version: "0.3.5"

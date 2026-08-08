@@ -10,10 +10,12 @@ import (
 
 // infrastructureQualificationOperator is deliberately package-private and is
 // not accepted by LiveConfig. The production hook therefore cannot inject an
-// observation provider and these scenarios remain fail-closed until a concrete
-// fixed operator exists. Keeping the typed boundary here lets that operator be
-// implemented without adding command, URL, or arbitrary evidence inputs to the
-// hook. Tests use it only to prove validation and mandatory cleanup semantics.
+// observation provider and the remaining infrastructure scenarios stay
+// fail-closed until concrete fixed operators exist. leader_kill_failover uses
+// its separate Kubernetes-only target. Keeping the typed boundary here lets an
+// operator be implemented without adding command, URL, or arbitrary evidence
+// inputs to the hook. Tests use it only to prove validation and mandatory
+// cleanup semantics.
 type infrastructureQualificationOperator interface {
 	LeaderKillFailover(context.Context, Candidate) (LeaderFailoverObservation, error)
 	CleanInstall(context.Context, Candidate) (CleanInstallObservation, error)

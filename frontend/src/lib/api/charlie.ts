@@ -406,6 +406,137 @@ export async function abortCharlieSession(id: string) {
   });
 }
 
+export type CharlieActiveThread = {
+  thread: {
+    id: string;
+    title: string;
+    state: string;
+    current_session_id?: string | null;
+    created_at?: string;
+    updated_at?: string;
+  } | null;
+  messageable?: boolean;
+  needs_continue?: boolean;
+  session_ids?: string[];
+  current_session?: CharlieSession | null;
+};
+
+export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
+  const { data } = await api.get("/charlie/threads/active/");
+  const value = data?.data ?? data;
+  return {
+    thread: value?.thread ?? null,
+    messageable: Boolean(value?.messageable),
+    needs_continue: Boolean(value?.needs_continue),
+    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
+    current_session: value?.current_session
+      ? mapCharlieSession(value.current_session)
+      : null,
+  };
+}
+
+export async function newCharlieChat(): Promise<CharlieActiveThread> {
+  const { data } = await api.post("/charlie/threads/new/", {});
+  const value = data?.data ?? data;
+  return {
+    thread: value?.thread ?? null,
+    messageable: Boolean(value?.messageable),
+    needs_continue: Boolean(value?.needs_continue),
+    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
+    current_session: value?.current_session
+      ? mapCharlieSession(value.current_session)
+      : null,
+  };
+}
+
+export async function sendCharlieThreadMessage(
+  message: string,
+  options?: {
+    trigger?: string;
+    currentUiContext?: string;
+    resources?: CharlieResource[];
+  },
+): Promise<CharlieActiveThread & { receipt?: unknown }> {
+  const { data } = await api.post("/charlie/threads/messages/", {
+    client_message_id: crypto.randomUUID(),
+    message,
+    trigger: options?.trigger,
+    current_ui_context: options?.currentUiContext,
+    resources: options?.resources?.map((r) => ({
+      type: r.type,
+      id: r.id,
+      required_verb: r.requiredVerb,
+    })),
+  });
+  const value = data?.data ?? data;
+  return {
+    thread: value?.thread ?? null,
+    messageable: Boolean(value?.messageable),
+    needs_continue: Boolean(value?.needs_continue),
+    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
+    current_session: value?.current_session
+      ? mapCharlieSession(value.current_session)
+      : null,
+    receipt: value?.receipt,
+  };
+}
+
+export async function getCharlieThreadHistory(
+  threadId: string,
+): Promise<CharlieMessage[]> {
+  const { data } = await api.get(
+    `/charlie/threads/${encodeURIComponent(threadId)}/history/`,
+  );
+  const value = data.items ?? data.data?.items ?? data.data ?? data;
+  if (!Array.isArray(value)) return [];
+  return (value as CharlieHistoryItemWire[]).map((item) => {
+    const citations = (Array.isArray(item.citations) ? item.citations : [])
+      .slice(0, 16)
+      .flatMap((citation) => {
+        const id = typeof citation.id === "string" ? citation.id : "";
+        const title =
+          typeof citation.title === "string" ? citation.title.trim() : "";
+        const source =
+          typeof citation.source === "string" ? citation.source.trim() : "";
+        if (!id || !title || !source) return [];
+        return [
+          {
+            id: id.slice(0, 128),
+            title: title.slice(0, 1024),
+            source: source.slice(0, 2048),
+          },
+        ];
+      });
+    return {
+      id: item.itemId ?? item.item_id ?? "",
+      role:
+        item.kind === "user_message"
+          ? "user"
+          : item.kind === "assistant_message"
+            ? "assistant"
+            : "system",
+      content: item.redactedContent ?? item.redacted_content ?? "",
+      ...(citations.length ? { citations } : {}),
+      createdAt: item.createdAt ?? item.created_at,
+    };
+  });
+}
+
+export async function listCharlieThreads(): Promise<
+  Array<{ id: string; title: string; state: string; updated_at?: string }>
+> {
+  const { data } = await api.get("/charlie/threads/");
+  const value = data.threads ?? data.data?.threads ?? data.data ?? data;
+  if (!Array.isArray(value)) return [];
+  return value.map((row: Record<string, unknown>) => ({
+    id: String(row.id ?? ""),
+    title: String(row.title ?? ""),
+    state: String(row.state ?? ""),
+    updated_at:
+      typeof row.updated_at === "string" ? row.updated_at : undefined,
+  }));
+}
+
 const charlieSessionEventTypes = [
   "turn.started",
   "text.delta",
@@ -424,26 +555,73 @@ const charlieSessionEventTypes = [
 // EventSource keeps its last confirmed event ID and sends Last-Event-ID on an
 // automatic reconnect. Astronomer also persists the cursor after flushing each
 // event, so a new browser/server can resume without storing conversation data.
+//
+// Browser EventSource retries aggressively after a 429/network blip. That can
+// thrash the product-local concurrency gate and leave the UI stuck on
+// "reconnecting" even after the stream is healthy again. Own reconnect with
+// backoff, clear unavailable on open, and stop retries when unsubscribed.
 export function subscribeCharlieSessionEvents(
   id: string,
   onEvent: (event: MessageEvent<string>) => void,
   onError: () => void,
+  onOpen?: () => void,
 ): () => void {
   const base = API_BASE.replace(/\/$/, "");
-  const source = new EventSource(
-    `${base}/charlie/sessions/${encodeURIComponent(id)}/events/`,
-    { withCredentials: true },
-  );
+  const url = `${base}/charlie/sessions/${encodeURIComponent(id)}/events/`;
+  let closed = false;
+  let source: EventSource | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let attempt = 0;
   const listener = (event: Event) => onEvent(event as MessageEvent<string>);
-  for (const type of charlieSessionEventTypes) {
-    source.addEventListener(type, listener);
-  }
-  source.onerror = onError;
-  return () => {
-    for (const type of charlieSessionEventTypes) {
-      source.removeEventListener(type, listener);
+
+  const clearRetry = () => {
+    if (retryTimer !== undefined) {
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
     }
-    source.close();
+  };
+
+  const detach = (es: EventSource) => {
+    for (const type of charlieSessionEventTypes) {
+      es.removeEventListener(type, listener);
+    }
+    es.onopen = null;
+    es.onerror = null;
+    es.close();
+  };
+
+  const connect = () => {
+    if (closed) return;
+    clearRetry();
+    const es = new EventSource(url, { withCredentials: true });
+    source = es;
+    for (const type of charlieSessionEventTypes) {
+      es.addEventListener(type, listener);
+    }
+    es.onopen = () => {
+      attempt = 0;
+      onOpen?.();
+    };
+    es.onerror = () => {
+      onError();
+      if (closed) return;
+      // Stop the browser's immediate reconnect loop; we reopen with backoff.
+      detach(es);
+      if (source === es) source = null;
+      attempt += 1;
+      const delayMs = Math.min(30_000, 500 * 2 ** Math.min(attempt, 5));
+      retryTimer = setTimeout(connect, delayMs);
+    };
+  };
+
+  connect();
+  return () => {
+    closed = true;
+    clearRetry();
+    if (source) {
+      detach(source);
+      source = null;
+    }
   };
 }
 

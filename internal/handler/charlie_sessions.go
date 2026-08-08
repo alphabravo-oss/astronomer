@@ -214,6 +214,11 @@ func (h *CharlieSessionHandler) Message(w http.ResponseWriter, r *http.Request) 
 	}
 	receipt, err := h.access.Message(r.Context(), mustUserID(actor), sessionID, messageID, request.Message)
 	if err != nil {
+		// Terminal sessions are a client state problem, not bridge outage.
+		if strings.Contains(err.Error(), "does not accept messages") {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie session is no longer open for messages")
+			return
+		}
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie message is unavailable")
 		return
 	}

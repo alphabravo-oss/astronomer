@@ -35,9 +35,20 @@ func TestCapabilityCatalogPinsSRESurfaceAndManagedTargetBoundary(t *testing.T) {
 		"astronomer.agent_fleet.upgrade_status", "astronomer.agent_fleet.ingestion_health",
 		"astronomer.tunnel.health", "astronomer.tunnel.replica_distribution",
 		"astronomer.tunnel.recent_errors",
+		"astronomer.management.pods", "astronomer.management.rollout_status",
+		"astronomer.installation.summary", "astronomer.management.pod_logs",
 	} {
 		if !seen[required] {
 			t.Errorf("required management-plane capability %s is missing", required)
+		}
+	}
+	// Descriptions must be specific enough for the model to pick tools.
+	for _, capability := range all {
+		if capability.Effect != EffectRead {
+			continue
+		}
+		if len(capability.Description) < 40 {
+			t.Errorf("read capability %s has a too-generic description", capability.Name)
 		}
 	}
 }

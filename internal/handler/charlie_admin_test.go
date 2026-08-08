@@ -28,6 +28,10 @@ type charlieAdminFake struct {
 	modeInput            charlie.Mode
 	modeCalls            int
 	emergency            bool
+	ackCalls             int
+	ackDigests           []string
+	ackErr               error
+	postModeDigest       string // when set, UpdateMode returns unacked post-transition digest
 	triggerEvents        []charlie.AdminTriggerEventView
 	retryEvent           charlie.AdminTriggerEventView
 	retrySource          uuid.UUID
@@ -181,7 +185,46 @@ func (f *charlieAdminFake) Uninstall(_ context.Context, actor uuid.UUID) error {
 func (f *charlieAdminFake) UpdateMode(_ context.Context, mode charlie.Mode, _ int64, emergency bool, _ uuid.UUID) (charlie.AdminModeView, error) {
 	f.modeCalls++
 	f.modeInput, f.emergency = mode, emergency
+	if f.postModeDigest != "" {
+		// Mode transitions rewrite disclosure from central and clear prior ack.
+		f.mode = charlie.AdminModeView{
+			Requested: mode, Authoritative: mode, Revision: f.mode.Revision + 1,
+			DisclosureDigest: f.postModeDigest, AcknowledgedDisclosureDigest: "",
+			AutoReadiness: charlie.AdminAutoReadiness{Ready: false, Blockers: []charlie.AdminAutoReadinessBlocker{{
+				Code: "disclosure_unacknowledged", Message: "The current MCP capability disclosure is not acknowledged.",
+			}}},
+			WorkloadCeiling: mode, WorkloadCeilingReady: true,
+		}
+	}
 	return f.mode, nil
+}
+func (f *charlieAdminFake) AcknowledgeDisclosure(_ context.Context, digest string) (charlie.AdminModeView, error) {
+	f.ackCalls++
+	f.ackDigests = append(f.ackDigests, digest)
+	if f.ackErr != nil {
+		return charlie.AdminModeView{}, f.ackErr
+	}
+	// Simulate mode-transition digest rewrite: first ack uses the supplied
+	// pre-transition digest; subsequent acks accept the live post-mode digest.
+	view := f.mode
+	if f.postModeDigest != "" && digest == f.postModeDigest {
+		view.DisclosureDigest = f.postModeDigest
+		view.AcknowledgedDisclosureDigest = f.postModeDigest
+		view.AutoReadiness = charlie.AdminAutoReadiness{Ready: true, Blockers: []charlie.AdminAutoReadinessBlocker{}}
+		f.mode = view
+		return view, nil
+	}
+	if f.postModeDigest != "" && digest != f.postModeDigest {
+		// Pre-transition ack succeeds but mode update will present a new digest.
+		view.DisclosureDigest = digest
+		view.AcknowledgedDisclosureDigest = digest
+		return view, nil
+	}
+	view.DisclosureDigest = digest
+	view.AcknowledgedDisclosureDigest = digest
+	view.AutoReadiness = charlie.AdminAutoReadiness{Ready: true, Blockers: []charlie.AdminAutoReadinessBlocker{}}
+	f.mode = view
+	return view, nil
 }
 
 func TestCharlieAdminStatusReturnsOnlySafeMetadata(t *testing.T) {
@@ -283,6 +326,54 @@ func TestCharlieAdminEmergencyDisableIsExplicit(t *testing.T) {
 	handler.Mode(recorder, authenticatedCharlieRequest(http.MethodPatch, "/", `{"mode":"disabled","revision":7,"emergency_disable":true}`, uuid.New(), "jwt"))
 	if recorder.Code != http.StatusOK || fake.modeInput != charlie.ModeDisabled || !fake.emergency {
 		t.Fatalf("emergency mode = %d input=%q emergency=%v body=%s", recorder.Code, fake.modeInput, fake.emergency, recorder.Body.String())
+	}
+}
+
+func TestCharlieAdminCombinedModeRaiseReAcksPostTransitionDisclosure(t *testing.T) {
+	// approval→auto rewrites disclosure (mode-dependent catalog). Combined
+	// mode+ack must re-ack the live post-transition digest so auto is ready.
+	preDigest := "sha256:" + strings.Repeat("b", 64)
+	postDigest := "sha256:" + strings.Repeat("a", 64)
+	fake := &charlieAdminFake{
+		mode: charlie.AdminModeView{
+			Requested: charlie.ModeApproval, Authoritative: charlie.ModeApproval, Revision: 10,
+			DisclosureDigest: preDigest,
+		},
+		postModeDigest: postDigest,
+	}
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+	body := `{"mode":"auto","revision":10,"acknowledge_disclosure_digest":"` + preDigest + `"}`
+	recorder := httptest.NewRecorder()
+	handler.Mode(recorder, authenticatedCharlieRequest(http.MethodPatch, "/", body, uuid.New(), "jwt"))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("combined mode raise = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if fake.modeCalls != 1 || fake.modeInput != charlie.ModeAuto {
+		t.Fatalf("mode not raised: calls=%d input=%s", fake.modeCalls, fake.modeInput)
+	}
+	// Pre-transition ack + post-transition re-ack.
+	if fake.ackCalls != 2 || len(fake.ackDigests) != 2 {
+		t.Fatalf("expected pre+post disclosure acks, got calls=%d digests=%v", fake.ackCalls, fake.ackDigests)
+	}
+	if fake.ackDigests[0] != preDigest || fake.ackDigests[1] != postDigest {
+		t.Fatalf("ack digests = %v want pre=%s post=%s", fake.ackDigests, preDigest, postDigest)
+	}
+	if !strings.Contains(recorder.Body.String(), postDigest) || !strings.Contains(recorder.Body.String(), `"ready":true`) {
+		t.Fatalf("response missing ready post-ack: %s", recorder.Body.String())
+	}
+}
+
+func TestCharlieAdminDisclosureOnlyAckDoesNotChangeMode(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("c", 64)
+	fake := &charlieAdminFake{mode: charlie.AdminModeView{
+		Requested: charlie.ModeAuto, Authoritative: charlie.ModeAuto, Revision: 3,
+		DisclosureDigest: digest,
+	}}
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+	recorder := httptest.NewRecorder()
+	handler.Mode(recorder, authenticatedCharlieRequest(http.MethodPatch, "/", `{"acknowledge_disclosure_digest":"`+digest+`"}`, uuid.New(), "jwt"))
+	if recorder.Code != http.StatusOK || fake.modeCalls != 0 || fake.ackCalls != 1 {
+		t.Fatalf("disclosure-only path = %d modeCalls=%d ackCalls=%d body=%s", recorder.Code, fake.modeCalls, fake.ackCalls, recorder.Body.String())
 	}
 }
 

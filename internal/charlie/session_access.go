@@ -206,7 +206,9 @@ func (s *SessionAccessService) History(ctx context.Context, actorID, sessionID u
 	if len(cursor) > 128 || limit < 1 || limit > MaxCharlieHistoryItems {
 		return nil, fmt.Errorf("Charlie history request is invalid")
 	}
-	local, resources, authorizationRef, err := s.authorize(ctx, actorID, sessionID)
+	// History must work for terminal membership sessions (aborted/failed/completed)
+	// so interactive threads can stitch prior turns after abort and continue.
+	local, resources, authorizationRef, err := s.authorizeHistory(ctx, actorID, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +285,7 @@ func (s *SessionAccessService) Stream(ctx context.Context, actorID, sessionID uu
 	defer func() { observeStreamClosed(failed) }()
 	s.audit(ctx, "charlie.session.stream_opened", local.ID, actorID, local.Visibility, "allowed", len(resources))
 	err = s.bridge.StreamSessionEvents(ctx, local.CharlieSessionID, authorizationRef, lastEventID, func(event contract.Event) error {
-		current, currentResources, accessErr := s.authorizeLocal(ctx, actorID, sessionID)
+		current, currentResources, accessErr := s.authorizeLocal(ctx, actorID, sessionID, false)
 		if accessErr != nil {
 			return accessErr
 		}
@@ -324,15 +326,22 @@ func sessionCursorState(current sqlc.CharlieSession, event contract.Event, now t
 	switch event.Event {
 	case "permission.requested":
 		state = "waiting_approval"
-	case "permission.responded", "turn.started", "text.delta", "tool.proposed", "tool.running", "tool.succeeded", "tool.failed":
-		state = "active"
-	case "turn.completed":
+	case "permission.responded", "turn.started", "text.delta", "tool.proposed", "tool.running",
+		"tool.succeeded", "tool.failed", "turn.completed", "turn.failed", "turn.aborted":
+		// Turn events end a model turn, not the product chat session. Marking the
+		// session completed on turn.completed made multi-turn drawer chat 409 after
+		// the first reply. Only session-level terminal events close messaging.
+		if state != "aborted" && state != "failed" {
+			state = "active"
+			completedAt = pgtype.Timestamptz{}
+		}
+	case "session.completed":
 		state = "completed"
 		completedAt = pgtype.Timestamptz{Time: now, Valid: true}
-	case "turn.failed":
+	case "session.failed":
 		state = "failed"
 		completedAt = pgtype.Timestamptz{Time: now, Valid: true}
-	case "turn.aborted":
+	case "session.aborted":
 		state = "aborted"
 		completedAt = pgtype.Timestamptz{Time: now, Valid: true}
 	}
@@ -344,7 +353,7 @@ func sessionCursorState(current sqlc.CharlieSession, event contract.Event, now t
 }
 
 func (s *SessionAccessService) authorize(ctx context.Context, actorID, sessionID uuid.UUID) (sqlc.CharlieSession, []sqlc.CharlieSessionResource, string, error) {
-	local, resources, err := s.authorizeLocal(ctx, actorID, sessionID)
+	local, resources, err := s.authorizeLocal(ctx, actorID, sessionID, false)
 	if err != nil {
 		return sqlc.CharlieSession{}, nil, "", err
 	}
@@ -355,7 +364,21 @@ func (s *SessionAccessService) authorize(ctx context.Context, actorID, sessionID
 	return local, resources, delegation.Reference, nil
 }
 
-func (s *SessionAccessService) authorizeLocal(ctx context.Context, actorID, sessionID uuid.UUID) (sqlc.CharlieSession, []sqlc.CharlieSessionResource, error) {
+// authorizeHistory allows terminal private sessions so stitched thread history
+// can include aborted/completed memberships. It never grants message/write.
+func (s *SessionAccessService) authorizeHistory(ctx context.Context, actorID, sessionID uuid.UUID) (sqlc.CharlieSession, []sqlc.CharlieSessionResource, string, error) {
+	local, resources, err := s.authorizeLocal(ctx, actorID, sessionID, true)
+	if err != nil {
+		return sqlc.CharlieSession{}, nil, "", err
+	}
+	delegation, err := IssueDelegation(ctx, s.queries, s.authority, local.ID, actorID, "user", maxDelegationTTL, s.now().UTC())
+	if err != nil {
+		return sqlc.CharlieSession{}, nil, "", fmt.Errorf("Charlie session authorization is unavailable")
+	}
+	return local, resources, delegation.Reference, nil
+}
+
+func (s *SessionAccessService) authorizeLocal(ctx context.Context, actorID, sessionID uuid.UUID, allowTerminal bool) (sqlc.CharlieSession, []sqlc.CharlieSessionResource, error) {
 	if err := s.guardActive(); err != nil {
 		return sqlc.CharlieSession{}, nil, err
 	}
@@ -367,7 +390,10 @@ func (s *SessionAccessService) authorizeLocal(ctx context.Context, actorID, sess
 		return sqlc.CharlieSession{}, nil, fmt.Errorf("Charlie connection is inactive")
 	}
 	local, err := s.queries.GetCharlieSession(ctx, sessionID)
-	if err != nil || local.ConnectionID != connection.ID || strings.TrimSpace(local.CharlieSessionID) == "" || local.State == "aborted" || local.State == "failed" {
+	if err != nil || local.ConnectionID != connection.ID || strings.TrimSpace(local.CharlieSessionID) == "" {
+		return sqlc.CharlieSession{}, nil, fmt.Errorf("Charlie session is unavailable")
+	}
+	if !allowTerminal && (local.State == "aborted" || local.State == "failed") {
 		return sqlc.CharlieSession{}, nil, fmt.Errorf("Charlie session is unavailable")
 	}
 	resources, err := s.queries.ListCharlieSessionResources(ctx, local.ID)

@@ -163,12 +163,12 @@ func TestManagementLogsHandler_BadComponent(t *testing.T) {
 
 	h := NewManagementLogsHandler(q, k8s, "astronomer", "astronomer")
 
-	t.Run("Missing", func(t *testing.T) {
+	t.Run("MissingDefaultsToServer", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := makeRequest("/api/v1/admin/management-logs/", callerID)
 		h.Tail(w, req)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400 (component required)", w.Code)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (component defaults to server)", w.Code)
 		}
 	})
 

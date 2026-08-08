@@ -13,10 +13,17 @@ import (
 )
 
 const (
-	charlieUserConcurrency    = 4
-	charlieSessionConcurrency = 2
-	charlieIPConcurrency      = 8
+	// One live SSE stream permanently holds a session slot. Leave headroom for
+	// concurrent history/message/abort traffic and a brief reconnect overlap.
+	charlieUserConcurrency    = 16
+	charlieSessionConcurrency = 8
+	charlieIPConcurrency      = 32
 	charlieLimitMaxKeys       = 10_000
+	// Short-request tokens must absorb history refreshes during a tool-heavy
+	// turn without starving message POSTs. This is browser→API only; Product
+	// MCP / cluster-agent paths never enter this middleware.
+	charlieShortRequestRate  = 20.0 // per second
+	charlieShortRequestBurst = 60
 )
 
 type charlieLimitBucket struct {
@@ -25,9 +32,9 @@ type charlieLimitBucket struct {
 	lastSeen time.Time
 }
 
-// CharlieSessionLimits independently bounds each authenticated user, local
-// session, and client IP. This product-local protection complements the
-// deployment-wide Product Bridge limiter; it does not affect any core API.
+// CharlieSessionLimits is retained for tests and optional future use. Live
+// Charlie routes no longer install it: authenticated product chat in a joined
+// installation is not request-rate-limited. Cluster-agent tunnels never use it.
 func CharlieSessionLimits() func(http.Handler) http.Handler {
 	var mu sync.Mutex
 	buckets := make(map[string]*charlieLimitBucket)
@@ -44,15 +51,23 @@ func CharlieSessionLimits() func(http.Handler) http.Handler {
 					}
 				}
 			}
+			// Long-lived EventSource connections reconnect automatically. Counting
+			// each open against the short-request token bucket turns a single 429
+			// into a reconnect death spiral. Streams keep concurrency caps only.
+			streamOpen := charlieIsEventStream(r)
 			allowed := true
 			for _, key := range keys {
 				bucket := buckets[key]
 				if bucket == nil {
-					bucket = &charlieLimitBucket{lim: rate.NewLimiter(rate.Limit(30.0/60.0), 10)}
+					bucket = &charlieLimitBucket{lim: rate.NewLimiter(rate.Limit(charlieShortRequestRate), charlieShortRequestBurst)}
 					buckets[key] = bucket
 				}
 				bucket.lastSeen = current
-				if !bucket.lim.Allow() || bucket.inFlight >= charlieConcurrencyForKey(key) {
+				if bucket.inFlight >= charlieConcurrencyForKey(key) {
+					allowed = false
+					continue
+				}
+				if !streamOpen && !bucket.lim.Allow() {
 					allowed = false
 				}
 			}
@@ -112,4 +127,12 @@ func charlieConcurrencyForKey(key string) int {
 	default:
 		return charlieIPConcurrency
 	}
+}
+
+func charlieIsEventStream(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	path := r.URL.Path
+	return strings.HasSuffix(path, "/events/") || strings.HasSuffix(path, "/events")
 }

@@ -22,6 +22,7 @@ type Querier interface {
 	AddCharlieAlertPolicyChannel(ctx context.Context, arg AddCharlieAlertPolicyChannelParams) error
 	AddCharlieFindingResource(ctx context.Context, arg AddCharlieFindingResourceParams) error
 	AddCharlieSessionResource(ctx context.Context, arg AddCharlieSessionResourceParams) error
+	AddCharlieThreadSession(ctx context.Context, arg AddCharlieThreadSessionParams) (CharlieThreadSession, error)
 	AdoptInstalledChartByRelease(ctx context.Context, arg AdoptInstalledChartByReleaseParams) (InstalledChart, error)
 	AdvanceCharlieOnboardingState(ctx context.Context, arg AdvanceCharlieOnboardingStateParams) (CharlieConnection, error)
 	AggregateClusterVulnerabilities(ctx context.Context, clusterID uuid.UUID) (AggregateClusterVulnerabilitiesRow, error)
@@ -53,9 +54,11 @@ type Querier interface {
 	// with the cluster). The detail extraction uses ->> so it's a text comparison
 	// against the cluster_id as a string.
 	ArchiveAuditLogsForCluster(ctx context.Context, arg ArchiveAuditLogsForClusterParams) (int64, error)
+	ArchiveCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error)
 	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
 	BackfillDexPublicClientsEnvelope(ctx context.Context, arg BackfillDexPublicClientsEnvelopeParams) (DexSetting, error)
 	BindCharlieSessionCentralID(ctx context.Context, arg BindCharlieSessionCentralIDParams) (CharlieSession, error)
+	BindCharlieSessionThread(ctx context.Context, arg BindCharlieSessionThreadParams) (CharlieSession, error)
 	// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
 	// (jsonb_to_recordset) so a whole chart's versions land in one query
 	// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
@@ -299,6 +302,7 @@ type Querier interface {
 	CreateCharlieAlertDeliveryWithOutbox(ctx context.Context, arg CreateCharlieAlertDeliveryWithOutboxParams) (CreateCharlieAlertDeliveryWithOutboxRow, error)
 	CreateCharlieConnection(ctx context.Context, arg CreateCharlieConnectionParams) (CharlieConnection, error)
 	CreateCharlieDelegation(ctx context.Context, arg CreateCharlieDelegationParams) (CharlieDelegation, error)
+	CreateCharlieInteractiveThread(ctx context.Context, arg CreateCharlieInteractiveThreadParams) (CharlieInteractiveThread, error)
 	CreateCharlieSession(ctx context.Context, arg CreateCharlieSessionParams) (CharlieSession, error)
 	CreateCharlieTriggerEvent(ctx context.Context, arg CreateCharlieTriggerEventParams) (CharlieTriggerEvent, error)
 	CreateCharlieTriggerEventWithOutbox(ctx context.Context, arg CreateCharlieTriggerEventWithOutboxParams) (CreateCharlieTriggerEventWithOutboxRow, error)
@@ -680,6 +684,7 @@ type Querier interface {
 	GetActiveCharlieConnection(ctx context.Context) (CharlieConnection, error)
 	GetActiveCharlieDelegationByHash(ctx context.Context, authorizationHash string) (CharlieDelegation, error)
 	GetActiveCharlieFindingByFingerprint(ctx context.Context, arg GetActiveCharlieFindingByFingerprintParams) (CharlieFinding, error)
+	GetActiveCharlieInteractiveThread(ctx context.Context, arg GetActiveCharlieInteractiveThreadParams) (CharlieInteractiveThread, error)
 	GetActiveControlPlaneAlert(ctx context.Context, arg GetActiveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	GetActiveControlPlaneSilences(ctx context.Context) ([]ControlPlaneSilence, error)
 	GetActiveSchedules(ctx context.Context) ([]BackupSchedule, error)
@@ -733,6 +738,7 @@ type Querier interface {
 	GetCharlieFindingByApprovalID(ctx context.Context, approvalID pgtype.Text) (CharlieFinding, error)
 	GetCharlieFindingByCentralID(ctx context.Context, arg GetCharlieFindingByCentralIDParams) (CharlieFinding, error)
 	GetCharlieFindingDecision(ctx context.Context, requestID uuid.UUID) (CharlieFindingDecision, error)
+	GetCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error)
 	GetCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
 	GetCharlieSessionByCentralID(ctx context.Context, charlieSessionID string) (CharlieSession, error)
 	GetCharlieSessionByClientID(ctx context.Context, arg GetCharlieSessionByClientIDParams) (CharlieSession, error)
@@ -1176,9 +1182,11 @@ type Querier interface {
 	ListCharlieFindingResources(ctx context.Context, findingID uuid.UUID) ([]CharlieFindingResource, error)
 	ListCharlieFindingSyncCandidateSessions(ctx context.Context, connectionID uuid.UUID) ([]CharlieSession, error)
 	ListCharlieFindings(ctx context.Context, arg ListCharlieFindingsParams) ([]CharlieFinding, error)
+	ListCharlieInteractiveThreadsForOwner(ctx context.Context, arg ListCharlieInteractiveThreadsForOwnerParams) ([]CharlieInteractiveThread, error)
 	ListCharlieSessionResources(ctx context.Context, sessionID uuid.UUID) ([]CharlieSessionResource, error)
 	ListCharlieSessionResourcesBatch(ctx context.Context, sessionIds []uuid.UUID) ([]CharlieSessionResource, error)
 	ListCharlieSessionsForOwner(ctx context.Context, arg ListCharlieSessionsForOwnerParams) ([]CharlieSession, error)
+	ListCharlieThreadSessions(ctx context.Context, threadID uuid.UUID) ([]CharlieSession, error)
 	ListCharlieTriggerEventsForAdmin(ctx context.Context, arg ListCharlieTriggerEventsForAdminParams) ([]CharlieTriggerEvent, error)
 	ListCharlieTriggerRules(ctx context.Context, connectionID uuid.UUID) ([]CharlieTriggerRule, error)
 	// Lightweight probe used by the repo-index ingest path to bulk-load the
@@ -1845,6 +1853,7 @@ type Querier interface {
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
+	NextCharlieThreadSessionSequence(ctx context.Context, threadID uuid.UUID) (int32, error)
 	// Retention sweep: delete apiserver audit rows older than the cutoff. The table
 	// is otherwise append-only and unbounded (one row per apiserver request, fleet
 	// wide), so a periodic sweeper must call this to keep it from growing forever.
@@ -1945,6 +1954,7 @@ type Querier interface {
 	// the winner stripped it.
 	SealMonitoringBackendAuthConfig(ctx context.Context, arg SealMonitoringBackendAuthConfigParams) error
 	SetCharlieEmergencyDisabled(ctx context.Context, arg SetCharlieEmergencyDisabledParams) (CharlieConnection, error)
+	SetCharlieInteractiveThreadSession(ctx context.Context, arg SetCharlieInteractiveThreadSessionParams) (CharlieInteractiveThread, error)
 	SetCharlieTriggerRuleEnabled(ctx context.Context, arg SetCharlieTriggerRuleEnabledParams) (CharlieTriggerRule, error)
 	// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
 	// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
@@ -2011,6 +2021,7 @@ type Querier interface {
 	TopVulnerableImages(ctx context.Context, arg TopVulnerableImagesParams) ([]ImageVulnerabilityReport, error)
 	TouchArgoCDClusterProxyToken(ctx context.Context, id uuid.UUID) error
 	TouchBackupPolling(ctx context.Context, id uuid.UUID) error
+	TouchCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error)
 	TouchClusterAgentToken(ctx context.Context, id uuid.UUID) error
 	// C3 / M13: stamp last_metrics_at to now() when a NON-EMPTY metrics SAMPLE
 	// arrives (driven by the agent's MetricsAvailable=true). Called ONLY by the

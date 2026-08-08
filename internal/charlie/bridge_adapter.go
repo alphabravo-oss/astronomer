@@ -125,10 +125,25 @@ func (b *RuntimeBridge) CreateInvestigation(ctx context.Context, input BridgeInv
 			}
 		}
 	}
+	// Always include the originating resource plus install-wide "local" so
+	// allowlisted auto writes can resolve session scope without a human chat.
 	resourceIDs := []string{input.ResourceID}
+	if input.ResourceID != "local" {
+		resourceIDs = append(resourceIDs, "local")
+	}
 	request := contract.CreateInvestigation{AuthorizationRef: input.AuthorizationRef, RequestId: input.RequestID}
 	request.Scope.Attributes = &attributes
 	request.Scope.ResourceIds = &resourceIDs
+	if summary := strings.TrimSpace(attributes["event_capability"]); summary != "" {
+		// Optional summary is a bounded operator-visible hint, not authority.
+		hint := "recommended_capability=" + summary
+		if app := strings.TrimSpace(attributes["event_application"]); app != "" {
+			hint += "; application=" + app
+		}
+		if len(hint) <= 512 {
+			request.Scope.Summary = &hint
+		}
+	}
 	var response contract.InvestigationReceipt
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, "/investigations", key, input.AuthorizationRef, request, &response); err != nil {
 		return BridgeSessionReceipt{}, err

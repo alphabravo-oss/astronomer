@@ -81,7 +81,10 @@ func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) err
 	}
 	event, err := d.queries.ClaimCharlieTriggerEvent(ctx, eventID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		// A prior attempt may have bound the central investigation and then
+		// failed before the durable dispatched transition. Complete that
+		// commit when the event is still dispatching with a live session.
+		return d.completeBoundDispatch(ctx, eventID)
 	}
 	if err != nil {
 		return fmt.Errorf("claim Charlie trigger event: %w", err)
@@ -103,7 +106,12 @@ func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) err
 			Intent: "event_investigation", ResourceScopeSummary: event.ResourceType + ":" + event.ResourceID, State: "creating",
 		})
 		if err == nil {
+			// Always attach the originating finding resource plus the install-wide
+			// scope so allowlisted auto writes (resource_id=local) resolve.
 			err = d.queries.AddCharlieSessionResource(ctx, sqlc.AddCharlieSessionResourceParams{SessionID: local.ID, ResourceType: event.ResourceType, ResourceID: event.ResourceID, RequiredVerb: "read"})
+			if err == nil {
+				_ = d.queries.AddCharlieSessionResource(ctx, sqlc.AddCharlieSessionResourceParams{SessionID: local.ID, ResourceType: "installation", ResourceID: "local", RequiredVerb: "read"})
+			}
 		}
 	}
 	if err != nil {
@@ -137,15 +145,39 @@ func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) err
 			return d.retry(ctx, event, rule, "session_receipt_ambiguous")
 		}
 	}
+	return d.commitDispatched(ctx, event.ID, local.ID)
+}
+
+// completeBoundDispatch finishes a dispatch that already created the central
+// investigation session but never committed the durable event transition.
+func (d *TriggerDispatcher) completeBoundDispatch(ctx context.Context, eventID uuid.UUID) error {
+	connection, err := d.queries.GetActiveCharlieConnection(ctx)
+	if err != nil || !connection.Active {
+		return nil
+	}
+	local, err := d.queries.GetCharlieSessionByClientID(ctx, sqlc.GetCharlieSessionByClientIDParams{ConnectionID: connection.ID, ClientSessionID: eventID})
+	if err != nil || local.CharlieSessionID == "" || local.State == "aborted" || local.State == "failed" {
+		return nil
+	}
+	return d.commitDispatched(ctx, eventID, local.ID)
+}
+
+func (d *TriggerDispatcher) commitDispatched(ctx context.Context, eventID, sessionID uuid.UUID) error {
+	// pgtype.UUID.Scan does not accept google/uuid.UUID; assign the raw bytes.
+	sessionUUID := pgtype.UUID{Bytes: [16]byte(sessionID), Valid: true}
 	transitioned, err := d.queries.TransitionCharlieTriggerEvent(ctx, sqlc.TransitionCharlieTriggerEventParams{
-		NextState: "dispatched", SessionID: pgtype.UUID{Bytes: local.ID, Valid: true},
-		NextAttemptAt: d.now().UTC(), LastErrorCode: "", ID: event.ID, ExpectedState: "dispatching",
+		NextState: "dispatched", SessionID: sessionUUID,
+		NextAttemptAt: d.now().UTC(), LastErrorCode: "", ID: eventID, ExpectedState: "dispatching",
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Already left dispatching (dispatched/dead/retry) — treat as done.
+			return nil
+		}
 		return fmt.Errorf("commit Charlie trigger dispatch: %w", err)
 	}
 	d.publisher.PublishCharlieTriggerLifecycle(ctx, transitioned.ID, transitioned.State, "")
-	observeTrigger(rule.Name, "dispatched")
+	observeTrigger(transitioned.EventType, "dispatched")
 	return nil
 }
 

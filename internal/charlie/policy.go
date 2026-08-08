@@ -211,6 +211,11 @@ type AuthorityInput struct {
 	// automatic path. In automation mode an invalid supplied approval must fail;
 	// it may never fall back to service automation.
 	ApprovalRequested bool
+	// InteractiveApprovalRequired is set for human (non-automation-service)
+	// write attempts under ModeAuto that did not supply an exact approval id.
+	// Unattended auto remains service-principal only; interactive chat must use
+	// the exact-approval path rather than being mis-reported as product RBAC denial.
+	InteractiveApprovalRequired bool
 	// FindingResource is resolved from the exact product-owned session resource
 	// matched by arguments.resource_id. It is display/dedupe scope only and never
 	// grants authority; the finding access layer rechecks current product RBAC.
@@ -307,6 +312,12 @@ func DecideAuthority(in AuthorityInput, now time.Time) AuthorityDecision {
 				return deny(DeniedApprovalInvalid)
 			}
 			break
+		}
+		// Human interactive sessions under auto never enter unattended automation.
+		// Surface approval_required so the agent can propose an exact approval
+		// instead of a misleading product_rbac_denied.
+		if in.InteractiveApprovalRequired {
+			return deny(DeniedApprovalRequired)
 		}
 		if !in.AutoEligible {
 			return deny(DeniedNotAutoEligible)

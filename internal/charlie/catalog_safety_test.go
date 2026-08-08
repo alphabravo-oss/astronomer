@@ -36,8 +36,10 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"keys": []string{"feature.charlie"}}
 	case "astronomer.management.workloads":
 		return map[string]any{"page": 2, "page_size": 10}
-	case "astronomer.management.workload_get":
+	case "astronomer.management.workload_get", "astronomer.management.rollout_status":
 		return map[string]any{"workload": "deployment/astronomer-server"}
+	case "astronomer.management.pods":
+		return map[string]any{"component": "server", "phase": "Running", "page": 1, "page_size": 10}
 	case "astronomer.management.events":
 		return map[string]any{"component": "astronomer-server", "since": "1h", "limit": 10}
 	case "astronomer.management.pod_logs":

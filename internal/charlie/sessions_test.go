@@ -100,6 +100,33 @@ func validSessionInput() CreateSessionInput {
 	}
 }
 
+func TestSessionCreateDefaultsEmptyResourcesToInstallationLocal(t *testing.T) {
+	connection := readySessionConnection()
+	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
+	bridge := &sessionBridgeFake{receipt: BridgeSessionReceipt{SessionID: "central-session", Revision: 3}}
+	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr-default"}}
+	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := validSessionInput()
+	input.Resources = nil
+
+	created, err := service.Create(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Local.ResourceScopeSummary != "installation" {
+		t.Fatalf("scope summary = %q, want installation", created.Local.ResourceScopeSummary)
+	}
+	if len(queries.resources) != 1 || queries.resources[0].ResourceType != "installation" || queries.resources[0].ResourceID != DefaultInstallationResourceID {
+		t.Fatalf("expected default installation/local session resource, got %#v", queries.resources)
+	}
+	if len(bridge.request.Context.Resources) != 1 || bridge.request.Context.Resources[0].ID != DefaultInstallationResourceID {
+		t.Fatalf("bridge context missing default resource: %#v", bridge.request.Context.Resources)
+	}
+}
+
 func TestSessionCreatePersistsAuthorizationBeforeBoundedBridgeCall(t *testing.T) {
 	connection := readySessionConnection()
 	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}

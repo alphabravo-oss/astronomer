@@ -49,7 +49,7 @@ export function SafeMarkdown({
   const lines = children.split("\n");
   return (
     <div
-      className="space-y-2 break-words text-sm"
+      className="space-y-2 break-words text-sm select-text"
       aria-live={streaming ? "polite" : undefined}
       aria-busy={streaming}
     >

@@ -600,14 +600,14 @@ LIMIT $1;
 -- name: ClaimCharlieAmbiguousReceipt :one
 WITH candidate AS (
     SELECT id FROM charlie_action_receipts
-    WHERE state IN ('dispatched', 'ambiguous', 'verifying')
+    WHERE state IN ('claimed', 'dispatched', 'ambiguous', 'verifying')
       AND lease_expires_at < now()
     ORDER BY updated_at, id
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
 UPDATE charlie_action_receipts receipt
-SET state = 'verifying',
+SET state = CASE WHEN receipt.state = 'claimed' THEN 'claimed' ELSE 'verifying' END,
     lease_owner = sqlc.arg(lease_owner),
     lease_expires_at = sqlc.arg(lease_expires_at),
     attempt = attempt + 1,
@@ -935,14 +935,16 @@ WHERE id = $1
 RETURNING *;
 
 -- name: TransitionCharlieTriggerEvent :one
+-- Explicit casts on every parameter keep pgx/Postgres prepared-statement type
+-- inference stable (avoids SQLSTATE 42P08 when next_state is reused).
 UPDATE charlie_trigger_events
-SET state = sqlc.arg(next_state),
-    session_id = COALESCE(sqlc.narg(session_id), session_id),
-    next_attempt_at = sqlc.arg(next_attempt_at),
-    last_error_code = sqlc.arg(last_error_code),
+SET state = sqlc.arg(next_state)::text,
+    session_id = COALESCE(sqlc.narg(session_id)::uuid, session_id),
+    next_attempt_at = sqlc.arg(next_attempt_at)::timestamptz,
+    last_error_code = sqlc.arg(last_error_code)::text,
     dead_lettered_at = CASE WHEN sqlc.arg(next_state)::text = 'dead' THEN now() ELSE dead_lettered_at END,
     updated_at = now()
-WHERE id = sqlc.arg(id) AND state = sqlc.arg(expected_state)
+WHERE id = sqlc.arg(id)::uuid AND state = sqlc.arg(expected_state)::text
 RETURNING *;
 
 -- name: SuppressActiveCharlieTriggerEvent :one
@@ -1366,3 +1368,79 @@ WHERE f.status IN ('open', 'acknowledged')
   )
 ORDER BY f.updated_at, f.id
 LIMIT $1;
+
+-- name: GetActiveCharlieInteractiveThread :one
+SELECT * FROM charlie_interactive_threads
+WHERE connection_id = $1
+  AND owner_user_id = $2
+  AND state = 'active';
+
+-- name: GetCharlieInteractiveThread :one
+SELECT * FROM charlie_interactive_threads
+WHERE id = $1;
+
+-- name: CreateCharlieInteractiveThread :one
+INSERT INTO charlie_interactive_threads (
+    connection_id, owner_user_id, title, state, current_session_id
+) VALUES (
+    sqlc.arg(connection_id), sqlc.arg(owner_user_id), sqlc.arg(title),
+    sqlc.arg(state), sqlc.narg(current_session_id)
+) RETURNING *;
+
+-- name: ArchiveCharlieInteractiveThread :one
+UPDATE charlie_interactive_threads
+SET state = 'archived',
+    archived_at = now(),
+    updated_at = now()
+WHERE id = $1
+  AND state = 'active'
+RETURNING *;
+
+-- name: SetCharlieInteractiveThreadSession :one
+UPDATE charlie_interactive_threads
+SET current_session_id = sqlc.narg(current_session_id),
+    title = CASE WHEN sqlc.arg(title)::text <> '' THEN sqlc.arg(title) ELSE title END,
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: TouchCharlieInteractiveThread :one
+UPDATE charlie_interactive_threads
+SET updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: ListCharlieInteractiveThreadsForOwner :many
+SELECT * FROM charlie_interactive_threads
+WHERE connection_id = sqlc.arg(connection_id)
+  AND owner_user_id = sqlc.arg(owner_user_id)
+ORDER BY
+  CASE state WHEN 'active' THEN 0 ELSE 1 END,
+  updated_at DESC,
+  id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: NextCharlieThreadSessionSequence :one
+SELECT COALESCE(MAX(sequence), 0)::int + 1 AS next_sequence
+FROM charlie_thread_sessions
+WHERE thread_id = $1;
+
+-- name: AddCharlieThreadSession :one
+INSERT INTO charlie_thread_sessions (thread_id, session_id, sequence)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: ListCharlieThreadSessions :many
+SELECT s.*
+FROM charlie_thread_sessions m
+JOIN charlie_sessions s ON s.id = m.session_id
+WHERE m.thread_id = $1
+ORDER BY m.sequence ASC, s.created_at ASC;
+
+-- name: BindCharlieSessionThread :one
+UPDATE charlie_sessions
+SET thread_id = sqlc.arg(thread_id),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND source = 'user'
+RETURNING *;

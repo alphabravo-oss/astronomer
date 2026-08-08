@@ -1,0 +1,7 @@
+playbooks/approval-remediation-loop.md
+playbooks/crashloop-management-pod.md
+playbooks/readiness-and-database.md
+playbooks/tunnel-and-agent-flaps.md
+reference/mcp-tools.md
+reference/modes-and-authority.md
+scope.md

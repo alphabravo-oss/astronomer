@@ -22,7 +22,7 @@ WHERE id = $1
   -- Treat an explicit close/abort as a terminal local authority revocation and
   -- let Charlie's idempotent abort endpoint confirm the already-terminal turn.
   AND state IN ('creating', 'active', 'waiting_approval', 'completed')
-RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at
+RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id
 `
 
 func (q *Queries) AbortCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error) {
@@ -44,6 +44,7 @@ func (q *Queries) AbortCharlieSession(ctx context.Context, id uuid.UUID) (Charli
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
@@ -187,6 +188,30 @@ func (q *Queries) AddCharlieSessionResource(ctx context.Context, arg AddCharlieS
 	return err
 }
 
+const addCharlieThreadSession = `-- name: AddCharlieThreadSession :one
+INSERT INTO charlie_thread_sessions (thread_id, session_id, sequence)
+VALUES ($1, $2, $3)
+RETURNING thread_id, session_id, sequence, created_at
+`
+
+type AddCharlieThreadSessionParams struct {
+	ThreadID  uuid.UUID `json:"thread_id"`
+	SessionID uuid.UUID `json:"session_id"`
+	Sequence  int32     `json:"sequence"`
+}
+
+func (q *Queries) AddCharlieThreadSession(ctx context.Context, arg AddCharlieThreadSessionParams) (CharlieThreadSession, error) {
+	row := q.db.QueryRow(ctx, addCharlieThreadSession, arg.ThreadID, arg.SessionID, arg.Sequence)
+	var i CharlieThreadSession
+	err := row.Scan(
+		&i.ThreadID,
+		&i.SessionID,
+		&i.Sequence,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const advanceCharlieOnboardingState = `-- name: AdvanceCharlieOnboardingState :one
 UPDATE charlie_connections
 SET onboarding_state = $1,
@@ -316,6 +341,33 @@ func (q *Queries) ApproveCharlieActionApproval(ctx context.Context, id uuid.UUID
 	return i, err
 }
 
+const archiveCharlieInteractiveThread = `-- name: ArchiveCharlieInteractiveThread :one
+UPDATE charlie_interactive_threads
+SET state = 'archived',
+    archived_at = now(),
+    updated_at = now()
+WHERE id = $1
+  AND state = 'active'
+RETURNING id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at
+`
+
+func (q *Queries) ArchiveCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error) {
+	row := q.db.QueryRow(ctx, archiveCharlieInteractiveThread, id)
+	var i CharlieInteractiveThread
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.State,
+		&i.CurrentSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const bindCharlieSessionCentralID = `-- name: BindCharlieSessionCentralID :one
 UPDATE charlie_sessions
 SET charlie_session_id = $1,
@@ -326,7 +378,7 @@ WHERE id = $3
   AND state = 'creating'
   AND charlie_session_id = ''
   AND central_revision = 0
-RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at
+RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id
 `
 
 type BindCharlieSessionCentralIDParams struct {
@@ -354,6 +406,45 @@ func (q *Queries) BindCharlieSessionCentralID(ctx context.Context, arg BindCharl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
+	)
+	return i, err
+}
+
+const bindCharlieSessionThread = `-- name: BindCharlieSessionThread :one
+UPDATE charlie_sessions
+SET thread_id = $1,
+    updated_at = now()
+WHERE id = $2
+  AND source = 'user'
+RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id
+`
+
+type BindCharlieSessionThreadParams struct {
+	ThreadID pgtype.UUID `json:"thread_id"`
+	ID       uuid.UUID   `json:"id"`
+}
+
+func (q *Queries) BindCharlieSessionThread(ctx context.Context, arg BindCharlieSessionThreadParams) (CharlieSession, error) {
+	row := q.db.QueryRow(ctx, bindCharlieSessionThread, arg.ThreadID, arg.ID)
+	var i CharlieSession
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.CharlieSessionID,
+		&i.ClientSessionID,
+		&i.OwnerUserID,
+		&i.Source,
+		&i.Visibility,
+		&i.Intent,
+		&i.ResourceScopeSummary,
+		&i.State,
+		&i.LastEventID,
+		&i.CentralRevision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
@@ -1030,14 +1121,14 @@ func (q *Queries) ClaimCharlieAlertDelivery(ctx context.Context, id uuid.UUID) (
 const claimCharlieAmbiguousReceipt = `-- name: ClaimCharlieAmbiguousReceipt :one
 WITH candidate AS (
     SELECT id FROM charlie_action_receipts
-    WHERE state IN ('dispatched', 'ambiguous', 'verifying')
+    WHERE state IN ('claimed', 'dispatched', 'ambiguous', 'verifying')
       AND lease_expires_at < now()
     ORDER BY updated_at, id
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
 UPDATE charlie_action_receipts receipt
-SET state = 'verifying',
+SET state = CASE WHEN receipt.state = 'claimed' THEN 'claimed' ELSE 'verifying' END,
     lease_owner = $1,
     lease_expires_at = $2,
     attempt = attempt + 1,
@@ -1867,6 +1958,46 @@ func (q *Queries) CreateCharlieDelegation(ctx context.Context, arg CreateCharlie
 	return i, err
 }
 
+const createCharlieInteractiveThread = `-- name: CreateCharlieInteractiveThread :one
+INSERT INTO charlie_interactive_threads (
+    connection_id, owner_user_id, title, state, current_session_id
+) VALUES (
+    $1, $2, $3,
+    $4, $5
+) RETURNING id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at
+`
+
+type CreateCharlieInteractiveThreadParams struct {
+	ConnectionID     uuid.UUID   `json:"connection_id"`
+	OwnerUserID      uuid.UUID   `json:"owner_user_id"`
+	Title            string      `json:"title"`
+	State            string      `json:"state"`
+	CurrentSessionID pgtype.UUID `json:"current_session_id"`
+}
+
+func (q *Queries) CreateCharlieInteractiveThread(ctx context.Context, arg CreateCharlieInteractiveThreadParams) (CharlieInteractiveThread, error) {
+	row := q.db.QueryRow(ctx, createCharlieInteractiveThread,
+		arg.ConnectionID,
+		arg.OwnerUserID,
+		arg.Title,
+		arg.State,
+		arg.CurrentSessionID,
+	)
+	var i CharlieInteractiveThread
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.State,
+		&i.CurrentSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const createCharlieSession = `-- name: CreateCharlieSession :one
 INSERT INTO charlie_sessions (
     connection_id, charlie_session_id, client_session_id, owner_user_id,
@@ -1876,7 +2007,7 @@ INSERT INTO charlie_sessions (
     $3, $4, $5,
     $6, $7, $8,
     $9
-) RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at
+) RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id
 `
 
 type CreateCharlieSessionParams struct {
@@ -1920,6 +2051,7 @@ func (q *Queries) CreateCharlieSession(ctx context.Context, arg CreateCharlieSes
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
@@ -2376,7 +2508,7 @@ SET state = 'failed', updated_at = now()
 WHERE id = $1
   AND state = 'creating'
   AND charlie_session_id = ''
-RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at
+RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id
 `
 
 func (q *Queries) FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error) {
@@ -2398,6 +2530,7 @@ func (q *Queries) FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
@@ -2587,6 +2720,35 @@ func (q *Queries) GetActiveCharlieFindingByFingerprint(ctx context.Context, arg 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.WorkflowState,
+	)
+	return i, err
+}
+
+const getActiveCharlieInteractiveThread = `-- name: GetActiveCharlieInteractiveThread :one
+SELECT id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at FROM charlie_interactive_threads
+WHERE connection_id = $1
+  AND owner_user_id = $2
+  AND state = 'active'
+`
+
+type GetActiveCharlieInteractiveThreadParams struct {
+	ConnectionID uuid.UUID `json:"connection_id"`
+	OwnerUserID  uuid.UUID `json:"owner_user_id"`
+}
+
+func (q *Queries) GetActiveCharlieInteractiveThread(ctx context.Context, arg GetActiveCharlieInteractiveThreadParams) (CharlieInteractiveThread, error) {
+	row := q.db.QueryRow(ctx, getActiveCharlieInteractiveThread, arg.ConnectionID, arg.OwnerUserID)
+	var i CharlieInteractiveThread
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.State,
+		&i.CurrentSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -3192,8 +3354,30 @@ func (q *Queries) GetCharlieFindingDecision(ctx context.Context, requestID uuid.
 	return i, err
 }
 
+const getCharlieInteractiveThread = `-- name: GetCharlieInteractiveThread :one
+SELECT id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at FROM charlie_interactive_threads
+WHERE id = $1
+`
+
+func (q *Queries) GetCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error) {
+	row := q.db.QueryRow(ctx, getCharlieInteractiveThread, id)
+	var i CharlieInteractiveThread
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.State,
+		&i.CurrentSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const getCharlieSession = `-- name: GetCharlieSession :one
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions WHERE id = $1
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions WHERE id = $1
 `
 
 func (q *Queries) GetCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error) {
@@ -3215,12 +3399,13 @@ func (q *Queries) GetCharlieSession(ctx context.Context, id uuid.UUID) (CharlieS
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
 
 const getCharlieSessionByCentralID = `-- name: GetCharlieSessionByCentralID :one
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions WHERE charlie_session_id = $1
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions WHERE charlie_session_id = $1
 `
 
 func (q *Queries) GetCharlieSessionByCentralID(ctx context.Context, charlieSessionID string) (CharlieSession, error) {
@@ -3242,12 +3427,13 @@ func (q *Queries) GetCharlieSessionByCentralID(ctx context.Context, charlieSessi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
 
 const getCharlieSessionByClientID = `-- name: GetCharlieSessionByClientID :one
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions WHERE connection_id = $1 AND client_session_id = $2
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions WHERE connection_id = $1 AND client_session_id = $2
 `
 
 type GetCharlieSessionByClientIDParams struct {
@@ -3274,6 +3460,7 @@ func (q *Queries) GetCharlieSessionByClientID(ctx context.Context, arg GetCharli
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }
@@ -3405,7 +3592,7 @@ func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnec
 }
 
 const listCharlieAccessibleSessionCandidates = `-- name: ListCharlieAccessibleSessionCandidates :many
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions
 WHERE connection_id = $1
   AND (
     (visibility = 'private' AND source = 'user' AND owner_user_id = $2)
@@ -3452,6 +3639,7 @@ func (q *Queries) ListCharlieAccessibleSessionCandidates(ctx context.Context, ar
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CompletedAt,
+			&i.ThreadID,
 		); err != nil {
 			return nil, err
 		}
@@ -3740,7 +3928,7 @@ func (q *Queries) ListCharlieAmbiguousReceipts(ctx context.Context, limit int32)
 }
 
 const listCharlieApprovalCandidateSessions = `-- name: ListCharlieApprovalCandidateSessions :many
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions
 WHERE state IN ('active', 'waiting_approval')
   AND charlie_session_id <> ''
 ORDER BY updated_at DESC, id
@@ -3772,6 +3960,7 @@ func (q *Queries) ListCharlieApprovalCandidateSessions(ctx context.Context) ([]C
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CompletedAt,
+			&i.ThreadID,
 		); err != nil {
 			return nil, err
 		}
@@ -3852,7 +4041,7 @@ func (q *Queries) ListCharlieFindingResources(ctx context.Context, findingID uui
 }
 
 const listCharlieFindingSyncCandidateSessions = `-- name: ListCharlieFindingSyncCandidateSessions :many
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions
 WHERE connection_id = $1
   AND state IN ('active', 'waiting_approval', 'completed')
   AND charlie_session_id <> ''
@@ -3885,6 +4074,7 @@ func (q *Queries) ListCharlieFindingSyncCandidateSessions(ctx context.Context, c
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CompletedAt,
+			&i.ThreadID,
 		); err != nil {
 			return nil, err
 		}
@@ -3976,6 +4166,59 @@ func (q *Queries) ListCharlieFindings(ctx context.Context, arg ListCharlieFindin
 	return items, nil
 }
 
+const listCharlieInteractiveThreadsForOwner = `-- name: ListCharlieInteractiveThreadsForOwner :many
+SELECT id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at FROM charlie_interactive_threads
+WHERE connection_id = $1
+  AND owner_user_id = $2
+ORDER BY
+  CASE state WHEN 'active' THEN 0 ELSE 1 END,
+  updated_at DESC,
+  id
+LIMIT $4 OFFSET $3
+`
+
+type ListCharlieInteractiveThreadsForOwnerParams struct {
+	ConnectionID uuid.UUID `json:"connection_id"`
+	OwnerUserID  uuid.UUID `json:"owner_user_id"`
+	PageOffset   int32     `json:"page_offset"`
+	PageLimit    int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListCharlieInteractiveThreadsForOwner(ctx context.Context, arg ListCharlieInteractiveThreadsForOwnerParams) ([]CharlieInteractiveThread, error) {
+	rows, err := q.db.Query(ctx, listCharlieInteractiveThreadsForOwner,
+		arg.ConnectionID,
+		arg.OwnerUserID,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieInteractiveThread{}
+	for rows.Next() {
+		var i CharlieInteractiveThread
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectionID,
+			&i.OwnerUserID,
+			&i.Title,
+			&i.State,
+			&i.CurrentSessionID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCharlieSessionResources = `-- name: ListCharlieSessionResources :many
 SELECT session_id, resource_type, resource_id, required_verb, created_at FROM charlie_session_resources WHERE session_id = $1 ORDER BY resource_type, resource_id, required_verb
 `
@@ -4039,7 +4282,7 @@ func (q *Queries) ListCharlieSessionResourcesBatch(ctx context.Context, sessionI
 }
 
 const listCharlieSessionsForOwner = `-- name: ListCharlieSessionsForOwner :many
-SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at FROM charlie_sessions
+SELECT id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id FROM charlie_sessions
 WHERE owner_user_id = $1
 ORDER BY updated_at DESC, id
 LIMIT $3 OFFSET $2
@@ -4076,6 +4319,52 @@ func (q *Queries) ListCharlieSessionsForOwner(ctx context.Context, arg ListCharl
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CompletedAt,
+			&i.ThreadID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCharlieThreadSessions = `-- name: ListCharlieThreadSessions :many
+SELECT s.id, s.connection_id, s.charlie_session_id, s.client_session_id, s.owner_user_id, s.source, s.visibility, s.intent, s.resource_scope_summary, s.state, s.last_event_id, s.central_revision, s.created_at, s.updated_at, s.completed_at, s.thread_id
+FROM charlie_thread_sessions m
+JOIN charlie_sessions s ON s.id = m.session_id
+WHERE m.thread_id = $1
+ORDER BY m.sequence ASC, s.created_at ASC
+`
+
+func (q *Queries) ListCharlieThreadSessions(ctx context.Context, threadID uuid.UUID) ([]CharlieSession, error) {
+	rows, err := q.db.Query(ctx, listCharlieThreadSessions, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CharlieSession{}
+	for rows.Next() {
+		var i CharlieSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectionID,
+			&i.CharlieSessionID,
+			&i.ClientSessionID,
+			&i.OwnerUserID,
+			&i.Source,
+			&i.Visibility,
+			&i.Intent,
+			&i.ResourceScopeSummary,
+			&i.State,
+			&i.LastEventID,
+			&i.CentralRevision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.ThreadID,
 		); err != nil {
 			return nil, err
 		}
@@ -4289,6 +4578,19 @@ type MarkCharlieAlertDeliveryRetryParams struct {
 func (q *Queries) MarkCharlieAlertDeliveryRetry(ctx context.Context, arg MarkCharlieAlertDeliveryRetryParams) error {
 	_, err := q.db.Exec(ctx, markCharlieAlertDeliveryRetry, arg.ID, arg.NextAttemptAt, arg.LastErrorCode)
 	return err
+}
+
+const nextCharlieThreadSessionSequence = `-- name: NextCharlieThreadSessionSequence :one
+SELECT COALESCE(MAX(sequence), 0)::int + 1 AS next_sequence
+FROM charlie_thread_sessions
+WHERE thread_id = $1
+`
+
+func (q *Queries) NextCharlieThreadSessionSequence(ctx context.Context, threadID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, nextCharlieThreadSessionSequence, threadID)
+	var next_sequence int32
+	err := row.Scan(&next_sequence)
+	return next_sequence, err
 }
 
 const recordAgentConnectionEvent = `-- name: RecordAgentConnectionEvent :one
@@ -4730,6 +5032,38 @@ func (q *Queries) SetCharlieEmergencyDisabled(ctx context.Context, arg SetCharli
 	return i, err
 }
 
+const setCharlieInteractiveThreadSession = `-- name: SetCharlieInteractiveThreadSession :one
+UPDATE charlie_interactive_threads
+SET current_session_id = $1,
+    title = CASE WHEN $2::text <> '' THEN $2 ELSE title END,
+    updated_at = now()
+WHERE id = $3
+RETURNING id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at
+`
+
+type SetCharlieInteractiveThreadSessionParams struct {
+	CurrentSessionID pgtype.UUID `json:"current_session_id"`
+	Title            string      `json:"title"`
+	ID               uuid.UUID   `json:"id"`
+}
+
+func (q *Queries) SetCharlieInteractiveThreadSession(ctx context.Context, arg SetCharlieInteractiveThreadSessionParams) (CharlieInteractiveThread, error) {
+	row := q.db.QueryRow(ctx, setCharlieInteractiveThreadSession, arg.CurrentSessionID, arg.Title, arg.ID)
+	var i CharlieInteractiveThread
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.State,
+		&i.CurrentSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const setCharlieTriggerRuleEnabled = `-- name: SetCharlieTriggerRuleEnabled :one
 UPDATE charlie_trigger_rules SET enabled = $2, updated_at = now() WHERE id = $1 RETURNING id, connection_id, name, rule_type, category, enabled, minimum_severity, selectors, thresholds, window_seconds, cooldown_seconds, service_identity_id, mode_ceiling, created_by_id, created_at, updated_at
 `
@@ -4822,6 +5156,30 @@ type SuppressCharlieAlertDeliveryParams struct {
 func (q *Queries) SuppressCharlieAlertDelivery(ctx context.Context, arg SuppressCharlieAlertDeliveryParams) error {
 	_, err := q.db.Exec(ctx, suppressCharlieAlertDelivery, arg.ID, arg.LastErrorCode)
 	return err
+}
+
+const touchCharlieInteractiveThread = `-- name: TouchCharlieInteractiveThread :one
+UPDATE charlie_interactive_threads
+SET updated_at = now()
+WHERE id = $1
+RETURNING id, connection_id, owner_user_id, title, state, current_session_id, created_at, updated_at, archived_at
+`
+
+func (q *Queries) TouchCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error) {
+	row := q.db.QueryRow(ctx, touchCharlieInteractiveThread, id)
+	var i CharlieInteractiveThread
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.OwnerUserID,
+		&i.Title,
+		&i.State,
+		&i.CurrentSessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
 }
 
 const transitionCharlieActionApproval = `-- name: TransitionCharlieActionApproval :one
@@ -5071,13 +5429,13 @@ func (q *Queries) TransitionCharlieFindingForApproval(ctx context.Context, arg T
 
 const transitionCharlieTriggerEvent = `-- name: TransitionCharlieTriggerEvent :one
 UPDATE charlie_trigger_events
-SET state = $1,
-    session_id = COALESCE($2, session_id),
-    next_attempt_at = $3,
-    last_error_code = $4,
+SET state = $1::text,
+    session_id = COALESCE($2::uuid, session_id),
+    next_attempt_at = $3::timestamptz,
+    last_error_code = $4::text,
     dead_lettered_at = CASE WHEN $1::text = 'dead' THEN now() ELSE dead_lettered_at END,
     updated_at = now()
-WHERE id = $5 AND state = $6
+WHERE id = $5::uuid AND state = $6::text
 RETURNING id, rule_id, retry_of_event_id, source, event_type, resource_type, resource_id, fingerprint, summary_metadata, state, session_id, repeat_count, first_occurred_at, last_occurred_at, origin_resource_ref, origin_event_ref, attempt_count, next_attempt_at, last_error_code, dead_lettered_at, created_at, updated_at
 `
 
@@ -5224,7 +5582,7 @@ SET state = $1,
     updated_at = now()
 WHERE id = $5
   AND central_revision <= $3
-RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at
+RETURNING id, connection_id, charlie_session_id, client_session_id, owner_user_id, source, visibility, intent, resource_scope_summary, state, last_event_id, central_revision, created_at, updated_at, completed_at, thread_id
 `
 
 type UpdateCharlieSessionCursorParams struct {
@@ -5260,6 +5618,7 @@ func (q *Queries) UpdateCharlieSessionCursor(ctx context.Context, arg UpdateChar
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ThreadID,
 	)
 	return i, err
 }

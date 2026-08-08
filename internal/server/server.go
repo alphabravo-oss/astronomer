@@ -48,6 +48,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -1319,6 +1320,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// generations are materialized later only through RuntimeLifecycle.
 	var (
 		charlieSessionsHandler   *handler.CharlieSessionHandler
+		charlieThreadsHandler    *handler.CharlieThreadHandler
 		charlieApprovalsHandler  *handler.CharlieApprovalHandler
 		charlieContextHandler    *handler.CharlieContextHandler
 		charlieFindingsHandler   *handler.CharlieFindingHandler
@@ -1347,7 +1349,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		}
 		{
 			active := func() bool { return managedCharlieBridge.Active(context.Background()) }
-			contextProvider, contextErr := charlie.NewProductSessionContextProvider(queries, localNamespace, "astronomer", "")
+			var discoveryClient discovery.DiscoveryInterface
+			if localK8s != nil {
+				discoveryClient = localK8s.Discovery()
+			}
+			contextProvider, contextErr := charlie.NewProductSessionContextProvider(queries, localNamespace, "astronomer", "", discoveryClient)
 			if contextErr != nil {
 				database.Close()
 				return nil, contextErr
@@ -1364,6 +1370,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return nil, accessErr
 			}
 			charlieSessionsHandler = handler.NewCharlieSessionHandler(sessionService, sessionAccess)
+			threadService, threadErr := charlie.NewThreadService(queries, sessionService, sessionAccess, auditor, active)
+			if threadErr != nil {
+				database.Close()
+				return nil, threadErr
+			}
+			charlieThreadsHandler = handler.NewCharlieThreadHandler(threadService)
 			findingAlertPlanner, plannerErr := charlie.NewFindingAlertPlanner(database.Pool())
 			if plannerErr != nil {
 				database.Close()
@@ -1646,6 +1658,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		CharlieOnboarding: charlieOnboardingHandler,
 		CharlieAdmin:      charlieAdminHandler,
 		CharlieSessions:   charlieSessionsHandler,
+		CharlieThreads:    charlieThreadsHandler,
 		CharlieApprovals:  charlieApprovalsHandler,
 		CharlieContext:    charlieContextHandler,
 		CharlieFindings:   charlieFindingsHandler,

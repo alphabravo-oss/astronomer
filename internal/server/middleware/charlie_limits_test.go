@@ -27,23 +27,24 @@ func TestCharlieSessionLimitsApplyPerUserAndIP(t *testing.T) {
 	calls := 0
 	handler := CharlieSessionLimits()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls++ }))
 	user := uuid.NewString()
-	for attempt := 0; attempt < 11; attempt++ {
+	for attempt := 0; attempt < charlieShortRequestBurst+1; attempt++ {
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, limitedCharlieRequest(user, ""))
-		if attempt < 10 && recorder.Code == http.StatusTooManyRequests {
+		if attempt < charlieShortRequestBurst && recorder.Code == http.StatusTooManyRequests {
 			t.Fatalf("request %d was prematurely limited", attempt+1)
 		}
-		if attempt == 10 && recorder.Code != http.StatusTooManyRequests {
-			t.Fatalf("11th burst request status=%d, want 429", recorder.Code)
+		if attempt == charlieShortRequestBurst && recorder.Code != http.StatusTooManyRequests {
+			t.Fatalf("request past burst status=%d, want 429", recorder.Code)
 		}
 	}
-	if calls != 10 {
-		t.Fatalf("handler calls=%d, want 10", calls)
+	if calls != charlieShortRequestBurst {
+		t.Fatalf("handler calls=%d, want %d", calls, charlieShortRequestBurst)
 	}
 }
 
 func TestCharlieSessionLimitsCapConcurrentSessionRequests(t *testing.T) {
-	entered := make(chan struct{}, 2)
+	const cap = charlieSessionConcurrency
+	entered := make(chan struct{}, cap)
 	release := make(chan struct{})
 	handler := CharlieSessionLimits()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		entered <- struct{}{}
@@ -52,20 +53,46 @@ func TestCharlieSessionLimitsCapConcurrentSessionRequests(t *testing.T) {
 	user := uuid.NewString()
 	session := uuid.NewString()
 	var wg sync.WaitGroup
-	for range 2 {
+	for range cap {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			handler.ServeHTTP(httptest.NewRecorder(), limitedCharlieRequest(user, session))
 		}()
 	}
-	<-entered
-	<-entered
+	for range cap {
+		<-entered
+	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, limitedCharlieRequest(user, session))
 	if recorder.Code != http.StatusTooManyRequests {
-		t.Fatalf("third concurrent session request status=%d, want 429", recorder.Code)
+		t.Fatalf("concurrent session request past cap status=%d, want 429", recorder.Code)
 	}
 	close(release)
 	wg.Wait()
+}
+
+func TestCharlieSessionLimitsEventStreamsSkipShortRequestTokens(t *testing.T) {
+	handler := CharlieSessionLimits()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	user := uuid.NewString()
+	// Exhaust the short-request token burst with non-stream calls.
+	for attempt := 0; attempt < charlieShortRequestBurst+1; attempt++ {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, limitedCharlieRequest(user, ""))
+		if attempt < charlieShortRequestBurst && recorder.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d was prematurely limited", attempt+1)
+		}
+	}
+	// A live event stream open must still be admitted under concurrency alone.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/charlie/sessions/session-1/events/", nil)
+	req.RemoteAddr = "192.0.2.10:1234"
+	req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: user, AuthMethod: "jwt"}))
+	route := chi.NewRouteContext()
+	route.URLParams.Add("session_id", "session-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code == http.StatusTooManyRequests {
+		t.Fatal("event stream open was rate-token limited after short-request burst exhaustion")
+	}
 }

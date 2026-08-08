@@ -105,6 +105,7 @@ type LiveFixtures struct {
 	ApprovalReject          ApprovalFixture        `json:"approval_reject"`
 	AutoAllowlistedSuccess  ActionFixture          `json:"auto_allowlisted_success"`
 	AutoNonallowlisted      PendingApprovalFixture `json:"auto_nonallowlisted_approval"`
+	LeaderKillFailover      ActionFixture          `json:"leader_kill_failover"`
 	VersionedRAGGrounded    VersionedRAGFixture    `json:"versioned_rag_grounded"`
 	GeneralAnswer           GeneralAnswerFixture   `json:"general_answer"`
 	DiagnosisAlert          AlertDeliveryFixture   `json:"diagnosis_alert"`
@@ -128,6 +129,7 @@ type LiveConfig struct {
 	HTTPClient        *http.Client
 	AgentScaler       AgentScaler
 	IsolationObserver IsolationObserver
+	LeaderFailover    *KubernetesLeaderFailoverTarget
 	ProofTimeout      time.Duration
 	ProofPoll         time.Duration
 	NoCallDwell       time.Duration
@@ -157,6 +159,7 @@ type LiveDriver struct {
 	client            *http.Client
 	agentScaler       AgentScaler
 	isolationObserver IsolationObserver
+	leaderFailover    leaderFailoverTarget
 	infrastructure    infrastructureQualificationOperator
 	proofTimeout      time.Duration
 	proofPoll         time.Duration
@@ -210,10 +213,14 @@ func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
 	if proofTimeout < proofPoll || proofTimeout > 2*time.Minute || proofPoll < time.Millisecond || proofPoll > 10*time.Second || noCallDwell < time.Millisecond || noCallDwell > 2*time.Minute {
 		return nil, errors.New("live proof timing is outside its safe bound")
 	}
+	var leaderFailover leaderFailoverTarget
+	if config.LeaderFailover != nil {
+		leaderFailover = config.LeaderFailover
+	}
 	return &LiveDriver{
 		base: base, adminToken: strings.TrimSpace(config.AdminToken), approverToken: strings.TrimSpace(config.ApproverToken), deniedToken: strings.TrimSpace(config.DeniedToken),
 		metricSources: metrics, counterMetrics: mapping, fixtures: config.Fixtures,
-		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver,
+		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver, leaderFailover: leaderFailover,
 		proofTimeout: proofTimeout, proofPoll: proofPoll, noCallDwell: noCallDwell,
 	}, nil
 }
@@ -345,6 +352,9 @@ func (d *LiveDriver) Run(ctx context.Context, request ScenarioRequest) ScenarioR
 		"blocked_auto_alert", "failed_precondition_alert", "failed_verification_alert":
 		return d.alertDeliveryQualification(ctx, request.Scenario)
 	case "leader_kill_failover", "clean_install", "isolation_matrix", "resilience_matrix", "upgrade_rollback":
+		if request.Scenario == "leader_kill_failover" && d.leaderFailover != nil {
+			return d.leaderKillFailover(ctx, request)
+		}
 		return d.infrastructureQualification(ctx, request)
 	default:
 		return Unsupported(request.Scenario)
@@ -1293,6 +1303,9 @@ func (d *LiveDriver) fixtureIDsAreIsolated() bool {
 		d.fixtures.AutoNonallowlisted.Stimulus.ClientSessionID,
 		d.fixtures.AutoNonallowlisted.Stimulus.ClientMessageID,
 		d.fixtures.AutoNonallowlisted.Stimulus.AbortRequestID,
+		d.fixtures.LeaderKillFailover.Stimulus.ClientSessionID,
+		d.fixtures.LeaderKillFailover.Stimulus.ClientMessageID,
+		d.fixtures.LeaderKillFailover.Stimulus.AbortRequestID,
 		d.fixtures.VersionedRAGGrounded.Stimulus.ClientSessionID,
 		d.fixtures.VersionedRAGGrounded.Stimulus.ClientMessageID,
 		d.fixtures.VersionedRAGGrounded.Stimulus.AbortRequestID,
@@ -1312,6 +1325,7 @@ func (d *LiveDriver) fixtureIDsAreIsolated() bool {
 	for _, stimulus := range []SessionStimulus{
 		d.fixtures.AutoAllowlistedSuccess.Stimulus,
 		d.fixtures.AutoNonallowlisted.Stimulus,
+		d.fixtures.LeaderKillFailover.Stimulus,
 		d.fixtures.VersionedRAGGrounded.Stimulus,
 		d.fixtures.GeneralAnswer.Stimulus,
 	} {
@@ -1406,6 +1420,7 @@ type statusEnvelope struct {
 	Data struct {
 		Connection struct {
 			Connected              bool   `json:"connected"`
+			CentralVersion         string `json:"central_version"`
 			DisclosureAcknowledged bool   `json:"disclosure_acknowledged"`
 			DisclosureDigest       string `json:"disclosure_digest"`
 		} `json:"connection"`
@@ -1419,8 +1434,17 @@ type statusEnvelope struct {
 		Agent struct {
 			DesiredReplicas int32  `json:"desired_replicas"`
 			ReadyReplicas   int32  `json:"ready_replicas"`
+			LeaderReplica   string `json:"leader_replica"`
+			FencingEpoch    int64  `json:"fencing_epoch"`
 			AgentVersion    string `json:"agent_version"`
+			ChartDigest     string `json:"chart_digest"`
 			ImageDigest     string `json:"image_digest"`
+			Replicas        []struct {
+				Ordinal    int    `json:"ordinal"`
+				InstanceID string `json:"instance_id"`
+				Role       string `json:"role"`
+				State      string `json:"state"`
+			} `json:"replicas"`
 		} `json:"agent"`
 	} `json:"data"`
 }

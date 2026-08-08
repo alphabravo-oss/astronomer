@@ -98,7 +98,9 @@ func FleetCapabilityAdapters(adapter CapabilityExecutor) map[string]CapabilityEx
 func ManagementKubernetesCapabilityAdapters(adapter CapabilityExecutor) map[string]CapabilityExecutor {
 	adapters := map[string]CapabilityExecutor{}
 	for _, name := range []string{
-		"astronomer.management.workloads", "astronomer.management.workload_get", "astronomer.management.events",
+		"astronomer.management.workloads", "astronomer.management.workload_get",
+		"astronomer.management.pods", "astronomer.management.rollout_status",
+		"astronomer.management.events",
 		"astronomer.management.pod_logs", "astronomer.management.nodes", "astronomer.management.storage",
 		"astronomer.management.network", "astronomer.management.workload_restart",
 		"astronomer.management.workload_rollout", "astronomer.management.workload_scale",

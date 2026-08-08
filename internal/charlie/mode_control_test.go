@@ -176,6 +176,29 @@ func TestModeReconcileSameExecutableModeReopensAfterNewRevisionReadback(t *testi
 	}
 }
 
+func TestModeReconcileSameExecutableModeStaysClosedWhenAuditIsUnavailable(t *testing.T) {
+	state := activeModeState()
+	state.Requested, state.Verified = ModeApproval, ModeApproval
+	store := &fakeModeStore{state: state}
+	remote := ModeState{ConnectionID: state.ConnectionID, Active: true, Requested: ModeApproval,
+		Verified: ModeApproval, Revision: 5, DisclosureDigest: "disclosure-b"}
+	bridge := &fakeModeBridge{state: remote}
+	controller, _ := NewModeController(store, bridgeWithoutModeCeiling{delegate: bridge},
+		&authorityAuditFake{err: errors.New("audit unavailable")})
+	rollouts := 0
+	controller.SetModeCeilingRollout(modeCeilingRolloutFunc(func(context.Context, ModeCeilingTarget) error {
+		rollouts++
+		return nil
+	}))
+
+	got, err := controller.Reconcile(t.Context())
+	if err == nil || got != state || store.verifyCalls != 0 || rollouts != 0 || bridge.statusCalls != 1 ||
+		!controller.writes.State().Closed {
+		t.Fatalf("unaudited executable revision reopened writes: state=%+v statuses=%d fence=%+v err=%v",
+			got, bridge.statusCalls, controller.writes.State(), err)
+	}
+}
+
 func TestModeReconcileUpwardRestorationRequiresFreshReadbackBeforeOpen(t *testing.T) {
 	state := activeModeState()
 	state.Requested, state.Verified = ModeAuto, ModeApproval

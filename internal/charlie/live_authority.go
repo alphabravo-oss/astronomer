@@ -140,8 +140,16 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		AmbiguousPriorAttempt: safety.AmbiguousPriorAttempt,
 	}
 
-	if mode == ModeAuto && !input.ApprovalRequested {
-		input.LiveAuthorized = input.LiveAuthorized && delegation.PrincipalType == "service" && delegation.PrincipalID == a.automationID
+	// Auto mode's unattended path is service-principal only for writes. Human
+	// interactive sessions still evaluate live RBAC (so a real permission miss
+	// stays product_rbac_denied) but must use the exact-approval path for
+	// writes rather than unattended automation. Clearing LiveAuthorized here
+	// previously mis-labeled every human auto write as product_rbac_denied.
+	if mode == ModeAuto && !input.ApprovalRequested && capability.Effect == EffectWrite {
+		isAutomationService := delegation.PrincipalType == "service" && delegation.PrincipalID == a.automationID
+		if !isAutomationService {
+			input.InteractiveApprovalRequired = true
+		}
 	}
 	if (mode == ModeApproval || mode == ModeAuto) && input.ApprovalRequested {
 		approval, approvalErr := a.queries.GetActiveCharlieActionApproval(ctx, sqlc.GetActiveCharlieActionApprovalParams{CharlieActionID: action.ActionID, ApprovalID: action.ApprovalID})

@@ -117,6 +117,11 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		if err != nil {
 			status = "error"
 			span.RecordError(err)
+			observability.WithEvent(logger, "worker_job_failed").Error("worker job failed",
+				"job", job,
+				"error", err.Error(),
+				"duration_ms", time.Since(start).Milliseconds(),
+			)
 		}
 		observability.WithEvent(logger, "worker_job_completed").Info("worker job completed",
 			"job", job,

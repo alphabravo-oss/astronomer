@@ -90,6 +90,22 @@ func run() error {
 			return err
 		}
 	}
+	var leaderFailover *charliequalification.KubernetesLeaderFailoverTarget
+	leaderFailoverEnabled := strings.TrimSpace(os.Getenv(envPrefix + "LEADER_FAILOVER_ENABLED"))
+	if leaderFailoverEnabled != "" && leaderFailoverEnabled != "1" {
+		return errors.New("LEADER_FAILOVER_ENABLED must be 1 when set")
+	}
+	if leaderFailoverEnabled == "1" {
+		if kubeconfig == "" || approverToken == "" {
+			return errors.New("LEADER_FAILOVER_ENABLED requires KUBECONFIG_FILE and APPROVER_TOKEN")
+		}
+		leaderFailover, err = charliequalification.NewKubernetesLeaderFailoverTarget(charliequalification.KubernetesLeaderFailoverConfig{
+			Kubeconfig: kubeconfig, Namespace: agentNamespace, StatefulSet: agentStatefulSet,
+		})
+		if err != nil {
+			return err
+		}
+	}
 	client, err := operatorHTTPClient(os.Getenv(envPrefix + "CA_FILE"))
 	if err != nil {
 		return err
@@ -132,6 +148,7 @@ func run() error {
 		AllowHTTP:         os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
 		AgentScaler:       scaler,
 		IsolationObserver: isolationObserver,
+		LeaderFailover:    leaderFailover,
 		HTTPClient:        client,
 		NoCallDwell:       noCallDwell,
 	})

@@ -8,13 +8,14 @@ import (
 )
 
 type CapabilityFieldSchema struct {
-	Type      string
-	Required  bool
-	Minimum   int64
-	Maximum   int64
-	MaxLength int
-	Pattern   string
-	Enum      []string
+	Type        string
+	Required    bool
+	Minimum     int64
+	Maximum     int64
+	MaxLength   int
+	Pattern     string
+	Enum        []string
+	Description string
 }
 
 var (
@@ -40,8 +41,13 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 	case "astronomer.management.workloads":
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
-	case "astronomer.management.workload_get":
+	case "astronomer.management.workload_get", "astronomer.management.rollout_status":
 		stringField("workload", true, workloadPattern)
+	case "astronomer.management.pods":
+		stringField("component", false, componentPattern)
+		fields["phase"] = CapabilityFieldSchema{Type: "string", Enum: []string{"Pending", "Running", "Succeeded", "Failed", "Unknown"}, MaxLength: 16}
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
 	case "astronomer.management.events":
 		stringField("component", false, componentPattern)
 		stringField("since", false, durationPattern)
@@ -91,27 +97,39 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		stringField("resource_id", true, opaqueIDPattern)
 		stringField("workload", true, workloadPattern)
 		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
 	case "astronomer.management.workload_scale":
 		stringField("resource_id", true, opaqueIDPattern)
 		stringField("workload", true, workloadPattern)
 		integerField("replicas", true, 2, 20)
 		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
+		replicas := fields["replicas"]
+		replicas.Description = "Desired replica count in [2,20] for the mutable management Deployment."
+		fields["replicas"] = replicas
+		workload := fields["workload"]
+		workload.Description = "Target as deployment/<name>, e.g. deployment/astronomer-worker."
+		fields["workload"] = workload
 	case "astronomer.argocd.self_management_sync":
 		stringField("resource_id", true, opaqueIDPattern)
 		stringField("application", true, componentPattern)
 		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
 	case "astronomer.queue.retry_task":
 		stringField("resource_id", true, opaqueIDPattern)
 		stringField("task_id", true, opaqueIDPattern)
 		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
 	case "astronomer.management.run_job":
 		stringField("resource_id", true, opaqueIDPattern)
 		fields["job"] = CapabilityFieldSchema{Type: "string", Required: true, Enum: []string{"management-plane-backup", "restore-drill"}, MaxLength: 32}
 		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
 	case "astronomer.tunnel.restart_component":
 		stringField("resource_id", true, opaqueIDPattern)
 		fields["component"] = CapabilityFieldSchema{Type: "string", Required: true, Enum: []string{"server", "worker"}, MaxLength: 16}
 		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
 	}
 	return fields
 }
@@ -163,6 +181,20 @@ func validateCapabilityArguments(capability CapabilityDescriptor, arguments map[
 	return nil
 }
 
+// annotateWriteCorrelators documents session-scoped resource_id and client
+// operation_id so the model fills them without asking operators for tool names
+// or opaque product IDs.
+func annotateWriteCorrelators(fields map[string]CapabilityFieldSchema) {
+	if field, ok := fields["resource_id"]; ok {
+		field.Description = "Session-scoped resource id from product context resource_ids. Default install-wide scope is 'local'."
+		fields["resource_id"] = field
+	}
+	if field, ok := fields["operation_id"]; ok {
+		field.Description = "Any fresh opaque correlator (e.g. a UUID you generate). Product replaces this with the trusted action id before the adapter runs."
+		fields["operation_id"] = field
+	}
+}
+
 func capabilityJSONSchema(capability CapabilityDescriptor) map[string]any {
 	properties := map[string]any{}
 	required := []string{}
@@ -184,6 +216,9 @@ func capabilityJSONSchema(capability CapabilityDescriptor) map[string]any {
 			} else {
 				property["enum"] = field.Enum
 			}
+		}
+		if field.Description != "" {
+			property["description"] = field.Description
 		}
 		properties[name] = property
 		if field.Required {

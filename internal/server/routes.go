@@ -252,6 +252,9 @@ type RouterDependencies struct {
 	// Charlie chat. Nil keeps every route absent when the optional runtime is
 	// not fully wired.
 	CharlieSessions *handler.CharlieSessionHandler
+	// CharlieThreads is the durable interactive conversation pointer (one active
+	// thread per user). Sessions under a thread remain authorized agent runs.
+	CharlieThreads *handler.CharlieThreadHandler
 	// CharlieApprovals is the browser-facing product authority gate for exact,
 	// signed, single-use write approvals.
 	CharlieApprovals *handler.CharlieApprovalHandler

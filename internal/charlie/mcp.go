@@ -204,7 +204,9 @@ func (h *MCPHandler) handleCall(w http.ResponseWriter, request *http.Request, rp
 		w.Header().Set("X-Charlie-Verification-Status", verificationStatus)
 	}
 	writeMCPResponse(w, status, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Result: map[string]any{
-		"content":           []map[string]string{{"type": "text", "text": boundedActionSummary(result)}},
+		// OpenCode and other MCP clients feed content[].text to the model.
+		// structuredContent alone is not model-visible on the product-agent path.
+		"content":           []map[string]string{{"type": "text", "text": boundedActionContent(result)}},
 		"structuredContent": result,
 		"isError":           result.State == "blocked" || result.State == "failed" || result.State == "ambiguous",
 	}})
@@ -331,6 +333,28 @@ func capabilityDisclosureDigest(tools []map[string]any) string {
 	return digestBytes(encoded)
 }
 
+// boundedActionContent is the only MCP field the product agent reliably shows
+// the model. Succeeded reads must return the bounded adapter JSON so Charlie can
+// answer questions from management-plane data (e.g. kubernetes_version). Lifecycle
+// summaries alone leave the model with no facts after an allowed tool call.
+func boundedActionContent(result ActionResult) string {
+	if result.State == "succeeded" {
+		if payload := strings.TrimSpace(string(result.Result)); payload != "" && json.Valid(result.Result) {
+			if len(payload) > maxActionResult {
+				payload = payload[:maxActionResult]
+			}
+			return payload
+		}
+		return "Astronomer completed and verified the bounded action."
+	}
+	if result.State == "failed" || result.State == "ambiguous" {
+		return "Astronomer could not verify the bounded action; no follow-on action is permitted."
+	}
+	return "Astronomer denied the action under current product policy: " + string(result.Code)
+}
+
+// boundedActionSummary is retained for tests and call sites that only need a
+// short lifecycle label without the adapter payload.
 func boundedActionSummary(result ActionResult) string {
 	if result.State == "succeeded" {
 		return "Astronomer completed and verified the bounded action."

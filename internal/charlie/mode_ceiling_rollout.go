@@ -103,7 +103,59 @@ func (i *AgentInstaller) ReconcileModeCeiling(ctx context.Context, spec AgentIns
 	if _, err = resources.Update(ctx, application, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("Charlie mode-ceiling Argo reconciliation failed")
 	}
+	// Apply the ceiling to the live StatefulSet immediately. Mode changes only
+	// rewrite CHARLIE_MODE. They must not depend on Argo successfully re-resolving
+	// the OCI chart (expired/invalid artifact credentials leave sync=Unknown and
+	// otherwise hang every authority transition until the HTTP deadline).
+	//
+	// Why a roll is required: the agent treats CHARLIE_MODE as an immutable
+	// local authority ceiling (clamp with central mode). Bridge updateMode
+	// refuses to raise central above localModeCeiling (authority.local_ceiling).
+	// Kubernetes only delivers env changes via pod restart. Disclosure digests
+	// are NOT env-rolled here — agents refresh them live from heartbeat/bridge.
+	if err = i.applyLiveModeCeiling(ctx, desired); err != nil {
+		return err
+	}
 	return i.waitModeCeiling(ctx, spec, desired)
+}
+
+// applyLiveModeCeiling patches the product-agent StatefulSet env so the desired
+// CHARLIE_MODE is enforced by the live workload even when Argo cannot regenerate
+// manifests from the chart registry. No-op when the ceiling is already correct
+// so rapid re-reconciles do not thrash pods.
+func (i *AgentInstaller) applyLiveModeCeiling(ctx context.Context, desired Mode) error {
+	if i == nil || i.kube == nil || !validMode(desired) {
+		return fmt.Errorf("Charlie mode-ceiling live patch is unavailable")
+	}
+	statefulSet, err := i.kube.AppsV1().StatefulSets(i.agentNamespace).Get(ctx, charlieAgentWorkloadName, metav1.GetOptions{})
+	if err != nil || statefulSet.Spec.Replicas == nil || *statefulSet.Spec.Replicas != 2 || len(statefulSet.Spec.Template.Spec.Containers) != 1 {
+		return fmt.Errorf("Charlie mode-ceiling StatefulSet is unavailable")
+	}
+	if containerModeCeiling(statefulSet.Spec.Template.Spec.Containers[0]) == desired {
+		return nil
+	}
+	updated := false
+	for index := range statefulSet.Spec.Template.Spec.Containers[0].Env {
+		if statefulSet.Spec.Template.Spec.Containers[0].Env[index].Name != "CHARLIE_MODE" {
+			continue
+		}
+		statefulSet.Spec.Template.Spec.Containers[0].Env[index].Value = string(desired)
+		statefulSet.Spec.Template.Spec.Containers[0].Env[index].ValueFrom = nil
+		updated = true
+		break
+	}
+	if !updated {
+		return fmt.Errorf("Charlie mode-ceiling CHARLIE_MODE env is missing")
+	}
+	// Stable annotation so repeated same-mode updates never force a roll.
+	if statefulSet.Spec.Template.Annotations == nil {
+		statefulSet.Spec.Template.Annotations = map[string]string{}
+	}
+	statefulSet.Spec.Template.Annotations["astronomer.io/charlie-mode-ceiling"] = string(desired)
+	if _, err = i.kube.AppsV1().StatefulSets(i.agentNamespace).Update(ctx, statefulSet, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("Charlie mode-ceiling StatefulSet patch failed: %w", err)
+	}
+	return nil
 }
 
 func exactJSONInteger(value any) int64 {
@@ -142,7 +194,14 @@ func (i *AgentInstaller) modeCeilingReady(ctx context.Context, spec AgentInstall
 	syncStatus, _, _ := unstructured.NestedString(application.Object, "status", "sync", "status")
 	healthStatus, _, _ := unstructured.NestedString(application.Object, "status", "health", "status")
 	prune, pruneFound, _ := unstructured.NestedBool(application.Object, "spec", "syncPolicy", "automated", "prune")
-	if syncStatus != "Synced" || healthStatus != "Healthy" || !pruneFound || prune {
+	if healthStatus != "Healthy" || !pruneFound || prune {
+		return false
+	}
+	// Prefer Synced. Accept Unknown when Argo cannot refresh OCI target state
+	// (expired chart credentials) but live StatefulSet/pods still prove the
+	// ceiling below. Do not accept OutOfSync without live proof either — live
+	// checks remain mandatory either way.
+	if syncStatus != "Synced" && syncStatus != "Unknown" && syncStatus != "" {
 		return false
 	}
 	statefulSet, err := i.kube.AppsV1().StatefulSets(i.agentNamespace).Get(ctx, charlieAgentWorkloadName, metav1.GetOptions{})

@@ -89,6 +89,16 @@ func (r *AmbiguousReceiptReconciler) RunOnce(ctx context.Context) error {
 }
 
 func (r *AmbiguousReceiptReconciler) reconcile(ctx context.Context, receipt sqlc.CharlieActionReceipt, now time.Time) error {
+	// A claimed receipt has not crossed the durable dispatched transition, and
+	// the action guard never invokes an adapter before that transition commits.
+	// After its lease expires, terminally block the abandoned pre-dispatch claim
+	// without running a postcondition or retrying the side effect. This makes an
+	// exact replay safe while requiring a new action/approval for later work.
+	if receipt.State == "claimed" {
+		return r.finish(ctx, receipt, "blocked", ActionResult{
+			Allowed: false, Code: DeniedAmbiguousPriorAttempt, State: "blocked", Verified: false,
+		})
+	}
 	descriptor, found := capabilityByName(receipt.Capability)
 	arguments, err := r.decryptArguments(receipt, descriptor, found)
 	if err != nil {
@@ -155,7 +165,7 @@ func (r *AmbiguousReceiptReconciler) finish(ctx context.Context, receipt sqlc.Ch
 	}
 	updated, err := r.queries.TransitionCharlieActionReceipt(ctx, sqlc.TransitionCharlieActionReceiptParams{
 		NextState: next, ResultDigest: digestBytes(encoded), ResultStatus: result.State, ResultEncrypted: sealed,
-		ID: receipt.ID, ExpectedState: "verifying", LeaseOwner: r.leaseOwner, FencingEpoch: receipt.FencingEpoch,
+		ID: receipt.ID, ExpectedState: receipt.State, LeaseOwner: r.leaseOwner, FencingEpoch: receipt.FencingEpoch,
 	})
 	if err != nil {
 		return fmt.Errorf("commit Charlie receipt reconciliation: %w", err)

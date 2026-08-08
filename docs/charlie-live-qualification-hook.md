@@ -41,6 +41,7 @@ only by their owner. Prefer the `_FILE` variants for secrets. Required settings:
 | `KUBECONFIG_FILE` | Owner-only kubeconfig required by scenarios that scale the agent. |
 | `AGENT_NAMESPACE`, `AGENT_RELEASE`, `AGENT_STATEFULSET`, `AGENT_SERVICE` | Exact product-agent Helm release and workload targets used by fixed Kubernetes inventory queries. |
 | `ISOLATION_CAPTURE_INTERFACE` | Operator-selected interface at the Charlie agent network boundary. Enables the typed isolation observer; zero-runtime scenarios fail closed when it is absent. |
+| `LEADER_FAILOVER_ENABLED` | Exact value `1` explicitly enables the fixed Kubernetes leader failover target. Requires the owner-only kubeconfig, approver token, at least two ready agent replicas, and the dedicated fixture below. |
 
 `DENIED_TOKEN_FILE`, `CA_FILE`, `KUBECTL`, `TCPDUMP`, and `COUNTER_METRICS_FILE` are
 optional. The counter mapping file is bounded JSON whose keys must match the
@@ -63,6 +64,7 @@ ASTRONOMER_CHARLIE_QUALIFICATION_FIXTURES_FILE=/secure/fixtures.json \
 ASTRONOMER_CHARLIE_QUALIFICATION_KUBECONFIG_FILE=/secure/qualification.kubeconfig \
 ASTRONOMER_CHARLIE_QUALIFICATION_AGENT_RELEASE=astronomer-charlie \
 ASTRONOMER_CHARLIE_QUALIFICATION_ISOLATION_CAPTURE_INTERFACE=any \
+ASTRONOMER_CHARLIE_QUALIFICATION_LEADER_FAILOVER_ENABLED=1 \
 ASTRONOMER_CHARLIE_QUALIFICATION_NO_CALL_DWELL=30s \
 ./bin/charlie-qualification-hook
 ```
@@ -132,6 +134,18 @@ resources must be safe, disposable qualification targets:
       "resource_type": "management_component",
       "resource_id": "qualification-workload",
       "message": "Propose the exact safe non-allowlisted qualification action."
+    }
+  },
+  "leader_kill_failover": {
+    "capability": "astronomer.queue.retry_task",
+    "stimulus": {
+      "client_session_id": "10000000-0000-4000-8000-000000000005",
+      "client_message_id": "20000000-0000-4000-8000-000000000005",
+      "abort_request_id": "40000000-0000-4000-8000-000000000005",
+      "intent": "qualification_leader_failover",
+      "resource_type": "management_component",
+      "resource_id": "qualification-task-failover",
+      "message": "Run the exact safe allowlisted post-failover qualification action."
     }
   },
   "versioned_rag_grounded": {
@@ -212,6 +226,31 @@ safety budget, preconditions, and verification. Run in a quiet dedicated
 environment because an unrelated Charlie product action invalidates the exact
 zero/one-call counter proof.
 
+`leader_kill_failover` is additionally gated by the explicit environment
+switch. The hook reads the product's authenticated leader instance and fencing
+epoch, binds that instance to a ready StatefulSet ordinal, opens the existing
+browser SSE stream, and deletes only that exact pod through the Kubernetes API.
+The delete carries the observed pod UID as a precondition, so it cannot delete
+a replacement pod after a race. The hook accepts no resource kind, pod name,
+command, patch, URL, or observation document. It requires a different elected
+leader, an advanced epoch, the replacement pod and all original replicas ready
+within the bound, and the same open SSE request to deliver a post-failover turn.
+It then submits the dedicated fresh-session fixture and requires exactly one
+successful operation and one product-call counter increment. Cleanup aborts the
+session, restores the acknowledged read-only authority, verifies the same
+central version and exact agent image/chart digests, and rechecks the original
+replica count. Any ambiguous deletion, stream, action, or restoration fails the
+scenario. The central image/chart tuple remains cryptographically bound to the
+qualification request; this Kubernetes scenario directly observes the running
+product-agent image and chart because Charlie central is deployed separately.
+Use a short-lived kubeconfig backed by a dedicated Role that grants only `get`
+on the named StatefulSet and `get`/`delete` on its exact ordinal pod names. The
+operator does not need list, watch, create, patch, exec, logs, Secret access, or
+permissions outside the Charlie agent namespace. Revoke the credential after
+the qualification window. The hook reads the bounded kubeconfig once and
+rejects exec or auth-provider credential plugins, so loading this feature
+cannot invoke a kubeconfig-supplied command.
+
 The answer scenarios remain in the acknowledged read-only baseline and use the
 same authenticated product APIs as the browser. Each creates one fresh private
 session, submits one exact message, observes the exact turn complete on SSE,
@@ -251,7 +290,7 @@ The live driver currently implements `feature_false`, `unactivated`,
 `central_disabled`, `emergency_disabled`, `read_denial`, `approval_expiry`,
 `approval_once`, `approval_replay`, `approval_reject`,
 `auto_allowlisted_success`, `auto_nonallowlisted_approval`,
-`versioned_rag_grounded`, `general_answer`, both discovery scenarios, and all
+`leader_kill_failover`, `versioned_rag_grounded`, `general_answer`, both discovery scenarios, and all
 seven alert-delivery scenarios. Automation is a cumulative
 ceiling: a safe, disclosed write that is not eligible for unattended execution
 must remain pending in the exact-approval lane rather than becoming a terminal

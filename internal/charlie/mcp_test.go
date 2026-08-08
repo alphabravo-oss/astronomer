@@ -243,3 +243,46 @@ func TestMCPInitializeNotificationUsesNotificationSemantics(t *testing.T) {
 		t.Fatalf("initialized notification returned a JSON-RPC response: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestMCPToolsCallContentIncludesSucceededPayload(t *testing.T) {
+	payload := json.RawMessage(`{"kubernetes_version":"v1.36.2+k3s1","server_version":"v1.36.2+k3s1"}`)
+	facts := allowedReadFacts()
+	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
+	executor := &fakeCapabilityExecutor{result: payload, verified: true}
+	guard, privateKey := newTestActionGuard(t, authority, &fakeReceipts{}, executor)
+	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, testMCPClientURI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := signedTestAction(t, privateKey, "astronomer.installation.summary", map[string]any{})
+	params := map[string]any{
+		"name":      "astronomer.installation.summary",
+		"arguments": map[string]any{},
+		"_meta":     map[string]any{"charlie/action": action},
+	}
+	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": "call-read", "method": "tools/call", "params": params})
+	request := authenticatedMCPRequest(t, string(body))
+	request.Header.Set("Idempotency-Key", action.ActionID)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("tools/call status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	responseBody := recorder.Body.String()
+	if !strings.Contains(responseBody, "v1.36.2+k3s1") {
+		t.Fatalf("model-visible content omitted adapter payload: %s", responseBody)
+	}
+	if strings.Contains(responseBody, `"text":"Astronomer completed and verified the bounded action."`) {
+		t.Fatalf("tools/call still returned only the lifecycle summary: %s", responseBody)
+	}
+}
+
+func TestBoundedActionContentPrefersPayload(t *testing.T) {
+	got := boundedActionContent(ActionResult{State: "succeeded", Result: json.RawMessage(`{"kubernetes_version":"v1.36.2+k3s1"}`)})
+	if got != `{"kubernetes_version":"v1.36.2+k3s1"}` {
+		t.Fatalf("boundedActionContent = %q", got)
+	}
+	if summary := boundedActionContent(ActionResult{State: "succeeded"}); summary != "Astronomer completed and verified the bounded action." {
+		t.Fatalf("empty success summary = %q", summary)
+	}
+}

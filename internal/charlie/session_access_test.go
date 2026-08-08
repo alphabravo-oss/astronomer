@@ -441,8 +441,13 @@ func TestStreamMapsOnlyBoundedLifecycleMetadata(t *testing.T) {
 	if state != "waiting_approval" || revision != 9 || completed.Valid {
 		t.Fatalf("approval cursor metadata=%q/%d/%#v", state, revision, completed)
 	}
+	// A finished turn must leave the session open for follow-up chat messages.
 	state, revision, completed = sessionCursorState(current, contract.Event{ID: "10", Event: "turn.completed", Data: []byte(`{"answer":"must-not-persist"}`)}, now)
-	if state != "completed" || revision != 10 || !completed.Valid || !completed.Time.Equal(now) {
-		t.Fatalf("terminal cursor metadata=%q/%d/%#v", state, revision, completed)
+	if state != "active" || revision != 10 || completed.Valid {
+		t.Fatalf("turn.completed must keep session messageable: state=%q revision=%d completed=%#v", state, revision, completed)
+	}
+	state, revision, completed = sessionCursorState(current, contract.Event{ID: "11", Event: "session.completed", Data: []byte(`{}`)}, now)
+	if state != "completed" || revision != 11 || !completed.Valid || !completed.Time.Equal(now) {
+		t.Fatalf("session.completed should terminate messaging: state=%q revision=%d completed=%#v", state, revision, completed)
 	}
 }
