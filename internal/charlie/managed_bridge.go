@@ -247,132 +247,102 @@ func bridgeMaterialDigest(config ManagedBridgeConfig) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func (m *ManagedBridge) CreateSession(ctx context.Context, input BridgeSessionRequest, key string) (receipt BridgeSessionReceipt, err error) {
+
+func withBridge[T any](m *ManagedBridge, ctx context.Context, name string, fn func(*RuntimeBridge) (T, error)) (result T, err error) {
 	started := time.Now()
-	defer func() { observeBridgeCall("create_session", started, err) }()
+	defer func() { observeBridgeCall(name, started, err) }()
 	bridge, err := m.runtimeBridge(ctx)
 	if err != nil {
-		return BridgeSessionReceipt{}, err
+		var zero T
+		return zero, err
 	}
-	return bridge.CreateSession(ctx, input, key)
+	return fn(bridge)
 }
 
-func (m *ManagedBridge) GetSession(ctx context.Context, sessionID, authorizationRef string) (result json.RawMessage, err error) {
+func withBridgeErr(m *ManagedBridge, ctx context.Context, name string, fn func(*RuntimeBridge) error) (err error) {
 	started := time.Now()
-	defer func() { observeBridgeCall("get_session", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bridge.GetSession(ctx, sessionID, authorizationRef)
-}
-
-func (m *ManagedBridge) ListFindings(ctx context.Context, authorizationRef string) (result []BridgeFindingSummary, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("list_findings", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bridge.ListFindings(ctx, authorizationRef)
-}
-
-func (m *ManagedBridge) GetHistory(ctx context.Context, sessionID, authorizationRef, cursor string, limit int) (result json.RawMessage, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("get_history", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bridge.GetHistory(ctx, sessionID, authorizationRef, cursor, limit)
-}
-
-func (m *ManagedBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, messageID uuid.UUID, message string) (result json.RawMessage, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("create_message", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bridge.CreateMessage(ctx, sessionID, authorizationRef, messageID, message)
-}
-
-func (m *ManagedBridge) AbortSession(ctx context.Context, sessionID, authorizationRef string, requestID uuid.UUID) (err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("abort_session", started, err) }()
+	defer func() { observeBridgeCall(name, started, err) }()
 	bridge, err := m.runtimeBridge(ctx)
 	if err != nil {
 		return err
 	}
-	return bridge.AbortSession(ctx, sessionID, authorizationRef, requestID)
+	return fn(bridge)
 }
 
-func (m *ManagedBridge) StreamSessionEvents(ctx context.Context, sessionID, authorizationRef, lastEventID string, handle func(contract.Event) error) (err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("stream_events", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return err
-	}
-	return bridge.StreamSessionEvents(ctx, sessionID, authorizationRef, lastEventID, handle)
+func (m *ManagedBridge) CreateSession(ctx context.Context, input BridgeSessionRequest, key string) (BridgeSessionReceipt, error) {
+	return withBridge(m, ctx, "create_session", func(bridge *RuntimeBridge) (BridgeSessionReceipt, error) {
+		return bridge.CreateSession(ctx, input, key)
+	})
 }
 
-func (m *ManagedBridge) ListApprovals(ctx context.Context, authorizationRef string) (result []contract.Approval, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("list_approvals", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bridge.ListApprovals(ctx, authorizationRef)
+func (m *ManagedBridge) GetSession(ctx context.Context, sessionID, authorizationRef string) (json.RawMessage, error) {
+	return withBridge(m, ctx, "get_session", func(bridge *RuntimeBridge) (json.RawMessage, error) {
+		return bridge.GetSession(ctx, sessionID, authorizationRef)
+	})
 }
 
-func (m *ManagedBridge) DecideApproval(ctx context.Context, approvalID, authorizationRef string, requestID uuid.UUID, decision, manifestDigest string) (result contract.Approval, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("decide_approval", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return contract.Approval{}, err
-	}
-	return bridge.DecideApproval(ctx, approvalID, authorizationRef, requestID, decision, manifestDigest)
+func (m *ManagedBridge) ListFindings(ctx context.Context, authorizationRef string) ([]BridgeFindingSummary, error) {
+	return withBridge(m, ctx, "list_findings", func(bridge *RuntimeBridge) ([]BridgeFindingSummary, error) {
+		return bridge.ListFindings(ctx, authorizationRef)
+	})
 }
 
-func (m *ManagedBridge) CreateInvestigation(ctx context.Context, request BridgeInvestigationRequest, key string) (receipt BridgeSessionReceipt, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("create_investigation", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return BridgeSessionReceipt{}, err
-	}
-	return bridge.CreateInvestigation(ctx, request, key)
+func (m *ManagedBridge) GetHistory(ctx context.Context, sessionID, authorizationRef, cursor string, limit int) (json.RawMessage, error) {
+	return withBridge(m, ctx, "get_history", func(bridge *RuntimeBridge) (json.RawMessage, error) {
+		return bridge.GetHistory(ctx, sessionID, authorizationRef, cursor, limit)
+	})
 }
 
-func (m *ManagedBridge) GetFinding(ctx context.Context, findingID, authorizationRef string) (result FindingAdvisoryDetail, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("get_finding", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return FindingAdvisoryDetail{}, err
-	}
-	return bridge.GetFinding(ctx, findingID, authorizationRef)
+func (m *ManagedBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, messageID uuid.UUID, message string) (json.RawMessage, error) {
+	return withBridge(m, ctx, "create_message", func(bridge *RuntimeBridge) (json.RawMessage, error) {
+		return bridge.CreateMessage(ctx, sessionID, authorizationRef, messageID, message)
+	})
 }
 
-func (m *ManagedBridge) GetFindingScope(ctx context.Context, findingID, authorizationRef string) (result BridgeFindingScope, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("get_finding_scope", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return BridgeFindingScope{}, err
-	}
-	return bridge.GetFindingScope(ctx, findingID, authorizationRef)
+func (m *ManagedBridge) AbortSession(ctx context.Context, sessionID, authorizationRef string, requestID uuid.UUID) error {
+	return withBridgeErr(m, ctx, "abort_session", func(bridge *RuntimeBridge) error {
+		return bridge.AbortSession(ctx, sessionID, authorizationRef, requestID)
+	})
 }
 
-func (m *ManagedBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, transition, actorRef string) (result BridgeFindingSummary, err error) {
-	started := time.Now()
-	defer func() { observeBridgeCall("transition_finding", started, err) }()
-	bridge, err := m.runtimeBridge(ctx)
-	if err != nil {
-		return BridgeFindingSummary{}, err
-	}
-	return bridge.TransitionFinding(ctx, findingID, authorizationRef, requestID, transition, actorRef)
+func (m *ManagedBridge) StreamSessionEvents(ctx context.Context, sessionID, authorizationRef, lastEventID string, handle func(contract.Event) error) error {
+	return withBridgeErr(m, ctx, "stream_events", func(bridge *RuntimeBridge) error {
+		return bridge.StreamSessionEvents(ctx, sessionID, authorizationRef, lastEventID, handle)
+	})
+}
+
+func (m *ManagedBridge) ListApprovals(ctx context.Context, authorizationRef string) ([]contract.Approval, error) {
+	return withBridge(m, ctx, "list_approvals", func(bridge *RuntimeBridge) ([]contract.Approval, error) {
+		return bridge.ListApprovals(ctx, authorizationRef)
+	})
+}
+
+func (m *ManagedBridge) DecideApproval(ctx context.Context, approvalID, authorizationRef string, requestID uuid.UUID, decision, manifestDigest string) (contract.Approval, error) {
+	return withBridge(m, ctx, "decide_approval", func(bridge *RuntimeBridge) (contract.Approval, error) {
+		return bridge.DecideApproval(ctx, approvalID, authorizationRef, requestID, decision, manifestDigest)
+	})
+}
+
+func (m *ManagedBridge) CreateInvestigation(ctx context.Context, request BridgeInvestigationRequest, key string) (BridgeSessionReceipt, error) {
+	return withBridge(m, ctx, "create_investigation", func(bridge *RuntimeBridge) (BridgeSessionReceipt, error) {
+		return bridge.CreateInvestigation(ctx, request, key)
+	})
+}
+
+func (m *ManagedBridge) GetFinding(ctx context.Context, findingID, authorizationRef string) (FindingAdvisoryDetail, error) {
+	return withBridge(m, ctx, "get_finding", func(bridge *RuntimeBridge) (FindingAdvisoryDetail, error) {
+		return bridge.GetFinding(ctx, findingID, authorizationRef)
+	})
+}
+
+func (m *ManagedBridge) GetFindingScope(ctx context.Context, findingID, authorizationRef string) (BridgeFindingScope, error) {
+	return withBridge(m, ctx, "get_finding_scope", func(bridge *RuntimeBridge) (BridgeFindingScope, error) {
+		return bridge.GetFindingScope(ctx, findingID, authorizationRef)
+	})
+}
+
+func (m *ManagedBridge) TransitionFinding(ctx context.Context, findingID, authorizationRef string, requestID uuid.UUID, transition, actorRef string) (BridgeFindingSummary, error) {
+	return withBridge(m, ctx, "transition_finding", func(bridge *RuntimeBridge) (BridgeFindingSummary, error) {
+		return bridge.TransitionFinding(ctx, findingID, authorizationRef, requestID, transition, actorRef)
+	})
 }

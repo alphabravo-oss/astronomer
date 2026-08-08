@@ -1013,6 +1013,29 @@ func (i *AgentInstaller) reconcileNamespace(ctx context.Context, installationID 
 	}, nil
 }
 
+
+// refuseForeignOwner returns an error when an existing object is not owned by
+// this Charlie installation. Shared by Secret/NetworkPolicy/Service/Application.
+func refuseForeignOwner(kind, namespace, name, currentOwner, desiredOwner string) error {
+	if currentOwner != desiredOwner {
+		if namespace == "" {
+			return fmt.Errorf("refuse to overwrite operator-owned %s %s", kind, name)
+		}
+		return fmt.Errorf("refuse to overwrite operator-owned %s %s/%s", kind, namespace, name)
+	}
+	return nil
+}
+
+func deleteRollback(del func(context.Context) error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		err := del(ctx)
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+}
+
 func (i *AgentInstaller) reconcileSecret(ctx context.Context, desired *corev1.Secret) (func(context.Context) error, error) {
 	resources := i.kube.CoreV1().Secrets(desired.Namespace)
 	current, err := resources.Get(ctx, desired.Name, metav1.GetOptions{})
@@ -1020,19 +1043,15 @@ func (i *AgentInstaller) reconcileSecret(ctx context.Context, desired *corev1.Se
 		if _, err := resources.Create(ctx, desired, metav1.CreateOptions{}); err != nil {
 			return nil, err
 		}
-		return func(rollbackCtx context.Context) error {
-			err := resources.Delete(rollbackCtx, desired.Name, metav1.DeleteOptions{})
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}, nil
+		return deleteRollback(func(rollbackCtx context.Context) error {
+			return resources.Delete(rollbackCtx, desired.Name, metav1.DeleteOptions{})
+		}), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if current.Labels[installationOwnerLabel] != desired.Labels[installationOwnerLabel] {
-		return nil, fmt.Errorf("refuse to overwrite operator-owned Secret %s/%s", desired.Namespace, desired.Name)
+	if err := refuseForeignOwner("Secret", desired.Namespace, desired.Name, current.Labels[installationOwnerLabel], desired.Labels[installationOwnerLabel]); err != nil {
+		return nil, err
 	}
 	previous := current.DeepCopy()
 	desired.ResourceVersion = current.ResourceVersion
@@ -1057,19 +1076,15 @@ func (i *AgentInstaller) reconcileNetworkPolicy(ctx context.Context, desired *ne
 		if _, err := resources.Create(ctx, desired, metav1.CreateOptions{}); err != nil {
 			return nil, err
 		}
-		return func(rollbackCtx context.Context) error {
-			err := resources.Delete(rollbackCtx, desired.Name, metav1.DeleteOptions{})
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}, nil
+		return deleteRollback(func(rollbackCtx context.Context) error {
+			return resources.Delete(rollbackCtx, desired.Name, metav1.DeleteOptions{})
+		}), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if current.Labels[installationOwnerLabel] != desired.Labels[installationOwnerLabel] {
-		return nil, fmt.Errorf("refuse to overwrite operator-owned NetworkPolicy")
+	if err := refuseForeignOwner("NetworkPolicy", desired.Namespace, desired.Name, current.Labels[installationOwnerLabel], desired.Labels[installationOwnerLabel]); err != nil {
+		return nil, err
 	}
 	previous := current.DeepCopy()
 	desired.ResourceVersion = current.ResourceVersion
@@ -1094,19 +1109,15 @@ func (i *AgentInstaller) reconcileService(ctx context.Context, desired *corev1.S
 		if _, err := resources.Create(ctx, desired, metav1.CreateOptions{}); err != nil {
 			return nil, err
 		}
-		return func(rollbackCtx context.Context) error {
-			err := resources.Delete(rollbackCtx, desired.Name, metav1.DeleteOptions{})
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}, nil
+		return deleteRollback(func(rollbackCtx context.Context) error {
+			return resources.Delete(rollbackCtx, desired.Name, metav1.DeleteOptions{})
+		}), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if current.Labels[installationOwnerLabel] != desired.Labels[installationOwnerLabel] {
-		return nil, fmt.Errorf("refuse to overwrite operator-owned Service")
+	if err := refuseForeignOwner("Service", desired.Namespace, desired.Name, current.Labels[installationOwnerLabel], desired.Labels[installationOwnerLabel]); err != nil {
+		return nil, err
 	}
 	previous := current.DeepCopy()
 	desired.ResourceVersion, desired.Spec.ClusterIP, desired.Spec.ClusterIPs = current.ResourceVersion, current.Spec.ClusterIP, current.Spec.ClusterIPs
@@ -1131,19 +1142,15 @@ func (i *AgentInstaller) reconcileApplication(ctx context.Context, desired *unst
 		if _, err := resources.Create(ctx, desired, metav1.CreateOptions{}); err != nil {
 			return nil, err
 		}
-		return func(rollbackCtx context.Context) error {
-			err := resources.Delete(rollbackCtx, desired.GetName(), metav1.DeleteOptions{})
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}, nil
+		return deleteRollback(func(rollbackCtx context.Context) error {
+			return resources.Delete(rollbackCtx, desired.GetName(), metav1.DeleteOptions{})
+		}), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if current.GetLabels()[installationOwnerLabel] != desired.GetLabels()[installationOwnerLabel] {
-		return nil, fmt.Errorf("refuse to overwrite operator-owned Argo Application")
+	if err := refuseForeignOwner("Argo Application", "", desired.GetName(), current.GetLabels()[installationOwnerLabel], desired.GetLabels()[installationOwnerLabel]); err != nil {
+		return nil, err
 	}
 	previous := current.DeepCopy()
 	desired.SetResourceVersion(current.GetResourceVersion())

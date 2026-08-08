@@ -24,7 +24,6 @@ var (
 	ErrReplacementPackageNeeded = errors.New("a new signed Charlie onboarding package is required")
 )
 
-const adminStatusReconcileTimeout = 2 * time.Second
 
 type AdminConnectionView struct {
 	Connected              bool   `json:"connected"`
@@ -358,17 +357,11 @@ func safeAdminAlertDeliveryProof(row sqlc.CharlieAlertDelivery) AdminAlertDelive
 	return proof
 }
 
+// Status returns a pure projection of durable connection state, live bridge
+// heartbeats, and installer readiness. It does not run mode reconciliation —
+// that remains on RunModeReconciler and post-mutation mode paths so admin GET
+// stays free of authority side-effects.
 func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
-	// Status is also an immediate reconciliation boundary so an administrator
-	// never has to wait for the background interval after a central policy edit.
-	// The periodic reconciler owns long-running rollouts; an administrator read
-	// must remain bounded if Kubernetes is degraded or another transition holds
-	// the authority fence.
-	if s != nil && s.mode != nil {
-		reconcileCtx, cancel := context.WithTimeout(ctx, adminStatusReconcileTimeout)
-		_, _ = s.mode.Reconcile(reconcileCtx)
-		cancel()
-	}
 	connection, err := s.connection(ctx)
 	if errors.Is(err, ErrAdminNotConfigured) {
 		return emptyAdminStatus(), nil
@@ -381,15 +374,6 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 		Agent:      safeAdminAgent(connection),
 		Mode:       safeAdminMode(connection),
 	}
-	spec := adminInstallSpec(connection)
-	if s.installer != nil {
-		installation, statusErr := s.installer.Status(ctx, spec)
-		view.Agent.DesiredReplicas = installation.DesiredReplicas
-		view.Agent.ReadyReplicas = installation.ReadyReplicas
-		view.Agent.ApplicationState = installationState(installation, statusErr)
-		view.Mode.WorkloadCeiling = installation.ModeCeiling
-		view.Mode.WorkloadCeilingReady = statusErr == nil && installation.ModeCeilingReady
-	}
 	if s.bridge != nil {
 		if bridgeStatus, statusErr := s.bridge.AdminStatus(ctx); statusErr == nil {
 			if connection.Active {
@@ -398,21 +382,26 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 					view.Connection = safeAdminConnection(connection)
 					view.Agent = safeAdminAgent(connection)
 					view.Mode = safeAdminMode(connection)
-					if s.installer != nil {
-						installation, installErr := s.installer.Status(ctx, adminInstallSpec(connection))
-						view.Agent.DesiredReplicas = installation.DesiredReplicas
-						view.Agent.ReadyReplicas = installation.ReadyReplicas
-						view.Agent.ApplicationState = installationState(installation, installErr)
-						view.Mode.WorkloadCeiling = installation.ModeCeiling
-						view.Mode.WorkloadCeilingReady = installErr == nil && installation.ModeCeilingReady
-					}
 				}
 			}
 			applyBridgeStatus(&view, bridgeStatus)
 		}
 	}
+	s.applyInstallerStatus(ctx, &view, connection)
 	view.Mode = s.enrichMode(ctx, view.Mode)
 	return view, nil
+}
+
+func (s *AdminService) applyInstallerStatus(ctx context.Context, view *AdminStatusView, connection sqlc.CharlieConnection) {
+	if s == nil || s.installer == nil || view == nil {
+		return
+	}
+	installation, statusErr := s.installer.Status(ctx, adminInstallSpec(connection))
+	view.Agent.DesiredReplicas = installation.DesiredReplicas
+	view.Agent.ReadyReplicas = installation.ReadyReplicas
+	view.Agent.ApplicationState = installationState(installation, statusErr)
+	view.Mode.WorkloadCeiling = installation.ModeCeiling
+	view.Mode.WorkloadCeilingReady = statusErr == nil && installation.ModeCeilingReady
 }
 
 // LocalStatus returns only the durable product-owned projection. It never
@@ -1436,287 +1425,4 @@ func (s *AdminService) Access(ctx context.Context) (AdminAccessView, error) {
 	}
 	effective := append([]AdminPermission(nil), grants...)
 	return AdminAccessView{EffectivePermissions: effective, AutomationGrants: grants}, nil
-}
-
-func (s *AdminService) Diagnostics(ctx context.Context, correlationID string) (AdminDiagnosticsView, error) {
-	now := s.now().UTC()
-	checked := now.Format(time.RFC3339)
-	checks := []AdminDiagnosticCheck{}
-	add := func(id, label, state, summary string) {
-		checks = append(checks, AdminDiagnosticCheck{ID: id, Label: label, State: state, Summary: summary, NextAction: diagnosticNextAction(id, state), CheckedAt: checked})
-	}
-	connection, connectionErr := s.connection(ctx)
-	if connectionErr != nil {
-		add("local_config", "Local database and configuration", "unavailable", "Charlie configuration is not available.")
-		for _, item := range [][2]string{{"product_bridge_mtls", "Product Bridge mTLS"}, {"agent_primary", "Agent primary replica"}, {"agent_standby", "Agent standby replica"}, {"central_via_agent", "Central through agent"}, {"leader_epoch", "Leader and fencing epoch"}, {"route_rag", "Route and RAG readiness"}, {"mcp_tls_discovery", "MCP TLS and discovery digest"}, {"oci_artifacts", "OCI chart and image"}, {"credential_expiry", "Certificate and credential expiry"}} {
-			add(item[0], item[1], "unknown", "Check was not run because Charlie is not configured.")
-		}
-		return AdminDiagnosticsView{Overall: "unavailable", Checks: checks, CorrelationID: correlationID}, nil
-	}
-	add("local_config", "Local database and configuration", "healthy", "Local Charlie metadata is readable and contains no runtime credentials in this response.")
-	if !connection.Active || connection.EmergencyDisabled || EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled) == ModeDisabled {
-		// The disabled diagnostics path is network-quiesced. It remains available
-		// as a local status surface but must not initiate a request to the product
-		// agent, its bridge, Charlie central, or the Kubernetes installer. An
-		// enabled connection's separate signed control heartbeat is not a
-		// diagnostics request and is governed by the runtime lifecycle gate.
-		for _, check := range inactiveDiagnosticChecks() {
-			add(check.ID, check.Label, "inactive", check.Summary)
-		}
-		return AdminDiagnosticsView{Overall: "inactive", Checks: checks, CorrelationID: correlationID}, nil
-	}
-	bridgeStatus, bridgeErr := AdminBridgeStatus{}, ErrAdminUnavailable
-	if s.bridge != nil {
-		bridgeStatus, bridgeErr = s.bridge.AdminStatus(ctx)
-	}
-	if bridgeErr != nil {
-		add("product_bridge_mtls", "Product Bridge mTLS", "unavailable", "The fixed local mTLS bridge could not be reached.")
-	} else {
-		add("product_bridge_mtls", "Product Bridge mTLS", "healthy", "The product-local bridge completed mutual TLS and returned bounded status.")
-	}
-	installation := AgentInstallationStatus{}
-	installErr := ErrAdminUnavailable
-	if s.installer != nil {
-		installation, installErr = s.installer.Status(ctx, adminInstallSpec(connection))
-	}
-	primaryState := "healthy"
-	if installation.ReadyReplicas < 1 {
-		primaryState = "unavailable"
-	}
-	add("agent_primary", "Agent primary replica", primaryState, fmt.Sprintf("%d of %d replicas are ready.", installation.ReadyReplicas, installation.DesiredReplicas))
-	standbyState := "healthy"
-	if installation.ReadyReplicas < 2 {
-		standbyState = "degraded"
-	}
-	add("agent_standby", "Agent standby replica", standbyState, fmt.Sprintf("%d ready replicas are visible locally.", installation.ReadyReplicas))
-	centralState := "unavailable"
-	if bridgeErr == nil && bridgeStatus.CentralHealth == "healthy" {
-		centralState = "healthy"
-	} else if bridgeErr == nil {
-		centralState = "degraded"
-	}
-	add("central_via_agent", "Central through agent", centralState, "Central health is reported only through the product-local agent.")
-	leaderState := "degraded"
-	if bridgeErr == nil && bridgeStatus.Epoch > 0 && bridgeStatus.LeaderInstanceID != "" {
-		leaderState = "healthy"
-	}
-	add("leader_epoch", "Leader and fencing epoch", leaderState, "Leader identity and epoch are reported by the local bridge.")
-	routeState := "unknown"
-	routeSummary := "The current bridge contract does not independently attest RAG readiness."
-	if bridgeErr == nil && bridgeStatus.RouteID == connection.RouteID && bridgeStatus.CentralHealth == "healthy" {
-		routeState = "healthy"
-		routeSummary = "The configured route matches the agent report; central route health is available."
-	}
-	add("route_rag", "Route and RAG readiness", routeState, routeSummary)
-	digestState := "degraded"
-	if bridgeErr == nil && normalizeDigest(bridgeStatus.DisclosureDigest) == normalizeDigest(connection.DisclosureDigest) {
-		digestState = "healthy"
-	}
-	add("mcp_tls_discovery", "MCP TLS and discovery digest", digestState, "The agent disclosure digest is compared with Astronomer's current MCP catalog.")
-	artifactState := "unavailable"
-	if installErr == nil && installation.ArtifactsVerified {
-		artifactState = "healthy"
-	} else if installation.ApplicationSynced {
-		artifactState = "degraded"
-	}
-	add("oci_artifacts", "OCI chart and image", artifactState, "Argo application and immutable artifact status are checked locally and through the agent.")
-	credentialState, credentialSummary := credentialExpiryDiagnostic(connection, now)
-	add("credential_expiry", "Certificate and credential expiry", credentialState, credentialSummary)
-	overall := "healthy"
-	for _, check := range checks {
-		if check.State == "unavailable" {
-			overall = "unavailable"
-			break
-		}
-		if check.State == "degraded" || check.State == "unknown" {
-			overall = "degraded"
-		}
-	}
-	return AdminDiagnosticsView{Overall: overall, Checks: checks, CorrelationID: correlationID}, nil
-}
-
-// LocalDiagnostics is the feature-disabled diagnostic contract. Even if the
-// last persisted connection was active, it deliberately performs database-only
-// reads and reports all runtime/network checks as inactive.
-func (s *AdminService) LocalDiagnostics(ctx context.Context, correlationID string) (AdminDiagnosticsView, error) {
-	checked := s.now().UTC().Format(time.RFC3339)
-	checks := []AdminDiagnosticCheck{}
-	add := func(id, label, state, summary string) {
-		checks = append(checks, AdminDiagnosticCheck{ID: id, Label: label, State: state, Summary: summary, NextAction: diagnosticNextAction(id, state), CheckedAt: checked})
-	}
-	if _, err := s.connection(ctx); err != nil {
-		state := "unavailable"
-		summary := "Charlie configuration is not available."
-		if errors.Is(err, ErrAdminNotConfigured) {
-			state = "inactive"
-			summary = "Charlie is not configured; no product-agent or central request was made."
-		}
-		add("local_config", "Local database and configuration", state, summary)
-	} else {
-		add("local_config", "Local database and configuration", "healthy", "Local Charlie metadata is readable and contains no runtime credentials in this response.")
-	}
-	for _, check := range inactiveDiagnosticChecks() {
-		add(check.ID, check.Label, "inactive", check.Summary)
-	}
-	return AdminDiagnosticsView{Overall: "inactive", Checks: checks, CorrelationID: correlationID}, nil
-}
-
-func inactiveDiagnosticChecks() []AdminDiagnosticCheck {
-	const summary = "Not run while Charlie is disabled; no product-agent or central request was made."
-	return []AdminDiagnosticCheck{
-		{ID: "product_bridge_mtls", Label: "Product Bridge mTLS", Summary: summary},
-		{ID: "agent_primary", Label: "Agent primary replica", Summary: summary},
-		{ID: "agent_standby", Label: "Agent standby replica", Summary: summary},
-		{ID: "central_via_agent", Label: "Central through agent", Summary: summary},
-		{ID: "leader_epoch", Label: "Leader and fencing epoch", Summary: summary},
-		{ID: "route_rag", Label: "Route and RAG readiness", Summary: summary},
-		{ID: "mcp_tls_discovery", Label: "MCP TLS and discovery digest", Summary: summary},
-		{ID: "oci_artifacts", Label: "OCI chart and image", Summary: summary},
-		{ID: "credential_expiry", Label: "Certificate and credential expiry", Summary: summary},
-	}
-}
-
-func diagnosticNextAction(id, state string) string {
-	if state == "healthy" {
-		return "No operator action is required."
-	}
-	if state == "inactive" {
-		return "Enable Charlie explicitly before running connectivity diagnostics; no request is sent while disabled."
-	}
-	actions := map[string]string{
-		"local_config":        "Verify the signed onboarding package and local Charlie configuration, then rerun diagnostics.",
-		"product_bridge_mtls": "Check the Charlie agent pods and Product Bridge Service/TLS trust, then rerun diagnostics.",
-		"agent_primary":       "Inspect the Argo application and agent StatefulSet; restore at least one ready replica.",
-		"agent_standby":       "Restore the configured standby replica before enabling approval or automation.",
-		"central_via_agent":   "Check agent egress to the configured Charlie endpoint; do not add direct server egress.",
-		"leader_epoch":        "Confirm one elected agent leader and a current fencing epoch before permitting writes.",
-		"route_rag":           "Verify the Charlie route and product-version knowledge release from Charlie administration.",
-		"mcp_tls_discovery":   "Rediscover the MCP catalog and acknowledge the exact new disclosure digest.",
-		"oci_artifacts":       "Reconcile the Argo application using the immutable chart and image digests from Charlie OCI.",
-		"credential_expiry":   "Rotate the Charlie agent credentials and certificates before they expire, then verify the new status.",
-	}
-	if action := actions[id]; action != "" {
-		return action
-	}
-	return "Keep Charlie in read-only or disabled mode and rerun diagnostics after correcting this boundary."
-}
-
-// credentialExpiryDiagnostic uses the exact signed onboarding expiries already
-// persisted with the connection. Inferring a nominal lifetime from the last
-// rotation time hides short-lived artifact credentials and reports "unknown"
-// immediately after a valid first install.
-func credentialExpiryDiagnostic(connection sqlc.CharlieConnection, now time.Time) (string, string) {
-	certificate := connection.CertificateExpiresAt.UTC()
-	artifact := connection.ArtifactCredentialExpiresAt.UTC()
-	if certificate.IsZero() || artifact.IsZero() {
-		return "unknown", "Exact certificate or artifact credential expiry metadata is unavailable."
-	}
-	earliest := certificate
-	kind := "certificate"
-	if artifact.Before(earliest) {
-		earliest = artifact
-		kind = "artifact credential"
-	}
-	state := "healthy"
-	if !earliest.After(now.UTC().Add(7 * 24 * time.Hour)) {
-		state = "degraded"
-	}
-	condition := "expires"
-	if !earliest.After(now.UTC()) {
-		condition = "expired"
-	}
-	return state, fmt.Sprintf("The earliest active %s %s at %s.", kind, condition, earliest.Format(time.RFC3339))
-}
-
-func normalizeDigest(value string) string {
-	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "sha256:")
-}
-
-// PGModeStore uses revision-checked updates and makes emergency disable atomic
-// with cancellation/fencing of all outstanding Charlie work.
-type PGModeStore struct{ Pool *pgxpool.Pool }
-
-func (p PGModeStore) LoadModeState(ctx context.Context) (ModeState, error) {
-	row, err := sqlc.New(p.Pool).GetActiveCharlieConnection(ctx)
-	if err != nil {
-		return ModeState{}, err
-	}
-	return dbModeState(row), nil
-}
-func (p PGModeStore) SetRequestedMode(ctx context.Context, connectionID string, mode Mode, expected int64) (ModeState, error) {
-	id, err := uuid.Parse(connectionID)
-	if err != nil {
-		return ModeState{}, err
-	}
-	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET requested_mode=$1, verified_mode_revision=verified_mode_revision+1, updated_at=now() WHERE id=$2 AND active=true AND emergency_disabled=false AND verified_mode_revision=$3`, string(mode), id, expected)
-	if err != nil || result.RowsAffected() != 1 {
-		return ModeState{}, ErrAdminConflict
-	}
-	row, err := sqlc.New(p.Pool).GetCharlieConnection(ctx, id)
-	return dbModeState(row), err
-}
-func (p PGModeStore) SetVerifiedMode(ctx context.Context, connectionID string, mode Mode, expected, next int64, digest string) (ModeState, error) {
-	id, err := uuid.Parse(connectionID)
-	if err != nil {
-		return ModeState{}, err
-	}
-	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET verified_mode=$1, verified_mode_revision=$2, disclosure_digest=$3::VARCHAR(128), acknowledged_disclosure_digest=CASE WHEN disclosure_digest=$3::VARCHAR(128) THEN acknowledged_disclosure_digest ELSE '' END, last_verified_at=now(), updated_at=now() WHERE id=$4 AND active=true AND emergency_disabled=false AND verified_mode_revision=$5`, string(mode), next, digest, id, expected)
-	if err != nil || result.RowsAffected() != 1 {
-		return ModeState{}, ErrAdminConflict
-	}
-	row, err := sqlc.New(p.Pool).GetCharlieConnection(ctx, id)
-	return dbModeState(row), err
-}
-func (p PGModeStore) SetEmergencyDisabled(ctx context.Context, connectionID, actorID string) (ModeState, error) {
-	id, err := uuid.Parse(connectionID)
-	if err != nil {
-		return ModeState{}, err
-	}
-	actor, err := uuid.Parse(actorID)
-	if err != nil {
-		return ModeState{}, err
-	}
-	tx, err := p.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return ModeState{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	result, err := tx.Exec(ctx, `UPDATE charlie_connections SET emergency_disabled=true, emergency_disabled_by_id=$1, emergency_disabled_at=now(), requested_mode='disabled', verified_mode='disabled', verified_mode_revision=verified_mode_revision+1, updated_at=now() WHERE id=$2 AND active=true`, actor, id)
-	if err != nil || result.RowsAffected() != 1 {
-		return ModeState{}, ErrAdminConflict
-	}
-	for _, statement := range []string{
-		`UPDATE charlie_sessions SET state='aborted', completed_at=now(), updated_at=now() WHERE connection_id=$1 AND state IN ('creating','active','waiting_approval')`,
-		`UPDATE charlie_action_approvals SET state='rejected', updated_at=now() WHERE connection_id=$1 AND state='approved'`,
-		`UPDATE charlie_action_receipts SET state='fenced', updated_at=now() WHERE connection_id=$1 AND state IN ('claimed','waiting_approval','dispatched','ambiguous','verifying')`,
-		`UPDATE charlie_trigger_events SET state='suppressed', updated_at=now() WHERE state IN ('pending','retry','dispatching') AND rule_id IN (SELECT id FROM charlie_trigger_rules WHERE connection_id=$1)`,
-		`UPDATE charlie_delegations SET revoked_at=now() WHERE revoked_at IS NULL AND session_id IN (SELECT id FROM charlie_sessions WHERE connection_id=$1)`,
-	} {
-		if _, err := tx.Exec(ctx, statement, id); err != nil {
-			return ModeState{}, err
-		}
-	}
-	row, err := sqlc.New(tx).GetCharlieConnection(ctx, id)
-	if err != nil {
-		return ModeState{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return ModeState{}, err
-	}
-	return dbModeState(row), nil
-}
-func (p PGModeStore) ClearEmergencyDisabled(ctx context.Context, connectionID, actorID string) (ModeState, error) {
-	id, err := uuid.Parse(connectionID)
-	if err != nil {
-		return ModeState{}, err
-	}
-	result, err := p.Pool.Exec(ctx, `UPDATE charlie_connections SET emergency_disabled=false, emergency_disabled_by_id=NULL, emergency_disabled_at=NULL, requested_mode='disabled', verified_mode='disabled', verified_mode_revision=verified_mode_revision+1, updated_at=now() WHERE id=$1 AND active=true AND emergency_disabled=true AND verified_mode='disabled'`, id)
-	if err != nil || result.RowsAffected() != 1 {
-		return ModeState{}, ErrAdminConflict
-	}
-	row, err := sqlc.New(p.Pool).GetCharlieConnection(ctx, id)
-	return dbModeState(row), err
-}
-func dbModeState(row sqlc.CharlieConnection) ModeState {
-	return ModeState{ConnectionID: row.ID.String(), Active: row.Active, EmergencyDisabled: row.EmergencyDisabled, Requested: Mode(row.RequestedMode), Verified: Mode(row.VerifiedMode), Revision: row.VerifiedModeRevision, DisclosureDigest: row.DisclosureDigest, UpdatedAt: row.UpdatedAt}
 }

@@ -167,10 +167,6 @@ func WriteCapabilityCatalog() []CapabilityDescriptor {
 	}
 }
 
-func read(name string, source CapabilitySource, resource string, fields []string, maxBytes int) CapabilityDescriptor {
-	return readDesc(name, "Read bounded, redacted Astronomer-owned management-plane state", source, resource, fields, maxBytes)
-}
-
 func readDesc(name, description string, source CapabilitySource, resource string, fields []string, maxBytes int) CapabilityDescriptor {
 	return CapabilityDescriptor{
 		Name: name, Description: description, SchemaVersion: "1",
@@ -178,10 +174,6 @@ func readDesc(name, description string, source CapabilitySource, resource string
 		Reversibility: "not_applicable", Rollback: "not_applicable", Source: source, RBACResource: resource,
 		RBACVerb: "read", AcceptedFields: fields, MaxResponseBytes: maxBytes, TimeoutSeconds: 10,
 	}
-}
-
-func write(name string, source CapabilitySource, resource string, fields []string, auto bool) CapabilityDescriptor {
-	return writeDesc(name, "Execute one bounded Astronomer-owned management-plane operation", source, resource, fields, auto)
 }
 
 func writeDesc(name, description string, source CapabilitySource, resource string, fields []string, auto bool) CapabilityDescriptor {

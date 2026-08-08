@@ -121,7 +121,8 @@ func TestTriggerDispatchCreatesOneIncidentSessionAndPublishesAfterCommit(t *test
 	if err := dispatcher.Dispatch(context.Background(), store.event.ID); err != nil {
 		t.Fatal(err)
 	}
-	if store.created != 1 || store.resources != 1 || store.delegations != 1 || bridge.calls != 1 {
+	// Origin finding resource + install-wide local scope (resource_id=local).
+	if store.created != 1 || store.resources != 2 || store.delegations != 1 || bridge.calls != 1 {
 		t.Fatalf("incident creation incomplete: store=%#v bridge=%#v", store, bridge)
 	}
 	if store.session.Source != "event" || store.session.Visibility != "incident" || bridge.key != store.event.ID.String() || bridge.request.AuthorizationRef == "" {
