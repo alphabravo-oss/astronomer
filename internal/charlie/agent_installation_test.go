@@ -808,6 +808,9 @@ func TestAgentInstallerResumeReconcilesFreshDisabledInstallationWithoutSnapshot(
 	if _, err := kube.CoreV1().ConfigMaps("astronomer").Get(context.Background(), receipt.Names.ResumeState, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("fresh installation unexpectedly has resume snapshot: %v", err)
 	}
+	// Durable connection metadata intentionally excludes the raw signed package.
+	// The live reviewed Application is enough to restore the local surface.
+	spec.OnboardingPackage = nil
 	if err := installer.Resume(context.Background(), spec); err != nil {
 		t.Fatal(err)
 	}
