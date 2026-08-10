@@ -523,33 +523,6 @@ func (i *AgentInstaller) Resume(ctx context.Context, spec AgentInstallSpec) erro
 		return fmt.Errorf("Charlie resume lifecycle dependencies are unavailable")
 	}
 	names := agentResourceNames(spec, i.agentNamespace)
-	// A freshly consumed onboarding/replacement package is installed with a
-	// disabled authority ceiling even when feature.charlie is still off. Its
-	// Argo Application is therefore already present, and there is intentionally
-	// no suspend snapshot to restore. Treat enable as an idempotent reconcile in
-	// that state. This also makes a retry safe when a prior resume restored the
-	// Application but failed before durable connection metadata was updated.
-	resources := i.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace(i.argoNamespace)
-	current, err := resources.Get(ctx, names.Application, metav1.GetOptions{})
-	if err == nil {
-		if current.GetLabels()[installationOwnerLabel] != spec.InstallationID.String() {
-			return fmt.Errorf("refuse to resume operator-owned Charlie Argo Application")
-		}
-		receipt, installErr := i.Install(ctx, spec)
-		if installErr != nil {
-			return installErr
-		}
-		if metadataErr := i.metadata.MarkReconnected(ctx, spec.ConnectionID); metadataErr != nil {
-			if rollbackErr := receipt.Rollback(ctx); rollbackErr != nil {
-				return fmt.Errorf("%w; rollback failed", metadataErr)
-			}
-			return metadataErr
-		}
-		return nil
-	}
-	if !apierrors.IsNotFound(err) {
-		return err
-	}
 	application, err := i.loadApplicationSnapshot(ctx, names, spec.InstallationID)
 	if err != nil {
 		return err
@@ -1039,6 +1012,7 @@ func (i *AgentInstaller) reconcileNamespace(ctx context.Context, installationID 
 		return err
 	}, nil
 }
+
 
 // refuseForeignOwner returns an error when an existing object is not owned by
 // this Charlie installation. Shared by Secret/NetworkPolicy/Service/Application.

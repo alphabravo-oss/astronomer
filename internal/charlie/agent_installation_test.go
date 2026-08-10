@@ -798,32 +798,6 @@ func TestAgentInstallerSuspendAndResumeRemoveOnlyRuntimeSurface(t *testing.T) {
 	}
 }
 
-func TestAgentInstallerResumeReconcilesFreshDisabledInstallationWithoutSnapshot(t *testing.T) {
-	installer, kube, _, metadata := testAgentInstaller(t)
-	spec := testAgentInstallSpec(t)
-	receipt, err := installer.Install(context.Background(), spec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := kube.CoreV1().ConfigMaps("astronomer").Get(context.Background(), receipt.Names.ResumeState, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
-		t.Fatalf("fresh installation unexpectedly has resume snapshot: %v", err)
-	}
-	if err := installer.Resume(context.Background(), spec); err != nil {
-		t.Fatal(err)
-	}
-	appResource := installer.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace("astronomer")
-	application, err := appResource.Get(context.Background(), receipt.Names.Application, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("fresh installation Application was not preserved: %v", err)
-	}
-	if application.GetLabels()[installationOwnerLabel] != spec.InstallationID.String() {
-		t.Fatal("fresh installation Application ownership changed")
-	}
-	if got := strings.Join(metadata.events, ","); got != "reconnected" {
-		t.Fatalf("lifecycle metadata=%s", got)
-	}
-}
-
 func TestAgentInstallerRepeatedSuspendConvergesStaleChartSurfaceWithoutInactiveBridge(t *testing.T) {
 	installer, kube, bridge, _ := testAgentInstaller(t)
 	spec := testAgentInstallSpec(t)
