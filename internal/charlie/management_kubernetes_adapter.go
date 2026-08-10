@@ -15,8 +15,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
@@ -133,7 +135,38 @@ func (a *ManagementKubernetesAdapter) Verify(ctx context.Context, capability Cap
 	if capability.Name == "astronomer.management.workload_scale" {
 		return deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == int32(int64Argument(arguments, "replicas", 0)), nil
 	}
-	return deployment.Spec.Template.Annotations["astronomer.io/charlie-operation"] == stringArgument(arguments, "operation_id"), nil
+	var receipt struct {
+		OperationID  string      `json:"operation_id"`
+		Target       string      `json:"target"`
+		PriorPodUIDs []types.UID `json:"prior_pod_uids"`
+	}
+	if json.Unmarshal(result, &receipt) != nil || receipt.OperationID != stringArgument(arguments, "operation_id") ||
+		receipt.Target != "deployment/"+name || len(receipt.PriorPodUIDs) == 0 {
+		return false, nil
+	}
+	pods, err := a.deploymentPods(ctx, deployment)
+	if err != nil {
+		return false, err
+	}
+	prior := make(map[types.UID]struct{}, len(receipt.PriorPodUIDs))
+	for _, uid := range receipt.PriorPodUIDs {
+		if uid == "" {
+			return false, nil
+		}
+		prior[uid] = struct{}{}
+	}
+	ready := int32(0)
+	replacementSeen := false
+	for _, pod := range pods {
+		if _, wasPresent := prior[pod.UID]; wasPresent {
+			return false, nil
+		}
+		if podReady(&pod) {
+			ready++
+			replacementSeen = true
+		}
+	}
+	return replacementSeen && deployment.Spec.Replicas != nil && ready >= *deployment.Spec.Replicas, nil
 }
 
 func (a *ManagementKubernetesAdapter) runJob(ctx context.Context, capability CapabilityDescriptor, arguments map[string]json.RawMessage) (json.RawMessage, error) {
@@ -443,7 +476,7 @@ func (a *ManagementKubernetesAdapter) nodes(ctx context.Context, capability Capa
 			"capacity_memory": node.Status.Capacity.Memory().String(), "conditions": conditions,
 			"kubelet_version": node.Status.NodeInfo.KubeletVersion,
 			"os_image":        node.Status.NodeInfo.OSImage,
-			"architecture":   node.Status.NodeInfo.Architecture,
+			"architecture":    node.Status.NodeInfo.Architecture,
 		})
 	}
 	return marshalBounded(map[string]any{"server_version": serverVersion, "items": items}, capability.MaxResponseBytes)
@@ -512,18 +545,134 @@ func (a *ManagementKubernetesAdapter) rollout(ctx context.Context, capability Ca
 	if d.Spec.Replicas == nil || *d.Spec.Replicas < 2 {
 		return nil, fmt.Errorf("management workload lacks safe redundancy")
 	}
-	if capability.Name == "astronomer.management.workload_restart" && d.Status.ReadyReplicas >= *d.Spec.Replicas {
-		return nil, fmt.Errorf("management workload is healthy; restart is not justified")
-	}
-	if d.Spec.Template.Annotations == nil {
-		d.Spec.Template.Annotations = map[string]string{}
-	}
-	d.Spec.Template.Annotations["astronomer.io/charlie-operation"] = operationID
-	updated, err := a.kube.AppsV1().Deployments(a.namespace).Update(ctx, d, metav1.UpdateOptions{})
+	pods, err := a.deploymentPods(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	return marshalBounded(operationResult(argumentsWithOperation(operationID), "accepted", "deployment/"+updated.Name), capability.MaxResponseBytes)
+	if len(pods) == 0 {
+		return nil, fmt.Errorf("management workload has no controlled pods")
+	}
+	sort.Slice(pods, func(i, j int) bool { return pods[i].Name < pods[j].Name })
+	targets := pods
+	unhealthyOnly := capability.Name == "astronomer.management.workload_restart" || capability.Name == "astronomer.tunnel.restart_component"
+	if unhealthyOnly {
+		targets = nil
+		for i := range pods {
+			if !podReady(&pods[i]) {
+				targets = append(targets, pods[i])
+				break
+			}
+		}
+		if len(targets) == 0 {
+			return nil, fmt.Errorf("management workload is healthy; restart is not justified")
+		}
+	} else {
+		ready := int32(0)
+		active := 0
+		for i := range pods {
+			if pods[i].DeletionTimestamp == nil {
+				active++
+			}
+			if podReady(&pods[i]) {
+				ready++
+			}
+		}
+		if active != int(*d.Spec.Replicas) || ready != *d.Spec.Replicas || d.Status.ObservedGeneration < d.Generation {
+			return nil, fmt.Errorf("management workload is not in a safe steady state for rollout")
+		}
+	}
+	priorUIDs := make([]types.UID, 0, len(targets))
+	for i := range targets {
+		priorUIDs = append(priorUIDs, targets[i].UID)
+		if unhealthyOnly {
+			uid := targets[i].UID
+			if err := a.kube.CoreV1().Pods(a.namespace).Delete(ctx, targets[i].Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil {
+				return nil, fmt.Errorf("replace unhealthy management pod: %w", err)
+			}
+		} else {
+			if err := a.kube.CoreV1().Pods(a.namespace).EvictV1(ctx, &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: targets[i].Name, Namespace: a.namespace}, DeleteOptions: &metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &targets[i].UID}}}); err != nil {
+				return nil, fmt.Errorf("safely evict management pod: %w", err)
+			}
+		}
+		if err := a.waitForReplacement(ctx, d, targets[i].UID); err != nil {
+			return nil, err
+		}
+	}
+	result := operationResult(argumentsWithOperation(operationID), "accepted", "deployment/"+d.Name)
+	result["prior_pod_uids"] = priorUIDs
+	result["replaced_pods"] = len(priorUIDs)
+	return marshalBounded(result, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) deploymentPods(ctx context.Context, deployment *appsv1.Deployment) ([]corev1.Pod, error) {
+	if deployment == nil || deployment.Spec.Selector == nil {
+		return nil, fmt.Errorf("management workload selector is unavailable")
+	}
+	selector := metav1.FormatLabelSelector(deployment.Spec.Selector)
+	replicaSets, err := a.kube.AppsV1().ReplicaSets(a.namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, err
+	}
+	ownedReplicaSets := make(map[types.UID]struct{}, len(replicaSets.Items))
+	for i := range replicaSets.Items {
+		if controlledBy(&replicaSets.Items[i], deployment.UID, "Deployment", deployment.Name) {
+			ownedReplicaSets[replicaSets.Items[i].UID] = struct{}{}
+		}
+	}
+	if len(ownedReplicaSets) == 0 {
+		return nil, fmt.Errorf("management workload controller ownership is unavailable")
+	}
+	listed, err := a.kube.CoreV1().Pods(a.namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, err
+	}
+	pods := make([]corev1.Pod, 0, len(listed.Items))
+	for i := range listed.Items {
+		for _, owner := range listed.Items[i].OwnerReferences {
+			if owner.Controller != nil && *owner.Controller && owner.Kind == "ReplicaSet" {
+				if _, ok := ownedReplicaSets[owner.UID]; ok {
+					pods = append(pods, listed.Items[i])
+				}
+			}
+		}
+	}
+	return pods, nil
+}
+
+func (a *ManagementKubernetesAdapter) waitForReplacement(ctx context.Context, deployment *appsv1.Deployment, priorUID types.UID) error {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		pods, err := a.deploymentPods(ctx, deployment)
+		if err != nil {
+			return err
+		}
+		ready := int32(0)
+		priorPresent := false
+		for i := range pods {
+			priorPresent = priorPresent || pods[i].UID == priorUID
+			if podReady(&pods[i]) {
+				ready++
+			}
+		}
+		if !priorPresent && deployment.Spec.Replicas != nil && ready >= *deployment.Spec.Replicas {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("management pod replacement did not become ready: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func controlledBy(object metav1.Object, ownerUID types.UID, ownerKind, ownerName string) bool {
+	for _, owner := range object.GetOwnerReferences() {
+		if owner.Controller != nil && *owner.Controller && owner.UID == ownerUID && owner.Kind == ownerKind && owner.Name == ownerName {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *ManagementKubernetesAdapter) mutableDeploymentName(args map[string]json.RawMessage, capability string) (string, error) {

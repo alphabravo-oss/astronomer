@@ -3,16 +3,20 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func managementAdapterFixture(t *testing.T, objects ...runtime.Object) *ManagementKubernetesAdapter {
@@ -30,6 +34,59 @@ func ownedDeployment(name string, replicas int32) *appsv1.Deployment {
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server", Image: "registry.invalid/private:tag", Env: []corev1.EnvVar{{Name: "API_KEY", Value: "SENTINEL"}}}}}}},
 		Status:     appsv1.DeploymentStatus{ReadyReplicas: replicas, AvailableReplicas: replicas, UpdatedReplicas: replicas},
 	}
+}
+
+func rolloutAdapterFixture(t *testing.T, name string, ready []bool) *ManagementKubernetesAdapter {
+	t.Helper()
+	controller := true
+	deploymentUID := types.UID("deployment-" + name)
+	replicaSetUID := types.UID("replicaset-" + name)
+	deployment := ownedDeployment(name, int32(len(ready)))
+	deployment.UID = deploymentUID
+	deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": name}}
+	deployment.Spec.Template.Labels = map[string]string{"app": name}
+	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+		Name: name + "-rs", Namespace: "astronomer", UID: replicaSetUID, Labels: map[string]string{"app": name},
+		OwnerReferences: []metav1.OwnerReference{{Controller: &controller, Kind: "Deployment", Name: name, UID: deploymentUID}},
+	}}
+	objects := []runtime.Object{deployment, replicaSet}
+	for i, isReady := range ready {
+		status := corev1.ConditionFalse
+		if isReady {
+			status = corev1.ConditionTrue
+		}
+		objects = append(objects, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-%d", name, i), Namespace: "astronomer", UID: types.UID(fmt.Sprintf("old-%d", i)), Labels: map[string]string{"app": name},
+			OwnerReferences: []metav1.OwnerReference{{Controller: &controller, Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSetUID}},
+		}, Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: status}}}})
+	}
+	client := fake.NewClientset(objects...)
+	replacement := 0
+	replace := func(name string) error {
+		if err := client.Tracker().Delete(corev1.SchemeGroupVersion.WithResource("pods"), "astronomer", name); err != nil {
+			return err
+		}
+		replacement++
+		return client.Tracker().Add(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-replacement-%d", name, replacement), Namespace: "astronomer", UID: types.UID(fmt.Sprintf("new-%d", replacement)), Labels: map[string]string{"app": name[:strings.LastIndex(name, "-")]},
+			OwnerReferences: []metav1.OwnerReference{{Controller: &controller, Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSetUID}},
+		}, Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}})
+	}
+	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, replace(action.(k8stesting.DeleteAction).GetName())
+	})
+	client.PrependReactor("create", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		eviction := action.(k8stesting.CreateAction).GetObject().(*policyv1.Eviction)
+		return true, eviction, replace(eviction.Name)
+	})
+	adapter, err := NewManagementKubernetesAdapter(client, "astronomer", "astronomer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return adapter
 }
 
 func TestManagementKubernetesReadsOnlyOwnedRedactedShapes(t *testing.T) {
@@ -71,12 +128,13 @@ func TestManagementKubernetesWritesStayAllowlistedAndVerify(t *testing.T) {
 }
 
 func TestManagementKubernetesRolloutRequiresRedundancyAndExactReceipt(t *testing.T) {
-	adapter := managementAdapterFixture(t, ownedDeployment("astronomer-worker", 1), ownedDeployment("astronomer-server", 2))
 	descriptor, _ := capabilityByName("astronomer.management.workload_rollout")
+	adapter := rolloutAdapterFixture(t, "astronomer-worker", []bool{true})
 	unsafeArgs := rawArguments(t, map[string]any{"resource_id": "resource-a", "workload": "deployment/astronomer-worker", "operation_id": "action-a"})
 	if _, err := adapter.Execute(context.Background(), descriptor, unsafeArgs); err == nil {
 		t.Fatal("single-replica rollout was allowed")
 	}
+	adapter = rolloutAdapterFixture(t, "astronomer-server", []bool{true, true})
 	safeArgs := rawArguments(t, map[string]any{"resource_id": "resource-a", "workload": "deployment/astronomer-server", "operation_id": "action-b"})
 	result, err := adapter.Execute(context.Background(), descriptor, safeArgs)
 	if err != nil {
@@ -85,6 +143,28 @@ func TestManagementKubernetesRolloutRequiresRedundancyAndExactReceipt(t *testing
 	verified, err := adapter.Verify(context.Background(), descriptor, safeArgs, result)
 	if err != nil || !verified {
 		t.Fatalf("rollout verification = %v, %v", verified, err)
+	}
+	if strings.Contains(string(result), "charlie-operation") {
+		t.Fatalf("GitOps-sensitive pod-template mutation leaked into rollout receipt: %s", result)
+	}
+}
+
+func TestManagementKubernetesRestartReplacesOnlyAnUnhealthyControlledPod(t *testing.T) {
+	descriptor, _ := capabilityByName("astronomer.management.workload_restart")
+	healthy := rolloutAdapterFixture(t, "astronomer-worker", []bool{true, true})
+	args := rawArguments(t, map[string]any{"resource_id": "resource-a", "workload": "deployment/astronomer-worker", "operation_id": "action-c"})
+	if _, err := healthy.Execute(context.Background(), descriptor, args); err == nil || !strings.Contains(err.Error(), "healthy") {
+		t.Fatalf("healthy workload restart was not refused: %v", err)
+	}
+
+	unhealthy := rolloutAdapterFixture(t, "astronomer-worker", []bool{true, false})
+	result, err := unhealthy.Execute(context.Background(), descriptor, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := unhealthy.Verify(context.Background(), descriptor, args, result)
+	if err != nil || !verified {
+		t.Fatalf("unhealthy restart verification = %v, %v; result=%s", verified, err, result)
 	}
 }
 
