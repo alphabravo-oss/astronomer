@@ -2,11 +2,14 @@ package charlie
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -150,8 +153,16 @@ func (p *FindingProjection) applyUpsert(ctx context.Context, connection sqlc.Cha
 	}
 	queries := sqlc.New(p.pool)
 	session, err := queries.GetCharlieSessionByCentralID(ctx, summary.SessionID)
-	if err != nil || session.ConnectionID != connection.ID || session.State == "aborted" || session.State == "failed" {
-		return fmt.Errorf("Charlie finding projection session is unavailable")
+	eligible, err := findingProjectionSessionEligible(connection.ID, session, err)
+	if err != nil {
+		return err
+	}
+	if !eligible {
+		// A replacement package retains the deployment's monotonic Central
+		// history but creates a new local connection boundary. Historical or
+		// already-terminal sessions are deliberately non-applicable; advancing
+		// past them prevents one old finding from blocking every future change.
+		return nil
 	}
 	resources, err := queries.ListCharlieSessionResources(ctx, session.ID)
 	if err != nil {
@@ -171,4 +182,14 @@ func (p *FindingProjection) applyUpsert(ctx context.Context, connection sqlc.Cha
 			BlockCode: summary.BlockCode, RepeatCount: durable.RepeatCount})
 	}
 	return nil
+}
+
+func findingProjectionSessionEligible(connectionID uuid.UUID, session sqlc.CharlieSession, err error) (bool, error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return session.ConnectionID == connectionID && session.State != "aborted" && session.State != "failed", nil
 }
