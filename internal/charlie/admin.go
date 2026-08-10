@@ -24,7 +24,6 @@ var (
 	ErrReplacementPackageNeeded = errors.New("a new signed Charlie onboarding package is required")
 )
 
-
 type AdminConnectionView struct {
 	Connected              bool   `json:"connected"`
 	ProductID              string `json:"product_id,omitempty"`
@@ -374,6 +373,14 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 		Agent:      safeAdminAgent(connection),
 		Mode:       safeAdminMode(connection),
 	}
+	// An emergency stop is a transport isolation boundary, not just an action
+	// authorization bit. Do not probe the product agent, central Charlie, or
+	// artifact registry while it is armed. Apart from making the admin page
+	// responsive during an outage, this prevents a read-only status request from
+	// re-opening network activity that the operator explicitly stopped.
+	if connection.EmergencyDisabled {
+		return quiescedAdminStatus(connection), nil
+	}
 	if s.bridge != nil {
 		if bridgeStatus, statusErr := s.bridge.AdminStatus(ctx); statusErr == nil {
 			if connection.Active {
@@ -416,6 +423,10 @@ func (s *AdminService) LocalStatus(ctx context.Context) (AdminStatusView, error)
 	if err != nil {
 		return AdminStatusView{}, err
 	}
+	return quiescedAdminStatus(connection), nil
+}
+
+func quiescedAdminStatus(connection sqlc.CharlieConnection) AdminStatusView {
 	view := AdminStatusView{
 		Connection: safeAdminConnection(connection),
 		Agent:      safeAdminAgent(connection),
@@ -425,6 +436,7 @@ func (s *AdminService) LocalStatus(ctx context.Context) (AdminStatusView, error)
 	// as quiesced rather than implying that the agent was polled or is running.
 	view.Agent.ApplicationState = "inactive"
 	view.Agent.ReadyReplicas = 0
+	view.Agent.LastHeartbeatAt = ""
 	view.Agent.LeaderReplica = ""
 	view.Agent.StandbyReplicas = []string{}
 	for index := range view.Agent.Replicas {
@@ -437,7 +449,7 @@ func (s *AdminService) LocalStatus(ctx context.Context) (AdminStatusView, error)
 	view.Mode.WorkloadCeiling = ModeDisabled
 	view.Mode.WorkloadCeilingReady = false
 	view.Mode.Effects = modeEffects(ModeDisabled)
-	return view, nil
+	return view
 }
 
 func emptyAdminStatus() AdminStatusView {

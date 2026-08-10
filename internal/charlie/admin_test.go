@@ -10,6 +10,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TestAdminInstallSpecUsesPersistedSignedReplicaCount(t *testing.T) {
@@ -26,6 +27,28 @@ func TestAdminModeExposesProductOwnedWorkloadCeilingAsUnverifiedUntilReadback(t 
 	}
 	if empty := emptyAdminStatus().Mode; empty.WorkloadCeiling != ModeDisabled || empty.WorkloadCeilingReady {
 		t.Fatalf("empty mode status did not fail closed: %+v", empty)
+	}
+}
+
+func TestQuiescedAdminStatusFailsClosedWithoutHistoricalRuntimeClaims(t *testing.T) {
+	view := quiescedAdminStatus(sqlc.CharlieConnection{
+		OnboardingState: "active", HealthState: "ready", Active: true,
+		RequestedMode: "auto", VerifiedMode: "auto", EmergencyDisabled: true,
+		ReplicaCount: 2, LeaderInstanceID: "stale-leader", AgentProtocolVersion: "1.0.0",
+		LastConnectedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	if !view.Mode.EmergencyDisabled || view.Mode.Requested != ModeDisabled || view.Mode.Authoritative != ModeDisabled ||
+		view.Mode.WorkloadCeiling != ModeDisabled || view.Mode.WorkloadCeilingReady {
+		t.Fatalf("quiesced mode did not fail closed: %+v", view.Mode)
+	}
+	if view.Agent.ApplicationState != "inactive" || view.Agent.ReadyReplicas != 0 || view.Agent.LeaderReplica != "" ||
+		view.Agent.LastHeartbeatAt != "" || len(view.Agent.StandbyReplicas) != 0 {
+		t.Fatalf("quiesced agent retained historical runtime claims: %+v", view.Agent)
+	}
+	for _, replica := range view.Agent.Replicas {
+		if replica.Role != "unknown" || replica.State != "unknown" || replica.LastHeartbeatAt != "" {
+			t.Fatalf("quiesced replica retained historical runtime claims: %+v", replica)
+		}
 	}
 }
 
