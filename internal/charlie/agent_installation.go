@@ -532,45 +532,15 @@ func (i *AgentInstaller) Resume(ctx context.Context, spec AgentInstallSpec) erro
 	resources := i.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace(i.argoNamespace)
 	current, err := resources.Get(ctx, names.Application, metav1.GetOptions{})
 	if err == nil {
-		if current.GetAPIVersion() != "argoproj.io/v1alpha1" || current.GetKind() != "Application" ||
-			current.GetName() != names.Application || current.GetNamespace() != i.argoNamespace ||
-			current.GetLabels()[installationOwnerLabel] != spec.InstallationID.String() {
+		if current.GetLabels()[installationOwnerLabel] != spec.InstallationID.String() {
 			return fmt.Errorf("refuse to resume operator-owned Charlie Argo Application")
 		}
-		destination, ok, destinationErr := unstructured.NestedString(current.Object, "spec", "destination", "namespace")
-		if destinationErr != nil || !ok || destination != i.agentNamespace {
-			return fmt.Errorf("Charlie resume destination is invalid")
-		}
-		var rollbacks []func(context.Context) error
-		appendStep := func(rollback func(context.Context) error, reconcileErr error) error {
-			if reconcileErr == nil {
-				rollbacks = append(rollbacks, rollback)
-			}
-			return reconcileErr
-		}
-		rollbackAll := func() error {
-			var first error
-			for index := len(rollbacks) - 1; index >= 0; index-- {
-				if rollbackErr := rollbacks[index](ctx); rollbackErr != nil && first == nil {
-					first = rollbackErr
-				}
-			}
-			return first
-		}
-		if reconcileErr := appendStep(i.reconcileNetworkPolicy(ctx, defaultDenyPolicy(names, spec.InstallationID))); reconcileErr != nil {
-			_ = rollbackAll()
-			return reconcileErr
-		}
-		if reconcileErr := appendStep(i.reconcileNetworkPolicy(ctx, productAccessPolicy(i, names, spec.InstallationID))); reconcileErr != nil {
-			_ = rollbackAll()
-			return reconcileErr
-		}
-		if reconcileErr := appendStep(i.reconcileService(ctx, mcpService(i, spec.InstallationID))); reconcileErr != nil {
-			_ = rollbackAll()
-			return reconcileErr
+		receipt, installErr := i.Install(ctx, spec)
+		if installErr != nil {
+			return installErr
 		}
 		if metadataErr := i.metadata.MarkReconnected(ctx, spec.ConnectionID); metadataErr != nil {
-			if rollbackErr := rollbackAll(); rollbackErr != nil {
+			if rollbackErr := receipt.Rollback(ctx); rollbackErr != nil {
 				return fmt.Errorf("%w; rollback failed", metadataErr)
 			}
 			return metadataErr
