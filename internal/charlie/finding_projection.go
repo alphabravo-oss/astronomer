@@ -168,9 +168,13 @@ func (p *FindingProjection) applyUpsert(ctx context.Context, connection sqlc.Cha
 	if err != nil {
 		return err
 	}
-	target, ok := exactFindingResource(resources, summary.ResourceDigest)
+	target, ok := findingProjectionResourceEligible(resources, summary.ResourceDigest)
 	if !ok {
-		return fmt.Errorf("Charlie finding projection resource is unavailable")
+		// The signed deployment feed may contain a finding for a broader
+		// Central-side investigation resource that this exact product session
+		// did not disclose. It is not authorized for local projection, but it
+		// must not hold the monotonic cursor and suppress later in-scope items.
+		return nil
 	}
 	durable, err := p.store.UpsertCentralFinding(ctx, connection.ID, session.ID, summary, centralFindingMode(summary.BlockCode, mode))
 	if err != nil {
@@ -182,6 +186,10 @@ func (p *FindingProjection) applyUpsert(ctx context.Context, connection sqlc.Cha
 			BlockCode: summary.BlockCode, RepeatCount: durable.RepeatCount})
 	}
 	return nil
+}
+
+func findingProjectionResourceEligible(resources []sqlc.CharlieSessionResource, digest string) (sqlc.CharlieSessionResource, bool) {
+	return exactFindingResource(resources, digest)
 }
 
 func findingProjectionSessionEligible(connectionID uuid.UUID, session sqlc.CharlieSession, err error) (bool, error) {

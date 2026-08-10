@@ -33,3 +33,14 @@ func TestFindingProjectionSessionEligibilitySkipsNonApplicableHistory(t *testing
 		})
 	}
 }
+
+func TestFindingProjectionResourceEligibilitySkipsUnboundCentralFinding(t *testing.T) {
+	resources := []sqlc.CharlieSessionResource{{ResourceType: "installation", ResourceID: "local", RequiredVerb: "read"}}
+	if _, ok := findingProjectionResourceEligible(resources, findingResourceDigest("unbound-central-resource")); ok {
+		t.Fatal("unbound Central finding resource was accepted")
+	}
+	resource, ok := findingProjectionResourceEligible(resources, findingResourceDigest("local"))
+	if !ok || resource.ResourceID != "local" {
+		t.Fatalf("exact local resource=%#v ok=%t", resource, ok)
+	}
+}
