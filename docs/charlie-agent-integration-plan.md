@@ -2610,3 +2610,69 @@ A1-A14 and definition-of-done items that remain unchecked above.
   eligible auto execution, a second isolated deployment, full notification
   channel/outage coverage, downstream-packet attribution, and leader-failover
   qualification remain open and must not be inferred from this run.
+
+## 13. Charlie 1.0.40 integrated qualification addendum — 2026-08-10
+
+This addendum records the exact live replacement and the acceptance cases proved
+by this run. It does not waive any unchecked A14 or definition-of-done item.
+
+- Charlie release `v1.0.40` was built from commit
+  `cd03997f3d97426fbb882691f2980e19c485c8b2`, pushed to `main`, and deployed
+  as the separate native central service at `charlie.dev.alphabravo.io`.
+  Public UI, TLS, health, readiness, authenticated administration, product
+  deployment, instruction, platform-pack, index, session, finding, usage,
+  activity, worker, and approval API reads returned their expected success or
+  authentication status. PostgreSQL/pgvector, RustFS, RAG, models, providers,
+  and orchestration remained on the Charlie server.
+- Qualification found that Charlie's admin API-key list included short-lived
+  product-agent runtime and artifact-pull credentials. Charlie 1.0.40 now returns
+  only operator-managed `service` credentials, with regression coverage for
+  excluding both internal purposes. The live Astronomer deployment consequently
+  reports zero managed API keys instead of thousands of internal credentials.
+- Astronomer commit `fb558026f1d4fa711c6bfefcdbac5a7369b2fef4` pins Charlie
+  source `cd03997f3d97426fbb882691f2980e19c485c8b2` and agent/chart `1.0.40`.
+  The running server image is `astronomer-go-server:charlie-fb55802`. A signed,
+  single-use replacement package installed agent image
+  `sha256:9439837c5ecd1b075cc9d5050b9925957f89a27c38394cb671c8f2cfb1038797`
+  and chart
+  `sha256:83ad89c724535f6c99da7a66788c334c8af139fd16b373d8c7cabbe797997580`
+  exclusively from Charlie. Both replicas became ready and Argo reported
+  `Synced/Healthy` before promotion.
+- An initial promotion attempt was rejected while Kubernetes still projected
+  the previous bridge mTLS Secret. After the mounted certificate, key, and CA
+  matched the current Secret and bridge readiness recovered, the same promotion
+  succeeded. Promotion did not inherit authority: disclosure acknowledgement
+  and the revision-checked `read_only` request were restored separately. Final
+  requested and authoritative modes are `read_only/read_only` at revision 242,
+  with the read-only workload ceiling ready and emergency disable clear.
+- A real read-only chat inspected the Astronomer worker Deployment and reported
+  2/2 ready replicas, observed generation 31, and zero restarts/OOM kills. Its
+  requested rollout was rejected by the read-only ceiling. No approval was
+  created and both worker pod UIDs remained unchanged. This closes A14-009 for
+  the current release but does not prove the approval-required or automation
+  matrices.
+- Exact leader isolation transferred the central lease from ordinal 1 to
+  ordinal 0 and advanced the fencing epoch to 53. The isolated leader could not
+  remain authoritative; after connectivity was restored it rejoined as standby.
+  Both replicas remained enabled and ready, and the temporary host rule was
+  removed. This is one live HA/fencing case, not the complete per-write-boundary
+  corpus required by A14-014.
+- Stopping Charlie central made public readiness fail and, after the bounded
+  grace period, made both product-agent enrollment readiness checks return 503
+  with `control_connected=false`; a new Astronomer session failed with 503.
+  Restarting central restored public readiness, both replicas, authenticated
+  administration, and session service without raising authority. The admin
+  session cookie survived the central restart. This is a central-outage subset,
+  not the complete component restart matrix in A14-015.
+- `make charlie-contract-check`, focused Charlie integration tests, and
+  Astronomer's enterprise verification pass on the pinned source. Charlie's Go
+  and race suites, 27 frontend tests, 125 OpenCode tests (one explicitly
+  live-provider-gated skip), SDK/package/example tests and builds, Helm checks,
+  generated-contract checks, and production builds pass for release 1.0.40.
+- One observability follow-up remains: the deployment-status endpoint currently
+  load-balances a replica-local bridge view, so successive reads can show the
+  other replica as `unknown` even though per-pod metrics and the central lease
+  prove one leader and one standby. Aggregate both replica reports, or label the
+  response as a local observation, before treating that table as authoritative.
+  A central-outage session error should also expose a stable
+  `charlie_unavailable` code instead of the current generic `internal_error`.
