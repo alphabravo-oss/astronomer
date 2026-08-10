@@ -52,6 +52,22 @@ func TestQuiescedAdminStatusFailsClosedWithoutHistoricalRuntimeClaims(t *testing
 	}
 }
 
+func TestConnectionTransportQuiescedUntilActiveAndEmergencyClear(t *testing.T) {
+	for name, connection := range map[string]sqlc.CharlieConnection{
+		"staged replacement": {Active: false},
+		"emergency stopped":  {Active: true, EmergencyDisabled: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !connectionTransportQuiesced(connection) {
+				t.Fatal("isolated connection was allowed to open transport")
+			}
+		})
+	}
+	if connectionTransportQuiesced(sqlc.CharlieConnection{Active: true}) {
+		t.Fatal("active non-emergency connection remained quiesced")
+	}
+}
+
 func TestAdminServiceAuditFailurePrecedesAutomationAuthorityMutation(t *testing.T) {
 	service := &AdminService{auditor: &authorityAuditFake{err: errors.New("database-SENTINEL")}}
 	if _, err := service.SetAutomationIdentity(context.Background(), true); err == nil || strings.Contains(err.Error(), "database-SENTINEL") {
