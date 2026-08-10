@@ -301,6 +301,15 @@ session has `source=event` and `visibility=incident`, and that exactly one
 allowlisted product action succeeds. Reusing a task ID or a pre-existing
 incident fails closed.
 
+The autonomous scenario never creates or reuses a human chat session. It first
+observes the new terminal event, locates the single local incident session whose
+`client_session_id` is that event ID, and learns the turn only from the signed
+action event stream. An owner user, private visibility, browser message receipt,
+or action bound to another turn invalidates the proof. An open circuit is a
+successful safety denial but does not satisfy `auto_allowlisted_success`; reset
+or policy changes must use Charlie's audited, revision-checked configuration
+API and must be restored after a dedicated qualification run.
+
 The discovery drivers call an authenticated administrator surface that accepts
 only `mixed_catalog` or `malformed_catalog`. It compiles embedded candidates
 through Astronomer's production catalog compiler, never accepts arbitrary

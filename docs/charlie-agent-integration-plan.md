@@ -2702,12 +2702,63 @@ widening Charlie's downstream-cluster boundary.
   projector. Accept only summaries bound to an existing central session and the
   exact digest of one local management-plane session resource; publish alerts
   through the existing deduplicating local finding path.
-- [ ] Publish Charlie 1.0.41 immutable central/agent artifacts and record their
+- [x] Build and serve Charlie 1.0.41 immutable central/agent artifacts from
+  Charlie OCI and record their
   digests and source commit.
-- [ ] Issue and consume one fresh signed replacement onboarding package for the
+- [x] Issue and consume one fresh signed replacement onboarding package for the
   expired pre-lease installation, then prove Argo returns to Synced/Healthy.
-- [ ] Force one lease renewal window and prove claim, exact dual-secret
+- [x] Force one lease renewal window and prove claim, exact dual-secret
   materialization, acknowledgement, prior-token overlap, restart replay, and
   zero plaintext leakage against the live deployment.
-- [ ] Run the event-bound autonomous qualification and prove the local finding
+- [x] Run the event-bound autonomous qualification and prove the local finding
   projection cursor catches a central-only finding after restart.
+
+#### Live 1.0.41 recovery and automation evidence
+
+- Charlie `v1.0.41` was built from `e638eddb` and installed from Charlie's
+  OCI service using image
+  `sha256:c173c65d829dee8b3c6fd3a72e4c189f64cbda62bbe854c7a20bf719f370050f`
+  and chart
+  `sha256:8b71eb2099ae22dcf58ff39d7d78f48098e76d9a236e3bf0eeba3d05ac3aa6d6`.
+  The replacement package was accepted through the authenticated Astronomer
+  API, the upgrade operation completed, both agent replicas reported 1.0.41,
+  and Argo returned to `Synced/Healthy` with the exact immutable digests.
+- Generation one was moved into its renewal window. Astronomer claimed,
+  materialized, read back, and acknowledged generation two; both the
+  `astronomer-charlie` image-pull Secret and Astronomer Argo repository Secret
+  changed, while no credential bytes entered the database or evidence log.
+  Charlie marked generation one superseded with its bounded 24-hour overlap.
+  Restarting Astronomer produced no extra generation and no digest drift.
+- A real malformed, zero-retry `catalog:sync` Asynq task exercised the worker's
+  normal terminal callback. It created durable event
+  `c6a46fd7-04b5-4639-baf0-bd6c49d379de`, event-owned incident session
+  `14f94877-38fa-4f1a-a4c7-9dd8f59ad6f7`, and no human owner or browser
+  message. With the reviewed queue rule and exact retry capability temporarily
+  raised to the `auto` ceiling, Charlie emitted exactly one
+  `astronomer.queue.retry_task` write. Receipt
+  `aact_b88d73665be341cbdf10b127d72b1e8f` succeeded once, reserved the
+  automation budget, and produced one each of proposed, approved, dispatched,
+  and succeeded audit phases. The intentionally malformed task failed again
+  after retry; the existing event coalesced to repeat count two and no second
+  write executed.
+- The first live autonomous attempt encountered the already-open Charlie
+  circuit and was denied. That denial projected as the existing local circuit
+  finding with an incremented repeat count. The safety policy was changed only
+  through Charlie's revision-checked audited API for the bounded qualification,
+  then restored to failure limit three and 900-second window. Astronomer was
+  restored to acknowledged `read_only` at central revision 262; the queue rule
+  remains enabled with a read-only ceiling and the local retry action policy is
+  disabled.
+- Finding-feed compatibility now takes workflow metadata from Charlie's
+  authoritative finding row, skips historical sessions belonging to replaced
+  connections, and treats a resource not bound to the current product session
+  as non-applicable instead of allowing it to stall the monotonic cursor. A
+  valid circuit finding projected once, advanced the cursor from 186 through
+  191 without an error, retained repeat count four, and remained single after
+  API restart/replay. No unbound finding was persisted.
+- Charlie's complete repository verification passed after central hotfix
+  `d80e8a2`. Astronomer's focused Charlie/server/worker tests and race-enabled
+  Charlie/worker tests pass through product commit `b8ba374`. Trigger metadata,
+  action audit details, worker logs, and both agent logs contained no bearer,
+  password, API-key, JWT, or raw queue-payload material in the qualification
+  window.

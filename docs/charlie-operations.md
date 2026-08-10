@@ -167,6 +167,29 @@ request; never generate a second credential while one is pending.
    dead source and fingerprint, creates at most one active retry attempt, and
    uses that request ID as the new event/session idempotency boundary. Never
    edit or revive the dead row or its terminal/ambiguous session in place.
+6. `queue_terminal_failure` is emitted by Asynq's production terminal error
+   callback, not by an operator or a database insert. The closed task catalog
+   decides whether a terminal task is eligible. Payload bytes and raw worker
+   errors are never copied into the event. Keep the rule enabled at a
+   `read_only` ceiling for findings; raising its ceiling also requires the exact
+   product-local action policy, Charlie's independent allowlist, current
+   disclosure acknowledgement, budgets, cooldown, and closed circuit.
+
+### Finding projection cursor is stalled
+
+1. Inspect `charlie_finding_projection_cursors.sequence` and the stable
+   `last_error_code`; do not edit the cursor or copy a central finding locally.
+2. A finding is projectable only when its central session maps to the active
+   connection and its resource digest exactly matches that local session's
+   management-plane scope. Historical sessions from a replaced installation and
+   findings for resources outside that exact scope are non-applicable and are
+   skipped while the cursor advances.
+3. Valid records are upserted by Charlie finding ID through the existing local
+   finding/alert path. Restart and replay must retain one local row, one dedupe
+   identity, and the latest repeat count.
+4. Workflow, status, block, severity, and repeat count come from Charlie's
+   authoritative finding record. The encrypted evidence envelope supplies only
+   scoped presentation fields and must never override newer workflow state.
 
 ### Actionable finding requires operator attention
 
