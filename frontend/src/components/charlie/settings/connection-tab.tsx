@@ -7,7 +7,6 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";

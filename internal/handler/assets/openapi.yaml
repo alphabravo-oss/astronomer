@@ -651,7 +651,7 @@ components:
     CharlieApprovalSummary:
       type: object
       additionalProperties: false
-      required: [id, title, state, eligible, capability, target, risk, expiresAt]
+      required: [id, title, state, eligible, capability, target, risk, effect, requiredPermission, expiresAt]
       description: Bounded display metadata only; signed authority material never crosses the browser boundary.
       properties:
         id: {type: string, minLength: 1, maxLength: 128}
@@ -661,8 +661,23 @@ components:
         capability: {type: string}
         target: {type: string}
         risk: {type: string}
+        effect: {type: string, enum: [write]}
+        requiredPermission: {type: string}
         expiresAt: {type: string, format: date-time}
         reason: {type: string, maxLength: 512}
+        review: {$ref: '#/components/schemas/CharlieApprovalReviewSummary'}
+    CharlieApprovalReviewSummary:
+      type: object
+      additionalProperties: false
+      required: [argumentsWithheld]
+      description: Product-projected human review content; raw action arguments and authority material are excluded.
+      properties:
+        description: {type: string, minLength: 1, maxLength: 4096}
+        expectedImpact: {type: string, minLength: 1, maxLength: 4096}
+        reversible: {type: boolean}
+        rollback: {type: string, minLength: 1, maxLength: 4096}
+        destructive: {type: boolean}
+        argumentsWithheld: {type: boolean, const: true}
     CharlieApprovalDecisionRequest:
       type: object
       additionalProperties: false

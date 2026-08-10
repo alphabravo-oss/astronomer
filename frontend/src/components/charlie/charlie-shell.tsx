@@ -68,15 +68,6 @@ function isCharlieRateLimitedError(error: unknown): boolean {
   return charlieErrorStatus(error) === 429;
 }
 
-function isCharlieStaleSessionError(error: unknown): boolean {
-  const status = charlieErrorStatus(error);
-  if (status === 409 || status === 503 || status === 404) return true;
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return /no longer open for messages|message is unavailable|session does not accept/i.test(
-    message,
-  );
-}
-
 /** Animated thinking indicator while Charlie is preparing a reply. */
 function CharlieThinkingDots() {
   return (
@@ -201,7 +192,10 @@ export const productModeCopy = {
 } as const;
 
 export function productModePresentation(mode: string | undefined) {
-  return productModeCopy[mode as keyof typeof productModeCopy] ?? {
+  if (mode && mode in productModeCopy) {
+    return productModeCopy[mode as keyof typeof productModeCopy];
+  }
+  return {
     key: "unknown" as const,
     label: "Mode unknown",
     short: "Unknown",
@@ -337,7 +331,7 @@ function ContextPicker() {
 }
 
 function CharlieDrawer() {
-  const { setOpen, resources, remove } = useCharlie();
+  const { open, setOpen, resources, remove } = useCharlie();
   const qc = useQueryClient();
   const [threadId, setThreadId] = useState<string>();
   const [sessionId, setSessionId] = useState<string>();
@@ -527,24 +521,26 @@ function CharlieDrawer() {
   // Optimistic local user rows use random ids; history returns server item ids.
   // Drop local user bubbles once the same content appears in history so "hi"
   // does not render twice.
-  const historyMessages = history.data ?? [];
-  const historyUserContents = new Set(
-    historyMessages
-      .filter((m) => m.role === "user")
-      .map((m) => m.content.trim()),
-  );
-  const optimistic = local.filter(
-    (m) =>
-      m.role !== "user" ||
-      !historyUserContents.has(m.content.trim()) ||
-      // Keep the optimistic row only until history has loaded at least one user turn.
-      historyMessages.length === 0,
-  );
-  // Prefer server history order; optimistic only when not yet confirmed.
-  const messages = [
-    ...historyMessages,
-    ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
-  ];
+  const messages = useMemo(() => {
+    const historyMessages = history.data ?? [];
+    const historyUserContents = new Set(
+      historyMessages
+        .filter((m) => m.role === "user")
+        .map((m) => m.content.trim()),
+    );
+    const optimistic = local.filter(
+      (m) =>
+        m.role !== "user" ||
+        !historyUserContents.has(m.content.trim()) ||
+        // Keep the optimistic row until history has loaded at least one user turn.
+        historyMessages.length === 0,
+    );
+    // Prefer server history order; optimistic only when not yet confirmed.
+    return [
+      ...historyMessages,
+      ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
+    ];
+  }, [history.data, local]);
   // Clear thinking once history shows an assistant reply after the last user turn.
   useEffect(() => {
     if (!awaitingReply || messages.length === 0) return;

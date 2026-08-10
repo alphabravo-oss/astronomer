@@ -21,7 +21,7 @@ import {
   runCharlieAgentAction,
   uninstallCharlieAgent,
 } from "@/lib/api/charlie-admin";
-import { Meta, Section, Unavailable, button, primary } from "./shared";
+import { Meta, Section, Unavailable, button } from "./shared";
 
 export function agentActionsForState(
   state: string,
@@ -201,4 +201,3 @@ export function AgentTab() {
     </Section>
   );
 }
-

@@ -81,12 +81,17 @@
     "signing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["algorithm", "canonicalization", "key_id", "public_key_sha256"],
+      "required": ["algorithm", "canonicalization", "key_id", "public_key_sha256", "public_key"],
       "properties": {
         "algorithm": {"type": "string", "const": "Ed25519"},
         "canonicalization": {"type": "string", "const": "RFC8785"},
         "key_id": {"$ref": "#/$defs/opaqueId"},
-        "public_key_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        "public_key_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "public_key": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "Unpadded base64url Ed25519 public key, so an air-gapped agent can verify action envelopes without a network fetch. Never verify THIS package with it: the package is signed by this key, so that proves only self-agreement. Verify with an out-of-band key and compare its fingerprint against public_key_sha256."
+        }
       }
     },
     "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$", "writeOnly": true}

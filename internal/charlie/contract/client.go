@@ -147,6 +147,9 @@ type (
 	ApprovalDecisionDecision          = bridgewire.ApprovalDecisionDecision
 	ApprovalManifest                  = bridgewire.ApprovalManifest
 	ApprovalManifestResource          = bridgewire.ApprovalManifestResource
+	ApprovalReviewSummary             = bridgewire.ApprovalReviewSummary
+	ApprovalReviewSummaryEffect       = bridgewire.ApprovalReviewSummaryEffect
+	ApprovalReviewSummaryRisk         = bridgewire.ApprovalReviewSummaryRisk
 	BridgeStatus                      = bridgewire.BridgeStatus
 	CreateInvestigation               = bridgewire.CreateInvestigation
 	CreateMessage                     = bridgewire.CreateMessage

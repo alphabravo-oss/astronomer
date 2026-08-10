@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -51,7 +50,7 @@ func executeAcceptanceAction(t *testing.T, facts AuthorityInput) (ActionResult, 
 	})
 	if facts.ApprovalRequested || (facts.Mode == ModeApproval && facts.ApprovalPresent) {
 		action.ApprovalID = "approval-a"
-		payload, marshalErr := json.Marshal(action.signed())
+		payload, marshalErr := actionEnvelopeSigningBytes(action)
 		if marshalErr != nil {
 			t.Fatal(marshalErr)
 		}

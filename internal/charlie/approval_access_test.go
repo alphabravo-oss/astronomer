@@ -181,6 +181,7 @@ type approvalBridgeFake struct {
 	approval contract.Approval
 	fail     bool
 	decides  int
+	decision BridgeApprovalDecision
 }
 
 func (f *approvalBridgeFake) ListApprovals(context.Context, string) ([]contract.Approval, error) {
@@ -188,15 +189,16 @@ func (f *approvalBridgeFake) ListApprovals(context.Context, string) ([]contract.
 	defer f.mu.Unlock()
 	return []contract.Approval{f.approval}, nil
 }
-func (f *approvalBridgeFake) DecideApproval(_ context.Context, _ string, _ string, _ uuid.UUID, decision, _ string) (contract.Approval, error) {
+func (f *approvalBridgeFake) DecideApproval(_ context.Context, _ string, _ string, input BridgeApprovalDecision) (contract.Approval, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.decides++
+	f.decision = input
 	if f.fail {
 		return contract.Approval{}, errors.New("bridge")
 	}
 	result := f.approval
-	if decision == "approve" {
+	if input.Decision == "approve" {
 		result.State = "approved"
 	} else {
 		result.State = "rejected"
@@ -305,7 +307,15 @@ func approvalAccessFixture(t *testing.T) (*ApprovalAccessService, *approvalAcces
 		t.Fatal(err)
 	}
 	manifest.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
-	approval := contract.Approval{ApprovalId: "approval-a", ActionId: "action-a", State: "pending", ExpiresAt: manifest.ExpiresAt, Manifest: manifest}
+	description, impact, rollback := "Retry one failed management-plane task.", "The exact queued task is retried once.", "Stop the retry worker and inspect the task receipt."
+	reversible, destructive := true, false
+	approval := contract.Approval{
+		ApprovalId: "approval-a", ActionId: "action-a", State: "pending", ExpiresAt: manifest.ExpiresAt, Manifest: manifest,
+		Review: &contract.ApprovalReviewSummary{
+			Capability: manifest.Capability, Effect: "write", Risk: "medium", ArgumentsWithheld: true,
+			Description: &description, ExpectedImpact: &impact, Reversible: &reversible, Rollback: &rollback, Destructive: &destructive,
+		},
+	}
 	store := &approvalAccessStoreFake{connection: connection, session: session, resources: []sqlc.CharlieSessionResource{{SessionID: sessionID, ResourceType: "management_component", ResourceID: "task-a", RequiredVerb: "read"}}}
 	bridge := &approvalBridgeFake{approval: approval}
 	bindings := approvalBindingsFake{actor: actorID, approve: true, target: true}
@@ -327,6 +337,11 @@ func TestApprovalAccessPersistsExactFindingAndUpdatesItOnRejection(t *testing.T)
 	items, err := service.List(context.Background(), actorID)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("approval list = %#v err=%v", items, err)
+	}
+	if items[0].Review == nil || items[0].Review.Description != "Retry one failed management-plane task." ||
+		items[0].Review.ExpectedImpact != "The exact queued task is retried once." || items[0].Review.Reversible == nil || !*items[0].Review.Reversible ||
+		items[0].Review.Destructive == nil || *items[0].Review.Destructive || !items[0].Review.ArgumentsWithheld {
+		t.Fatalf("safe approval review projection = %#v", items[0].Review)
 	}
 	if store.finding.ApprovalID.String != "approval-a" || store.finding.SessionID.Bytes != store.session.ID || store.finding.ExpiresAt.Time != bridge.approval.Manifest.ExpiresAt || store.finding.ExecutionBlockCode != "approval_required" {
 		t.Fatalf("approval finding is not exact: %#v", store.finding)
@@ -369,6 +384,9 @@ func TestApprovalAccessApprovesExactSignedActionOnce(t *testing.T) {
 	if store.approval.ResourceType != "management_component" || store.approval.ResourceID != "task-a" {
 		t.Fatalf("local approval did not retain the exact signed resource: %+v", store.approval)
 	}
+	if bridge.decision.DecidedBy != "user:"+actorID.String() || bridge.decision.Rationale != "bounded retry" || bridge.decision.RequestID != requestID || bridge.decision.ManifestDigest != store.approval.ManifestDigest {
+		t.Fatalf("bridge decision did not bind the real actor and bounded rationale: %#v", bridge.decision)
+	}
 	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "bounded retry"); err != nil || bridge.decides != 1 {
 		t.Fatalf("safe replay reached central bridge: calls=%d err=%v", bridge.decides, err)
 	}
@@ -377,6 +395,29 @@ func TestApprovalAccessApprovesExactSignedActionOnce(t *testing.T) {
 	}
 	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "approve", "changed rationale"); err == nil || bridge.decides != 1 {
 		t.Fatalf("changed replay payload adopted prior authority: calls=%d err=%v", bridge.decides, err)
+	}
+}
+
+func TestApprovalAccessTrimsRationaleBeforeBindingAndRejectsUnsafeReview(t *testing.T) {
+	service, _, bridge, actorID := approvalAccessFixture(t)
+	requestID := uuid.New()
+	if _, err := service.Decide(context.Background(), actorID, "approval-a", requestID, "reject", "  operator decision  \n"); err != nil {
+		t.Fatal(err)
+	}
+	if bridge.decision.Rationale != "operator decision" {
+		t.Fatalf("rationale was not trimmed: %q", bridge.decision.Rationale)
+	}
+
+	service, _, bridge, actorID = approvalAccessFixture(t)
+	bridge.approval.Review.ArgumentsWithheld = false
+	if items, err := service.List(context.Background(), actorID); err != nil || len(items) != 0 {
+		t.Fatalf("review that exposed arguments remained actionable: items=%#v err=%v", items, err)
+	}
+
+	service, _, bridge, actorID = approvalAccessFixture(t)
+	bridge.approval.Review.Risk = "critical"
+	if items, err := service.List(context.Background(), actorID); err != nil || len(items) != 0 {
+		t.Fatalf("review with mismatched authority remained actionable: items=%#v err=%v", items, err)
 	}
 }
 

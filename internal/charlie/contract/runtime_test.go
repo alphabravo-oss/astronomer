@@ -152,6 +152,28 @@ func TestRuntimeRejectsForgedFindingExecutionFields(t *testing.T) {
 	}
 }
 
+func TestRuntimeRejectsRawApprovalArgumentsAndAuthorityInReview(t *testing.T) {
+	for _, response := range []struct{ name, field string }{
+		{name: "raw arguments", field: `"arguments":{"token":"must-not-cross"}`},
+		{name: "authorization", field: `"authorization_ref":"must-not-cross"`},
+		{name: "manifest", field: `"authority_manifest":{"forged":true}`},
+	} {
+		t.Run(response.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"approval_id":"approval-a","action_id":"action-a","state":"pending","expires_at":"2026-08-10T12:00:00Z","manifest":{},"review":{"capability":"astronomer.queue.retry_task","effect":"write","risk":"medium","arguments_withheld":true,`+response.field+`}}`)
+			}))
+			defer server.Close()
+			var active atomic.Bool
+			active.Store(true)
+			var output Approval
+			if err := testRuntime(server, &active).DoJSONAuthorized(context.Background(), http.MethodGet, "/approvals/approval-a", "", "opaque-product-ref", nil, &output); err == nil || strings.Contains(err.Error(), "must-not-cross") {
+				t.Fatalf("unsafe approval review crossed the strict bridge decoder: %v", err)
+			}
+		})
+	}
+}
+
 func TestStreamEnforcesTurnTimeoutAndCancelsBlockedResponse(t *testing.T) {
 	cancelled := make(chan struct{}, 1)
 	var calls atomic.Int32

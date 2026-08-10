@@ -219,6 +219,13 @@ func verifyOnboardingSignature(raw []byte, pkg contract.OnboardingPackage, confi
 	if !ed25519.Verify(ed25519.PublicKey(publicKey), signingBytes, signature) {
 		return nil, fmt.Errorf("onboarding signature verification failed")
 	}
+	// The package is authentic under the independently supplied key. Only now
+	// trust its embedded copy enough to compare it; the embedded key is for the
+	// air-gapped agent's action-envelope checks, never for verifying this package.
+	embeddedKey, err := base64.RawURLEncoding.DecodeString(pkg.Signing.PublicKey)
+	if err != nil || len(embeddedKey) != ed25519.PublicKeySize || !bytes.Equal(embeddedKey, publicKey) {
+		return nil, fmt.Errorf("Charlie embedded signing key does not match operator confirmation")
+	}
 	return ed25519.PublicKey(publicKey), nil
 }
 

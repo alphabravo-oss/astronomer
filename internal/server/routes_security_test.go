@@ -968,6 +968,7 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 		CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil),
 		CharlieAdmin:      handler.NewCharlieAdminHandler(nil, nil),
 		CharlieSessions:   handler.NewCharlieSessionHandler(nil, nil),
+		CharlieThreads:    handler.NewCharlieThreadHandler(nil),
 		CharlieFindings:   handler.NewCharlieFindingHandler(nil),
 		CharlieOperations: handler.NewCharlieOperationHandler(nil),
 		CharlieContext:    handler.NewCharlieContextHandler(routeSecurityCharlieContextSearcher{}),

@@ -632,6 +632,14 @@ export interface OpenAPIComponents {
           "decision": "approve" | "reject" | "deny";
           "rationale"?: string;
         };
+    CharlieApprovalReviewSummary: {
+          "description"?: string;
+          "expectedImpact"?: string;
+          "reversible"?: boolean;
+          "rollback"?: string;
+          "destructive"?: boolean;
+          "argumentsWithheld": boolean;
+        };
     CharlieApprovalSummary: {
           "id": string;
           "title": string;
@@ -640,8 +648,11 @@ export interface OpenAPIComponents {
           "capability": string;
           "target": string;
           "risk": string;
+          "effect": "write";
+          "requiredPermission": string;
           "expiresAt": string;
           "reason"?: string;
+          "review"?: OpenAPIComponents['schemas']['CharlieApprovalReviewSummary'];
         };
     CharlieContextSearchResult: {
           "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
@@ -2057,6 +2068,7 @@ export type CharlieAdminStatus = OpenAPIComponents['schemas']['CharlieAdminStatu
 export type CharlieAdminTriggerEvent = OpenAPIComponents['schemas']['CharlieAdminTriggerEvent'];
 export type CharlieAdminTriggerRule = OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
 export type CharlieApprovalDecisionRequest = OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
+export type CharlieApprovalReviewSummary = OpenAPIComponents['schemas']['CharlieApprovalReviewSummary'];
 export type CharlieApprovalSummary = OpenAPIComponents['schemas']['CharlieApprovalSummary'];
 export type CharlieContextSearchResult = OpenAPIComponents['schemas']['CharlieContextSearchResult'];
 export type CharlieDiscoveryQualificationRequest = OpenAPIComponents['schemas']['CharlieDiscoveryQualificationRequest'];

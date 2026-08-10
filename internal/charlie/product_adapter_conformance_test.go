@@ -372,7 +372,7 @@ func adapterSignedAction(t *testing.T, privateKey ed25519.PrivateKey, effect, ap
 
 func adapterSignAction(t *testing.T, privateKey ed25519.PrivateKey, action *ActionEnvelope) {
 	t.Helper()
-	payload, err := json.Marshal(action.signed())
+	payload, err := actionEnvelopeSigningBytes(*action)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,6 @@ import { Link } from "@/lib/link";
 import {
   decideCharlieApproval,
   getCharlieFinding,
-  getCharlieHistory,
   getCharlieOverview,
   listCharlieApprovals,
   listCharlieFindings,
@@ -718,6 +717,18 @@ function Approvals({ selected }: { selected: string | null }) {
           <p className="mt-2 text-sm">
             {a.capability} on {a.target} · risk {a.risk}
           </p>
+          {a.review && (
+            <section className="mt-3 rounded-md border bg-muted/30 p-3 text-sm" aria-label={`Review summary for ${a.title}`}>
+              {a.review.description && <p>{a.review.description}</p>}
+              <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                {a.review.expectedImpact && <div><dt className="text-foreground/70">Expected impact</dt><dd>{a.review.expectedImpact}</dd></div>}
+                {a.review.reversible !== undefined && <div><dt className="text-foreground/70">Reversible</dt><dd>{a.review.reversible ? "Yes" : "No"}</dd></div>}
+                {a.review.rollback && <div><dt className="text-foreground/70">Rollback</dt><dd>{a.review.rollback}</dd></div>}
+                {a.review.destructive !== undefined && <div><dt className="text-foreground/70">Destructive</dt><dd>{a.review.destructive ? "Yes" : "No"}</dd></div>}
+                <div><dt className="text-foreground/70">Arguments</dt><dd>{a.review.argumentsWithheld ? "Withheld by Charlie" : "Unavailable"}</dd></div>
+              </dl>
+            </section>
+          )}
           <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
             <div><dt className="text-foreground/70">Effect</dt><dd>{a.effect ?? "bounded write"}</dd></div>
             <div><dt className="text-foreground/70">Required permission</dt><dd>{a.requiredPermission ?? "Exact target permission"}</dd></div>
@@ -773,9 +784,9 @@ function Approvals({ selected }: { selected: string | null }) {
         onClose={() => setConfirm(undefined)}
         onConfirm={() => confirm && decide.mutate({ id: confirm.approval.id, d: confirm.decision, rationale: rationales[confirm.approval.id] ?? "" })}
         title={confirm?.decision === "approve" ? "Approve exact Charlie action" : "Deny exact Charlie action"}
-        description={confirm ? `${confirm.approval.capability} on ${confirm.approval.target}. No broader action is authorized.` : ""}
+        description={confirm ? `${confirm.approval.review?.description ?? confirm.approval.capability} on ${confirm.approval.target}. ${confirm.approval.review?.destructive ? "Charlie marks this action as destructive. " : ""}No broader action is authorized.` : ""}
         confirmText={confirm?.decision === "approve" ? "Approve exact action" : "Deny exact action"}
-        variant={confirm?.decision === "deny" ? "destructive" : undefined}
+        variant={confirm?.decision === "deny" || confirm?.approval.review?.destructive ? "destructive" : undefined}
         loading={decide.isPending}
       />
     </div>

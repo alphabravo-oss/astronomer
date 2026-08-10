@@ -4,8 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  RefreshCw,
-  Save,
 } from "lucide-react";
 import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -21,7 +19,7 @@ import {
   updateCharlieMode,
   type CharlieMode,
 } from "@/lib/api/charlie-admin";
-import { Meta, Section, Unavailable, button, primary } from "./shared";
+import { Meta, Section, Unavailable, button } from "./shared";
 
 const modeHelp: Record<CharlieMode, string> = {
   disabled:
@@ -624,4 +622,3 @@ export function ModeTab() {
     </div>
   );
 }
-

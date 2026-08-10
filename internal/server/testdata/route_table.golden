@@ -200,6 +200,9 @@ GET /api/v1/charlie/sessions
 GET /api/v1/charlie/sessions/{session_id}
 GET /api/v1/charlie/sessions/{session_id}/events
 GET /api/v1/charlie/sessions/{session_id}/history
+GET /api/v1/charlie/threads
+GET /api/v1/charlie/threads/active
+GET /api/v1/charlie/threads/{thread_id}/history
 GET /api/v1/charts/{chart_id}/ratings
 GET /api/v1/charts/{chart_id}/ratings/aggregate
 GET /api/v1/charts/{chart_id}/ratings/mine
@@ -529,6 +532,8 @@ POST /api/v1/charlie/findings/{finding_id}/start-remediation
 POST /api/v1/charlie/sessions
 POST /api/v1/charlie/sessions/{session_id}/abort
 POST /api/v1/charlie/sessions/{session_id}/messages
+POST /api/v1/charlie/threads/messages
+POST /api/v1/charlie/threads/new
 POST /api/v1/charts/{chart_id}/ratings
 POST /api/v1/cluster-groups
 POST /api/v1/cluster-groups/{id}/move

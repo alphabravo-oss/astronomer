@@ -294,7 +294,7 @@ func signedTestAction(t *testing.T, privateKey ed25519.PrivateKey, capability st
 		DisclosureDigest: "disclosure-a", ModeRevision: 2, PolicyRevision: 2,
 		FencingEpoch: 7, ExpiresAt: time.Now().Add(time.Minute).UTC(), IdempotencyKey: "action-a",
 	}
-	payload, err := json.Marshal(action.signed())
+	payload, err := actionEnvelopeSigningBytes(action)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -681,7 +681,7 @@ func TestActionGuardRequiresAtomicApprovalOrBudgetConsumption(t *testing.T) {
 	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
 	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 	action.ApprovalID = "approval-a"
-	payload, _ := json.Marshal(action.signed())
+	payload, _ := actionEnvelopeSigningBytes(action)
 	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 	result := guard.Execute(context.Background(), action)
 	if result.Code != DeniedApprovalInvalid || authority.commitCalls != 1 || executor.calls != 0 || stringSlice(receipts.transitions) != stringSlice([]string{"blocked"}) {
@@ -703,7 +703,7 @@ func TestActionGuardPersistsDeferralWithoutDispatch(t *testing.T) {
 	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
 	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 	action.ApprovalID = "approval-a"
-	payload, _ := json.Marshal(action.signed())
+	payload, _ := actionEnvelopeSigningBytes(action)
 	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 
 	result := guard.Execute(context.Background(), action)
@@ -852,7 +852,7 @@ func TestActionGuardAuditOutageIsActionableRetrySafeAndNeverDispatches(t *testin
 			guard.SetFindingRecorder(findings, "installation-a")
 			action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 			action.ApprovalID = "approval-a"
-			payload, _ := json.Marshal(action.signed())
+			payload, _ := actionEnvelopeSigningBytes(action)
 			action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 			result := guard.Execute(context.Background(), action)
 			wantTransitions := []string{"blocked"}
@@ -995,7 +995,7 @@ func TestActionGuardEmergencyDisableWinsWhileRequiredAuditIsInFlight(t *testing.
 			guard.SetFindingRecorder(findings, "installation-a")
 			action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 			action.ApprovalID = "approval-a"
-			payload, _ := json.Marshal(action.signed())
+			payload, _ := actionEnvelopeSigningBytes(action)
 			action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 
 			resultCh := make(chan ActionResult, 1)
@@ -1037,7 +1037,7 @@ func TestActionGuardAuditOutageReplayReconcilesFailedFinding(t *testing.T) {
 	guard.SetFindingRecorder(findings, "installation-a")
 	action := signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"})
 	action.ApprovalID = "approval-a"
-	payload, _ := json.Marshal(action.signed())
+	payload, _ := actionEnvelopeSigningBytes(action)
 	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 
 	first := guard.Execute(context.Background(), action)
@@ -1076,7 +1076,7 @@ func TestActionGuardPostVerificationFailureIsDurableAndReplayNeverExecutesAgain(
 		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
 	})
 	action.ApprovalID = "approval-a"
-	payload, _ := json.Marshal(action.signed())
+	payload, _ := actionEnvelopeSigningBytes(action)
 	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 
 	first := guard.Execute(context.Background(), action)
@@ -1128,7 +1128,7 @@ func TestActionGuardVerificationCannotConsumeTerminalPersistenceBudget(t *testin
 		"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a",
 	})
 	action.ApprovalID = "approval-a"
-	payload, _ := json.Marshal(action.signed())
+	payload, _ := actionEnvelopeSigningBytes(action)
 	action.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 
 	result := guard.Execute(context.Background(), action)

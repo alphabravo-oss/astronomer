@@ -65,7 +65,11 @@ func newOnboardingFixture(t *testing.T) onboardingFixture {
 			map[string]any{"purpose": "artifact_pull", "credential": "artifact-secret-value-0000000000001", "expires_at": now.Add(30 * time.Minute).Format(time.RFC3339)},
 		},
 		"artifact": map[string]any{"image": "registry.example.test/charlie/agent@sha256:" + digest, "manifest_digest": "sha256:" + digest, "chart": "oci://registry.example.test/charlie/agent", "chart_digest": "sha256:" + digest},
-		"signing":  map[string]any{"algorithm": "Ed25519", "canonicalization": "RFC8785", "key_id": "operator-key-1", "public_key_sha256": hex.EncodeToString(keyFingerprint[:])},
+		"signing": map[string]any{
+			"algorithm": "Ed25519", "canonicalization": "RFC8785", "key_id": "operator-key-1",
+			"public_key_sha256": hex.EncodeToString(keyFingerprint[:]),
+			"public_key":        base64.RawURLEncoding.EncodeToString(publicKey),
+		},
 	}
 	return onboardingFixture{
 		now: now, privateKey: privateKey, object: object,
@@ -146,6 +150,13 @@ func TestValidateOnboardingPackageRejectsInvalidMatrix(t *testing.T) {
 		{name: "expired", mutate: func(f *onboardingFixture) { f.confirmation.Now = f.now.Add(2 * time.Hour) }},
 		{name: "wrong product", mutate: func(f *onboardingFixture) { f.object["product_slug"] = "another-product" }},
 		{name: "wrong fingerprint", mutate: func(f *onboardingFixture) { f.confirmation.ConfirmedSigningFingerprint = string(make([]byte, 64)) }},
+		{name: "missing embedded signing key", mutate: func(f *onboardingFixture) {
+			delete(f.object["signing"].(map[string]any), "public_key")
+		}},
+		{name: "embedded signing key differs from trusted key", mutate: func(f *onboardingFixture) {
+			otherPublic := bytes.Repeat([]byte{0x42}, ed25519.PublicKeySize)
+			f.object["signing"].(map[string]any)["public_key"] = base64.RawURLEncoding.EncodeToString(otherPublic)
+		}},
 		{name: "unsupported version", mutate: func(f *onboardingFixture) { f.object["central_api_version"] = "charlie/v999" }},
 		{name: "wrong deployment", mutate: func(f *onboardingFixture) { f.confirmation.ExpectedDeploymentID = "different" }},
 		{name: "wrong private MCP endpoint", mutate: func(f *onboardingFixture) {

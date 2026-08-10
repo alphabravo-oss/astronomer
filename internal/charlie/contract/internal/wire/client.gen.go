@@ -127,6 +127,19 @@ const (
 	ApprovalManifestVersionCharlieApprovalManifestv1 ApprovalManifestVersion = "charlie.approval-manifest/v1"
 )
 
+// Defines values for ApprovalReviewSummaryEffect.
+const (
+	ApprovalReviewSummaryEffectApprovalReviewSummaryEffectWrite ApprovalReviewSummaryEffect = "write"
+)
+
+// Defines values for ApprovalReviewSummaryRisk.
+const (
+	ApprovalReviewSummaryRiskApprovalReviewSummaryRiskCritical ApprovalReviewSummaryRisk = "critical"
+	ApprovalReviewSummaryRiskApprovalReviewSummaryRiskHigh     ApprovalReviewSummaryRisk = "high"
+	ApprovalReviewSummaryRiskApprovalReviewSummaryRiskLow      ApprovalReviewSummaryRisk = "low"
+	ApprovalReviewSummaryRiskApprovalReviewSummaryRiskMedium   ApprovalReviewSummaryRisk = "medium"
+)
+
 // Defines values for BlockCode.
 const (
 	BlockCodeAllowlistDenied       BlockCode = "allowlist_denied"
@@ -422,7 +435,10 @@ type Approval struct {
 	ApprovalId OpaqueId         `json:"approval_id"`
 	ExpiresAt  time.Time        `json:"expires_at"`
 	Manifest   ApprovalManifest `json:"manifest"`
-	State      ApprovalState    `json:"state"`
+
+	// Review A bounded, human-readable summary of the proposed write. Raw action arguments and authority material remain on Charlie central and never cross the Product Bridge review surface.
+	Review *ApprovalReviewSummary `json:"review,omitempty"`
+	State  ApprovalState          `json:"state"`
 }
 
 // ApprovalState defines model for Approval.State.
@@ -430,10 +446,14 @@ type ApprovalState string
 
 // ApprovalDecision defines model for ApprovalDecision.
 type ApprovalDecision struct {
-	AuthorizationRef OpaqueId                 `json:"authorization_ref"`
-	Decision         ApprovalDecisionDecision `json:"decision"`
-	ManifestDigest   string                   `json:"manifest_digest"`
-	RequestId        OpaqueId                 `json:"request_id"`
+	AuthorizationRef OpaqueId `json:"authorization_ref"`
+
+	// DecidedBy The product-authenticated human identity responsible for the decision.
+	DecidedBy      string                   `json:"decided_by"`
+	Decision       ApprovalDecisionDecision `json:"decision"`
+	ManifestDigest string                   `json:"manifest_digest"`
+	Rationale      *string                  `json:"rationale,omitempty"`
+	RequestId      OpaqueId                 `json:"request_id"`
 }
 
 // ApprovalDecisionDecision defines model for ApprovalDecision.Decision.
@@ -471,6 +491,26 @@ type ApprovalManifestResource struct {
 	Kind         string   `json:"kind"`
 	RequiredVerb string   `json:"required_verb"`
 }
+
+// ApprovalReviewSummary A bounded, human-readable summary of the proposed write. Raw action arguments and authority material remain on Charlie central and never cross the Product Bridge review surface.
+type ApprovalReviewSummary struct {
+	// ArgumentsWithheld Raw action arguments are intentionally withheld by the Product Bridge.
+	ArgumentsWithheld bool                        `json:"arguments_withheld"`
+	Capability        string                      `json:"capability"`
+	Description       *string                     `json:"description,omitempty"`
+	Destructive       *bool                       `json:"destructive,omitempty"`
+	Effect            ApprovalReviewSummaryEffect `json:"effect"`
+	ExpectedImpact    *string                     `json:"expected_impact,omitempty"`
+	Reversible        *bool                       `json:"reversible,omitempty"`
+	Risk              ApprovalReviewSummaryRisk   `json:"risk"`
+	Rollback          *string                     `json:"rollback,omitempty"`
+}
+
+// ApprovalReviewSummaryEffect defines model for ApprovalReviewSummary.Effect.
+type ApprovalReviewSummaryEffect string
+
+// ApprovalReviewSummaryRisk defines model for ApprovalReviewSummary.Risk.
+type ApprovalReviewSummaryRisk string
 
 // BlockCode defines model for BlockCode.
 type BlockCode string

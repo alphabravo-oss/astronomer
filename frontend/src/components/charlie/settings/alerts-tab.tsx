@@ -9,7 +9,7 @@ import {
   updateCharlieAlertPolicy,
   type CharlieAlertPolicy,
 } from "@/lib/api/charlie-admin";
-import { Field, NumberField, Section, Unavailable, button, field, primary } from "./shared";
+import { Field, NumberField, Section, Unavailable, field, primary } from "./shared";
 
 export function AlertsTab() {
   const qc = useQueryClient();

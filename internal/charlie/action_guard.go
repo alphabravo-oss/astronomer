@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
+	"github.com/gowebpki/jcs"
 )
 
 const (
-	maxActionArguments = 64 << 10
-	maxActionResult    = 64 << 10
+	maxActionArguments          = 64 << 10
+	maxActionResult             = 64 << 10
+	actionEnvelopeSigningDomain = "charlie-action/v1\n"
 )
 
 // ActionEnvelope is Charlie's signed, bounded request to the product-owned MCP
@@ -45,34 +47,32 @@ type ActionEnvelope struct {
 	Signature        string          `json:"signature"`
 }
 
-type signedActionEnvelope struct {
-	Version          string          `json:"version"`
-	DeploymentID     string          `json:"deployment_id"`
-	SessionID        string          `json:"session_id"`
-	TurnID           string          `json:"turn_id"`
-	ActionID         string          `json:"action_id"`
-	Capability       string          `json:"capability"`
-	Arguments        json.RawMessage `json:"arguments"`
-	ArgumentDigest   string          `json:"argument_digest"`
-	AuthorizationRef string          `json:"authorization_ref"`
-	ApprovalID       string          `json:"approval_id,omitempty"`
-	DisclosureDigest string          `json:"disclosure_digest"`
-	ModeRevision     int64           `json:"mode_revision"`
-	PolicyRevision   int64           `json:"policy_revision"`
-	FencingEpoch     int64           `json:"fencing_epoch"`
-	ExpiresAt        time.Time       `json:"expires_at"`
-	IdempotencyKey   string          `json:"idempotency_key"`
-}
-
-func (a ActionEnvelope) signed() signedActionEnvelope {
-	return signedActionEnvelope{
-		Version: a.Version, DeploymentID: a.DeploymentID, SessionID: a.SessionID,
-		TurnID: a.TurnID, ActionID: a.ActionID, Capability: a.Capability,
-		Arguments: a.Arguments, ArgumentDigest: a.ArgumentDigest,
-		AuthorizationRef: a.AuthorizationRef, ApprovalID: a.ApprovalID, DisclosureDigest: a.DisclosureDigest,
-		ModeRevision: a.ModeRevision, PolicyRevision: a.PolicyRevision,
-		FencingEpoch: a.FencingEpoch, ExpiresAt: a.ExpiresAt.UTC(), IdempotencyKey: a.IdempotencyKey,
+// actionEnvelopeSigningBytes is the product-side implementation of Charlie's
+// action authorization contract: the signature field is omitted, timestamps
+// are normalized to UTC, and the remaining envelope is RFC 8785 canonicalized
+// under a domain-separation prefix. Keep this independently implemented and
+// prove it against Charlie's published cross-language vector.
+func actionEnvelopeSigningBytes(envelope ActionEnvelope) ([]byte, error) {
+	envelope.Signature = ""
+	envelope.ExpiresAt = envelope.ExpiresAt.UTC()
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, fmt.Errorf("encode Charlie action envelope: %w", err)
 	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, fmt.Errorf("decode Charlie action envelope: %w", err)
+	}
+	delete(fields, "signature")
+	unsigned, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode unsigned Charlie action envelope: %w", err)
+	}
+	canonical, err := jcs.Transform(unsigned)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize Charlie action envelope: %w", err)
+	}
+	return append([]byte(actionEnvelopeSigningDomain), canonical...), nil
 }
 
 type LiveActionAuthority interface {
@@ -718,15 +718,12 @@ func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, m
 	if err != nil || envelope.ArgumentDigest != capabilityArgumentDigest(envelope.Capability, canonical) {
 		return CapabilityDescriptor{}, nil, DeniedIdempotency
 	}
-	signedBytes, err := json.Marshal(envelope.signed())
+	signedBytes, err := actionEnvelopeSigningBytes(envelope)
 	if err != nil {
 		return CapabilityDescriptor{}, nil, DeniedAuthorization
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(envelope.Signature)
-	if err != nil {
-		signature, err = base64.StdEncoding.DecodeString(envelope.Signature)
-	}
-	if err != nil || !ed25519.Verify(g.publicKey, signedBytes, signature) {
+	if err != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(g.publicKey, signedBytes, signature) {
 		return CapabilityDescriptor{}, nil, DeniedAuthorization
 	}
 	descriptor, ok := capabilityByName(envelope.Capability)

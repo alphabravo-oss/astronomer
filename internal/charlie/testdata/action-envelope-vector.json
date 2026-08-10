@@ -1,0 +1,30 @@
+{
+  "envelope": {
+    "version": "charlie-action/v1",
+    "deployment_id": "scope_astro",
+    "session_id": "asess_1",
+    "turn_id": "aturn_1",
+    "action_id": "aact_1",
+    "capability": "workload.restart",
+    "arguments": {
+      "resource_id": "scheduler-7",
+      "note": "scale <  1",
+      "nested": {
+        "b": 2,
+        "a": 1
+      },
+      "force": true
+    },
+    "argument_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "authorization_ref": "opaque-authz-1",
+    "approval_id": "aappr_1",
+    "disclosure_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "mode_revision": 7,
+    "policy_revision": 7,
+    "fencing_epoch": 3,
+    "expires_at": "2030-01-02T03:04:05Z",
+    "idempotency_key": "aact_1",
+    "signature": "1k7UZqi5x-VPjVlN-P0W7-tzItL7wWRM5iOhjYQJKFtfg-59DY-wESqhvnN-TcJTcld1E_T2XxVmwTn1imsWAQ"
+  },
+  "public_key": "O2onvM62pC1io6jQKm8Nc2UyFXcd4kOmOsBIoYtZ2ik"
+}

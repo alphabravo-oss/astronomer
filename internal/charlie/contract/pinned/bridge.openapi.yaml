@@ -678,6 +678,33 @@ components:
         state: {type: string, enum: [pending, approved, rejected, expired]}
         expires_at: {type: string, format: date-time}
         manifest: {$ref: "#/components/schemas/ApprovalManifest"}
+        review: {$ref: "#/components/schemas/ApprovalReviewSummary"}
+    ApprovalReviewSummary:
+      type: object
+      additionalProperties: false
+      description: >-
+        A bounded, human-readable summary of the proposed write. Raw action
+        arguments and authority material remain on Charlie central and never
+        cross the Product Bridge review surface.
+      required: [capability, effect, risk, arguments_withheld]
+      properties:
+        capability: {type: string, pattern: "^[a-z][a-z0-9_.:-]{0,127}$"}
+        effect:
+          type: string
+          enum: [write]
+          x-enum-varnames: [ApprovalReviewSummaryEffectWrite]
+        risk:
+          type: string
+          enum: [low, medium, high, critical]
+          x-enum-varnames: [ApprovalReviewSummaryRiskLow, ApprovalReviewSummaryRiskMedium, ApprovalReviewSummaryRiskHigh, ApprovalReviewSummaryRiskCritical]
+        description: {type: string, minLength: 1, maxLength: 4096}
+        arguments_withheld:
+          type: boolean
+          description: Raw action arguments are intentionally withheld by the Product Bridge.
+        expected_impact: {type: string, minLength: 1, maxLength: 4096}
+        reversible: {type: boolean}
+        rollback: {type: string, minLength: 1, maxLength: 4096}
+        destructive: {type: boolean}
     ApprovalManifestResource:
       type: object
       additionalProperties: false
@@ -714,11 +741,17 @@ components:
     ApprovalDecision:
       type: object
       additionalProperties: false
-      required: [request_id, decision, authorization_ref, manifest_digest]
+      required: [request_id, decision, authorization_ref, decided_by, manifest_digest]
       properties:
         request_id: {$ref: "#/components/schemas/OpaqueId"}
         decision: {type: string, enum: [approve, reject]}
         authorization_ref: {$ref: "#/components/schemas/OpaqueId"}
+        decided_by:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: The product-authenticated human identity responsible for the decision.
+        rationale: {type: string, minLength: 1, maxLength: 512}
         manifest_digest: {type: string, pattern: "^[a-f0-9]{64}$"}
     CreateInvestigation:
       type: object

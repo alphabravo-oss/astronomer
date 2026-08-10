@@ -50,20 +50,23 @@ func TestCharlieApprovalListReturnsNoAuthorityMaterial(t *testing.T) {
 	access := &charlieApprovalAccessFake{views: []charlie.ApprovalView{{
 		ID: "approval-a", Title: "Approve bounded retry", State: "pending", Eligible: true,
 		Capability: "astronomer.queue.retry_task", Target: "management_component:task-a", Risk: "medium",
-		Effect: "retry one failed task", RequiredPermission: "management_components:astronomer.queue.retry_task",
+		Effect: "write", RequiredPermission: "management_components:astronomer.queue.retry_task",
 		ExpiresAt: time.Date(2026, 8, 5, 10, 5, 0, 0, time.UTC),
+		Review: &charlie.ApprovalReviewView{
+			Description: "Retry one failed task", ExpectedImpact: "One bounded retry", Rollback: "Stop further retries", ArgumentsWithheld: true,
+		},
 	}}}
 	recorder := httptest.NewRecorder()
 	NewCharlieApprovalHandler(access).List(recorder, authenticatedCharlieRequest(http.MethodGet, "/", "", actor, "jwt"))
 	if recorder.Code != http.StatusOK || access.actor != actor {
 		t.Fatalf("status=%d actor=%s body=%s", recorder.Code, access.actor, recorder.Body.String())
 	}
-	for _, prohibited := range []string{"manifest", "signature", "argument_digest", "authorization_ref", "disclosure_digest"} {
+	for _, prohibited := range []string{"manifest", "signature", "argument_digest", "raw_arguments", "authorization_ref", "disclosure_digest", "decided_by", "required_permission"} {
 		if strings.Contains(recorder.Body.String(), prohibited) {
 			t.Fatalf("approval response exposed %q: %s", prohibited, recorder.Body.String())
 		}
 	}
-	for _, required := range []string{"retry one failed task", "management_components:astronomer.queue.retry_task"} {
+	for _, required := range []string{"Retry one failed task", "One bounded retry", "Stop further retries", "argumentsWithheld", "requiredPermission", "management_components:astronomer.queue.retry_task"} {
 		if !strings.Contains(recorder.Body.String(), required) {
 			t.Fatalf("approval response omitted %q: %s", required, recorder.Body.String())
 		}

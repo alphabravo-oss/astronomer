@@ -247,7 +247,6 @@ func bridgeMaterialDigest(config ManagedBridgeConfig) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-
 func withBridge[T any](m *ManagedBridge, ctx context.Context, name string, fn func(*RuntimeBridge) (T, error)) (result T, err error) {
 	started := time.Now()
 	defer func() { observeBridgeCall(name, started, err) }()
@@ -317,9 +316,9 @@ func (m *ManagedBridge) ListApprovals(ctx context.Context, authorizationRef stri
 	})
 }
 
-func (m *ManagedBridge) DecideApproval(ctx context.Context, approvalID, authorizationRef string, requestID uuid.UUID, decision, manifestDigest string) (contract.Approval, error) {
+func (m *ManagedBridge) DecideApproval(ctx context.Context, approvalID, authorizationRef string, input BridgeApprovalDecision) (contract.Approval, error) {
 	return withBridge(m, ctx, "decide_approval", func(bridge *RuntimeBridge) (contract.Approval, error) {
-		return bridge.DecideApproval(ctx, approvalID, authorizationRef, requestID, decision, manifestDigest)
+		return bridge.DecideApproval(ctx, approvalID, authorizationRef, input)
 	})
 }
 

@@ -11,10 +11,12 @@ import type {
 import {
   decideCharlieApproval,
   getCharlieFinding,
-  getCharlieHistory,
+  getCharlieOverview,
+  getCharlieThreadHistory,
   listCharlieApprovals,
   listCharlieFindings,
   listCharlieSessions,
+  listCharlieThreads,
   transitionCharlieFinding,
 } from "@/lib/api/charlie";
 import { useAuthStore } from "@/lib/store";
@@ -42,10 +44,12 @@ vi.mock("@/lib/api/charlie", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/charlie")>()),
   decideCharlieApproval: vi.fn(),
   getCharlieFinding: vi.fn(),
-  getCharlieHistory: vi.fn(),
+  getCharlieOverview: vi.fn(),
+  getCharlieThreadHistory: vi.fn(),
   listCharlieApprovals: vi.fn(),
   listCharlieFindings: vi.fn(),
   listCharlieSessions: vi.fn(),
+  listCharlieThreads: vi.fn(),
   transitionCharlieFinding: vi.fn(),
 }));
 
@@ -118,7 +122,18 @@ describe("Charlie hub acceptance", () => {
     vi.mocked(listCharlieSessions).mockResolvedValue([privateSession, incident]);
     vi.mocked(listCharlieFindings).mockResolvedValue([finding]);
     vi.mocked(getCharlieFinding).mockResolvedValue(finding);
-    vi.mocked(getCharlieHistory).mockResolvedValue([]);
+    vi.mocked(getCharlieOverview).mockResolvedValue({
+      sessions: [privateSession, incident],
+      mode: "read_only",
+    });
+    vi.mocked(getCharlieThreadHistory).mockResolvedValue([]);
+    vi.mocked(listCharlieThreads).mockResolvedValue([
+      {
+        id: privateSession.id,
+        title: privateSession.intent,
+        state: privateSession.state,
+      },
+    ]);
     vi.mocked(listCharlieApprovals).mockResolvedValue([]);
     vi.mocked(transitionCharlieFinding).mockResolvedValue(undefined);
     vi.mocked(decideCharlieApproval).mockResolvedValue(undefined);
@@ -180,15 +195,26 @@ describe("Charlie hub acceptance", () => {
       capability: "astronomer.server.restart_replica",
       target: "management_component:server-a",
       risk: "medium",
-      effect: "Restart one unhealthy management-plane replica",
+	      effect: "write",
       requiredPermission: "management_components:update",
       expiresAt: "2026-08-06T12:00:00Z",
+	      review: {
+	        description: "Restart one unhealthy management-plane replica",
+	        expectedImpact: "One server replica reconnects",
+	        reversible: true,
+	        rollback: "Stop the rollout and restore the prior replica",
+	        destructive: false,
+	        argumentsWithheld: true,
+	      },
     };
     vi.mocked(listCharlieApprovals).mockResolvedValue([approval]);
     search = new URLSearchParams("tab=approvals&approval=approval-1");
     renderHub();
     expect(await screen.findByText("Restart one server replica")).toBeInTheDocument();
     expect(screen.getByText("management_components:update")).toBeInTheDocument();
+	    expect(screen.getByText("Restart one unhealthy management-plane replica")).toBeInTheDocument();
+	    expect(screen.getByText("One server replica reconnects")).toBeInTheDocument();
+	    expect(screen.getByText("Withheld by Charlie")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Rationale for Restart one server replica"), {
       target: { value: "Health probe remains unhealthy" },
     });

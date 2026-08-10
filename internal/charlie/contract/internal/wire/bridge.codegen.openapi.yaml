@@ -225,6 +225,8 @@ components:
                     type: string
                 manifest:
                     $ref: '#/components/schemas/ApprovalManifest'
+                review:
+                    $ref: '#/components/schemas/ApprovalReviewSummary'
                 state:
                     enum:
                         - pending
@@ -244,6 +246,11 @@ components:
             properties:
                 authorization_ref:
                     $ref: '#/components/schemas/OpaqueId'
+                decided_by:
+                    description: The product-authenticated human identity responsible for the decision.
+                    maxLength: 255
+                    minLength: 1
+                    type: string
                 decision:
                     enum:
                         - approve
@@ -252,12 +259,17 @@ components:
                 manifest_digest:
                     pattern: ^[a-f0-9]{64}$
                     type: string
+                rationale:
+                    maxLength: 512
+                    minLength: 1
+                    type: string
                 request_id:
                     $ref: '#/components/schemas/OpaqueId'
             required:
                 - request_id
                 - decision
                 - authorization_ref
+                - decided_by
                 - manifest_digest
             type: object
         ApprovalManifest:
@@ -349,6 +361,56 @@ components:
                 - kind
                 - id
                 - required_verb
+            type: object
+        ApprovalReviewSummary:
+            additionalProperties: false
+            description: A bounded, human-readable summary of the proposed write. Raw action arguments and authority material remain on Charlie central and never cross the Product Bridge review surface.
+            properties:
+                arguments_withheld:
+                    description: Raw action arguments are intentionally withheld by the Product Bridge.
+                    type: boolean
+                capability:
+                    pattern: ^[a-z][a-z0-9_.:-]{0,127}$
+                    type: string
+                description:
+                    maxLength: 4096
+                    minLength: 1
+                    type: string
+                destructive:
+                    type: boolean
+                effect:
+                    enum:
+                        - write
+                    type: string
+                    x-enum-varnames:
+                        - ApprovalReviewSummaryEffectWrite
+                expected_impact:
+                    maxLength: 4096
+                    minLength: 1
+                    type: string
+                reversible:
+                    type: boolean
+                risk:
+                    enum:
+                        - low
+                        - medium
+                        - high
+                        - critical
+                    type: string
+                    x-enum-varnames:
+                        - ApprovalReviewSummaryRiskLow
+                        - ApprovalReviewSummaryRiskMedium
+                        - ApprovalReviewSummaryRiskHigh
+                        - ApprovalReviewSummaryRiskCritical
+                rollback:
+                    maxLength: 4096
+                    minLength: 1
+                    type: string
+            required:
+                - capability
+                - effect
+                - risk
+                - arguments_withheld
             type: object
         BlockCode:
             enum:

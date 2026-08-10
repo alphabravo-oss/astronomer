@@ -65,6 +65,14 @@ export interface CharlieApproval {
   requiredPermission?: string;
   expiresAt?: string;
   reason?: string;
+  review?: {
+    description?: string;
+    expectedImpact?: string;
+    reversible?: boolean;
+    rollback?: string;
+    destructive?: boolean;
+    argumentsWithheld: true;
+  };
 }
 export interface CharlieMessage {
   id: string;

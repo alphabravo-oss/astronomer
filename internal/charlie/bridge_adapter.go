@@ -323,22 +323,36 @@ func isLowerHexDigest(value string) bool {
 // DecideApproval binds the browser decision to the exact product-verified
 // signed manifest digest. Charlie cannot substitute a different action, target,
 // revision, or expiry after Astronomer presents it to the approver.
-func (b *RuntimeBridge) DecideApproval(ctx context.Context, approvalID, authorizationRef string, requestID uuid.UUID, decision, manifestDigest string) (contract.Approval, error) {
+func (b *RuntimeBridge) DecideApproval(ctx context.Context, approvalID, authorizationRef string, input BridgeApprovalDecision) (contract.Approval, error) {
 	path, err := opaqueBridgePath("/approvals/", approvalID)
-	if err != nil || requestID == uuid.Nil || (decision != "approve" && decision != "reject") || len(manifestDigest) != 64 {
+	request, requestErr := productBridgeApprovalDecision(input, authorizationRef)
+	if err != nil || requestErr != nil {
 		return contract.Approval{}, fmt.Errorf("Charlie approval decision is invalid")
 	}
-	request := contract.ApprovalDecision{
-		AuthorizationRef: authorizationRef,
-		Decision:         contract.ApprovalDecisionDecision(decision),
-		ManifestDigest:   manifestDigest,
-		RequestId:        requestID.String(),
-	}
 	var response contract.Approval
-	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/decision", requestID.String(), authorizationRef, request, &response); err != nil {
+	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/decision", input.RequestID.String(), authorizationRef, request, &response); err != nil {
 		return contract.Approval{}, err
 	}
 	return response, nil
+}
+
+func productBridgeApprovalDecision(input BridgeApprovalDecision, authorizationRef string) (contract.ApprovalDecision, error) {
+	rationale := strings.TrimSpace(input.Rationale)
+	actorID, actorErr := uuid.Parse(strings.TrimPrefix(input.DecidedBy, "user:"))
+	if input.RequestID == uuid.Nil || (input.Decision != "approve" && input.Decision != "reject") ||
+		len(input.ManifestDigest) != 64 || len(input.DecidedBy) > 255 || actorErr != nil ||
+		input.DecidedBy != "user:"+actorID.String() || len(rationale) > 512 {
+		return contract.ApprovalDecision{}, fmt.Errorf("Charlie approval decision is invalid")
+	}
+	request := contract.ApprovalDecision{
+		AuthorizationRef: authorizationRef, DecidedBy: input.DecidedBy,
+		Decision: contract.ApprovalDecisionDecision(input.Decision), ManifestDigest: input.ManifestDigest,
+		RequestId: input.RequestID.String(),
+	}
+	if rationale != "" {
+		request.Rationale = &rationale
+	}
+	return request, nil
 }
 
 func (b *RuntimeBridge) GetFinding(ctx context.Context, findingID, authorizationRef string) (FindingAdvisoryDetail, error) {

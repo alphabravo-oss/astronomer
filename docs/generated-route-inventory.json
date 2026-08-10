@@ -206,6 +206,49 @@
     "security_registry_id": "charlie-admin-agent-upgrade"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/alert-deliveries/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "read bounded metadata-only Charlie finding alert-delivery proof",
+    "auth": "browser JWT only; feature.charlie opt-in gate",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "not applicable: GET",
+    "audit": "admin.charlie.alert_delivery.read with finding identity, count, and dedupe verdict only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-admin-alert-delivery-proof"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/alert-policy/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/admin/charlie/alert-policy/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-charlie-admin",
+    "risk_reason": "The product-owned Charlie notification policy is feature-gated and requires authenticated admin scope plus charlie:manage at the router. Browser mutations inherit CSRF protection, the handler enforces optimistic revisions, and the mutation is recorded through the bounded Charlie audit contract without exposing recipients, channel configuration, or credentials."
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/*/admin/charlie/diagnostics/run/",
     "handler_owner": "internal/server route owner requires explicit classification",
@@ -279,6 +322,21 @@
       "TestBrowserCookieMutatingRoutesRequireCSRF"
     ],
     "security_registry_id": "charlie-onboarding-validate"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/admin/charlie/qualification/discovery/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "run one fixed non-mutating Charlie discovery compiler qualification case",
+    "auth": "browser JWT only; feature.charlie opt-in gate; caller-selected capabilities are not accepted",
+    "rbac": "admin API token scope plus charlie:manage",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "admin.charlie.discovery_qualification.run with fixed scenario and bounded counts/verdicts only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-admin-discovery-qualification"
   },
   {
     "method": "GET",
@@ -2855,6 +2913,78 @@
       "TestBrowserCookieMutatingRoutesRequireCSRF"
     ],
     "security_registry_id": "charlie-session-message"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/threads/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "private Charlie conversation pointer list",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus owner isolation",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only thread list; no conversation content",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-thread-list"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/threads/active/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "private active Charlie conversation pointer",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus owner isolation",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only thread read; conversation content remains in Charlie",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-thread-active"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/threads/messages/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "send one idempotent message through the caller's active Charlie thread",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:create plus owner and disclosed-resource authorization",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "content-free accepted-turn and thread metadata only",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-thread-message"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/charlie/threads/new/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "archive the current private thread and create a new active Charlie conversation pointer",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:create plus owner isolation",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "metadata-only thread lifecycle audit; no conversation content",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestBrowserCookieMutatingRoutesRequireCSRF"
+    ],
+    "security_registry_id": "charlie-thread-new"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/charlie/threads/{thread_id}/history/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "bounded stitched history for one caller-owned Charlie thread",
+    "auth": "browser JWT only; feature and live connection gates",
+    "rbac": "charlie:read plus owner isolation",
+    "csrf": "not applicable: GET",
+    "audit": "metadata-only read audit; stitched content remains in Charlie",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests"
+    ],
+    "security_registry_id": "charlie-thread-history"
   },
   {
     "method": "GET",

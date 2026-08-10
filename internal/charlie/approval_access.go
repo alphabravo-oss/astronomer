@@ -38,7 +38,18 @@ type approvalAccessQueries interface {
 
 type ApprovalBridge interface {
 	ListApprovals(context.Context, string) ([]contract.Approval, error)
-	DecideApproval(context.Context, string, string, uuid.UUID, string, string) (contract.Approval, error)
+	DecideApproval(context.Context, string, string, BridgeApprovalDecision) (contract.Approval, error)
+}
+
+// BridgeApprovalDecision is product-authenticated decision metadata sent only
+// to the local Product Bridge. The actor reference is derived from the active
+// Astronomer user rather than accepted from a browser request.
+type BridgeApprovalDecision struct {
+	RequestID      uuid.UUID
+	Decision       string
+	DecidedBy      string
+	Rationale      string
+	ManifestDigest string
 }
 
 type ApprovalLifecycleAudit struct {
@@ -60,17 +71,30 @@ type ApprovalLifecycleAuditor interface {
 // signed manifest, signature, argument digest, disclosure digest, and
 // authorization reference never cross Astronomer's browser API boundary.
 type ApprovalView struct {
-	ID                 string    `json:"id"`
-	Title              string    `json:"title"`
-	State              string    `json:"state"`
-	Eligible           bool      `json:"eligible"`
-	Capability         string    `json:"capability"`
-	Target             string    `json:"target"`
-	Risk               string    `json:"risk"`
-	Effect             string    `json:"effect"`
-	RequiredPermission string    `json:"required_permission"`
-	ExpiresAt          time.Time `json:"expiresAt"`
-	Reason             string    `json:"reason,omitempty"`
+	ID                 string              `json:"id"`
+	Title              string              `json:"title"`
+	State              string              `json:"state"`
+	Eligible           bool                `json:"eligible"`
+	Capability         string              `json:"capability"`
+	Target             string              `json:"target"`
+	Risk               string              `json:"risk"`
+	Effect             string              `json:"effect"`
+	RequiredPermission string              `json:"requiredPermission"`
+	ExpiresAt          time.Time           `json:"expiresAt"`
+	Reason             string              `json:"reason,omitempty"`
+	Review             *ApprovalReviewView `json:"review,omitempty"`
+}
+
+// ApprovalReviewView is the complete review content allowed across
+// Astronomer's browser API. It intentionally excludes raw arguments,
+// authorization references, signed manifests, and all other authority data.
+type ApprovalReviewView struct {
+	Description       string `json:"description,omitempty"`
+	ExpectedImpact    string `json:"expectedImpact,omitempty"`
+	Reversible        *bool  `json:"reversible,omitempty"`
+	Rollback          string `json:"rollback,omitempty"`
+	Destructive       *bool  `json:"destructive,omitempty"`
+	ArgumentsWithheld bool   `json:"argumentsWithheld"`
 }
 
 type verifiedApproval struct {
@@ -144,10 +168,11 @@ func (s *ApprovalAccessService) List(ctx context.Context, actorID uuid.UUID) ([]
 }
 
 func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, approvalID string, requestID uuid.UUID, decision, rationale string) (ApprovalView, error) {
-	if actorID == uuid.Nil || requestID == uuid.Nil || strings.TrimSpace(approvalID) == "" || len(approvalID) > 128 || len(rationale) > 512 || (decision != "approve" && decision != "reject") {
+	trimmedRationale := strings.TrimSpace(rationale)
+	if actorID == uuid.Nil || requestID == uuid.Nil || strings.TrimSpace(approvalID) == "" || len(approvalID) > 128 || len(trimmedRationale) > 512 || (decision != "approve" && decision != "reject") {
 		return ApprovalView{}, fmt.Errorf("Charlie approval decision is invalid")
 	}
-	rationaleDigest := digestBytes([]byte(strings.TrimSpace(rationale)))
+	rationaleDigest := digestBytes([]byte(trimmedRationale))
 	// A response lost after a successful commit is safe to replay only for the
 	// same product approver, exact idempotency request, decision, rationale, and
 	// final state. No central content is needed, and a new request can never
@@ -205,7 +230,10 @@ func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, a
 	}
 	reservationID := row.ID
 
-	response, bridgeErr := s.bridge.DecideApproval(ctx, approvalID, candidate.authorization, requestID, decision, candidate.manifestDigest)
+	response, bridgeErr := s.bridge.DecideApproval(ctx, approvalID, candidate.authorization, BridgeApprovalDecision{
+		RequestID: requestID, Decision: decision, DecidedBy: "user:" + actorID.String(),
+		Rationale: trimmedRationale, ManifestDigest: candidate.manifestDigest,
+	})
 	if bridgeErr != nil {
 		s.rejectLocal(context.WithoutCancel(ctx), reservationID)
 		s.audit(context.WithoutCancel(ctx), candidate, actorID, decision, "bridge_failed_closed")
@@ -375,6 +403,9 @@ func (s *ApprovalAccessService) verifyCandidate(ctx context.Context, actorID uui
 	if !found || descriptor.Effect != EffectWrite || descriptor.ManagedTargetAccess || descriptor.Risk == "destructive" || !descriptor.RequiresPrecondition || !descriptor.RequiresVerification {
 		return verifiedApproval{}, fmt.Errorf("Charlie approval capability is not permitted")
 	}
+	if _, err := approvalReviewView(approval.Review, manifest, descriptor); err != nil {
+		return verifiedApproval{}, err
+	}
 	resource, err := validateApprovalResources(manifest, resources)
 	if err != nil {
 		return verifiedApproval{}, err
@@ -451,13 +482,50 @@ func approvalView(item verifiedApproval) ApprovalView {
 	for _, resource := range item.approval.Manifest.Resources {
 		targets = append(targets, resource.Kind+":"+string(resource.Id))
 	}
+	review, _ := approvalReviewView(item.approval.Review, item.approval.Manifest, item.descriptor)
 	return ApprovalView{
 		ID: string(item.approval.ApprovalId), Title: "Approve " + item.descriptor.Name,
 		State: mapApprovalState(string(item.approval.State)), Eligible: item.eligible,
 		Capability: item.descriptor.Name, Target: strings.Join(targets, ", "), Risk: item.descriptor.Risk,
 		Effect: string(item.descriptor.Effect), RequiredPermission: item.descriptor.RBACResource + ":" + item.descriptor.RBACVerb,
-		ExpiresAt: item.approval.ExpiresAt.UTC(), Reason: item.reason,
+		ExpiresAt: item.approval.ExpiresAt.UTC(), Reason: item.reason, Review: review,
 	}
+}
+
+func approvalReviewView(review *contract.ApprovalReviewSummary, manifest contract.ApprovalManifest, descriptor CapabilityDescriptor) (*ApprovalReviewView, error) {
+	if review == nil {
+		return nil, nil
+	}
+	if !review.ArgumentsWithheld || review.Capability != manifest.Capability || string(review.Effect) != string(EffectWrite) || string(review.Risk) != descriptor.Risk {
+		return nil, fmt.Errorf("Charlie approval review summary does not match product authority")
+	}
+	description, err := projectedApprovalReviewText(review.Description)
+	if err != nil {
+		return nil, err
+	}
+	impact, err := projectedApprovalReviewText(review.ExpectedImpact)
+	if err != nil {
+		return nil, err
+	}
+	rollback, err := projectedApprovalReviewText(review.Rollback)
+	if err != nil {
+		return nil, err
+	}
+	return &ApprovalReviewView{
+		Description: description, ExpectedImpact: impact, Reversible: review.Reversible,
+		Rollback: rollback, Destructive: review.Destructive, ArgumentsWithheld: true,
+	}, nil
+}
+
+func projectedApprovalReviewText(value *string) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" || len(trimmed) > 4096 {
+		return "", fmt.Errorf("Charlie approval review summary is invalid")
+	}
+	return trimmed, nil
 }
 
 func localApprovalView(row sqlc.CharlieActionApproval) ApprovalView {

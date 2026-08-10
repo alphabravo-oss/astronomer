@@ -1929,6 +1929,12 @@ type OnboardingV1SchemaJsonSigning struct {
 	// KeyId corresponds to the JSON schema field "key_id".
 	KeyId OpaqueId `json:"key_id" yaml:"key_id" mapstructure:"key_id"`
 
+	// Unpadded base64url Ed25519 public key, so an air-gapped agent can verify action
+	// envelopes without a network fetch. Never verify THIS package with it: the
+	// package is signed by this key, so that proves only self-agreement. Verify with
+	// an out-of-band key and compare its fingerprint against public_key_sha256.
+	PublicKey string `json:"public_key" yaml:"public_key" mapstructure:"public_key"`
+
 	// PublicKeySha256 corresponds to the JSON schema field "public_key_sha256".
 	PublicKeySha256 string `json:"public_key_sha256" yaml:"public_key_sha256" mapstructure:"public_key_sha256"`
 }
@@ -1948,6 +1954,9 @@ func (j *OnboardingV1SchemaJsonSigning) UnmarshalJSON(value []byte) error {
 	if _, ok := raw["key_id"]; raw != nil && !ok {
 		return fmt.Errorf("field key_id in OnboardingV1SchemaJsonSigning: required")
 	}
+	if _, ok := raw["public_key"]; raw != nil && !ok {
+		return fmt.Errorf("field public_key in OnboardingV1SchemaJsonSigning: required")
+	}
 	if _, ok := raw["public_key_sha256"]; raw != nil && !ok {
 		return fmt.Errorf("field public_key_sha256 in OnboardingV1SchemaJsonSigning: required")
 	}
@@ -1961,6 +1970,9 @@ func (j *OnboardingV1SchemaJsonSigning) UnmarshalJSON(value []byte) error {
 	}
 	if plain.Canonicalization != "RFC8785" {
 		return fmt.Errorf("field %s: must be equal to %s", "canonicalization", "RFC8785")
+	}
+	if matched, _ := regexp.MatchString(`^[A-Za-z0-9_-]{43}$`, string(plain.PublicKey)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "PublicKey", `^[A-Za-z0-9_-]{43}$`)
 	}
 	if matched, _ := regexp.MatchString(`^[a-f0-9]{64}$`, string(plain.PublicKeySha256)); !matched {
 		return fmt.Errorf("field %s pattern match: must match %s", "PublicKeySha256", `^[a-f0-9]{64}$`)
