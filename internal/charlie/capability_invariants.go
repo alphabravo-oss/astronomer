@@ -23,7 +23,7 @@ const (
 // irreversible, or internally inconsistent descriptor.
 func validateV1CapabilityDescriptor(descriptor CapabilityDescriptor) error {
 	if strings.TrimSpace(descriptor.Name) == "" || descriptor.SchemaVersion != "1" || descriptor.Destructive || descriptor.ManagedTargetAccess ||
-		descriptor.MaxResponseBytes < 1 || descriptor.MaxResponseBytes > maxActionResult || descriptor.TimeoutSeconds < 1 || descriptor.TimeoutSeconds > 30 ||
+		descriptor.MaxResponseBytes < 1 || descriptor.MaxResponseBytes > maxActionResult || descriptor.TimeoutSeconds < 1 || descriptor.TimeoutSeconds > 120 ||
 		!validCapabilitySource(descriptor.Source) || strings.TrimSpace(descriptor.RBACResource) == "" || strings.TrimSpace(descriptor.RBACVerb) == "" ||
 		containsSpoofableSafetyField(descriptor.AcceptedFields) {
 		return fmt.Errorf("Charlie v1 capability descriptor is unsafe")

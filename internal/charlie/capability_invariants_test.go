@@ -38,6 +38,17 @@ func TestV1DescriptorInvariantRejectsDestructiveAndSpoofedSafetyMetadata(t *test
 	}
 }
 
+func TestV1DescriptorTimeoutMatchesCharlieContractMaximum(t *testing.T) {
+	descriptor, ok := capabilityByName("astronomer.management.workload_rollout")
+	if !ok || descriptor.TimeoutSeconds != 120 || validateV1CapabilityDescriptor(descriptor) != nil {
+		t.Fatalf("120-second contract maximum was not accepted: %+v", descriptor)
+	}
+	descriptor.TimeoutSeconds++
+	if validateV1CapabilityDescriptor(descriptor) == nil {
+		t.Fatal("descriptor above the 120-second contract maximum was accepted")
+	}
+}
+
 func TestUnsafeDescriptorFailsRegistrationAndDiscovery(t *testing.T) {
 	unsafe := WriteCapabilityCatalog()[0]
 	unsafe.Destructive = true
