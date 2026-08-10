@@ -590,7 +590,7 @@ func (a *ManagementKubernetesAdapter) rollout(ctx context.Context, capability Ca
 				return nil, fmt.Errorf("replace unhealthy management pod: %w", err)
 			}
 		} else {
-			if err := a.kube.CoreV1().Pods(a.namespace).EvictV1(ctx, &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: targets[i].Name, Namespace: a.namespace}, DeleteOptions: &metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &targets[i].UID}}}); err != nil {
+			if err := a.evictWhenBudgetAllows(ctx, &targets[i]); err != nil {
 				return nil, fmt.Errorf("safely evict management pod: %w", err)
 			}
 		}
@@ -602,6 +602,31 @@ func (a *ManagementKubernetesAdapter) rollout(ctx context.Context, capability Ca
 	result["prior_pod_uids"] = priorUIDs
 	result["replaced_pods"] = len(priorUIDs)
 	return marshalBounded(result, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) evictWhenBudgetAllows(ctx context.Context, pod *corev1.Pod) error {
+	if pod == nil || pod.UID == "" {
+		return fmt.Errorf("management pod identity is unavailable")
+	}
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		err := a.kube.CoreV1().Pods(a.namespace).EvictV1(ctx, &policyv1.Eviction{
+			ObjectMeta:    metav1.ObjectMeta{Name: pod.Name, Namespace: a.namespace},
+			DeleteOptions: &metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pod.UID}},
+		})
+		if err == nil {
+			return nil
+		}
+		if !apierrors.IsTooManyRequests(err) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 func (a *ManagementKubernetesAdapter) deploymentPods(ctx context.Context, deployment *appsv1.Deployment) ([]corev1.Pod, error) {

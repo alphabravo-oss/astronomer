@@ -143,12 +143,12 @@ func ReadCapabilityCatalog() []CapabilityDescriptor {
 
 func WriteCapabilityCatalog() []CapabilityDescriptor {
 	return []CapabilityDescriptor{
-		writeDesc("astronomer.management.workload_restart",
+		writeDescWithTimeout("astronomer.management.workload_restart",
 			"Restart one mutable management Deployment (server|worker|frontend). Use when the user asks to restart a management component. resource_id must be a session-scoped resource id from product context (default install scope is 'local'); workload=deployment/<name>; operation_id=any fresh opaque correlator (product replaces it with the trusted action id). Never ask the user for tool names or these ids.",
-			SourceManagementKubernetes, "workloads", []string{"resource_id", "workload", "operation_id"}, false),
-		writeDesc("astronomer.management.workload_rollout",
+			SourceManagementKubernetes, "workloads", []string{"resource_id", "workload", "operation_id"}, false, 120),
+		writeDescWithTimeout("astronomer.management.workload_rollout",
 			"Trigger a rollout restart of one mutable management Deployment. resource_id=session-scoped id (default 'local'); workload=deployment/<name>; operation_id=any fresh opaque correlator.",
-			SourceManagementKubernetes, "workloads", []string{"resource_id", "workload", "operation_id"}, false),
+			SourceManagementKubernetes, "workloads", []string{"resource_id", "workload", "operation_id"}, false, 120),
 		writeDesc("astronomer.management.workload_scale",
 			"Scale a mutable management Deployment to replicas in [2,20]. Use when the user asks to scale a management workload. resource_id=session-scoped id from product context (default install scope is 'local'); workload=deployment/<name> e.g. deployment/astronomer-worker; replicas=N; operation_id=any fresh opaque correlator (product binds trusted action id). Do not ask the user for resource_id or operation_id.",
 			SourceManagementKubernetes, "workloads", []string{"resource_id", "workload", "replicas", "operation_id"}, false),
@@ -161,9 +161,9 @@ func WriteCapabilityCatalog() []CapabilityDescriptor {
 		writeDesc("astronomer.management.run_job",
 			"Run an owned CronJob-derived maintenance Job: management-plane-backup or restore-drill. resource_id=session-scoped id (default 'local'); job enum; operation_id=any fresh opaque correlator.",
 			SourceManagementKubernetes, "workloads", []string{"resource_id", "job", "operation_id"}, false),
-		writeDesc("astronomer.tunnel.restart_component",
+		writeDescWithTimeout("astronomer.tunnel.restart_component",
 			"Restart tunnel-related management component server|worker. resource_id=session-scoped id; component; operation_id=any fresh opaque correlator.",
-			SourceManagementKubernetes, "agents", []string{"resource_id", "component", "operation_id"}, false),
+			SourceManagementKubernetes, "agents", []string{"resource_id", "component", "operation_id"}, false, 120),
 	}
 }
 
@@ -186,4 +186,10 @@ func writeDesc(name, description string, source CapabilitySource, resource strin
 		TimeoutSeconds: 30, Destructive: false, AutoEligible: auto, Idempotent: true,
 		RequiresPrecondition: true, RequiresVerification: true,
 	}
+}
+
+func writeDescWithTimeout(name, description string, source CapabilitySource, resource string, fields []string, auto bool, timeoutSeconds int) CapabilityDescriptor {
+	descriptor := writeDesc(name, description, source, resource, fields, auto)
+	descriptor.TimeoutSeconds = timeoutSeconds
+	return descriptor
 }

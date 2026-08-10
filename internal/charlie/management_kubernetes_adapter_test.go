@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -165,6 +167,33 @@ func TestManagementKubernetesRestartReplacesOnlyAnUnhealthyControlledPod(t *test
 	verified, err := unhealthy.Verify(context.Background(), descriptor, args, result)
 	if err != nil || !verified {
 		t.Fatalf("unhealthy restart verification = %v, %v; result=%s", verified, err, result)
+	}
+}
+
+func TestManagementKubernetesRolloutWaitsForDisruptionBudget(t *testing.T) {
+	client := fake.NewClientset()
+	attempts := 0
+	client.PrependReactor("create", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		attempts++
+		if attempts < 3 {
+			return true, nil, apierrors.NewTooManyRequests("disruption budget is updating", 0)
+		}
+		return true, action.(k8stesting.CreateAction).GetObject(), nil
+	})
+	adapter, err := NewManagementKubernetesAdapter(client, "astronomer", "astronomer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := adapter.evictWhenBudgetAllows(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-worker-0", UID: "pod-a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("eviction attempts = %d, want 3", attempts)
 	}
 }
 
