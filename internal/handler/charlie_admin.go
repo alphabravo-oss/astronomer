@@ -244,7 +244,7 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 		if reacked, ackErr := h.backend.AcknowledgeDisclosure(r.Context(), view.DisclosureDigest); ackErr == nil {
 			view = reacked
 			recordCharlieAdminAudit(r, h.audit, "admin.charlie.disclosure.acknowledge", "charlie_connection", "current", map[string]any{
-				"with_mode":           string(request.Mode),
+				"with_mode":            string(request.Mode),
 				"post_mode_transition": true,
 			})
 		}
@@ -387,8 +387,12 @@ func (h *CharlieAdminHandler) CreateTrigger(w http.ResponseWriter, r *http.Reque
 	if !decodeCharlieJSON(w, r, &request) {
 		return
 	}
+	modeCeiling := request.ModeCeiling
+	if modeCeiling == "" {
+		modeCeiling = string(charlie.ModeReadOnly)
+	}
 	intentID := charlieAuditOpaque(request.Name)
-	if !h.requireAuthorityAudit(w, r, "admin.charlie.trigger.create", "charlie_trigger_rule", intentID, map[string]any{"enabled": request.Enabled, "suppressed": request.Suppressed}) {
+	if !h.requireAuthorityAudit(w, r, "admin.charlie.trigger.create", "charlie_trigger_rule", intentID, map[string]any{"enabled": request.Enabled, "suppressed": request.Suppressed, "mode_ceiling": modeCeiling}) {
 		return
 	}
 	view, err := h.backend.CreateTrigger(r.Context(), mustUserID(actor), request)
@@ -396,7 +400,7 @@ func (h *CharlieAdminHandler) CreateTrigger(w http.ResponseWriter, r *http.Reque
 		h.respondError(w, r, err)
 		return
 	}
-	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.create", "charlie_trigger_rule", view.ID, map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.create", "charlie_trigger_rule", view.ID, map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed, "mode_ceiling": view.ModeCeiling})
 	RespondJSON(w, http.StatusCreated, view)
 }
 
@@ -413,7 +417,11 @@ func (h *CharlieAdminHandler) UpdateTrigger(w http.ResponseWriter, r *http.Reque
 	if !decodeCharlieJSON(w, r, &request) {
 		return
 	}
-	fields := map[string]any{"enabled": request.Enabled, "suppressed": request.Suppressed}
+	modeCeiling := request.ModeCeiling
+	if modeCeiling == "" {
+		modeCeiling = string(charlie.ModeReadOnly)
+	}
+	fields := map[string]any{"enabled": request.Enabled, "suppressed": request.Suppressed, "mode_ceiling": modeCeiling}
 	if !h.requireAuthorityAudit(w, r, "admin.charlie.trigger.update", "charlie_trigger_rule", id.String(), fields) {
 		return
 	}
@@ -422,7 +430,7 @@ func (h *CharlieAdminHandler) UpdateTrigger(w http.ResponseWriter, r *http.Reque
 		h.respondError(w, r, err)
 		return
 	}
-	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.update", "charlie_trigger_rule", id.String(), map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed})
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.trigger.update", "charlie_trigger_rule", id.String(), map[string]any{"enabled": view.Enabled, "suppressed": view.Suppressed, "mode_ceiling": view.ModeCeiling})
 	RespondJSON(w, http.StatusOK, view)
 }
 

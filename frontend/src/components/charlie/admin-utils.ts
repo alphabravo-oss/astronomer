@@ -78,6 +78,7 @@ export function automationValidationIssues(input: {
     fleetThresholdPercent: number;
     maximumAttempts: number;
     serviceIdentity: string;
+    modeCeiling: string;
   }>;
 }): string[] {
   const issues: string[] = [];
@@ -87,6 +88,8 @@ export function automationValidationIssues(input: {
     if (!rule.sourceType.trim()) issues.push(`${label} needs a source type.`);
     if (!rule.serviceIdentity.trim())
       issues.push(`${label} needs a service identity.`);
+    if (!["read_only", "approval", "auto"].includes(rule.modeCeiling))
+      issues.push(`${label} needs a valid mode ceiling.`);
     if (rule.severities.length === 0)
       issues.push(`${label} needs at least one severity.`);
     if (

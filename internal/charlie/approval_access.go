@@ -201,9 +201,17 @@ func (s *ApprovalAccessService) Decide(ctx context.Context, actorID uuid.UUID, a
 	}
 
 	candidate, err := s.findForActor(ctx, actorID, approvalID)
-	if err != nil || !candidate.eligible {
+	if err != nil {
+		// Do not manufacture an approval lifecycle record from untrusted request
+		// data when no signed, product-bound candidate can be recovered. The HTTP
+		// mutation audit still records the bounded denied request; emitting a
+		// lifecycle event with empty action/session/digest fields would violate
+		// the audit contract and previously produced a misleading encode failure.
+		return ApprovalView{}, fmt.Errorf("Charlie approval is not eligible")
+	}
+	if !candidate.eligible {
 		reason := "authorization_denied"
-		if err == nil && candidate.auditReason != "" {
+		if candidate.auditReason != "" {
 			reason = candidate.auditReason
 		}
 		s.audit(ctx, candidate, actorID, decision, reason)

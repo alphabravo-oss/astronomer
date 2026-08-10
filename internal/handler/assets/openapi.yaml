@@ -409,7 +409,7 @@ components:
     CharlieAdminTriggerRule:
       type: object
       additionalProperties: false
-      required: [name, source_type, enabled, severities, scopes, cooldown_seconds, grace_period_seconds, flap_window_seconds, flap_count, fleet_threshold_percent, suppressed, maximum_attempts, dead_letter_enabled]
+      required: [name, source_type, enabled, severities, scopes, cooldown_seconds, grace_period_seconds, flap_window_seconds, flap_count, fleet_threshold_percent, suppressed, maximum_attempts, dead_letter_enabled, mode_ceiling]
       properties:
         id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128}
@@ -427,6 +427,7 @@ components:
         maximum_attempts: {type: integer, format: int32, minimum: 1}
         dead_letter_enabled: {type: boolean}
         service_identity: {type: string, readOnly: true}
+        mode_ceiling: {type: string, enum: [read_only, approval, auto], default: read_only}
     CharlieAdminAutomation:
       type: object
       additionalProperties: false

@@ -653,6 +653,12 @@ WITH current_receipt AS (
     SELECT r.* FROM charlie_action_receipts r
     WHERE r.session_id = sqlc.arg(session_id_arg)
       AND r.charlie_action_id <> sqlc.arg(action_id_arg)
+), deployment_receipts AS (
+    SELECT r.* FROM charlie_action_receipts r
+    JOIN charlie_sessions s ON s.id = r.session_id
+    JOIN charlie_sessions current_session ON current_session.id = sqlc.arg(session_id_arg)
+    WHERE s.connection_id = current_session.connection_id
+      AND r.charlie_action_id <> sqlc.arg(action_id_arg)
 )
 SELECT
     NOT EXISTS (
@@ -662,7 +668,7 @@ SELECT
           AND (c.id IS NULL OR r.created_at < c.created_at OR (r.created_at = c.created_at AND r.id::text < c.id::text))
     ) AS incident_clear,
     NOT EXISTS (
-        SELECT 1 FROM prior_receipts r
+        SELECT 1 FROM deployment_receipts r
         WHERE r.capability = sqlc.arg(capability_arg)
           AND r.resource_digest = sqlc.arg(resource_digest_arg)
           AND r.state IN ('dispatched', 'verifying', 'ambiguous', 'succeeded', 'failed')
@@ -672,19 +678,21 @@ SELECT
         SELECT 1 FROM prior_receipts r WHERE r.state IN ('failed', 'ambiguous')
     ) AS circuit_closed,
     (SELECT count(*) FROM prior_receipts r WHERE r.auto_budget_reserved) < sqlc.arg(max_actions_per_incident)::integer AS incident_budget_available,
-    (SELECT count(*) FROM prior_receipts r
+    (SELECT count(*) FROM deployment_receipts r
        WHERE r.auto_budget_reserved
+         AND r.capability = sqlc.arg(capability_arg)
          AND r.updated_at > now() - make_interval(secs => sqlc.arg(budget_window_seconds)::integer)
     ) < sqlc.arg(max_actions_per_window)::integer AS window_budget_available;
 
 -- name: ReserveCharlieAutoBudget :one
 WITH locked_session AS MATERIALIZED (
     SELECT s.id FROM charlie_sessions s WHERE s.id = sqlc.arg(session_id_arg) FOR UPDATE
-), policy AS (
+), policy AS MATERIALIZED (
     SELECT p.* FROM charlie_automation_policies p, locked_session
     WHERE p.connection_id = sqlc.arg(connection_id_arg)
       AND p.capability = sqlc.arg(capability_arg)
       AND p.enabled = true
+    FOR UPDATE
 ), current_receipt AS (
     SELECT r.* FROM charlie_action_receipts r, locked_session
     WHERE r.charlie_action_id = sqlc.arg(action_id_arg)
@@ -704,7 +712,7 @@ WITH locked_session AS MATERIALIZED (
     )
       AND NOT EXISTS (
         SELECT 1 FROM charlie_action_receipts other
-        WHERE other.session_id = r.session_id AND other.id <> r.id
+        WHERE other.connection_id = r.connection_id AND other.id <> r.id
           AND other.capability = r.capability AND other.resource_digest = r.resource_digest
           AND other.state IN ('dispatched', 'verifying', 'ambiguous', 'succeeded', 'failed')
           AND other.updated_at > now() - make_interval(secs => p.cooldown_seconds)
@@ -717,7 +725,8 @@ WITH locked_session AS MATERIALIZED (
       AND (SELECT count(*) FROM charlie_action_receipts other
            WHERE other.session_id = r.session_id AND other.auto_budget_reserved) < p.max_actions_per_incident
       AND (SELECT count(*) FROM charlie_action_receipts other
-           WHERE other.session_id = r.session_id AND other.auto_budget_reserved
+           WHERE other.connection_id = r.connection_id AND other.capability = r.capability
+             AND other.auto_budget_reserved
              AND other.updated_at > now() - make_interval(secs => p.budget_window_seconds)) < p.max_actions_per_window
 )
 UPDATE charlie_action_receipts r

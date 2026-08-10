@@ -86,13 +86,11 @@ func TestAutomationWriteGrantRequiresExactGlobalAutoEligiblePermission(t *testin
 	if !hasAutomationWriteGrant([]AdminPermission{{Permission: "monitoring:update", Scope: "global"}}) {
 		t.Fatal("exact queue-retry target grant was not recognized")
 	}
-	if !hasAutomationWriteGrant([]AdminPermission{{Permission: "argocd:update", Scope: "global"}}) {
-		t.Fatal("exact Argo sync target grant was not recognized")
-	}
 	for name, grants := range map[string][]AdminPermission{
 		"built-in Charlie only": {{Permission: "charlie:create", Scope: "global"}, {Permission: "charlie:read", Scope: "global"}},
 		"wildcard":              {{Permission: "*:*", Scope: "global"}},
 		"read only":             {{Permission: "monitoring:read", Scope: "global"}},
+		"non-auto Argo write":   {{Permission: "argocd:update", Scope: "global"}},
 		"downstream cluster":    {{Permission: "monitoring:update", Scope: "cluster:cluster-a"}},
 		"downstream project":    {{Permission: "monitoring:update", Scope: "project:project-a"}},
 	} {

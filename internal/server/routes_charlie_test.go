@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -16,6 +17,25 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+func TestCharlieOperationRouteUsesCanonicalTrailingSlash(t *testing.T) {
+	router := NewRouter(&config.Config{}, RouterDependencies{
+		CharlieOperations: handler.NewCharlieOperationHandler(nil),
+	})
+
+	found := false
+	if err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if method == http.MethodGet && route == "/api/v1/charlie/operations/{operation_id}/" {
+			found = true
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk router: %v", err)
+	}
+	if !found {
+		t.Fatal("Charlie operation route must end in / because API normalization appends it before chi matches")
+	}
+}
 
 type charlieEnabledSettings struct{}
 

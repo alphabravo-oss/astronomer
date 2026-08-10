@@ -10,6 +10,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeLiveAuthorityQueries struct {
@@ -17,10 +18,25 @@ type fakeLiveAuthorityQueries struct {
 	session       sqlc.CharlieSession
 	delegation    sqlc.CharlieDelegation
 	approval      sqlc.CharlieActionApproval
+	triggerEvent  sqlc.CharlieTriggerEvent
+	triggerRule   sqlc.CharlieTriggerRule
 	resources     [][]sqlc.CharlieSessionResource
 	resourceReads int
 	error         error
 	consumes      int
+}
+
+func (f *fakeLiveAuthorityQueries) GetCharlieTriggerEvent(context.Context, uuid.UUID) (sqlc.CharlieTriggerEvent, error) {
+	if f.triggerEvent.ID == uuid.Nil {
+		return sqlc.CharlieTriggerEvent{}, errors.New("trigger event not found")
+	}
+	return f.triggerEvent, f.error
+}
+func (f *fakeLiveAuthorityQueries) GetCharlieTriggerRule(context.Context, uuid.UUID) (sqlc.CharlieTriggerRule, error) {
+	if f.triggerRule.ID == uuid.Nil {
+		return sqlc.CharlieTriggerRule{}, errors.New("trigger rule not found")
+	}
+	return f.triggerRule, f.error
 }
 
 func (f *fakeLiveAuthorityQueries) GetCharlieConnectionByDeploymentID(context.Context, string) (sqlc.CharlieConnection, error) {
@@ -194,6 +210,39 @@ func TestProductLiveAuthorityAutoRequiresExactAutomationIdentity(t *testing.T) {
 	}
 	if decision := DecideAuthority(facts, time.Now()); decision.Allowed || decision.Code != DeniedApprovalRequired {
 		t.Fatalf("non-automation auto write should require approval, got %+v", decision)
+	}
+}
+
+func TestProductLiveAuthorityEventSessionCannotExceedTriggerModeCeiling(t *testing.T) {
+	queries, bindings, safety, action, capability, automationID, _ := liveAuthorityFixture(ModeAuto)
+	queries.delegation.PrincipalID = automationID
+	queries.delegation.PrincipalType = "service"
+	queries.session.Source = "event"
+	queries.session.ClientSessionID = uuid.New()
+	queries.triggerRule = sqlc.CharlieTriggerRule{
+		ID: uuid.New(), ConnectionID: queries.connection.ID, Enabled: true,
+		ServiceIdentityID: automationID, ModeCeiling: string(ModeReadOnly),
+	}
+	queries.triggerEvent = sqlc.CharlieTriggerEvent{
+		ID: queries.session.ClientSessionID, RuleID: queries.triggerRule.ID, State: "dispatched",
+		SessionID: pgtype.UUID{Bytes: queries.session.ID, Valid: true},
+	}
+	authority, _ := NewProductLiveAuthority(queries, bindings, safety, automationID)
+	facts, err := authority.Evaluate(context.Background(), action, capability, liveWriteArguments("resource-a"))
+	if err != nil || facts.Mode != ModeReadOnly {
+		t.Fatalf("read-only trigger ceiling was not applied: facts=%+v err=%v", facts, err)
+	}
+	if decision := DecideAuthority(facts, time.Now()); decision.Allowed || decision.Code != DeniedReadOnlyWrite {
+		t.Fatalf("read-only trigger authorized unattended write: %+v", decision)
+	}
+
+	queries.triggerRule.ModeCeiling = string(ModeAuto)
+	facts, err = authority.Evaluate(context.Background(), action, capability, liveWriteArguments("resource-a"))
+	if err != nil || facts.Mode != ModeAuto || facts.InteractiveApprovalRequired {
+		t.Fatalf("explicit auto trigger ceiling did not admit service identity facts: %+v err=%v", facts, err)
+	}
+	if decision := DecideAuthority(facts, time.Now()); !decision.Allowed {
+		t.Fatalf("explicit auto trigger ceiling denied bounded automatic action: %+v", decision)
 	}
 }
 

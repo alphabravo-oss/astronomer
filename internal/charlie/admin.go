@@ -114,6 +114,7 @@ type AdminTriggerRule struct {
 	MaximumAttempts       int32    `json:"maximum_attempts"`
 	DeadLetterEnabled     bool     `json:"dead_letter_enabled"`
 	ServiceIdentity       string   `json:"service_identity"`
+	ModeCeiling           string   `json:"mode_ceiling"`
 }
 
 type AdminAutomationView struct {
@@ -1162,7 +1163,7 @@ func safeAdminTrigger(rule sqlc.CharlieTriggerRule) AdminTriggerRule {
 		FlapCount: integer("flap_count", integer("count", 1)), FleetThresholdPercent: integer("fleet_threshold_percent", 0),
 		MinimumAgentVersion: selectors.MinimumAgentVersion, Suppressed: selectors.Suppressed,
 		MaximumAttempts: integer("maximum_attempts", MaxTriggerDispatchAttempts), DeadLetterEnabled: boolean("dead_letter_enabled", true),
-		ServiceIdentity: AutomationUsername,
+		ServiceIdentity: AutomationUsername, ModeCeiling: rule.ModeCeiling,
 	}
 }
 
@@ -1181,9 +1182,10 @@ func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input Ad
 	if err := validateAdminTrigger(input); err != nil {
 		return AdminTriggerRule{}, err
 	}
+	input.ModeCeiling = safeTriggerModeCeiling(input.ModeCeiling)
 	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{
 		Action: "admin.charlie.trigger.update", ResourceType: "charlie_trigger_rule", ResourceID: id.String(),
-		Fields: map[string]any{"enabled": input.Enabled, "suppressed": input.Suppressed},
+		Fields: map[string]any{"enabled": input.Enabled, "suppressed": input.Suppressed, "mode_ceiling": input.ModeCeiling},
 	}); err != nil {
 		return AdminTriggerRule{}, err
 	}
@@ -1199,7 +1201,7 @@ func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input Ad
 		Name: strings.TrimSpace(input.Name), RuleType: strings.TrimSpace(input.SourceType), Category: existing.Category,
 		Enabled: input.Enabled && !input.Suppressed, MinimumSeverity: severity, Selectors: selectors, Thresholds: thresholds,
 		WindowSeconds: max32(input.GracePeriodSeconds, 1), CooldownSeconds: input.CooldownSeconds,
-		ServiceIdentityID: existing.ServiceIdentityID, ModeCeiling: existing.ModeCeiling, ID: id, ConnectionID: connection.ID,
+		ServiceIdentityID: existing.ServiceIdentityID, ModeCeiling: input.ModeCeiling, ID: id, ConnectionID: connection.ID,
 	})
 	if err != nil {
 		return AdminTriggerRule{}, ErrAdminConflict
@@ -1215,13 +1217,14 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 	if err := validateAdminTrigger(input); err != nil {
 		return AdminTriggerRule{}, err
 	}
+	input.ModeCeiling = safeTriggerModeCeiling(input.ModeCeiling)
 	identity, err := s.queries.GetUserByUsername(ctx, AutomationUsername)
 	if err != nil || !identity.IsActive || !identity.IsService {
 		return AdminTriggerRule{}, ErrAdminUnavailable
 	}
 	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{
 		Action: "admin.charlie.trigger.create", ResourceType: "charlie_trigger_rule", ResourceID: digestBytes([]byte(strings.TrimSpace(input.Name))), ActorID: actor,
-		Fields: map[string]any{"enabled": input.Enabled, "suppressed": input.Suppressed},
+		Fields: map[string]any{"enabled": input.Enabled, "suppressed": input.Suppressed, "mode_ceiling": input.ModeCeiling},
 	}); err != nil {
 		return AdminTriggerRule{}, err
 	}
@@ -1237,7 +1240,7 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 		Category: strings.TrimSpace(input.SourceType), Enabled: input.Enabled && !input.Suppressed,
 		MinimumSeverity: input.Severities[0], Selectors: selectors, Thresholds: thresholds,
 		WindowSeconds: max32(input.GracePeriodSeconds, 1), CooldownSeconds: input.CooldownSeconds,
-		ServiceIdentityID: identity.ID, ModeCeiling: string(ModeReadOnly), CreatedByID: uuidToPG(actor),
+		ServiceIdentityID: identity.ID, ModeCeiling: input.ModeCeiling, CreatedByID: uuidToPG(actor),
 	})
 	if err != nil {
 		return AdminTriggerRule{}, ErrAdminConflict
@@ -1285,7 +1288,17 @@ func validateAdminTrigger(input AdminTriggerRule) error {
 	if input.ServiceIdentity != "" && input.ServiceIdentity != AutomationUsername {
 		return fmt.Errorf("%w: trigger service identity is invalid", ErrAdminConflict)
 	}
+	if input.ModeCeiling != "" && input.ModeCeiling != string(ModeReadOnly) && input.ModeCeiling != string(ModeApproval) && input.ModeCeiling != string(ModeAuto) {
+		return fmt.Errorf("%w: trigger mode ceiling is invalid", ErrAdminConflict)
+	}
 	return nil
+}
+
+func safeTriggerModeCeiling(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return string(ModeReadOnly)
+	}
+	return strings.TrimSpace(value)
 }
 
 func normalizedScopes(values []string) []string {

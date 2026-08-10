@@ -21,6 +21,15 @@ type liveAuthorityQueries interface {
 	ConsumeCharlieActionApproval(context.Context, sqlc.ConsumeCharlieActionApprovalParams) (sqlc.CharlieActionApproval, error)
 }
 
+// triggerAuthorityQueries binds event-created service sessions back to the
+// product-owned trigger policy that created them. Keeping this separate from
+// liveAuthorityQueries preserves the small core interface while production
+// SQL queries must provide the additional ceiling for event sessions.
+type triggerAuthorityQueries interface {
+	GetCharlieTriggerEvent(context.Context, uuid.UUID) (sqlc.CharlieTriggerEvent, error)
+	GetCharlieTriggerRule(context.Context, uuid.UUID) (sqlc.CharlieTriggerRule, error)
+}
+
 type LiveBindingResolver interface {
 	CurrentBindings(context.Context, uuid.UUID) ([]rbac.RoleBinding, bool, error)
 }
@@ -115,6 +124,10 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		a.engine.CheckPermission(bindings, rbac.ResourceCharlie, rbac.VerbRead, clusterID, uuid.Nil)
 
 	mode := EffectiveMode(Mode(connection.RequestedMode), Mode(connection.VerifiedMode), connection.EmergencyDisabled)
+	mode, err = a.applyTriggerModeCeiling(ctx, connection, session, delegation, mode)
+	if err != nil {
+		return AuthorityInput{}, err
+	}
 	safety, err := a.safety.Evaluate(ctx, action, capability, arguments)
 	if err != nil {
 		return AuthorityInput{}, err
@@ -165,6 +178,25 @@ func (a *ProductLiveAuthority) Evaluate(ctx context.Context, action ActionEnvelo
 		}
 	}
 	return input, nil
+}
+
+func (a *ProductLiveAuthority) applyTriggerModeCeiling(ctx context.Context, connection sqlc.CharlieConnection, session sqlc.CharlieSession, delegation sqlc.CharlieDelegation, mode Mode) (Mode, error) {
+	if session.Source != "event" || delegation.PrincipalType != "service" {
+		return mode, nil
+	}
+	queries, ok := a.queries.(triggerAuthorityQueries)
+	if !ok || session.ClientSessionID == uuid.Nil {
+		return ModeDisabled, fmt.Errorf("Charlie trigger authority ceiling is unavailable")
+	}
+	event, err := queries.GetCharlieTriggerEvent(ctx, session.ClientSessionID)
+	if err != nil || !event.SessionID.Valid || event.SessionID.Bytes != session.ID || event.State != "dispatched" {
+		return ModeDisabled, fmt.Errorf("Charlie trigger authority binding is inactive")
+	}
+	rule, err := queries.GetCharlieTriggerRule(ctx, event.RuleID)
+	if err != nil || !rule.Enabled || rule.ConnectionID != connection.ID || rule.ServiceIdentityID != delegation.PrincipalID || !validMode(Mode(rule.ModeCeiling)) {
+		return ModeDisabled, fmt.Errorf("Charlie trigger authority policy is inactive")
+	}
+	return EffectiveMode(mode, Mode(rule.ModeCeiling), false), nil
 }
 
 func (a *ProductLiveAuthority) Commit(ctx context.Context, action ActionEnvelope, capability CapabilityDescriptor, arguments map[string]json.RawMessage, facts AuthorityInput) error {

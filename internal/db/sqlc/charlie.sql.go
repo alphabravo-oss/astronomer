@@ -2837,6 +2837,12 @@ WITH current_receipt AS (
     SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at FROM charlie_action_receipts r
     WHERE r.session_id = $8
       AND r.charlie_action_id <> $7
+), deployment_receipts AS (
+    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at FROM charlie_action_receipts r
+    JOIN charlie_sessions s ON s.id = r.session_id
+    JOIN charlie_sessions current_session ON current_session.id = $8
+    WHERE s.connection_id = current_session.connection_id
+      AND r.charlie_action_id <> $7
 )
 SELECT
     NOT EXISTS (
@@ -2846,7 +2852,7 @@ SELECT
           AND (c.id IS NULL OR r.created_at < c.created_at OR (r.created_at = c.created_at AND r.id::text < c.id::text))
     ) AS incident_clear,
     NOT EXISTS (
-        SELECT 1 FROM prior_receipts r
+        SELECT 1 FROM deployment_receipts r
         WHERE r.capability = $1
           AND r.resource_digest = $2
           AND r.state IN ('dispatched', 'verifying', 'ambiguous', 'succeeded', 'failed')
@@ -2856,8 +2862,9 @@ SELECT
         SELECT 1 FROM prior_receipts r WHERE r.state IN ('failed', 'ambiguous')
     ) AS circuit_closed,
     (SELECT count(*) FROM prior_receipts r WHERE r.auto_budget_reserved) < $4::integer AS incident_budget_available,
-    (SELECT count(*) FROM prior_receipts r
+    (SELECT count(*) FROM deployment_receipts r
        WHERE r.auto_budget_reserved
+         AND r.capability = $1
          AND r.updated_at > now() - make_interval(secs => $5::integer)
     ) < $6::integer AS window_budget_available
 `
@@ -4693,11 +4700,12 @@ func (q *Queries) RecordTunnelLocatorEvent(ctx context.Context, arg RecordTunnel
 const reserveCharlieAutoBudget = `-- name: ReserveCharlieAutoBudget :one
 WITH locked_session AS MATERIALIZED (
     SELECT s.id FROM charlie_sessions s WHERE s.id = $1 FOR UPDATE
-), policy AS (
+), policy AS MATERIALIZED (
     SELECT p.id, p.connection_id, p.capability, p.enabled, p.max_actions_per_incident, p.max_actions_per_window, p.budget_window_seconds, p.cooldown_seconds, p.revision, p.created_at, p.updated_at FROM charlie_automation_policies p, locked_session
     WHERE p.connection_id = $2
       AND p.capability = $3
       AND p.enabled = true
+    FOR UPDATE
 ), current_receipt AS (
     SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at FROM charlie_action_receipts r, locked_session
     WHERE r.charlie_action_id = $4
@@ -4717,7 +4725,7 @@ WITH locked_session AS MATERIALIZED (
     )
       AND NOT EXISTS (
         SELECT 1 FROM charlie_action_receipts other
-        WHERE other.session_id = r.session_id AND other.id <> r.id
+        WHERE other.connection_id = r.connection_id AND other.id <> r.id
           AND other.capability = r.capability AND other.resource_digest = r.resource_digest
           AND other.state IN ('dispatched', 'verifying', 'ambiguous', 'succeeded', 'failed')
           AND other.updated_at > now() - make_interval(secs => p.cooldown_seconds)
@@ -4730,7 +4738,8 @@ WITH locked_session AS MATERIALIZED (
       AND (SELECT count(*) FROM charlie_action_receipts other
            WHERE other.session_id = r.session_id AND other.auto_budget_reserved) < p.max_actions_per_incident
       AND (SELECT count(*) FROM charlie_action_receipts other
-           WHERE other.session_id = r.session_id AND other.auto_budget_reserved
+           WHERE other.connection_id = r.connection_id AND other.capability = r.capability
+             AND other.auto_budget_reserved
              AND other.updated_at > now() - make_interval(secs => p.budget_window_seconds)) < p.max_actions_per_window
 )
 UPDATE charlie_action_receipts r
@@ -5448,6 +5457,8 @@ type TransitionCharlieTriggerEventParams struct {
 	ExpectedState string      `json:"expected_state"`
 }
 
+// Explicit casts on every parameter keep pgx/Postgres prepared-statement type
+// inference stable (avoids SQLSTATE 42P08 when next_state is reused).
 func (q *Queries) TransitionCharlieTriggerEvent(ctx context.Context, arg TransitionCharlieTriggerEventParams) (CharlieTriggerEvent, error) {
 	row := q.db.QueryRow(ctx, transitionCharlieTriggerEvent,
 		arg.NextState,

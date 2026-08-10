@@ -49,11 +49,12 @@ describe("Charlie administration boundaries", () => {
     expect(automationValidationIssues({ rules: [{
       name: "", sourceType: "", severities: [], cooldownSeconds: 0,
       gracePeriodSeconds: 1, flapWindowSeconds: 1, flapCount: 1,
-      fleetThresholdPercent: 101, maximumAttempts: 1, serviceIdentity: "",
+      fleetThresholdPercent: 101, maximumAttempts: 1, serviceIdentity: "", modeCeiling: "invalid",
     }] })).toEqual(expect.arrayContaining([
       "Rule 1 needs a name.",
       "Rule 1 needs a source type.",
       "Rule 1 needs a service identity.",
+      "Rule 1 needs a valid mode ceiling.",
       "Rule 1 needs at least one severity.",
       "Rule 1 fleet threshold must be between 0 and 100.",
     ]));

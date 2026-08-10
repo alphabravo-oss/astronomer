@@ -183,6 +183,14 @@
         "auto"
       ]
     },
+    "mode_ceiling": {
+      "kind": "enum",
+      "values": [
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
     "revision": {
       "kind": "count"
     },
@@ -451,7 +459,8 @@
       "allowed_fields": [
         "outcome_code",
         "enabled",
-        "suppressed"
+        "suppressed",
+        "mode_ceiling"
       ],
       "coverage": [
         "success",

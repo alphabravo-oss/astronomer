@@ -109,6 +109,7 @@ export interface CharlieTriggerRule {
   maximumAttempts: number;
   deadLetterEnabled: boolean;
   serviceIdentity: string;
+  modeCeiling: "read_only" | "approval" | "auto";
 }
 export interface CharlieAutomationView {
   rules: CharlieTriggerRule[];
@@ -439,6 +440,7 @@ function triggerRuleWire(rule: CharlieTriggerRule) {
     maximum_attempts: rule.maximumAttempts,
     dead_letter_enabled: rule.deadLetterEnabled,
     service_identity: rule.serviceIdentity,
+    mode_ceiling: rule.modeCeiling,
   };
 }
 

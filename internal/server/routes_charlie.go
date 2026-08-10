@@ -97,7 +97,12 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, update).Post("/charlie/findings/{finding_id}/resolve/", deps.CharlieFindings.Resolve)
 		}
 		if deps.CharlieOperations != nil {
-			r.With(gate, read).Get("/charlie/operations/{operation_id}", deps.CharlieOperations.Get)
+			// All /api/v1 requests are normalized to a trailing slash before
+			// chi matches them. Keep this route canonical too; otherwise both
+			// the documented slashless URL and an explicitly suffixed request
+			// normalize to a path that can never match and return the router's
+			// generic 404 instead of operation status.
+			r.With(gate, read).Get("/charlie/operations/{operation_id}/", deps.CharlieOperations.Get)
 		}
 	})
 }

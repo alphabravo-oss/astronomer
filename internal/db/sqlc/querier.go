@@ -2041,6 +2041,8 @@ type Querier interface {
 	TransitionCharlieActionReceipt(ctx context.Context, arg TransitionCharlieActionReceiptParams) (CharlieActionReceipt, error)
 	TransitionCharlieFinding(ctx context.Context, arg TransitionCharlieFindingParams) (uuid.UUID, error)
 	TransitionCharlieFindingForApproval(ctx context.Context, arg TransitionCharlieFindingForApprovalParams) (CharlieFinding, error)
+	// Explicit casts on every parameter keep pgx/Postgres prepared-statement type
+	// inference stable (avoids SQLSTATE 42P08 when next_state is reused).
 	TransitionCharlieTriggerEvent(ctx context.Context, arg TransitionCharlieTriggerEventParams) (CharlieTriggerEvent, error)
 	UnassignClusterGroup(ctx context.Context, id uuid.UUID) error
 	UnlockUser(ctx context.Context, id uuid.UUID) error

@@ -192,7 +192,7 @@ beforeEach(() => {
       severities: ["high"], scopes: ["production"], cooldownSeconds: 1800,
       gracePeriodSeconds: 300, flapWindowSeconds: 900, flapCount: 3,
       fleetThresholdPercent: 25, minimumAgentVersion: "1.0.0", suppressed: false,
-      maximumAttempts: 3, deadLetterEnabled: true, serviceIdentity: "charlie-automation",
+      maximumAttempts: 3, deadLetterEnabled: true, serviceIdentity: "system:charlie-automation", modeCeiling: "read_only",
     }],
   });
   api.getCharlieAccess.mockResolvedValue({ effectivePermissions: [], automationGrants: [] });

@@ -76,7 +76,8 @@ describe("Charlie admin wire boundary", () => {
           suppressed: false,
           maximumAttempts: 5,
           deadLetterEnabled: true,
-          serviceIdentity: "charlie-automation",
+          serviceIdentity: "system:charlie-automation",
+          modeCeiling: "auto",
         },
       ],
     });
@@ -90,6 +91,7 @@ describe("Charlie admin wire boundary", () => {
         fleet_threshold_percent: 25,
         maximum_attempts: 5,
         dead_letter_enabled: true,
+        mode_ceiling: "auto",
       }),
     );
     expect(mockedApi.put).toHaveBeenCalledWith("/admin/charlie/access/", {

@@ -85,6 +85,15 @@ func TestWriteCatalogRequiresIdempotencyPreconditionsAndVerification(t *testing.
 	}
 }
 
+func TestOnlyBoundedQueueRetryIsAutoEligible(t *testing.T) {
+	for _, capability := range WriteCapabilityCatalog() {
+		want := capability.Name == "astronomer.queue.retry_task"
+		if capability.AutoEligible != want {
+			t.Fatalf("auto eligibility for %s = %t, want %t", capability.Name, capability.AutoEligible, want)
+		}
+	}
+}
+
 func TestDestructiveCatalogFactAlwaysWinsOverAutomationMetadata(t *testing.T) {
 	capability := WriteCapabilityCatalog()[0]
 	capability.Destructive = true

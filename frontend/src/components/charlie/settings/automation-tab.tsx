@@ -45,7 +45,8 @@ const newAutomationRule = (): CharlieTriggerRule => ({
   suppressed: false,
   maximumAttempts: 3,
   deadLetterEnabled: true,
-  serviceIdentity: "charlie-automation",
+  serviceIdentity: "system:charlie-automation",
+  modeCeiling: "read_only",
 });
 
 export function AutomationTab() {
@@ -335,6 +336,25 @@ export function AutomationTab() {
               value={r.serviceIdentity}
               set={(v) => update(i, { serviceIdentity: v })}
             />
+            <label className="space-y-1 text-sm">
+              <span className="block font-medium">Mode ceiling</span>
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={r.modeCeiling}
+                onChange={(event) =>
+                  update(i, {
+                    modeCeiling: event.target.value as CharlieTriggerRule["modeCeiling"],
+                  })
+                }
+              >
+                <option value="read_only">Read only</option>
+                <option value="approval">Approval required</option>
+                <option value="auto">Autonomous</option>
+              </select>
+              <span className="block text-xs text-muted-foreground">
+                This rule can never exceed the deployment mode. Autonomous also requires an eligible central allowlist and local action policy.
+              </span>
+            </label>
             <NumberField
               label="Cooldown seconds"
               value={r.cooldownSeconds}

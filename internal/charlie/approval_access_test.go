@@ -584,6 +584,22 @@ func TestApprovalAccessAuditFailureConsumesNoApprovalOrAuthority(t *testing.T) {
 	}
 }
 
+func TestApprovalAccessUnavailableCandidateDoesNotEmitMalformedLifecycleAudit(t *testing.T) {
+	service, _, bridge, actorID := approvalAccessFixture(t)
+	bridge.approval.ApprovalId = "approval-other"
+	bridge.approval.Manifest.ApprovalId = "approval-other"
+
+	if _, err := service.Decide(context.Background(), actorID, "approval-missing", uuid.New(), "reject", "stale request"); err == nil {
+		t.Fatal("unavailable approval decision succeeded")
+	}
+	audit := service.auditor.(*approvalAuditFake)
+	audit.mu.Lock()
+	defer audit.mu.Unlock()
+	if len(audit.events) != 0 {
+		t.Fatalf("untrusted approval request emitted a malformed lifecycle audit: %#v", audit.events)
+	}
+}
+
 func TestApprovalAccessAcceptsExactApprovalUnderAutomationCeiling(t *testing.T) {
 	service, store, bridge, actorID := approvalAccessFixture(t)
 	store.connection.RequestedMode = string(ModeAuto)

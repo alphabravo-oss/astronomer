@@ -626,6 +626,7 @@ export interface OpenAPIComponents {
           "maximum_attempts": number;
           "dead_letter_enabled": boolean;
           "service_identity"?: string;
+          "mode_ceiling": "read_only" | "approval" | "auto";
         };
     CharlieApprovalDecisionRequest: {
           "request_id": string;
