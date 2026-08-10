@@ -373,13 +373,12 @@ func (s *AdminService) Status(ctx context.Context) (AdminStatusView, error) {
 		Agent:      safeAdminAgent(connection),
 		Mode:       safeAdminMode(connection),
 	}
-	// An inactive staged replacement and an emergency stop are transport
-	// isolation boundaries, not just action-authorization bits. Do not probe the
-	// product agent, central Charlie, or artifact registry in either state. Apart
-	// from making the admin page responsive during an outage or upgrade, this
-	// prevents a read-only status request from opening network activity before
-	// activation or re-opening activity that the operator explicitly stopped.
-	if connectionTransportQuiesced(connection) {
+	// An emergency stop is a transport isolation boundary, not just an action
+	// authorization bit. Do not probe the product agent, central Charlie, or
+	// artifact registry while it is armed. Apart from making the admin page
+	// responsive during an outage, this prevents a read-only status request from
+	// re-opening network activity that the operator explicitly stopped.
+	if connection.EmergencyDisabled {
 		return quiescedAdminStatus(connection), nil
 	}
 	if s.bridge != nil {
@@ -451,10 +450,6 @@ func quiescedAdminStatus(connection sqlc.CharlieConnection) AdminStatusView {
 	view.Mode.WorkloadCeilingReady = false
 	view.Mode.Effects = modeEffects(ModeDisabled)
 	return view
-}
-
-func connectionTransportQuiesced(connection sqlc.CharlieConnection) bool {
-	return !connection.Active || connection.EmergencyDisabled
 }
 
 func emptyAdminStatus() AdminStatusView {
