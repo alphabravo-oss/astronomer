@@ -75,6 +75,9 @@ func TestCentralFindingWorkflowRejectsInconsistentAuthorityLabels(t *testing.T) 
 	if !validCentralFindingWorkflow(base) {
 		t.Fatal("valid manual workflow rejected")
 	}
+	if !validCentralFindingWorkflow(BridgeFindingSummary{Status: "reopened", WorkflowState: "approval_pending", BlockCode: "approval_required"}) {
+		t.Fatal("reopened approval-required recurrence was rejected")
+	}
 	for _, unsafe := range []BridgeFindingSummary{
 		{Status: "open", WorkflowState: "approval_pending", BlockCode: "read_only"},
 		{Status: "open", WorkflowState: "verification_pending", BlockCode: "verification_failed"},

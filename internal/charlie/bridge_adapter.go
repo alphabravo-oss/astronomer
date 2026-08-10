@@ -289,7 +289,10 @@ func validCentralFindingWorkflow(finding BridgeFindingSummary) bool {
 	}
 	switch finding.WorkflowState {
 	case "approval_pending":
-		return (finding.Status == "open" || finding.Status == "acknowledged") && reason == ReasonApprovalRequired
+		// A deduplicated approval-required finding can recur after it was
+		// terminal. Charlie marks that recurrence as reopened while restoring
+		// the approval-pending workflow; it still carries no execution authority.
+		return (finding.Status == "open" || finding.Status == "acknowledged" || finding.Status == "reopened") && reason == ReasonApprovalRequired
 	case "manual_remediation_required":
 		return IsActionableNonExecutionReason(reason) && reason != ReasonApprovalRequired &&
 			(finding.Status == "open" || finding.Status == "acknowledged" || finding.Status == "reopened")
