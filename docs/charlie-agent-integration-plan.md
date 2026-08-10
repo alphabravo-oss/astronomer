@@ -2676,3 +2676,38 @@ by this run. It does not waive any unchecked A14 or definition-of-done item.
   response as a local observation, before treating that table as authoritative.
   A central-outage session error should also expose a stable
   `charlie_unavailable` code instead of the current generic `internal_error`.
+
+## 14. Charlie 1.0.41 operational recovery addendum — 2026-08-10
+
+This addendum closes three gaps exposed after the 1.0.40 live run without
+widening Charlie's downstream-cluster boundary.
+
+- [x] Add a signed central artifact-credential lease protocol with separate
+  onboarding/enrollment and artifact expiry, durable generations, idempotent
+  claim, product materialization acknowledgement, encrypted pending bytes,
+  post-acknowledgement scrubbing, and bounded prior-generation overlap.
+- [x] Add an Astronomer reconciliation state machine that persists only lease
+  IDs, generation, request UUID, state, and receipt digest; updates only the
+  owner-fenced image-pull and Argo repository Secrets; reads both back exactly;
+  and recovers at every claim/materialize/acknowledge commit boundary.
+- [x] Connect Asynq's normal terminal error callback to the existing atomic
+  trigger-event/task-outbox transaction through a closed task catalog. Exclude
+  Charlie's own dispatch, outbox, and alert tasks to prevent recursive storms,
+  and pass no task payload or raw error text.
+- [x] Redesign `auto_allowlisted_success` around a real zero-retry queue failure,
+  dispatched trigger event, and event-owned incident/service session. A browser
+  session, human message, stale task ID, or pre-existing session cannot satisfy
+  the qualification proof.
+- [x] Add a signed monotonic central finding-change feed and an Astronomer cursor
+  projector. Accept only summaries bound to an existing central session and the
+  exact digest of one local management-plane session resource; publish alerts
+  through the existing deduplicating local finding path.
+- [ ] Publish Charlie 1.0.41 immutable central/agent artifacts and record their
+  digests and source commit.
+- [ ] Issue and consume one fresh signed replacement onboarding package for the
+  expired pre-lease installation, then prove Argo returns to Synced/Healthy.
+- [ ] Force one lease renewal window and prove claim, exact dual-secret
+  materialization, acknowledgement, prior-token overlap, restart replay, and
+  zero plaintext leakage against the live deployment.
+- [ ] Run the event-bound autonomous qualification and prove the local finding
+  projection cursor catches a central-only finding after restart.

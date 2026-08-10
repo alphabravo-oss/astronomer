@@ -267,7 +267,12 @@ func main() {
 	// Create worker and scheduler. Both fail-fast on invalid REDIS_URL —
 	// the old silent-fallback behavior was a production footgun in
 	// air-gapped / split-network deployments.
-	w, werr := worker.NewWorker(cfg.RedisURL, log)
+	queueTerminalPublisher, publisherErr := charlie.NewQueueTerminalFailurePublisher(sqlc.New(database.Pool()))
+	if publisherErr != nil {
+		log.Error("failed to configure Charlie queue terminal failure publisher")
+		os.Exit(1)
+	}
+	w, werr := worker.NewWorker(cfg.RedisURL, log, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
 	if werr != nil {
 		log.Error("failed to start worker", "error", werr)
 		os.Exit(1)

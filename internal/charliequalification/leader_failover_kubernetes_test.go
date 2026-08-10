@@ -20,7 +20,7 @@ import (
 )
 
 func TestKubernetesLeaderFailoverDeletesOnlyObservedUIDAndWaitsForReplacement(t *testing.T) {
-	client := fake.NewSimpleClientset(leaderStatefulSet(2), leaderPod(0, "pod-old", true), leaderPod(1, "pod-standby", true))
+	client := fake.NewClientset(leaderStatefulSet(2), leaderPod(0, "pod-old", true), leaderPod(1, "pod-standby", true))
 	deletedName, deletedUID := "", types.UID("")
 	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		deletion := action.(k8stesting.DeleteAction)
@@ -64,7 +64,7 @@ func TestKubernetesLeaderFailoverRejectsUnsafeTargetState(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			target := &KubernetesLeaderFailoverTarget{client: fake.NewSimpleClientset(test.objects...), namespace: "qualification", statefulSet: "charlie-agent", poll: time.Millisecond}
+			target := &KubernetesLeaderFailoverTarget{client: fake.NewClientset(test.objects...), namespace: "qualification", statefulSet: "charlie-agent", poll: time.Millisecond}
 			if _, _, err := target.Snapshot(t.Context(), test.ordinal); err == nil {
 				t.Fatal("unsafe leader target was accepted")
 			}

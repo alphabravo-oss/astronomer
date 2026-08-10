@@ -37,6 +37,7 @@ only by their owner. Prefer the `_FILE` variants for secrets. Required settings:
 | `ASTRONOMER_URL` | HTTPS Astronomer API base URL. HTTP is rejected except loopback when explicitly enabled. |
 | `METRICS_SOURCES_FILE` | Owner-only bounded JSON defining one to eight metrics endpoints and each endpoint's optional, separate bearer-token file. |
 | `FIXTURES_FILE` | Owner-only strict JSON containing the pre-staged approval identifiers, expected capabilities, exact single-resource session stimuli, idempotency UUIDs, and non-secret answer/citation canaries used by live scenarios. |
+| `QUEUE_REDIS_URL_FILE` | Owner-only file containing the Astronomer worker queue Redis URL. The hook uses it only to enqueue one malformed, zero-retry allowlisted catalog task; the normal worker terminal-failure publisher must create the event-driven Charlie incident. |
 | `NO_CALL_DWELL` | Optional Go duration for continuous unchanged-counter observation; defaults to `10s`, is bounded to two minutes, and should be set longer (for example `30s`) for the final release run. |
 | `KUBECONFIG_FILE` | Owner-only kubeconfig required by scenarios that scale the agent. |
 | `AGENT_NAMESPACE`, `AGENT_RELEASE`, `AGENT_STATEFULSET`, `AGENT_SERVICE` | Exact product-agent Helm release and workload targets used by fixed Kubernetes inventory queries. |
@@ -61,6 +62,7 @@ ASTRONOMER_CHARLIE_QUALIFICATION_APPROVER_TOKEN_FILE=/secure/approver.token \
 ASTRONOMER_CHARLIE_QUALIFICATION_ASTRONOMER_URL=https://astronomer.example \
 ASTRONOMER_CHARLIE_QUALIFICATION_METRICS_SOURCES_FILE=/secure/metrics-sources.json \
 ASTRONOMER_CHARLIE_QUALIFICATION_FIXTURES_FILE=/secure/fixtures.json \
+ASTRONOMER_CHARLIE_QUALIFICATION_QUEUE_REDIS_URL_FILE=/secure/queue-redis.url \
 ASTRONOMER_CHARLIE_QUALIFICATION_KUBECONFIG_FILE=/secure/qualification.kubeconfig \
 ASTRONOMER_CHARLIE_QUALIFICATION_AGENT_RELEASE=astronomer-charlie \
 ASTRONOMER_CHARLIE_QUALIFICATION_ISOLATION_CAPTURE_INTERFACE=any \
@@ -89,9 +91,11 @@ present. The observer requires every fixed family and rejects arbitrary labels;
 the other sources continue to provide the product and central counters.
 
 Authority fixtures are inputs, not mock results. Approval scenarios reference
-pre-staged approvals in Charlie. Automatic-mode scenarios create a fresh,
-private, single-resource session and submit exactly one configured message; all
-resources must be safe, disposable qualification targets:
+pre-staged approvals in Charlie. The allowlisted automatic scenario publishes a
+real terminal queue event and requires the production dispatcher to create a
+fresh event-owned incident session; no browser session or human message can
+satisfy it. Other interactive scenarios use safe, disposable qualification
+targets:
 
 ```json
 {
@@ -114,15 +118,8 @@ resources must be safe, disposable qualification targets:
   },
   "auto_allowlisted_success": {
     "capability": "astronomer.queue.retry_task",
-    "stimulus": {
-      "client_session_id": "10000000-0000-4000-8000-000000000001",
-      "client_message_id": "20000000-0000-4000-8000-000000000001",
-      "abort_request_id": "40000000-0000-4000-8000-000000000001",
-      "intent": "qualification_auto_allowlisted",
-      "resource_type": "management_component",
-      "resource_id": "qualification-task-auto",
-      "message": "Run the exact safe allowlisted qualification action."
-    }
+    "task_id": "10000000-0000-4000-8000-000000000001",
+    "abort_request_id": "40000000-0000-4000-8000-000000000001"
   },
   "auto_nonallowlisted_approval": {
     "capability": "astronomer.management.workload_restart",
@@ -295,6 +292,14 @@ seven alert-delivery scenarios. Automation is a cumulative
 ceiling: a safe, disclosed write that is not eligible for unattended execution
 must remain pending in the exact-approval lane rather than becoming a terminal
 denial.
+
+`auto_allowlisted_success` additionally requires an enabled
+`queue_terminal_failure` trigger rule whose automation ceiling permits the
+fixture capability. It proves that Asynq's terminal callback publishes a
+content-free event, that the trigger reaches `dispatched`, that its local
+session has `source=event` and `visibility=incident`, and that exactly one
+allowlisted product action succeeds. Reusing a task ID or a pre-existing
+incident fails closed.
 
 The discovery drivers call an authenticated administrator surface that accepts
 only `mixed_catalog` or `malformed_catalog`. It compiles embedded candidates

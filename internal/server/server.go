@@ -1319,17 +1319,21 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// gate-checked objects. Listener, consumer, dispatcher, and capability-client
 	// generations are materialized later only through RuntimeLifecycle.
 	var (
-		charlieSessionsHandler   *handler.CharlieSessionHandler
-		charlieThreadsHandler    *handler.CharlieThreadHandler
-		charlieApprovalsHandler  *handler.CharlieApprovalHandler
-		charlieContextHandler    *handler.CharlieContextHandler
-		charlieFindingsHandler   *handler.CharlieFindingHandler
-		charlieOperationsHandler *handler.CharlieOperationHandler
-		charlieAdminHandler      *handler.CharlieAdminHandler
-		charlieAdminService      *charlie.AdminService
-		managedCharlieBridge     *charlie.ManagedBridge
-		charlieFindingEvents     handler.CharlieFindingEventAuthorizer
-		charlieWriteFence        = charlie.NewDistributedWriteFence(database.Pool())
+		charlieSessionsHandler     *handler.CharlieSessionHandler
+		charlieThreadsHandler      *handler.CharlieThreadHandler
+		charlieApprovalsHandler    *handler.CharlieApprovalHandler
+		charlieContextHandler      *handler.CharlieContextHandler
+		charlieFindingsHandler     *handler.CharlieFindingHandler
+		charlieOperationsHandler   *handler.CharlieOperationHandler
+		charlieAdminHandler        *handler.CharlieAdminHandler
+		charlieAdminService        *charlie.AdminService
+		managedCharlieBridge       *charlie.ManagedBridge
+		charlieArtifactCredentials *charlie.ArtifactCredentialReconciler
+		charlieFindingProjection   *charlie.FindingProjection
+		charlieCentralFindingStore *charlie.PGCentralFindingStore
+		charlieFindingPublisher    *charlie.EventFindingPublisher
+		charlieFindingEvents       handler.CharlieFindingEventAuthorizer
+		charlieWriteFence          = charlie.NewDistributedWriteFence(database.Pool())
 	)
 	charlieBindings := charlieLiveBindings{queries: queries, bindings: appmiddleware.NewSQLCRBACQuerierWithCache(queries, nil)}
 	agentNamespace := strings.TrimSpace(cfg.CharlieAgentNamespace)
@@ -1382,6 +1386,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return nil, plannerErr
 			}
 			findingPublisher := charlie.NewPolicyFindingPublisher(bus, findingAlertPlanner)
+			charlieFindingPublisher = findingPublisher
 			approvalAccess, approvalErr := charlie.NewApprovalAccessService(queries, sessionAccess, charlieBindings, managedCharlieBridge, auditor, findingPublisher, cfg.CharlieMCPActionSigningKeyFile)
 			if approvalErr != nil {
 				database.Close()
@@ -1400,6 +1405,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				database.Close()
 				return nil, findingErr
 			}
+			charlieCentralFindingStore = centralFindingStore
 			centralFindingSync, findingErr := charlie.NewCentralFindingSyncService(queries, sessionAccess, managedCharlieBridge, centralFindingStore, findingPublisher, active)
 			if findingErr != nil {
 				database.Close()
@@ -1420,16 +1426,23 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		adminInstaller = charlieAgentInstaller
 	}
 	if localK8s != nil && localDyn != nil && managedCharlieBridge != nil {
+		lifecycleBridge := charlie.NewManagedAgentLifecycleBridge(managedCharlieBridge)
 		configuredInstaller, installErr := charlie.NewAgentInstaller(localK8s, localDyn, charlie.AgentInstallerConfig{
 			AgentNamespace: agentNamespace, ArgoNamespace: localArgoNamespace,
 			ProductNamespace: localNamespace, Metadata: charlie.PGAgentMetadataLifecycle{Pool: database.Pool()},
-			Bridge: charlie.NewManagedAgentLifecycleBridge(managedCharlieBridge),
+			Bridge: lifecycleBridge,
 		})
 		if installErr != nil {
 			charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.admin_lifecycle_unavailable", "")
 		} else {
 			adminInstaller = configuredInstaller
 			featureInstaller = configuredInstaller
+			if artifactBridge, ok := lifecycleBridge.(charlie.ArtifactCredentialBridge); ok {
+				charlieArtifactCredentials, _ = charlie.NewArtifactCredentialReconciler(database.Pool(), artifactBridge, configuredInstaller)
+			}
+			if findingBridge, ok := lifecycleBridge.(charlie.FindingChangeBridge); ok && charlieCentralFindingStore != nil && charlieFindingPublisher != nil {
+				charlieFindingProjection, _ = charlie.NewFindingProjection(database.Pool(), findingBridge, charlieCentralFindingStore, charlieFindingPublisher, func() bool { return managedCharlieBridge.Active(context.Background()) })
+			}
 		}
 	}
 	if adminService, adminErr := charlie.NewAdminService(database.Pool(), adminInstaller, managedCharlieBridge); adminErr != nil {
@@ -2126,6 +2139,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			return nil, err
 		}
 	}
+	if charlieArtifactCredentials != nil {
+		go charlieArtifactCredentials.Run(reconcileCtx)
+	}
+	if charlieFindingProjection != nil {
+		go charlieFindingProjection.Run(reconcileCtx)
+	}
 	// CORR-R06: under multi-replica server, only one pod runs reconcilers.
 	// Atomic claims (CORR-R01) still protect correctness when leadership is
 	// briefly dual or unavailable; this reduces N× list/claim load.
@@ -2241,7 +2260,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// runtime deps; without this Server nothing actually drains tasks
 	// from the "tunnel" queue and apply rows would sit at pending.
 	if cfg.RedisURL != "" {
-		tw, twErr := worker.NewTunnelWorker(cfg.RedisURL, cfg.TunnelWorkerConcurrency, logger)
+		queueTerminalPublisher, _ := charlie.NewQueueTerminalFailurePublisher(sqlc.New(database.Pool()))
+		tw, twErr := worker.NewTunnelWorker(cfg.RedisURL, cfg.TunnelWorkerConcurrency, logger, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, logger))
 		if twErr != nil {
 			logger.Error("failed to create tunnel-queue asynq server", "error", twErr)
 		} else {

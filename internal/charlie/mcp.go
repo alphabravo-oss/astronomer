@@ -353,18 +353,6 @@ func boundedActionContent(result ActionResult) string {
 	return "Astronomer denied the action under current product policy: " + string(result.Code)
 }
 
-// boundedActionSummary is retained for tests and call sites that only need a
-// short lifecycle label without the adapter payload.
-func boundedActionSummary(result ActionResult) string {
-	if result.State == "succeeded" {
-		return "Astronomer completed and verified the bounded action."
-	}
-	if result.State == "failed" || result.State == "ambiguous" {
-		return "Astronomer could not verify the bounded action; no follow-on action is permitted."
-	}
-	return "Astronomer denied the action under current product policy: " + string(result.Code)
-}
-
 func writeMCPHTTPError(w http.ResponseWriter, status int, code string) {
 	writeMCPResponse(w, status, mcpResponse{JSONRPC: "2.0", Error: &mcpError{Code: -32000, Message: code}})
 }

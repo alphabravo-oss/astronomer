@@ -412,6 +412,101 @@ components:
                 - risk
                 - arguments_withheld
             type: object
+        ArtifactCredentialAcknowledgementRequest:
+            additionalProperties: false
+            properties:
+                generation:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                materialization_digest:
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - request_id
+                - generation
+                - materialization_digest
+            type: object
+        ArtifactCredentialClaimRequest:
+            additionalProperties: false
+            properties:
+                current_generation:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                expected_deployment_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                expected_integration_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                expected_package_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+            required:
+                - request_id
+                - current_generation
+                - expected_deployment_id
+                - expected_package_id
+                - expected_integration_id
+            type: object
+        ArtifactCredentialLease:
+            additionalProperties: false
+            properties:
+                acknowledged_at:
+                    format: date-time
+                    type: string
+                credential:
+                    description: Present only while the exact pending request awaits acknowledgement.
+                    maxLength: 4096
+                    minLength: 32
+                    type: string
+                deployment_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                expires_at:
+                    format: date-time
+                    type: string
+                generation:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                integration_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                issued_at:
+                    format: date-time
+                    type: string
+                lease_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                overlap_expires_at:
+                    format: date-time
+                    type: string
+                package_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                renew_after:
+                    format: date-time
+                    type: string
+                request_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                state:
+                    enum:
+                        - pending
+                        - active
+                        - superseded
+                        - revoked
+                    type: string
+            required:
+                - lease_id
+                - request_id
+                - deployment_id
+                - integration_id
+                - package_id
+                - generation
+                - state
+                - issued_at
+                - renew_after
+                - expires_at
+            type: object
         BlockCode:
             enum:
                 - capability_destructive
@@ -784,6 +879,55 @@ components:
                 - verification_failed
                 - no_safe_action
             type: string
+        FindingChange:
+            additionalProperties: false
+            properties:
+                finding_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                occurred_at:
+                    format: date-time
+                    type: string
+                operation:
+                    enum:
+                        - upsert
+                        - delete
+                    type: string
+                revision:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                sequence:
+                    format: int64
+                    minimum: 1
+                    type: integer
+                summary:
+                    $ref: '#/components/schemas/FindingProjectionSummary'
+            required:
+                - sequence
+                - operation
+                - finding_id
+                - revision
+                - occurred_at
+            type: object
+        FindingChangePage:
+            additionalProperties: false
+            properties:
+                data:
+                    items:
+                        $ref: '#/components/schemas/FindingChange'
+                    maxItems: 100
+                    type: array
+                has_more:
+                    type: boolean
+                next_sequence:
+                    format: int64
+                    minimum: 0
+                    type: integer
+            required:
+                - data
+                - next_sequence
+                - has_more
+            type: object
         FindingEnvelope:
             additionalProperties: false
             properties:
@@ -1006,6 +1150,73 @@ components:
         FindingOpaqueId:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
             type: string
+        FindingProjectionSummary:
+            additionalProperties: false
+            properties:
+                block_code:
+                    $ref: '#/components/schemas/BlockCode'
+                deduplication_key:
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                finding_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                investigation_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                recommended_capability:
+                    pattern: ^[a-z][a-z0-9_.:-]{2,127}$
+                    type: string
+                repeat_count:
+                    minimum: 1
+                    type: integer
+                resource_digest:
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                session_id:
+                    $ref: '#/components/schemas/OpaqueId'
+                severity:
+                    enum:
+                        - info
+                        - low
+                        - medium
+                        - high
+                        - critical
+                    type: string
+                status:
+                    enum:
+                        - open
+                        - acknowledged
+                        - dismissed
+                        - resolved
+                        - reopened
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+                workflow_state:
+                    enum:
+                        - approval_pending
+                        - manual_remediation_required
+                        - remediation_in_progress
+                        - verification_pending
+                        - resolved
+                        - rejected
+                        - dismissed
+                        - expired
+                    type: string
+            required:
+                - finding_id
+                - session_id
+                - investigation_id
+                - deduplication_key
+                - repeat_count
+                - severity
+                - status
+                - workflow_state
+                - block_code
+                - updated_at
+                - resource_digest
+                - recommended_capability
+            type: object
         FindingSummary:
             additionalProperties: false
             properties:
@@ -1559,6 +1770,80 @@ paths:
                     description: Investigation accepted
                 default:
                     $ref: '#/components/responses/Error'
+    /lifecycle/artifacts/credentials:
+        get:
+            operationId: getBridgeArtifactCredentialLease
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactCredentialLease'
+                    description: Current content-free artifact credential lease status
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+        post:
+            operationId: claimBridgeArtifactCredentialLease
+            parameters:
+                - in: header
+                  name: Idempotency-Key
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/OpaqueId'
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ArtifactCredentialClaimRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactCredentialLease'
+                    description: Idempotent pending artifact credential claim
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactCredentialLease'
+                    description: Newly issued pending artifact credential claim
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+    /lifecycle/artifacts/credentials/{lease_id}/acknowledgement:
+        parameters:
+            - in: path
+              name: lease_id
+              required: true
+              schema:
+                $ref: '#/components/schemas/OpaqueId'
+        post:
+            operationId: acknowledgeBridgeArtifactCredentialLease
+            parameters:
+                - in: header
+                  name: Idempotency-Key
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/OpaqueId'
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ArtifactCredentialAcknowledgementRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactCredentialLease'
+                    description: Activated artifact credential lease
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
     /lifecycle/credentials/revocation:
         get:
             operationId: getBridgeCredentialRevocation
@@ -1602,14 +1887,38 @@ paths:
                 default:
                     $ref: '#/components/responses/Error'
             x-charlie-availability: always
-        put:
-            operationId: setBridgeMode
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ModeRequest'
-                required: true
+    /lifecycle/findings/changes:
+        get:
+            operationId: listBridgeFindingChanges
+            parameters:
+                - in: query
+                  name: cursor
+                  required: false
+                  schema:
+                    default: "0"
+                    pattern: ^[0-9]+$
+                    type: string
+                - in: query
+                  name: limit
+                  required: false
+                  schema:
+                    default: 100
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FindingChangePage'
+                    description: Monotonic deployment finding projection changes
+                default:
+                    $ref: '#/components/responses/Error'
+            x-charlie-availability: always
+    /mode:
+        get:
+            operationId: getBridgeMode
             responses:
                 "200":
                     content:
@@ -1620,9 +1929,14 @@ paths:
                 default:
                     $ref: '#/components/responses/Error'
             x-charlie-availability: always
-    /mode:
-        get:
-            operationId: getBridgeMode
+        put:
+            operationId: setBridgeMode
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ModeRequest'
+                required: true
             responses:
                 "200":
                     content:

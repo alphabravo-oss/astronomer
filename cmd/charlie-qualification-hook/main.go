@@ -59,6 +59,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	queueRedisURL, err := secret("QUEUE_REDIS_URL")
+	if err != nil {
+		return err
+	}
+	eventStimulus, err := charliequalification.NewAsynqEventStimulus(queueRedisURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = eventStimulus.Close() }()
 	metricSources, err := metricSourcesFromFile(os.Getenv(envPrefix + "METRICS_SOURCES_FILE"))
 	if err != nil {
 		return err
@@ -149,6 +158,7 @@ func run() error {
 		AgentScaler:       scaler,
 		IsolationObserver: isolationObserver,
 		LeaderFailover:    leaderFailover,
+		EventStimulus:     eventStimulus,
 		HTTPClient:        client,
 		NoCallDwell:       noCallDwell,
 	})

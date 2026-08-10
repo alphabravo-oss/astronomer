@@ -81,7 +81,6 @@ func TestIsContinueableMessageError(t *testing.T) {
 type threadQueryFake struct {
 	connection sqlc.CharlieConnection
 	threads    map[uuid.UUID]sqlc.CharlieInteractiveThread
-	activeKey  string
 	sessions   map[uuid.UUID]sqlc.CharlieSession
 	membership map[uuid.UUID][]sqlc.CharlieSession
 	seq        map[uuid.UUID]int32
@@ -224,13 +223,13 @@ func (f *threadSessionCreatorFake) Create(_ context.Context, input CreateSession
 }
 
 type threadMessengerFake struct {
-	messages      []string
-	historyBySess map[uuid.UUID]json.RawMessage
-	historyErr    map[uuid.UUID]error
-	messageErr    error
+	messages       []string
+	historyBySess  map[uuid.UUID]json.RawMessage
+	historyErr     map[uuid.UUID]error
+	messageErr     error
 	messageErrOnce error // consumed once then cleared
-	history       json.RawMessage
-	err           error
+	history        json.RawMessage
+	err            error
 }
 
 func (f *threadMessengerFake) Message(_ context.Context, _, sessionID, _ uuid.UUID, message string) (json.RawMessage, error) {

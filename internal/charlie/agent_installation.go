@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -783,6 +785,31 @@ func objectMeta(name, namespace string, installationID uuid.UUID) metav1.ObjectM
 }
 
 func installationSecrets(i *AgentInstaller, names AgentResourceNames, spec AgentInstallSpec) []*corev1.Secret {
+	artifactSecrets := artifactCredentialSecrets(i, names, spec)
+	return []*corev1.Secret{
+		{ObjectMeta: objectMeta(names.Enrollment, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"onboarding-package.json": append([]byte(nil), spec.OnboardingPackage...)}},
+		{ObjectMeta: objectMeta(names.BridgeTLS, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
+			"tls.crt": []byte(spec.Trust.Agent.BridgeServerCertificate), "tls.key": []byte(spec.Trust.Agent.BridgeServerPrivateKey), "ca.crt": []byte(spec.Trust.Agent.CACertificatePEM),
+		}},
+		{ObjectMeta: objectMeta(names.MCPClientTLS, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
+			"tls.crt": []byte(spec.Trust.Agent.MCPClientCertificate), "tls.key": []byte(spec.Trust.Agent.MCPClientPrivateKey), "ca.crt": []byte(spec.Trust.Agent.CACertificatePEM),
+		}},
+		{ObjectMeta: objectMeta(names.CentralCA, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"ca.crt": []byte(spec.CentralCAPEM)}},
+		artifactSecrets[0], artifactSecrets[1],
+		{ObjectMeta: objectMeta(names.MCPServerTLS, i.productNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
+			"tls.crt": []byte(spec.Trust.Public.MCPServerCertificate), "tls.key": []byte(spec.Trust.Astronomer.MCPServerPrivateKey), "ca.crt": []byte(spec.Trust.Public.CACertificatePEM),
+			"action-signing-public-key": append([]byte(nil), spec.ActionSigningPublicKey...),
+		}},
+		{ObjectMeta: objectMeta(names.BridgeClientTLS, i.productNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
+			"tls.crt": []byte(spec.Trust.Public.BridgeClientCertificate), "tls.key": []byte(spec.Trust.Astronomer.BridgeClientPrivateKey), "ca.crt": []byte(spec.Trust.Public.CACertificatePEM),
+		}},
+	}
+}
+
+// artifactCredentialSecrets is deliberately the only constructor for the two
+// product-owned registry credential consumers. Onboarding and lease rotation
+// therefore cannot drift in names, labels, types, or Docker auth encoding.
+func artifactCredentialSecrets(i *AgentInstaller, names AgentResourceNames, spec AgentInstallSpec) []*corev1.Secret {
 	imageRepository := strings.Split(spec.ImageReference, "@")[0]
 	registry := strings.Split(imageRepository, "/")[0]
 	authValue := base64.StdEncoding.EncodeToString([]byte("artifact-token:" + spec.ArtifactCredential))
@@ -799,24 +826,45 @@ func installationSecrets(i *AgentInstaller, names AgentResourceNames, spec Agent
 	}
 	repository.Labels["argocd.argoproj.io/secret-type"] = "repository"
 	return []*corev1.Secret{
-		{ObjectMeta: objectMeta(names.Enrollment, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"onboarding-package.json": append([]byte(nil), spec.OnboardingPackage...)}},
-		{ObjectMeta: objectMeta(names.BridgeTLS, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
-			"tls.crt": []byte(spec.Trust.Agent.BridgeServerCertificate), "tls.key": []byte(spec.Trust.Agent.BridgeServerPrivateKey), "ca.crt": []byte(spec.Trust.Agent.CACertificatePEM),
-		}},
-		{ObjectMeta: objectMeta(names.MCPClientTLS, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
-			"tls.crt": []byte(spec.Trust.Agent.MCPClientCertificate), "tls.key": []byte(spec.Trust.Agent.MCPClientPrivateKey), "ca.crt": []byte(spec.Trust.Agent.CACertificatePEM),
-		}},
-		{ObjectMeta: objectMeta(names.CentralCA, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"ca.crt": []byte(spec.CentralCAPEM)}},
 		{ObjectMeta: objectMeta(names.ImagePull, i.agentNamespace, spec.InstallationID), Type: corev1.SecretTypeDockerConfigJson, Data: map[string][]byte{corev1.DockerConfigJsonKey: dockerJSON}},
 		repository,
-		{ObjectMeta: objectMeta(names.MCPServerTLS, i.productNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
-			"tls.crt": []byte(spec.Trust.Public.MCPServerCertificate), "tls.key": []byte(spec.Trust.Astronomer.MCPServerPrivateKey), "ca.crt": []byte(spec.Trust.Public.CACertificatePEM),
-			"action-signing-public-key": append([]byte(nil), spec.ActionSigningPublicKey...),
-		}},
-		{ObjectMeta: objectMeta(names.BridgeClientTLS, i.productNamespace, spec.InstallationID), Type: corev1.SecretTypeTLS, Data: map[string][]byte{
-			"tls.crt": []byte(spec.Trust.Public.BridgeClientCertificate), "tls.key": []byte(spec.Trust.Astronomer.BridgeClientPrivateKey), "ca.crt": []byte(spec.Trust.Public.CACertificatePEM),
-		}},
 	}
+}
+
+// RotateArtifactCredential converges and reads back both exact consumers. It
+// never patches the Charlie workload, Argo application, RBAC, or any downstream
+// cluster. A partial Kubernetes failure is safe to replay with the same lease.
+func (i *AgentInstaller) RotateArtifactCredential(ctx context.Context, spec AgentInstallSpec) (string, error) {
+	if i == nil || i.kube == nil || spec.InstallationID == uuid.Nil || strings.TrimSpace(spec.ArtifactCredential) == "" ||
+		strings.TrimSpace(spec.SecretPrefix) == "" || strings.TrimSpace(spec.ChartReference) == "" || strings.TrimSpace(spec.ImageReference) == "" {
+		return "", fmt.Errorf("Charlie artifact credential materialization is unavailable")
+	}
+	names := agentResourceNames(spec, i.agentNamespace)
+	desired := artifactCredentialSecrets(i, names, spec)
+	for _, secret := range desired {
+		if _, err := i.reconcileSecret(ctx, secret); err != nil {
+			return "", err
+		}
+	}
+	hash := sha256.New()
+	for _, secret := range desired {
+		live, err := i.kube.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
+		if err != nil || live.Labels[installationOwnerLabel] != spec.InstallationID.String() || live.Type != secret.Type || !reflect.DeepEqual(live.Data, secret.Data) {
+			return "", fmt.Errorf("Charlie artifact credential readback verification failed")
+		}
+		_, _ = hash.Write([]byte(secret.Namespace + "\x00" + secret.Name + "\x00" + string(secret.Type) + "\x00"))
+		keys := make([]string, 0, len(secret.Data))
+		for key := range secret.Data {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			_, _ = hash.Write([]byte(key + "\x00"))
+			_, _ = hash.Write(secret.Data[key])
+			_, _ = hash.Write([]byte{'\x00'})
+		}
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func defaultDenyPolicy(names AgentResourceNames, installationID uuid.UUID) *networkingv1.NetworkPolicy {
@@ -1012,7 +1060,6 @@ func (i *AgentInstaller) reconcileNamespace(ctx context.Context, installationID 
 		return err
 	}, nil
 }
-
 
 // refuseForeignOwner returns an error when an existing object is not owned by
 // this Charlie installation. Shared by Secret/NetworkPolicy/Service/Application.

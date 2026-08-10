@@ -62,6 +62,15 @@ type ActionFixture struct {
 	Stimulus   SessionStimulus `json:"stimulus"`
 }
 
+// EventActionFixture binds unattended automation to a product event. The
+// service session is created by the trigger dispatcher; no browser identity
+// creates the session or sends an instruction.
+type EventActionFixture struct {
+	Capability     string `json:"capability"`
+	TaskID         string `json:"task_id"`
+	AbortRequestID string `json:"abort_request_id"`
+}
+
 type PendingApprovalFixture struct {
 	Capability string          `json:"capability"`
 	Stimulus   SessionStimulus `json:"stimulus"`
@@ -103,7 +112,7 @@ type LiveFixtures struct {
 	ApprovalExpiry          ApprovalFixture        `json:"approval_expiry"`
 	ApprovalOnce            ApprovalFixture        `json:"approval_once"`
 	ApprovalReject          ApprovalFixture        `json:"approval_reject"`
-	AutoAllowlistedSuccess  ActionFixture          `json:"auto_allowlisted_success"`
+	AutoAllowlistedSuccess  EventActionFixture     `json:"auto_allowlisted_success"`
 	AutoNonallowlisted      PendingApprovalFixture `json:"auto_nonallowlisted_approval"`
 	LeaderKillFailover      ActionFixture          `json:"leader_kill_failover"`
 	VersionedRAGGrounded    VersionedRAGFixture    `json:"versioned_rag_grounded"`
@@ -130,6 +139,7 @@ type LiveConfig struct {
 	AgentScaler       AgentScaler
 	IsolationObserver IsolationObserver
 	LeaderFailover    *KubernetesLeaderFailoverTarget
+	EventStimulus     EventStimulus
 	ProofTimeout      time.Duration
 	ProofPoll         time.Duration
 	NoCallDwell       time.Duration
@@ -160,6 +170,7 @@ type LiveDriver struct {
 	agentScaler       AgentScaler
 	isolationObserver IsolationObserver
 	leaderFailover    leaderFailoverTarget
+	eventStimulus     EventStimulus
 	infrastructure    infrastructureQualificationOperator
 	proofTimeout      time.Duration
 	proofPoll         time.Duration
@@ -220,7 +231,7 @@ func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
 	return &LiveDriver{
 		base: base, adminToken: strings.TrimSpace(config.AdminToken), approverToken: strings.TrimSpace(config.ApproverToken), deniedToken: strings.TrimSpace(config.DeniedToken),
 		metricSources: metrics, counterMetrics: mapping, fixtures: config.Fixtures,
-		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver, leaderFailover: leaderFailover,
+		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver, leaderFailover: leaderFailover, eventStimulus: config.EventStimulus,
 		proofTimeout: proofTimeout, proofPoll: proofPoll, noCallDwell: noCallDwell,
 	}, nil
 }
@@ -406,6 +417,35 @@ type messageReceipt struct {
 	AcceptedAt time.Time `json:"accepted_at"`
 }
 
+type sessionListItem struct {
+	ID                   string `json:"id"`
+	ClientSessionID      string `json:"client_session_id"`
+	ResourceScopeSummary string `json:"resource_scope_summary"`
+	State                string `json:"state"`
+	Visibility           string `json:"visibility"`
+	Source               string `json:"source"`
+}
+
+type sessionListEnvelope struct {
+	Data struct {
+		Sessions []sessionListItem `json:"sessions"`
+	} `json:"data"`
+}
+
+type triggerEventItem struct {
+	ID           string `json:"id"`
+	EventType    string `json:"event_type"`
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+	State        string `json:"state"`
+}
+
+type triggerEventListEnvelope struct {
+	Data struct {
+		Items []triggerEventItem `json:"items"`
+	} `json:"data"`
+}
+
 var (
 	fixtureIDPattern         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 	fixtureCapabilityPattern = regexp.MustCompile(`^[a-z][a-z0-9._:-]{0,127}$`)
@@ -526,28 +566,28 @@ func (d *LiveDriver) approvalReject(ctx context.Context, scenario string) (resul
 
 func (d *LiveDriver) autoAllowlistedSuccess(ctx context.Context, scenario string) (result ScenarioResult) {
 	fixture := d.fixtures.AutoAllowlistedSuccess
-	if d.approverToken == "" || !validActionFixture(fixture) {
+	if d.approverToken == "" || d.eventStimulus == nil || !validEventActionFixture(fixture) {
 		return Unsupported(scenario)
 	}
 	original, before, ok := d.beginAuthorityProof(ctx, "auto")
 	if !ok {
 		return Unsupported(scenario)
 	}
-	localSessionID, err := d.createFixtureSession(ctx, fixture.Stimulus)
-	if err != nil {
+	if d.eventSessionExists(ctx, fixture.TaskID) || d.eventStimulus.PublishTerminalQueueFailure(ctx, fixture.TaskID) != nil {
 		d.finishAuthorityProof(&result, scenario, original, before, 0)
 		return Unsupported(scenario)
 	}
-	defer d.finishAutomaticProof(&result, scenario, original, before, 1, localSessionID, fixture.Stimulus.AbortRequestID)
-	receipt, err := d.sendStimulus(ctx, localSessionID, fixture.Stimulus)
-	if err != nil {
+	localSessionID, eventID, ok := d.waitForEventSession(ctx, fixture.TaskID)
+	if !ok || !d.verifyDispatchedQueueEvent(ctx, eventID, fixture.TaskID) {
+		d.finishAuthorityProof(&result, scenario, original, before, 0)
 		return Unsupported(scenario)
 	}
-	actionID, ok := d.discoverActionFromEvents(ctx, localSessionID, receipt.TurnID, fixture.Capability)
+	defer d.finishAutomaticProof(&result, scenario, original, before, 1, localSessionID, fixture.AbortRequestID)
+	actionID, ok := d.discoverEventActionFromEvents(ctx, localSessionID, fixture.Capability)
 	if !ok || !d.waitForOperation(ctx, actionID, fixture.Capability, before, 1) {
 		return Unsupported(scenario)
 	}
-	return Passed(scenario, "allowlisted_action_succeeded", "product_call_once")
+	return Passed(scenario, "event_bound_service_session", "allowlisted_action_succeeded", "product_call_once")
 }
 
 func (d *LiveDriver) autoNonallowlistedApproval(ctx context.Context, scenario string) (result ScenarioResult) {
@@ -1039,7 +1079,66 @@ func (d *LiveDriver) finishAnswerProof(result *ScenarioResult, scenario string, 
 	}
 }
 
-func (d *LiveDriver) discoverActionFromEvents(ctx context.Context, localSessionID, turnID, capability string) (string, bool) {
+func (d *LiveDriver) eventSessionExists(ctx context.Context, taskID string) bool {
+	_, _, found := d.findEventSession(ctx, taskID)
+	return found
+}
+
+func (d *LiveDriver) waitForEventSession(ctx context.Context, taskID string) (string, string, bool) {
+	deadline := time.Now().Add(d.proofTimeout)
+	for {
+		localID, eventID, found := d.findEventSession(ctx, taskID)
+		if found {
+			return localID, eventID, true
+		}
+		if !time.Now().Before(deadline) || waitContext(ctx, d.proofPoll) != nil {
+			return "", "", false
+		}
+	}
+}
+
+func (d *LiveDriver) findEventSession(ctx context.Context, taskID string) (string, string, bool) {
+	var response sessionListEnvelope
+	status, err := d.apiQuery(ctx, http.MethodGet, "/api/v1/charlie/sessions/", url.Values{"offset": {"0"}, "limit": {"100"}}, d.approverToken, nil, &response)
+	if err != nil || status != http.StatusOK || len(response.Data.Sessions) > 100 {
+		return "", "", false
+	}
+	wantScope := "workflow:" + qualificationQueueTaskType + ":" + taskID
+	localID, eventID := "", ""
+	for _, session := range response.Data.Sessions {
+		if session.ResourceScopeSummary != wantScope {
+			continue
+		}
+		_, sessionIDErr := uuid.Parse(session.ClientSessionID)
+		if !validFixtureID(session.ID) || sessionIDErr != nil || session.Source != "event" || session.Visibility != "incident" ||
+			(session.State != "active" && session.State != "waiting_approval") || localID != "" {
+			return "", "", false
+		}
+		localID, eventID = session.ID, session.ClientSessionID
+	}
+	return localID, eventID, localID != ""
+}
+
+func (d *LiveDriver) verifyDispatchedQueueEvent(ctx context.Context, eventID, taskID string) bool {
+	var response triggerEventListEnvelope
+	status, err := d.apiQuery(ctx, http.MethodGet, "/api/v1/admin/charlie/trigger-events/", url.Values{"state": {"dispatched"}, "offset": {"0"}, "limit": {"100"}}, d.adminToken, nil, &response)
+	if err != nil || status != http.StatusOK || len(response.Data.Items) > 100 {
+		return false
+	}
+	matches := 0
+	for _, event := range response.Data.Items {
+		if event.ID == eventID && event.EventType == "queue_terminal_failure" && event.ResourceType == "workflow" &&
+			event.ResourceID == qualificationQueueTaskType+":"+taskID && event.State == "dispatched" {
+			matches++
+		}
+	}
+	return matches == 1
+}
+
+// Event-created sessions have no browser message receipt, so the exact turn is
+// learned from the first action event and every subsequent action must remain
+// bound to that same turn until its terminal event.
+func (d *LiveDriver) discoverEventActionFromEvents(ctx context.Context, localSessionID, capability string) (string, bool) {
 	streamCtx, cancel := context.WithTimeout(ctx, d.proofTimeout)
 	defer cancel()
 	endpoint := d.base.ResolveReference(&url.URL{Path: "/api/v1/charlie/sessions/" + localSessionID + "/events/"})
@@ -1060,9 +1159,7 @@ func (d *LiveDriver) discoverActionFromEvents(ctx context.Context, localSessionI
 	limited := &io.LimitedReader{R: response.Body, N: (1 << 20) + 1}
 	scanner := bufio.NewScanner(limited)
 	scanner.Buffer(make([]byte, 16<<10), 256<<10)
-	eventName, dataLines := "", make([]string, 0, 2)
-	actions := map[string]struct{}{}
-	capabilityMatched := false
+	eventName, dataLines, actionID, turnID := "", make([]string, 0, 2), "", ""
 	events := 0
 	process := func() (bool, bool) {
 		if len(dataLines) == 0 {
@@ -1081,30 +1178,24 @@ func (d *LiveDriver) discoverActionFromEvents(ctx context.Context, localSessionI
 		if eventName != "" && event.Type != "" && eventName != event.Type {
 			return false, false
 		}
-		if event.ActionID != "" {
-			if event.TurnID != turnID || !validFixtureID(event.ActionID) {
-				return false, false
-			}
-			actions[event.ActionID] = struct{}{}
-			if len(actions) != 1 {
-				return false, false
-			}
-			eventCapability := strings.TrimSpace(event.Data.Data.Capability)
-			if eventCapability != "" && eventCapability != capability {
-				return false, false
-			}
-			capabilityMatched = capabilityMatched || eventCapability == capability
-		}
 		terminalType := event.Type
 		if terminalType == "" {
 			terminalType = eventName
 		}
 		eventName = ""
-		if event.TurnID == turnID && (terminalType == "turn.failed" || terminalType == "turn.aborted") {
+		if event.ActionID != "" {
+			eventCapability := strings.TrimSpace(event.Data.Data.Capability)
+			if !validFixtureID(event.ActionID) || !validFixtureID(event.TurnID) || eventCapability != capability ||
+				(actionID != "" && event.ActionID != actionID) || (turnID != "" && event.TurnID != turnID) {
+				return false, false
+			}
+			actionID, turnID = event.ActionID, event.TurnID
+		}
+		if turnID != "" && event.TurnID == turnID && (terminalType == "turn.failed" || terminalType == "turn.aborted") {
 			return true, false
 		}
-		if event.TurnID == turnID && terminalType == "turn.completed" {
-			return true, len(actions) == 1 && capabilityMatched
+		if turnID != "" && event.TurnID == turnID && terminalType == "turn.completed" {
+			return true, actionID != ""
 		}
 		return false, true
 	}
@@ -1113,14 +1204,8 @@ func (d *LiveDriver) discoverActionFromEvents(ctx context.Context, localSessionI
 		switch {
 		case line == "":
 			done, valid := process()
-			if !valid {
-				return "", false
-			}
-			if done {
-				for actionID := range actions {
-					return actionID, true
-				}
-				return "", false
+			if done || !valid {
+				return actionID, done && valid
 			}
 		case strings.HasPrefix(line, "event:"):
 			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
@@ -1257,6 +1342,12 @@ func validGeneralAnswerFixture(fixture GeneralAnswerFixture) bool {
 	return validStimulus(fixture.Stimulus) && validFixtureMarker(fixture.ExpectedAnswerMarker)
 }
 
+func validEventActionFixture(fixture EventActionFixture) bool {
+	taskID, taskErr := uuid.Parse(fixture.TaskID)
+	abortID, abortErr := uuid.Parse(fixture.AbortRequestID)
+	return fixtureCapabilityPattern.MatchString(fixture.Capability) && taskErr == nil && abortErr == nil && taskID != uuid.Nil && abortID != uuid.Nil && taskID != abortID
+}
+
 func validFixtureMarker(value string) bool {
 	return validFixtureText(value, 256) && len([]byte(strings.TrimSpace(value))) >= 8
 }
@@ -1297,9 +1388,8 @@ func (d *LiveDriver) fixtureIDsAreIsolated() bool {
 		d.fixtures.ApprovalOnce.DecisionRequest,
 		d.fixtures.ApprovalOnce.ReplayRequest,
 		d.fixtures.ApprovalReject.DecisionRequest,
-		d.fixtures.AutoAllowlistedSuccess.Stimulus.ClientSessionID,
-		d.fixtures.AutoAllowlistedSuccess.Stimulus.ClientMessageID,
-		d.fixtures.AutoAllowlistedSuccess.Stimulus.AbortRequestID,
+		d.fixtures.AutoAllowlistedSuccess.TaskID,
+		d.fixtures.AutoAllowlistedSuccess.AbortRequestID,
 		d.fixtures.AutoNonallowlisted.Stimulus.ClientSessionID,
 		d.fixtures.AutoNonallowlisted.Stimulus.ClientMessageID,
 		d.fixtures.AutoNonallowlisted.Stimulus.AbortRequestID,
@@ -1323,7 +1413,6 @@ func (d *LiveDriver) fixtureIDsAreIsolated() bool {
 	}
 	seenResources := map[string]struct{}{}
 	for _, stimulus := range []SessionStimulus{
-		d.fixtures.AutoAllowlistedSuccess.Stimulus,
 		d.fixtures.AutoNonallowlisted.Stimulus,
 		d.fixtures.LeaderKillFailover.Stimulus,
 		d.fixtures.VersionedRAGGrounded.Stimulus,

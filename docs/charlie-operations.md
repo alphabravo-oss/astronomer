@@ -127,12 +127,18 @@ trust.
 2. Verify package signature, confirmed public-key fingerprint, deployment and
    route binding, expiration, immutable chart/image digests, replica count, and
    one unique enrollment slot per ordinal.
-3. Charlie v1 rotates enrollment and artifact credentials only by issuing a
-   signed replacement package. Charlie atomically revokes the prior generation;
-   Astronomer validates and installs the replacement, verifies bridge/MCP
-   identity and readiness, then prunes superseded owner-bound material. There
-   is no separate Astronomer-side credential-rotation RPC.
-4. Replayed or ordinal-mismatched enrollment is an incident. Revoke/replace the
+3. Replace the signed package when enrollment identity, trust, artifact pins, or
+   package scope changes. Routine artifact-pull credentials use renewable
+   leases: Astronomer persists a request ID, claims one pending generation
+   through the local mTLS product bridge, writes and reads back only the exact
+   image-pull and Argo repository Secrets, then acknowledges their digest.
+   Charlie activates the new generation, retains the prior token for a bounded
+   24-hour overlap, and scrubs the pending secret. No credential is stored in
+   Astronomer's database.
+4. An installation whose pre-lease artifact token already expired needs one
+   fresh signed replacement package to install a lease-aware agent. Do not
+   reuse the expired package or patch a registry password by hand.
+5. Replayed or ordinal-mismatched enrollment is an incident. Revoke/replace the
    package and inspect Charlie's enrollment audit without exposing token data.
 
 ### Agent image or chart pull failure
@@ -141,7 +147,10 @@ Confirm the onboarding package points to Charlie OCI by immutable digest, the
 artifact credential is unexpired and repository-scoped, and the registry/Blob
 store health is green. Do not fall back to `latest`, an unreviewed public image,
 or an inline registry password. Roll back to the previously verified digest if
-the new artifact cannot be read back and verified.
+the new artifact cannot be read back and verified. Check
+`charlie_artifact_credential_state` for the content-free generation, pending
+state, expiry, acknowledgement time, and stable error code. Replay the same
+request; never generate a second credential while one is pending.
 
 ### Trigger dead-letter or event storm
 

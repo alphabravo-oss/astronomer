@@ -1,6 +1,7 @@
 package charliequalification
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,36 +31,39 @@ type qualificationOperation struct {
 }
 
 type authorityLiveState struct {
-	mu               sync.Mutex
-	requested        string
-	authority        string
-	revision         int64
-	digest           string
-	acknowledged     bool
-	runtime          map[string]uint64
-	downstream       map[string]uint64
-	approvals        map[string]*qualificationApproval
-	operations       map[string]qualificationOperation
-	autoAction       ActionFixture
-	autoPending      PendingApprovalFixture
-	ragAnswer        VersionedRAGFixture
-	generalAnswer    GeneralAnswerFixture
-	alertFixtures    map[string]AlertDeliveryFixture
-	history          map[string][]historyItem
-	autoTriggered    bool
-	sessions         map[string]SessionStimulus
-	clientSessions   map[string]string
-	modeDelay        time.Duration
-	failRestore      bool
-	failAbort        bool
-	replaySession    bool
-	unwrapApprovals  bool
-	unwrapDecision   bool
-	unwrapOperation  bool
-	streamVariant    string
-	answerVariant    string
-	activeModes      atomic.Int32
-	maximumModeCalls atomic.Int32
+	mu                   sync.Mutex
+	requested            string
+	authority            string
+	revision             int64
+	digest               string
+	acknowledged         bool
+	runtime              map[string]uint64
+	downstream           map[string]uint64
+	approvals            map[string]*qualificationApproval
+	operations           map[string]qualificationOperation
+	autoAction           EventActionFixture
+	autoPending          PendingApprovalFixture
+	ragAnswer            VersionedRAGFixture
+	generalAnswer        GeneralAnswerFixture
+	alertFixtures        map[string]AlertDeliveryFixture
+	history              map[string][]historyItem
+	autoTriggered        bool
+	eventStimulusEnabled bool
+	eventLocalSessionID  string
+	eventID              string
+	sessions             map[string]SessionStimulus
+	clientSessions       map[string]string
+	modeDelay            time.Duration
+	failRestore          bool
+	failAbort            bool
+	replaySession        bool
+	unwrapApprovals      bool
+	unwrapDecision       bool
+	unwrapOperation      bool
+	streamVariant        string
+	answerVariant        string
+	activeModes          atomic.Int32
+	maximumModeCalls     atomic.Int32
 }
 
 func authorityFixtures() LiveFixtures {
@@ -77,12 +81,8 @@ func authorityFixtures() LiveFixtures {
 			ApprovalID: "approval-reject", Capability: qualificationCapability,
 			DecisionRequest: "00000000-0000-4000-8000-000000000004",
 		},
-		AutoAllowlistedSuccess: ActionFixture{
-			Capability: qualificationCapability,
-			Stimulus: SessionStimulus{
-				ClientSessionID: "10000000-0000-4000-8000-000000000001", ClientMessageID: "20000000-0000-4000-8000-000000000001", AbortRequestID: "40000000-0000-4000-8000-000000000001",
-				Intent: "qualification_auto_allowlisted", ResourceType: "management_component", ResourceID: "qualification-task-auto", Message: "Run the exact safe allowlisted qualification action.",
-			},
+		AutoAllowlistedSuccess: EventActionFixture{
+			Capability: qualificationCapability, TaskID: "10000000-0000-4000-8000-000000000001", AbortRequestID: "40000000-0000-4000-8000-000000000001",
 		},
 		AutoNonallowlisted: PendingApprovalFixture{
 			Capability: "astronomer.management.workload_restart",
@@ -141,9 +141,27 @@ func newAuthorityLiveState(fixtures LiveFixtures) *authorityLiveState {
 		requested: "read_only", authority: "read_only", revision: 70, digest: readOnlyDisclosureDigest, acknowledged: true,
 		runtime: map[string]uint64{}, downstream: map[string]uint64{}, approvals: approvals, operations: map[string]qualificationOperation{},
 		sessions: map[string]SessionStimulus{}, clientSessions: map[string]string{},
-		history:       map[string][]historyItem{},
-		alertFixtures: map[string]AlertDeliveryFixture{},
+		history:              map[string][]historyItem{},
+		alertFixtures:        map[string]AlertDeliveryFixture{},
+		eventStimulusEnabled: true,
 	}
+}
+
+type authorityEventStimulus struct{ state *authorityLiveState }
+
+func (s authorityEventStimulus) PublishTerminalQueueFailure(_ context.Context, taskID string) error {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if !s.state.eventStimulusEnabled || taskID != s.state.autoAction.TaskID || s.state.requested != "auto" || s.state.authority != "auto" {
+		return nil
+	}
+	s.state.autoTriggered = true
+	s.state.eventLocalSessionID = "30000000-0000-4000-8000-000000000001"
+	s.state.eventID = "50000000-0000-4000-8000-000000000001"
+	s.state.runtime["sessions"]++
+	s.state.runtime["tool_calls"]++
+	s.state.operations["action-auto-generated"] = qualificationOperation{actionID: "action-auto-generated", capability: s.state.autoAction.Capability}
+	return nil
 }
 
 func configureAlertFixtures(state *authorityLiveState, fixtures LiveFixtures) {
@@ -159,6 +177,7 @@ func newAuthorityDriver(t *testing.T, state *authorityLiveState, fixtures LiveFi
 		AstronomerURL: server.URL, AdminToken: "admin", ApproverToken: "approver", Fixtures: fixtures,
 		MetricSources: []MetricSource{{URL: server.URL + "/metrics", Token: "admin"}}, HTTPClient: server.Client(),
 		ProofTimeout: 2 * time.Second, ProofPoll: time.Millisecond, NoCallDwell: time.Millisecond,
+		EventStimulus: authorityEventStimulus{state: state},
 	})
 	if err != nil {
 		server.Close()
@@ -353,11 +372,15 @@ func TestAuthorityQualificationFailsClosedOnMissingOrMismatchedProof(t *testing.
 		{name: "wrong approval capability", scenario: "approval_reject", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
 			state.approvals[fixtures.ApprovalReject.ApprovalID].fixture.Capability = "astronomer.queue.failed_tasks"
 		}},
-		{name: "replayed fixture session", scenario: "auto_allowlisted_success", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
+		{name: "preexisting event session", scenario: "auto_allowlisted_success", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
 			state.autoAction = fixtures.AutoAllowlistedSuccess
-			state.replaySession = true
+			state.eventLocalSessionID = "30000000-0000-4000-8000-000000000001"
+			state.eventID = "50000000-0000-4000-8000-000000000001"
 		}},
-		{name: "mode transition without action stimulus", scenario: "auto_allowlisted_success", mutate: func(_ *authorityLiveState, _ *LiveFixtures) {}},
+		{name: "mode transition without action stimulus", scenario: "auto_allowlisted_success", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
+			state.autoAction = fixtures.AutoAllowlistedSuccess
+			state.eventStimulusEnabled = false
+		}},
 		{name: "unwrapped approval list", scenario: "approval_reject", mutate: func(state *authorityLiveState, _ *LiveFixtures) {
 			state.unwrapApprovals = true
 		}},
@@ -395,7 +418,7 @@ func TestAuthorityQualificationFailsClosedOnMissingOrMismatchedProof(t *testing.
 			fixtures.ApprovalReject.ApprovalID = fixtures.ApprovalOnce.ApprovalID
 		}},
 		{name: "reused automatic request identifier", scenario: "auto_nonallowlisted_approval", mutate: func(state *authorityLiveState, fixtures *LiveFixtures) {
-			fixtures.AutoNonallowlisted.Stimulus.ClientSessionID = fixtures.AutoAllowlistedSuccess.Stimulus.ClientSessionID
+			fixtures.AutoNonallowlisted.Stimulus.ClientSessionID = fixtures.AutoAllowlistedSuccess.TaskID
 			state.autoPending = fixtures.AutoNonallowlisted
 		}},
 	}
@@ -447,7 +470,11 @@ func TestAuthorityQualificationDriverSerializesDirectConcurrentRuns(t *testing.T
 
 func assertQualificationPassed(t *testing.T, result ScenarioResult) {
 	t.Helper()
-	if !result.Passed || len(result.Assertions) != 2 {
+	want := 2
+	if result.Scenario == "auto_allowlisted_success" {
+		want = 3
+	}
+	if !result.Passed || len(result.Assertions) != want {
 		t.Fatalf("qualification failed: %#v", result)
 	}
 }
@@ -539,6 +566,12 @@ func (s *authorityLiveState) serveAdmin(w http.ResponseWriter, r *http.Request) 
 				"deep_link_valid": true, "content_free": true, "attempt_count": 1, "maximum_attempts": 3, "created_at": now, "updated_at": now, "delivered_at": now,
 			}},
 		}})
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/charlie/trigger-events/":
+		items := []map[string]any{}
+		if s.eventID != "" && r.URL.Query().Get("state") == "dispatched" {
+			items = append(items, map[string]any{"id": s.eventID, "event_type": "queue_terminal_failure", "resource_type": "workflow", "resource_id": qualificationQueueTaskType + ":" + s.autoAction.TaskID, "state": "dispatched"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"items": items}})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/charlie/status/":
 		_, _ = fmt.Fprintf(w, `{"data":{"connection":{"connected":true,"disclosure_digest":%q,"disclosure_acknowledged":%t},"mode":{"requested":%q,"authoritative":%q,"revision":%d,"emergency_disabled":false,"disclosure_digest":%q},"agent":{"desired_replicas":2,"ready_replicas":2,"agent_version":"v1.2.3","image_digest":"sha256:test"}}}`, s.digest, s.acknowledged, s.requested, s.authority, s.revision, s.digest)
 	case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/admin/charlie/mode/":
@@ -579,6 +612,12 @@ func (s *authorityLiveState) serveAdmin(w http.ResponseWriter, r *http.Request) 
 
 func (s *authorityLiveState) serveProduct(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/charlie/sessions/":
+		items := []map[string]any{}
+		if s.eventLocalSessionID != "" {
+			items = append(items, map[string]any{"id": s.eventLocalSessionID, "client_session_id": s.eventID, "resource_scope_summary": "workflow:" + qualificationQueueTaskType + ":" + s.autoAction.TaskID, "state": "active", "visibility": "incident", "source": "event"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"sessions": items, "mode": s.authority}})
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/charlie/sessions/":
 		s.createSession(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/charlie/approvals/":
@@ -642,9 +681,7 @@ func (s *authorityLiveState) createSession(w http.ResponseWriter, r *http.Reques
 	}
 	var stimulus SessionStimulus
 	var localID string
-	if match(s.autoAction.Stimulus) {
-		stimulus, localID = s.autoAction.Stimulus, "30000000-0000-4000-8000-000000000001"
-	} else if match(s.autoPending.Stimulus) {
+	if match(s.autoPending.Stimulus) {
 		stimulus, localID = s.autoPending.Stimulus, "30000000-0000-4000-8000-000000000002"
 	} else if match(s.ragAnswer.Stimulus) {
 		stimulus, localID = s.ragAnswer.Stimulus, "30000000-0000-4000-8000-000000000003"
@@ -688,13 +725,7 @@ func (s *authorityLiveState) acceptStimulus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	turnID := "turn-auto-pending"
-	if stimulus.ClientSessionID == s.autoAction.Stimulus.ClientSessionID && !s.autoTriggered {
-		s.autoTriggered = true
-		turnID = "turn-auto-success"
-		actionID := "action-auto-generated"
-		s.runtime["tool_calls"]++
-		s.operations[actionID] = qualificationOperation{actionID: actionID, capability: s.autoAction.Capability}
-	} else if stimulus.ClientSessionID == s.autoPending.Stimulus.ClientSessionID {
+	if stimulus.ClientSessionID == s.autoPending.Stimulus.ClientSessionID {
 		approvalID := "approval-auto-generated"
 		target := stimulus.ResourceType + ":" + stimulus.ResourceID
 		s.approvals[approvalID] = &qualificationApproval{fixture: ApprovalFixture{ApprovalID: approvalID, ActionID: target, Capability: s.autoPending.Capability}, expiresAt: time.Now().UTC().Add(time.Minute), state: "pending", visible: true}
@@ -753,7 +784,7 @@ func (s *authorityLiveState) streamEvents(w http.ResponseWriter, r *http.Request
 		_, _ = fmt.Fprintf(w, "id: answer-terminal\nevent: turn.completed\ndata: %s\n\n", encoded)
 		return
 	}
-	if !exists || stimulus.ClientSessionID != s.autoAction.Stimulus.ClientSessionID || !s.autoTriggered {
+	if localSessionID != s.eventLocalSessionID || !s.autoTriggered {
 		http.Error(w, "stream unavailable", http.StatusConflict)
 		return
 	}
@@ -791,7 +822,20 @@ func (s *authorityLiveState) abortSession(w http.ResponseWriter, r *http.Request
 	var body struct {
 		RequestID string `json:"request_id"`
 	}
-	if !exists || json.NewDecoder(r.Body).Decode(&body) != nil || body.RequestID != stimulus.AbortRequestID || s.failAbort {
+	if json.NewDecoder(r.Body).Decode(&body) != nil || s.failAbort {
+		http.Error(w, "abort failed", http.StatusConflict)
+		return
+	}
+	if localSessionID == s.eventLocalSessionID {
+		if body.RequestID != s.autoAction.AbortRequestID {
+			http.Error(w, "abort failed", http.StatusConflict)
+			return
+		}
+		s.eventLocalSessionID = ""
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !exists || body.RequestID != stimulus.AbortRequestID {
 		http.Error(w, "abort failed", http.StatusConflict)
 		return
 	}

@@ -271,6 +271,45 @@ func TestAgentInstallerCreatesPrivateDigestPinnedAgentOnly(t *testing.T) {
 	}
 }
 
+func TestAgentInstallerRotatesOnlyExactArtifactCredentialConsumers(t *testing.T) {
+	installer, kube, _, _ := testAgentInstaller(t)
+	spec := testAgentInstallSpec(t)
+	receipt, err := installer.Install(context.Background(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeEnrollment, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.Enrollment, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated := spec
+	rotated.SecretPrefix = receipt.Names.Bootstrap
+	rotated.ArtifactCredential = "ca_replacement-artifact-secret-value-0000000001"
+	firstDigest, err := installer.RotateArtifactCredential(context.Background(), rotated)
+	if err != nil || !exactDigest(firstDigest) {
+		t.Fatalf("rotation digest=%q err=%v", firstDigest, err)
+	}
+	secondDigest, err := installer.RotateArtifactCredential(context.Background(), rotated)
+	if err != nil || secondDigest != firstDigest {
+		t.Fatalf("idempotent rotation digest=%q want=%q err=%v", secondDigest, firstDigest, err)
+	}
+	afterEnrollment, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.Enrollment, metav1.GetOptions{})
+	if err != nil || !reflect.DeepEqual(beforeEnrollment.Data, afterEnrollment.Data) {
+		t.Fatal("artifact rotation changed enrollment material")
+	}
+	imagePull, err := kube.CoreV1().Secrets(DefaultCharlieAgentNamespace).Get(context.Background(), receipt.Names.ImagePull, metav1.GetOptions{})
+	if err != nil || !bytes.Contains(imagePull.Data[corev1.DockerConfigJsonKey], []byte(rotated.ArtifactCredential)) || bytes.Contains(imagePull.Data[corev1.DockerConfigJsonKey], []byte(spec.ArtifactCredential)) {
+		t.Fatal("image pull credential was not replaced exactly")
+	}
+	repository, err := kube.CoreV1().Secrets("astronomer").Get(context.Background(), receipt.Names.Repository, metav1.GetOptions{})
+	if err != nil || string(repository.Data["password"]) != rotated.ArtifactCredential || string(repository.Data["username"]) != "artifact-token" {
+		t.Fatal("Argo repository credential was not replaced exactly")
+	}
+	if strings.Contains(firstDigest, rotated.ArtifactCredential) {
+		t.Fatal("materialization digest exposed the credential")
+	}
+}
+
 func TestAgentInstallerRejectsCentralChartMutableOrBroadArtifacts(t *testing.T) {
 	installer, _, _, _ := testAgentInstaller(t)
 	base := testAgentInstallSpec(t)

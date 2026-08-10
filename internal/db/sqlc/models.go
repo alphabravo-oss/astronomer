@@ -639,6 +639,24 @@ type CharlieAlertPolicyChannel struct {
 	CreatedAt             time.Time `json:"created_at"`
 }
 
+type CharlieArtifactCredentialState struct {
+	ConnectionID          uuid.UUID          `json:"connection_id"`
+	CurrentLeaseID        string             `json:"current_lease_id"`
+	CurrentGeneration     int64              `json:"current_generation"`
+	RenewAfter            pgtype.Timestamptz `json:"renew_after"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	PendingRequestID      pgtype.UUID        `json:"pending_request_id"`
+	PendingLeaseID        string             `json:"pending_lease_id"`
+	PendingGeneration     int64              `json:"pending_generation"`
+	PendingState          string             `json:"pending_state"`
+	MaterializationDigest string             `json:"materialization_digest"`
+	LastErrorCode         string             `json:"last_error_code"`
+	AttemptCount          int32              `json:"attempt_count"`
+	AcknowledgedAt        pgtype.Timestamptz `json:"acknowledged_at"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+}
+
 type CharlieAutomationPolicy struct {
 	ID                    uuid.UUID `json:"id"`
 	ConnectionID          uuid.UUID `json:"connection_id"`
@@ -760,6 +778,13 @@ type CharlieFindingDecision struct {
 	ResultStatus        string    `json:"result_status"`
 	ResultWorkflowState string    `json:"result_workflow_state"`
 	CreatedAt           time.Time `json:"created_at"`
+}
+
+type CharlieFindingProjectionCursor struct {
+	ConnectionID  uuid.UUID `json:"connection_id"`
+	Sequence      int64     `json:"sequence"`
+	LastErrorCode string    `json:"last_error_code"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type CharlieFindingResource struct {

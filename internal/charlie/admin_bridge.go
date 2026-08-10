@@ -139,11 +139,106 @@ func modeStateFromBridge(status AdminBridgeStatus, revision int64) ModeState {
 
 type managedAgentLifecycleBridge struct{ bridge *ManagedBridge }
 
+// ArtifactCredentialClaim binds a durable product-owned request to the exact
+// active package generation. The product agent validates these values again
+// before it signs and forwards the request to Charlie Central.
+type ArtifactCredentialClaim struct {
+	RequestID, DeploymentID, IntegrationID, PackageID string
+	CurrentGeneration                                 int64
+}
+
+// ArtifactCredentialAcknowledgement commits a replacement only after both
+// product-owned Kubernetes credential consumers have been materialized and
+// read back. The digest is content-derived but reveals no credential bytes.
+type ArtifactCredentialAcknowledgement struct {
+	RequestID, LeaseID, MaterializationDigest string
+	Generation                                int64
+}
+
+type ArtifactCredentialBridge interface {
+	ArtifactCredentialStatus(context.Context) (contract.ArtifactCredentialLease, error)
+	ClaimArtifactCredential(context.Context, ArtifactCredentialClaim) (contract.ArtifactCredentialLease, error)
+	AcknowledgeArtifactCredential(context.Context, ArtifactCredentialAcknowledgement) (contract.ArtifactCredentialLease, error)
+}
+
+type FindingChangeBridge interface {
+	FindingChanges(context.Context, int64, int) (contract.FindingChangePage, error)
+}
+
 func NewManagedAgentLifecycleBridge(bridge *ManagedBridge) AgentBridgeLifecycle {
 	if bridge == nil {
 		return nil
 	}
 	return &managedAgentLifecycleBridge{bridge: bridge}
+}
+
+func (b *managedAgentLifecycleBridge) ArtifactCredentialStatus(ctx context.Context) (contract.ArtifactCredentialLease, error) {
+	if b == nil || b.bridge == nil {
+		return contract.ArtifactCredentialLease{}, fmt.Errorf("Charlie artifact credential bridge is unavailable")
+	}
+	runtimeBridge, err := b.bridge.configurationRuntimeBridge(ctx)
+	if err != nil {
+		return contract.ArtifactCredentialLease{}, err
+	}
+	var lease contract.ArtifactCredentialLease
+	if err := runtimeBridge.runtime.DoJSON(ctx, http.MethodGet, "/lifecycle/artifacts/credentials", "", nil, &lease); err != nil {
+		return contract.ArtifactCredentialLease{}, err
+	}
+	return lease, nil
+}
+
+func (b *managedAgentLifecycleBridge) ClaimArtifactCredential(ctx context.Context, claim ArtifactCredentialClaim) (contract.ArtifactCredentialLease, error) {
+	if b == nil || b.bridge == nil || claim.RequestID == "" || claim.DeploymentID == "" || claim.IntegrationID == "" || claim.PackageID == "" || claim.CurrentGeneration < 1 {
+		return contract.ArtifactCredentialLease{}, fmt.Errorf("Charlie artifact credential claim binding is incomplete")
+	}
+	runtimeBridge, err := b.bridge.configurationRuntimeBridge(ctx)
+	if err != nil {
+		return contract.ArtifactCredentialLease{}, err
+	}
+	request := contract.ArtifactCredentialClaimRequest{
+		RequestId: contract.OpaqueId(claim.RequestID), CurrentGeneration: claim.CurrentGeneration,
+		ExpectedDeploymentId: contract.OpaqueId(claim.DeploymentID), ExpectedIntegrationId: contract.OpaqueId(claim.IntegrationID), ExpectedPackageId: contract.OpaqueId(claim.PackageID),
+	}
+	var lease contract.ArtifactCredentialLease
+	if err := runtimeBridge.runtime.DoJSON(ctx, http.MethodPost, "/lifecycle/artifacts/credentials", claim.RequestID, request, &lease); err != nil {
+		return contract.ArtifactCredentialLease{}, err
+	}
+	return lease, nil
+}
+
+func (b *managedAgentLifecycleBridge) AcknowledgeArtifactCredential(ctx context.Context, acknowledgement ArtifactCredentialAcknowledgement) (contract.ArtifactCredentialLease, error) {
+	if b == nil || b.bridge == nil || acknowledgement.RequestID == "" || acknowledgement.LeaseID == "" || acknowledgement.Generation < 1 || !exactDigest(acknowledgement.MaterializationDigest) {
+		return contract.ArtifactCredentialLease{}, fmt.Errorf("Charlie artifact credential acknowledgement binding is incomplete")
+	}
+	runtimeBridge, err := b.bridge.configurationRuntimeBridge(ctx)
+	if err != nil {
+		return contract.ArtifactCredentialLease{}, err
+	}
+	request := contract.ArtifactCredentialAcknowledgementRequest{
+		RequestId: contract.OpaqueId(acknowledgement.RequestID), Generation: acknowledgement.Generation, MaterializationDigest: acknowledgement.MaterializationDigest,
+	}
+	var lease contract.ArtifactCredentialLease
+	path := "/lifecycle/artifacts/credentials/" + url.PathEscape(acknowledgement.LeaseID) + "/acknowledgement"
+	if err := runtimeBridge.runtime.DoJSON(ctx, http.MethodPost, path, acknowledgement.RequestID, request, &lease); err != nil {
+		return contract.ArtifactCredentialLease{}, err
+	}
+	return lease, nil
+}
+
+func (b *managedAgentLifecycleBridge) FindingChanges(ctx context.Context, cursor int64, limit int) (contract.FindingChangePage, error) {
+	if b == nil || b.bridge == nil || cursor < 0 || limit < 1 || limit > 100 {
+		return contract.FindingChangePage{}, fmt.Errorf("Charlie finding change cursor is invalid")
+	}
+	runtimeBridge, err := b.bridge.configurationRuntimeBridge(ctx)
+	if err != nil {
+		return contract.FindingChangePage{}, err
+	}
+	path := "/lifecycle/findings/changes?cursor=" + strconv.FormatInt(cursor, 10) + "&limit=" + strconv.Itoa(limit)
+	var page contract.FindingChangePage
+	if err := runtimeBridge.runtime.DoJSON(ctx, http.MethodGet, path, "", nil, &page); err != nil {
+		return contract.FindingChangePage{}, err
+	}
+	return page, nil
 }
 
 func (b *managedAgentLifecycleBridge) Status(ctx context.Context) (AgentBridgeStatus, error) {

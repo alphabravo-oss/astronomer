@@ -140,6 +140,14 @@ const (
 	ApprovalReviewSummaryRiskApprovalReviewSummaryRiskMedium   ApprovalReviewSummaryRisk = "medium"
 )
 
+// Defines values for ArtifactCredentialLeaseState.
+const (
+	ArtifactCredentialLeaseStateActive     ArtifactCredentialLeaseState = "active"
+	ArtifactCredentialLeaseStatePending    ArtifactCredentialLeaseState = "pending"
+	ArtifactCredentialLeaseStateRevoked    ArtifactCredentialLeaseState = "revoked"
+	ArtifactCredentialLeaseStateSuperseded ArtifactCredentialLeaseState = "superseded"
+)
+
 // Defines values for BlockCode.
 const (
 	BlockCodeAllowlistDenied       BlockCode = "allowlist_denied"
@@ -253,6 +261,12 @@ const (
 	FindingBlockCodeVerificationFailed    FindingBlockCode = "verification_failed"
 )
 
+// Defines values for FindingChangeOperation.
+const (
+	FindingChangeOperationDelete FindingChangeOperation = "delete"
+	FindingChangeOperationUpsert FindingChangeOperation = "upsert"
+)
+
 // Defines values for FindingFindingSeverity.
 const (
 	FindingFindingSeverityCritical FindingFindingSeverity = "critical"
@@ -281,6 +295,36 @@ const (
 	FindingLifecycleEventTransitionReopened              FindingLifecycleEventTransition = "reopened"
 	FindingLifecycleEventTransitionResolved              FindingLifecycleEventTransition = "resolved"
 	FindingLifecycleEventTransitionVerificationRequested FindingLifecycleEventTransition = "verification_requested"
+)
+
+// Defines values for FindingProjectionSummarySeverity.
+const (
+	FindingProjectionSummarySeverityCritical FindingProjectionSummarySeverity = "critical"
+	FindingProjectionSummarySeverityHigh     FindingProjectionSummarySeverity = "high"
+	FindingProjectionSummarySeverityInfo     FindingProjectionSummarySeverity = "info"
+	FindingProjectionSummarySeverityLow      FindingProjectionSummarySeverity = "low"
+	FindingProjectionSummarySeverityMedium   FindingProjectionSummarySeverity = "medium"
+)
+
+// Defines values for FindingProjectionSummaryStatus.
+const (
+	FindingProjectionSummaryStatusAcknowledged FindingProjectionSummaryStatus = "acknowledged"
+	FindingProjectionSummaryStatusDismissed    FindingProjectionSummaryStatus = "dismissed"
+	FindingProjectionSummaryStatusOpen         FindingProjectionSummaryStatus = "open"
+	FindingProjectionSummaryStatusReopened     FindingProjectionSummaryStatus = "reopened"
+	FindingProjectionSummaryStatusResolved     FindingProjectionSummaryStatus = "resolved"
+)
+
+// Defines values for FindingProjectionSummaryWorkflowState.
+const (
+	FindingProjectionSummaryWorkflowStateApprovalPending           FindingProjectionSummaryWorkflowState = "approval_pending"
+	FindingProjectionSummaryWorkflowStateDismissed                 FindingProjectionSummaryWorkflowState = "dismissed"
+	FindingProjectionSummaryWorkflowStateExpired                   FindingProjectionSummaryWorkflowState = "expired"
+	FindingProjectionSummaryWorkflowStateManualRemediationRequired FindingProjectionSummaryWorkflowState = "manual_remediation_required"
+	FindingProjectionSummaryWorkflowStateRejected                  FindingProjectionSummaryWorkflowState = "rejected"
+	FindingProjectionSummaryWorkflowStateRemediationInProgress     FindingProjectionSummaryWorkflowState = "remediation_in_progress"
+	FindingProjectionSummaryWorkflowStateResolved                  FindingProjectionSummaryWorkflowState = "resolved"
+	FindingProjectionSummaryWorkflowStateVerificationPending       FindingProjectionSummaryWorkflowState = "verification_pending"
 )
 
 // Defines values for FindingSummarySeverity.
@@ -512,6 +556,44 @@ type ApprovalReviewSummaryEffect string
 // ApprovalReviewSummaryRisk defines model for ApprovalReviewSummary.Risk.
 type ApprovalReviewSummaryRisk string
 
+// ArtifactCredentialAcknowledgementRequest defines model for ArtifactCredentialAcknowledgementRequest.
+type ArtifactCredentialAcknowledgementRequest struct {
+	Generation            int64    `json:"generation"`
+	MaterializationDigest string   `json:"materialization_digest"`
+	RequestId             OpaqueId `json:"request_id"`
+}
+
+// ArtifactCredentialClaimRequest defines model for ArtifactCredentialClaimRequest.
+type ArtifactCredentialClaimRequest struct {
+	CurrentGeneration     int64    `json:"current_generation"`
+	ExpectedDeploymentId  OpaqueId `json:"expected_deployment_id"`
+	ExpectedIntegrationId OpaqueId `json:"expected_integration_id"`
+	ExpectedPackageId     OpaqueId `json:"expected_package_id"`
+	RequestId             OpaqueId `json:"request_id"`
+}
+
+// ArtifactCredentialLease defines model for ArtifactCredentialLease.
+type ArtifactCredentialLease struct {
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+
+	// Credential Present only while the exact pending request awaits acknowledgement.
+	Credential       *string                      `json:"credential,omitempty"`
+	DeploymentId     OpaqueId                     `json:"deployment_id"`
+	ExpiresAt        time.Time                    `json:"expires_at"`
+	Generation       int64                        `json:"generation"`
+	IntegrationId    OpaqueId                     `json:"integration_id"`
+	IssuedAt         time.Time                    `json:"issued_at"`
+	LeaseId          OpaqueId                     `json:"lease_id"`
+	OverlapExpiresAt *time.Time                   `json:"overlap_expires_at,omitempty"`
+	PackageId        OpaqueId                     `json:"package_id"`
+	RenewAfter       time.Time                    `json:"renew_after"`
+	RequestId        OpaqueId                     `json:"request_id"`
+	State            ArtifactCredentialLeaseState `json:"state"`
+}
+
+// ArtifactCredentialLeaseState defines model for ArtifactCredentialLease.State.
+type ArtifactCredentialLeaseState string
+
 // BlockCode defines model for BlockCode.
 type BlockCode string
 
@@ -650,6 +732,26 @@ type ErrorEnvelopeCode string
 // FindingBlockCode defines model for FindingBlockCode.
 type FindingBlockCode string
 
+// FindingChange defines model for FindingChange.
+type FindingChange struct {
+	FindingId  OpaqueId                  `json:"finding_id"`
+	OccurredAt time.Time                 `json:"occurred_at"`
+	Operation  FindingChangeOperation    `json:"operation"`
+	Revision   int64                     `json:"revision"`
+	Sequence   int64                     `json:"sequence"`
+	Summary    *FindingProjectionSummary `json:"summary,omitempty"`
+}
+
+// FindingChangeOperation defines model for FindingChange.Operation.
+type FindingChangeOperation string
+
+// FindingChangePage defines model for FindingChangePage.
+type FindingChangePage struct {
+	Data         []FindingChange `json:"data"`
+	HasMore      bool            `json:"has_more"`
+	NextSequence int64           `json:"next_sequence"`
+}
+
 // FindingEnvelope defines model for FindingEnvelope.
 type FindingEnvelope struct {
 	Finding   FindingFinding          `json:"finding"`
@@ -716,6 +818,31 @@ type FindingManualRemediation struct {
 
 // FindingOpaqueId defines model for FindingOpaqueId.
 type FindingOpaqueId = string
+
+// FindingProjectionSummary defines model for FindingProjectionSummary.
+type FindingProjectionSummary struct {
+	BlockCode             BlockCode                             `json:"block_code"`
+	DeduplicationKey      string                                `json:"deduplication_key"`
+	FindingId             OpaqueId                              `json:"finding_id"`
+	InvestigationId       OpaqueId                              `json:"investigation_id"`
+	RecommendedCapability string                                `json:"recommended_capability"`
+	RepeatCount           int                                   `json:"repeat_count"`
+	ResourceDigest        string                                `json:"resource_digest"`
+	SessionId             OpaqueId                              `json:"session_id"`
+	Severity              FindingProjectionSummarySeverity      `json:"severity"`
+	Status                FindingProjectionSummaryStatus        `json:"status"`
+	UpdatedAt             time.Time                             `json:"updated_at"`
+	WorkflowState         FindingProjectionSummaryWorkflowState `json:"workflow_state"`
+}
+
+// FindingProjectionSummarySeverity defines model for FindingProjectionSummary.Severity.
+type FindingProjectionSummarySeverity string
+
+// FindingProjectionSummaryStatus defines model for FindingProjectionSummary.Status.
+type FindingProjectionSummaryStatus string
+
+// FindingProjectionSummaryWorkflowState defines model for FindingProjectionSummary.WorkflowState.
+type FindingProjectionSummaryWorkflowState string
 
 // FindingSummary defines model for FindingSummary.
 type FindingSummary struct {
@@ -919,6 +1046,16 @@ type CreateBridgeInvestigationParams struct {
 	XCharlieAuthorizationRef AuthorizationRef `json:"X-Charlie-Authorization-Ref"`
 }
 
+// ClaimBridgeArtifactCredentialLeaseParams defines parameters for ClaimBridgeArtifactCredentialLease.
+type ClaimBridgeArtifactCredentialLeaseParams struct {
+	IdempotencyKey OpaqueId `json:"Idempotency-Key"`
+}
+
+// AcknowledgeBridgeArtifactCredentialLeaseParams defines parameters for AcknowledgeBridgeArtifactCredentialLease.
+type AcknowledgeBridgeArtifactCredentialLeaseParams struct {
+	IdempotencyKey OpaqueId `json:"Idempotency-Key"`
+}
+
 // GetBridgeCredentialRevocationParams defines parameters for GetBridgeCredentialRevocation.
 type GetBridgeCredentialRevocationParams struct {
 	RequestId OpaqueId `form:"request_id" json:"request_id"`
@@ -927,6 +1064,12 @@ type GetBridgeCredentialRevocationParams struct {
 // RevokeBridgeCredentialsParams defines parameters for RevokeBridgeCredentials.
 type RevokeBridgeCredentialsParams struct {
 	IdempotencyKey OpaqueId `json:"Idempotency-Key"`
+}
+
+// ListBridgeFindingChangesParams defines parameters for ListBridgeFindingChanges.
+type ListBridgeFindingChangesParams struct {
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListBridgeSessionsParams defines parameters for ListBridgeSessions.
@@ -991,6 +1134,12 @@ type TransitionBridgeFindingJSONRequestBody = FindingTransition
 
 // CreateBridgeInvestigationJSONRequestBody defines body for CreateBridgeInvestigation for application/json ContentType.
 type CreateBridgeInvestigationJSONRequestBody = CreateInvestigation
+
+// ClaimBridgeArtifactCredentialLeaseJSONRequestBody defines body for ClaimBridgeArtifactCredentialLease for application/json ContentType.
+type ClaimBridgeArtifactCredentialLeaseJSONRequestBody = ArtifactCredentialClaimRequest
+
+// AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody defines body for AcknowledgeBridgeArtifactCredentialLease for application/json ContentType.
+type AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody = ArtifactCredentialAcknowledgementRequest
 
 // RevokeBridgeCredentialsJSONRequestBody defines body for RevokeBridgeCredentials for application/json ContentType.
 type RevokeBridgeCredentialsJSONRequestBody = CredentialRevocationRequest
@@ -1118,6 +1267,19 @@ type ClientInterface interface {
 
 	CreateBridgeInvestigation(ctx context.Context, params *CreateBridgeInvestigationParams, body CreateBridgeInvestigationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetBridgeArtifactCredentialLease request
+	GetBridgeArtifactCredentialLease(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ClaimBridgeArtifactCredentialLeaseWithBody request with any body
+	ClaimBridgeArtifactCredentialLeaseWithBody(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ClaimBridgeArtifactCredentialLease(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, body ClaimBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AcknowledgeBridgeArtifactCredentialLeaseWithBody request with any body
+	AcknowledgeBridgeArtifactCredentialLeaseWithBody(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AcknowledgeBridgeArtifactCredentialLease(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, body AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetBridgeCredentialRevocation request
 	GetBridgeCredentialRevocation(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1126,13 +1288,16 @@ type ClientInterface interface {
 
 	RevokeBridgeCredentials(ctx context.Context, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListBridgeFindingChanges request
+	ListBridgeFindingChanges(ctx context.Context, params *ListBridgeFindingChangesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetBridgeMode request
+	GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SetBridgeModeWithBody request with any body
 	SetBridgeModeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SetBridgeMode(ctx context.Context, body SetBridgeModeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetBridgeMode request
-	GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListBridgeSessions request
 	ListBridgeSessions(ctx context.Context, params *ListBridgeSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1336,6 +1501,66 @@ func (c *Client) CreateBridgeInvestigation(ctx context.Context, params *CreateBr
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetBridgeArtifactCredentialLease(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBridgeArtifactCredentialLeaseRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ClaimBridgeArtifactCredentialLeaseWithBody(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClaimBridgeArtifactCredentialLeaseRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ClaimBridgeArtifactCredentialLease(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, body ClaimBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClaimBridgeArtifactCredentialLeaseRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AcknowledgeBridgeArtifactCredentialLeaseWithBody(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAcknowledgeBridgeArtifactCredentialLeaseRequestWithBody(c.Server, leaseId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AcknowledgeBridgeArtifactCredentialLease(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, body AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAcknowledgeBridgeArtifactCredentialLeaseRequest(c.Server, leaseId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetBridgeCredentialRevocation(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBridgeCredentialRevocationRequest(c.Server, params)
 	if err != nil {
@@ -1372,6 +1597,30 @@ func (c *Client) RevokeBridgeCredentials(ctx context.Context, params *RevokeBrid
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListBridgeFindingChanges(ctx context.Context, params *ListBridgeFindingChangesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListBridgeFindingChangesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetBridgeModeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) SetBridgeModeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSetBridgeModeRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -1386,18 +1635,6 @@ func (c *Client) SetBridgeModeWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) SetBridgeMode(ctx context.Context, body SetBridgeModeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSetBridgeModeRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetBridgeMode(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBridgeModeRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -2024,6 +2261,146 @@ func NewCreateBridgeInvestigationRequestWithBody(server string, params *CreateBr
 	return req, nil
 }
 
+// NewGetBridgeArtifactCredentialLeaseRequest generates requests for GetBridgeArtifactCredentialLease
+func NewGetBridgeArtifactCredentialLeaseRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/lifecycle/artifacts/credentials")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewClaimBridgeArtifactCredentialLeaseRequest calls the generic ClaimBridgeArtifactCredentialLease builder with application/json body
+func NewClaimBridgeArtifactCredentialLeaseRequest(server string, params *ClaimBridgeArtifactCredentialLeaseParams, body ClaimBridgeArtifactCredentialLeaseJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewClaimBridgeArtifactCredentialLeaseRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewClaimBridgeArtifactCredentialLeaseRequestWithBody generates requests for ClaimBridgeArtifactCredentialLease with any type of body
+func NewClaimBridgeArtifactCredentialLeaseRequestWithBody(server string, params *ClaimBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/lifecycle/artifacts/credentials")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewAcknowledgeBridgeArtifactCredentialLeaseRequest calls the generic AcknowledgeBridgeArtifactCredentialLease builder with application/json body
+func NewAcknowledgeBridgeArtifactCredentialLeaseRequest(server string, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, body AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAcknowledgeBridgeArtifactCredentialLeaseRequestWithBody(server, leaseId, params, "application/json", bodyReader)
+}
+
+// NewAcknowledgeBridgeArtifactCredentialLeaseRequestWithBody generates requests for AcknowledgeBridgeArtifactCredentialLease with any type of body
+func NewAcknowledgeBridgeArtifactCredentialLeaseRequestWithBody(server string, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "lease_id", runtime.ParamLocationPath, leaseId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/lifecycle/artifacts/credentials/%s/acknowledgement", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewGetBridgeCredentialRevocationRequest generates requests for GetBridgeCredentialRevocation
 func NewGetBridgeCredentialRevocationRequest(server string, params *GetBridgeCredentialRevocationParams) (*http.Request, error) {
 	var err error
@@ -2122,19 +2499,8 @@ func NewRevokeBridgeCredentialsRequestWithBody(server string, params *RevokeBrid
 	return req, nil
 }
 
-// NewSetBridgeModeRequest calls the generic SetBridgeMode builder with application/json body
-func NewSetBridgeModeRequest(server string, body SetBridgeModeJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewSetBridgeModeRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewSetBridgeModeRequestWithBody generates requests for SetBridgeMode with any type of body
-func NewSetBridgeModeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewListBridgeFindingChangesRequest generates requests for ListBridgeFindingChanges
+func NewListBridgeFindingChangesRequest(server string, params *ListBridgeFindingChangesParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2142,7 +2508,7 @@ func NewSetBridgeModeRequestWithBody(server string, contentType string, body io.
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/lifecycle/credentials/revocation")
+	operationPath := fmt.Sprintf("/lifecycle/findings/changes")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2152,12 +2518,48 @@ func NewSetBridgeModeRequestWithBody(server string, contentType string, body io.
 		return nil, err
 	}
 
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2185,6 +2587,46 @@ func NewGetBridgeModeRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewSetBridgeModeRequest calls the generic SetBridgeMode builder with application/json body
+func NewSetBridgeModeRequest(server string, body SetBridgeModeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetBridgeModeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSetBridgeModeRequestWithBody generates requests for SetBridgeMode with any type of body
+func NewSetBridgeModeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/mode")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2736,6 +3178,19 @@ type ClientWithResponsesInterface interface {
 
 	CreateBridgeInvestigationWithResponse(ctx context.Context, params *CreateBridgeInvestigationParams, body CreateBridgeInvestigationJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateBridgeInvestigationResponse, error)
 
+	// GetBridgeArtifactCredentialLeaseWithResponse request
+	GetBridgeArtifactCredentialLeaseWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeArtifactCredentialLeaseResponse, error)
+
+	// ClaimBridgeArtifactCredentialLeaseWithBodyWithResponse request with any body
+	ClaimBridgeArtifactCredentialLeaseWithBodyWithResponse(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ClaimBridgeArtifactCredentialLeaseResponse, error)
+
+	ClaimBridgeArtifactCredentialLeaseWithResponse(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, body ClaimBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*ClaimBridgeArtifactCredentialLeaseResponse, error)
+
+	// AcknowledgeBridgeArtifactCredentialLeaseWithBodyWithResponse request with any body
+	AcknowledgeBridgeArtifactCredentialLeaseWithBodyWithResponse(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AcknowledgeBridgeArtifactCredentialLeaseResponse, error)
+
+	AcknowledgeBridgeArtifactCredentialLeaseWithResponse(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, body AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*AcknowledgeBridgeArtifactCredentialLeaseResponse, error)
+
 	// GetBridgeCredentialRevocationWithResponse request
 	GetBridgeCredentialRevocationWithResponse(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*GetBridgeCredentialRevocationResponse, error)
 
@@ -2744,13 +3199,16 @@ type ClientWithResponsesInterface interface {
 
 	RevokeBridgeCredentialsWithResponse(ctx context.Context, params *RevokeBridgeCredentialsParams, body RevokeBridgeCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*RevokeBridgeCredentialsResponse, error)
 
+	// ListBridgeFindingChangesWithResponse request
+	ListBridgeFindingChangesWithResponse(ctx context.Context, params *ListBridgeFindingChangesParams, reqEditors ...RequestEditorFn) (*ListBridgeFindingChangesResponse, error)
+
+	// GetBridgeModeWithResponse request
+	GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error)
+
 	// SetBridgeModeWithBodyWithResponse request with any body
 	SetBridgeModeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetBridgeModeResponse, error)
 
 	SetBridgeModeWithResponse(ctx context.Context, body SetBridgeModeJSONRequestBody, reqEditors ...RequestEditorFn) (*SetBridgeModeResponse, error)
-
-	// GetBridgeModeWithResponse request
-	GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error)
 
 	// ListBridgeSessionsWithResponse request
 	ListBridgeSessionsWithResponse(ctx context.Context, params *ListBridgeSessionsParams, reqEditors ...RequestEditorFn) (*ListBridgeSessionsResponse, error)
@@ -3019,6 +3477,76 @@ func (r CreateBridgeInvestigationResponse) StatusCode() int {
 	return 0
 }
 
+type GetBridgeArtifactCredentialLeaseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ArtifactCredentialLease
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetBridgeArtifactCredentialLeaseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetBridgeArtifactCredentialLeaseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ClaimBridgeArtifactCredentialLeaseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ArtifactCredentialLease
+	JSON201      *ArtifactCredentialLease
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ClaimBridgeArtifactCredentialLeaseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClaimBridgeArtifactCredentialLeaseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AcknowledgeBridgeArtifactCredentialLeaseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ArtifactCredentialLease
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r AcknowledgeBridgeArtifactCredentialLeaseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AcknowledgeBridgeArtifactCredentialLeaseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetBridgeCredentialRevocationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3065,15 +3593,15 @@ func (r RevokeBridgeCredentialsResponse) StatusCode() int {
 	return 0
 }
 
-type SetBridgeModeResponse struct {
+type ListBridgeFindingChangesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *ModeResponse
+	JSON200      *FindingChangePage
 	JSONDefault  *Error
 }
 
 // Status returns HTTPResponse.Status
-func (r SetBridgeModeResponse) Status() string {
+func (r ListBridgeFindingChangesResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3081,7 +3609,7 @@ func (r SetBridgeModeResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r SetBridgeModeResponse) StatusCode() int {
+func (r ListBridgeFindingChangesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3105,6 +3633,29 @@ func (r GetBridgeModeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetBridgeModeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SetBridgeModeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ModeResponse
+	JSONDefault  *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r SetBridgeModeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetBridgeModeResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3441,6 +3992,49 @@ func (c *ClientWithResponses) CreateBridgeInvestigationWithResponse(ctx context.
 	return ParseCreateBridgeInvestigationResponse(rsp)
 }
 
+// GetBridgeArtifactCredentialLeaseWithResponse request returning *GetBridgeArtifactCredentialLeaseResponse
+func (c *ClientWithResponses) GetBridgeArtifactCredentialLeaseWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeArtifactCredentialLeaseResponse, error) {
+	rsp, err := c.GetBridgeArtifactCredentialLease(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBridgeArtifactCredentialLeaseResponse(rsp)
+}
+
+// ClaimBridgeArtifactCredentialLeaseWithBodyWithResponse request with arbitrary body returning *ClaimBridgeArtifactCredentialLeaseResponse
+func (c *ClientWithResponses) ClaimBridgeArtifactCredentialLeaseWithBodyWithResponse(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ClaimBridgeArtifactCredentialLeaseResponse, error) {
+	rsp, err := c.ClaimBridgeArtifactCredentialLeaseWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClaimBridgeArtifactCredentialLeaseResponse(rsp)
+}
+
+func (c *ClientWithResponses) ClaimBridgeArtifactCredentialLeaseWithResponse(ctx context.Context, params *ClaimBridgeArtifactCredentialLeaseParams, body ClaimBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*ClaimBridgeArtifactCredentialLeaseResponse, error) {
+	rsp, err := c.ClaimBridgeArtifactCredentialLease(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClaimBridgeArtifactCredentialLeaseResponse(rsp)
+}
+
+// AcknowledgeBridgeArtifactCredentialLeaseWithBodyWithResponse request with arbitrary body returning *AcknowledgeBridgeArtifactCredentialLeaseResponse
+func (c *ClientWithResponses) AcknowledgeBridgeArtifactCredentialLeaseWithBodyWithResponse(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AcknowledgeBridgeArtifactCredentialLeaseResponse, error) {
+	rsp, err := c.AcknowledgeBridgeArtifactCredentialLeaseWithBody(ctx, leaseId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAcknowledgeBridgeArtifactCredentialLeaseResponse(rsp)
+}
+
+func (c *ClientWithResponses) AcknowledgeBridgeArtifactCredentialLeaseWithResponse(ctx context.Context, leaseId OpaqueId, params *AcknowledgeBridgeArtifactCredentialLeaseParams, body AcknowledgeBridgeArtifactCredentialLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*AcknowledgeBridgeArtifactCredentialLeaseResponse, error) {
+	rsp, err := c.AcknowledgeBridgeArtifactCredentialLease(ctx, leaseId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAcknowledgeBridgeArtifactCredentialLeaseResponse(rsp)
+}
+
 // GetBridgeCredentialRevocationWithResponse request returning *GetBridgeCredentialRevocationResponse
 func (c *ClientWithResponses) GetBridgeCredentialRevocationWithResponse(ctx context.Context, params *GetBridgeCredentialRevocationParams, reqEditors ...RequestEditorFn) (*GetBridgeCredentialRevocationResponse, error) {
 	rsp, err := c.GetBridgeCredentialRevocation(ctx, params, reqEditors...)
@@ -3467,6 +4061,24 @@ func (c *ClientWithResponses) RevokeBridgeCredentialsWithResponse(ctx context.Co
 	return ParseRevokeBridgeCredentialsResponse(rsp)
 }
 
+// ListBridgeFindingChangesWithResponse request returning *ListBridgeFindingChangesResponse
+func (c *ClientWithResponses) ListBridgeFindingChangesWithResponse(ctx context.Context, params *ListBridgeFindingChangesParams, reqEditors ...RequestEditorFn) (*ListBridgeFindingChangesResponse, error) {
+	rsp, err := c.ListBridgeFindingChanges(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListBridgeFindingChangesResponse(rsp)
+}
+
+// GetBridgeModeWithResponse request returning *GetBridgeModeResponse
+func (c *ClientWithResponses) GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error) {
+	rsp, err := c.GetBridgeMode(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetBridgeModeResponse(rsp)
+}
+
 // SetBridgeModeWithBodyWithResponse request with arbitrary body returning *SetBridgeModeResponse
 func (c *ClientWithResponses) SetBridgeModeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetBridgeModeResponse, error) {
 	rsp, err := c.SetBridgeModeWithBody(ctx, contentType, body, reqEditors...)
@@ -3482,15 +4094,6 @@ func (c *ClientWithResponses) SetBridgeModeWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseSetBridgeModeResponse(rsp)
-}
-
-// GetBridgeModeWithResponse request returning *GetBridgeModeResponse
-func (c *ClientWithResponses) GetBridgeModeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeModeResponse, error) {
-	rsp, err := c.GetBridgeMode(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetBridgeModeResponse(rsp)
 }
 
 // ListBridgeSessionsWithResponse request returning *ListBridgeSessionsResponse
@@ -3931,6 +4534,112 @@ func ParseCreateBridgeInvestigationResponse(rsp *http.Response) (*CreateBridgeIn
 	return response, nil
 }
 
+// ParseGetBridgeArtifactCredentialLeaseResponse parses an HTTP response from a GetBridgeArtifactCredentialLeaseWithResponse call
+func ParseGetBridgeArtifactCredentialLeaseResponse(rsp *http.Response) (*GetBridgeArtifactCredentialLeaseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetBridgeArtifactCredentialLeaseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ArtifactCredentialLease
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseClaimBridgeArtifactCredentialLeaseResponse parses an HTTP response from a ClaimBridgeArtifactCredentialLeaseWithResponse call
+func ParseClaimBridgeArtifactCredentialLeaseResponse(rsp *http.Response) (*ClaimBridgeArtifactCredentialLeaseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClaimBridgeArtifactCredentialLeaseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ArtifactCredentialLease
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ArtifactCredentialLease
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAcknowledgeBridgeArtifactCredentialLeaseResponse parses an HTTP response from a AcknowledgeBridgeArtifactCredentialLeaseWithResponse call
+func ParseAcknowledgeBridgeArtifactCredentialLeaseResponse(rsp *http.Response) (*AcknowledgeBridgeArtifactCredentialLeaseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AcknowledgeBridgeArtifactCredentialLeaseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ArtifactCredentialLease
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetBridgeCredentialRevocationResponse parses an HTTP response from a GetBridgeCredentialRevocationWithResponse call
 func ParseGetBridgeCredentialRevocationResponse(rsp *http.Response) (*GetBridgeCredentialRevocationResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3997,22 +4706,22 @@ func ParseRevokeBridgeCredentialsResponse(rsp *http.Response) (*RevokeBridgeCred
 	return response, nil
 }
 
-// ParseSetBridgeModeResponse parses an HTTP response from a SetBridgeModeWithResponse call
-func ParseSetBridgeModeResponse(rsp *http.Response) (*SetBridgeModeResponse, error) {
+// ParseListBridgeFindingChangesResponse parses an HTTP response from a ListBridgeFindingChangesWithResponse call
+func ParseListBridgeFindingChangesResponse(rsp *http.Response) (*ListBridgeFindingChangesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &SetBridgeModeResponse{
+	response := &ListBridgeFindingChangesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ModeResponse
+		var dest FindingChangePage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -4039,6 +4748,39 @@ func ParseGetBridgeModeResponse(rsp *http.Response) (*GetBridgeModeResponse, err
 	}
 
 	response := &GetBridgeModeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ModeResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetBridgeModeResponse parses an HTTP response from a SetBridgeModeWithResponse call
+func ParseSetBridgeModeResponse(rsp *http.Response) (*SetBridgeModeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetBridgeModeResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

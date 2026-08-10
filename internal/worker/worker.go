@@ -155,20 +155,24 @@ type Worker struct {
 // footgun in air-gapped or split-network production clusters — the worker
 // would come up, fail every redis op invisibly, and take hours to
 // diagnose. Now a bad URL surfaces at process start.
-func NewWorker(redisURL string, log *slog.Logger) (*Worker, error) {
+func NewWorker(redisURL string, log *slog.Logger, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
 	}
 
-	srv := asynq.NewServer(redisOpt, asynq.Config{
+	config := asynq.Config{
 		Concurrency: 10,
 		Queues: map[string]int{
 			"critical": 6,
 			"default":  3,
 			"low":      1,
 		},
-	})
+	}
+	if len(errorHandlers) > 0 {
+		config.ErrorHandler = errorHandlers[0]
+	}
+	srv := asynq.NewServer(redisOpt, config)
 
 	return &Worker{
 		server: srv,
@@ -196,7 +200,7 @@ const defaultTunnelWorkerConcurrency = 8
 // apply runs (helm install of multiple operators, up to ~10m each) starved every
 // short tunnel RPC across the platform. A non-positive value falls back to
 // defaultTunnelWorkerConcurrency.
-func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger) (*Worker, error) {
+func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
@@ -204,12 +208,16 @@ func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger) (*Worke
 	if concurrency <= 0 {
 		concurrency = defaultTunnelWorkerConcurrency
 	}
-	srv := asynq.NewServer(redisOpt, asynq.Config{
+	config := asynq.Config{
 		Concurrency: concurrency,
 		Queues: map[string]int{
 			TunnelQueueName: 1,
 		},
-	})
+	}
+	if len(errorHandlers) > 0 {
+		config.ErrorHandler = errorHandlers[0]
+	}
+	srv := asynq.NewServer(redisOpt, config)
 	return &Worker{
 		server: srv,
 		mux:    asynq.NewServeMux(),
