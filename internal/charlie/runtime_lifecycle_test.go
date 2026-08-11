@@ -173,7 +173,7 @@ func TestConfigurationRuntimeLifecycleServesOperationalDisabledButStopsForEmerge
 	lifecycle, err := NewConfigurationRuntimeLifecycle(features, connection, func(context.Context) (ActivationWork, error) {
 		factories.Add(1)
 		return work, nil
-	}, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,6 +197,50 @@ func TestConfigurationRuntimeLifecycleServesOperationalDisabledButStopsForEmerge
 	case <-work.runExited:
 	case <-time.After(time.Second):
 		t.Fatal("emergency stop did not close configuration discovery")
+	}
+	if work.stops.Load() != 1 {
+		t.Fatalf("configuration stops=%d", work.stops.Load())
+	}
+}
+
+func TestConfigurationRuntimeLifecycleReconcilesWhileOperationallyDisabled(t *testing.T) {
+	features := &lifecycleFeature{}
+	features.enabled.Store(true)
+	connection := &lifecycleConnection{row: sqlc.CharlieConnection{
+		ID: uuid.New(), Active: true, OnboardingState: "active",
+		RequestedMode: string(ModeDisabled), VerifiedMode: string(ModeDisabled),
+	}}
+	work := &lifecycleWork{runExited: make(chan struct{})}
+	controlStarted, controlExited := make(chan struct{}), make(chan struct{})
+	lifecycle, err := NewConfigurationRuntimeLifecycle(features, connection, func(context.Context) (ActivationWork, error) {
+		return work, nil
+	}, func(ctx context.Context) {
+		close(controlStarted)
+		<-ctx.Done()
+		close(controlExited)
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticks := make(chan time.Time, 1)
+	lifecycle.ticker = func(time.Duration) runtimeTicker { return &fakeRuntimeTicker{channel: ticks} }
+	if err := lifecycle.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-controlStarted:
+	case <-time.After(time.Second):
+		t.Fatal("mode reconciler did not start with operationally disabled configuration lifecycle")
+	}
+
+	connection.mu.Lock()
+	connection.row.EmergencyDisabled = true
+	connection.mu.Unlock()
+	ticks <- time.Now()
+	select {
+	case <-controlExited:
+	case <-time.After(time.Second):
+		t.Fatal("emergency stop did not cancel the mode reconciler")
 	}
 	if work.stops.Load() != 1 {
 		t.Fatalf("configuration stops=%d", work.stops.Load())

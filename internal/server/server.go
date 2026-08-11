@@ -2131,12 +2131,12 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 		}
 		var lifecycleErr error
-		charlieConfigurationLifecycle, lifecycleErr = charlie.NewConfigurationRuntimeLifecycle(charlieFeatures, queries, mcpFactory, managedCharlieBridge.Close)
+		charlieConfigurationLifecycle, lifecycleErr = charlie.NewConfigurationRuntimeLifecycle(charlieFeatures, queries, mcpFactory, control, managedCharlieBridge.Close)
 		if lifecycleErr != nil {
 			database.Close()
 			return nil, lifecycleErr
 		}
-		charlieRuntimeLifecycle, lifecycleErr = charlie.NewRuntimeLifecycle(charlieFeatures, queries, workFactory, control, managedCharlieBridge.Close)
+		charlieRuntimeLifecycle, lifecycleErr = charlie.NewRuntimeLifecycle(charlieFeatures, queries, workFactory, nil, nil)
 		if lifecycleErr != nil {
 			database.Close()
 			return nil, lifecycleErr

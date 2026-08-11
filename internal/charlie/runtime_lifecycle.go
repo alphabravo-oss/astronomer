@@ -42,11 +42,12 @@ func NewRuntimeLifecycle(features featureReader, queries activeConnectionReader,
 }
 
 // NewConfigurationRuntimeLifecycle owns the product-local configuration
-// surface. It may exist for an installed, operationally disabled connection so
-// the product agent can rediscover the exact MCP catalog, but it remains absent
-// for feature-off, unconfigured, installing, and emergency-stop states.
-func NewConfigurationRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, closeTransport func()) (*RuntimeLifecycle, error) {
-	return newRuntimeLifecycle(features, queries, factory, configurationDiscoveryAllowed, nil, closeTransport)
+// surface and signed authority reconciliation. It may exist for an installed,
+// operationally disabled connection so the product agent can rediscover the
+// exact MCP catalog and import a reviewed disclosure, but it remains absent for
+// feature-off, unconfigured, installing, and emergency-stop states.
+func NewConfigurationRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, control func(context.Context), closeTransport func()) (*RuntimeLifecycle, error) {
+	return newRuntimeLifecycle(features, queries, factory, configurationDiscoveryAllowed, control, closeTransport)
 }
 
 func newRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, eligible func(Activation) bool, control func(context.Context), closeTransport func()) (*RuntimeLifecycle, error) {
