@@ -33,6 +33,11 @@ import { contextForRoute } from "./context-registry";
 import { SafeMarkdown } from "./safe-markdown";
 import { CharlieMessageParts } from "./message-parts";
 import {
+  initialCharlieTurnProgress,
+  updateCharlieTurnProgress,
+  type CharlieTurnProgress,
+} from "./turn-progress";
+import {
   abortCharlieSession,
   getCharlieActiveThread,
   getCharlieOverview,
@@ -68,38 +73,59 @@ function isCharlieRateLimitedError(error: unknown): boolean {
   return charlieErrorStatus(error) === 429;
 }
 
-/** Animated thinking indicator while Charlie is preparing a reply. */
-function CharlieThinkingDots() {
+/** Truthful, event-driven activity while Charlie is preparing a reply. */
+function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const elapsedSeconds = Math.max(0, Math.floor((now - progress.startedAt) / 1000));
+  const toolCalls = progress.toolCallIds.length;
+  const completedTools = progress.completedToolCallIds.length;
   return (
     <article
       role="status"
       aria-live="polite"
-      aria-label="Charlie is thinking"
+      aria-label={`Charlie is working: ${progress.label}`}
       className="mr-8 rounded-lg border bg-card p-3"
+      data-testid="charlie-turn-progress"
     >
-      <p className="mb-2 text-xs font-medium text-muted-foreground">Charlie</p>
-      <div className="flex items-center gap-1.5 py-0.5" aria-hidden="true">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="h-2 w-2 rounded-full bg-muted-foreground/70 motion-reduce:opacity-60"
-            style={{
-              animation: "charlie-thinking-dot 1.2s ease-in-out infinite",
-              animationDelay: `${i * 0.2}s`,
-            }}
-          />
-        ))}
+      <div className="flex items-start gap-2">
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-muted-foreground">Charlie is working</p>
+          <p className="truncate text-sm" title={progress.label}>{progress.label}</p>
+        </div>
       </div>
-      <span className="sr-only">Charlie is preparing a response</span>
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="Charlie request progress"
+        aria-valuetext={progress.label}
+      >
+        <span
+          className="block h-full w-1/3 rounded-full bg-primary motion-reduce:w-2/3"
+          style={{ animation: "charlie-progress-slide 1.4s ease-in-out infinite" }}
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span>{elapsedSeconds}s elapsed</span>
+        {toolCalls > 0 ? <span>{toolCalls} tool {toolCalls === 1 ? "call" : "calls"}</span> : null}
+        {completedTools > 0 ? <span>{completedTools} completed</span> : null}
+        {progress.eventCount > 0 ? (
+          <span>{progress.eventCount.toLocaleString()} live {progress.eventCount === 1 ? "update" : "updates"}</span>
+        ) : null}
+      </div>
       <style>{`
-        @keyframes charlie-thinking-dot {
-          0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
-          40% { opacity: 1; transform: translateY(-3px); }
+        @keyframes charlie-progress-slide {
+          0% { transform: translateX(-110%); }
+          50% { transform: translateX(110%); }
+          100% { transform: translateX(310%); }
         }
         @media (prefers-reduced-motion: reduce) {
-          @keyframes charlie-thinking-dot {
-            0%, 100% { opacity: 0.55; }
-            50% { opacity: 1; }
+          @keyframes charlie-progress-slide {
+            0%, 100% { transform: translateX(50%); }
           }
         }
       `}</style>
@@ -341,6 +367,7 @@ function CharlieDrawer() {
   const [confirmAbort, setConfirmAbort] = useState(false);
   // True from user send until Charlie produces assistant content or the turn ends.
   const [awaitingReply, setAwaitingReply] = useState(false);
+  const [turnProgress, setTurnProgress] = useState<CharlieTurnProgress>();
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   // Server-owned active interactive thread survives close/reopen. Close only
@@ -421,7 +448,17 @@ function CharlieDrawer() {
       (event) => {
         setStreamUnavailable(false);
         scheduleHistoryRefresh();
-        // Stop the thinking indicator once the turn finishes (or hard-errors).
+        setTurnProgress((current) =>
+          updateCharlieTurnProgress(
+            current ?? initialCharlieTurnProgress(),
+            {
+              type: event.type,
+              data: event.data,
+              lastEventId: event.lastEventId,
+            },
+          ),
+        );
+        // Stop the progress indicator once the turn finishes (or hard-errors).
         if (
           event.type === "turn.completed" ||
           event.type === "turn.failed" ||
@@ -465,13 +502,17 @@ function CharlieDrawer() {
     },
     onMutate: (message) => {
       setAwaitingReply(true);
+      setTurnProgress(initialCharlieTurnProgress());
       setLocal((v) => [
         ...v,
         // Prefixed id so optimistic rows are easy to drop once history arrives.
         { id: `local:${crypto.randomUUID()}`, role: "user", content: message },
       ]);
     },
-    onError: () => setAwaitingReply(false),
+    onError: () => {
+      setAwaitingReply(false);
+      setTurnProgress(undefined);
+    },
     onSuccess: (ids) => {
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
@@ -492,6 +533,7 @@ function CharlieDrawer() {
     onSuccess: (result) => {
       setLocal([]);
       setAwaitingReply(false);
+      setTurnProgress(undefined);
       setStreamUnavailable(false);
       setThreadId(result.thread?.id);
       setSessionId(undefined);
@@ -507,6 +549,7 @@ function CharlieDrawer() {
       setConfirmAbort(false);
       // Keep transcript; only live authority ends. Next send continues the thread.
       setAwaitingReply(false);
+      setTurnProgress(undefined);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.sessions });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
@@ -541,22 +584,14 @@ function CharlieDrawer() {
       ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
     ];
   }, [history.data, local]);
-  // Clear thinking once history shows an assistant reply after the last user turn.
-  useEffect(() => {
-    if (!awaitingReply || messages.length === 0) return;
-    const last = messages[messages.length - 1];
-    if (last?.role === "assistant" && (last.content?.trim() || last.state === "streaming")) {
-      setAwaitingReply(false);
-    }
-  }, [awaitingReply, messages]);
-  const showThinking = (send.isPending || awaitingReply) && !send.isError;
+  const showProgress = (send.isPending || awaitingReply) && !send.isError;
   // Keep the latest turn visible above the fixed composer unless the user has
   // scrolled up to read earlier history.
   useLayoutEffect(() => {
     const el = messagesViewportRef.current;
     if (!el || !stickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, showThinking, streamUnavailable, send.isError, history.isError]);
+  }, [messages, showProgress, streamUnavailable, send.isError, history.isError]);
   const mode = productModePresentation(
     adminMode.data?.authoritative ?? overview.data?.mode,
   );
@@ -666,7 +701,7 @@ function CharlieDrawer() {
         role="log"
         aria-live="polite"
         aria-relevant="additions text"
-        aria-busy={showThinking}
+        aria-busy={showProgress}
         aria-label="Charlie conversation"
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -675,7 +710,7 @@ function CharlieDrawer() {
           stickToBottomRef.current = distanceFromBottom < 80;
         }}
       >
-        {messages.length === 0 && !showThinking ? (
+        {messages.length === 0 && !showProgress ? (
           <EmptyState
             icon={Bot}
             title="Ask Charlie"
@@ -713,7 +748,11 @@ function CharlieDrawer() {
                 />
               </article>
             ))}
-            {showThinking && <CharlieThinkingDots />}
+            {showProgress && (
+              <CharlieProgressIndicator
+                progress={turnProgress ?? initialCharlieTurnProgress()}
+              />
+            )}
           </>
         )}
       </div>
@@ -797,17 +836,6 @@ function CharlieDrawer() {
             className="w-full resize-none rounded-lg border bg-background p-3 text-sm"
             placeholder="Ask Charlie… (Enter to send, Shift+Enter for newline)"
           />
-          <p className="text-[11px] text-muted-foreground" data-testid="charlie-mode-composer-hint">
-            {mode.key === "read_only" &&
-              "Read only: Charlie can inspect and recommend, but cannot apply changes (for example scaling replicas)."}
-            {mode.key === "approval" &&
-              "Approval mode: write actions appear as an approval card with a confirmation step before they run."}
-            {mode.key === "auto" &&
-              "Autonomous: only allowlisted safe writes run without a click; others still need approval."}
-            {mode.key === "disabled" &&
-              "Charlie is disabled for this installation."}
-            {mode.key === "unknown" && mode.ceiling}
-          </p>
           <div className="flex justify-between">
             <Link
               href={`/dashboard/charlie?tab=conversations${sessionId ? `&session=${sessionId}` : ""}`}

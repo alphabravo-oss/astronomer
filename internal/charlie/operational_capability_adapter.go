@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -30,6 +31,7 @@ type operationalCapabilityQueries interface {
 	ListAlertEventsFiltered(context.Context, sqlc.ListAlertEventsFilteredParams) ([]sqlc.AlertEvent, error)
 	GetAlertEventByID(context.Context, uuid.UUID) (sqlc.AlertEvent, error)
 	ListAuditLogV1Filtered(context.Context, sqlc.AuditLogFilterParams) ([]sqlc.AuditLog, error)
+	ListHelmRepositories(context.Context, sqlc.ListHelmRepositoriesParams) ([]sqlc.HelmRepository, error)
 }
 
 type operationalDatabase interface {
@@ -80,6 +82,7 @@ func OperationalCapabilityAdapters(adapter CapabilityExecutor) map[string]Capabi
 		"astronomer.database.health", "astronomer.migrations.status", "astronomer.backups.status",
 		"astronomer.tls.status", "astronomer.observability.health", "astronomer.alert.list",
 		"astronomer.alert.get", "astronomer.audit.recent_changes",
+		"astronomer.catalog.repositories",
 	} {
 		adapters[name] = adapter
 	}
@@ -112,6 +115,8 @@ func (a *OperationalCapabilityAdapter) Execute(ctx context.Context, capability C
 		value, err = a.alert(ctx, arguments)
 	case "astronomer.audit.recent_changes":
 		value, err = a.audit(ctx, arguments)
+	case "astronomer.catalog.repositories":
+		value, err = a.catalogRepositories(ctx, arguments)
 	default:
 		return nil, fmt.Errorf("unsupported operational capability")
 	}
@@ -119,6 +124,57 @@ func (a *OperationalCapabilityAdapter) Execute(ctx context.Context, capability C
 		return nil, err
 	}
 	return marshalBounded(value, capability.MaxResponseBytes)
+}
+
+func (a *OperationalCapabilityAdapter) catalogRepositories(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
+	page, size := pagination(arguments, 50)
+	rows, err := a.config.Queries.ListHelmRepositories(ctx, sqlc.ListHelmRepositoriesParams{
+		Limit: int32(size), Offset: int32((page - 1) * size),
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		status := "never_attempted"
+		failureCode := ""
+		if row.LastSyncAttemptedAt.Valid {
+			status = "succeeded"
+			if strings.TrimSpace(row.LastSyncError) != "" {
+				status = "failed"
+				failureCode = classifyTaskFailure(row.LastSyncError)
+			}
+		}
+		item := map[string]any{
+			"repository_id": row.ID, "name": row.Name, "repository_type": row.RepoType,
+			"endpoint": safeRepositoryEndpoint(row.Url), "enabled": row.Enabled,
+			"default": row.IsDefault, "scope": "global", "sync_status": status,
+			"authentication_type":       row.AuthType,
+			"authentication_configured": strings.TrimSpace(row.AuthConfigEncrypted) != "" || (len(row.AuthConfig) > 0 && string(row.AuthConfig) != "{}"),
+		}
+		if row.OwnerProjectID.Valid {
+			item["scope"] = "project"
+		}
+		if row.LastSyncedAt.Valid {
+			item["last_succeeded_at"] = row.LastSyncedAt.Time.UTC()
+		}
+		if row.LastSyncAttemptedAt.Valid {
+			item["last_attempted_at"] = row.LastSyncAttemptedAt.Time.UTC()
+		}
+		if failureCode != "" {
+			item["failure_code"] = failureCode
+		}
+		items = append(items, item)
+	}
+	return map[string]any{"items": items, "page": page, "page_size": size}, nil
+}
+
+func safeRepositoryEndpoint(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "withheld"
+	}
+	return strings.ToLower(parsed.Scheme) + "://" + parsed.Host
 }
 
 func (a *OperationalCapabilityAdapter) Verify(context.Context, CapabilityDescriptor, map[string]json.RawMessage, json.RawMessage) (bool, error) {

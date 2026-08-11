@@ -1,7 +1,7 @@
 # Astronomer 0.3.5 Charlie SRE scope
 
-**Product documentation version:** `0.3.5`  
-**Audience:** Charlie (RAG) and human operators on the management plane  
+**Product documentation version:** `0.3.5`
+**Audience:** Charlie (RAG) and human operators on the management plane
 **Maturity:** test-run
 
 Charlie troubleshoots the **Astronomer management-plane installation** and the

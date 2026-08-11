@@ -60,6 +60,14 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
 		stringField("task_type", false, opaqueIDPattern)
+	case "astronomer.queue.tasks":
+		fields["state"] = CapabilityFieldSchema{Type: "string", Enum: []string{"pending", "active", "scheduled", "retry", "archived"}, MaxLength: 16}
+		fields["queue"] = CapabilityFieldSchema{Type: "string", Enum: append([]string(nil), charlieQueueNames...), MaxLength: 16}
+		stringField("task_type", false, opaqueIDPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.queue.task_get":
+		stringField("task_id", true, opaqueIDPattern)
 	case "astronomer.observability.health":
 		fields["query_template"] = CapabilityFieldSchema{Type: "string", Required: true, Enum: allowedQueryNames, MaxLength: 32}
 		fields["range"] = CapabilityFieldSchema{Type: "string", Enum: []string{"5m", "15m", "1h", "6h"}, MaxLength: 3}
@@ -75,6 +83,9 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		stringField("resource_id", false, opaqueIDPattern)
 		stringField("since", false, durationPattern)
 		integerField("limit", false, 1, 100)
+	case "astronomer.catalog.repositories":
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
 	case "astronomer.agent_fleet.summary":
 		integerField("stale_after_seconds", false, 30, 86400)
 	case "astronomer.agent_fleet.list":

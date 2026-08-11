@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   abortCharlieSession,
@@ -120,15 +120,45 @@ describe("Charlie global shell accessibility", () => {
     expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
   });
 
-  it("shows a clear read-only mode badge and composer hint", async () => {
+  it("shows the read-only ceiling once at the top without a redundant composer hint", async () => {
     renderShell();
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
     expect(await screen.findByText("Mode: Read only")).toBeInTheDocument();
     const badge = screen.getByTestId("charlie-mode-badge");
     expect(badge).toHaveAttribute("data-mode", "read_only");
-    expect(screen.getByTestId("charlie-mode-composer-hint")).toHaveTextContent(
-      /cannot apply changes/i,
-    );
+    expect(screen.getByText(/Investigation and findings only/i)).toBeInTheDocument();
+    expect(screen.queryByText(/for example scaling replicas/i)).not.toBeInTheDocument();
+  });
+
+  it("shows authenticated tool progress while Charlie is working", async () => {
+    let receiveEvent: ((event: MessageEvent<string>) => void) | undefined;
+    vi.mocked(subscribeCharlieSessionEvents).mockImplementation((_id, onEvent) => {
+      receiveEvent = onEvent;
+      return () => undefined;
+    });
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    fireEvent.change(composer, { target: { value: "inspect queued tasks" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("Sending request to Charlie")).toBeInTheDocument();
+    await waitFor(() => expect(receiveEvent).toBeTypeOf("function"));
+
+    act(() => receiveEvent?.(new MessageEvent("tool.running", {
+      data: JSON.stringify({
+        id: "event-1",
+        type: "tool.running",
+        data: {
+          capability: "astronomer.queue.tasks",
+          tool_call_id: "call-1",
+          input: { credential: "SENTINEL" },
+        },
+      }),
+      lastEventId: "event-1",
+    })));
+    expect(screen.getByText("Calling astronomer.queue.tasks")).toBeInTheDocument();
+    expect(screen.getByText("1 tool call")).toBeInTheDocument();
+    expect(screen.queryByText("SENTINEL")).not.toBeInTheDocument();
   });
 
   it("sends via the interactive thread API and keeps session continuity", async () => {
@@ -244,7 +274,7 @@ describe("Charlie global shell accessibility", () => {
     );
   });
 
-  it("shows animated thinking indicator while a reply is pending", async () => {
+  it("shows event-ready progress while a reply is pending", async () => {
     let resolveSend: (value: unknown) => void = () => undefined;
     vi.mocked(sendCharlieThreadMessage).mockImplementation(
       () =>
@@ -258,7 +288,8 @@ describe("Charlie global shell accessibility", () => {
       target: { value: "hello" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByRole("status", { name: "Charlie is thinking" })).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: "Charlie is working: Sending request to Charlie" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Charlie request progress" })).toBeInTheDocument();
     resolveSend({
       thread: { id: "thread-1", title: "hello", state: "active", current_session_id: "session-1" },
       current_session: { id: "session-1" },

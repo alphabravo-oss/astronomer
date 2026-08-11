@@ -22,7 +22,10 @@ the Charlie RAG card for the **0.3.5 test run**.
 | Nodes | `astronomer.management.nodes` | Management-plane nodes only |
 | Storage / network | `astronomer.management.storage` / `.network` | Owned PVCs / Services / NP |
 | DB / migrations | `astronomer.database.health` / `astronomer.migrations.status` | |
-| Queue | `astronomer.queue.health` / `.failed_tasks` | |
+| Queue overview | `astronomer.queue.health` | Counts by queue and state |
+| Queued work | `astronomer.queue.tasks` then `.task_get` | Inspect pending/active/scheduled/retry/archived work without payload values |
+| Failed work | `astronomer.queue.failed_tasks` then `.task_get` | Includes purpose, timing, retry state, and a sanitized failure category |
+| Catalog sync | `astronomer.catalog.repositories` | Repository host, enabled/auth/sync state, last attempt/success, and sanitized failure category |
 | Argo self-mgmt | `astronomer.argocd.self_management_status` | |
 | Fleet agents | `astronomer.agent_fleet.*` | Metadata only |
 | Tunnel | `astronomer.tunnel.health` / `.recent_errors` / `.replica_distribution` | |
@@ -63,3 +66,6 @@ Users never name tools. Match natural language to tool **descriptions** in the d
 4. **No downstream** — fleet tools are DB/telemetry only.
 5. **Mode honesty** — if mode is `read_only`, stop at diagnosis + operator steps.
 6. **Natural language** — pick tools from the disclosed catalog; do not require the operator to know tool names.
+7. **Queue diagnosis** — use `queue.tasks` to identify the affected task, then
+   `queue.task_get` for safe detail. For `catalog:sync`, correlate with
+   `catalog.repositories`; do not infer that it is Charlie-specific.

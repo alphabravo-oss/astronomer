@@ -24,11 +24,12 @@ func (f operationalDBFake) SchemaVersion(context.Context) (int64, bool, error) {
 func (f operationalDBFake) Pool() *pgxpool.Pool { return nil }
 
 type operationalQueriesFake struct {
-	settings map[string]json.RawMessage
-	backups  []sqlc.Backup
-	drill    sqlc.BackupDrillResult
-	alerts   []sqlc.AlertEvent
-	audits   []sqlc.AuditLog
+	settings     map[string]json.RawMessage
+	backups      []sqlc.Backup
+	drill        sqlc.BackupDrillResult
+	alerts       []sqlc.AlertEvent
+	audits       []sqlc.AuditLog
+	repositories []sqlc.HelmRepository
 }
 
 func (f *operationalQueriesFake) GetPlatformConfig(context.Context) (sqlc.PlatformConfiguration, error) {
@@ -62,6 +63,14 @@ func (f *operationalQueriesFake) GetAlertEventByID(_ context.Context, id uuid.UU
 }
 func (f *operationalQueriesFake) ListAuditLogV1Filtered(context.Context, sqlc.AuditLogFilterParams) ([]sqlc.AuditLog, error) {
 	return f.audits, nil
+}
+func (f *operationalQueriesFake) ListHelmRepositories(_ context.Context, params sqlc.ListHelmRepositoriesParams) ([]sqlc.HelmRepository, error) {
+	start := int(params.Offset)
+	if start >= len(f.repositories) {
+		return []sqlc.HelmRepository{}, nil
+	}
+	end := min(start+int(params.Limit), len(f.repositories))
+	return append([]sqlc.HelmRepository(nil), f.repositories[start:end]...), nil
 }
 
 func operationalAdapterFixture(t *testing.T, queries *operationalQueriesFake) *OperationalCapabilityAdapter {
@@ -125,6 +134,32 @@ func TestOperationalBackupsExcludeDownstreamClusterRows(t *testing.T) {
 	result, err := adapter.Execute(context.Background(), descriptor, nil)
 	if err != nil || stringsContainsAny(string(result), "downstream", "SENTINEL") {
 		t.Fatalf("backup status leaked downstream row: %s err=%v", result, err)
+	}
+}
+
+func TestOperationalCatalogRepositoriesExposeSyncDiagnosticsWithoutURLSecrets(t *testing.T) {
+	now := time.Now().UTC()
+	queries := &operationalQueriesFake{settings: map[string]json.RawMessage{}, repositories: []sqlc.HelmRepository{{
+		ID: uuid.New(), Name: "private charts", Url: "https://user:SENTINEL@charts.example.invalid/private/index.yaml?token=SENTINEL",
+		RepoType: "helm", AuthType: "basic", AuthConfig: json.RawMessage(`{"username":"operator","password":"SENTINEL"}`),
+		AuthConfigEncrypted: "SENTINEL-CIPHERTEXT", Enabled: true,
+		LastSyncAttemptedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		LastSyncError:       "request returned 401 authorization token=SENTINEL",
+	}}}
+	adapter := operationalAdapterFixture(t, queries)
+	descriptor, _ := capabilityByName("astronomer.catalog.repositories")
+	result, err := adapter.Execute(context.Background(), descriptor, rawArguments(t, map[string]any{"page": 1, "page_size": 10}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := string(result)
+	for _, wanted := range []string{`"endpoint":"https://charts.example.invalid"`, `"sync_status":"failed"`, `"failure_code":"authentication"`, `"authentication_configured":true`} {
+		if !strings.Contains(value, wanted) {
+			t.Fatalf("catalog diagnostics missing %s: %s", wanted, value)
+		}
+	}
+	if stringsContainsAny(value, "SENTINEL", "/private", "operator", "index.yaml") {
+		t.Fatalf("catalog diagnostics leaked URL/auth/error material: %s", value)
 	}
 }
 

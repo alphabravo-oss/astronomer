@@ -46,6 +46,10 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"pod": "astronomer-server", "container": "server", "lines": 10}
 	case "astronomer.queue.failed_tasks":
 		return map[string]any{"page": 2, "page_size": 10, "task_type": "catalog:sync"}
+	case "astronomer.queue.tasks":
+		return map[string]any{"state": "pending", "queue": "default", "task_type": "catalog:sync", "page": 2, "page_size": 10}
+	case "astronomer.queue.task_get":
+		return map[string]any{"task_id": "task-a"}
 	case "astronomer.observability.health":
 		return map[string]any{"query_template": "availability", "range": "15m"}
 	case "astronomer.alert.list":
@@ -54,6 +58,8 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"alert_id": id}
 	case "astronomer.audit.recent_changes":
 		return map[string]any{"resource_type": "platform_setting", "resource_id": "feature.charlie", "since": "1h", "limit": 10}
+	case "astronomer.catalog.repositories":
+		return map[string]any{"page": 2, "page_size": 10}
 	case "astronomer.agent_fleet.summary":
 		return map[string]any{"stale_after_seconds": 300}
 	case "astronomer.agent_fleet.list":

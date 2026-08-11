@@ -92,7 +92,9 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 	paginated := map[string]bool{
 		"astronomer.management.workloads": true,
 		"astronomer.queue.failed_tasks":   true,
+		"astronomer.queue.tasks":          true,
 		"astronomer.alert.list":           true,
+		"astronomer.catalog.repositories": true,
 		"astronomer.agent_fleet.list":     true,
 	}
 	for _, descriptor := range ReadCapabilityCatalog() {
@@ -141,9 +143,11 @@ func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testi
 		{"empty workloads", emptyManagement, "astronomer.management.workloads", `"items":[]`},
 		{"empty storage", emptyManagement, "astronomer.management.storage", `"items":[]`},
 		{"empty failed tasks", emptyQueue, "astronomer.queue.failed_tasks", `"items":[]`},
+		{"empty pending tasks", emptyQueue, "astronomer.queue.tasks", `"items":[]`},
 		{"partial queue outage", emptyQueue, "astronomer.queue.health", `"available":false`},
 		{"empty backups", emptyOperational, "astronomer.backups.status", `"management_backups":[]`},
 		{"empty alerts", emptyOperational, "astronomer.alert.list", `"items":[]`},
+		{"empty catalog repositories", emptyOperational, "astronomer.catalog.repositories", `"items":[]`},
 		{"partial readiness", emptyOperational, "astronomer.installation.readiness", `"ready":false`},
 	}
 	for _, tc := range cases {

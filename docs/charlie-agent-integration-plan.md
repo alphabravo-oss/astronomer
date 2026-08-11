@@ -1131,8 +1131,15 @@ request to that cluster.
   status, and no arbitrary resource-kind or GVR input.
 - [x] **A7-008** `astronomer.database.health` — connection-pool, replication,
   storage, and failover signals without raw SQL or credentials.
-- [x] **A7-009** `astronomer.queue.health` and `.failed_tasks` — bounded Asynq/Redis
-  health, backlog, retry, and dead-letter metadata without payloads.
+- [x] **A7-009** `astronomer.queue.health`, `.tasks`, `.task_get`, and
+  `.failed_tasks` — bounded Asynq/Redis health plus pending, active, scheduled,
+  retry, and dead-letter diagnostics. Charlie receives task purpose,
+  retry/timing/orphan state, payload field names, and fixed failure categories,
+  but never payload values or raw error strings.
+- [x] **A7-009a** `astronomer.catalog.repositories` — correlate
+  `catalog:sync` tasks with safe repository sync state, last attempt/success,
+  endpoint scheme/host, and fixed failure category without URL paths, query
+  parameters, credentials, encrypted auth configuration, or raw errors.
 - [x] **A7-010** `astronomer.argocd.self_management_status` — sanitized health and
   sync state for Astronomer-owned management applications only.
 - [x] **A7-011** `astronomer.migrations.status`, `astronomer.backups.status`, and
