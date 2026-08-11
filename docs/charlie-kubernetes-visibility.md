@@ -57,7 +57,11 @@ Profile changes use a revision-checked, fail-closed state machine:
    fence, sets both requested and verified mode to disabled, and clears both
    prior disclosure acknowledgements.
 2. Astronomer calls its local Product Bridge over mTLS. It binds the request to
-   the integration ID and Charlie revision reported by the agent.
+   the integration ID and Charlie revision reported by the agent. An installed,
+   non-emergency connection keeps a private mTLS configuration-discovery
+   listener for `initialize`, `notifications/initialized`, and `tools/list`
+   even while operational mode is disabled. `tools/call`, event consumers,
+   triggers, receipt reconciliation, and write admission remain stopped.
 3. The product agent signs and forwards rediscovery. Charlie Central compiles
    the new Product MCP catalog, drops stale automatic allowlist entries, stores
    the integration disabled, audits the mutation, and returns a content-free
@@ -122,6 +126,9 @@ Changes to this connector must keep these tests green:
 - mode changes and profile changes during admitted work;
 - rediscovery mTLS, device signature, installation/revision binding, replay, and
   content-free receipt checks;
+- disabled-mode discovery paired with unconditional `tools/call` denial, plus
+  complete listener teardown for feature-off, disconnected, and emergency-stop
+  states;
 - central review and product acknowledgement separation;
 - audit-before-mutation and write-fence drain behavior; and
 - generated OpenAPI, SQL, Product Bridge, and frontend type drift gates.

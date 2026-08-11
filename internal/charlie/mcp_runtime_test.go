@@ -160,8 +160,9 @@ func TestMCPRuntimeBindsOnlyWhileLiveAndStopsOnEmergencyDisable(t *testing.T) {
 	}
 }
 
-func TestMCPRuntimeOperationalDisabledHasNoWorkListener(t *testing.T) {
+func TestMCPRuntimeOperationalDisabledServesDiscoveryWithWriteFenceClosed(t *testing.T) {
 	runtime, queries := mcpRuntimeFixture(t)
+	defer func() { _ = runtime.Shutdown(context.Background()) }()
 	queries.connection.RequestedMode = string(ModeDisabled)
 	queries.connection.VerifiedMode = string(ModeDisabled)
 	if err := runtime.reconcile(context.Background()); err != nil {
@@ -170,8 +171,8 @@ func TestMCPRuntimeOperationalDisabledHasNoWorkListener(t *testing.T) {
 	runtime.mu.Lock()
 	serving := runtime.listener != nil
 	runtime.mu.Unlock()
-	if serving {
-		t.Fatal("wire-disabled integration retained a Product MCP work listener")
+	if !serving {
+		t.Fatal("wire-disabled installed integration did not retain configuration discovery")
 	}
 	if state := runtime.config.WriteFence.State(); !state.Closed || !state.Drained {
 		t.Fatalf("disabled discovery opened product writes: %+v", state)
@@ -204,9 +205,6 @@ func TestMCPRuntimeQuiescentStatesCreateNoTimerListenerOrReceiptConsumer(t *test
 	}{
 		{name: "feature false", mutate: func(runtime *MCPRuntime, _ *mcpRuntimeFakeQueries) { runtime.features = gateFeature(false) }, wantConnectionReads: 0},
 		{name: "connection inactive", mutate: func(_ *MCPRuntime, queries *mcpRuntimeFakeQueries) { queries.connection.Active = false }, wantConnectionReads: 1},
-		{name: "operational disabled", mutate: func(_ *MCPRuntime, queries *mcpRuntimeFakeQueries) {
-			queries.connection.RequestedMode, queries.connection.VerifiedMode = string(ModeDisabled), string(ModeDisabled)
-		}, wantConnectionReads: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

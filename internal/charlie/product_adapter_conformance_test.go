@@ -507,7 +507,7 @@ func expectedAstronomerAttackCode(class string, mode Mode) DenialCode {
 func runInjectedAuthorityHeaderAttack(t *testing.T, guard *ActionGuard, executor *adapterConformanceExecutor) {
 	t.Helper()
 	const identity = "spiffe://astronomer.local/installations/installation-a/charlie-agent-mcp"
-	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, identity)
+	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, func(context.Context) bool { return true }, identity)
 	if err != nil {
 		t.Fatal(err)
 	}

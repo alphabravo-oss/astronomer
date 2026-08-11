@@ -24,6 +24,7 @@ type RuntimeLifecycle struct {
 	features       featureReader
 	queries        activeConnectionReader
 	factory        ActivationWorkFactory
+	eligible       func(Activation) bool
 	control        func(context.Context)
 	closeTransport func()
 	ticker         func(time.Duration) runtimeTicker
@@ -37,11 +38,23 @@ type RuntimeLifecycle struct {
 }
 
 func NewRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, control func(context.Context), closeTransport func()) (*RuntimeLifecycle, error) {
-	if features == nil || queries == nil || factory == nil {
+	return newRuntimeLifecycle(features, queries, factory, func(activation Activation) bool { return activation.Runnable }, control, closeTransport)
+}
+
+// NewConfigurationRuntimeLifecycle owns the product-local configuration
+// surface. It may exist for an installed, operationally disabled connection so
+// the product agent can rediscover the exact MCP catalog, but it remains absent
+// for feature-off, unconfigured, installing, and emergency-stop states.
+func NewConfigurationRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, closeTransport func()) (*RuntimeLifecycle, error) {
+	return newRuntimeLifecycle(features, queries, factory, configurationDiscoveryAllowed, nil, closeTransport)
+}
+
+func newRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, eligible func(Activation) bool, control func(context.Context), closeTransport func()) (*RuntimeLifecycle, error) {
+	if features == nil || queries == nil || factory == nil || eligible == nil {
 		return nil, fmt.Errorf("Charlie runtime lifecycle requires activation state and a work factory")
 	}
 	return &RuntimeLifecycle{
-		features: features, queries: queries, factory: factory, control: control,
+		features: features, queries: queries, factory: factory, eligible: eligible, control: control,
 		closeTransport: closeTransport, ticker: newRuntimeTicker, interval: 500 * time.Millisecond,
 	}, nil
 }
@@ -70,7 +83,7 @@ func (l *RuntimeLifecycle) Activate(ctx context.Context) error {
 	l.transition.Lock()
 	defer l.transition.Unlock()
 	activation := EvaluateActivation(ctx, l.features, l.queries)
-	if !activation.Runnable {
+	if !l.eligible(activation) {
 		return l.stopGeneration(ctx, nil)
 	}
 
@@ -89,7 +102,7 @@ func (l *RuntimeLifecycle) Activate(ctx context.Context) error {
 	}
 	// Construction can span trust and client setup. Recheck before publishing
 	// the generation so a concurrent disable cannot leave it runnable.
-	if !EvaluateActivation(ctx, l.features, l.queries).Runnable {
+	if !l.eligible(EvaluateActivation(ctx, l.features, l.queries)) {
 		_ = work.Shutdown(ctx)
 		if l.closeTransport != nil {
 			l.closeTransport()
@@ -114,7 +127,7 @@ func (l *RuntimeLifecycle) watch(ctx context.Context, generation ActivationWork)
 		case <-ctx.Done():
 			return
 		case <-ticker.C():
-			if !EvaluateActivation(ctx, l.features, l.queries).Runnable {
+			if !l.eligible(EvaluateActivation(ctx, l.features, l.queries)) {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				l.transition.Lock()
 				_ = l.stopGeneration(shutdownCtx, generation)

@@ -19,6 +19,11 @@ service never run in the Astronomer release.
   Configuration with `runtime.enabled=false` renders no workload or listener.
   The agent has no Kubernetes service-account token or RBAC. Either product or
   Charlie deployment disablement wins immediately.
+- For an installed non-emergency connection, operational `disabled` mode keeps
+  one private mTLS Product MCP configuration surface for initialization and
+  `tools/list` so an administrator can review a changed connector catalog.
+  `tools/call`, events, triggers, receipts, and writes remain stopped. Emergency
+  disable and feature/connection disable remove this listener too.
 - Effective authority is the least privilege of current product feature state,
   connection state, emergency latch, Charlie-verified mode, current Astronomer
   RBAC, affected-resource scope, disclosure digest, action classification,

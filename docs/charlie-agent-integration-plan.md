@@ -2190,8 +2190,10 @@ unchecked qualification gates.
   lifecycle. A cold `feature.charlie=false` state constructs no bridge client,
   stream, dispatcher, scheduler, reconciler, timer, listener, or network path.
   Signed feature enable starts a fresh generation; feature disable, connection
-  deactivation, operational disable, emergency stop, or authority fall drains
-  and closes the permitted work plane without a server restart.
+  deactivation, emergency stop, or authority fall drains and closes the
+  permitted work plane without a server restart. Operational disable closes all
+  work but may retain the private configuration-only MCP discovery surface
+  described below.
 - Feature disable quiesces local admission before suspending the installed
   product agent. Operational wire mode `disabled` is a separate control-only
   state; `read_only`, `approval_required`, and `automation` remain cumulative
@@ -2250,7 +2252,7 @@ unchecked qualification gates.
 - The first live disable exposed a control-recovery defect: emergency disable had
   correctly closed work, but it also removed the transport needed to suspend the
   agent. Commit `0ddff69` keeps a control-only configuration transport while the
-  work transport, listeners, sessions, claims, triggers, findings, and MCP calls
+  work transport, sessions, claims, triggers, findings, and MCP `tools/call`
   remain closed. A managed-bridge regression proves the distinction.
 - Live ceiling checks allowed `read_only -> approval`, rejected
   `approval -> auto` with `409` while allowlist review and exact target grants
@@ -2420,9 +2422,10 @@ unchecked qualification gates.
   the UI distinguishes requested from verified central mode.
 - [x] Diagnostics state exactly which boundary failed and provide a safe next
   action without exposing secrets.
-- [x] Disabled administration is local-only and visibly reports the agent,
-  bridge, MCP listener, schedulers, and network paths as quiesced without polling
-  them.
+- [x] Feature-off or disconnected administration is local-only and visibly
+  reports the agent, bridge, MCP listener, schedulers, and network paths as
+  quiesced without polling them. Operational-disabled installed connections
+  distinguish the private `tools/list` configuration surface from stopped work.
 
 Acceptance evidence on 2026-08-06 is checked in with the implementation:
 `charlie-shell.test.tsx` covers the closed-fetch boundary, authorized private

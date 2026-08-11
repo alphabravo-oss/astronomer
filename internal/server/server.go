@@ -369,9 +369,10 @@ type Server struct {
 	// SSO drives the OAuth login/callback flow. May be nil if no providers
 	// are configured at boot.
 	SSO *auth.SSOManager
-	// charlieRuntime owns dynamically materialized Charlie work generations.
-	// The bridge remains transport-dormant outside an authorized operation.
-	charlieRuntime *charlie.RuntimeLifecycle
+	// charlieRuntime owns independently gated configuration-discovery and work
+	// generations. The bridge remains transport-dormant outside an authorized
+	// product operation.
+	charlieRuntime *charlieLifecycleGroup
 	charlieBridge  *charlie.ManagedBridge
 }
 
@@ -1989,10 +1990,13 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		leaseOwner = "astronomer-server-" + uuid.NewString()
 	}
 	var charlieRuntimeLifecycle *charlie.RuntimeLifecycle
+	var charlieConfigurationLifecycle *charlie.RuntimeLifecycle
+	var charlieLifecycles *charlieLifecycleGroup
 	if managedCharlieBridge != nil {
-		workFactory := func(factoryCtx context.Context) (charlie.ActivationWork, error) {
-			if !charlie.EvaluateActivation(factoryCtx, charlieFeatures, queries).Runnable {
-				return nil, fmt.Errorf("Charlie product runtime is inactive")
+		mcpFactory := func(factoryCtx context.Context) (charlie.ActivationWork, error) {
+			activation := charlie.EvaluateActivation(factoryCtx, charlieFeatures, queries)
+			if !activation.Configurable || activation.State == charlie.ActivationEmergencyStop {
+				return nil, fmt.Errorf("Charlie product configuration discovery is inactive")
 			}
 			fleetCapabilityAdapter, err := charlie.NewFleetCapabilityAdapter(queries)
 			if err != nil {
@@ -2100,22 +2104,26 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			if err != nil {
 				return fail(err)
 			}
+			return &charlieMCPGeneration{mcp: mcpRuntime, inspector: queueInspector}, nil
+		}
+		workFactory := func(factoryCtx context.Context) (charlie.ActivationWork, error) {
+			if !charlie.EvaluateActivation(factoryCtx, charlieFeatures, queries).Runnable {
+				return nil, fmt.Errorf("Charlie product runtime is inactive")
+			}
 			auditor := charlie.NewDBLifecycleAuditor(queries)
 			dispatcher, err := charlie.NewTriggerDispatcher(queries, managedCharlieBridge, charlie.NewEventTriggerLifecyclePublisher(bus), auditor, func() bool {
 				return managedCharlieBridge.Active(context.Background())
 			})
 			if err != nil {
-				_ = mcpRuntime.Shutdown(factoryCtx)
-				return fail(err)
+				return nil, err
 			}
 			eventRuntime, err := charlie.NewEventRuntime(bus, queries, func() bool {
 				return managedCharlieBridge.Active(context.Background())
 			})
 			if err != nil {
-				_ = mcpRuntime.Shutdown(factoryCtx)
-				return fail(err)
+				return nil, err
 			}
-			return &charlieRuntimeGeneration{mcp: mcpRuntime, events: eventRuntime, dispatcher: dispatcher, inspector: queueInspector}, nil
+			return &charlieRuntimeGeneration{events: eventRuntime, dispatcher: dispatcher}, nil
 		}
 		control := func(controlCtx context.Context) {
 			if charlieAdminService != nil {
@@ -2123,19 +2131,25 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 		}
 		var lifecycleErr error
+		charlieConfigurationLifecycle, lifecycleErr = charlie.NewConfigurationRuntimeLifecycle(charlieFeatures, queries, mcpFactory, managedCharlieBridge.Close)
+		if lifecycleErr != nil {
+			database.Close()
+			return nil, lifecycleErr
+		}
 		charlieRuntimeLifecycle, lifecycleErr = charlie.NewRuntimeLifecycle(charlieFeatures, queries, workFactory, control, managedCharlieBridge.Close)
 		if lifecycleErr != nil {
 			database.Close()
 			return nil, lifecycleErr
 		}
+		charlieLifecycles = &charlieLifecycleGroup{configuration: charlieConfigurationLifecycle, runtime: charlieRuntimeLifecycle}
 		managedCharlieBridge.SetActivationChanged(func(changeCtx context.Context) {
-			if err := charlieRuntimeLifecycle.Activate(changeCtx); err != nil {
+			if err := charlieLifecycles.Activate(changeCtx); err != nil {
 				charlie.LogOperationalFailure(changeCtx, logger, "runtime.activation_failed", "")
 			}
 		})
 	}
 	if deps.PlatformSettings != nil {
-		lifecycle, lifecycleErr := charlie.NewFeatureLifecycle(database.Pool(), featureInstaller, managedCharlieBridge, charlieRuntimeLifecycle, charlieWriteFence)
+		lifecycle, lifecycleErr := charlie.NewFeatureLifecycle(database.Pool(), featureInstaller, managedCharlieBridge, charlieLifecycles, charlieWriteFence)
 		if lifecycleErr != nil {
 			charlie.LogOperationalFailure(context.Background(), logger, "runtime.feature_dependencies_incomplete", "")
 		} else {
@@ -2152,7 +2166,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		hub:                   hub,
 		Encryptor:             encryptor,
 		SSO:                   ssoManager,
-		charlieRuntime:        charlieRuntimeLifecycle,
+		charlieRuntime:        charlieLifecycles,
 		charlieBridge:         managedCharlieBridge,
 	}
 	s.httpServer = &http.Server{
@@ -2169,8 +2183,8 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	reconcileCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	if charlieRuntimeLifecycle != nil {
-		if err := charlieRuntimeLifecycle.Start(reconcileCtx); err != nil {
+	if charlieLifecycles != nil {
+		if err := charlieLifecycles.Start(reconcileCtx); err != nil {
 			database.Close()
 			return nil, err
 		}

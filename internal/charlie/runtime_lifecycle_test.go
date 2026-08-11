@@ -161,6 +161,48 @@ func TestRuntimeLifecycleDynamicEnableAndModeFallQuiesceGeneration(t *testing.T)
 	}
 }
 
+func TestConfigurationRuntimeLifecycleServesOperationalDisabledButStopsForEmergency(t *testing.T) {
+	features := &lifecycleFeature{}
+	features.enabled.Store(true)
+	connection := &lifecycleConnection{row: sqlc.CharlieConnection{
+		ID: uuid.New(), Active: true, OnboardingState: "active",
+		RequestedMode: string(ModeDisabled), VerifiedMode: string(ModeDisabled),
+	}}
+	work := &lifecycleWork{runExited: make(chan struct{})}
+	factories := &atomic.Int32{}
+	lifecycle, err := NewConfigurationRuntimeLifecycle(features, connection, func(context.Context) (ActivationWork, error) {
+		factories.Add(1)
+		return work, nil
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticks := make(chan time.Time, 1)
+	lifecycle.ticker = func(time.Duration) runtimeTicker { return &fakeRuntimeTicker{channel: ticks} }
+	if err := lifecycle.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for work.runs.Load() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if factories.Load() != 1 || work.runs.Load() != 1 {
+		t.Fatalf("configuration factory=%d runs=%d", factories.Load(), work.runs.Load())
+	}
+	connection.mu.Lock()
+	connection.row.EmergencyDisabled = true
+	connection.mu.Unlock()
+	ticks <- time.Now()
+	select {
+	case <-work.runExited:
+	case <-time.After(time.Second):
+		t.Fatal("emergency stop did not close configuration discovery")
+	}
+	if work.stops.Load() != 1 {
+		t.Fatalf("configuration stops=%d", work.stops.Load())
+	}
+}
+
 func TestRuntimeLifecycleConcurrentDisableDoesNotPublishLateWork(t *testing.T) {
 	features := &lifecycleFeature{}
 	features.enabled.Store(true)

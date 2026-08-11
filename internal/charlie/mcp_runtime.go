@@ -36,10 +36,10 @@ type MCPRuntimeConfig struct {
 	PollInterval         time.Duration
 }
 
-// MCPRuntime owns the private listener lifecycle. It does not bind a socket
-// until both the feature gate and one connection are live, and it tears the
-// listener down when either becomes inactive. Every request is gated again
-// against current database state before its identity or body is resolved.
+// MCPRuntime owns the private listener lifecycle. An installed non-emergency
+// connection may bind a configuration-only discovery surface while operational
+// authority is disabled; tools/call is independently live-gated on every
+// request before its identity or body is resolved.
 type MCPRuntime struct {
 	config   MCPRuntimeConfig
 	features featureReader
@@ -94,7 +94,7 @@ func (r *MCPRuntime) Run(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
-	if !EvaluateActivation(ctx, r.features, r.queries).Runnable {
+	if !configurationDiscoveryAllowed(EvaluateActivation(ctx, r.features, r.queries)) {
 		return r.Shutdown(ctx)
 	}
 	ticker := r.ticker(r.config.PollInterval)
@@ -108,10 +108,11 @@ func (r *MCPRuntime) Run(ctx context.Context) error {
 		if err := r.reconcile(ctx); err != nil {
 			LogRuntimeEvent(ctx, r.logger, "inactive_reconciliation_failed")
 		}
-		if !EvaluateActivation(ctx, r.features, r.queries).Runnable {
+		activation := EvaluateActivation(ctx, r.features, r.queries)
+		if !configurationDiscoveryAllowed(activation) {
 			return nil
 		}
-		if r.receipts != nil {
+		if activation.Runnable && r.receipts != nil {
 			if err := r.receipts.RunOnce(ctx); err != nil {
 				LogRuntimeEvent(ctx, r.logger, "reconciliation_pending")
 			}
@@ -128,7 +129,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	r.lifecycle.Lock()
 	defer r.lifecycle.Unlock()
 	activation := EvaluateActivation(ctx, r.features, r.queries)
-	if !activation.Runnable {
+	if !configurationDiscoveryAllowed(activation) {
 		r.config.WriteFence.Close()
 		shutdownErr := r.shutdownLocked(ctx)
 		_, drainErr := r.config.WriteFence.CloseAndWait(ctx)
@@ -216,6 +217,10 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	connectionID := activation.Connection.ID
 	expectedFingerprint := activation.Connection.SigningKeyFingerprint
 	handler, err := NewMCPHandler(guard, func(callCtx context.Context) bool {
+		current := EvaluateActivation(callCtx, r.features, r.queries)
+		return configurationDiscoveryAllowed(current) && current.Connection.ID == connectionID &&
+			current.Connection.SigningKeyFingerprint == expectedFingerprint
+	}, func(callCtx context.Context) bool {
 		current := EvaluateActivation(callCtx, r.features, r.queries)
 		return current.Runnable && current.Connection.ID == connectionID &&
 			current.Connection.SigningKeyFingerprint == expectedFingerprint

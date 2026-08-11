@@ -77,3 +77,11 @@ func activationResult(result Activation) Activation {
 	observeConnectionExpiries(result.Connection, time.Now().UTC())
 	return result
 }
+
+// configurationDiscoveryAllowed is narrower than Configurable. Emergency stop
+// deliberately keeps the Product Bridge control channel available for recovery
+// but closes the Product MCP listener entirely. Ordinary operational-disabled
+// mode may expose only authenticated initialize/tools-list discovery.
+func configurationDiscoveryAllowed(activation Activation) bool {
+	return activation.Configurable && activation.State != ActivationEmergencyStop
+}

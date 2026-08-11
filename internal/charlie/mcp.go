@@ -20,16 +20,17 @@ const maxMCPRequestBytes = 1 << 20
 
 type MCPHandler struct {
 	guard             *ActionGuard
+	discoverable      func(context.Context) bool
 	active            func(context.Context) bool
 	expectedClientURI string
 }
 
-func NewMCPHandler(guard *ActionGuard, active func(context.Context) bool, expectedClientURI string) (*MCPHandler, error) {
+func NewMCPHandler(guard *ActionGuard, discoverable, active func(context.Context) bool, expectedClientURI string) (*MCPHandler, error) {
 	parsed, err := url.Parse(expectedClientURI)
-	if guard == nil || active == nil || err != nil || !parsed.IsAbs() || parsed.Scheme != "spiffe" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, fmt.Errorf("Charlie MCP requires an action guard, live activation, and exact SPIFFE client identity")
+	if guard == nil || discoverable == nil || active == nil || err != nil || !parsed.IsAbs() || parsed.Scheme != "spiffe" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, fmt.Errorf("Charlie MCP requires configuration discovery, live activation, and exact SPIFFE client identity")
 	}
-	return &MCPHandler{guard: guard, active: active, expectedClientURI: parsed.String()}, nil
+	return &MCPHandler{guard: guard, discoverable: discoverable, active: active, expectedClientURI: parsed.String()}, nil
 }
 
 type mcpRequest struct {
@@ -88,11 +89,14 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	method = rpc.Method
-	// The listener and Service are removed when Charlie becomes inactive, but a
-	// request already accepted by the listener can race that teardown. Recheck
-	// activation before every MCP operation so initialize, notifications, and
-	// discovery cannot disclose or revive a disabled integration in that window.
-	if !h.active(request.Context()) {
+	// An installed operational-disabled connection may expose only the
+	// configuration discovery subset. Execution is independently rechecked for
+	// every tools/call, including requests racing a mode transition.
+	if rpc.Method == "tools/call" && !h.active(request.Context()) {
+		writeMCPHTTPError(w, http.StatusServiceUnavailable, "integration_inactive")
+		return
+	}
+	if rpc.Method != "tools/call" && !h.discoverable(request.Context()) {
 		writeMCPHTTPError(w, http.StatusServiceUnavailable, "integration_inactive")
 		return
 	}

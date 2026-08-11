@@ -21,7 +21,8 @@ type MCPListenerConfig struct {
 }
 
 // MCPListener is a dedicated private listener. It is never mounted into the
-// public Astronomer router and accepts no plaintext fallback.
+// public Astronomer router and accepts no plaintext fallback. In operational
+// disabled mode its handler exposes configuration discovery only.
 type MCPListener struct {
 	server *http.Server
 	addr   string
