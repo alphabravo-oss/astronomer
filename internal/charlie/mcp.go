@@ -118,7 +118,7 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 			"instructions":    "Discover only the current digest-pinned Astronomer management-plane tools.",
 		}})
 	case "tools/list":
-		tools := mcpToolsFor(h.guard.executor)
+		tools := mcpToolsFor(request.Context(), h.guard.executor)
 		writeMCPResponse(w, http.StatusOK, mcpResponse{JSONRPC: "2.0", ID: rpc.ID, Result: map[string]any{"tools": tools, "disclosureDigest": capabilityDisclosureDigest(tools)}})
 	case "tools/call":
 		h.handleCall(w, request, rpc)
@@ -246,14 +246,14 @@ func validJSONRPCID(id json.RawMessage) bool {
 }
 
 func mcpTools() []map[string]any {
-	return mcpToolsFor(nil)
+	return mcpToolsFor(context.Background(), nil)
 }
 
-func mcpToolsFor(executor CapabilityExecutor) []map[string]any {
-	return mcpToolsFromCatalog(append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...), executor)
+func mcpToolsFor(ctx context.Context, executor CapabilityExecutor) []map[string]any {
+	return mcpToolsFromCatalog(ctx, append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...), executor)
 }
 
-func mcpToolsFromCatalog(catalog []CapabilityDescriptor, executor CapabilityExecutor) []map[string]any {
+func mcpToolsFromCatalog(ctx context.Context, catalog []CapabilityDescriptor, executor CapabilityExecutor) []map[string]any {
 	catalog = append([]CapabilityDescriptor(nil), catalog...)
 	sort.Slice(catalog, func(i, j int) bool { return catalog[i].Name < catalog[j].Name })
 	tools := make([]map[string]any, 0, len(catalog))
@@ -261,8 +261,14 @@ func mcpToolsFromCatalog(catalog []CapabilityDescriptor, executor CapabilityExec
 		if validateV1CapabilityDescriptor(capability) != nil {
 			continue
 		}
-		if availability, ok := executor.(CapabilityAvailability); ok && !availability.SupportsCapability(capability.Name) {
+		if availability, ok := executor.(CapabilityAvailability); ok && !availability.SupportsCapability(ctx, capability.Name) {
 			continue
+		}
+		safety := capabilitySafetyDisclosure(capability)
+		if metadata, ok := executor.(ConnectorMetadataProvider); ok {
+			if connector, present := metadata.ConnectorMetadata(ctx, capability.Name); present {
+				safety["connector"] = connector
+			}
 		}
 		tool := map[string]any{
 			"name":        capability.Name,
@@ -275,7 +281,7 @@ func mcpToolsFromCatalog(catalog []CapabilityDescriptor, executor CapabilityExec
 				"openWorldHint":   false,
 			},
 			"_meta": map[string]any{
-				"charlie/capability": capabilitySafetyDisclosure(capability),
+				"charlie/capability": safety,
 				"effect":             capability.Effect, "source": capability.Source,
 				"schema_version": capability.SchemaVersion, "risk": capability.Risk,
 				"target_bounds": capability.TargetBounds, "impact": capability.Impact,

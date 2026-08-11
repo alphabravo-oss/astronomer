@@ -59,7 +59,7 @@ func TestUnsafeDescriptorFailsRegistrationAndDiscovery(t *testing.T) {
 	if _, err := newCatalogExecutor(map[string]CapabilityExecutor{unsafe.Name: adapter}, []CapabilityDescriptor{unsafe}); err == nil {
 		t.Fatal("destructive descriptor registered")
 	}
-	if tools := mcpToolsFromCatalog([]CapabilityDescriptor{unsafe}, nil); len(tools) != 0 {
+	if tools := mcpToolsFromCatalog(context.Background(), []CapabilityDescriptor{unsafe}, nil); len(tools) != 0 {
 		t.Fatalf("destructive descriptor was discoverable: %+v", tools)
 	}
 }

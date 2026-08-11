@@ -64,7 +64,7 @@ func (e *CatalogExecutor) Verify(ctx context.Context, capability CapabilityDescr
 
 // SupportsCapability keeps discovery and dispatch on the same explicit
 // registration list. Missing adapters are not latent or partially available.
-func (e *CatalogExecutor) SupportsCapability(name string) bool {
+func (e *CatalogExecutor) SupportsCapability(_ context.Context, name string) bool {
 	if e == nil {
 		return false
 	}

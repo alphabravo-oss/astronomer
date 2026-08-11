@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 413
-- Frontend source lines: 114208
-- Go source files under `internal/` excluding generated sqlc and tests: 569
-- Go source files scanned for sqlc query references excluding generated sqlc: 17095
-- sqlc query declarations: 1021
-- Component files scanned: 133
+- Frontend source files: 414
+- Frontend source lines: 114457
+- Go source files under `internal/` excluding generated sqlc and tests: 573
+- Go source files scanned for sqlc query references excluding generated sqlc: 17103
+- sqlc query declarations: 1023
+- Component files scanned: 134
 - Helm top-level values scanned: 33
 
 ## Hard Gates
@@ -113,17 +113,17 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
-- `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:863`](internal/db/queries/charlie.sql:863) has no non-generated Go reference
-- `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:306`](internal/db/queries/charlie.sql:306) has no non-generated Go reference
-- `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:282`](internal/db/queries/charlie.sql:282) has no non-generated Go reference
-- `CreateCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:796`](internal/db/queries/charlie.sql:796) has no non-generated Go reference
-- `DisconnectCharlieConnection` declared at [`internal/db/queries/charlie.sql:331`](internal/db/queries/charlie.sql:331) has no non-generated Go reference
-- `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:594`](internal/db/queries/charlie.sql:594) has no non-generated Go reference
+- `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:899`](internal/db/queries/charlie.sql:899) has no non-generated Go reference
+- `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:342`](internal/db/queries/charlie.sql:342) has no non-generated Go reference
+- `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:318`](internal/db/queries/charlie.sql:318) has no non-generated Go reference
+- `CreateCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:832`](internal/db/queries/charlie.sql:832) has no non-generated Go reference
+- `DisconnectCharlieConnection` declared at [`internal/db/queries/charlie.sql:367`](internal/db/queries/charlie.sql:367) has no non-generated Go reference
+- `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:630`](internal/db/queries/charlie.sql:630) has no non-generated Go reference
 - `RecordTunnelLocatorEvent` declared at [`internal/db/queries/charlie.sql:71`](internal/db/queries/charlie.sql:71) has no non-generated Go reference
-- `RevokeCharlieDelegation` declared at [`internal/db/queries/charlie.sql:458`](internal/db/queries/charlie.sql:458) has no non-generated Go reference
-- `RevokeCharlieDelegationsForPrincipal` declared at [`internal/db/queries/charlie.sql:466`](internal/db/queries/charlie.sql:466) has no non-generated Go reference
-- `SetCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:296`](internal/db/queries/charlie.sql:296) has no non-generated Go reference
-- `SetCharlieTriggerRuleEnabled` declared at [`internal/db/queries/charlie.sql:773`](internal/db/queries/charlie.sql:773) has no non-generated Go reference
+- `RevokeCharlieDelegation` declared at [`internal/db/queries/charlie.sql:494`](internal/db/queries/charlie.sql:494) has no non-generated Go reference
+- `RevokeCharlieDelegationsForPrincipal` declared at [`internal/db/queries/charlie.sql:502`](internal/db/queries/charlie.sql:502) has no non-generated Go reference
+- `SetCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:332`](internal/db/queries/charlie.sql:332) has no non-generated Go reference
+- `SetCharlieTriggerRuleEnabled` declared at [`internal/db/queries/charlie.sql:809`](internal/db/queries/charlie.sql:809) has no non-generated Go reference
 - `UpsertAgentOperationalStatus` declared at [`internal/db/queries/charlie.sql:13`](internal/db/queries/charlie.sql:13) has no non-generated Go reference
 
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.

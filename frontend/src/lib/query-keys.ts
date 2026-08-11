@@ -24,6 +24,7 @@ export const queryKeys = {
     adminConnection: ['charlie', 'admin', 'connection'] as const,
     adminAgent: ['charlie', 'admin', 'agent'] as const,
     adminMode: ['charlie', 'admin', 'mode'] as const,
+    adminKubernetesVisibility: ['charlie', 'admin', 'kubernetes-visibility'] as const,
     adminAlertPolicy: ['charlie', 'admin', 'alert-policy'] as const,
     adminAutomation: ['charlie', 'admin', 'automation'] as const,
     adminTriggerEvents: (state: string = 'dead') =>

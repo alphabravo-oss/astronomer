@@ -36,11 +36,11 @@ func TestCatalogExecutorDiscoveryIsExactlyRegisteredCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tools := mcpToolsFor(executor)
+	tools := mcpToolsFor(context.Background(), executor)
 	if len(tools) != 1 || tools[0]["name"] != "astronomer.installation.summary" {
 		t.Fatalf("tools=%v", tools)
 	}
-	if executor.SupportsCapability("astronomer.management.run_job") {
+	if executor.SupportsCapability(context.Background(), "astronomer.management.run_job") {
 		t.Fatal("unregistered write capability was supported")
 	}
 }
@@ -52,7 +52,7 @@ func TestCapabilityDisclosureDigestIsDeterministicAndCatalogBound(t *testing.T) 
 		t.Fatalf("digest is not deterministic: %q != %q", first, second)
 	}
 	executor, _ := NewCatalogExecutor(map[string]CapabilityExecutor{"astronomer.installation.summary": staticCapabilityAdapter{}})
-	narrow := capabilityDisclosureDigest(mcpToolsFor(executor))
+	narrow := capabilityDisclosureDigest(mcpToolsFor(context.Background(), executor))
 	if narrow == "" || narrow == first {
 		t.Fatalf("narrow disclosure digest did not change: full=%s narrow=%s", first, narrow)
 	}

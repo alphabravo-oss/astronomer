@@ -92,6 +92,7 @@ GET /api/v1/admin/alerting/inhibitions/{id}
 GET /api/v1/admin/charlie/access
 GET /api/v1/admin/charlie/alert-deliveries
 GET /api/v1/admin/charlie/alert-policy
+GET /api/v1/admin/charlie/kubernetes-visibility
 GET /api/v1/admin/charlie/status
 GET /api/v1/admin/charlie/trigger-events
 GET /api/v1/admin/charlie/trigger-rules
@@ -662,6 +663,7 @@ PUT /api/v1/admin/alerting/inhibitions/{id}
 PUT /api/v1/admin/charlie/access
 PUT /api/v1/admin/charlie/action-policies/{capability}
 PUT /api/v1/admin/charlie/alert-policy
+PUT /api/v1/admin/charlie/kubernetes-visibility
 PUT /api/v1/admin/dashboard-widgets/{id}
 PUT /api/v1/admin/gitops-sources/{id}
 PUT /api/v1/admin/network-policy-templates/{id}

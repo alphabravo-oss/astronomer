@@ -615,6 +615,7 @@ type BridgeStatus struct {
 	EmergencyDisabled   bool      `json:"emergency_disabled"`
 	Epoch               int64     `json:"epoch"`
 	InstanceId          OpaqueId  `json:"instance_id"`
+	IntegrationId       OpaqueId  `json:"integration_id"`
 	IntegrationRevision OpaqueId  `json:"integration_revision"`
 	LeaderInstanceId    OpaqueId  `json:"leader_instance_id"`
 	LeaseExpiresAt      time.Time `json:"lease_expires_at"`
@@ -1040,6 +1041,12 @@ type TransitionBridgeFindingParams struct {
 	XCharlieAuthorizationRef AuthorizationRef `json:"X-Charlie-Authorization-Ref"`
 }
 
+// RequestBridgeIntegrationRediscoveryJSONBody defines parameters for RequestBridgeIntegrationRediscovery.
+type RequestBridgeIntegrationRediscoveryJSONBody struct {
+	ExpectedIntegrationId OpaqueId `json:"expected_integration_id"`
+	ExpectedRevision      string   `json:"expected_revision"`
+}
+
 // CreateBridgeInvestigationParams defines parameters for CreateBridgeInvestigation.
 type CreateBridgeInvestigationParams struct {
 	// XCharlieAuthorizationRef Opaque live product authorization reference; the deployment credential never substitutes for end-user authority.
@@ -1131,6 +1138,9 @@ type DecideBridgeApprovalJSONRequestBody = ApprovalDecision
 
 // TransitionBridgeFindingJSONRequestBody defines body for TransitionBridgeFinding for application/json ContentType.
 type TransitionBridgeFindingJSONRequestBody = FindingTransition
+
+// RequestBridgeIntegrationRediscoveryJSONRequestBody defines body for RequestBridgeIntegrationRediscovery for application/json ContentType.
+type RequestBridgeIntegrationRediscoveryJSONRequestBody RequestBridgeIntegrationRediscoveryJSONBody
 
 // CreateBridgeInvestigationJSONRequestBody defines body for CreateBridgeInvestigation for application/json ContentType.
 type CreateBridgeInvestigationJSONRequestBody = CreateInvestigation
@@ -1261,6 +1271,11 @@ type ClientInterface interface {
 
 	// GetBridgeHealth request
 	GetBridgeHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RequestBridgeIntegrationRediscoveryWithBody request with any body
+	RequestBridgeIntegrationRediscoveryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RequestBridgeIntegrationRediscovery(ctx context.Context, body RequestBridgeIntegrationRediscoveryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateBridgeInvestigationWithBody request with any body
 	CreateBridgeInvestigationWithBody(ctx context.Context, params *CreateBridgeInvestigationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1467,6 +1482,30 @@ func (c *Client) TransitionBridgeFinding(ctx context.Context, findingId OpaqueId
 
 func (c *Client) GetBridgeHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBridgeHealthRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RequestBridgeIntegrationRediscoveryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestBridgeIntegrationRediscoveryRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RequestBridgeIntegrationRediscovery(ctx context.Context, body RequestBridgeIntegrationRediscoveryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestBridgeIntegrationRediscoveryRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2204,6 +2243,46 @@ func NewGetBridgeHealthRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewRequestBridgeIntegrationRediscoveryRequest calls the generic RequestBridgeIntegrationRediscovery builder with application/json body
+func NewRequestBridgeIntegrationRediscoveryRequest(server string, body RequestBridgeIntegrationRediscoveryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRequestBridgeIntegrationRediscoveryRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewRequestBridgeIntegrationRediscoveryRequestWithBody generates requests for RequestBridgeIntegrationRediscovery with any type of body
+func NewRequestBridgeIntegrationRediscoveryRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/integration/rediscovery")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -3173,6 +3252,11 @@ type ClientWithResponsesInterface interface {
 	// GetBridgeHealthWithResponse request
 	GetBridgeHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetBridgeHealthResponse, error)
 
+	// RequestBridgeIntegrationRediscoveryWithBodyWithResponse request with any body
+	RequestBridgeIntegrationRediscoveryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestBridgeIntegrationRediscoveryResponse, error)
+
+	RequestBridgeIntegrationRediscoveryWithResponse(ctx context.Context, body RequestBridgeIntegrationRediscoveryJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestBridgeIntegrationRediscoveryResponse, error)
+
 	// CreateBridgeInvestigationWithBodyWithResponse request with any body
 	CreateBridgeInvestigationWithBodyWithResponse(ctx context.Context, params *CreateBridgeInvestigationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateBridgeInvestigationResponse, error)
 
@@ -3448,6 +3532,36 @@ func (r GetBridgeHealthResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetBridgeHealthResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RequestBridgeIntegrationRediscoveryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		CapabilityCount     int                                         `json:"capability_count"`
+		DisclosureDigest    string                                      `json:"disclosure_digest"`
+		IntegrationId       OpaqueId                                    `json:"integration_id"`
+		IntegrationRevision OpaqueId                                    `json:"integration_revision"`
+		State               RequestBridgeIntegrationRediscovery200State `json:"state"`
+	}
+	JSONDefault *Error
+}
+type RequestBridgeIntegrationRediscovery200State string
+
+// Status returns HTTPResponse.Status
+func (r RequestBridgeIntegrationRediscoveryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RequestBridgeIntegrationRediscoveryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3975,6 +4089,23 @@ func (c *ClientWithResponses) GetBridgeHealthWithResponse(ctx context.Context, r
 	return ParseGetBridgeHealthResponse(rsp)
 }
 
+// RequestBridgeIntegrationRediscoveryWithBodyWithResponse request with arbitrary body returning *RequestBridgeIntegrationRediscoveryResponse
+func (c *ClientWithResponses) RequestBridgeIntegrationRediscoveryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestBridgeIntegrationRediscoveryResponse, error) {
+	rsp, err := c.RequestBridgeIntegrationRediscoveryWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestBridgeIntegrationRediscoveryResponse(rsp)
+}
+
+func (c *ClientWithResponses) RequestBridgeIntegrationRediscoveryWithResponse(ctx context.Context, body RequestBridgeIntegrationRediscoveryJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestBridgeIntegrationRediscoveryResponse, error) {
+	rsp, err := c.RequestBridgeIntegrationRediscovery(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestBridgeIntegrationRediscoveryResponse(rsp)
+}
+
 // CreateBridgeInvestigationWithBodyWithResponse request with arbitrary body returning *CreateBridgeInvestigationResponse
 func (c *ClientWithResponses) CreateBridgeInvestigationWithBodyWithResponse(ctx context.Context, params *CreateBridgeInvestigationParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateBridgeInvestigationResponse, error) {
 	rsp, err := c.CreateBridgeInvestigationWithBody(ctx, params, contentType, body, reqEditors...)
@@ -4484,6 +4615,45 @@ func ParseGetBridgeHealthResponse(rsp *http.Response) (*GetBridgeHealthResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Health
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRequestBridgeIntegrationRediscoveryResponse parses an HTTP response from a RequestBridgeIntegrationRediscoveryWithResponse call
+func ParseRequestBridgeIntegrationRediscoveryResponse(rsp *http.Response) (*RequestBridgeIntegrationRediscoveryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RequestBridgeIntegrationRediscoveryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			CapabilityCount     int                                         `json:"capability_count"`
+			DisclosureDigest    string                                      `json:"disclosure_digest"`
+			IntegrationId       OpaqueId                                    `json:"integration_id"`
+			IntegrationRevision OpaqueId                                    `json:"integration_revision"`
+			State               RequestBridgeIntegrationRediscovery200State `json:"state"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

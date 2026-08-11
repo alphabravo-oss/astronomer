@@ -578,6 +578,8 @@ components:
                     type: integer
                 instance_id:
                     $ref: '#/components/schemas/OpaqueId'
+                integration_id:
+                    $ref: '#/components/schemas/OpaqueId'
                 integration_revision:
                     $ref: '#/components/schemas/OpaqueId'
                 leader_instance_id:
@@ -605,6 +607,7 @@ components:
                 - central_health
                 - logical_agent_id
                 - deployment_id
+                - integration_id
                 - instance_id
                 - replica_ordinal
                 - replica_count
@@ -1750,6 +1753,58 @@ paths:
                 default:
                     $ref: '#/components/responses/Error'
             x-charlie-availability: always
+    /integration/rediscovery:
+        post:
+            operationId: requestBridgeIntegrationRediscovery
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                expected_integration_id:
+                                    $ref: '#/components/schemas/OpaqueId'
+                                expected_revision:
+                                    pattern: ^[0-9]+$
+                                    type: string
+                            required:
+                                - expected_integration_id
+                                - expected_revision
+                            type: object
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                additionalProperties: false
+                                properties:
+                                    capability_count:
+                                        maximum: 256
+                                        minimum: 1
+                                        type: integer
+                                    disclosure_digest:
+                                        pattern: ^[a-f0-9]{64}$
+                                        type: string
+                                    integration_id:
+                                        $ref: '#/components/schemas/OpaqueId'
+                                    integration_revision:
+                                        $ref: '#/components/schemas/OpaqueId'
+                                    state:
+                                        enum:
+                                            - disabled
+                                        type: string
+                                required:
+                                    - integration_id
+                                    - integration_revision
+                                    - disclosure_digest
+                                    - capability_count
+                                    - state
+                                type: object
+                    description: Content-free rediscovery receipt. Capabilities remain central-only.
+                default:
+                    $ref: '#/components/responses/Error'
+            summary: Ask the deployment-bound product agent to rediscover its current Product MCP catalog
     /investigations:
         parameters:
             - $ref: '#/components/parameters/AuthorizationRef'

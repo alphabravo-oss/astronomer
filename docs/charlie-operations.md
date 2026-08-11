@@ -31,6 +31,10 @@ service never run in the Astronomer release.
 - Charlie never opens an Astronomer downstream-cluster tunnel. Downstream-agent
   connection metadata is Astronomer management-plane state and is readable;
   downstream Kubernetes objects and all downstream mutations are prohibited.
+- Optional management-cluster Kubernetes diagnostics are configured separately
+  under **Settings → Charlie → Kubernetes** and execute only inside Astronomer's
+  existing Product MCP adapter. The generic product agent still has no service
+  account. See [Charlie Kubernetes visibility](charlie-kubernetes-visibility.md).
 
 Emergency response always starts with **Settings → Charlie → Mode → Emergency
 Disable**. The local latch commits first, stops new sessions/triggers/MCP calls,
@@ -137,14 +141,22 @@ task payload or become auto-eligible.
 
 ### Disclosure digest changed
 
-1. Leave the effective mode at `read_only` or `disabled`; changed disclosure
-   invalidates prior automation acknowledgement.
-2. Review the exact added, removed, and changed capability schemas, effects,
-   target bounds, preconditions, verification, and auto eligibility.
-3. Confirm no shell, exec, arbitrary HTTP/SQL/Kubernetes operation, Secret read,
-   downstream operation, destructive action, or open-ended selector appears.
-4. Acknowledge the new digest explicitly. Rebuild automation allowlists rather
-   than carrying unknown entries forward.
+1. Leave the effective mode at `disabled`; a connector scope change closes the
+   write fence, clears prior acknowledgements, and triggers signed catalog
+   rediscovery through the local Product Bridge.
+2. Confirm the Kubernetes tab distinguishes rediscovery, Charlie central review,
+   and Astronomer acknowledgement instead of treating them as one state.
+3. Leave the new, safer product profile in force if rediscovery is unavailable;
+   save the unchanged profile to retry after bridge health is restored.
+4. Review the exact added, removed, and changed capability schemas, effects,
+   connector provenance, target bounds, preconditions, verification, and auto
+   eligibility in Charlie.
+5. Confirm no shell, exec, attach, port-forward, arbitrary HTTP/SQL/Kubernetes
+   proxy, Secret read, downstream operation, destructive action, or open-ended
+   selector appears.
+6. Acknowledge the candidate in Charlie, wait for Astronomer to import the exact
+   active digest, then acknowledge the same digest in Astronomer. Rebuild
+   automation allowlists rather than carrying unknown entries forward.
 
 ### Requested and verified mode drift
 

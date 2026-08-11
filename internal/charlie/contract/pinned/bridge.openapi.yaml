@@ -8,6 +8,37 @@ servers:
 security:
   - mutualTLS: []
 paths:
+  /integration/rediscovery:
+    post:
+      operationId: requestBridgeIntegrationRediscovery
+      summary: Ask the deployment-bound product agent to rediscover its current Product MCP catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_integration_id, expected_revision]
+              properties:
+                expected_integration_id: {$ref: '#/components/schemas/OpaqueId'}
+                expected_revision: {type: string, pattern: '^[0-9]+$'}
+      responses:
+        '200':
+          description: Content-free rediscovery receipt. Capabilities remain central-only.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [integration_id, integration_revision, disclosure_digest, capability_count, state]
+                properties:
+                  integration_id: {$ref: '#/components/schemas/OpaqueId'}
+                  integration_revision: {$ref: '#/components/schemas/OpaqueId'}
+                  disclosure_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+                  capability_count: {type: integer, minimum: 1, maximum: 256}
+                  state: {type: string, enum: [disabled]}
+        default: {$ref: '#/components/responses/Error'}
   /health:
     get:
       operationId: getBridgeHealth
@@ -510,6 +541,7 @@ components:
         - central_health
         - logical_agent_id
         - deployment_id
+        - integration_id
         - instance_id
         - replica_ordinal
         - replica_count
@@ -532,6 +564,7 @@ components:
         central_health: {type: string, enum: [healthy, degraded, unavailable]}
         logical_agent_id: {$ref: "#/components/schemas/OpaqueId"}
         deployment_id: {$ref: "#/components/schemas/OpaqueId"}
+        integration_id: {$ref: "#/components/schemas/OpaqueId"}
         instance_id: {$ref: "#/components/schemas/OpaqueId"}
         replica_ordinal: {type: integer, minimum: 0, maximum: 19}
         replica_count: {type: integer, minimum: 1, maximum: 20}

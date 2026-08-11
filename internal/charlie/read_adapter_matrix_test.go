@@ -116,7 +116,7 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 	for _, descriptor := range ReadCapabilityCatalog() {
 		descriptor := descriptor
 		t.Run(descriptor.Name, func(t *testing.T) {
-			if !executor.SupportsCapability(descriptor.Name) {
+			if !executor.SupportsCapability(context.Background(), descriptor.Name) {
 				t.Fatal("production adapter is not registered")
 			}
 			arguments := rawArguments(t, validReadArguments(descriptor.Name))

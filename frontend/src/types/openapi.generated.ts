@@ -713,6 +713,34 @@ export interface OpenAPIComponents {
           "method": string;
           "steps": string[];
         };
+    CharlieKubernetesVisibility: {
+          "schema": "charlie.kubernetes-visibility/v1";
+          "profile": "disabled" | "product_namespace" | "cluster_diagnostics";
+          "revision": number;
+          "state": "not_configured" | "disabled" | "enabled";
+          "instance_id": string;
+          "namespaces": string[];
+          "product_owned_only": true;
+          "cluster_scoped": boolean;
+          "pod_logs": boolean;
+          "downstream_targets": false;
+          "secret_values": false;
+          "exec": false;
+          "attach": false;
+          "port_forward": false;
+          "api_proxy": false;
+          "requires_rediscovery": boolean;
+          "requires_central_review": boolean;
+          "requires_product_acknowledgement": boolean;
+          "candidate_disclosure_digest"?: string;
+          "available_profiles": Array<"disabled" | "product_namespace" | "cluster_diagnostics">;
+          "scope_summary": string;
+        };
+    CharlieKubernetesVisibilityRequest: {
+          "profile": "disabled" | "product_namespace" | "cluster_diagnostics";
+          "pod_logs": boolean;
+          "revision": number;
+        };
     CharlieMessageRequest: {
           "client_message_id": string;
           "message": string;
@@ -2080,6 +2108,8 @@ export type CharlieFindingResource = OpenAPIComponents['schemas']['CharlieFindin
 export type CharlieFindingSummary = OpenAPIComponents['schemas']['CharlieFindingSummary'];
 export type CharlieFindingTransitionRequest = OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
 export type CharlieFindingVerification = OpenAPIComponents['schemas']['CharlieFindingVerification'];
+export type CharlieKubernetesVisibility = OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+export type CharlieKubernetesVisibilityRequest = OpenAPIComponents['schemas']['CharlieKubernetesVisibilityRequest'];
 export type CharlieMessageRequest = OpenAPIComponents['schemas']['CharlieMessageRequest'];
 export type CharlieModeRequest = OpenAPIComponents['schemas']['CharlieModeRequest'];
 export type CharlieOnboardingRequest = OpenAPIComponents['schemas']['CharlieOnboardingRequest'];

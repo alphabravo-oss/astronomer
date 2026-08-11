@@ -16,37 +16,107 @@ import (
 
 type charlieAdminFake struct {
 	CharlieAdminBackend
-	status               charlie.AdminStatusView
-	localStatus          charlie.AdminStatusView
-	statusCalls          int
-	localCalls           int
-	diagnosticCalls      int
-	localDiagnosticCalls int
-	uninstallCalls       int
-	uninstallActor       uuid.UUID
-	mode                 charlie.AdminModeView
-	modeInput            charlie.Mode
-	modeCalls            int
-	emergency            bool
-	ackCalls             int
-	ackDigests           []string
-	ackErr               error
-	postModeDigest       string // when set, UpdateMode returns unacked post-transition digest
-	triggerEvents        []charlie.AdminTriggerEventView
-	retryEvent           charlie.AdminTriggerEventView
-	retrySource          uuid.UUID
-	retryRequest         uuid.UUID
-	actionPolicy         charlie.AdminActionPolicy
-	policyName           string
-	policyInput          charlie.AdminActionPolicyInput
-	alertPolicy          charlie.AdminAlertPolicyView
-	alertPolicyErr       error
-	alertPolicyInput     charlie.AdminAlertPolicyInput
-	alertPolicyActor     uuid.UUID
-	alertDeliveryProof   charlie.AdminAlertDeliveryProofView
-	alertDeliveryFinding uuid.UUID
-	discoveryProof       charlie.AdminDiscoveryQualificationView
-	discoveryScenario    string
+	status                    charlie.AdminStatusView
+	localStatus               charlie.AdminStatusView
+	statusCalls               int
+	localCalls                int
+	diagnosticCalls           int
+	localDiagnosticCalls      int
+	uninstallCalls            int
+	uninstallActor            uuid.UUID
+	mode                      charlie.AdminModeView
+	modeInput                 charlie.Mode
+	modeCalls                 int
+	emergency                 bool
+	ackCalls                  int
+	ackDigests                []string
+	ackErr                    error
+	postModeDigest            string // when set, UpdateMode returns unacked post-transition digest
+	triggerEvents             []charlie.AdminTriggerEventView
+	retryEvent                charlie.AdminTriggerEventView
+	retrySource               uuid.UUID
+	retryRequest              uuid.UUID
+	actionPolicy              charlie.AdminActionPolicy
+	policyName                string
+	policyInput               charlie.AdminActionPolicyInput
+	alertPolicy               charlie.AdminAlertPolicyView
+	alertPolicyErr            error
+	alertPolicyInput          charlie.AdminAlertPolicyInput
+	alertPolicyActor          uuid.UUID
+	alertDeliveryProof        charlie.AdminAlertDeliveryProofView
+	alertDeliveryFinding      uuid.UUID
+	discoveryProof            charlie.AdminDiscoveryQualificationView
+	discoveryScenario         string
+	kubernetesVisibility      charlie.AdminKubernetesVisibilityView
+	kubernetesVisibilityInput charlie.AdminKubernetesVisibilityInput
+	kubernetesVisibilityActor uuid.UUID
+	kubernetesVisibilityCalls int
+	kubernetesVisibilityErr   error
+}
+
+func (f *charlieAdminFake) KubernetesVisibility(context.Context) (charlie.AdminKubernetesVisibilityView, error) {
+	return f.kubernetesVisibility, f.kubernetesVisibilityErr
+}
+
+func (f *charlieAdminFake) UpdateKubernetesVisibility(_ context.Context, input charlie.AdminKubernetesVisibilityInput, actor uuid.UUID) (charlie.AdminKubernetesVisibilityView, error) {
+	f.kubernetesVisibilityCalls++
+	f.kubernetesVisibilityInput = input
+	f.kubernetesVisibilityActor = actor
+	return f.kubernetesVisibility, f.kubernetesVisibilityErr
+}
+
+func TestCharlieAdminKubernetesVisibilityIsBoundedAndAudited(t *testing.T) {
+	actor := uuid.New()
+	fake := &charlieAdminFake{kubernetesVisibility: charlie.AdminKubernetesVisibilityView{
+		Schema: "charlie.kubernetes-visibility/v1", Profile: charlie.KubernetesVisibilityClusterDiagnostics,
+		Revision: 8, State: "enabled", InstanceID: "astronomer-management-plane", Namespaces: []string{"astronomer"},
+		ProductOwnedOnly: true, ClusterScoped: true, AvailableProfiles: []charlie.KubernetesVisibilityProfile{
+			charlie.KubernetesVisibilityDisabled, charlie.KubernetesVisibilityProductNamespace, charlie.KubernetesVisibilityClusterDiagnostics,
+		},
+	}}
+	writer := &charlieAuditWriterFake{}
+	handler := NewCharlieAdminHandler(fake, writer)
+
+	read := httptest.NewRecorder()
+	handler.KubernetesVisibility(read, authenticatedCharlieRequest(http.MethodGet, "/", "", actor, "jwt"))
+	if read.Code != http.StatusOK || !strings.Contains(read.Body.String(), `"profile":"cluster_diagnostics"`) || !strings.Contains(read.Body.String(), `"downstream_targets":false`) {
+		t.Fatalf("Kubernetes visibility read=%d body=%s", read.Code, read.Body.String())
+	}
+	for _, prohibited := range []string{"kubeconfig", "token", `"secret_values":true`, "api_server", "capabilities"} {
+		if strings.Contains(strings.ToLower(read.Body.String()), prohibited) {
+			t.Fatalf("Kubernetes visibility response leaked %q: %s", prohibited, read.Body.String())
+		}
+	}
+
+	update := httptest.NewRecorder()
+	handler.UpdateKubernetesVisibility(update, authenticatedCharlieRequest(http.MethodPut, "/", `{"profile":"cluster_diagnostics","pod_logs":false,"revision":7}`, actor, "jwt"))
+	if update.Code != http.StatusOK || fake.kubernetesVisibilityCalls != 1 || fake.kubernetesVisibilityActor != actor ||
+		fake.kubernetesVisibilityInput.Profile != charlie.KubernetesVisibilityClusterDiagnostics || fake.kubernetesVisibilityInput.PodLogs || fake.kubernetesVisibilityInput.Revision != 7 {
+		t.Fatalf("Kubernetes visibility update=%d calls=%d actor=%s input=%+v body=%s", update.Code, fake.kubernetesVisibilityCalls, fake.kubernetesVisibilityActor, fake.kubernetesVisibilityInput, update.Body.String())
+	}
+	if writer.row.Action != "admin.charlie.kubernetes_visibility.update" || writer.row.ResourceType != "charlie_connection" ||
+		!strings.Contains(string(writer.row.Detail), `"profile":"cluster_diagnostics"`) || !strings.Contains(string(writer.row.Detail), `"revision":7`) {
+		t.Fatalf("Kubernetes visibility audit incomplete: %+v detail=%s", writer.row, writer.row.Detail)
+	}
+}
+
+func TestCharlieAdminKubernetesVisibilityRejectsMalformedAndConflictingUpdates(t *testing.T) {
+	actor := uuid.New()
+	fake := &charlieAdminFake{}
+	handler := NewCharlieAdminHandler(fake, &charlieAuditWriterFake{})
+
+	malformed := httptest.NewRecorder()
+	handler.UpdateKubernetesVisibility(malformed, authenticatedCharlieRequest(http.MethodPut, "/", `{"profile":"disabled","pod_logs":false,"revision":1,"credential":"forbidden"}`, actor, "jwt"))
+	if malformed.Code != http.StatusBadRequest || fake.kubernetesVisibilityCalls != 0 {
+		t.Fatalf("unknown Kubernetes visibility field reached backend: status=%d calls=%d body=%s", malformed.Code, fake.kubernetesVisibilityCalls, malformed.Body.String())
+	}
+
+	fake.kubernetesVisibilityErr = charlie.ErrAdminConflict
+	conflict := httptest.NewRecorder()
+	handler.UpdateKubernetesVisibility(conflict, authenticatedCharlieRequest(http.MethodPut, "/", `{"profile":"product_namespace","pod_logs":true,"revision":2}`, actor, "jwt"))
+	if conflict.Code != http.StatusConflict || fake.kubernetesVisibilityCalls != 1 {
+		t.Fatalf("Kubernetes visibility conflict=%d calls=%d body=%s", conflict.Code, fake.kubernetesVisibilityCalls, conflict.Body.String())
+	}
 }
 
 func (f *charlieAdminFake) AlertDeliveryProofs(_ context.Context, findingID uuid.UUID) (charlie.AdminAlertDeliveryProofView, error) {

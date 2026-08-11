@@ -366,6 +366,40 @@ components:
         auto_readiness: {$ref: '#/components/schemas/CharlieAdminAutoReadiness'}
         workload_ceiling: {type: string, enum: [disabled, read_only, approval, auto], description: Product-owned ceiling currently rendered in the agent Argo workload.}
         workload_ceiling_ready: {type: boolean, description: True only after a non-pruning rollout and exact readback from both ready product-agent replicas.}
+    CharlieKubernetesVisibility:
+      type: object
+      additionalProperties: false
+      required: [schema, profile, revision, state, instance_id, namespaces, product_owned_only, cluster_scoped, pod_logs, downstream_targets, secret_values, exec, attach, port_forward, api_proxy, requires_rediscovery, requires_central_review, requires_product_acknowledgement, available_profiles, scope_summary]
+      properties:
+        schema: {type: string, enum: [charlie.kubernetes-visibility/v1]}
+        profile: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}
+        revision: {type: integer, format: int64, minimum: 0}
+        state: {type: string, enum: [not_configured, disabled, enabled]}
+        instance_id: {type: string, maxLength: 128}
+        namespaces: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, maxLength: 63}}
+        product_owned_only: {type: boolean, enum: [true]}
+        cluster_scoped: {type: boolean}
+        pod_logs: {type: boolean}
+        downstream_targets: {type: boolean, enum: [false]}
+        secret_values: {type: boolean, enum: [false]}
+        exec: {type: boolean, enum: [false]}
+        attach: {type: boolean, enum: [false]}
+        port_forward: {type: boolean, enum: [false]}
+        api_proxy: {type: boolean, enum: [false]}
+        requires_rediscovery: {type: boolean}
+        requires_central_review: {type: boolean}
+        requires_product_acknowledgement: {type: boolean}
+        candidate_disclosure_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+        available_profiles: {type: array, minItems: 3, maxItems: 3, uniqueItems: true, items: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}}
+        scope_summary: {type: string, maxLength: 512}
+    CharlieKubernetesVisibilityRequest:
+      type: object
+      additionalProperties: false
+      required: [profile, pod_logs, revision]
+      properties:
+        profile: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}
+        pod_logs: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 0}
     CharlieAdminAutoReadiness:
       type: object
       additionalProperties: false
@@ -18494,6 +18528,31 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {description: Revision or mode prerequisites changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/kubernetes-visibility/:
+    get:
+      operationId: adminCharlieKubernetesVisibilityGet
+      summary: Read the product-owned Kubernetes observation boundary
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Current Kubernetes visibility profile and hard prohibitions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: adminCharlieKubernetesVisibilityUpdate
+      summary: Replace the product-owned Kubernetes observation boundary
+      description: A change closes admission, forces Charlie authority to disabled, clears capability acknowledgement, and never enables downstream targets or interactive Kubernetes transports.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibilityRequest'}}}}
+      responses:
+        '200': {description: Updated Kubernetes visibility profile., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Revision, connection, or visibility prerequisites changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/charlie/trigger-rules/:
     get:

@@ -279,6 +279,35 @@
     "security_registry_id": "charlie-admin-disconnect"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/*/admin/charlie/kubernetes-visibility/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/admin/charlie/kubernetes-visibility/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "administrative API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "admin/superuser or explicit resource permission enforced by handler/middleware",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-charlie-admin-fail-closed",
+    "risk_reason": "The product-owned Kubernetes visibility policy is feature-gated and requires authenticated admin scope plus charlie:manage at the router. Browser mutations inherit CSRF protection; the handler enforces optimistic revisions; every scope change closes Charlie authority to disabled, clears capability acknowledgement, drains active work, and emits a bounded audit event before rediscovery can be reviewed and acknowledged on both sides."
+  },
+  {
     "method": "PATCH",
     "pattern": "/api/v1/*/admin/charlie/mode/",
     "handler_owner": "internal/server route owner requires explicit classification",
@@ -2801,7 +2830,7 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/*/charlie/operations/{operation_id}",
+    "pattern": "/api/v1/*/charlie/operations/{operation_id}/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "metadata-only status for one Charlie action receipt",
     "auth": "browser JWT only; feature and live connection gates",

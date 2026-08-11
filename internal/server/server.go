@@ -2068,6 +2068,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			if err != nil {
 				return fail(err)
 			}
+			visibilityExecutor, err := charlie.NewKubernetesVisibilityExecutor(capabilityExecutor, queries)
+			if err != nil {
+				return fail(err)
+			}
 			charlieSafety, err := charlie.NewProductActionSafety(queries, maintenanceEvaluator)
 			if err != nil {
 				return fail(err)
@@ -2092,7 +2096,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				ActionSigningKeyFile: cfg.CharlieMCPActionSigningKeyFile,
 				LeaseOwner:           leaseOwner, ReceiptCipher: encryptor, WriteFence: charlieWriteFence,
 				BridgeStatus: managedCharlieBridge, FindingRecorder: charlieFindingRecorder,
-			}, charlieFeatures, queries, charlieBindings, charlieSafety, capabilityExecutor, logger)
+			}, charlieFeatures, queries, charlieBindings, charlieSafety, visibilityExecutor, logger)
 			if err != nil {
 				return fail(err)
 			}

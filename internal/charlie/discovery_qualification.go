@@ -57,7 +57,7 @@ func qualifyFixedDiscovery(scenario string) (AdminDiscoveryQualificationView, er
 	default:
 		return AdminDiscoveryQualificationView{}, ErrAdminConflict
 	}
-	tools := mcpToolsFromCatalog(candidate, nil)
+	tools := mcpToolsFromCatalog(context.Background(), candidate, nil)
 	view := AdminDiscoveryQualificationView{
 		Scenario: scenario, CandidateEnabled: len(tools) > 0,
 		AcceptedCount: len(tools), RejectedCount: len(candidate) - len(tools),

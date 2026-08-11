@@ -1087,6 +1087,106 @@ func (j *CapabilityV1SchemaJson) UnmarshalJSON(value []byte) error {
 	return nil
 }
 
+// Content-free connector provenance included in a capability disclosure and
+// therefore in its acknowledgement digest.
+type ConnectorCapabilityV1SchemaJson struct {
+	// Boundary corresponds to the JSON schema field "boundary".
+	Boundary string `json:"boundary" yaml:"boundary" mapstructure:"boundary"`
+
+	// ClusterScoped corresponds to the JSON schema field "cluster_scoped".
+	ClusterScoped bool `json:"cluster_scoped" yaml:"cluster_scoped" mapstructure:"cluster_scoped"`
+
+	// ContentAccess corresponds to the JSON schema field "content_access".
+	ContentAccess []string `json:"content_access" yaml:"content_access" mapstructure:"content_access"`
+
+	// DownstreamTargets corresponds to the JSON schema field "downstream_targets".
+	DownstreamTargets bool `json:"downstream_targets" yaml:"downstream_targets" mapstructure:"downstream_targets"`
+
+	// InstanceId corresponds to the JSON schema field "instance_id".
+	InstanceId string `json:"instance_id" yaml:"instance_id" mapstructure:"instance_id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile string `json:"profile" yaml:"profile" mapstructure:"profile"`
+
+	// Schema corresponds to the JSON schema field "schema".
+	Schema string `json:"schema" yaml:"schema" mapstructure:"schema"`
+
+	// ScopeSummary corresponds to the JSON schema field "scope_summary".
+	ScopeSummary string `json:"scope_summary" yaml:"scope_summary" mapstructure:"scope_summary"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *ConnectorCapabilityV1SchemaJson) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["boundary"]; raw != nil && !ok {
+		return fmt.Errorf("field boundary in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["cluster_scoped"]; raw != nil && !ok {
+		return fmt.Errorf("field cluster_scoped in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["content_access"]; raw != nil && !ok {
+		return fmt.Errorf("field content_access in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["downstream_targets"]; raw != nil && !ok {
+		return fmt.Errorf("field downstream_targets in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["instance_id"]; raw != nil && !ok {
+		return fmt.Errorf("field instance_id in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["kind"]; raw != nil && !ok {
+		return fmt.Errorf("field kind in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["profile"]; raw != nil && !ok {
+		return fmt.Errorf("field profile in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["schema"]; raw != nil && !ok {
+		return fmt.Errorf("field schema in ConnectorCapabilityV1SchemaJson: required")
+	}
+	if _, ok := raw["scope_summary"]; raw != nil && !ok {
+		return fmt.Errorf("field scope_summary in ConnectorCapabilityV1SchemaJson: required")
+	}
+	type Plain ConnectorCapabilityV1SchemaJson
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if matched, _ := regexp.MatchString(`^[a-z][a-z0-9_.-]{0,63}$`, string(plain.Boundary)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "Boundary", `^[a-z][a-z0-9_.-]{0,63}$`)
+	}
+	if len(plain.ContentAccess) > 16 {
+		return fmt.Errorf("field %s length: must be <= %d", "content_access", 16)
+	}
+	if plain.DownstreamTargets != false {
+		return fmt.Errorf("field %s: must be equal to %t", "downstream_targets", false)
+	}
+	if matched, _ := regexp.MatchString(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, string(plain.InstanceId)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "InstanceId", `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	}
+	if matched, _ := regexp.MatchString(`^[a-z][a-z0-9_.-]{0,63}$`, string(plain.Kind)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "Kind", `^[a-z][a-z0-9_.-]{0,63}$`)
+	}
+	if matched, _ := regexp.MatchString(`^[a-z][a-z0-9_.-]{0,63}$`, string(plain.Profile)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "Profile", `^[a-z][a-z0-9_.-]{0,63}$`)
+	}
+	if plain.Schema != "charlie.connector-capability/v1" {
+		return fmt.Errorf("field %s: must be equal to %s", "schema", "charlie.connector-capability/v1")
+	}
+	if utf8.RuneCountInString(string(plain.ScopeSummary)) < 1 {
+		return fmt.Errorf("field %s length: must be >= %d", "scope_summary", 1)
+	}
+	if utf8.RuneCountInString(string(plain.ScopeSummary)) > 512 {
+		return fmt.Errorf("field %s length: must be <= %d", "scope_summary", 512)
+	}
+	*j = ConnectorCapabilityV1SchemaJson(plain)
+	return nil
+}
+
 type Credential struct {
 	// Credential corresponds to the JSON schema field "credential".
 	Credential string `json:"credential" yaml:"credential" mapstructure:"credential"`
@@ -1518,6 +1618,308 @@ func (j *Finding) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s length: must be <= %d", "verification_steps", 16)
 	}
 	*j = Finding(plain)
+	return nil
+}
+
+// Product-owned Kubernetes observation policy. Charlie agents never receive
+// Kubernetes credentials; the product adapter enforces this policy at its MCP
+// boundary.
+type KubernetesVisibilityV1SchemaJson struct {
+	// ContentAccess corresponds to the JSON schema field "content_access".
+	ContentAccess KubernetesVisibilityV1SchemaJsonContentAccess `json:"content_access" yaml:"content_access" mapstructure:"content_access"`
+
+	// Limits corresponds to the JSON schema field "limits".
+	Limits KubernetesVisibilityV1SchemaJsonLimits `json:"limits" yaml:"limits" mapstructure:"limits"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile KubernetesVisibilityV1SchemaJsonProfile `json:"profile" yaml:"profile" mapstructure:"profile"`
+
+	// Schema corresponds to the JSON schema field "schema".
+	Schema string `json:"schema" yaml:"schema" mapstructure:"schema"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target KubernetesVisibilityV1SchemaJsonTarget `json:"target" yaml:"target" mapstructure:"target"`
+}
+
+type KubernetesVisibilityV1SchemaJsonContentAccess struct {
+	// ApiProxy corresponds to the JSON schema field "api_proxy".
+	ApiProxy bool `json:"api_proxy" yaml:"api_proxy" mapstructure:"api_proxy"`
+
+	// Attach corresponds to the JSON schema field "attach".
+	Attach bool `json:"attach" yaml:"attach" mapstructure:"attach"`
+
+	// ConfigmapValues corresponds to the JSON schema field "configmap_values".
+	ConfigmapValues bool `json:"configmap_values" yaml:"configmap_values" mapstructure:"configmap_values"`
+
+	// CustomResourceSpec corresponds to the JSON schema field "custom_resource_spec".
+	CustomResourceSpec bool `json:"custom_resource_spec" yaml:"custom_resource_spec" mapstructure:"custom_resource_spec"`
+
+	// Exec corresponds to the JSON schema field "exec".
+	Exec bool `json:"exec" yaml:"exec" mapstructure:"exec"`
+
+	// PodLogs corresponds to the JSON schema field "pod_logs".
+	PodLogs bool `json:"pod_logs" yaml:"pod_logs" mapstructure:"pod_logs"`
+
+	// PortForward corresponds to the JSON schema field "port_forward".
+	PortForward bool `json:"port_forward" yaml:"port_forward" mapstructure:"port_forward"`
+
+	// SecretValues corresponds to the JSON schema field "secret_values".
+	SecretValues bool `json:"secret_values" yaml:"secret_values" mapstructure:"secret_values"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *KubernetesVisibilityV1SchemaJsonContentAccess) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["api_proxy"]; raw != nil && !ok {
+		return fmt.Errorf("field api_proxy in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["attach"]; raw != nil && !ok {
+		return fmt.Errorf("field attach in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["configmap_values"]; raw != nil && !ok {
+		return fmt.Errorf("field configmap_values in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["custom_resource_spec"]; raw != nil && !ok {
+		return fmt.Errorf("field custom_resource_spec in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["exec"]; raw != nil && !ok {
+		return fmt.Errorf("field exec in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["pod_logs"]; raw != nil && !ok {
+		return fmt.Errorf("field pod_logs in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["port_forward"]; raw != nil && !ok {
+		return fmt.Errorf("field port_forward in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	if _, ok := raw["secret_values"]; raw != nil && !ok {
+		return fmt.Errorf("field secret_values in KubernetesVisibilityV1SchemaJsonContentAccess: required")
+	}
+	type Plain KubernetesVisibilityV1SchemaJsonContentAccess
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.ApiProxy != false {
+		return fmt.Errorf("field %s: must be equal to %t", "api_proxy", false)
+	}
+	if plain.Attach != false {
+		return fmt.Errorf("field %s: must be equal to %t", "attach", false)
+	}
+	if plain.Exec != false {
+		return fmt.Errorf("field %s: must be equal to %t", "exec", false)
+	}
+	if plain.PortForward != false {
+		return fmt.Errorf("field %s: must be equal to %t", "port_forward", false)
+	}
+	if plain.SecretValues != false {
+		return fmt.Errorf("field %s: must be equal to %t", "secret_values", false)
+	}
+	*j = KubernetesVisibilityV1SchemaJsonContentAccess(plain)
+	return nil
+}
+
+type KubernetesVisibilityV1SchemaJsonLimits struct {
+	// ListItems corresponds to the JSON schema field "list_items".
+	ListItems int `json:"list_items" yaml:"list_items" mapstructure:"list_items"`
+
+	// LogTailLines corresponds to the JSON schema field "log_tail_lines".
+	LogTailLines int `json:"log_tail_lines" yaml:"log_tail_lines" mapstructure:"log_tail_lines"`
+
+	// ResponseBytes corresponds to the JSON schema field "response_bytes".
+	ResponseBytes int `json:"response_bytes" yaml:"response_bytes" mapstructure:"response_bytes"`
+
+	// TimeoutMs corresponds to the JSON schema field "timeout_ms".
+	TimeoutMs int `json:"timeout_ms" yaml:"timeout_ms" mapstructure:"timeout_ms"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *KubernetesVisibilityV1SchemaJsonLimits) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["list_items"]; raw != nil && !ok {
+		return fmt.Errorf("field list_items in KubernetesVisibilityV1SchemaJsonLimits: required")
+	}
+	if _, ok := raw["log_tail_lines"]; raw != nil && !ok {
+		return fmt.Errorf("field log_tail_lines in KubernetesVisibilityV1SchemaJsonLimits: required")
+	}
+	if _, ok := raw["response_bytes"]; raw != nil && !ok {
+		return fmt.Errorf("field response_bytes in KubernetesVisibilityV1SchemaJsonLimits: required")
+	}
+	if _, ok := raw["timeout_ms"]; raw != nil && !ok {
+		return fmt.Errorf("field timeout_ms in KubernetesVisibilityV1SchemaJsonLimits: required")
+	}
+	type Plain KubernetesVisibilityV1SchemaJsonLimits
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if 200 < plain.ListItems {
+		return fmt.Errorf("field %s: must be <= %v", "list_items", 200)
+	}
+	if 1 > plain.ListItems {
+		return fmt.Errorf("field %s: must be >= %v", "list_items", 1)
+	}
+	if 1000 < plain.LogTailLines {
+		return fmt.Errorf("field %s: must be <= %v", "log_tail_lines", 1000)
+	}
+	if 1 > plain.LogTailLines {
+		return fmt.Errorf("field %s: must be >= %v", "log_tail_lines", 1)
+	}
+	if 262144 < plain.ResponseBytes {
+		return fmt.Errorf("field %s: must be <= %v", "response_bytes", 262144)
+	}
+	if 1024 > plain.ResponseBytes {
+		return fmt.Errorf("field %s: must be >= %v", "response_bytes", 1024)
+	}
+	if 30000 < plain.TimeoutMs {
+		return fmt.Errorf("field %s: must be <= %v", "timeout_ms", 30000)
+	}
+	if 100 > plain.TimeoutMs {
+		return fmt.Errorf("field %s: must be >= %v", "timeout_ms", 100)
+	}
+	*j = KubernetesVisibilityV1SchemaJsonLimits(plain)
+	return nil
+}
+
+type KubernetesVisibilityV1SchemaJsonProfile string
+
+const KubernetesVisibilityV1SchemaJsonProfileClusterDiagnostics KubernetesVisibilityV1SchemaJsonProfile = "cluster_diagnostics"
+const KubernetesVisibilityV1SchemaJsonProfileDisabled KubernetesVisibilityV1SchemaJsonProfile = "disabled"
+const KubernetesVisibilityV1SchemaJsonProfileExtendedDiagnostics KubernetesVisibilityV1SchemaJsonProfile = "extended_diagnostics"
+const KubernetesVisibilityV1SchemaJsonProfileProductNamespace KubernetesVisibilityV1SchemaJsonProfile = "product_namespace"
+
+var enumValues_KubernetesVisibilityV1SchemaJsonProfile = []interface{}{
+	"disabled",
+	"product_namespace",
+	"cluster_diagnostics",
+	"extended_diagnostics",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *KubernetesVisibilityV1SchemaJsonProfile) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_KubernetesVisibilityV1SchemaJsonProfile {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_KubernetesVisibilityV1SchemaJsonProfile, v)
+	}
+	*j = KubernetesVisibilityV1SchemaJsonProfile(v)
+	return nil
+}
+
+type KubernetesVisibilityV1SchemaJsonTarget struct {
+	// Boundary corresponds to the JSON schema field "boundary".
+	Boundary string `json:"boundary" yaml:"boundary" mapstructure:"boundary"`
+
+	// IncludeClusterScoped corresponds to the JSON schema field
+	// "include_cluster_scoped".
+	IncludeClusterScoped bool `json:"include_cluster_scoped" yaml:"include_cluster_scoped" mapstructure:"include_cluster_scoped"`
+
+	// IncludeDownstreamTargets corresponds to the JSON schema field
+	// "include_downstream_targets".
+	IncludeDownstreamTargets bool `json:"include_downstream_targets" yaml:"include_downstream_targets" mapstructure:"include_downstream_targets"`
+
+	// InstanceId corresponds to the JSON schema field "instance_id".
+	InstanceId string `json:"instance_id" yaml:"instance_id" mapstructure:"instance_id"`
+
+	// Namespaces corresponds to the JSON schema field "namespaces".
+	Namespaces []string `json:"namespaces" yaml:"namespaces" mapstructure:"namespaces"`
+
+	// ProductOwnedOnly corresponds to the JSON schema field "product_owned_only".
+	ProductOwnedOnly bool `json:"product_owned_only" yaml:"product_owned_only" mapstructure:"product_owned_only"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *KubernetesVisibilityV1SchemaJsonTarget) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["boundary"]; raw != nil && !ok {
+		return fmt.Errorf("field boundary in KubernetesVisibilityV1SchemaJsonTarget: required")
+	}
+	if _, ok := raw["include_cluster_scoped"]; raw != nil && !ok {
+		return fmt.Errorf("field include_cluster_scoped in KubernetesVisibilityV1SchemaJsonTarget: required")
+	}
+	if _, ok := raw["include_downstream_targets"]; raw != nil && !ok {
+		return fmt.Errorf("field include_downstream_targets in KubernetesVisibilityV1SchemaJsonTarget: required")
+	}
+	if _, ok := raw["instance_id"]; raw != nil && !ok {
+		return fmt.Errorf("field instance_id in KubernetesVisibilityV1SchemaJsonTarget: required")
+	}
+	if _, ok := raw["namespaces"]; raw != nil && !ok {
+		return fmt.Errorf("field namespaces in KubernetesVisibilityV1SchemaJsonTarget: required")
+	}
+	if _, ok := raw["product_owned_only"]; raw != nil && !ok {
+		return fmt.Errorf("field product_owned_only in KubernetesVisibilityV1SchemaJsonTarget: required")
+	}
+	type Plain KubernetesVisibilityV1SchemaJsonTarget
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.Boundary != "product_runtime" {
+		return fmt.Errorf("field %s: must be equal to %s", "boundary", "product_runtime")
+	}
+	if plain.IncludeDownstreamTargets != false {
+		return fmt.Errorf("field %s: must be equal to %t", "include_downstream_targets", false)
+	}
+	if matched, _ := regexp.MatchString(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, string(plain.InstanceId)); !matched {
+		return fmt.Errorf("field %s pattern match: must match %s", "InstanceId", `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	}
+	if len(plain.Namespaces) > 32 {
+		return fmt.Errorf("field %s length: must be <= %d", "namespaces", 32)
+	}
+	if plain.ProductOwnedOnly != true {
+		return fmt.Errorf("field %s: must be equal to %t", "product_owned_only", true)
+	}
+	*j = KubernetesVisibilityV1SchemaJsonTarget(plain)
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *KubernetesVisibilityV1SchemaJson) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["content_access"]; raw != nil && !ok {
+		return fmt.Errorf("field content_access in KubernetesVisibilityV1SchemaJson: required")
+	}
+	if _, ok := raw["limits"]; raw != nil && !ok {
+		return fmt.Errorf("field limits in KubernetesVisibilityV1SchemaJson: required")
+	}
+	if _, ok := raw["profile"]; raw != nil && !ok {
+		return fmt.Errorf("field profile in KubernetesVisibilityV1SchemaJson: required")
+	}
+	if _, ok := raw["schema"]; raw != nil && !ok {
+		return fmt.Errorf("field schema in KubernetesVisibilityV1SchemaJson: required")
+	}
+	if _, ok := raw["target"]; raw != nil && !ok {
+		return fmt.Errorf("field target in KubernetesVisibilityV1SchemaJson: required")
+	}
+	type Plain KubernetesVisibilityV1SchemaJson
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	if plain.Schema != "charlie.kubernetes-visibility/v1" {
+		return fmt.Errorf("field %s: must be equal to %s", "schema", "charlie.kubernetes-visibility/v1")
+	}
+	*j = KubernetesVisibilityV1SchemaJson(plain)
 	return nil
 }
 

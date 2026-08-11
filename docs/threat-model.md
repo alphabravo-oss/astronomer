@@ -129,6 +129,13 @@ Controls:
 - Charlie may read Astronomer-owned downstream-agent connection telemetry but
   no capability proxies through an agent tunnel or queries downstream
   Kubernetes. Instrumented tunnel-spy tests enforce the boundary.
+- Optional management-cluster Kubernetes visibility is owned and executed by
+  the Product MCP, not the product agent. Profile and content-scope changes
+  lower verified authority to disabled, change the disclosure digest, and
+  require signed installation-bound rediscovery plus independent Charlie and
+  Astronomer acknowledgement. Secret values, downstream targets, exec, attach,
+  port-forward, generic API proxying, and unrestricted selectors remain hard
+  prohibitions.
 
 Review checks:
 
