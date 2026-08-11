@@ -33,6 +33,7 @@ import { contextForRoute } from "./context-registry";
 import { SafeMarkdown } from "./safe-markdown";
 import { CharlieMessageParts } from "./message-parts";
 import {
+  charlieProgressEventTurnId,
   initialCharlieTurnProgress,
   updateCharlieTurnProgress,
   type CharlieTurnProgress,
@@ -303,7 +304,7 @@ function ContextPicker() {
   const result = useQuery({
     queryKey: queryKeys.charlie.contextSearch(q),
     queryFn: () => searchCharlieContext(q),
-    enabled: open && q.trim().length >= 2,
+    enabled: open && (q.trim().length === 0 || q.trim().length >= 2),
     retry: false,
   });
   if (!open)
@@ -315,25 +316,40 @@ function ContextPicker() {
         className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
       >
         <Plus className="h-3 w-3" />
-        Add context
+        Narrow scope
       </button>
     );
   return (
-    <div className="rounded-md border p-2" role="search">
+    <div className="min-w-72 rounded-md border bg-background p-2 shadow-sm" role="search">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium">Choose a diagnostic scope</p>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+        >
+          Done
+        </button>
+      </div>
       <label className="flex items-center gap-2">
         <Search className="h-4 w-4" />
-        <span className="sr-only">Search authorized context</span>
+        <span className="sr-only">Search components or agent connections</span>
         <input
-          aria-label="Search authorized context"
+          aria-label="Search components or agent connections"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search authorized resources"
+          placeholder="Search components or agent connections"
           className="w-full bg-transparent text-sm outline-none"
         />
       </label>
       {result.isError && (
         <p role="status" className="mt-2 text-xs text-muted-foreground">
           Context search is unavailable for this installation.
+        </p>
+      )}
+      {result.isLoading && (
+        <p role="status" className="mt-2 text-xs text-muted-foreground">
+          Loading available scopes…
         </p>
       )}
       {result.data?.map((v) => (
@@ -352,6 +368,11 @@ function ContextPicker() {
           </span>
         </button>
       ))}
+      {!result.isLoading && result.data?.length === 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          No matching scope is available to your account.
+        </p>
+      )}
     </div>
   );
 }
@@ -367,6 +388,10 @@ function CharlieDrawer() {
   const [confirmAbort, setConfirmAbort] = useState(false);
   // True from user send until Charlie produces assistant content or the turn ends.
   const [awaitingReply, setAwaitingReply] = useState(false);
+  const awaitingReplyRef = useRef(false);
+  const activeTurnIdRef = useRef<string | undefined>(undefined);
+  const assistantIdsBeforeTurnRef = useRef<Set<string>>(new Set());
+  const [streamGeneration, setStreamGeneration] = useState(0);
   const [turnProgress, setTurnProgress] = useState<CharlieTurnProgress>();
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -424,6 +449,10 @@ function CharlieDrawer() {
         : getCharlieHistory(sessionId!),
     enabled: !!threadId || !!sessionId,
     retry: false,
+    // SSE remains the low-latency path. Polling while one turn is outstanding
+    // is the authoritative fallback when a browser/proxy misses a terminal
+    // frame after Charlie has already persisted the assistant response.
+    refetchInterval: awaitingReply ? 1_500 : false,
   });
   useEffect(() => {
     if (!sessionId) return;
@@ -448,6 +477,15 @@ function CharlieDrawer() {
       (event) => {
         setStreamUnavailable(false);
         scheduleHistoryRefresh();
+        if (!awaitingReplyRef.current) return;
+        const eventTurnId = charlieProgressEventTurnId(event.data);
+        const expectedTurnId = activeTurnIdRef.current;
+        if (expectedTurnId && eventTurnId && eventTurnId !== expectedTurnId) {
+          return;
+        }
+        if (!expectedTurnId && eventTurnId && event.type === "turn.started") {
+          activeTurnIdRef.current = eventTurnId;
+        }
         setTurnProgress((current) =>
           updateCharlieTurnProgress(
             current ?? initialCharlieTurnProgress(),
@@ -465,17 +503,20 @@ function CharlieDrawer() {
           event.type === "turn.aborted" ||
           event.type === "charlie.error"
         ) {
+          awaitingReplyRef.current = false;
           setAwaitingReply(false);
         }
       },
-      () => setStreamUnavailable(true),
+      () => {
+        if (awaitingReplyRef.current) setStreamUnavailable(true);
+      },
       () => setStreamUnavailable(false),
     );
     return () => {
       if (historyRefresh !== undefined) clearTimeout(historyRefresh);
       unsubscribe();
     };
-  }, [qc, sessionId, threadId]);
+  }, [qc, sessionId, streamGeneration, threadId]);
   const send = useMutation({
     mutationFn: async (message: string) => {
       // Thread API reattaches a messageable session or continues under the same
@@ -498,10 +539,20 @@ function CharlieDrawer() {
       return {
         threadId: result.thread?.id,
         sessionId: nextSession,
+        turnId: result.receipt?.turnId,
       };
     },
     onMutate: (message) => {
+      awaitingReplyRef.current = true;
       setAwaitingReply(true);
+      activeTurnIdRef.current = undefined;
+      assistantIdsBeforeTurnRef.current = new Set(
+        (history.data ?? [])
+          .filter((item) => item.role === "assistant")
+          .map((item) => item.id),
+      );
+      setStreamGeneration((value) => value + 1);
+      setStreamUnavailable(false);
       setTurnProgress(initialCharlieTurnProgress());
       setLocal((v) => [
         ...v,
@@ -510,10 +561,13 @@ function CharlieDrawer() {
       ]);
     },
     onError: () => {
+      awaitingReplyRef.current = false;
+      activeTurnIdRef.current = undefined;
       setAwaitingReply(false);
       setTurnProgress(undefined);
     },
     onSuccess: (ids) => {
+      if (ids.turnId) activeTurnIdRef.current = ids.turnId;
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
       if (ids.sessionId) {
@@ -532,6 +586,8 @@ function CharlieDrawer() {
     mutationFn: newCharlieChat,
     onSuccess: (result) => {
       setLocal([]);
+      awaitingReplyRef.current = false;
+      activeTurnIdRef.current = undefined;
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setStreamUnavailable(false);
@@ -548,6 +604,8 @@ function CharlieDrawer() {
     onSuccess: () => {
       setConfirmAbort(false);
       // Keep transcript; only live authority ends. Next send continues the thread.
+      awaitingReplyRef.current = false;
+      activeTurnIdRef.current = undefined;
       setAwaitingReply(false);
       setTurnProgress(undefined);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.sessions });
@@ -584,7 +642,34 @@ function CharlieDrawer() {
       ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
     ];
   }, [history.data, local]);
+  useEffect(() => {
+    if (!awaitingReply || !history.data) return;
+    const response = history.data.find(
+      (message) =>
+        message.role === "assistant" &&
+        !assistantIdsBeforeTurnRef.current.has(message.id),
+    );
+    if (!response) return;
+    // Persisted history is authoritative even when the terminal SSE frame was
+    // lost after a proxy/browser reconnect. Never leave a completed response
+    // next to an indefinite "Charlie is working" indicator.
+    awaitingReplyRef.current = false;
+    setAwaitingReply(false);
+    setStreamUnavailable(false);
+    setTurnProgress((current) =>
+      current
+        ? {
+            ...current,
+            stage: "completed",
+            label: "Response complete",
+            lastEventAt: Date.now(),
+          }
+        : current,
+    );
+  }, [awaitingReply, history.data]);
   const showProgress = (send.isPending || awaitingReply) && !send.isError;
+  const historyReady =
+    (!threadId && !sessionId) || history.data !== undefined;
   // Keep the latest turn visible above the fixed composer unless the user has
   // scrolled up to read earlier history.
   useLayoutEffect(() => {
@@ -668,31 +753,45 @@ function CharlieDrawer() {
         id="charlie-assistant-drawer"
         className="shrink-0 space-y-2 border-b border-border px-5 py-3"
       >
-        <div className="flex flex-wrap gap-2" role="list" aria-label="Attached context">
-          {resources.map((r) => (
-            <span
-              key={`${r.type}:${r.id}`}
-              role="listitem"
-              aria-label={`${r.label}: ${r.summary}`}
-              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
-            >
-              {r.label}
-              <button
-                type="button"
-                aria-label={`Remove ${r.label}`}
-                onClick={() => remove(`${r.type}:${r.id}`)}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          <div role="listitem">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Scope</p>
+            <div className="flex flex-wrap gap-2" role="list" aria-label="Conversation scope">
+              {resources.length === 0 ? (
+                <span
+                  role="listitem"
+                  className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs"
+                >
+                  This Astronomer deployment
+                </span>
+              ) : null}
+              {resources.map((r) => (
+                <span
+                  key={`${r.type}:${r.id}`}
+                  role="listitem"
+                  aria-label={`${r.label}: ${r.summary}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
+                >
+                  {r.label}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${r.label}`}
+                    onClick={() => remove(`${r.type}:${r.id}`)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="shrink-0">
             <ContextPicker />
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Only the identifiers shown above are attached. Logs, metrics, audit
-          details, and broad resource data are never attached automatically.
+          Charlie retrieves authorized diagnostics through audited read tools
+          when needed. Choose a component or agent connection to narrow this
+          conversation.
         </p>
       </div>
       <div
@@ -806,7 +905,7 @@ function CharlieDrawer() {
           onSubmit={(e) => {
             e.preventDefault();
             const v = text.trim();
-            if (v && !send.isPending) {
+            if (v && historyReady && !send.isPending && !awaitingReply) {
               setText("");
               stickToBottomRef.current = true;
               send.mutate(v);
@@ -825,7 +924,7 @@ function CharlieDrawer() {
               }
               e.preventDefault();
               const v = text.trim();
-              if (v && !send.isPending) {
+              if (v && historyReady && !send.isPending && !awaitingReply) {
                 setText("");
                 stickToBottomRef.current = true;
                 send.mutate(v);
@@ -846,15 +945,15 @@ function CharlieDrawer() {
             </Link>
             <button
               type="submit"
-              disabled={!text.trim() || send.isPending}
+              disabled={!text.trim() || !historyReady || send.isPending || awaitingReply}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors motion-reduce:transition-none disabled:opacity-50"
             >
-              {send.isPending ? (
+              {send.isPending || awaitingReply ? (
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
-              Send
+              {send.isPending ? "Sending" : awaitingReply ? "Working" : "Send"}
             </button>
           </div>
         </form>

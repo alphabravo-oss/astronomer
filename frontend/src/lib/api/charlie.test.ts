@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, type Mocked } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mocked } from "vitest";
 import api from "@/lib/api";
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 import {
@@ -7,6 +7,8 @@ import {
   getCharlieFinding,
   listCharlieFindings,
   listCharlieSessions,
+  sendCharlieThreadMessage,
+  subscribeCharlieSessionEvents,
   transitionCharlieFinding,
 } from "./charlie";
 const mockedApi = api as Mocked<typeof api>;
@@ -89,6 +91,28 @@ describe("Charlie browser gateway mapping", () => {
     ]);
     expect(mockedApi.get).toHaveBeenCalledWith(
       "/charlie/sessions/session%2Fa/history/",
+    );
+  });
+  it("maps the accepted turn receipt used to correlate live progress", async () => {
+    mockedApi.post.mockResolvedValue({
+      data: {
+        thread: { id: "thread-1", title: "health", state: "active" },
+        currentSession: { id: "local-session-1" },
+        receipt: {
+          sessionId: "central-session-1",
+          turnId: "turn-1",
+          acceptedAt: "2026-08-11T23:27:12Z",
+        },
+      },
+    });
+    await expect(sendCharlieThreadMessage("assess health")).resolves.toEqual(
+      expect.objectContaining({
+        receipt: {
+          sessionId: "central-session-1",
+          turnId: "turn-1",
+          acceptedAt: "2026-08-11T23:27:12Z",
+        },
+      }),
     );
   });
   it("maps bounded local finding data plus on-demand central detail", async () => {
@@ -189,5 +213,68 @@ describe("Charlie browser gateway mapping", () => {
     await expect(decideCharlieApproval("a", "approve")).rejects.toThrow(
       /stale or was already decided/i,
     );
+  });
+});
+
+describe("Charlie session event transport", () => {
+  class FakeEventSource {
+    static instances: FakeEventSource[] = [];
+    onopen: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    listeners = new Map<string, Set<(event: Event) => void>>();
+    closed = false;
+
+    constructor(public url: string) {
+      FakeEventSource.instances.push(this);
+    }
+
+    addEventListener(type: string, listener: (event: Event) => void) {
+      const listeners = this.listeners.get(type) ?? new Set();
+      listeners.add(listener);
+      this.listeners.set(type, listeners);
+    }
+
+    removeEventListener(type: string, listener: (event: Event) => void) {
+      this.listeners.get(type)?.delete(listener);
+    }
+
+    close() {
+      this.closed = true;
+    }
+
+    emit(type: string, data: string) {
+      const event = new MessageEvent(type, { data, lastEventId: "1" });
+      this.listeners.get(type)?.forEach((listener) => listener(event));
+    }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    FakeEventSource.instances = [];
+    vi.stubGlobal("EventSource", FakeEventSource);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("treats stream closure after a terminal turn event as successful", () => {
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+    const unsubscribe = subscribeCharlieSessionEvents("session-1", onEvent, onError);
+    const source = FakeEventSource.instances[0];
+    source.emit("turn.completed", JSON.stringify({
+      turn_id: "turn-1",
+      type: "turn.completed",
+      data: {},
+    }));
+    source.onerror?.();
+    vi.advanceTimersByTime(60_000);
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    expect(source.closed).toBe(true);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    unsubscribe();
   });
 });

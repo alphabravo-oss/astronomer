@@ -33,8 +33,8 @@ func (h *CharlieContextHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if !valid {
 		return
 	}
-	if len(query) < 2 || len(query) > 128 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie context query must be between 2 and 128 characters")
+	if len(query) == 1 || len(query) > 128 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie context query must be empty or between 2 and 128 characters")
 		return
 	}
 	items, err := h.searcher.Search(r.Context(), mustUserID(actor), query, int32(limit))

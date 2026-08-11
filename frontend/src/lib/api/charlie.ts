@@ -429,6 +429,12 @@ export type CharlieActiveThread = {
   current_session?: CharlieSession | null;
 };
 
+export type CharlieTurnReceipt = {
+  sessionId: string;
+  turnId: string;
+  acceptedAt?: string;
+};
+
 export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
   const { data } = await api.get("/charlie/threads/active/");
   const value = data?.data ?? data;
@@ -464,7 +470,7 @@ export async function sendCharlieThreadMessage(
     currentUiContext?: string;
     resources?: CharlieResource[];
   },
-): Promise<CharlieActiveThread & { receipt?: unknown }> {
+): Promise<CharlieActiveThread & { receipt?: CharlieTurnReceipt }> {
   const { data } = await api.post("/charlie/threads/messages/", {
     client_message_id: crypto.randomUUID(),
     message,
@@ -477,6 +483,24 @@ export async function sendCharlieThreadMessage(
     })),
   });
   const value = data?.data ?? data;
+  const rawReceipt = value?.receipt;
+  const receiptSessionId = rawReceipt?.sessionId ?? rawReceipt?.session_id;
+  const receiptTurnId = rawReceipt?.turnId ?? rawReceipt?.turn_id;
+  const receiptAcceptedAt = rawReceipt?.acceptedAt ?? rawReceipt?.accepted_at;
+  const receipt =
+    rawReceipt &&
+    typeof receiptSessionId === "string" &&
+    receiptSessionId &&
+    typeof receiptTurnId === "string" &&
+    receiptTurnId
+      ? {
+          sessionId: receiptSessionId,
+          turnId: receiptTurnId,
+          ...(typeof receiptAcceptedAt === "string"
+            ? { acceptedAt: receiptAcceptedAt }
+            : {}),
+        }
+      : undefined;
   return {
     thread: value?.thread ?? null,
     messageable: Boolean(value?.messageable),
@@ -485,7 +509,7 @@ export async function sendCharlieThreadMessage(
     current_session: value?.current_session
       ? mapCharlieSession(value.current_session)
       : null,
-    receipt: value?.receipt,
+    receipt,
   };
 }
 
@@ -560,6 +584,13 @@ const charlieSessionEventTypes = [
   "charlie.error",
 ] as const;
 
+const charlieTerminalEventTypes = new Set<string>([
+  "turn.completed",
+  "turn.failed",
+  "turn.aborted",
+  "charlie.error",
+]);
+
 // EventSource keeps its last confirmed event ID and sends Last-Event-ID on an
 // automatic reconnect. Astronomer also persists the cursor after flushing each
 // event, so a new browser/server can resume without storing conversation data.
@@ -580,7 +611,11 @@ export function subscribeCharlieSessionEvents(
   let source: EventSource | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let attempt = 0;
-  const listener = (event: Event) => onEvent(event as MessageEvent<string>);
+  let terminalSeen = false;
+  const listener = (event: Event) => {
+    onEvent(event as MessageEvent<string>);
+    if (charlieTerminalEventTypes.has(event.type)) terminalSeen = true;
+  };
 
   const clearRetry = () => {
     if (retryTimer !== undefined) {
@@ -611,6 +646,14 @@ export function subscribeCharlieSessionEvents(
       onOpen?.();
     };
     es.onerror = () => {
+      // Charlie closes a completed turn stream after the terminal event. That
+      // is a successful end, not a connectivity failure and must not produce a
+      // false reconnect warning. A later turn creates a fresh subscription.
+      if (terminalSeen) {
+        detach(es);
+        if (source === es) source = null;
+        return;
+      }
       onError();
       if (closed) return;
       // Stop the browser's immediate reconnect loop; we reopen with backoff.

@@ -35,6 +35,24 @@ func TestContextSearchExposesAgentMetadataNotDownstreamResources(t *testing.T) {
 	}
 }
 
+func TestContextSearchEmptyQueryReturnsManagementPlaneSuggestionsOnly(t *testing.T) {
+	actor, clusterID := uuid.New(), uuid.New()
+	service := NewContextSearchService(
+		contextSearchFake{rows: []sqlc.CharlieAgentFleetListRow{{ClusterID: clusterID, DisplayName: "Payments"}}},
+		&sessionAuthorizerFake{use: true, incident: true},
+		func() bool { return true },
+	)
+	results, err := service.Search(context.Background(), actor, "", 20)
+	if err != nil || len(results) == 0 {
+		t.Fatalf("suggestions=%#v err=%v", results, err)
+	}
+	for _, result := range results {
+		if result.Type == "agent_connection_record" {
+			t.Fatalf("empty query enumerated an individual agent connection: %#v", result)
+		}
+	}
+}
+
 func TestContextSearchIsDormantAndLiveAuthorized(t *testing.T) {
 	actor := uuid.New()
 	inert := NewContextSearchService(contextSearchFake{}, &sessionAuthorizerFake{use: true, incident: true}, func() bool { return false })

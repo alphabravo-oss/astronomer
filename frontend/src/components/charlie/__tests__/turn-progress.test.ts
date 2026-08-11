@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  charlieProgressEventTurnId,
   initialCharlieTurnProgress,
   updateCharlieTurnProgress,
 } from "../turn-progress";
@@ -10,6 +11,7 @@ function event(type: string, data: Record<string, unknown>, lastEventId: string)
     lastEventId,
     data: JSON.stringify({
       id: lastEventId,
+      turn_id: "turn-1",
       type,
       data,
     }),
@@ -17,6 +19,11 @@ function event(type: string, data: Record<string, unknown>, lastEventId: string)
 }
 
 describe("Charlie turn progress", () => {
+  it("extracts the bounded turn identity from the public event envelope", () => {
+    expect(charlieProgressEventTurnId(event("turn.started", {}, "1").data)).toBe("turn-1");
+    expect(charlieProgressEventTurnId(JSON.stringify({ turn_id: "<unsafe>" }))).toBeUndefined();
+  });
+
   it("shows real tool lifecycle and live updates without retaining content", () => {
     let progress = initialCharlieTurnProgress(1000);
     progress = updateCharlieTurnProgress(progress, event("turn.started", {}, "1"), 1100);

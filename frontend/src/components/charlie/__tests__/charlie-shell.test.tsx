@@ -94,6 +94,11 @@ describe("Charlie global shell accessibility", () => {
       messageable: true,
       needs_continue: false,
       session_ids: ["session-1"],
+      receipt: {
+        sessionId: "central-session-1",
+        turnId: "turn-1",
+        acceptedAt: "2026-08-11T23:27:12Z",
+      },
     } as never);
     vi.mocked(newCharlieChat).mockResolvedValue({
       thread: { id: "thread-2", title: "", state: "active" },
@@ -147,6 +152,7 @@ describe("Charlie global shell accessibility", () => {
     act(() => receiveEvent?.(new MessageEvent("tool.running", {
       data: JSON.stringify({
         id: "event-1",
+        turn_id: "turn-1",
         type: "tool.running",
         data: {
           capability: "astronomer.queue.tasks",
@@ -162,6 +168,11 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("sends via the interactive thread API and keeps session continuity", async () => {
+    let receiveEvent: ((event: MessageEvent<string>) => void) | undefined;
+    vi.mocked(subscribeCharlieSessionEvents).mockImplementation((_id, onEvent) => {
+      receiveEvent = onEvent;
+      return () => undefined;
+    });
     renderShell();
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
     const objective = "what version of k8s are we running";
@@ -174,6 +185,16 @@ describe("Charlie global shell accessibility", () => {
         expect.objectContaining({ trigger: "user_chat" }),
       ),
     );
+    await waitFor(() => expect(receiveEvent).toBeTypeOf("function"));
+    act(() => receiveEvent?.(new MessageEvent("turn.completed", {
+      data: JSON.stringify({
+        id: "event-terminal-1",
+        turn_id: "turn-1",
+        type: "turn.completed",
+        data: {},
+      }),
+      lastEventId: "event-terminal-1",
+    })));
     fireEvent.change(composer, { target: { value: "Now check tunnel health" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
@@ -246,6 +267,7 @@ describe("Charlie global shell accessibility", () => {
     ] as never);
     renderShell();
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByText("Hi. How can I help?")).toBeInTheDocument();
     fireEvent.change(await screen.findByLabelText("Message Charlie"), {
       target: { value: "hi" },
     });
@@ -296,6 +318,45 @@ describe("Charlie global shell accessibility", () => {
       messageable: true,
       session_ids: ["session-1"],
     });
+  });
+
+  it("clears working state when persisted assistant history arrives without a terminal event", async () => {
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "health",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1" },
+      messageable: true,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(getCharlieThreadHistory)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { id: "u-new", role: "user", content: "assess health" },
+        { id: "a-new", role: "assistant", content: "Everything is healthy." },
+      ] as never);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    await waitFor(() => expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1"));
+    fireEvent.change(composer, { target: { value: "assess health" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendCharlieThreadMessage).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("Everything is healthy.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument());
+  });
+
+  it("explains deployment scope and offers browsable narrowing choices", async () => {
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByText("Scope")).toBeInTheDocument();
+    expect(screen.getByText(/retrieves authorized diagnostics through audited read tools/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Narrow scope" }));
+    expect(await screen.findByLabelText("Search components or agent connections")).toBeInTheDocument();
+    expect(screen.getByText("Choose a diagnostic scope")).toBeInTheDocument();
   });
 
   it("keeps abort from wiping the server conversation pointer (does not call new chat)", async () => {

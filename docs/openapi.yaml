@@ -18152,11 +18152,11 @@ paths:
   /api/v1/charlie/context/search/:
     get:
       operationId: searchCharlieContext
-      summary: Search product-owned resources available for explicit Charlie disclosure
+      summary: Browse or search product-owned scopes available to Charlie
       tags: [charlie]
       security: [{bearerJWT: []}]
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 128}}
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 128}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
       responses:
         '200':
