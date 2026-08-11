@@ -43,28 +43,48 @@ func (charlieEnabledSettings) GetPlatformSetting(_ context.Context, key string) 
 	return sqlc.PlatformSetting{Key: key, Value: json.RawMessage("true")}, nil
 }
 
-func TestAPIRequestTimeoutExemptsOnlyCharlieEventStreams(t *testing.T) {
+func TestAPIRequestTimeoutClassesCharlieReconciliationAndEventStreams(t *testing.T) {
 	handler := apiRequestTimeout(time.Second)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, hasDeadline := r.Context().Deadline()
-		_ = json.NewEncoder(w).Encode(map[string]bool{"deadline": hasDeadline})
+		deadline, hasDeadline := r.Context().Deadline()
+		remaining := time.Duration(0)
+		if hasDeadline {
+			remaining = time.Until(deadline)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"deadline": hasDeadline, "remaining_ms": remaining.Milliseconds()})
 	}))
 	for _, test := range []struct {
 		method, path string
 		deadline     bool
+		long         bool
 	}{
-		{http.MethodGet, "/api/v1/charlie/sessions/session-a/events/", false},
-		{http.MethodGet, "/api/v1/charlie/sessions/session-a/history/", true},
-		{http.MethodPost, "/api/v1/charlie/sessions/session-a/events/", true},
-		{http.MethodGet, "/api/v1/clusters/", true},
+		{http.MethodGet, "/api/v1/charlie/sessions/session-a/events/", false, false},
+		{http.MethodGet, "/api/v1/charlie/sessions/session-a/history/", true, false},
+		{http.MethodPost, "/api/v1/charlie/sessions/session-a/events/", true, false},
+		{http.MethodGet, "/api/v1/clusters/", true, false},
+		{http.MethodPost, "/api/v1/admin/charlie/onboarding/consume/", true, true},
+		{http.MethodPost, "/api/v1/admin/charlie/agent/upgrade/", true, true},
+		{http.MethodPatch, "/api/v1/admin/charlie/mode/", true, true},
+		{http.MethodPut, "/api/v1/admin/charlie/kubernetes-visibility/", true, true},
+		{http.MethodGet, "/api/v1/admin/charlie/kubernetes-visibility/", true, false},
+		{http.MethodPost, "/api/v1/admin/charlie/diagnostics/run/", true, false},
 	} {
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, httptest.NewRequest(test.method, test.path, nil))
-		var response map[string]bool
+		var response struct {
+			Deadline    bool  `json:"deadline"`
+			RemainingMS int64 `json:"remaining_ms"`
+		}
 		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		if response["deadline"] != test.deadline {
-			t.Fatalf("%s %s deadline=%v, want %v", test.method, test.path, response["deadline"], test.deadline)
+		if response.Deadline != test.deadline {
+			t.Fatalf("%s %s deadline=%v, want %v", test.method, test.path, response.Deadline, test.deadline)
+		}
+		if test.long && response.RemainingMS < (charlieAdminReconciliationTimeout-time.Second).Milliseconds() {
+			t.Fatalf("%s %s remaining=%dms, want long reconciliation deadline", test.method, test.path, response.RemainingMS)
+		}
+		if !test.long && test.deadline && response.RemainingMS > (2*time.Second).Milliseconds() {
+			t.Fatalf("%s %s remaining=%dms, want ordinary REST deadline", test.method, test.path, response.RemainingMS)
 		}
 	}
 }
