@@ -1126,6 +1126,8 @@ request to that cluster.
   Astronomer namespace and allowlisted supporting namespaces/components.
 - [x] **A7-006** `astronomer.management.pod_logs` — named management pod/container,
   maximum 200 lines and 64 KiB, shared redaction, and no downstream log path.
+  Encoded responses compact oldest lines first, retain newest evidence, and
+  expose requested/returned counts plus an explicit truncation marker.
 - [x] **A7-007** `astronomer.management.nodes`, `.storage`, and `.network` — bounded
   management-cluster capacity/pressure, PVC health, ingress/service/network-policy
   status, and no arbitrary resource-kind or GVR input.

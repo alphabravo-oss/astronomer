@@ -14,7 +14,8 @@ a bounded restart proposal (`approval`) or manual operator steps (`read_only`).
    - Optional filters: `component` (e.g. `server`, `worker`), `phase`
 3. `astronomer.management.events` — recent Warning events for the component.
 4. `astronomer.management.pod_logs` — redacted tail for the failing pod/container
-   (get names from the pods tool first).
+   (get names from the pods tool first). Treat `truncated=true` as a bounded
+   sample and say how many of the requested lines were returned.
 5. `astronomer.management.rollout_status` — if a Deployment is stuck mid-rollout
    (`workload=deployment/<name>`).
 6. `astronomer.management.workload_get` — replica summary for the owner workload.

@@ -1,6 +1,6 @@
 # Astronomer Charlie knowledge pack 0.3.5
 
-Generated 2026-08-11T17:02:10Z. Product version key: 0.3.5
+Generated 2026-08-11T21:58:57Z. Product version key: 0.3.5
 
 
 ---
@@ -64,7 +64,8 @@ a bounded restart proposal (`approval`) or manual operator steps (`read_only`).
    - Optional filters: `component` (e.g. `server`, `worker`), `phase`
 3. `astronomer.management.events` — recent Warning events for the component.
 4. `astronomer.management.pod_logs` — redacted tail for the failing pod/container
-   (get names from the pods tool first).
+   (get names from the pods tool first). Treat `truncated=true` as a bounded
+   sample and say how many of the requested lines were returned.
 5. `astronomer.management.rollout_status` — if a Deployment is stuck mid-rollout
    (`workload=deployment/<name>`).
 6. `astronomer.management.workload_get` — replica summary for the owner workload.
@@ -196,11 +197,11 @@ the Charlie RAG card for the **0.3.5 test run**.
 | Workload list | `astronomer.management.workloads` | Deployments/StatefulSets |
 | One workload | `astronomer.management.workload_get` | `workload=deployment\|statefulset/<name>` |
 | Rollout stuck? | `astronomer.management.rollout_status` | Same `workload` arg |
-| Logs | `astronomer.management.pod_logs` | Needs `pod` + `container` from pods first |
+| Logs | `astronomer.management.pod_logs` | Needs `pod` + `container` from pods first; inspect `truncated` and requested/returned line counts |
 | Events | `astronomer.management.events` | `component`, `since`, `limit` |
 | Nodes | `astronomer.management.nodes` | Management-plane nodes only |
 | Storage / network | `astronomer.management.storage` / `.network` | Owned PVCs / Services / NP |
-| Runtime objects | `astronomer.management.jobs` / `.job_get` / `.daemonsets` / `.availability` / `.ingress` | Owned management objects only |
+| Runtime objects | `astronomer.management.jobs` / `.job_get` / `.daemonsets` / `.availability` / `.ingress` | Owned management objects only; ingress reports partial EndpointSlice visibility explicitly |
 | Resource usage | `astronomer.management.resource_usage` | Requests/limits/restarts plus live metrics when available |
 | DB / migrations | `astronomer.database.health` / `.performance` / `astronomer.migrations.status` | Fixed SQL projections only |
 | Redis / server | `astronomer.redis.health` / `astronomer.runtime.http_health` / `.process_health` | No keys, paths, headers, or bodies |

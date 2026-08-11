@@ -17,11 +17,11 @@ the Charlie RAG card for the **0.3.5 test run**.
 | Workload list | `astronomer.management.workloads` | Deployments/StatefulSets |
 | One workload | `astronomer.management.workload_get` | `workload=deployment\|statefulset/<name>` |
 | Rollout stuck? | `astronomer.management.rollout_status` | Same `workload` arg |
-| Logs | `astronomer.management.pod_logs` | Needs `pod` + `container` from pods first |
+| Logs | `astronomer.management.pod_logs` | Needs `pod` + `container` from pods first; inspect `truncated` and requested/returned line counts |
 | Events | `astronomer.management.events` | `component`, `since`, `limit` |
 | Nodes | `astronomer.management.nodes` | Management-plane nodes only |
 | Storage / network | `astronomer.management.storage` / `.network` | Owned PVCs / Services / NP |
-| Runtime objects | `astronomer.management.jobs` / `.job_get` / `.daemonsets` / `.availability` / `.ingress` | Owned management objects only |
+| Runtime objects | `astronomer.management.jobs` / `.job_get` / `.daemonsets` / `.availability` / `.ingress` | Owned management objects only; ingress reports partial EndpointSlice visibility explicitly |
 | Resource usage | `astronomer.management.resource_usage` | Requests/limits/restarts plus live metrics when available |
 | DB / migrations | `astronomer.database.health` / `.performance` / `astronomer.migrations.status` | Fixed SQL projections only |
 | Redis / server | `astronomer.redis.health` / `astronomer.runtime.http_health` / `.process_health` | No keys, paths, headers, or bodies |

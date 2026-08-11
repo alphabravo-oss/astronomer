@@ -474,7 +474,7 @@ func (a *ManagementKubernetesAdapter) logs(ctx context.Context, capability Capab
 	if err != nil || len(bounded) > maxManagementLogBytes {
 		return nil, fmt.Errorf("management logs exceed bound")
 	}
-	return marshalBounded(map[string]any{"pod": podName, "container": container, "lines": redactLogLines(bounded, int(lines))}, capability.MaxResponseBytes)
+	return marshalLogResultBounded(podName, container, lines, redactLogLines(bounded, int(lines)), capability.MaxResponseBytes)
 }
 
 func (a *ManagementKubernetesAdapter) nodes(ctx context.Context, capability CapabilityDescriptor) (json.RawMessage, error) {
@@ -825,8 +825,13 @@ func (a *ManagementKubernetesAdapter) ingressHealth(ctx context.Context, capabil
 		return nil, err
 	}
 	endpoints, err := a.kube.DiscoveryV1().EndpointSlices(a.namespace).List(ctx, metav1.ListOptions{})
+	endpointSlicesAvailable := err == nil
+	endpointSlicesFailure := ""
 	if err != nil {
-		return nil, err
+		// An ingress inventory is still useful when an older installation has not
+		// yet received the additive EndpointSlice read grant. Surface a fixed,
+		// content-free diagnostic instead of failing the entire read.
+		endpointSlicesFailure = classifyTaskFailure(err.Error())
 	}
 	ingressItems := []map[string]any{}
 	for _, ingress := range ingresses.Items {
@@ -850,7 +855,12 @@ func (a *ManagementKubernetesAdapter) ingressHealth(ctx context.Context, capabil
 		ingressItems = append(ingressItems, map[string]any{"name": ingress.Name, "hosts": hosts, "tls_configured": len(ingress.Spec.TLS) > 0, "addresses": addresses})
 	}
 	endpointItems := []map[string]any{}
-	for _, endpoint := range endpoints.Items {
+	endpointRows := 0
+	if endpoints != nil {
+		endpointRows = len(endpoints.Items)
+	}
+	for index := 0; index < endpointRows; index++ {
+		endpoint := endpoints.Items[index]
 		service := endpoint.Labels["kubernetes.io/service-name"]
 		if !a.nameOwned(service) && !a.owned(endpoint.Labels, endpoint.Name) {
 			continue
@@ -882,7 +892,10 @@ func (a *ManagementKubernetesAdapter) ingressHealth(ctx context.Context, capabil
 		}
 		endpointItems = append(endpointItems, map[string]any{"name": endpoint.Name, "service": service, "ready": ready, "not_ready": notReady, "unknown": unknown, "ports": ports})
 	}
-	return marshalBounded(map[string]any{"ingresses": ingressItems, "endpoint_slices": endpointItems}, capability.MaxResponseBytes)
+	return marshalBounded(map[string]any{
+		"ingresses": ingressItems, "endpoint_slices": endpointItems,
+		"endpoint_slices_available": endpointSlicesAvailable, "endpoint_slices_failure_code": endpointSlicesFailure,
+	}, capability.MaxResponseBytes)
 }
 
 func (a *ManagementKubernetesAdapter) rollout(ctx context.Context, capability CapabilityDescriptor, name, operationID string) (json.RawMessage, error) {
@@ -1161,4 +1174,28 @@ func redactLogLines(raw []byte, maxLines int) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+func marshalLogResultBounded(pod, container string, requested int64, lines []string, max int) (json.RawMessage, error) {
+	truncated := false
+	for {
+		value := map[string]any{
+			"pod": pod, "container": container, "lines": lines,
+			"requested_lines": requested, "returned_lines": len(lines), "truncated": truncated,
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		if len(encoded) <= max {
+			return encoded, nil
+		}
+		if len(lines) == 0 {
+			return nil, fmt.Errorf("capability result exceeds bound")
+		}
+		// Kubernetes returns a chronological tail. Retain the newest evidence
+		// when the encoded/redacted result needs further compaction.
+		lines = lines[1:]
+		truncated = true
+	}
 }

@@ -1,9 +1,11 @@
 package charlie
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +109,58 @@ func TestManagementKubernetesReadsOnlyOwnedRedactedShapes(t *testing.T) {
 		if strings.Contains(serialized, "SENTINEL") || strings.Contains(serialized, "registry.invalid") || strings.Contains(serialized, "other-server") {
 			t.Fatalf("%s leaked an unowned or sensitive field: %s", capabilityName, serialized)
 		}
+	}
+}
+
+func TestManagementKubernetesLogResultRetainsNewestEvidenceWithinCapabilityBound(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server-0", Namespace: "astronomer", Labels: map[string]string{"app.kubernetes.io/instance": "astronomer"}},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "server"}}},
+	}
+	adapter := managementAdapterFixture(t, pod)
+	lines := make([][]byte, 0, 200)
+	for i := 0; i < 199; i++ {
+		lines = append(lines, []byte(fmt.Sprintf("old-%03d %s", i, strings.Repeat("x", 180))))
+	}
+	lines = append(lines, []byte("newest password=DO_NOT_LEAK operational-warning"))
+	adapter.logStream = func(context.Context, string, string, int64) (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bytes.Join(lines, []byte("\n")))), nil
+	}
+	descriptor, _ := capabilityByName("astronomer.management.pod_logs")
+	descriptor.MaxResponseBytes = 1024
+	result, err := adapter.Execute(context.Background(), descriptor, rawArguments(t, map[string]any{"pod": pod.Name, "container": "server", "lines": 200}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) > descriptor.MaxResponseBytes || !strings.Contains(string(result), "newest password=[REDACTED] operational-warning") || strings.Contains(string(result), "DO_NOT_LEAK") {
+		t.Fatalf("bounded log result is unsafe or lost newest evidence: bytes=%d result=%s", len(result), result)
+	}
+	var value struct {
+		Truncated      bool `json:"truncated"`
+		RequestedLines int  `json:"requested_lines"`
+		ReturnedLines  int  `json:"returned_lines"`
+	}
+	if err := json.Unmarshal(result, &value); err != nil || !value.Truncated || value.RequestedLines != 200 || value.ReturnedLines <= 0 || value.ReturnedLines >= value.RequestedLines {
+		t.Fatalf("bounded log metadata=%+v err=%v", value, err)
+	}
+}
+
+func TestManagementKubernetesIngressDegradesWithoutEndpointSliceGrant(t *testing.T) {
+	adapter := managementAdapterFixture(t)
+	adapter.kube.(*fake.Clientset).PrependReactor("list", "endpointslices", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("forbidden")
+	})
+	descriptor, _ := capabilityByName("astronomer.management.ingress")
+	result, err := adapter.Execute(context.Background(), descriptor, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value struct {
+		Available   bool   `json:"endpoint_slices_available"`
+		FailureCode string `json:"endpoint_slices_failure_code"`
+	}
+	if err := json.Unmarshal(result, &value); err != nil || value.Available || value.FailureCode != "authentication" {
+		t.Fatalf("degraded ingress result=%s parsed=%+v err=%v", result, value, err)
 	}
 }
 
