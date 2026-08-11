@@ -37,6 +37,11 @@ func TestCapabilityCatalogPinsSRESurfaceAndManagedTargetBoundary(t *testing.T) {
 		"astronomer.tunnel.recent_errors",
 		"astronomer.management.pods", "astronomer.management.rollout_status",
 		"astronomer.installation.summary", "astronomer.management.pod_logs",
+		"astronomer.authentication.health", "astronomer.external_integrations.health",
+		"astronomer.registration.health", "astronomer.fleet_operations.health",
+		"astronomer.policy_engine.health", "astronomer.templates.health",
+		"astronomer.catalog.health", "astronomer.reconciliation.health",
+		"astronomer.security.key_status",
 	} {
 		if !seen[required] {
 			t.Errorf("required management-plane capability %s is missing", required)
@@ -50,6 +55,32 @@ func TestCapabilityCatalogPinsSRESurfaceAndManagedTargetBoundary(t *testing.T) {
 		if len(capability.Description) < 40 {
 			t.Errorf("read capability %s has a too-generic description", capability.Name)
 		}
+	}
+}
+
+func TestCrossDomainVisibilityRequiresWildcardRBAC(t *testing.T) {
+	required := map[string]bool{
+		"astronomer.delivery.summary":             true,
+		"astronomer.identity.health":              true,
+		"astronomer.authentication.health":        true,
+		"astronomer.security.posture":             true,
+		"astronomer.security.key_status":          true,
+		"astronomer.external_integrations.health": true,
+		"astronomer.governance.health":            true,
+		"astronomer.templates.health":             true,
+		"astronomer.tenancy.summary":              true,
+		"astronomer.platform.inventory":           true,
+	}
+	for _, capability := range ReadCapabilityCatalog() {
+		if required[capability.Name] {
+			if capability.RBACResource != "*" || capability.RBACVerb != "read" {
+				t.Fatalf("cross-domain capability %s does not require wildcard read RBAC: %+v", capability.Name, capability)
+			}
+			delete(required, capability.Name)
+		}
+	}
+	if len(required) != 0 {
+		t.Fatalf("cross-domain capability descriptors are missing: %v", required)
 	}
 }
 

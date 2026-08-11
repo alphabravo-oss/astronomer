@@ -48,6 +48,16 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		fields["phase"] = CapabilityFieldSchema{Type: "string", Enum: []string{"Pending", "Running", "Succeeded", "Failed", "Unknown"}, MaxLength: 16}
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)
+	case "astronomer.management.resource_usage":
+		stringField("component", false, componentPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.management.jobs":
+		fields["status"] = CapabilityFieldSchema{Type: "string", Enum: []string{"active", "succeeded", "failed", "suspended"}, MaxLength: 16}
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.management.job_get":
+		stringField("job", true, `^(job|cronjob)/[a-z0-9][a-z0-9-]{0,62}$`)
 	case "astronomer.management.events":
 		stringField("component", false, componentPattern)
 		stringField("since", false, durationPattern)
@@ -68,6 +78,31 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		integerField("page_size", false, 1, 100)
 	case "astronomer.queue.task_get":
 		stringField("task_id", true, opaqueIDPattern)
+	case "astronomer.task_outbox.list":
+		fields["status"] = CapabilityFieldSchema{Type: "string", Enum: []string{"pending", "delivering", "failed", "delivered", "dead"}, MaxLength: 16}
+		stringField("task_type", false, opaqueIDPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.task_outbox.get":
+		stringField("outbox_id", true, uuidPattern)
+	case "astronomer.task_outbox.retry_delivery":
+		stringField("resource_id", true, opaqueIDPattern)
+		stringField("outbox_id", true, uuidPattern)
+		stringField("operation_id", true, opaqueIDPattern)
+		annotateWriteCorrelators(fields)
+	case "astronomer.controllers.alerts":
+		fields["status"] = CapabilityFieldSchema{Type: "string", Enum: []string{"active", "acknowledged", "resolved"}, MaxLength: 16}
+		stringField("controller", false, componentPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.catalog.operations", "astronomer.argocd.operations", "astronomer.tools.operations",
+		"astronomer.monitoring.operations", "astronomer.logging.operations", "astronomer.workloads.operations":
+		fields["status"] = CapabilityFieldSchema{Type: "string", Enum: []string{"pending", "running", "completed", "failed", "superseded", "cancelled"}, MaxLength: 16}
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
+	case "astronomer.catalog.operation_get", "astronomer.argocd.operation_get", "astronomer.tools.operation_get",
+		"astronomer.monitoring.operation_get", "astronomer.logging.operation_get", "astronomer.workloads.operation_get":
+		stringField("record_id", true, uuidPattern)
 	case "astronomer.observability.health":
 		fields["query_template"] = CapabilityFieldSchema{Type: "string", Required: true, Enum: allowedQueryNames, MaxLength: 32}
 		fields["range"] = CapabilityFieldSchema{Type: "string", Enum: []string{"5m", "15m", "1h", "6h"}, MaxLength: 3}
@@ -83,6 +118,17 @@ func capabilityFieldSchemas(name string) map[string]CapabilityFieldSchema {
 		stringField("resource_id", false, opaqueIDPattern)
 		stringField("since", false, durationPattern)
 		integerField("limit", false, 1, 100)
+	case "astronomer.audit.search":
+		stringField("resource_type", false, opaqueIDPattern)
+		stringField("resource_id", false, opaqueIDPattern)
+		stringField("action", false, opaqueIDPattern)
+		stringField("action_class", false, opaqueIDPattern)
+		fields["result"] = CapabilityFieldSchema{Type: "string", Enum: []string{"success", "failure", "error"}, MaxLength: 16}
+		stringField("source", false, opaqueIDPattern)
+		stringField("correlation_id", false, opaqueIDPattern)
+		stringField("since", false, durationPattern)
+		integerField("page", false, 1, 10000)
+		integerField("page_size", false, 1, 100)
 	case "astronomer.catalog.repositories":
 		integerField("page", false, 1, 10000)
 		integerField("page_size", false, 1, 100)

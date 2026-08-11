@@ -633,8 +633,10 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	}
 	queue := asynq.NewClient(redisOpt)
 	var securityCacheCoordinator *cacheinvalidate.Coordinator
+	var runtimeRedisClient redis.UniversalClient
 	securityTarget := securityCacheTarget{jwt: jwtManager, rbac: rbacQuerier.Cache()}
 	if redisClient, ok := redisOpt.MakeRedisClient().(redis.UniversalClient); ok && redisClient != nil {
+		runtimeRedisClient = redisClient
 		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
 		go securityCacheCoordinator.Run(ctx)
 		go func() { <-ctx.Done(); _ = redisClient.Close() }()
@@ -1047,6 +1049,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 	// localK8s too.
 	var localK8s kubernetes.Interface
 	var localDyn dynamic.Interface
+	var localMetrics metricsv.Interface
 	if restCfg, err := rest.InClusterConfig(); err == nil {
 		if cs, err := kubernetes.NewForConfig(restCfg); err == nil {
 			localK8s = cs
@@ -1068,6 +1071,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				Registration:        clusterRegistrationHandler.Service(),
 			})
 			if mc, err := metricsv.NewForConfig(restCfg); err == nil {
+				localMetrics = mc
 				clusterHandler.SetMetricsLocalClient(cs, mc)
 			} else {
 				clusterHandler.SetMetricsLocalClient(cs, nil)
@@ -2018,11 +2022,39 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return fail(err)
 			}
 			adapterGroups = append(adapterGroups, charlie.OperationalCapabilityAdapters(operationalAdapter))
+			workPipelineAdapter, err := charlie.NewWorkPipelineCapabilityAdapter(queries)
+			if err != nil {
+				return fail(err)
+			}
+			adapterGroups = append(adapterGroups, charlie.WorkPipelineCapabilityAdapters(workPipelineAdapter))
+			encryptionKeyCount := 0
+			if encryptor != nil {
+				encryptionKeyCount = encryptor.KeyCount()
+			}
+			jwtKeyCount := 0
+			if jwtManager != nil {
+				jwtKeyCount = jwtManager.KeyCount()
+			}
+			runtimeAdapter, err := charlie.NewRuntimeCapabilityAdapter(charlie.RuntimeCapabilityConfig{
+				Database: database.Pool(), Redis: runtimeRedisClient,
+				EncryptionKeyCount: encryptionKeyCount, JWTKeyCount: jwtKeyCount,
+				InsecureDevKeys: config.DevSentinelsInUse(cfg),
+			})
+			if err != nil {
+				return fail(err)
+			}
+			adapterGroups = append(adapterGroups, charlie.RuntimeCapabilityAdapters(runtimeAdapter))
+			adminVisibilityAdapter, err := charlie.NewAdminVisibilityCapabilityAdapter(database.Pool())
+			if err != nil {
+				return fail(err)
+			}
+			adapterGroups = append(adapterGroups, charlie.AdminVisibilityCapabilityAdapters(adminVisibilityAdapter))
 			if localK8s != nil && localNamespace != "" {
 				managementAdapter, managementErr := charlie.NewManagementKubernetesAdapter(localK8s, localNamespace, releaseName)
 				if managementErr != nil {
 					return fail(managementErr)
 				}
+				managementAdapter.SetMetricsClient(localMetrics)
 				adapterGroups = append(adapterGroups, charlie.ManagementKubernetesCapabilityAdapters(managementAdapter))
 			}
 			if localDyn != nil {

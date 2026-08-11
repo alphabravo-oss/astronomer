@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 const maxManagementLogBytes = 64 << 10
@@ -31,6 +32,16 @@ type ManagementKubernetesAdapter struct {
 	namespace string
 	release   string
 	logStream func(context.Context, string, string, int64) (io.ReadCloser, error)
+	metrics   metricsv.Interface
+}
+
+// SetMetricsClient attaches the in-cluster metrics.k8s.io client. A missing
+// metrics-server is represented explicitly in resource_usage results and does
+// not disable the remaining management-plane inventory.
+func (a *ManagementKubernetesAdapter) SetMetricsClient(metrics metricsv.Interface) {
+	if a != nil {
+		a.metrics = metrics
+	}
 }
 
 func NewManagementKubernetesAdapter(kube kubernetes.Interface, namespace, release string) (*ManagementKubernetesAdapter, error) {
@@ -72,6 +83,18 @@ func (a *ManagementKubernetesAdapter) Execute(ctx context.Context, capability Ca
 		return a.storage(ctx, capability)
 	case "astronomer.management.network":
 		return a.network(ctx, capability)
+	case "astronomer.management.resource_usage":
+		return a.resourceUsage(ctx, capability, arguments)
+	case "astronomer.management.jobs":
+		return a.jobs(ctx, capability, arguments)
+	case "astronomer.management.job_get":
+		return a.jobGet(ctx, capability, arguments)
+	case "astronomer.management.daemonsets":
+		return a.daemonSets(ctx, capability)
+	case "astronomer.management.availability":
+		return a.availability(ctx, capability)
+	case "astronomer.management.ingress":
+		return a.ingressHealth(ctx, capability)
 	case "astronomer.management.workload_restart", "astronomer.management.workload_rollout", "astronomer.tunnel.restart_component":
 		name, err := a.mutableDeploymentName(arguments, capability.Name)
 		if err != nil {
@@ -532,6 +555,334 @@ func (a *ManagementKubernetesAdapter) network(ctx context.Context, capability Ca
 		}
 	}
 	return marshalBounded(map[string]any{"services": serviceItems, "ingresses": ingressItems, "network_policies": policyItems}, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) resourceUsage(ctx context.Context, capability CapabilityDescriptor, args map[string]json.RawMessage) (json.RawMessage, error) {
+	pods, err := a.kube.CoreV1().Pods(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	usageByPod := map[string][2]int64{}
+	metricsAvailable := false
+	metricsFailure := ""
+	if a.metrics != nil {
+		metrics, metricsErr := a.metrics.MetricsV1beta1().PodMetricses(a.namespace).List(ctx, metav1.ListOptions{})
+		if metricsErr == nil {
+			metricsAvailable = true
+			for _, pod := range metrics.Items {
+				var cpuMilli, memoryBytes int64
+				for _, container := range pod.Containers {
+					cpuMilli += container.Usage.Cpu().MilliValue()
+					memoryBytes += container.Usage.Memory().Value()
+				}
+				usageByPod[pod.Name] = [2]int64{cpuMilli, memoryBytes}
+			}
+		} else {
+			metricsFailure = classifyTaskFailure(metricsErr.Error())
+		}
+	}
+	component := stringArgument(args, "component")
+	items := []map[string]any{}
+	for _, pod := range pods.Items {
+		if !a.owned(pod.Labels, pod.Name) || (component != "" && !strings.Contains(pod.Name, component)) {
+			continue
+		}
+		var requestCPU, limitCPU, requestMemory, limitMemory int64
+		for _, container := range pod.Spec.Containers {
+			requestCPU += container.Resources.Requests.Cpu().MilliValue()
+			limitCPU += container.Resources.Limits.Cpu().MilliValue()
+			requestMemory += container.Resources.Requests.Memory().Value()
+			limitMemory += container.Resources.Limits.Memory().Value()
+		}
+		restarts := int32(0)
+		for _, status := range pod.Status.ContainerStatuses {
+			restarts += status.RestartCount
+		}
+		item := map[string]any{
+			"pod": pod.Name, "node": pod.Spec.NodeName, "phase": pod.Status.Phase, "ready": podReady(&pod),
+			"restarts": restarts, "request_cpu_millicores": requestCPU, "limit_cpu_millicores": limitCPU,
+			"request_memory_bytes": requestMemory, "limit_memory_bytes": limitMemory,
+		}
+		if usage, ok := usageByPod[pod.Name]; ok {
+			item["usage_cpu_millicores"], item["usage_memory_bytes"] = usage[0], usage[1]
+		}
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool { return fmt.Sprint(items[i]["pod"]) < fmt.Sprint(items[j]["pod"]) })
+	page, size := pagination(args, 50)
+	start := min(int((page-1)*size), len(items))
+	end := min(start+int(size), len(items))
+	return marshalBounded(map[string]any{
+		"metrics_available": metricsAvailable, "metrics_failure_code": metricsFailure,
+		"items": items[start:end], "total": len(items), "page": page, "page_size": size,
+	}, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) jobs(ctx context.Context, capability CapabilityDescriptor, args map[string]json.RawMessage) (json.RawMessage, error) {
+	jobs, err := a.kube.BatchV1().Jobs(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	cronJobs, err := a.kube.BatchV1().CronJobs(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	status := stringArgument(args, "status")
+	items := []map[string]any{}
+	for _, job := range jobs.Items {
+		if !a.owned(job.Labels, job.Name) {
+			continue
+		}
+		item := safeJob(job)
+		if jobMatchesStatus(item, status) {
+			items = append(items, item)
+		}
+	}
+	for _, cronJob := range cronJobs.Items {
+		if !a.owned(cronJob.Labels, cronJob.Name) {
+			continue
+		}
+		item := safeCronJob(cronJob)
+		if jobMatchesStatus(item, status) {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return fmt.Sprint(items[i]["job"]) < fmt.Sprint(items[j]["job"]) })
+	page, size := pagination(args, 50)
+	start := min(int((page-1)*size), len(items))
+	end := min(start+int(size), len(items))
+	return marshalBounded(map[string]any{"items": items[start:end], "total": len(items), "page": page, "page_size": size}, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) jobGet(ctx context.Context, capability CapabilityDescriptor, args map[string]json.RawMessage) (json.RawMessage, error) {
+	kind, name, ok := strings.Cut(stringArgument(args, "job"), "/")
+	if !ok || !a.nameOwned(name) {
+		return nil, fmt.Errorf("management job identifier is invalid")
+	}
+	if kind == "job" {
+		job, err := a.kube.BatchV1().Jobs(a.namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		if !a.owned(job.Labels, job.Name) {
+			return nil, fmt.Errorf("job is outside Astronomer")
+		}
+		value := safeJob(*job)
+		pods, err := a.kube.CoreV1().Pods(a.namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		addPodHealth(value, pods.Items, job.Name)
+		return marshalBounded(value, capability.MaxResponseBytes)
+	}
+	if kind == "cronjob" {
+		job, err := a.kube.BatchV1().CronJobs(a.namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		if !a.owned(job.Labels, job.Name) {
+			return nil, fmt.Errorf("cronjob is outside Astronomer")
+		}
+		return marshalBounded(safeCronJob(*job), capability.MaxResponseBytes)
+	}
+	return nil, fmt.Errorf("management job kind is invalid")
+}
+
+func safeJob(job batchv1.Job) map[string]any {
+	conditions := []map[string]any{}
+	for _, condition := range job.Status.Conditions {
+		conditions = append(conditions, map[string]any{"type": condition.Type, "status": condition.Status, "reason": boundedDiagnosticText(condition.Reason, 64), "changed_at": condition.LastTransitionTime.UTC()})
+	}
+	return map[string]any{
+		"job": "job/" + job.Name, "active": job.Status.Active, "succeeded": job.Status.Succeeded, "failed": job.Status.Failed,
+		"conditions": conditions, "start_time": kubernetesTime(job.Status.StartTime), "completion_time": kubernetesTime(job.Status.CompletionTime),
+	}
+}
+
+func safeCronJob(job batchv1.CronJob) map[string]any {
+	active := make([]string, 0, len(job.Status.Active))
+	for _, ref := range job.Status.Active {
+		active = append(active, ref.Name)
+	}
+	sort.Strings(active)
+	return map[string]any{
+		"job": "cronjob/" + job.Name, "schedule": boundedDiagnosticText(job.Spec.Schedule, 64), "suspended": job.Spec.Suspend != nil && *job.Spec.Suspend,
+		"active_jobs": active, "last_schedule_time": kubernetesTime(job.Status.LastScheduleTime), "last_successful_time": kubernetesTime(job.Status.LastSuccessfulTime),
+	}
+}
+
+func jobMatchesStatus(item map[string]any, status string) bool {
+	if status == "" {
+		return true
+	}
+	switch status {
+	case "active":
+		return numericValue(item["active"]) > 0 || lenStringSlice(item["active_jobs"]) > 0
+	case "succeeded":
+		return numericValue(item["succeeded"]) > 0
+	case "failed":
+		return numericValue(item["failed"]) > 0
+	case "suspended":
+		suspended, _ := item["suspended"].(bool)
+		return suspended
+	default:
+		return false
+	}
+}
+
+func lenStringSlice(value any) int { values, _ := value.([]string); return len(values) }
+
+func numericValue(value any) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int32:
+		return int64(typed)
+	case int64:
+		return typed
+	case uint:
+		return int64(typed)
+	case uint32:
+		return int64(typed)
+	case uint64:
+		if typed > uint64(^uint64(0)>>1) {
+			return int64(^uint64(0) >> 1)
+		}
+		return int64(typed)
+	default:
+		return 0
+	}
+}
+
+func kubernetesTime(value *metav1.Time) any {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+	return value.UTC()
+}
+
+func (a *ManagementKubernetesAdapter) daemonSets(ctx context.Context, capability CapabilityDescriptor) (json.RawMessage, error) {
+	rows, err := a.kube.AppsV1().DaemonSets(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	items := []map[string]any{}
+	for _, row := range rows.Items {
+		if !a.owned(row.Labels, row.Name) {
+			continue
+		}
+		items = append(items, map[string]any{
+			"daemonset": row.Name, "desired": row.Status.DesiredNumberScheduled, "current": row.Status.CurrentNumberScheduled,
+			"ready": row.Status.NumberReady, "available": row.Status.NumberAvailable, "unavailable": row.Status.NumberUnavailable,
+			"updated": row.Status.UpdatedNumberScheduled, "misscheduled": row.Status.NumberMisscheduled,
+			"generation": row.Generation, "observed_generation": row.Status.ObservedGeneration,
+		})
+	}
+	return marshalBounded(map[string]any{"items": items}, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) availability(ctx context.Context, capability CapabilityDescriptor) (json.RawMessage, error) {
+	hpas, err := a.kube.AutoscalingV2().HorizontalPodAutoscalers(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	pdbs, err := a.kube.PolicyV1().PodDisruptionBudgets(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	hpaItems := []map[string]any{}
+	for _, hpa := range hpas.Items {
+		if !a.owned(hpa.Labels, hpa.Name) {
+			continue
+		}
+		conditions := []map[string]any{}
+		for _, condition := range hpa.Status.Conditions {
+			conditions = append(conditions, map[string]any{"type": condition.Type, "status": condition.Status, "reason": boundedDiagnosticText(condition.Reason, 64)})
+		}
+		hpaItems = append(hpaItems, map[string]any{
+			"name": hpa.Name, "target": strings.ToLower(hpa.Spec.ScaleTargetRef.Kind) + "/" + hpa.Spec.ScaleTargetRef.Name,
+			"minimum": int32Value(hpa.Spec.MinReplicas), "maximum": hpa.Spec.MaxReplicas, "current": hpa.Status.CurrentReplicas,
+			"desired": hpa.Status.DesiredReplicas, "conditions": conditions,
+		})
+	}
+	pdbItems := []map[string]any{}
+	for _, pdb := range pdbs.Items {
+		if !a.owned(pdb.Labels, pdb.Name) {
+			continue
+		}
+		pdbItems = append(pdbItems, map[string]any{
+			"name": pdb.Name, "current_healthy": pdb.Status.CurrentHealthy, "desired_healthy": pdb.Status.DesiredHealthy,
+			"expected_pods": pdb.Status.ExpectedPods, "disruptions_allowed": pdb.Status.DisruptionsAllowed,
+			"observed_generation": pdb.Status.ObservedGeneration,
+		})
+	}
+	return marshalBounded(map[string]any{"horizontal_pod_autoscalers": hpaItems, "pod_disruption_budgets": pdbItems}, capability.MaxResponseBytes)
+}
+
+func (a *ManagementKubernetesAdapter) ingressHealth(ctx context.Context, capability CapabilityDescriptor) (json.RawMessage, error) {
+	ingresses, err := a.kube.NetworkingV1().Ingresses(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	endpoints, err := a.kube.DiscoveryV1().EndpointSlices(a.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	ingressItems := []map[string]any{}
+	for _, ingress := range ingresses.Items {
+		if !a.owned(ingress.Labels, ingress.Name) {
+			continue
+		}
+		hosts := []string{}
+		for _, rule := range ingress.Spec.Rules {
+			if rule.Host != "" {
+				hosts = append(hosts, boundedDiagnosticText(rule.Host, 253))
+			}
+		}
+		addresses := []string{}
+		for _, address := range ingress.Status.LoadBalancer.Ingress {
+			if address.Hostname != "" {
+				addresses = append(addresses, boundedDiagnosticText(address.Hostname, 253))
+			} else if address.IP != "" {
+				addresses = append(addresses, address.IP)
+			}
+		}
+		ingressItems = append(ingressItems, map[string]any{"name": ingress.Name, "hosts": hosts, "tls_configured": len(ingress.Spec.TLS) > 0, "addresses": addresses})
+	}
+	endpointItems := []map[string]any{}
+	for _, endpoint := range endpoints.Items {
+		service := endpoint.Labels["kubernetes.io/service-name"]
+		if !a.nameOwned(service) && !a.owned(endpoint.Labels, endpoint.Name) {
+			continue
+		}
+		ready, notReady, unknown := 0, 0, 0
+		for _, item := range endpoint.Endpoints {
+			switch {
+			case item.Conditions.Ready == nil:
+				unknown++
+			case *item.Conditions.Ready:
+				ready++
+			default:
+				notReady++
+			}
+		}
+		ports := []map[string]any{}
+		for _, port := range endpoint.Ports {
+			name, protocol, number := "", "", int32(0)
+			if port.Name != nil {
+				name = *port.Name
+			}
+			if port.Protocol != nil {
+				protocol = string(*port.Protocol)
+			}
+			if port.Port != nil {
+				number = *port.Port
+			}
+			ports = append(ports, map[string]any{"name": name, "protocol": protocol, "port": number})
+		}
+		endpointItems = append(endpointItems, map[string]any{"name": endpoint.Name, "service": service, "ready": ready, "not_ready": notReady, "unknown": unknown, "ports": ports})
+	}
+	return marshalBounded(map[string]any{"ingresses": ingressItems, "endpoint_slices": endpointItems}, capability.MaxResponseBytes)
 }
 
 func (a *ManagementKubernetesAdapter) rollout(ctx context.Context, capability CapabilityDescriptor, name, operationID string) (json.RawMessage, error) {

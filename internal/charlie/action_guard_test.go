@@ -268,6 +268,8 @@ func validWriteArguments(name string) map[string]any {
 		return map[string]any{"resource_id": "resource-a", "application": "astronomer-self-manage", "operation_id": "action-a"}
 	case "astronomer.queue.retry_task":
 		return map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"}
+	case "astronomer.task_outbox.retry_delivery":
+		return map[string]any{"resource_id": "resource-a", "outbox_id": "11111111-1111-4111-8111-111111111111", "operation_id": "action-a"}
 	case "astronomer.management.run_job":
 		return map[string]any{"resource_id": "resource-a", "job": "restore-drill", "operation_id": "action-a"}
 	case "astronomer.tunnel.restart_component":

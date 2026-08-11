@@ -21,16 +21,57 @@ the Charlie RAG card for the **0.3.5 test run**.
 | Events | `astronomer.management.events` | `component`, `since`, `limit` |
 | Nodes | `astronomer.management.nodes` | Management-plane nodes only |
 | Storage / network | `astronomer.management.storage` / `.network` | Owned PVCs / Services / NP |
-| DB / migrations | `astronomer.database.health` / `astronomer.migrations.status` | |
+| Runtime objects | `astronomer.management.jobs` / `.job_get` / `.daemonsets` / `.availability` / `.ingress` | Owned management objects only |
+| Resource usage | `astronomer.management.resource_usage` | Requests/limits/restarts plus live metrics when available |
+| DB / migrations | `astronomer.database.health` / `.performance` / `astronomer.migrations.status` | Fixed SQL projections only |
+| Redis / server | `astronomer.redis.health` / `astronomer.runtime.http_health` / `.process_health` | No keys, paths, headers, or bodies |
+| Key rotation | `astronomer.security.key_status` | Loaded-key counts and dev-sentinel names only; no key material |
 | Queue overview | `astronomer.queue.health` | Counts by queue and state |
 | Queued work | `astronomer.queue.tasks` then `.task_get` | Inspect pending/active/scheduled/retry/archived work without payload values |
 | Failed work | `astronomer.queue.failed_tasks` then `.task_get` | Includes purpose, timing, retry state, and a sanitized failure category |
 | Catalog sync | `astronomer.catalog.repositories` | Repository host, enabled/auth/sync state, last attempt/success, and sanitized failure category |
+| Durable delivery | `astronomer.task_outbox.summary` then `.list` / `.get` | Correlates DB delivery rows to queue task IDs without payload values |
+| Scheduler/controllers | `astronomer.scheduler.health` / `astronomer.controllers.summary` / `.alerts` | Finds stuck durable work and controller-wide patterns |
+| Controller operations | `astronomer.catalog|argocd|tools|monitoring|logging|workloads.operations` then `.operation_get` | Sanitized lifecycle/event timelines |
 | Argo self-mgmt | `astronomer.argocd.self_management_status` | |
 | Fleet agents | `astronomer.agent_fleet.*` | Metadata only |
 | Tunnel | `astronomer.tunnel.health` / `.recent_errors` / `.replica_distribution` | |
-| Alerts / audit | `astronomer.alert.*` / `astronomer.audit.recent_changes` | |
+| Alerts / audit | `astronomer.alert.*` / `astronomer.audit.recent_changes` / `.search` | Search is exact-filtered and paginated |
 | TLS / backups / obs | `astronomer.tls.status` / `.backups.status` / `.observability.health` | Obs uses fixed `query_template` enum |
+
+## Administrative coverage
+
+Start with `astronomer.platform.inventory` when the affected subsystem is not
+known. It returns counts only; then use the domain-specific tool.
+
+| Domain | Tool |
+| --- | --- |
+| Email, webhook, SIEM, notification delivery | `astronomer.delivery.summary` or `.email_health`, `.webhook_health`, `.siem_health` |
+| Logging and monitoring configuration | `astronomer.logging.health`, `astronomer.monitoring.health` |
+| Identity, Dex, SSO, SCIM | `astronomer.identity.health` |
+| Authentication sessions, TOTP, recovery | `astronomer.authentication.health` |
+| RBAC graph integrity | `astronomer.rbac.health` |
+| Credential/TLS/account/compliance posture | `astronomer.security.posture` |
+| Cloud credential materialization and Vault | `astronomer.external_integrations.health` |
+| Maintenance, quotas, compliance, read audit | `astronomer.governance.health` |
+| Controller threshold/silence policy | `astronomer.policy_engine.health` |
+| Template/baseline reconciliation | `astronomer.templates.health` |
+| Platform setting overrides | `astronomer.configuration.overview` |
+| Users/projects/registered-cluster metadata/quotas | `astronomer.tenancy.summary` |
+| Registration/decommission/agent lifecycle | `astronomer.registration.health` |
+| Fleet-operation orchestration records | `astronomer.fleet_operations.health` |
+| GitOps registration | `astronomer.gitops.health` |
+| UI extensions | `astronomer.extensions.health` |
+| Alert rules/channels/events | `astronomer.alerting.health` |
+| Catalog ingestion/hydration/inventory | `astronomer.catalog.health` |
+| Repair/idempotency bookkeeping | `astronomer.reconciliation.health` |
+| Dashboard widgets/data sources | `astronomer.dashboard.health` |
+| Product-local Charlie lifecycle | `astronomer.charlie.runtime_health` |
+
+Administrative tools return aggregate state and safe enums. They deliberately
+withhold identities, free-form configuration, policy documents, message
+content, endpoint paths, credentials, and raw errors. Cross-domain tools require
+wildcard read RBAC or superuser authority.
 
 ---
 
@@ -43,8 +84,9 @@ the Charlie RAG card for the **0.3.5 test run**.
 | `astronomer.management.workload_scale` | No | approval (replicas 2–20) |
 | `astronomer.management.run_job` | No | approval (allowlisted jobs only) |
 | `astronomer.tunnel.restart_component` | No | approval |
-| `astronomer.argocd.self_management_sync` | **Yes** (if allowlisted) | auto or approval |
+| `astronomer.argocd.self_management_sync` | No | approval |
 | `astronomer.queue.retry_task` | **Yes** (if allowlisted) | auto or approval |
+| `astronomer.task_outbox.retry_delivery` | No | approval |
 
 Write args:
 
@@ -69,3 +111,8 @@ Users never name tools. Match natural language to tool **descriptions** in the d
 7. **Queue diagnosis** — use `queue.tasks` to identify the affected task, then
    `queue.task_get` for safe detail. For `catalog:sync`, correlate with
    `catalog.repositories`; do not infer that it is Charlie-specific.
+8. **Durable delivery diagnosis** — use `task_outbox` before the queue when work
+   may never have reached Redis. Retry delivery only for a proven `failed` or
+   `dead` row and only after exact approval.
+9. **Inventory then detail** — use `platform.inventory` only to choose a
+   specific administrative diagnostic; do not treat a count as a diagnosis.

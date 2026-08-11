@@ -1152,6 +1152,35 @@ request to that cluster.
   alerts only.
 - [x] **A7-014** `astronomer.audit.recent_changes` — narrow management-resource and
   time query with sanitized details and affected-resource authorization.
+- [x] **A7-014a** Add fixed, bounded work-pipeline diagnostics:
+  `astronomer.task_outbox.summary|list|get`, `astronomer.scheduler.health`,
+  `astronomer.controllers.summary|alerts`, and per-domain operation list/detail
+  tools for catalog, Argo CD, tools, monitoring, logging, and workloads. Expose
+  lifecycle state, attempts, timing, payload field names/size, and fixed failure
+  categories only; never payload values or raw errors.
+- [x] **A7-014b** Add management runtime diagnostics for owned Jobs/CronJobs,
+  DaemonSets, HPA/PDB availability, Ingress/EndpointSlice health, pod resource
+  usage, PostgreSQL performance/pool state, Redis safe INFO fields, aggregate
+  HTTP status-class metrics, and process/runtime metrics. No arbitrary metric
+  query, Redis key/value operation, SQL, GVR, selector, or non-owned Kubernetes
+  object is accepted.
+- [x] **A7-014c** Add secret-safe administrative coverage for outbound delivery,
+  logging, monitoring, identity/Dex/SCIM, RBAC, security, governance,
+  configuration overrides, tenancy, GitOps registration, UI extensions,
+  alerting, dashboards, platform inventory, and product-local Charlie runtime
+  health. These are fixed aggregate projections; identities, free-form content,
+  endpoints, policy documents, credentials, and raw errors are withheld.
+- [x] **A7-014d** Add `astronomer.audit.search` with exact filters, bounded
+  lookback, and pagination while continuing to withhold actors, paths, IPs,
+  user agents, detail JSON, and managed-cluster evidence.
+- [x] **A7-014e** Complete the management-domain coverage audit with fixed
+  health projections for authentication sessions/TOTP/recovery, live key
+  rotation, cloud-credential/Vault integration state, controller policies and
+  silences, template/baseline reconciliation, registration/decommission/agent
+  lifecycle, fleet-operation orchestration records, catalog ingestion/hydration,
+  and repair/idempotency bookkeeping. Require wildcard read RBAC for every
+  cross-domain summary and continue to withhold identities, secret/content
+  documents, operation specifications, target details, and raw errors.
 
 #### Astronomer cluster-agent connection reads
 
@@ -1220,6 +1249,10 @@ quota, audit, and task semantics as the normal Astronomer API.
   downstream Application target.
 - [x] **A8-005** `astronomer.queue.retry_task` — retry one allowlisted idempotent
   management-plane task/dead-letter item after payload-free review.
+- [x] **A8-005a** `astronomer.task_outbox.retry_delivery` — approval-only retry of
+  one failed or dead durable delivery row. Refuse delivered, pending, and
+  in-flight rows; clear only delivery lock/error state; and verify the exact row
+  returned to pending. It is never auto-eligible.
 - [x] **A8-006** `astronomer.management.run_job` — rerun one allowlisted diagnostic
   or maintenance Job with fixed inputs and no shell/command override.
 - [x] **A8-007** Omit separate backup mutation tools in v1. The product has no

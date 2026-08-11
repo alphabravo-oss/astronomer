@@ -81,7 +81,7 @@ func OperationalCapabilityAdapters(adapter CapabilityExecutor) map[string]Capabi
 		"astronomer.installation.summary", "astronomer.installation.readiness", "astronomer.installation.configuration",
 		"astronomer.database.health", "astronomer.migrations.status", "astronomer.backups.status",
 		"astronomer.tls.status", "astronomer.observability.health", "astronomer.alert.list",
-		"astronomer.alert.get", "astronomer.audit.recent_changes",
+		"astronomer.alert.get", "astronomer.audit.recent_changes", "astronomer.audit.search",
 		"astronomer.catalog.repositories",
 	} {
 		adapters[name] = adapter
@@ -115,6 +115,8 @@ func (a *OperationalCapabilityAdapter) Execute(ctx context.Context, capability C
 		value, err = a.alert(ctx, arguments)
 	case "astronomer.audit.recent_changes":
 		value, err = a.audit(ctx, arguments)
+	case "astronomer.audit.search":
+		value, err = a.auditSearch(ctx, arguments)
 	case "astronomer.catalog.repositories":
 		value, err = a.catalogRepositories(ctx, arguments)
 	default:
@@ -430,6 +432,37 @@ func (a *OperationalCapabilityAdapter) audit(ctx context.Context, arguments map[
 		items = append(items, map[string]any{"id": row.ID, "created_at": row.CreatedAt.UTC(), "source": row.Source, "action": row.Action, "action_class": row.ActionClass, "resource_type": row.ResourceType, "resource_id": row.ResourceID, "resource_name": row.ResourceName, "status_code": row.StatusCode, "correlation_id": row.CorrelationID})
 	}
 	return map[string]any{"items": items}, nil
+}
+
+func (a *OperationalCapabilityAdapter) auditSearch(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
+	page, size := pagination(arguments, 50)
+	filter := sqlc.AuditLogFilterParams{
+		ResourceType:  stringArgument(arguments, "resource_type"),
+		ResourceID:    stringArgument(arguments, "resource_id"),
+		Action:        stringArgument(arguments, "action"),
+		ActionClass:   stringArgument(arguments, "action_class"),
+		Result:        stringArgument(arguments, "result"),
+		Source:        stringArgument(arguments, "source"),
+		CorrelationID: stringArgument(arguments, "correlation_id"),
+		From:          sinceArgument(arguments, 24*time.Hour),
+		HasFrom:       true,
+		Limit:         int32(size),
+		Offset:        int32((page - 1) * size),
+	}
+	rows, err := a.config.Queries.ListAuditLogV1Filtered(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, map[string]any{
+			"id": row.ID, "created_at": row.CreatedAt.UTC(), "source": row.Source,
+			"action": row.Action, "action_class": row.ActionClass, "resource_type": row.ResourceType,
+			"resource_id": row.ResourceID, "resource_name": row.ResourceName,
+			"status_code": row.StatusCode, "correlation_id": row.CorrelationID,
+		})
+	}
+	return map[string]any{"items": items, "page": page, "page_size": size}, nil
 }
 
 func sanitizedAlert(row sqlc.AlertEvent) map[string]any {

@@ -15,8 +15,17 @@ import (
 
 type staticCapabilityAdapter struct{}
 
-func (staticCapabilityAdapter) Execute(context.Context, CapabilityDescriptor, map[string]json.RawMessage) (json.RawMessage, error) {
-	return json.RawMessage(`{"ok":true}`), nil
+func (staticCapabilityAdapter) Execute(_ context.Context, _ CapabilityDescriptor, arguments map[string]json.RawMessage) (json.RawMessage, error) {
+	value := map[string]any{"ok": true}
+	for _, name := range []string{"page", "page_size"} {
+		if raw := arguments[name]; len(raw) > 0 {
+			var number int64
+			if json.Unmarshal(raw, &number) == nil {
+				value[name] = number
+			}
+		}
+	}
+	return json.Marshal(value)
 }
 func (staticCapabilityAdapter) Verify(context.Context, CapabilityDescriptor, map[string]json.RawMessage, json.RawMessage) (bool, error) {
 	return true, nil
@@ -65,6 +74,7 @@ func TestProductionAdapterGroupsCoverTheEntireV1Catalog(t *testing.T) {
 	registrations := MergeCapabilityAdapters(
 		FleetCapabilityAdapters(adapter), ManagementKubernetesCapabilityAdapters(adapter),
 		QueueCapabilityAdapters(adapter), ArgoCDCapabilityAdapters(adapter), OperationalCapabilityAdapters(adapter),
+		WorkPipelineCapabilityAdapters(adapter), RuntimeCapabilityAdapters(adapter), AdminVisibilityCapabilityAdapters(adapter),
 	)
 	catalog := append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...)
 	if len(registrations) != len(catalog) {
@@ -86,7 +96,9 @@ func TestProductionCapabilityAdaptersCannotCallDownstreamTunnel(t *testing.T) {
 	for _, name := range []string{
 		"fleet_capability_adapter.go", "management_kubernetes_adapter.go",
 		"queue_capability_adapter.go", "argocd_capability_adapter.go",
-		"operational_capability_adapter.go",
+		"operational_capability_adapter.go", "work_pipeline_capability_adapter.go",
+		"runtime_capability_adapter.go",
+		"admin_visibility_capability_adapter.go",
 	} {
 		name := name
 		t.Run(name, func(t *testing.T) {

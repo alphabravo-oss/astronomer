@@ -36,6 +36,12 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"keys": []string{"feature.charlie"}}
 	case "astronomer.management.workloads":
 		return map[string]any{"page": 2, "page_size": 10}
+	case "astronomer.management.resource_usage":
+		return map[string]any{"component": "server", "page": 2, "page_size": 10}
+	case "astronomer.management.jobs":
+		return map[string]any{"status": "succeeded", "page": 2, "page_size": 10}
+	case "astronomer.management.job_get":
+		return map[string]any{"job": "job/astronomer-maintenance"}
 	case "astronomer.management.workload_get", "astronomer.management.rollout_status":
 		return map[string]any{"workload": "deployment/astronomer-server"}
 	case "astronomer.management.pods":
@@ -50,6 +56,18 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"state": "pending", "queue": "default", "task_type": "catalog:sync", "page": 2, "page_size": 10}
 	case "astronomer.queue.task_get":
 		return map[string]any{"task_id": "task-a"}
+	case "astronomer.task_outbox.list":
+		return map[string]any{"status": "pending", "task_type": "catalog:sync", "page": 2, "page_size": 10}
+	case "astronomer.task_outbox.get":
+		return map[string]any{"outbox_id": id}
+	case "astronomer.controllers.alerts":
+		return map[string]any{"status": "active", "controller": "catalog", "page": 2, "page_size": 10}
+	case "astronomer.catalog.operations", "astronomer.argocd.operations", "astronomer.tools.operations",
+		"astronomer.monitoring.operations", "astronomer.logging.operations", "astronomer.workloads.operations":
+		return map[string]any{"status": "failed", "page": 2, "page_size": 10}
+	case "astronomer.catalog.operation_get", "astronomer.argocd.operation_get", "astronomer.tools.operation_get",
+		"astronomer.monitoring.operation_get", "astronomer.logging.operation_get", "astronomer.workloads.operation_get":
+		return map[string]any{"record_id": id}
 	case "astronomer.observability.health":
 		return map[string]any{"query_template": "availability", "range": "15m"}
 	case "astronomer.alert.list":
@@ -58,6 +76,8 @@ func validReadArguments(name string) map[string]any {
 		return map[string]any{"alert_id": id}
 	case "astronomer.audit.recent_changes":
 		return map[string]any{"resource_type": "platform_setting", "resource_id": "feature.charlie", "since": "1h", "limit": 10}
+	case "astronomer.audit.search":
+		return map[string]any{"resource_type": "platform_setting", "resource_id": "feature.charlie", "action": "settings.updated", "action_class": "mutation", "result": "success", "source": "http", "correlation_id": "request-a", "since": "1h", "page": 2, "page_size": 10}
 	case "astronomer.catalog.repositories":
 		return map[string]any{"page": 2, "page_size": 10}
 	case "astronomer.agent_fleet.summary":

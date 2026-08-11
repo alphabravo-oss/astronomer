@@ -103,6 +103,8 @@ func ManagementKubernetesCapabilityAdapters(adapter CapabilityExecutor) map[stri
 		"astronomer.management.events",
 		"astronomer.management.pod_logs", "astronomer.management.nodes", "astronomer.management.storage",
 		"astronomer.management.network", "astronomer.management.workload_restart",
+		"astronomer.management.resource_usage", "astronomer.management.jobs", "astronomer.management.job_get",
+		"astronomer.management.daemonsets", "astronomer.management.availability", "astronomer.management.ingress",
 		"astronomer.management.workload_rollout", "astronomer.management.workload_scale",
 		"astronomer.management.run_job", "astronomer.tunnel.restart_component",
 	} {

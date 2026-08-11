@@ -11,6 +11,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -47,6 +48,7 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "management-node"}},
 		&corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-data", Namespace: "astronomer", Labels: map[string]string{"app.kubernetes.io/instance": "astronomer", "secret": "SENTINEL"}}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-server", Namespace: "astronomer", Labels: map[string]string{"app.kubernetes.io/instance": "astronomer", "secret": "SENTINEL"}}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-maintenance", Namespace: "astronomer", Labels: map[string]string{"app.kubernetes.io/instance": "astronomer", "secret": "SENTINEL"}}, Status: batchv1.JobStatus{Succeeded: 1}},
 	)
 	management.logStream = func(context.Context, string, string, int64) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("token=SENTINEL\nready\n")), nil
@@ -80,6 +82,9 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 		QueueCapabilityAdapters(queue),
 		ArgoCDCapabilityAdapters(argo),
 		OperationalCapabilityAdapters(operational),
+		WorkPipelineCapabilityAdapters(staticCapabilityAdapter{}),
+		RuntimeCapabilityAdapters(staticCapabilityAdapter{}),
+		AdminVisibilityCapabilityAdapters(staticCapabilityAdapter{}),
 	))
 	if err != nil {
 		t.Fatal(err)
@@ -90,12 +95,23 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *testing.T) {
 	executor := productionReadAdapterFixture(t)
 	paginated := map[string]bool{
-		"astronomer.management.workloads": true,
-		"astronomer.queue.failed_tasks":   true,
-		"astronomer.queue.tasks":          true,
-		"astronomer.alert.list":           true,
-		"astronomer.catalog.repositories": true,
-		"astronomer.agent_fleet.list":     true,
+		"astronomer.management.workloads":      true,
+		"astronomer.queue.failed_tasks":        true,
+		"astronomer.queue.tasks":               true,
+		"astronomer.alert.list":                true,
+		"astronomer.catalog.repositories":      true,
+		"astronomer.agent_fleet.list":          true,
+		"astronomer.audit.search":              true,
+		"astronomer.management.resource_usage": true,
+		"astronomer.management.jobs":           true,
+		"astronomer.task_outbox.list":          true,
+		"astronomer.controllers.alerts":        true,
+		"astronomer.catalog.operations":        true,
+		"astronomer.argocd.operations":         true,
+		"astronomer.tools.operations":          true,
+		"astronomer.monitoring.operations":     true,
+		"astronomer.logging.operations":        true,
+		"astronomer.workloads.operations":      true,
 	}
 	for _, descriptor := range ReadCapabilityCatalog() {
 		descriptor := descriptor

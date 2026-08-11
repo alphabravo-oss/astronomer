@@ -60,6 +60,50 @@ denied, approved/committed, dispatched, verified, succeeded, failed, ambiguous,
 and replayed lifecycle metadata without arguments or content. If the durable
 audit or receipt cannot be committed, the action fails closed.
 
+## Management-plane diagnostic coverage
+
+Charlie discovery separates broad orientation from narrow evidence:
+
+1. `astronomer.platform.inventory` reports bounded counts for configured
+   management-plane domains. It cannot return record contents.
+2. Domain health tools cover delivery, logging, monitoring, identity,
+   authentication, RBAC, live key rotation, external credential integrations,
+   governance, controller policy, templates, configuration, tenancy,
+   registration, fleet-operation orchestration, catalog ingestion,
+   reconciliation bookkeeping, GitOps, extensions, alerting, dashboards, and
+   the product-local Charlie runtime.
+3. Work-pipeline tools expose durable task-outbox, scheduler, controller-alert,
+   and controller-operation lifecycle state. Payload field names and byte counts
+   may be returned; values and raw errors are never returned.
+4. Runtime tools cover owned management Kubernetes resources, PostgreSQL,
+   Redis, aggregate HTTP metrics, and the Astronomer process. They accept no
+   generic SQL, Redis command, metric query, Kubernetes kind/GVR, namespace, or
+   selector.
+5. `astronomer.audit.search` is exact-filtered, lookback-bounded, and paginated.
+   It excludes actors, paths, IP addresses, user agents, and detail JSON.
+
+These reads still require live product RBAC and exact session scope. Registered
+cluster and cluster-agent connection metadata remains management-plane state;
+no tool can convert that metadata into a managed-cluster Kubernetes request.
+Cross-domain summaries require wildcard read RBAC (or superuser); a narrow
+settings, monitoring, or project grant cannot authorize them.
+
+Full management-plane visibility is not database export access. Charlie does
+not receive user identities, tokens, secret/configuration documents, support
+bundles, shell-command history, raw SQL, arbitrary PromQL, or raw HTTP data.
+It also does not receive managed-cluster pods/workloads/nodes/events/logs,
+API-server audit events, security findings, vulnerability/image inventories,
+snapshots, manifests, or policy bodies. It may receive bounded Astronomer-owned
+workflow state about registration, delivery, reconciliation, or fleet work so
+it can diagnose the management service without entering a managed cluster.
+
+The only remediation added with this coverage is
+`astronomer.task_outbox.retry_delivery`. It is approval-only and accepts one
+UUID from the outbox diagnostic. The adapter refuses delivered, pending, and
+in-flight records, requeues only failed/dead delivery state, and verifies the
+same row is pending with its delivery error/lock cleared. It cannot change the
+task payload or become auto-eligible.
+
 ## Runbooks
 
 ### Product Bridge unavailable or circuit open

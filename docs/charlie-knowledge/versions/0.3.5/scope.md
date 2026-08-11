@@ -22,17 +22,25 @@ agents; it may not kubectl into those clusters.
 | Install identity | Product/chart version, namespace, release, **kubernetes_version**, distribution |
 | Readiness | Database, schema/migrations dirty flag, queues, component ready counts |
 | Owned workloads | Deployments/StatefulSets/Pods with release ownership (install namespace) |
-| Diagnostics | Bounded redacted pod logs, events, nodes, storage (PVC), network (Services/NP) |
+| Diagnostics | Bounded redacted pod logs, events, nodes, storage, network, Jobs/CronJobs, DaemonSets, HPA/PDB, ingress/endpoints, and owned pod resource usage |
+| Runtime health | Postgres performance/pool/locks, Redis safe metrics, HTTP status-class aggregates, process/runtime metrics, live key-rotation counts, queue and durable task-outbox state |
+| Controllers | Scheduler health, controller alerts, and catalog/Argo/tools/monitoring/logging/workload operation timelines with payload values withheld |
+| Administration | Delivery, logging, monitoring, identity/authentication, RBAC, security, external credential integrations, governance/policy, templates, configuration, tenancy/registration, fleet-operation records, catalog, reconciliation, GitOps, extensions, alerting, dashboards, and bounded platform inventory |
+| Product-local Charlie | Connection/mode/disclosure/credential posture plus session, approval, receipt, trigger, finding, and alert-delivery lifecycle counts |
 | Data plane health | Postgres health, queue health/failed tasks, TLS status, backups summary |
 | Self-management | Argo CD Application sync/health for the Astronomer install |
 | Fleet (metadata only) | Agent list/summary, connection history, upgrade/ingestion status |
 | Tunnel hub | Health, replica distribution, recent errors; restart only if mode allows |
-| Bounded writes | Restart/scale/rollout mutable Deployments; Argo sync; queue retry; tunnel restart; allowlisted run jobs — all mode-gated |
+| Bounded writes | Restart/scale/rollout mutable Deployments; Argo sync; queue retry; approval-only durable outbox retry; tunnel restart; allowlisted run jobs — all mode-gated |
 
 ## Out of scope
 
 - Downstream kubectl: list/logs/exec/apply/delete in **customer** clusters
 - Generic shell, raw SQL, free-form HTTP, Secret **values**
+- User identities, token/key material, configuration or policy documents,
+  support bundles, shell-command history, and raw request data
+- Managed-cluster workload, node, event, log, API-audit, vulnerability,
+  security-finding, snapshot, manifest, or policy-body data
 - Destructive catalog operations not published for this version
 - Inventing tools, IDs, or “I already restarted it” without tool evidence
 

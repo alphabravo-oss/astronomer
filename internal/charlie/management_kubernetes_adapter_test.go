@@ -110,6 +110,32 @@ func TestManagementKubernetesReadsOnlyOwnedRedactedShapes(t *testing.T) {
 	}
 }
 
+func TestManagementKubernetesJobReadsFilterTypedStatusAndWithholdTemplates(t *testing.T) {
+	adapter := managementAdapterFixture(t,
+		&batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "astronomer-active", Namespace: "astronomer", Labels: map[string]string{"app.kubernetes.io/instance": "astronomer", "secret": "SENTINEL"}},
+			Spec:       batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "job", Image: "private.invalid/SENTINEL", Env: []corev1.EnvVar{{Name: "TOKEN", Value: "SENTINEL"}}}}, RestartPolicy: corev1.RestartPolicyNever}}},
+			Status:     batchv1.JobStatus{Active: 1},
+		},
+		&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-suspended", Namespace: "astronomer", Labels: map[string]string{"app.kubernetes.io/instance": "astronomer", "secret": "SENTINEL"}}, Spec: batchv1.CronJobSpec{Schedule: "0 * * * *", Suspend: func() *bool { value := true; return &value }()}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "other-active", Namespace: "astronomer"}, Status: batchv1.JobStatus{Active: 1}},
+	)
+	descriptor, _ := capabilityByName("astronomer.management.jobs")
+	result, err := adapter.Execute(context.Background(), descriptor, rawArguments(t, map[string]any{"status": "active", "page": 1, "page_size": 20}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(result)
+	if !strings.Contains(text, "astronomer-active") || strings.Contains(text, "astronomer-suspended") || strings.Contains(text, "other-active") || strings.Contains(text, "SENTINEL") || strings.Contains(text, "private.invalid") {
+		t.Fatalf("unsafe or incorrectly filtered job result: %s", result)
+	}
+	detail, _ := capabilityByName("astronomer.management.job_get")
+	result, err = adapter.Execute(context.Background(), detail, rawArguments(t, map[string]any{"job": "job/astronomer-active"}))
+	if err != nil || strings.Contains(string(result), "SENTINEL") || strings.Contains(string(result), "private.invalid") {
+		t.Fatalf("unsafe job detail: %s err=%v", result, err)
+	}
+}
+
 func TestManagementKubernetesWritesStayAllowlistedAndVerify(t *testing.T) {
 	adapter := managementAdapterFixture(t, ownedDeployment("astronomer-server", 2), ownedDeployment("astronomer-database", 3))
 	descriptor, _ := capabilityByName("astronomer.management.workload_scale")
