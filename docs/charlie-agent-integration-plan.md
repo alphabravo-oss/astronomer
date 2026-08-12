@@ -2830,6 +2830,10 @@ widening Charlie's downstream-cluster boundary.
   persisted assistant history, and an authorized session read that merges
   Charlie's remote terminal state when the local SSE cursor is stale. A missed
   terminal frame must not leave a failed, aborted, or completed turn busy.
+- [x] Persist every action denial, including pre-dispatch rejections where no
+  trusted capability descriptor exists. Such records retain the content-free
+  action/capability/authorization digests and denial code while omitting, rather
+  than fabricating, an unknown read/write effect.
 - [x] Pin Astronomer to Charlie source
   `c63b7f066c2951ef5003c1fbb67272b862019ab2` and product-agent/chart `1.0.54`.
   A fresh signed replacement package installed image

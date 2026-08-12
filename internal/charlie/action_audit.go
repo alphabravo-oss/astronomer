@@ -30,13 +30,22 @@ func (a *DBActionAuditor) Record(ctx context.Context, phase string, envelope Act
 		resultDigest = digestBytes(result.Result)
 	}
 	action := "charlie.action." + phase
-	detail, err := EncodeCharlieAuditDetail(action, "charlie_action", map[string]any{
+	fields := map[string]any{
 		"phase": phase, "action_digest": digestBytes([]byte(envelope.ActionID)),
 		"argument_digest": digestBytes([]byte(envelope.ArgumentDigest)), "authorization_digest": digestBytes([]byte(envelope.AuthorizationRef)),
-		"capability_digest": digestBytes([]byte(envelope.Capability)), "effect": string(capability.Effect),
-		"state": result.State, "denial_code": string(result.Code), "result_digest": resultDigest,
+		"capability_digest": digestBytes([]byte(envelope.Capability)),
+		"state":             result.State, "denial_code": string(result.Code), "result_digest": resultDigest,
 		"mode_revision": envelope.ModeRevision, "policy_revision": envelope.PolicyRevision, "fencing_epoch": envelope.FencingEpoch,
-	})
+	}
+	// Validation can reject an action before it has a trusted capability
+	// descriptor (for example, an unavailable optional capability or an unknown
+	// capability name). Preserve that denial in the audit trail without
+	// inventing an effect. The strict audit contract validates effect when it is
+	// present, but does not require it for pre-dispatch outcomes.
+	if capability.Effect == EffectRead || capability.Effect == EffectWrite {
+		fields["effect"] = string(capability.Effect)
+	}
+	detail, err := EncodeCharlieAuditDetail(action, "charlie_action", fields)
 	if err != nil {
 		return err
 	}
