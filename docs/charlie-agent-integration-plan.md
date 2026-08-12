@@ -2853,7 +2853,11 @@ widening Charlie's downstream-cluster boundary.
   completed in 15 seconds with 15/15 aggregate checks plus targeted reads; all
   ten product actions were audited as successful reads with no scope denial or
   persistence warning. Both agent replicas remained ready and Argo remained
-  `Synced/Healthy`.
+  `Synced/Healthy`. A focused `/investigate management-plane autoscaling and
+  disruption posture` then completed in 23 seconds and successfully read
+  workloads, nodes, resource usage, events, and availability controls; it found
+  the real single-replica/no-HPA/zero-disruption posture without querying a
+  downstream cluster.
 - [x] Pin Astronomer to Charlie source
   `c63b7f066c2951ef5003c1fbb67272b862019ab2` and product-agent/chart `1.0.54`.
   A fresh signed replacement package installed image
