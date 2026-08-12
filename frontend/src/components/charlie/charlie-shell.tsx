@@ -475,9 +475,15 @@ function CharlieDrawer() {
   const sessionStatus = useQuery({
     queryKey: queryKeys.charlie.sessionStatus(sessionId),
     queryFn: () => getCharlieSession(sessionId!),
-    enabled: awaitingReply && !viewingThreadId && !!sessionId,
+    // Always reconcile the current server-owned session when the drawer opens.
+    // Closing the drawer intentionally unmounts the UI and its EventSource, but
+    // it does not abort Charlie. This status read lets a reopened drawer attach
+    // to work that continued while it was hidden.
+    enabled: !viewingThreadId && !!sessionId,
     retry: false,
-    refetchInterval: 1_500,
+    // The first read detects work that survived a closed drawer. Once that
+    // work is reattached, awaitingReply enables terminal-state polling.
+    refetchInterval: awaitingReply ? 1_500 : false,
   });
   const commands = useQuery({
     queryKey: queryKeys.charlie.commands,
@@ -734,6 +740,56 @@ function CharlieDrawer() {
       ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
     ];
   }, [history.data, local, viewingThreadId]);
+  // Reattach UI progress after the drawer was closed during an in-flight turn.
+  // Remote active state alone is not enough: a locally active interactive
+  // session can have a completed answer. The transcript must also end in an
+  // unanswered user (or streaming assistant) message before we show work as
+  // pending and disable duplicate sends.
+  useEffect(() => {
+    if (viewingThreadId || awaitingReply || !sessionId) return;
+    const current = sessionStatus.data;
+    if (!current || current.id !== sessionId) return;
+    if (
+      current.state !== "creating" &&
+      current.state !== "active" &&
+      current.state !== "waiting_approval"
+    ) return;
+    if (history.data === undefined && !history.isError) return;
+    const lastConversationMessage = [...(history.data ?? [])]
+      .reverse()
+      .find((message) => message.role === "user" || message.role === "assistant");
+    const hasUnansweredTurn =
+      lastConversationMessage?.role === "user" ||
+      lastConversationMessage?.state === "streaming";
+    if (!hasUnansweredTurn) return;
+
+    const now = Date.now();
+    awaitingReplyRef.current = true;
+    activeTurnIdRef.current = undefined;
+    assistantIdsBeforeTurnRef.current = new Set(
+      (history.data ?? [])
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.id),
+    );
+    setAwaitingReply(true);
+    setStreamUnavailable(false);
+    setTurnFailed(false);
+    setTurnProgress({
+      ...initialCharlieTurnProgress(now),
+      stage: current.state === "waiting_approval" ? "waiting_approval" : "planning",
+      label:
+        current.state === "waiting_approval"
+          ? "Waiting for approval"
+          : "Reconnected to active Charlie work",
+    });
+  }, [
+    awaitingReply,
+    history.data,
+    history.isError,
+    sessionId,
+    sessionStatus.data,
+    viewingThreadId,
+  ]);
   useEffect(() => {
     if (!awaitingReply || !history.data || viewingThreadId) return;
     const response = history.data.find(

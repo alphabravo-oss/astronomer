@@ -302,6 +302,56 @@ describe("Charlie global shell accessibility", () => {
     expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1");
   });
 
+  it("does not abort hidden work and restores its completed answer when reopened", async () => {
+    let completed = false;
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "slow health assessment",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1", state: "active" },
+      messageable: true,
+      needs_continue: false,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(getCharlieSession).mockImplementation(async () => ({
+      id: "session-1",
+      state: completed ? "completed" : "active",
+    }) as never);
+    vi.mocked(getCharlieThreadHistory).mockImplementation(async () => completed
+      ? [
+          { id: "u1", role: "user", content: "run a slow health assessment" },
+          { id: "a1", role: "assistant", content: "The background assessment is complete." },
+        ] as never
+      : [
+          { id: "u1", role: "user", content: "run a slow health assessment" },
+        ] as never);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(
+      await screen.findByRole("status", {
+        name: "Charlie is working: Reconnected to active Charlie work",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog", { name: "Charlie" })).not.toBeInTheDocument();
+    expect(abortCharlieSession).not.toHaveBeenCalled();
+
+    completed = true;
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(
+      await screen.findByText("The background assessment is complete."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument(),
+    );
+    expect(abortCharlieSession).not.toHaveBeenCalled();
+  });
+
   it("New chat clears the transcript via the thread API", async () => {
     vi.mocked(getCharlieActiveThread).mockResolvedValue({
       thread: {
