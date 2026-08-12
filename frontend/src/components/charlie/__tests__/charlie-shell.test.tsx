@@ -181,7 +181,7 @@ describe("Charlie global shell accessibility", () => {
       lastEventId: "event-1",
     })));
     expect(screen.getByText("Calling astronomer.queue.tasks")).toBeInTheDocument();
-    expect(screen.getByText("1 tool call")).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 tool call finished")).toBeInTheDocument();
     expect(screen.queryByText("SENTINEL")).not.toBeInTheDocument();
   });
 

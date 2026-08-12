@@ -16,6 +16,8 @@ export type CharlieTurnProgress = {
   lastEventAt: number;
   toolCallIds: string[];
   completedToolCallIds: string[];
+  failedToolCallIds: string[];
+  blockedToolCallIds: string[];
   eventCount: number;
   seenEventIds: string[];
 };
@@ -39,6 +41,8 @@ export function initialCharlieTurnProgress(now = Date.now()): CharlieTurnProgres
     lastEventAt: now,
     toolCallIds: [],
     completedToolCallIds: [],
+    failedToolCallIds: [],
+    blockedToolCallIds: [],
     eventCount: 0,
     seenEventIds: [],
   };
@@ -129,15 +133,26 @@ export function updateCharlieTurnProgress(
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
         completedToolCallIds: appendUnique(current.completedToolCallIds, toolCallID),
       };
-    case "tool.failed":
+    case "tool.failed": {
+      const errorCode = boundedID(data.error_code, SAFE_CAPABILITY);
+      const blocked = errorCode?.startsWith("authority.") ?? false;
       return {
         ...next,
         stage: "analyzing",
-        label: capability ? `${capability} failed · Adjusting the investigation` : "Tool failed · Adjusting the investigation",
+        label: capability
+          ? `${capability} ${blocked ? "was blocked" : "failed"} · Adjusting the investigation`
+          : `Tool ${blocked ? "was blocked" : "failed"} · Adjusting the investigation`,
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
         completedToolCallIds: appendUnique(current.completedToolCallIds, toolCallID),
+        failedToolCallIds: blocked
+          ? current.failedToolCallIds
+          : appendUnique(current.failedToolCallIds, toolCallID),
+        blockedToolCallIds: blocked
+          ? appendUnique(current.blockedToolCallIds, toolCallID)
+          : current.blockedToolCallIds,
       };
+    }
     case "permission.requested":
       return {
         ...next,

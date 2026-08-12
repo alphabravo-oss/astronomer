@@ -2068,6 +2068,15 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				}
 				adapterGroups = append(adapterGroups, charlie.ArgoCDCapabilityAdapters(argoCapabilityAdapter))
 			}
+			baseCapabilityExecutor, err := charlie.NewCatalogExecutor(charlie.MergeCapabilityAdapters(adapterGroups...))
+			if err != nil {
+				return fail(err)
+			}
+			systemHealthAdapter, err := charlie.NewSystemHealthCapabilityAdapter(baseCapabilityExecutor)
+			if err != nil {
+				return fail(err)
+			}
+			adapterGroups = append(adapterGroups, charlie.SystemHealthCapabilityAdapters(systemHealthAdapter))
 			capabilityExecutor, err := charlie.NewCatalogExecutor(charlie.MergeCapabilityAdapters(adapterGroups...))
 			if err != nil {
 				return fail(err)

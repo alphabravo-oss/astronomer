@@ -126,6 +126,7 @@ func (h *CharlieThreadHandler) Commands(w http.ResponseWriter, r *http.Request) 
 	RespondJSON(w, http.StatusOK, charlie.CharlieCommandCatalog())
 }
 
+// openapi:request CharlieThreadMessageRequest
 type sendCharlieThreadMessageRequest struct {
 	ClientMessageID  string                    `json:"client_message_id"`
 	Message          string                    `json:"message"`

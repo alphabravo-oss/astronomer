@@ -95,11 +95,29 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
   const elapsedSeconds = Math.max(0, Math.floor((now - progress.startedAt) / 1000));
   const toolCalls = progress.toolCallIds.length;
   const completedTools = progress.completedToolCallIds.length;
+  const failedTools = progress.failedToolCallIds.length;
+  const blockedTools = progress.blockedToolCallIds.length;
+  const pendingTools = Math.max(0, toolCalls - completedTools);
+  const quietSeconds = Math.max(0, Math.floor((now - progress.lastEventAt) / 1000));
+  const delayed = quietSeconds >= 30;
+  const stalled = quietSeconds >= 90;
+  let activity = progress.label;
+  if (delayed && progress.stage === "analyzing") {
+    activity = completedTools > 0
+      ? `Waiting for Charlie's model to analyze ${completedTools} tool ${completedTools === 1 ? "result" : "results"}`
+      : "Waiting for Charlie's model to analyze the available evidence";
+  } else if (delayed && (progress.stage === "queued" || progress.stage === "planning")) {
+    activity = "Waiting for Charlie's model to begin the investigation";
+  } else if (delayed && progress.stage === "running_tool") {
+    activity = progress.capability
+      ? `Waiting for ${progress.capability} to return`
+      : "Waiting for the diagnostic tool to return";
+  }
   return (
     <article
       role="status"
       aria-live="polite"
-      aria-label={`Charlie is working: ${progress.label}`}
+      aria-label={`Charlie is working: ${activity}`}
       className="mr-8 rounded-lg border bg-card p-3"
       data-testid="charlie-turn-progress"
     >
@@ -107,14 +125,14 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-muted-foreground">Charlie is working</p>
-          <p className="truncate text-sm" title={progress.label}>{progress.label}</p>
+          <p className="truncate text-sm" title={activity}>{activity}</p>
         </div>
       </div>
       <div
         className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-label="Charlie request progress"
-        aria-valuetext={progress.label}
+        aria-valuetext={activity}
       >
         <span
           className="block h-full w-1/3 rounded-full bg-primary motion-reduce:w-2/3"
@@ -123,12 +141,20 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
       </div>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span>{elapsedSeconds}s elapsed</span>
-        {toolCalls > 0 ? <span>{toolCalls} tool {toolCalls === 1 ? "call" : "calls"}</span> : null}
-        {completedTools > 0 ? <span>{completedTools} completed</span> : null}
+        {toolCalls > 0 ? <span>{completedTools} of {toolCalls} tool {toolCalls === 1 ? "call" : "calls"} finished</span> : null}
+        {pendingTools > 0 ? <span>{pendingTools} active or pending</span> : null}
+        {failedTools > 0 ? <span>{failedTools} failed</span> : null}
+        {blockedTools > 0 ? <span>{blockedTools} safely blocked</span> : null}
         {progress.eventCount > 0 ? (
           <span>{progress.eventCount.toLocaleString()} live {progress.eventCount === 1 ? "update" : "updates"}</span>
         ) : null}
+        {delayed ? <span>Last update {quietSeconds}s ago</span> : null}
       </div>
+      {stalled ? (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+          This step is taking longer than expected. Charlie will stop it at the configured deadline; you can keep waiting or stop the request.
+        </p>
+      ) : null}
       <style>{`
         @keyframes charlie-progress-slide {
           0% { transform: translateX(-110%); }
@@ -402,6 +428,7 @@ function CharlieDrawer() {
   const [commandNotice, setCommandNotice] = useState<string>();
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [streamUnavailable, setStreamUnavailable] = useState(false);
+  const [turnFailed, setTurnFailed] = useState(false);
   const [confirmAbort, setConfirmAbort] = useState(false);
   // True from user send until Charlie produces assistant content or the turn ends.
   const [awaitingReply, setAwaitingReply] = useState(false);
@@ -442,6 +469,7 @@ function CharlieDrawer() {
     queryKey: queryKeys.charlie.activeThread,
     queryFn: getCharlieActiveThread,
     retry: false,
+    refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
   });
   const commands = useQuery({
     queryKey: queryKeys.charlie.commands,
@@ -546,6 +574,9 @@ function CharlieDrawer() {
           event.type === "turn.aborted" ||
           event.type === "charlie.error"
         ) {
+          if (event.type === "turn.failed" || event.type === "charlie.error") {
+            setTurnFailed(true);
+          }
           awaitingReplyRef.current = false;
           setAwaitingReply(false);
         }
@@ -597,6 +628,7 @@ function CharlieDrawer() {
       );
       setStreamGeneration((value) => value + 1);
       setStreamUnavailable(false);
+      setTurnFailed(false);
       setTurnProgress(initialCharlieTurnProgress());
       setLocal((v) => [
         ...v,
@@ -609,6 +641,7 @@ function CharlieDrawer() {
       activeTurnIdRef.current = undefined;
       setAwaitingReply(false);
       setTurnProgress(undefined);
+      setTurnFailed(true);
     },
     onSuccess: (ids) => {
       if (ids.turnId) activeTurnIdRef.current = ids.turnId;
@@ -635,6 +668,7 @@ function CharlieDrawer() {
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setStreamUnavailable(false);
+      setTurnFailed(false);
       setViewingThreadId(undefined);
       setConversationListOpen(false);
       setCommandHelpOpen(false);
@@ -656,6 +690,7 @@ function CharlieDrawer() {
       activeTurnIdRef.current = undefined;
       setAwaitingReply(false);
       setTurnProgress(undefined);
+      setTurnFailed(false);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.sessions });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
@@ -716,6 +751,26 @@ function CharlieDrawer() {
         : current,
     );
   }, [awaitingReply, history.data, viewingThreadId]);
+  // Session polling is the terminal fallback when an SSE connection dies
+  // before delivering turn.failed/turn.aborted and no assistant message exists
+  // for history polling to detect.
+  useEffect(() => {
+    if (!awaitingReply || viewingThreadId) return;
+    const current = activeThread.data?.current_session;
+    if (!current || current.id !== sessionId) return;
+    if (current.state !== "failed" && current.state !== "aborted") return;
+    awaitingReplyRef.current = false;
+    setAwaitingReply(false);
+    if (current.state === "failed") setTurnFailed(true);
+    setTurnProgress((progress) => progress
+      ? {
+          ...progress,
+          stage: current.state === "failed" ? "failed" : "aborted",
+          label: current.state === "failed" ? "Charlie could not complete the response" : "Turn aborted",
+          lastEventAt: Date.now(),
+        }
+      : progress);
+  }, [activeThread.data?.current_session, awaitingReply, sessionId, viewingThreadId]);
   const showProgress = !viewingThreadId && (send.isPending || awaitingReply) && !send.isError;
   const historyReady =
     (!displayedThreadId && !sessionId) || history.data !== undefined;
@@ -1060,14 +1115,16 @@ function CharlieDrawer() {
         )}
       </div>
       <div className="shrink-0 space-y-2 border-t border-border bg-background px-5 py-3">
-        {(send.isError || history.isError || streamUnavailable) && (
+        {(send.isError || history.isError || streamUnavailable || turnFailed) && (
           <div
             role="alert"
             className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm"
           >
             <p>
-              {streamUnavailable
-                ? "The live Charlie stream is reconnecting. Confirmed history remains available, and your Astronomer data remains unchanged."
+              {turnFailed
+                ? "Charlie could not complete this request. Partial work was not presented as an answer, and your Astronomer data remains unchanged. You can retry or narrow the request."
+                : streamUnavailable
+                  ? "The live Charlie stream is reconnecting. Confirmed history remains available, and your Astronomer data remains unchanged."
                 : isCharlieRateLimitedError(send.error) ||
                     isCharlieRateLimitedError(history.error)
                   ? "Charlie is briefly rate-limited while the session catches up. Retry in a moment — your Astronomer data remains unchanged."
@@ -1083,7 +1140,7 @@ function CharlieDrawer() {
                   Reconnect and retry history
                 </button>
               )}
-              {send.isError && send.variables && (
+              {(send.isError || turnFailed) && send.variables && (
                 <button
                   type="button"
                   onClick={() => send.mutate(send.variables!)}

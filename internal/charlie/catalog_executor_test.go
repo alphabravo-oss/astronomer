@@ -75,6 +75,7 @@ func TestProductionAdapterGroupsCoverTheEntireV1Catalog(t *testing.T) {
 		FleetCapabilityAdapters(adapter), ManagementKubernetesCapabilityAdapters(adapter),
 		QueueCapabilityAdapters(adapter), ArgoCDCapabilityAdapters(adapter), OperationalCapabilityAdapters(adapter),
 		WorkPipelineCapabilityAdapters(adapter), RuntimeCapabilityAdapters(adapter), AdminVisibilityCapabilityAdapters(adapter),
+		SystemHealthCapabilityAdapters(adapter),
 	)
 	catalog := append(ReadCapabilityCatalog(), WriteCapabilityCatalog()...)
 	if len(registrations) != len(catalog) {
@@ -99,6 +100,7 @@ func TestProductionCapabilityAdaptersCannotCallDownstreamTunnel(t *testing.T) {
 		"operational_capability_adapter.go", "work_pipeline_capability_adapter.go",
 		"runtime_capability_adapter.go",
 		"admin_visibility_capability_adapter.go",
+		"system_health_capability_adapter.go",
 	} {
 		name := name
 		t.Run(name, func(t *testing.T) {

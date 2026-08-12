@@ -77,7 +77,7 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 	operational := operationalAdapterFixture(t, queries)
 	operational.databaseSnapshot = func(context.Context) (bool, int64, error) { return false, 1024, nil }
 
-	executor, err := NewCatalogExecutor(MergeCapabilityAdapters(
+	groups := []map[string]CapabilityExecutor{
 		FleetCapabilityAdapters(fleet),
 		ManagementKubernetesCapabilityAdapters(management),
 		QueueCapabilityAdapters(queue),
@@ -86,7 +86,17 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 		WorkPipelineCapabilityAdapters(staticCapabilityAdapter{}),
 		RuntimeCapabilityAdapters(staticCapabilityAdapter{}),
 		AdminVisibilityCapabilityAdapters(staticCapabilityAdapter{}),
-	))
+	}
+	base, err := NewCatalogExecutor(MergeCapabilityAdapters(groups...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	health, err := NewSystemHealthCapabilityAdapter(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups = append(groups, SystemHealthCapabilityAdapters(health))
+	executor, err := NewCatalogExecutor(MergeCapabilityAdapters(groups...))
 	if err != nil {
 		t.Fatal(err)
 	}

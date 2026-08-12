@@ -65,4 +65,25 @@ describe("Charlie turn progress", () => {
     expect(replay).toBe(once);
     expect(replay.eventCount).toBe(1);
   });
+
+  it("tracks failed and policy-blocked tools as distinct terminal outcomes", () => {
+    let progress = initialCharlieTurnProgress(1000);
+    progress = updateCharlieTurnProgress(progress, event("tool.failed", {
+      capability: "astronomer.queue.tasks",
+      tool_call_id: "call-failed",
+      error_code: "capability.failed",
+      message: "SENTINEL must not be retained",
+    }, "1"), 1100);
+    progress = updateCharlieTurnProgress(progress, event("tool.failed", {
+      capability: "astronomer.management.workload_restart",
+      tool_call_id: "call-blocked",
+      error_code: "authority.approval_required",
+    }, "2"), 1200);
+
+    expect(progress.completedToolCallIds).toEqual(["call-failed", "call-blocked"]);
+    expect(progress.failedToolCallIds).toEqual(["call-failed"]);
+    expect(progress.blockedToolCallIds).toEqual(["call-blocked"]);
+    expect(progress.label).toContain("was blocked");
+    expect(JSON.stringify(progress)).not.toContain("SENTINEL");
+  });
 });

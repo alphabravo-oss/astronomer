@@ -160,7 +160,7 @@ func TestMessageForwardsValidatedCommandAndAuditsOnlyItsIdentity(t *testing.T) {
 		t.Fatalf("command was not forwarded: %#v", bridge.command)
 	}
 	last := auditor.events[len(auditor.events)-1]
-	if last.CommandID != "investigate" || last.CommandVersion != "1" {
+	if last.CommandID != "investigate" || last.CommandVersion != "2" {
 		t.Fatalf("command identity was not audited: %#v", last)
 	}
 	encodedAudit, _ := json.Marshal(last)

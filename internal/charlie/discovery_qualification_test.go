@@ -1,6 +1,9 @@
 package charlie
 
-import "testing"
+import (
+	"sort"
+	"testing"
+)
 
 func TestFixedDiscoveryQualificationUsesProductionCatalogCompiler(t *testing.T) {
 	mixed, err := qualifyFixedDiscovery(DiscoveryQualificationMixed)
@@ -8,8 +11,10 @@ func TestFixedDiscoveryQualificationUsesProductionCatalogCompiler(t *testing.T) 
 		t.Fatal(err)
 	}
 	readName, writeName := ReadCapabilityCatalog()[0].Name, WriteCapabilityCatalog()[0].Name
+	wantNames := []string{readName, writeName}
+	sort.Strings(wantNames)
 	if !mixed.CandidateEnabled || mixed.AcceptedCount != 2 || mixed.RejectedCount != 1 || !mixed.MalformedRejected || !mixed.CatalogBound || mixed.DisclosureDigest == "" ||
-		len(mixed.AcceptedNames) != 2 || mixed.AcceptedNames[0] != readName || mixed.AcceptedNames[1] != writeName {
+		len(mixed.AcceptedNames) != 2 || mixed.AcceptedNames[0] != wantNames[0] || mixed.AcceptedNames[1] != wantNames[1] {
 		t.Fatalf("mixed catalog qualification is incomplete: %+v", mixed)
 	}
 	malformed, err := qualifyFixedDiscovery(DiscoveryQualificationMalformed)

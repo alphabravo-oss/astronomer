@@ -1021,6 +1021,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/charlie/commands"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/charlie/context/search"
   },
   {

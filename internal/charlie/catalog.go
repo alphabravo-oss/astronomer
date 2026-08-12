@@ -42,6 +42,9 @@ type CapabilityDescriptor struct {
 func ReadCapabilityCatalog() []CapabilityDescriptor {
 	const max = 64 << 10
 	return []CapabilityDescriptor{
+		readDesc("astronomer.system.health",
+			"Bounded concurrent management-plane health assessment across installation, Kubernetes runtime, database, Redis, queues, agent fleet, tunnels, backups, TLS, alerting, Argo CD, Charlie, and security posture. Use this once as the first tool for broad health/status requests, then run only targeted follow-up tools for degraded checks.",
+			SourceAstronomerServer, "*", nil, max),
 		readDesc("astronomer.installation.summary",
 			"Installation identity: installation_id, platform name, astronomer_version, chart_version, namespace, release, kubernetes_version, kubernetes_distribution, and management component health. Use for 'what version of k8s/astronomer are we running'.",
 			SourceAstronomerServer, "settings", nil, max),
