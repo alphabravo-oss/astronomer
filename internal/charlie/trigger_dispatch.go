@@ -39,7 +39,8 @@ type BridgeInvestigationRequest struct {
 	FirstOccurredAt  time.Time       `json:"first_occurred_at"`
 	LastOccurredAt   time.Time       `json:"last_occurred_at"`
 	SummaryMetadata  json.RawMessage `json:"summary_metadata"`
-	ProductVersion   string          `json:"product_version"`
+	ProductVersion   string               `json:"product_version"`
+	Platforms        []PlatformAssertion  `json:"platforms"`
 }
 
 type InvestigationBridge interface {
@@ -55,8 +56,13 @@ type TriggerDispatcher struct {
 	bridge    InvestigationBridge
 	publisher TriggerLifecyclePublisher
 	auditor   AuthorityMutationAuditor
+	inventory PlatformInventoryProvider
 	active    func() bool
 	now       func() time.Time
+}
+
+func (d *TriggerDispatcher) SetPlatformInventory(provider PlatformInventoryProvider) {
+	d.inventory = provider
 }
 
 func NewTriggerDispatcher(queries triggerDispatchQueries, bridge InvestigationBridge, publisher TriggerLifecyclePublisher, auditor AuthorityMutationAuditor, active func() bool) (*TriggerDispatcher, error) {
@@ -136,6 +142,7 @@ func (d *TriggerDispatcher) Dispatch(ctx context.Context, eventID uuid.UUID) err
 			Fingerprint: event.Fingerprint, RepeatCount: event.RepeatCount,
 			FirstOccurredAt: event.FirstOccurredAt, LastOccurredAt: event.LastOccurredAt,
 			SummaryMetadata: append(json.RawMessage(nil), event.SummaryMetadata...), ProductVersion: currentProductDocumentationVersion(),
+			Platforms: collectPlatforms(ctx, d.inventory),
 		}, event.ID.String())
 		if bridgeErr != nil || receipt.SessionID == "" || receipt.Revision < 1 {
 			return d.retry(ctx, event, rule, "bridge_unavailable")

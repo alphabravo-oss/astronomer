@@ -128,6 +128,9 @@ func TestTriggerDispatchCreatesOneIncidentSessionAndPublishesAfterCommit(t *test
 	if store.session.Source != "event" || store.session.Visibility != "incident" || bridge.key != store.event.ID.String() || bridge.request.AuthorizationRef == "" {
 		t.Fatalf("incident binding was not stable/bounded: session=%#v request=%#v", store.session, bridge.request)
 	}
+	if bridge.request.Platforms == nil {
+		t.Fatal("event investigation omitted platforms instead of sending an explicit empty list")
+	}
 	if len(store.transitions) != 1 || store.transitions[0].NextState != "dispatched" || !store.transitions[0].SessionID.Valid || len(publisher.states) != 1 || publisher.states[0] != "dispatched" {
 		t.Fatalf("durable transition was not published after commit: transitions=%#v published=%#v", store.transitions, publisher.states)
 	}

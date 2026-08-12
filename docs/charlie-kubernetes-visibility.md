@@ -9,6 +9,12 @@ This connector never targets an Astronomer-managed downstream cluster. Existing
 Astronomer cluster-agent connection state is management-plane telemetry; it does
 not become a Kubernetes transport.
 
+Human chat and event investigations send the same verified platform inventory
+through the Product Bridge. Kubernetes assertions come only from management
+`ServerVersion` (for example `v1.36.2+k3s1` → kubernetes/`1.36`/`k3s`). Other
+packs are asserted only from existing product-owned management-plane readers.
+Library, Helm chart, and downstream versions are never runtime proof.
+
 ## Administration
 
 Open **Settings → Charlie → Kubernetes**. The visibility profile is independent

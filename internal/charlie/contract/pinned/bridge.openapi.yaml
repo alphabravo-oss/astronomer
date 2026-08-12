@@ -287,9 +287,20 @@ paths:
       - $ref: "#/components/parameters/AuthorizationRef"
     get:
       operationId: streamBridgeEvents
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: Positive numeric durable sequence cursor from the last delivered bridge frame.
+          schema: {type: string, pattern: "^[1-9][0-9]{0,18}$"}
       responses:
         "200":
-          description: Server-sent event stream
+          description: >-
+            Server-sent central session events with a numeric sequence cursor.
+            Product backends must project the stream through the SDK's safe
+            product-experience event contract before sending it to a browser;
+            raw tool arguments, results, errors, and approval metadata are not a
+            browser contract.
           content:
             text/event-stream:
               schema: {type: string}
@@ -722,10 +733,37 @@ components:
         data: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/FindingChange"}}
         next_sequence: {type: integer, format: int64, minimum: 0}
         has_more: {type: boolean}
+    PlatformAssertion:
+      type: object
+      additionalProperties: false
+      required: [pack, pack_version]
+      properties:
+        pack:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,63}$'
+          description: Canonical Charlie pack name, not a collection ID.
+        pack_version:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Exact Charlie knowledge release line, e.g. "1.36" or "2006-03-01".
+        observed_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Bounded raw product observation for audit only; never used as fallback.
+        variant:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,63}$'
+          description: Canonical pack-defined slug such as k3s or rustfs.
+      description: >-
+        Product-owned platform fact and knowledge selector. Never a resource
+        authorization or capability request. Snapshotted at session creation;
+        later messages cannot mutate it.
     CreateSession:
       type: object
       additionalProperties: false
-      required: [request_id, authorization_ref, actor, intent, objective, product_version, context, resources]
+      required: [request_id, authorization_ref, actor, intent, objective, product_version, context, resources, platforms]
       properties:
         request_id: {$ref: "#/components/schemas/OpaqueId"}
         authorization_ref: {$ref: "#/components/schemas/OpaqueId"}
@@ -752,6 +790,14 @@ components:
           description: Resource IDs must be unique across all kinds.
           maxItems: 25
           items: {$ref: "#/components/schemas/ResourceReference"}
+        platforms:
+          type: array
+          maxItems: 16
+          items: {$ref: "#/components/schemas/PlatformAssertion"}
+          description: >-
+            Authenticated product-owned platform facts. Required; empty is valid.
+            Duplicate pack names are rejected. Never inferred from prompts,
+            messages, resources, or model output.
     Session:
       type: object
       additionalProperties: false
@@ -966,11 +1012,16 @@ components:
     CreateInvestigation:
       type: object
       additionalProperties: false
-      required: [request_id, authorization_ref, scope]
+      required: [request_id, authorization_ref, scope, platforms]
       properties:
         request_id: {$ref: "#/components/schemas/OpaqueId"}
         authorization_ref: {$ref: "#/components/schemas/OpaqueId"}
         scope: {$ref: "#/components/schemas/UntrustedContext"}
+        platforms:
+          type: array
+          maxItems: 16
+          items: {$ref: "#/components/schemas/PlatformAssertion"}
+          description: Same inventory as CreateSession; required, empty is valid.
     FindingSummary:
       type: object
       additionalProperties: false

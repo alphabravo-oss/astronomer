@@ -632,6 +632,12 @@ components:
             properties:
                 authorization_ref:
                     $ref: '#/components/schemas/OpaqueId'
+                platforms:
+                    description: Same inventory as CreateSession; required, empty is valid.
+                    items:
+                        $ref: '#/components/schemas/PlatformAssertion'
+                    maxItems: 16
+                    type: array
                 request_id:
                     $ref: '#/components/schemas/OpaqueId'
                 scope:
@@ -640,6 +646,7 @@ components:
                 - request_id
                 - authorization_ref
                 - scope
+                - platforms
             type: object
         CreateMessage:
             additionalProperties: false
@@ -703,6 +710,12 @@ components:
                     maxLength: 4096
                     minLength: 1
                     type: string
+                platforms:
+                    description: Authenticated product-owned platform facts. Required; empty is valid. Duplicate pack names are rejected. Never inferred from prompts, messages, resources, or model output.
+                    items:
+                        $ref: '#/components/schemas/PlatformAssertion'
+                    maxItems: 16
+                    type: array
                 product_version:
                     maxLength: 255
                     minLength: 1
@@ -724,6 +737,7 @@ components:
                 - product_version
                 - context
                 - resources
+                - platforms
             type: object
         CredentialRevocationReceipt:
             additionalProperties: false
@@ -1464,6 +1478,32 @@ components:
         OpaqueId:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
             type: string
+        PlatformAssertion:
+            additionalProperties: false
+            description: Product-owned platform fact and knowledge selector. Never a resource authorization or capability request. Snapshotted at session creation; later messages cannot mutate it.
+            properties:
+                observed_version:
+                    description: Bounded raw product observation for audit only; never used as fallback.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                pack:
+                    description: Canonical Charlie pack name, not a collection ID.
+                    pattern: ^[a-z][a-z0-9-]{0,63}$
+                    type: string
+                pack_version:
+                    description: Exact Charlie knowledge release line, e.g. "1.36" or "2006-03-01".
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                variant:
+                    description: Canonical pack-defined slug such as k3s or rustfs.
+                    pattern: ^[a-z][a-z0-9-]{0,63}$
+                    type: string
+            required:
+                - pack
+                - pack_version
+            type: object
         ProductCommandInvocation:
             additionalProperties: false
             description: A product-validated shortcut expansion. Commands are non-authoritative input and never bypass the session mode, disclosed capability catalog, approval policy, or action tickets.
@@ -2131,13 +2171,21 @@ paths:
     /sessions/{session_id}/events:
         get:
             operationId: streamBridgeEvents
+            parameters:
+                - description: Positive numeric durable sequence cursor from the last delivered bridge frame.
+                  in: header
+                  name: Last-Event-ID
+                  required: false
+                  schema:
+                    pattern: ^[1-9][0-9]{0,18}$
+                    type: string
             responses:
                 "200":
                     content:
                         text/event-stream:
                             schema:
                                 type: string
-                    description: Server-sent event stream
+                    description: Server-sent central session events with a numeric sequence cursor. Product backends must project the stream through the SDK's safe product-experience event contract before sending it to a browser; raw tool arguments, results, errors, and approval metadata are not a browser contract.
                 default:
                     $ref: '#/components/responses/Error'
         parameters:

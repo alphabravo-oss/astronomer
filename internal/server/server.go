@@ -1338,6 +1338,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		charlieAdminHandler        *handler.CharlieAdminHandler
 		charlieAdminService        *charlie.AdminService
 		managedCharlieBridge       *charlie.ManagedBridge
+		charlieInventory           *charlie.ManagementPlatformInventory
 		charlieArtifactCredentials *charlie.ArtifactCredentialReconciler
 		charlieFindingProjection   *charlie.FindingProjection
 		charlieCentralFindingStore *charlie.PGCentralFindingStore
@@ -1378,6 +1379,18 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				database.Close()
 				return nil, sessionErr
 			}
+			inventory := charlie.NewManagementPlatformInventory(discoveryClient, func(ctx context.Context) (string, error) {
+				var raw string
+				err := database.Pool().QueryRow(ctx, `SELECT current_setting('server_version_num')`).Scan(&raw)
+				return raw, err
+			}, nil)
+			if runtimeRedisClient != nil {
+				inventory.Valkey = func(ctx context.Context) (string, error) {
+					return runtimeRedisClient.Info(ctx, "server").Result()
+				}
+			}
+			sessionService.SetPlatformInventory(inventory)
+			charlieInventory = inventory
 			sessionAccess, accessErr := charlie.NewSessionAccessService(queries, charlieBindings, managedCharlieBridge, auditor, active)
 			if accessErr != nil {
 				database.Close()
@@ -2127,6 +2140,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			if err != nil {
 				return nil, err
 			}
+			dispatcher.SetPlatformInventory(charlieInventory)
 			eventRuntime, err := charlie.NewEventRuntime(bus, queries, func() bool {
 				return managedCharlieBridge.Active(context.Background())
 			})

@@ -159,6 +159,7 @@ type (
 	CreateMessage                            = bridgewire.CreateMessage
 	CreateSession                            = bridgewire.CreateSession
 	CreateSessionActorType                   = bridgewire.CreateSessionActorType
+	PlatformAssertion                        = bridgewire.PlatformAssertion
 	CredentialRevocationReceipt              = bridgewire.CredentialRevocationReceipt
 	CredentialRevocationReceiptState         = bridgewire.CredentialRevocationReceiptState
 	CredentialRevocationRequest              = bridgewire.CredentialRevocationRequest

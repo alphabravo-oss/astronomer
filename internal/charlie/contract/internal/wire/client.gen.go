@@ -640,7 +640,10 @@ type BridgeStatusCentralHealth string
 // CreateInvestigation defines model for CreateInvestigation.
 type CreateInvestigation struct {
 	AuthorizationRef OpaqueId `json:"authorization_ref"`
-	RequestId        OpaqueId `json:"request_id"`
+
+	// Platforms Same inventory as CreateSession; required, empty is valid.
+	Platforms []PlatformAssertion `json:"platforms"`
+	RequestId OpaqueId            `json:"request_id"`
 
 	// Scope Data only; never an authority or capability selector.
 	Scope UntrustedContext `json:"scope"`
@@ -669,10 +672,13 @@ type CreateSession struct {
 		Data   UntrustedContext `json:"data"`
 		Schema string           `json:"schema"`
 	} `json:"context"`
-	Intent         string   `json:"intent"`
-	Objective      string   `json:"objective"`
-	ProductVersion string   `json:"product_version"`
-	RequestId      OpaqueId `json:"request_id"`
+	Intent    string `json:"intent"`
+	Objective string `json:"objective"`
+
+	// Platforms Authenticated product-owned platform facts. Required; empty is valid. Duplicate pack names are rejected. Never inferred from prompts, messages, resources, or model output.
+	Platforms      []PlatformAssertion `json:"platforms"`
+	ProductVersion string              `json:"product_version"`
+	RequestId      OpaqueId            `json:"request_id"`
 
 	// Resources Resource IDs must be unique across all kinds.
 	Resources []ResourceReference `json:"resources"`
@@ -963,6 +969,21 @@ type ModeResponse struct {
 // OpaqueId defines model for OpaqueId.
 type OpaqueId = string
 
+// PlatformAssertion Product-owned platform fact and knowledge selector. Never a resource authorization or capability request. Snapshotted at session creation; later messages cannot mutate it.
+type PlatformAssertion struct {
+	// ObservedVersion Bounded raw product observation for audit only; never used as fallback.
+	ObservedVersion *string `json:"observed_version,omitempty"`
+
+	// Pack Canonical Charlie pack name, not a collection ID.
+	Pack string `json:"pack"`
+
+	// PackVersion Exact Charlie knowledge release line, e.g. "1.36" or "2006-03-01".
+	PackVersion string `json:"pack_version"`
+
+	// Variant Canonical pack-defined slug such as k3s or rustfs.
+	Variant *string `json:"variant,omitempty"`
+}
+
 // ProductCommandInvocation A product-validated shortcut expansion. Commands are non-authoritative input and never bypass the session mode, disclosed capability catalog, approval policy, or action tickets.
 type ProductCommandInvocation struct {
 	Arguments map[string]string `json:"arguments"`
@@ -1136,6 +1157,9 @@ type ListBridgeActionsParams struct {
 
 // StreamBridgeEventsParams defines parameters for StreamBridgeEvents.
 type StreamBridgeEventsParams struct {
+	// LastEventID Positive numeric durable sequence cursor from the last delivered bridge frame.
+	LastEventID *string `json:"Last-Event-ID,omitempty"`
+
 	// XCharlieAuthorizationRef Opaque live product authorization reference; the deployment credential never substitutes for end-user authority.
 	XCharlieAuthorizationRef AuthorizationRef `json:"X-Charlie-Authorization-Ref"`
 }
@@ -3015,14 +3039,25 @@ func NewStreamBridgeEventsRequest(server string, sessionId SessionId, params *St
 
 	if params != nil {
 
-		var headerParam0 string
+		if params.LastEventID != nil {
+			var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-Charlie-Authorization-Ref", runtime.ParamLocationHeader, params.XCharlieAuthorizationRef)
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Last-Event-ID", runtime.ParamLocationHeader, *params.LastEventID)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Last-Event-ID", headerParam0)
+		}
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithLocation("simple", false, "X-Charlie-Authorization-Ref", runtime.ParamLocationHeader, params.XCharlieAuthorizationRef)
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("X-Charlie-Authorization-Ref", headerParam0)
+		req.Header.Set("X-Charlie-Authorization-Ref", headerParam1)
 
 	}
 
