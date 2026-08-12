@@ -2843,6 +2843,17 @@ widening Charlie's downstream-cluster boundary.
   without pod-log content, then require signed rediscovery, central review,
   exact product acknowledgement, and an explicit read-only restoration before
   the expanded catalog becomes usable.
+- [x] Live evidence: the product submitted and Charlie reviewed 99 capabilities
+  at disclosure
+  `f34af79588391dc81c19e9f2b46e4ff08c5aa4fe34bb66ccda0641d9ab32e863`.
+  Product readback reached revision 298 with `read_only/read_only`, an exact
+  acknowledgement, and a ready read-only workload ceiling. `/status` completed
+  in 18 seconds and reported chart 0.3.5, a precise UTC window, node capacity,
+  Kubernetes/kubelet identity, resource usage, and workload health. `/health`
+  completed in 15 seconds with 15/15 aggregate checks plus targeted reads; all
+  ten product actions were audited as successful reads with no scope denial or
+  persistence warning. Both agent replicas remained ready and Argo remained
+  `Synced/Healthy`.
 - [x] Pin Astronomer to Charlie source
   `c63b7f066c2951ef5003c1fbb67272b862019ab2` and product-agent/chart `1.0.54`.
   A fresh signed replacement package installed image
