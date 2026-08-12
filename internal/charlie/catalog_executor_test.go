@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type staticCapabilityAdapter struct{}
@@ -43,6 +44,61 @@ func TestCatalogExecutorDiscoveryIsExactlyRegisteredCapabilities(t *testing.T) {
 	if executor.SupportsCapability(context.Background(), "astronomer.management.run_job") {
 		t.Fatal("unregistered write capability was supported")
 	}
+}
+
+func TestCatalogExecutorAddsUniformCheckedAtToReadsOnly(t *testing.T) {
+	executor, err := NewCatalogExecutor(map[string]CapabilityExecutor{
+		"astronomer.installation.summary": staticCapabilityAdapter{},
+		"astronomer.queue.retry_task":     staticCapabilityAdapter{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTime := time.Date(2026, 8, 12, 5, 0, 1, 234000000, time.UTC)
+	executor.now = func() time.Time { return wantTime }
+
+	read, _ := capabilityByName("astronomer.installation.summary")
+	result, err := executor.Execute(t.Context(), read, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]any
+	if json.Unmarshal(result, &object) != nil || object["checked_at"] != wantTime.Format(time.RFC3339Nano) || object["ok"] != true {
+		t.Fatalf("read response lacks a uniform timestamp: %s", result)
+	}
+
+	write, _ := capabilityByName("astronomer.queue.retry_task")
+	result, err = executor.Execute(t.Context(), write, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(result), "checked_at") {
+		t.Fatalf("write execution was mislabeled as an observation: %s", result)
+	}
+}
+
+func TestCatalogExecutorPreservesAdapterCheckedAt(t *testing.T) {
+	adapter := fixedCapabilityAdapter{value: json.RawMessage(`{"checked_at":"2026-08-12T04:00:00Z","healthy":true}`)}
+	executor, err := NewCatalogExecutor(map[string]CapabilityExecutor{"astronomer.system.health": adapter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor.now = func() time.Time { return time.Date(2026, 8, 12, 5, 0, 0, 0, time.UTC) }
+	descriptor, _ := capabilityByName("astronomer.system.health")
+	result, err := executor.Execute(t.Context(), descriptor, nil)
+	if err != nil || !strings.Contains(string(result), `"checked_at":"2026-08-12T04:00:00Z"`) {
+		t.Fatalf("adapter timestamp was not preserved: %s err=%v", result, err)
+	}
+}
+
+type fixedCapabilityAdapter struct{ value json.RawMessage }
+
+func (a fixedCapabilityAdapter) Execute(context.Context, CapabilityDescriptor, map[string]json.RawMessage) (json.RawMessage, error) {
+	return append(json.RawMessage(nil), a.value...), nil
+}
+
+func (fixedCapabilityAdapter) Verify(context.Context, CapabilityDescriptor, map[string]json.RawMessage, json.RawMessage) (bool, error) {
+	return true, nil
 }
 
 func TestCapabilityDisclosureDigestIsDeterministicAndCatalogBound(t *testing.T) {

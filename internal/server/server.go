@@ -1104,6 +1104,11 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 		})
 	}
 	localNamespace := detectReleaseNamespace()
+	localReleaseName := strings.TrimSpace(os.Getenv("RELEASE_NAME"))
+	if localReleaseName == "" {
+		localReleaseName = "astronomer"
+	}
+	localChartVersion := strings.TrimSpace(os.Getenv("CHART_VERSION"))
 	charlieFeatures := charlieLiveFeatures{queries: queries}
 	var (
 		charlieOnboardingHandler *handler.CharlieOnboardingHandler
@@ -1362,7 +1367,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			if localK8s != nil {
 				discoveryClient = localK8s.Discovery()
 			}
-			contextProvider, contextErr := charlie.NewProductSessionContextProvider(queries, localNamespace, "astronomer", "", discoveryClient)
+			contextProvider, contextErr := charlie.NewProductSessionContextProvider(queries, localNamespace, localReleaseName, localChartVersion, discoveryClient)
 			if contextErr != nil {
 				database.Close()
 				return nil, contextErr
@@ -2013,13 +2018,9 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 				return fail(err)
 			}
 			adapterGroups = append(adapterGroups, charlie.QueueCapabilityAdapters(queueCapabilityAdapter))
-			releaseName := strings.TrimSpace(os.Getenv("RELEASE_NAME"))
-			if releaseName == "" {
-				releaseName = "astronomer"
-			}
 			operationalAdapter, err := charlie.NewOperationalCapabilityAdapter(charlie.OperationalCapabilityConfig{
 				Database: database, Queries: queries, Kubernetes: localK8s, Queue: queueInspector,
-				Namespace: localNamespace, Release: releaseName, ChartVersion: strings.TrimSpace(os.Getenv("CHART_VERSION")),
+				Namespace: localNamespace, Release: localReleaseName, ChartVersion: localChartVersion,
 				TLSCertFiles: []string{cfg.CharlieMCPTLSCertFile, cfg.CharlieBridgeTLSCertFile},
 			})
 			if err != nil {
@@ -2054,7 +2055,7 @@ func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Serv
 			}
 			adapterGroups = append(adapterGroups, charlie.AdminVisibilityCapabilityAdapters(adminVisibilityAdapter))
 			if localK8s != nil && localNamespace != "" {
-				managementAdapter, managementErr := charlie.NewManagementKubernetesAdapter(localK8s, localNamespace, releaseName)
+				managementAdapter, managementErr := charlie.NewManagementKubernetesAdapter(localK8s, localNamespace, localReleaseName)
 				if managementErr != nil {
 					return fail(managementErr)
 				}

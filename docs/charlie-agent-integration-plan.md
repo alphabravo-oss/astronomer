@@ -2834,6 +2834,15 @@ widening Charlie's downstream-cluster boundary.
   trusted capability descriptor exists. Such records retain the content-free
   action/capability/authorization digests and denial code while omitting, rather
   than fabricating, an unknown read/write effect.
+- [x] Inject the authoritative Helm release and chart version into both the
+  product session context and installation capability. Stamp every successful
+  read capability with a bounded RFC 3339 `checked_at` value at the shared
+  catalog boundary, while preserving a source adapter's more precise snapshot
+  timestamp.
+- [x] Enable the bounded `cluster_diagnostics` Kubernetes visibility profile
+  without pod-log content, then require signed rediscovery, central review,
+  exact product acknowledgement, and an explicit read-only restoration before
+  the expanded catalog becomes usable.
 - [x] Pin Astronomer to Charlie source
   `c63b7f066c2951ef5003c1fbb67272b862019ab2` and product-agent/chart `1.0.54`.
   A fresh signed replacement package installed image
