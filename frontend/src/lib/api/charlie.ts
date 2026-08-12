@@ -371,6 +371,22 @@ export async function createCharlieSession(input: {
   });
   return mapCharlieSession(data.session ?? data.data?.session ?? data);
 }
+export async function getCharlieSession(id: string): Promise<CharlieSession> {
+  const { data } = await api.get(
+    `/charlie/sessions/${encodeURIComponent(id)}/`,
+  );
+  const value = data.data ?? data;
+  const session = mapCharlieSession(value.session ?? value);
+  const remoteState = value.remote?.state;
+  const state =
+    remoteState === "completed" ||
+    remoteState === "failed" ||
+    remoteState === "aborted" ||
+    remoteState === "waiting_approval"
+      ? remoteState
+      : session.state;
+  return { ...session, state };
+}
 export async function getCharlieHistory(id: string): Promise<CharlieMessage[]> {
   const { data } = await api.get(
     `/charlie/sessions/${encodeURIComponent(id)}/history/`,

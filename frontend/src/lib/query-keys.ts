@@ -14,6 +14,7 @@ export const queryKeys = {
     sessions: ['charlie', 'sessions'] as const,
     overview: ['charlie', 'overview'] as const,
     activeThread: ['charlie', 'threads', 'active'] as const,
+    sessionStatus: (id?: string | null) => ['charlie', 'session', 'status', id] as const,
     commands: ['charlie', 'commands'] as const,
     threads: ['charlie', 'threads'] as const,
     threadHistory: (id?: string | null) => ['charlie', 'threads', 'history', id] as const,

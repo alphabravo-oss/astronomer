@@ -5,6 +5,7 @@ import {
   decideCharlieApproval,
   getCharlieActiveThread,
   getCharlieCommands,
+  getCharlieSession,
   getCharlieHistory,
   getCharlieFinding,
   listCharlieFindings,
@@ -42,6 +43,32 @@ describe("Charlie browser gateway mapping", () => {
         centralRevision: 2,
       }),
     ]);
+  });
+  it("uses authoritative remote terminal state when local SSE projection is stale", async () => {
+    mockedApi.get.mockResolvedValue({
+      data: {
+        data: {
+          session: {
+            id: "local-session",
+            clientSessionId: "client-session",
+            intent: "inspect",
+            resourceScopeSummary: "installation",
+            state: "active",
+            visibility: "private",
+            centralRevision: 1,
+            source: "user",
+          },
+          remote: { state: "failed", revision: 2 },
+        },
+      },
+    });
+
+    await expect(getCharlieSession("local/session")).resolves.toEqual(
+      expect.objectContaining({ id: "local-session", state: "failed" }),
+    );
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/charlie/sessions/local%2Fsession/",
+    );
   });
   it("maps bounded redacted history items into renderable chat messages", async () => {
     mockedApi.get.mockResolvedValue({

@@ -2807,3 +2807,40 @@ widening Charlie's downstream-cluster boundary.
   action audit details, worker logs, and both agent logs contained no bearer,
   password, API-key, JWT, or raw queue-payload material in the qualification
   window.
+
+## 15. Charlie 1.0.54 bounded-turn and progress addendum — 2026-08-12
+
+- [x] Apply the lifecycle correction to every natural-language turn and every
+  product slash-command turn: a server-enforced 24-action ceiling, exact-turn
+  action accounting, bounded provider egress, abortable OpenCode prompts,
+  official OpenCode session abort, immediate `session.error` handling, and
+  terminal events for success, denial, failure, and timeout.
+- [x] Keep one failed or denied read local to that action. It must not poison
+  independent diagnostics in the same turn; write-side safety circuits remain
+  persistent and fail closed.
+- [x] Give each Astronomer command a smaller product-owned workflow budget and
+  no-repeat rule. `/health` publishes `astronomer.system.health`, which composes
+  existing authorized management-plane adapters concurrently; the command may
+  use targeted fallback/follow-up reads without gaining access or crossing the
+  downstream-cluster boundary.
+- [x] Render durable tool proposal/running/outcome counts, current capability,
+  elapsed time, quiet/delayed states, and terminal status. Do not invent token
+  counts or a completion percentage.
+- [x] Reconcile completion from three independent sources: terminal SSE,
+  persisted assistant history, and an authorized session read that merges
+  Charlie's remote terminal state when the local SSE cursor is stale. A missed
+  terminal frame must not leave a failed, aborted, or completed turn busy.
+- [x] Pin Astronomer to Charlie source
+  `c63b7f066c2951ef5003c1fbb67272b862019ab2` and product-agent/chart `1.0.54`.
+  A fresh signed replacement package installed image
+  `sha256:007603ddec5a9884a8c7041f3517989ff0c8c436fff8fff47c5dbc8d7e90a427`
+  and chart
+  `sha256:9984eaa2624af6a9b88f0780cd69b320b6eac92aef919d5bcde78fe63691da6e`.
+  Both replicas became ready, Argo returned `Synced/Healthy`, and read-only was
+  restored through separate disclosure acknowledgement and revision-checked
+  mode selection.
+- [x] Live evidence: a normal management-plane chat completed in 8.1 seconds
+  with two successful capabilities; `/health` completed in 15.6 seconds with
+  seven bounded calls; `/queues` delivered `turn.started`, eight complete tool
+  lifecycles, and `turn.completed` over the authenticated product SSE path in
+  27 seconds. The hard global and smaller command budgets remained intact.

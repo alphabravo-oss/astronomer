@@ -45,6 +45,7 @@ import {
   getCharlieActiveThread,
   getCharlieCommands,
   getCharlieOverview,
+  getCharlieSession,
   getCharlieHistory,
   getCharlieThreadHistory,
   listCharlieThreads,
@@ -471,6 +472,13 @@ function CharlieDrawer() {
     retry: false,
     refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
   });
+  const sessionStatus = useQuery({
+    queryKey: queryKeys.charlie.sessionStatus(sessionId),
+    queryFn: () => getCharlieSession(sessionId!),
+    enabled: awaitingReply && !viewingThreadId && !!sessionId,
+    retry: false,
+    refetchInterval: 1_500,
+  });
   const commands = useQuery({
     queryKey: queryKeys.charlie.commands,
     queryFn: getCharlieCommands,
@@ -751,26 +759,38 @@ function CharlieDrawer() {
         : current,
     );
   }, [awaitingReply, history.data, viewingThreadId]);
-  // Session polling is the terminal fallback when an SSE connection dies
-  // before delivering turn.failed/turn.aborted and no assistant message exists
-  // for history polling to detect.
+  // Authoritative central-state polling is the final terminal fallback when an
+  // SSE connection dies before its terminal event. Successful turns normally
+  // stop through SSE or persisted history; failed/aborted turns may have no
+  // assistant row, so local-only state is insufficient.
   useEffect(() => {
     if (!awaitingReply || viewingThreadId) return;
-    const current = activeThread.data?.current_session;
+    const current = sessionStatus.data ?? activeThread.data?.current_session;
     if (!current || current.id !== sessionId) return;
-    if (current.state !== "failed" && current.state !== "aborted") return;
+    if (
+      current.state !== "completed" &&
+      current.state !== "failed" &&
+      current.state !== "aborted"
+    ) return;
     awaitingReplyRef.current = false;
     setAwaitingReply(false);
     if (current.state === "failed") setTurnFailed(true);
+    if (current.state === "completed") {
+      setStreamUnavailable(false);
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.history(sessionId) });
+      if (threadId) {
+        void qc.invalidateQueries({ queryKey: queryKeys.charlie.threadHistory(threadId) });
+      }
+    }
     setTurnProgress((progress) => progress
       ? {
           ...progress,
-          stage: current.state === "failed" ? "failed" : "aborted",
-          label: current.state === "failed" ? "Charlie could not complete the response" : "Turn aborted",
+          stage: current.state === "completed" ? "completed" : current.state === "failed" ? "failed" : "aborted",
+          label: current.state === "completed" ? "Response complete" : current.state === "failed" ? "Charlie could not complete the response" : "Turn aborted",
           lastEventAt: Date.now(),
         }
       : progress);
-  }, [activeThread.data?.current_session, awaitingReply, sessionId, viewingThreadId]);
+  }, [activeThread.data?.current_session, awaitingReply, qc, sessionId, sessionStatus.data, threadId, viewingThreadId]);
   const showProgress = !viewingThreadId && (send.isPending || awaitingReply) && !send.isError;
   const historyReady =
     (!displayedThreadId && !sessionId) || history.data !== undefined;

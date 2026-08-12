@@ -6,6 +6,7 @@ import {
   getCharlieActiveThread,
   getCharlieCommands,
   getCharlieOverview,
+  getCharlieSession,
   getCharlieHistory,
   getCharlieThreadHistory,
   listCharlieThreads,
@@ -21,6 +22,7 @@ vi.mock("@/lib/api/charlie", () => ({
   getCharlieActiveThread: vi.fn(),
   getCharlieCommands: vi.fn(),
   getCharlieOverview: vi.fn(),
+  getCharlieSession: vi.fn(),
   getCharlieHistory: vi.fn(),
   getCharlieThreadHistory: vi.fn(),
   listCharlieThreads: vi.fn(),
@@ -89,6 +91,10 @@ describe("Charlie global shell accessibility", () => {
       workloadCeilingReady: true,
     } as never);
     vi.mocked(getCharlieActiveThread).mockResolvedValue({ thread: null } as never);
+    vi.mocked(getCharlieSession).mockResolvedValue({
+      id: "session-1",
+      state: "active",
+    } as never);
     vi.mocked(getCharlieCommands).mockResolvedValue({
       schema: "astronomer.charlie-command-catalog/v1",
       version: 1,
@@ -415,6 +421,23 @@ describe("Charlie global shell accessibility", () => {
     await waitFor(() => expect(sendCharlieThreadMessage).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText("Everything is healthy.")).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument());
+  });
+
+  it("clears working state from remote failure when the terminal stream event is missed", async () => {
+    vi.mocked(getCharlieSession).mockResolvedValue({
+      id: "session-1",
+      state: "failed",
+    } as never);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    fireEvent.change(composer, { target: { value: "assess health" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(getCharlieSession).toHaveBeenCalledWith("session-1"));
+    expect(
+      await screen.findByText(/Charlie could not complete this request/),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument();
   });
 
   it("explains deployment scope and offers browsable narrowing choices", async () => {
