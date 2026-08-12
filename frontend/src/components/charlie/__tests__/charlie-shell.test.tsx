@@ -394,6 +394,12 @@ describe("Charlie global shell accessibility", () => {
         command: { id: "health", version: "1", arguments: {} },
       }),
     ));
+    expect(
+      await screen.findByLabelText("Recognized Charlie command"),
+    ).toHaveTextContent("Command");
+    expect(screen.getByLabelText("Message from you")).toHaveClass(
+      "border-primary/40",
+    );
   });
 
   it("handles help and scope commands locally without creating a model turn", async () => {

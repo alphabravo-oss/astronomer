@@ -994,36 +994,63 @@ function CharlieDrawer() {
           />
         ) : (
           <>
-            {messages.map((m) => (
-              <article
-                key={m.id}
-                aria-label={m.role === "user" ? "Message from you" : "Message from Charlie"}
-                className={cn(
-                  "rounded-lg border p-3 select-text",
-                  m.role === "user" ? "ml-8 bg-primary/5" : "mr-8 bg-card",
-                )}
-              >
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {m.role === "user" ? "You" : "Charlie"}
-                  </p>
-                  {m.role === "assistant" && m.content?.trim() ? (
-                    <CopyMessageButton text={m.content} />
-                  ) : null}
-                </div>
-                <SafeMarkdown streaming={m.state === "streaming"}>
-                  {m.content}
-                </SafeMarkdown>
-                <CharlieMessageParts
-                  message={m}
-                  onApprovalChanged={() =>
-                    void qc.invalidateQueries({
-                      queryKey: queryKeys.charlie.history(sessionId),
-                    })
+            {messages.map((m) => {
+              const recognizedCommand =
+                m.role === "user"
+                  ? parseCharlieCommand(m.content, catalogCommands)
+                  : undefined;
+              return (
+                <article
+                  key={m.id}
+                  aria-label={
+                    m.role === "user" ? "Message from you" : "Message from Charlie"
                   }
-                />
-              </article>
-            ))}
+                  className={cn(
+                    "rounded-lg border p-3 select-text",
+                    m.role === "user" ? "ml-8 bg-primary/5" : "mr-8 bg-card",
+                    recognizedCommand && "border-primary/40 bg-primary/10",
+                  )}
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {m.role === "user" ? "You" : "Charlie"}
+                      </p>
+                      {recognizedCommand ? (
+                        <span
+                          aria-label="Recognized Charlie command"
+                          title={recognizedCommand.descriptor.label}
+                          className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                        >
+                          <Command className="h-2.5 w-2.5" aria-hidden="true" />
+                          Command
+                        </span>
+                      ) : null}
+                    </div>
+                    {m.role === "assistant" && m.content?.trim() ? (
+                      <CopyMessageButton text={m.content} />
+                    ) : null}
+                  </div>
+                  {recognizedCommand ? (
+                    <p className="break-words font-mono text-sm font-medium text-primary">
+                      {m.content}
+                    </p>
+                  ) : (
+                    <SafeMarkdown streaming={m.state === "streaming"}>
+                      {m.content}
+                    </SafeMarkdown>
+                  )}
+                  <CharlieMessageParts
+                    message={m}
+                    onApprovalChanged={() =>
+                      void qc.invalidateQueries({
+                        queryKey: queryKeys.charlie.history(sessionId),
+                      })
+                    }
+                  />
+                </article>
+              );
+            })}
             {showProgress && (
               <CharlieProgressIndicator
                 progress={turnProgress ?? initialCharlieTurnProgress()}
