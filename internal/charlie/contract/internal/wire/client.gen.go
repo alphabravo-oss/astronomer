@@ -400,6 +400,13 @@ const (
 	ModeReadOnly Mode = "read_only"
 )
 
+// Defines values for ProductCommandInvocationAuthorityCeiling.
+const (
+	ProductCommandInvocationAuthorityCeilingApproval ProductCommandInvocationAuthorityCeiling = "approval"
+	ProductCommandInvocationAuthorityCeilingAuto     ProductCommandInvocationAuthorityCeiling = "auto"
+	ProductCommandInvocationAuthorityCeilingReadOnly ProductCommandInvocationAuthorityCeiling = "read_only"
+)
+
 // Defines values for SessionState.
 const (
 	SessionStateAborted          SessionState = "aborted"
@@ -642,8 +649,11 @@ type CreateInvestigation struct {
 // CreateMessage defines model for CreateMessage.
 type CreateMessage struct {
 	AuthorizationRef OpaqueId `json:"authorization_ref"`
-	Message          string   `json:"message"`
-	RequestId        OpaqueId `json:"request_id"`
+
+	// Command A product-validated shortcut expansion. Commands are non-authoritative input and never bypass the session mode, disclosed capability catalog, approval policy, or action tickets.
+	Command   *ProductCommandInvocation `json:"command,omitempty"`
+	Message   string                    `json:"message"`
+	RequestId OpaqueId                  `json:"request_id"`
 }
 
 // CreateSession defines model for CreateSession.
@@ -952,6 +962,21 @@ type ModeResponse struct {
 
 // OpaqueId defines model for OpaqueId.
 type OpaqueId = string
+
+// ProductCommandInvocation A product-validated shortcut expansion. Commands are non-authoritative input and never bypass the session mode, disclosed capability catalog, approval policy, or action tickets.
+type ProductCommandInvocation struct {
+	Arguments map[string]string `json:"arguments"`
+
+	// AuthorityCeiling A per-turn authority ceiling that may only reduce the session's effective mode.
+	AuthorityCeiling ProductCommandInvocationAuthorityCeiling `json:"authority_ceiling"`
+	ExecutionPrompt  string                                   `json:"execution_prompt"`
+	Id               string                                   `json:"id"`
+	Schema           string                                   `json:"schema"`
+	Version          string                                   `json:"version"`
+}
+
+// ProductCommandInvocationAuthorityCeiling A per-turn authority ceiling that may only reduce the session's effective mode.
+type ProductCommandInvocationAuthorityCeiling string
 
 // ResourceReference defines model for ResourceReference.
 type ResourceReference struct {

@@ -19,7 +19,7 @@ type CharlieThreadService interface {
 	GetActive(ctx context.Context, ownerID uuid.UUID) (charlie.ActiveThreadView, error)
 	NewChat(ctx context.Context, ownerID uuid.UUID) (charlie.ActiveThreadView, error)
 	List(ctx context.Context, ownerID uuid.UUID, limit, offset int32) ([]sqlc.CharlieInteractiveThread, error)
-	SendOnThread(ctx context.Context, ownerID uuid.UUID, clientMessageID uuid.UUID, message string, create charlie.CreateSessionInput) (charlie.ActiveThreadView, json.RawMessage, error)
+	SendOnThread(ctx context.Context, ownerID uuid.UUID, clientMessageID uuid.UUID, message string, command *charlie.ProductCommandInvocation, create charlie.CreateSessionInput) (charlie.ActiveThreadView, json.RawMessage, error)
 	StitchedHistory(ctx context.Context, ownerID, threadID uuid.UUID, limit int) (json.RawMessage, error)
 }
 
@@ -117,12 +117,22 @@ func (h *CharlieThreadHandler) List(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, map[string]any{"threads": items})
 }
 
+// Commands publishes Astronomer's versioned shortcut catalog. The catalog is
+// presentation and workflow metadata only; it grants no product capability.
+func (h *CharlieThreadHandler) Commands(w http.ResponseWriter, r *http.Request) {
+	if _, ok := browserCharlieActor(w, r); !ok {
+		return
+	}
+	RespondJSON(w, http.StatusOK, charlie.CharlieCommandCatalog())
+}
+
 type sendCharlieThreadMessageRequest struct {
 	ClientMessageID  string                    `json:"client_message_id"`
 	Message          string                    `json:"message"`
 	Trigger          string                    `json:"trigger,omitempty"`
 	CurrentUIContext string                    `json:"current_ui_context,omitempty"`
 	Resources        []charlie.SessionResource `json:"resources,omitempty"`
+	Command          *charlie.CommandRequest   `json:"command,omitempty"`
 }
 
 func (h *CharlieThreadHandler) Message(w http.ResponseWriter, r *http.Request) {
@@ -139,14 +149,23 @@ func (h *CharlieThreadHandler) Message(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie thread message request")
 		return
 	}
+	command, err := charlie.ResolveProductCommand(request.Message, request.Command)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Unknown or invalid Charlie command")
+		return
+	}
 	label := strings.TrimSpace(actor.Username)
 	if label == "" {
 		label = strings.TrimSpace(actor.Email)
 	}
 	owner := mustUserID(actor)
-	view, receipt, err := h.threads.SendOnThread(r.Context(), owner, messageID, request.Message, charlie.CreateSessionInput{
+	trigger := request.Trigger
+	if command != nil {
+		trigger = "slash_command:" + command.ID
+	}
+	view, receipt, err := h.threads.SendOnThread(r.Context(), owner, messageID, request.Message, command, charlie.CreateSessionInput{
 		ClientSessionID: uuid.New(), OwnerID: owner, ActorType: "user", ActorLabel: label,
-		Intent: request.Message, Trigger: request.Trigger, CurrentUIContext: request.CurrentUIContext,
+		Intent: request.Message, Trigger: trigger, CurrentUIContext: request.CurrentUIContext,
 		Resources: request.Resources,
 	})
 	if err != nil {

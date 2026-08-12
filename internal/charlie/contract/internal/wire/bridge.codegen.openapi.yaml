@@ -646,6 +646,8 @@ components:
             properties:
                 authorization_ref:
                     $ref: '#/components/schemas/OpaqueId'
+                command:
+                    $ref: '#/components/schemas/ProductCommandInvocation'
                 message:
                     maxLength: 32768
                     minLength: 1
@@ -1462,6 +1464,46 @@ components:
         OpaqueId:
             pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
             type: string
+        ProductCommandInvocation:
+            additionalProperties: false
+            description: A product-validated shortcut expansion. Commands are non-authoritative input and never bypass the session mode, disclosed capability catalog, approval policy, or action tickets.
+            properties:
+                arguments:
+                    additionalProperties:
+                        maxLength: 512
+                        type: string
+                    maxProperties: 4
+                    propertyNames:
+                        pattern: ^[a-z][a-z0-9_]{0,31}$
+                    type: object
+                authority_ceiling:
+                    description: A per-turn authority ceiling that may only reduce the session's effective mode.
+                    enum:
+                        - read_only
+                        - approval
+                        - auto
+                    type: string
+                execution_prompt:
+                    maxLength: 8192
+                    minLength: 1
+                    type: string
+                id:
+                    pattern: ^[a-z][a-z0-9._-]{0,63}$
+                    type: string
+                schema:
+                    const: charlie.command-invocation/v1
+                    type: string
+                version:
+                    pattern: ^[1-9][0-9]{0,8}$
+                    type: string
+            required:
+                - schema
+                - id
+                - version
+                - arguments
+                - execution_prompt
+                - authority_ceiling
+            type: object
         ResourceReference:
             additionalProperties: false
             properties:

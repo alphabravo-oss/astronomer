@@ -3,6 +3,7 @@ import api from "@/lib/api";
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 import {
   decideCharlieApproval,
+  getCharlieCommands,
   getCharlieHistory,
   getCharlieFinding,
   listCharlieFindings,
@@ -112,6 +113,23 @@ describe("Charlie browser gateway mapping", () => {
           turnId: "turn-1",
           acceptedAt: "2026-08-11T23:27:12Z",
         },
+      }),
+    );
+  });
+  it("loads the versioned product command catalog and sends a structured command selection", async () => {
+    mockedApi.get.mockResolvedValue({ data: { schema: "astronomer.charlie-command-catalog/v1", version: 1, commands: [] } });
+    await expect(getCharlieCommands()).resolves.toEqual(expect.objectContaining({ version: 1, commands: [] }));
+    expect(mockedApi.get).toHaveBeenCalledWith("/charlie/commands/");
+
+    mockedApi.post.mockResolvedValue({ data: { thread: null } });
+    await sendCharlieThreadMessage("/health", {
+      command: { id: "health", version: "1", arguments: {} },
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      "/charlie/threads/messages/",
+      expect.objectContaining({
+        message: "/health",
+        command: { id: "health", version: "1", arguments: {} },
       }),
     );
   });

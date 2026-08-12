@@ -75,6 +75,7 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, create).Post("/charlie/sessions/{session_id}/abort/", deps.CharlieSessions.Abort)
 		}
 		if deps.CharlieThreads != nil {
+			r.With(gate, read).Get("/charlie/commands/", deps.CharlieThreads.Commands)
 			r.With(gate, read).Get("/charlie/threads/active/", deps.CharlieThreads.Active)
 			r.With(gate, create).Post("/charlie/threads/new/", deps.CharlieThreads.NewChat)
 			r.With(gate, read).Get("/charlie/threads/", deps.CharlieThreads.List)

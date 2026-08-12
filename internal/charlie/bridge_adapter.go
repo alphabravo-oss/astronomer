@@ -189,12 +189,17 @@ func (b *RuntimeBridge) GetHistory(ctx context.Context, sessionID, authorization
 	return json.Marshal(response)
 }
 
-func (b *RuntimeBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, clientMessageID uuid.UUID, message string) (json.RawMessage, error) {
+func (b *RuntimeBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, clientMessageID uuid.UUID, message string, command *ProductCommandInvocation) (json.RawMessage, error) {
 	path, err := sessionPath(sessionID)
 	if err != nil {
 		return nil, err
 	}
 	request := contract.CreateMessage{AuthorizationRef: authorizationRef, RequestId: clientMessageID.String(), Message: message}
+	if command != nil {
+		request.Command = &contract.ProductCommandInvocation{Schema: command.Schema, Id: command.ID, Version: command.Version,
+			Arguments: command.Arguments, ExecutionPrompt: command.ExecutionPrompt,
+			AuthorityCeiling: contract.ProductCommandInvocationAuthorityCeiling(command.AuthorityCeiling)}
+	}
 	var response contract.TurnReceipt
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/messages", clientMessageID.String(), authorizationRef, request, &response); err != nil {
 		return nil, err

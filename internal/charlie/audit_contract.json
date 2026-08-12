@@ -52,6 +52,12 @@
     "resource_count": {
       "kind": "count"
     },
+    "command_id": {
+      "kind": "code"
+    },
+    "command_version": {
+      "kind": "code"
+    },
     "approval_digest": {
       "kind": "digest"
     },
@@ -580,7 +586,9 @@
       "allowed_fields": [
         "outcome_code",
         "visibility",
-        "resource_count"
+        "resource_count",
+        "command_id",
+        "command_version"
       ],
       "coverage": [
         "success",

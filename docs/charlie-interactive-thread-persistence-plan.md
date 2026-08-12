@@ -1,6 +1,6 @@
 # Charlie interactive thread persistence and dual-track sessions
 
-**Status:** draft for implementation  
+**Status:** implemented; live qualification remains release-gated
 **Date:** 2026-08-07  
 **Owners:** Astronomer product Charlie integration + Charlie product agent / central  
 **Related:**  
@@ -58,7 +58,7 @@ Users expect drawer chat to behave like ChatGPT/Grok:
 ### 0.4 Non-goals (this plan)
 
 - [ ] N1 Downstream cluster shell / kubectl via Charlie (still v1 management-plane MCP only).
-- [ ] N2 Full ChatGPT-style infinite multi-thread sidebar inside the drawer (v1 is **one active interactive thread per user**; hub lists archives).
+- [ ] N2 Full ChatGPT-style infinite multi-thread sidebar inside the drawer (v1 keeps **one active interactive thread per user** and a bounded recent-conversation picker; the hub remains the full archive surface).
 - [ ] N3 Merging autonomous investigation transcripts into the user’s open chat automatically.
 - [ ] N4 Changing Charlie content encryption, retention purge engines, or finding workflow semantics beyond classification/correlation.
 - [ ] N5 Public multi-tenant “share this chat” links.
@@ -76,6 +76,7 @@ Users expect drawer chat to behave like ChatGPT/Grok:
 | D7 | Prefer **new product tables** for threads rather than overloading `charlie_sessions` forever; keep `charlie_sessions` as the per-run authorization row. |
 | D8 | Charlie central may remain session-centric; product maps **thread → ordered sessions**. Continuity for the model is product-orchestrated (reattach or continue with bounded prior context if Charlie requires a new session). |
 | D9 | Minimal LOC preferred, but **correct lifecycle > clever flags**. Separate tables when a flag would create dual semantics on every query. |
+| D10 | The drawer may browse an owner-scoped archived thread, but that transcript is read-only and is never silently injected into the active thread or a new Charlie turn. |
 
 ---
 
@@ -530,7 +531,7 @@ Execute phases in order. Do not skip validation gates.
 - [ ] **P0-3** List all create-session call sites (user chat, triggers, findings, qualification).
 - [ ] **P0-4** Confirm hub filters for private vs incident.
 - [ ] **P0-5** Write baseline test inventory (existing charlie session tests).
-- [ ] **P0-6** Decision log: confirm D1–D9 with any product stakeholder notes in this file’s amendment section if changed.
+- [ ] **P0-6** Decision log: confirm D1–D10 with any product stakeholder notes in this file’s amendment section if changed.
 
 **Exit:** checklist above complete; no code required.
 
@@ -806,7 +807,7 @@ All must be true:
 | --- | --- | --- |
 | 2026-08-07 | Initial plan from drawer persistence / dual-track discussion | implementation planning |
 
-When a locked decision D1–D9 changes, add a row here and update §0.5.
+When a locked decision D1–D10 changes, add a row here and update §0.5.
 
 ---
 

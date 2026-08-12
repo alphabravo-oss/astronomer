@@ -178,6 +178,8 @@ type (
 	HistoryItem                              = bridgewire.HistoryItem
 	InvestigationReceipt                     = bridgewire.InvestigationReceipt
 	IdempotentCommand                        = bridgewire.IdempotentCommand
+	ProductCommandInvocation                 = bridgewire.ProductCommandInvocation
+	ProductCommandInvocationAuthorityCeiling = bridgewire.ProductCommandInvocationAuthorityCeiling
 	Mode                                     = bridgewire.Mode
 	ModeRequest                              = bridgewire.ModeRequest
 	ModeResponse                             = bridgewire.ModeResponse

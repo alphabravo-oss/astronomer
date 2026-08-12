@@ -292,9 +292,9 @@ func (m *ManagedBridge) GetHistory(ctx context.Context, sessionID, authorization
 	})
 }
 
-func (m *ManagedBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, messageID uuid.UUID, message string) (json.RawMessage, error) {
+func (m *ManagedBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, messageID uuid.UUID, message string, command *ProductCommandInvocation) (json.RawMessage, error) {
 	return withBridge(m, ctx, "create_message", func(bridge *RuntimeBridge) (json.RawMessage, error) {
-		return bridge.CreateMessage(ctx, sessionID, authorizationRef, messageID, message)
+		return bridge.CreateMessage(ctx, sessionID, authorizationRef, messageID, message, command)
 	})
 }
 

@@ -799,6 +799,29 @@ components:
         request_id: {$ref: "#/components/schemas/OpaqueId"}
         authorization_ref: {$ref: "#/components/schemas/OpaqueId"}
         message: {type: string, minLength: 1, maxLength: 32768}
+        command:
+          $ref: "#/components/schemas/ProductCommandInvocation"
+    ProductCommandInvocation:
+      type: object
+      additionalProperties: false
+      description: >-
+        A product-validated shortcut expansion. Commands are non-authoritative input and never
+        bypass the session mode, disclosed capability catalog, approval policy, or action tickets.
+      required: [schema, id, version, arguments, execution_prompt, authority_ceiling]
+      properties:
+        schema: {type: string, const: charlie.command-invocation/v1}
+        id: {type: string, pattern: "^[a-z][a-z0-9._-]{0,63}$"}
+        version: {type: string, pattern: "^[1-9][0-9]{0,8}$"}
+        arguments:
+          type: object
+          maxProperties: 4
+          propertyNames: {pattern: "^[a-z][a-z0-9_]{0,31}$"}
+          additionalProperties: {type: string, maxLength: 512}
+        execution_prompt: {type: string, minLength: 1, maxLength: 8192}
+        authority_ceiling:
+          type: string
+          enum: [read_only, approval, auto]
+          description: A per-turn authority ceiling that may only reduce the session's effective mode.
     TurnReceipt:
       type: object
       additionalProperties: false

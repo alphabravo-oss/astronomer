@@ -193,6 +193,7 @@ GET /api/v1/catalog/recommendations/similar/{chart_id}
 GET /api/v1/catalog/repositories
 GET /api/v1/catalog/repositories/{id}
 GET /api/v1/charlie/approvals
+GET /api/v1/charlie/commands
 GET /api/v1/charlie/context/search
 GET /api/v1/charlie/findings
 GET /api/v1/charlie/findings/{finding_id}

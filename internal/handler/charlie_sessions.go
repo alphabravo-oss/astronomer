@@ -33,7 +33,7 @@ type CharlieSessionAccess interface {
 	CurrentMode(context.Context, uuid.UUID) (charlie.Mode, error)
 	Get(context.Context, uuid.UUID, uuid.UUID) (charlie.SessionView, error)
 	History(context.Context, uuid.UUID, uuid.UUID, string, int) (json.RawMessage, error)
-	Message(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (json.RawMessage, error)
+	Message(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, *charlie.ProductCommandInvocation) (json.RawMessage, error)
 	Abort(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 	Stream(context.Context, uuid.UUID, uuid.UUID, string, func(charliecontract.Event) error) error
 }
@@ -212,7 +212,7 @@ func (h *CharlieSessionHandler) Message(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie message request")
 		return
 	}
-	receipt, err := h.access.Message(r.Context(), mustUserID(actor), sessionID, messageID, request.Message)
+	receipt, err := h.access.Message(r.Context(), mustUserID(actor), sessionID, messageID, request.Message, nil)
 	if err != nil {
 		// Terminal sessions are a client state problem, not bridge outage.
 		if strings.Contains(err.Error(), "does not accept messages") {

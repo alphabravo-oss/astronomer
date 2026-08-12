@@ -172,6 +172,77 @@ components:
       properties:
         client_message_id: {type: string, format: uuid}
         message: {type: string, minLength: 1, maxLength: 32768}
+    CharlieCommandRequest:
+      type: object
+      additionalProperties: false
+      required: [id, version, arguments]
+      description: Product-validated shortcut selection. It does not grant authority or bypass Charlie policy.
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        version: {type: string, pattern: '^[1-9][0-9]{0,8}$'}
+        arguments:
+          type: object
+          maxProperties: 4
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,31}$'}
+          additionalProperties: {type: string, maxLength: 512}
+    CharlieCommandDescriptor:
+      type: object
+      additionalProperties: false
+      required: [id, version, name, label, description, category, execution, effect, required_mode, example]
+      properties:
+        id: {type: string}
+        version: {type: string}
+        name: {type: string}
+        aliases: {type: array, uniqueItems: true, items: {type: string}}
+        label: {type: string}
+        description: {type: string}
+        category: {type: string}
+        execution: {type: string, enum: [agent, client]}
+        effect: {type: string, enum: [read, local]}
+        required_mode: {type: string, const: read_only}
+        example: {type: string}
+        argument:
+          type: object
+          additionalProperties: false
+          required: [name, placeholder, required]
+          properties:
+            name: {type: string}
+            placeholder: {type: string}
+            required: {type: boolean}
+    CharlieCommandCatalog:
+      type: object
+      additionalProperties: false
+      required: [schema, version, commands]
+      properties:
+        schema: {type: string, const: astronomer.charlie-command-catalog/v1}
+        version: {type: integer, const: 1}
+        commands: {type: array, items: {$ref: '#/components/schemas/CharlieCommandDescriptor'}}
+    CharlieThreadMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [client_message_id, message]
+      properties:
+        client_message_id: {type: string, format: uuid}
+        message: {type: string, minLength: 1, maxLength: 32768}
+        trigger: {type: string, maxLength: 128}
+        current_ui_context: {type: string, maxLength: 255}
+        resources:
+          type: array
+          maxItems: 25
+          items: {$ref: '#/components/schemas/CharlieSessionResource'}
+        command: {$ref: '#/components/schemas/CharlieCommandRequest'}
+    CharlieThreadMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, title, state, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, maxLength: 120}
+        state: {type: string, enum: [active, archived]}
+        current_session_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        archived_at: {type: [string, 'null'], format: date-time}
     CharlieAbortRequest:
       type: object
       additionalProperties: false
@@ -18005,6 +18076,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/charlie/commands/:
+    get:
+      operationId: listCharlieCommands
+      summary: List versioned Astronomer-owned Charlie chat shortcuts
+      description: Commands are presentation and repeatable workflow metadata only. Every agent command still uses the active scope, mode, disclosed capabilities, approval rules, and audit boundary.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: The command catalog available to the authenticated user.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CharlieCommandCatalog'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/:
+    get:
+      operationId: listCharlieThreads
+      summary: List the authenticated user's current and archived Charlie conversations
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: Owner-scoped conversation metadata; content remains in Charlie.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [threads]
+                properties:
+                  threads: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieThreadMetadata'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/active/:
+    get:
+      operationId: getActiveCharlieThread
+      summary: Get the authenticated user's active Charlie conversation
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: Active conversation metadata, or a null thread when none exists.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/new/:
+    post:
+      operationId: createCharlieThread
+      summary: Archive the current conversation and start a clean one
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '201':
+          description: New owner-scoped active conversation metadata.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/messages/:
+    post:
+      operationId: createCharlieThreadMessage
+      summary: Send natural language or a validated slash command on the active conversation
+      description: The server reparses visible slash text and rejects command identity, version, or argument drift before forwarding it through the Product Bridge.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieThreadMessageRequest'}}}
+      responses:
+        '202':
+          description: Active thread metadata and the accepted Charlie turn receipt.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/threads/{thread_id}/history/:
+    get:
+      operationId: getCharlieThreadHistory
+      summary: Read stitched history for one owner-scoped Charlie conversation
+      description: Archived transcripts are read-only by default and are never silently injected into a new turn.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: thread_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Retention-bounded redacted items stitched across the conversation's Charlie sessions.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/charlie/sessions/:
     get:
       operationId: listCharlieSessions

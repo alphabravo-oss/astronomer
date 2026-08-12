@@ -123,6 +123,7 @@ type contentBridgeFake struct {
 	abortCalls   int
 	message      string
 	messageID    uuid.UUID
+	command      *ProductCommandInvocation
 	err          error
 	events       []contract.Event
 	streamCursor string
@@ -136,10 +137,36 @@ func (f *contentBridgeFake) GetHistory(context.Context, string, string, string, 
 	f.historyCalls++
 	return json.RawMessage(`[{"redacted_content":"answer"}]`), f.err
 }
-func (f *contentBridgeFake) CreateMessage(_ context.Context, _ string, _ string, messageID uuid.UUID, message string) (json.RawMessage, error) {
+func (f *contentBridgeFake) CreateMessage(_ context.Context, _ string, _ string, messageID uuid.UUID, message string, command *ProductCommandInvocation) (json.RawMessage, error) {
 	f.messageCalls++
-	f.message, f.messageID = message, messageID
+	f.message, f.messageID, f.command = message, messageID, command
 	return json.RawMessage(`{"turn_id":"turn-1"}`), f.err
+}
+
+func TestMessageForwardsValidatedCommandAndAuditsOnlyItsIdentity(t *testing.T) {
+	owner := uuid.New()
+	queries, sessionID := readyPrivateAccess(owner)
+	bridge := &contentBridgeFake{}
+	auditor := &sessionAuditFake{}
+	service, _ := NewSessionAccessService(queries, &sessionAuthorizerFake{use: true}, bridge, auditor, func() bool { return true })
+	command, err := ResolveProductCommand("/investigate queue failure secret-SENTINEL", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Message(context.Background(), owner, sessionID, uuid.New(), "/investigate queue failure secret-SENTINEL", command); err != nil {
+		t.Fatal(err)
+	}
+	if bridge.command == nil || bridge.command.ID != "investigate" || !strings.Contains(bridge.command.ExecutionPrompt, "queue failure") {
+		t.Fatalf("command was not forwarded: %#v", bridge.command)
+	}
+	last := auditor.events[len(auditor.events)-1]
+	if last.CommandID != "investigate" || last.CommandVersion != "1" {
+		t.Fatalf("command identity was not audited: %#v", last)
+	}
+	encodedAudit, _ := json.Marshal(last)
+	if strings.Contains(string(encodedAudit), "secret-SENTINEL") {
+		t.Fatal("command arguments leaked into lifecycle audit")
+	}
 }
 func (f *contentBridgeFake) AbortSession(context.Context, string, string, uuid.UUID) error {
 	f.abortCalls++
@@ -323,11 +350,11 @@ func TestMessageUsesStableClientIDWithoutLocalContentPersistence(t *testing.T) {
 	messageID := uuid.New()
 	message := "diagnose the management plane"
 
-	first, err := service.Message(context.Background(), owner, sessionID, messageID, message)
+	first, err := service.Message(context.Background(), owner, sessionID, messageID, message, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.Message(context.Background(), owner, sessionID, messageID, message)
+	second, err := service.Message(context.Background(), owner, sessionID, messageID, message, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

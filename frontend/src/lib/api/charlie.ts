@@ -435,6 +435,42 @@ export type CharlieTurnReceipt = {
   acceptedAt?: string;
 };
 
+export type CharlieCommandDescriptor = {
+  id: string;
+  version: string;
+  name: string;
+  aliases?: string[];
+  label: string;
+  description: string;
+  category: string;
+  execution: "agent" | "client";
+  effect: "read" | "local";
+  required_mode: "read_only";
+  example: string;
+  argument?: {
+    name: string;
+    placeholder: string;
+    required: boolean;
+  };
+};
+
+export type CharlieCommandCatalog = {
+  schema: "astronomer.charlie-command-catalog/v1";
+  version: number;
+  commands: CharlieCommandDescriptor[];
+};
+
+export type CharlieCommandRequest = {
+  id: string;
+  version: string;
+  arguments: Record<string, string>;
+};
+
+export async function getCharlieCommands(): Promise<CharlieCommandCatalog> {
+  const { data } = await api.get("/charlie/commands/");
+  return (data?.data ?? data) as CharlieCommandCatalog;
+}
+
 export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
   const { data } = await api.get("/charlie/threads/active/");
   const value = data?.data ?? data;
@@ -469,6 +505,7 @@ export async function sendCharlieThreadMessage(
     trigger?: string;
     currentUiContext?: string;
     resources?: CharlieResource[];
+    command?: CharlieCommandRequest;
   },
 ): Promise<CharlieActiveThread & { receipt?: CharlieTurnReceipt }> {
   const { data } = await api.post("/charlie/threads/messages/", {
@@ -481,6 +518,7 @@ export async function sendCharlieThreadMessage(
       id: r.id,
       required_verb: r.requiredVerb,
     })),
+    command: options?.command,
   });
   const value = data?.data ?? data;
   const rawReceipt = value?.receipt;
@@ -565,7 +603,11 @@ export async function listCharlieThreads(): Promise<
     title: String(row.title ?? ""),
     state: String(row.state ?? ""),
     updated_at:
-      typeof row.updated_at === "string" ? row.updated_at : undefined,
+      typeof row.updated_at === "string"
+        ? row.updated_at
+        : typeof row.updatedAt === "string"
+          ? row.updatedAt
+          : undefined,
   }));
 }
 

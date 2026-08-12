@@ -211,7 +211,7 @@ func (*approvalBridgeFake) GetSession(context.Context, string, string) (json.Raw
 func (*approvalBridgeFake) GetHistory(context.Context, string, string, string, int) (json.RawMessage, error) {
 	return nil, nil
 }
-func (*approvalBridgeFake) CreateMessage(context.Context, string, string, uuid.UUID, string) (json.RawMessage, error) {
+func (*approvalBridgeFake) CreateMessage(context.Context, string, string, uuid.UUID, string, *ProductCommandInvocation) (json.RawMessage, error) {
 	return nil, nil
 }
 func (*approvalBridgeFake) AbortSession(context.Context, string, string, uuid.UUID) error { return nil }

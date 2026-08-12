@@ -12,8 +12,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   Check,
+  Command,
   Copy,
   ExternalLink,
+  History as HistoryIcon,
   Loader2,
   Plus,
   Search,
@@ -41,17 +43,26 @@ import {
 import {
   abortCharlieSession,
   getCharlieActiveThread,
+  getCharlieCommands,
   getCharlieOverview,
   getCharlieHistory,
   getCharlieThreadHistory,
+  listCharlieThreads,
   newCharlieChat,
   searchCharlieContext,
   sendCharlieThreadMessage,
   subscribeCharlieSessionEvents,
   type CharlieContextOption,
+  type CharlieCommandRequest,
   type CharlieMessage,
 } from "@/lib/api/charlie";
 import { getCharlieMode } from "@/lib/api/charlie-admin";
+import {
+  commandInsertion,
+  commandSuggestions,
+  contextualCharlieCommands,
+  parseCharlieCommand,
+} from "./commands";
 
 type CharlieState = {
   open: boolean;
@@ -297,9 +308,8 @@ export function CharlieShell({ children }: { children: ReactNode }) {
   );
 }
 
-function ContextPicker() {
+function ContextPicker({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { add } = useCharlie();
-  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const result = useQuery({
     queryKey: queryKeys.charlie.contextSearch(q),
@@ -311,7 +321,7 @@ function ContextPicker() {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => onOpenChange(true)}
         aria-expanded="false"
         className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
       >
@@ -325,7 +335,7 @@ function ContextPicker() {
         <p className="text-xs font-medium">Choose a diagnostic scope</p>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => onOpenChange(false)}
           className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
         >
           Done
@@ -358,7 +368,7 @@ function ContextPicker() {
           key={`${v.type}:${v.id}`}
           onClick={() => {
             add(v);
-            setOpen(false);
+            onOpenChange(false);
           }}
           className="mt-2 block w-full rounded p-2 text-left text-sm hover:bg-accent"
         >
@@ -379,11 +389,18 @@ function ContextPicker() {
 
 function CharlieDrawer() {
   const { open, setOpen, resources, remove } = useCharlie();
+  const pathname = usePathname();
   const qc = useQueryClient();
   const [threadId, setThreadId] = useState<string>();
   const [sessionId, setSessionId] = useState<string>();
+  const [viewingThreadId, setViewingThreadId] = useState<string>();
   const [text, setText] = useState("");
   const [local, setLocal] = useState<CharlieMessage[]>([]);
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  const [commandHelpOpen, setCommandHelpOpen] = useState(false);
+  const [conversationListOpen, setConversationListOpen] = useState(false);
+  const [commandNotice, setCommandNotice] = useState<string>();
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [streamUnavailable, setStreamUnavailable] = useState(false);
   const [confirmAbort, setConfirmAbort] = useState(false);
   // True from user send until Charlie produces assistant content or the turn ends.
@@ -426,6 +443,18 @@ function CharlieDrawer() {
     queryFn: getCharlieActiveThread,
     retry: false,
   });
+  const commands = useQuery({
+    queryKey: queryKeys.charlie.commands,
+    queryFn: getCharlieCommands,
+    enabled: open,
+    retry: false,
+  });
+  const threads = useQuery({
+    queryKey: queryKeys.charlie.threads,
+    queryFn: listCharlieThreads,
+    enabled: open && conversationListOpen,
+    retry: false,
+  });
   useEffect(() => {
     const thread = activeThread.data?.thread;
     if (!thread?.id) {
@@ -439,21 +468,35 @@ function CharlieDrawer() {
       setSessionId(current);
     }
   }, [activeThread.data]);
+  const displayedThreadId = viewingThreadId ?? threadId;
   const history = useQuery({
-    queryKey: threadId
-      ? queryKeys.charlie.threadHistory(threadId)
+    queryKey: displayedThreadId
+      ? queryKeys.charlie.threadHistory(displayedThreadId)
       : queryKeys.charlie.history(sessionId),
     queryFn: () =>
-      threadId
-        ? getCharlieThreadHistory(threadId)
+      displayedThreadId
+        ? getCharlieThreadHistory(displayedThreadId)
         : getCharlieHistory(sessionId!),
-    enabled: !!threadId || !!sessionId,
+    enabled: !!displayedThreadId || !!sessionId,
     retry: false,
     // SSE remains the low-latency path. Polling while one turn is outstanding
     // is the authoritative fallback when a browser/proxy misses a terminal
     // frame after Charlie has already persisted the assistant response.
-    refetchInterval: awaitingReply ? 1_500 : false,
+    refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
   });
+  const catalogCommands = useMemo(
+    () => commands.data?.commands ?? [],
+    [commands.data?.commands],
+  );
+  const slashSuggestions = useMemo(
+    () => commandSuggestions(text, catalogCommands),
+    [catalogCommands, text],
+  );
+  const suggestedCommands = useMemo(
+    () => contextualCharlieCommands(pathname, catalogCommands),
+    [catalogCommands, pathname],
+  );
+  useEffect(() => setSelectedCommandIndex(0), [text]);
   useEffect(() => {
     if (!sessionId) return;
     setStreamUnavailable(false);
@@ -518,13 +561,14 @@ function CharlieDrawer() {
     };
   }, [qc, sessionId, streamGeneration, threadId]);
   const send = useMutation({
-    mutationFn: async (message: string) => {
+    mutationFn: async (input: { message: string; command?: CharlieCommandRequest }) => {
       // Thread API reattaches a messageable session or continues under the same
       // interactive thread when the prior session is terminal (no blank 409).
-      const result = await sendCharlieThreadMessage(message, {
-        trigger: "user_chat",
+      const result = await sendCharlieThreadMessage(input.message, {
+        trigger: input.command ? `slash_command:${input.command.id}` : "user_chat",
         currentUiContext: location.pathname.slice(0, 255),
         resources: resources.map(({ label: _, summary: __, ...r }) => r),
+        command: input.command,
       });
       if (result.thread?.id) {
         setThreadId(result.thread.id);
@@ -542,7 +586,7 @@ function CharlieDrawer() {
         turnId: result.receipt?.turnId,
       };
     },
-    onMutate: (message) => {
+    onMutate: (input) => {
       awaitingReplyRef.current = true;
       setAwaitingReply(true);
       activeTurnIdRef.current = undefined;
@@ -557,7 +601,7 @@ function CharlieDrawer() {
       setLocal((v) => [
         ...v,
         // Prefixed id so optimistic rows are easy to drop once history arrives.
-        { id: `local:${crypto.randomUUID()}`, role: "user", content: message },
+        { id: `local:${crypto.randomUUID()}`, role: "user", content: input.message },
       ]);
     },
     onError: () => {
@@ -591,6 +635,10 @@ function CharlieDrawer() {
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setStreamUnavailable(false);
+      setViewingThreadId(undefined);
+      setConversationListOpen(false);
+      setCommandHelpOpen(false);
+      setCommandNotice(undefined);
       setThreadId(result.thread?.id);
       setSessionId(undefined);
       stickToBottomRef.current = true;
@@ -624,6 +672,7 @@ function CharlieDrawer() {
   // does not render twice.
   const messages = useMemo(() => {
     const historyMessages = history.data ?? [];
+    if (viewingThreadId) return historyMessages;
     const historyUserContents = new Set(
       historyMessages
         .filter((m) => m.role === "user")
@@ -641,9 +690,9 @@ function CharlieDrawer() {
       ...historyMessages,
       ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
     ];
-  }, [history.data, local]);
+  }, [history.data, local, viewingThreadId]);
   useEffect(() => {
-    if (!awaitingReply || !history.data) return;
+    if (!awaitingReply || !history.data || viewingThreadId) return;
     const response = history.data.find(
       (message) =>
         message.role === "assistant" &&
@@ -666,10 +715,10 @@ function CharlieDrawer() {
           }
         : current,
     );
-  }, [awaitingReply, history.data]);
-  const showProgress = (send.isPending || awaitingReply) && !send.isError;
+  }, [awaitingReply, history.data, viewingThreadId]);
+  const showProgress = !viewingThreadId && (send.isPending || awaitingReply) && !send.isError;
   const historyReady =
-    (!threadId && !sessionId) || history.data !== undefined;
+    (!displayedThreadId && !sessionId) || history.data !== undefined;
   // Keep the latest turn visible above the fixed composer unless the user has
   // scrolled up to read earlier history.
   useLayoutEffect(() => {
@@ -685,6 +734,52 @@ function CharlieDrawer() {
     (adminMode.data.requested !== adminMode.data.authoritative ||
       !adminMode.data.workloadCeilingReady ||
       !!adminMode.data.disablePending);
+  const submitComposer = () => {
+    const value = text.trim();
+    if (!value || viewingThreadId || !historyReady || send.isPending || awaitingReply) return;
+    if (value.startsWith("/")) {
+      const parsed = parseCharlieCommand(value, catalogCommands);
+      if (!parsed) {
+        setCommandNotice(commands.isError
+          ? "The command catalog is unavailable. Natural-language chat is still available."
+          : "Unknown or incomplete command. Choose a suggestion or use /help.");
+        return;
+      }
+      if (parsed.descriptor.execution === "client") {
+        setText("");
+        setCommandNotice(undefined);
+        switch (parsed.descriptor.id) {
+          case "help":
+            setCommandHelpOpen(true);
+            break;
+          case "scope":
+            setScopePickerOpen(true);
+            break;
+          case "mode":
+            setCommandNotice(`Charlie is in ${mode.label}. ${mode.ceiling}`);
+            break;
+          case "new":
+            send.reset();
+            startNewChat.mutate();
+            break;
+          case "stop":
+            if (sessionId) setConfirmAbort(true);
+            else setCommandNotice("There is no active Charlie session to stop.");
+            break;
+        }
+        return;
+      }
+      setText("");
+      setCommandNotice(undefined);
+      stickToBottomRef.current = true;
+      send.mutate({ message: value, command: parsed.request });
+      return;
+    }
+    setText("");
+    setCommandNotice(undefined);
+    stickToBottomRef.current = true;
+    send.mutate({ message: value });
+  };
   return (
     <DrawerShell
       title="Charlie"
@@ -725,6 +820,14 @@ function CharlieDrawer() {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => setConversationListOpen((value) => !value)}
+            aria-expanded={conversationListOpen}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+          >
+            <HistoryIcon className="h-3 w-3" /> History
+          </button>
+          <button
+            type="button"
             onClick={() => {
               send.reset();
               startNewChat.mutate();
@@ -734,7 +837,7 @@ function CharlieDrawer() {
           >
             New chat
           </button>
-          {sessionId && (
+          {sessionId && !viewingThreadId && (
             <button
               type="button"
               onClick={() => setConfirmAbort(true)}
@@ -785,7 +888,7 @@ function CharlieDrawer() {
             </div>
           </div>
           <div className="shrink-0">
-            <ContextPicker />
+            <ContextPicker open={scopePickerOpen} onOpenChange={setScopePickerOpen} />
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -794,6 +897,71 @@ function CharlieDrawer() {
           conversation.
         </p>
       </div>
+      {conversationListOpen && (
+        <section className="max-h-52 shrink-0 overflow-y-auto border-b border-border bg-card px-5 py-3" aria-label="Recent Charlie conversations">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold">Recent conversations</p>
+            <button type="button" aria-label="Close conversation history" onClick={() => setConversationListOpen(false)} className="text-xs text-muted-foreground">Close</button>
+          </div>
+          {threads.isLoading ? <p className="text-xs text-muted-foreground">Loading conversations…</p> : null}
+          {threads.isError ? <p role="alert" className="text-xs text-muted-foreground">Conversation history is unavailable.</p> : null}
+          <div className="space-y-1">
+            {threads.data?.map((thread) => {
+              const current = thread.id === threadId;
+              const selected = current ? !viewingThreadId : thread.id === viewingThreadId;
+              return (
+                <button
+                  type="button"
+                  key={thread.id}
+                  aria-current={selected ? "true" : undefined}
+                  onClick={() => {
+                    setViewingThreadId(current ? undefined : thread.id);
+                    setConversationListOpen(false);
+                    setCommandHelpOpen(false);
+                    setCommandNotice(undefined);
+                    stickToBottomRef.current = false;
+                  }}
+                  className={cn("block w-full rounded-md border px-3 py-2 text-left hover:bg-accent", selected && "border-primary bg-primary/5")}
+                >
+                  <span className="block truncate text-sm font-medium">{thread.title || "Untitled conversation"}</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {current ? "Current" : thread.state === "archived" ? "Previous" : thread.state}
+                    {thread.updated_at ? ` · ${new Date(thread.updated_at).toLocaleString()}` : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {!threads.isLoading && threads.data?.length === 0 ? <p className="text-xs text-muted-foreground">No previous conversations yet.</p> : null}
+        </section>
+      )}
+      {commandHelpOpen && (
+        <section className="max-h-64 shrink-0 overflow-y-auto border-b border-border bg-card px-5 py-3" aria-label="Charlie command help">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Charlie commands</p>
+              <p className="text-xs text-muted-foreground">Shortcuts use the same scope, mode, approvals, and audit controls as ordinary chat.</p>
+            </div>
+            <button type="button" aria-label="Close command help" onClick={() => setCommandHelpOpen(false)} className="text-xs text-muted-foreground">Close</button>
+          </div>
+          <div className="space-y-1">
+            {catalogCommands.map((command) => (
+              <button
+                type="button"
+                key={command.id}
+                onClick={() => {
+                  setText(commandInsertion(command));
+                  setCommandHelpOpen(false);
+                }}
+                className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <span className="font-mono text-xs">/{command.name}{command.argument ? ` <${command.argument.placeholder}>` : ""}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{command.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <div
         ref={messagesViewportRef}
         className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-3 select-text"
@@ -809,6 +977,15 @@ function CharlieDrawer() {
           stickToBottomRef.current = distanceFromBottom < 80;
         }}
       >
+        {viewingThreadId ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/50 p-3" role="status">
+            <div>
+              <p className="text-sm font-medium">Viewing a previous conversation</p>
+              <p className="text-xs text-muted-foreground">This transcript is read-only and is not added to your current Charlie context.</p>
+            </div>
+            <button type="button" onClick={() => { setViewingThreadId(undefined); stickToBottomRef.current = true; }} className="shrink-0 rounded-md border px-2 py-1 text-xs">Back to current</button>
+          </div>
+        ) : null}
         {messages.length === 0 && !showProgress ? (
           <EmptyState
             icon={Bot}
@@ -901,62 +1078,107 @@ function CharlieDrawer() {
             Abort is pending or could not be confirmed. The product-side session remains locally closed.
           </p>
         )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const v = text.trim();
-            if (v && historyReady && !send.isPending && !awaitingReply) {
-              setText("");
-              stickToBottomRef.current = true;
-              send.mutate(v);
-            }
-          }}
-          className="space-y-2"
-        >
-          <textarea
-            aria-label="Message Charlie"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter sends; Shift+Enter inserts a newline (standard chat UX).
-              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) {
-                return;
-              }
-              e.preventDefault();
-              const v = text.trim();
-              if (v && historyReady && !send.isPending && !awaitingReply) {
-                setText("");
-                stickToBottomRef.current = true;
-                send.mutate(v);
-              }
-            }}
-            rows={3}
-            maxLength={sessionId ? 32768 : 4096}
-            className="w-full resize-none rounded-lg border bg-background p-3 text-sm"
-            placeholder="Ask Charlie… (Enter to send, Shift+Enter for newline)"
-          />
-          <div className="flex justify-between">
-            <Link
-              href={`/dashboard/charlie?tab=conversations${sessionId ? `&session=${sessionId}` : ""}`}
-              className="inline-flex items-center gap-1 text-xs text-primary"
-            >
-              Open Charlie hub
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-            <button
-              type="submit"
-              disabled={!text.trim() || !historyReady || send.isPending || awaitingReply}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors motion-reduce:transition-none disabled:opacity-50"
-            >
-              {send.isPending || awaitingReply ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              {send.isPending ? "Sending" : awaitingReply ? "Working" : "Send"}
-            </button>
+        {commandNotice ? <p role="status" className="rounded-md border bg-muted/50 p-2 text-xs">{commandNotice}</p> : null}
+        {viewingThreadId ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Previous conversations are read-only. Return to the current conversation to message Charlie.</p>
+            <button type="button" onClick={() => { setViewingThreadId(undefined); stickToBottomRef.current = true; }} className="shrink-0 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground">Return to current</button>
           </div>
-        </form>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitComposer();
+            }}
+            className="space-y-2"
+          >
+            {!text && suggestedCommands.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5" aria-label="Suggested Charlie commands">
+                {suggestedCommands.map((command) => (
+                  <button type="button" key={command.id} onClick={() => setText(commandInsertion(command))} className="rounded-full border px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+                    /{command.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {text.trimStart().startsWith("/") && slashSuggestions.length > 0 ? (
+              <div id="charlie-command-suggestions" role="listbox" aria-label="Charlie command suggestions" className="max-h-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                {slashSuggestions.map((command, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === selectedCommandIndex}
+                    key={command.id}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setText(commandInsertion(command))}
+                    className={cn("flex w-full items-start gap-2 rounded px-2 py-2 text-left", index === selectedCommandIndex ? "bg-accent" : "hover:bg-accent")}
+                  >
+                    <Command className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block font-mono text-xs">/{command.name}{command.argument ? ` <${command.argument.placeholder}>` : ""}</span>
+                      <span className="block text-[11px] text-muted-foreground">{command.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <textarea
+              aria-label="Message Charlie"
+              aria-controls={slashSuggestions.length ? "charlie-command-suggestions" : undefined}
+              value={text}
+              onChange={(e) => { setText(e.target.value); setCommandNotice(undefined); }}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (slashSuggestions.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                  e.preventDefault();
+                  setSelectedCommandIndex((current) => e.key === "ArrowDown"
+                    ? (current + 1) % slashSuggestions.length
+                    : (current - 1 + slashSuggestions.length) % slashSuggestions.length);
+                  return;
+                }
+                if (slashSuggestions.length > 0 && e.key === "Tab") {
+                  e.preventDefault();
+                  setText(commandInsertion(slashSuggestions[selectedCommandIndex] ?? slashSuggestions[0]));
+                  return;
+                }
+                // Enter sends a complete command/message; for a partial command
+                // it accepts the highlighted suggestion. Shift+Enter is newline.
+                if (e.key !== "Enter" || e.shiftKey) return;
+                e.preventDefault();
+                if (slashSuggestions.length > 0 && !parseCharlieCommand(text, catalogCommands)) {
+                  setText(commandInsertion(slashSuggestions[selectedCommandIndex] ?? slashSuggestions[0]));
+                  return;
+                }
+                submitComposer();
+              }}
+              rows={3}
+              maxLength={sessionId ? 32768 : 4096}
+              className="w-full resize-none rounded-lg border bg-background p-3 text-sm"
+              placeholder="Ask Charlie or type / for commands…"
+            />
+            <div className="flex justify-between">
+              <Link
+                href={`/dashboard/charlie?tab=conversations${sessionId ? `&session=${sessionId}` : ""}`}
+                className="inline-flex items-center gap-1 text-xs text-primary"
+              >
+                Open Charlie hub
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <button
+                type="submit"
+                disabled={!text.trim() || !historyReady || send.isPending || awaitingReply}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors motion-reduce:transition-none disabled:opacity-50"
+              >
+                {send.isPending || awaitingReply ? (
+                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {send.isPending ? "Sending" : awaitingReply ? "Working" : "Send"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
       <ConfirmDialog
         open={confirmAbort}
