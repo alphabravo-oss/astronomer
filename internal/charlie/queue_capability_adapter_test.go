@@ -13,6 +13,8 @@ import (
 
 type queueInspectorFake struct {
 	queues       map[string]*asynq.QueueInfo
+	listedQueues []string
+	queuesError  error
 	queueErrors  map[string]error
 	tasks        map[string]map[string]*asynq.TaskInfo
 	taskErrors   map[string]error
@@ -21,7 +23,19 @@ type queueInspectorFake struct {
 	runTask      string
 }
 
-func (f *queueInspectorFake) Queues() ([]string, error) { return []string{"default"}, nil }
+func (f *queueInspectorFake) Queues() ([]string, error) {
+	if f.queuesError != nil {
+		return nil, f.queuesError
+	}
+	if f.listedQueues != nil {
+		return f.listedQueues, nil
+	}
+	queues := make([]string, 0, len(f.queues))
+	for queue := range f.queues {
+		queues = append(queues, queue)
+	}
+	return queues, nil
+}
 func (f *queueInspectorFake) Servers() ([]*asynq.ServerInfo, error) {
 	if f.serversError != nil {
 		return nil, f.serversError
@@ -81,10 +95,29 @@ func TestQueueCapabilityTreatsConfiguredUnmaterializedQueueAsHealthyAndIdle(t *t
 	}
 }
 
+func TestQueueCapabilityUsesQueueInventoryForAsynqPrivateNotFoundError(t *testing.T) {
+	inspector := &queueInspectorFake{
+		queues:       map[string]*asynq.QueueInfo{"default": {Queue: "default"}},
+		listedQueues: []string{"default"},
+		queueErrors:  map[string]error{"low": errors.New("rdb.CurrentStats: NOT FOUND: queue not found: low")},
+	}
+	adapter, _ := NewQueueCapabilityAdapter(inspector)
+	descriptor, _ := capabilityByName("astronomer.queue.health")
+	result, err := adapter.Execute(context.Background(), descriptor, map[string]json.RawMessage{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	low := queueHealthItem(t, result, "low")
+	if low["available"] != true || low["materialized"] != false || low["consumer_ready"] != true {
+		t.Fatalf("private not-found error was not resolved through queue inventory: %s", result)
+	}
+}
+
 func TestQueueCapabilityDistinguishesRealInspectionFailureFromEmptyQueue(t *testing.T) {
 	inspector := &queueInspectorFake{
-		queues:      map[string]*asynq.QueueInfo{},
-		queueErrors: map[string]error{"default": errors.New("redis unavailable")},
+		queues:       map[string]*asynq.QueueInfo{},
+		listedQueues: []string{"default"},
+		queueErrors:  map[string]error{"default": errors.New("redis unavailable")},
 	}
 	adapter, _ := NewQueueCapabilityAdapter(inspector)
 	descriptor, _ := capabilityByName("astronomer.queue.health")

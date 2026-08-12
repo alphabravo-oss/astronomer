@@ -67,10 +67,15 @@ func (a *QueueCapabilityAdapter) Execute(_ context.Context, capability Capabilit
 	switch capability.Name {
 	case "astronomer.queue.health":
 		consumers, consumersAvailable := a.queueConsumers()
+		materialized, materializationAvailable := a.materializedQueues()
 		items := []map[string]any{}
 		for _, queue := range charlieQueueNames {
-			info, err := a.inspector.GetQueueInfo(queue)
 			consumer := consumers[queue]
+			if materializationAvailable && !materialized[queue] {
+				items = append(items, emptyQueueSummary(queue, consumer, consumersAvailable))
+				continue
+			}
+			info, err := a.inspector.GetQueueInfo(queue)
 			if errors.Is(err, asynq.ErrQueueNotFound) {
 				items = append(items, emptyQueueSummary(queue, consumer, consumersAvailable))
 				continue
@@ -83,6 +88,7 @@ func (a *QueueCapabilityAdapter) Execute(_ context.Context, capability Capabilit
 		}
 		return marshalBounded(map[string]any{
 			"queues": items, "consumer_inspection_available": consumersAvailable,
+			"materialization_inspection_available": materializationAvailable,
 		}, capability.MaxResponseBytes)
 	case "astronomer.queue.failed_tasks":
 		page, size := pagination(arguments, 50)
@@ -231,6 +237,18 @@ type queueConsumerSummary struct {
 	Servers     int
 	Concurrency int
 	Weight      int
+}
+
+func (a *QueueCapabilityAdapter) materializedQueues() (map[string]bool, bool) {
+	queues, err := a.inspector.Queues()
+	if err != nil {
+		return map[string]bool{}, false
+	}
+	result := make(map[string]bool, len(queues))
+	for _, queue := range queues {
+		result[queue] = true
+	}
+	return result, true
 }
 
 func (a *QueueCapabilityAdapter) queueConsumers() (map[string]queueConsumerSummary, bool) {

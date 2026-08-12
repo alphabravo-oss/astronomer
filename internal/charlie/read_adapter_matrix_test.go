@@ -147,7 +147,7 @@ func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testi
 	emptyQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{}})
 	partialQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{
 		queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{},
-		queueErrors: map[string]error{"low": errors.New("inspection unavailable")},
+		listedQueues: []string{"low"}, queueErrors: map[string]error{"low": errors.New("inspection unavailable")},
 	})
 	emptyOperational := operationalAdapterFixture(t, &operationalQueriesFake{settings: map[string]json.RawMessage{}})
 	emptyOperational.databaseSnapshot = func(context.Context) (bool, int64, error) { return false, 0, nil }
