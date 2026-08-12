@@ -279,6 +279,44 @@ describe("Charlie global shell accessibility", () => {
     );
   });
 
+  it("keeps second-turn progress visible when the prior status cache is terminal", async () => {
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "health then status",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1", state: "active" },
+      messageable: true,
+      needs_continue: false,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(getCharlieSession)
+      .mockResolvedValueOnce({ id: "session-1", state: "completed" } as never)
+      .mockResolvedValue({ id: "session-1", state: "active" } as never);
+    vi.mocked(getCharlieThreadHistory).mockResolvedValue([
+      { id: "u1", role: "user", content: "/health" },
+      { id: "a1", role: "assistant", content: "The first assessment is complete." },
+    ] as never);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByText("The first assessment is complete.")).toBeInTheDocument();
+    await waitFor(() => expect(getCharlieSession).toHaveBeenCalledTimes(1));
+
+    const composer = screen.getByLabelText("Message Charlie");
+    fireEvent.change(composer, { target: { value: "check current status" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendCharlieThreadMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getCharlieSession).toHaveBeenCalledTimes(2));
+
+    expect(
+      screen.getByTestId("charlie-turn-progress"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
+  });
+
   it("restores active-thread history on open instead of starting blank", async () => {
     vi.mocked(getCharlieActiveThread).mockResolvedValue({
       thread: {

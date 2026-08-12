@@ -435,6 +435,9 @@ function CharlieDrawer() {
   const [awaitingReply, setAwaitingReply] = useState(false);
   const awaitingReplyRef = useRef(false);
   const activeTurnIdRef = useRef<string | undefined>(undefined);
+  // A terminal session status may be cached from the preceding turn. Only a
+  // status fetched after the current message receipt may terminate this turn.
+  const terminalStatusAfterRef = useRef(0);
   const assistantIdsBeforeTurnRef = useRef<Set<string>>(new Set());
   const [streamGeneration, setStreamGeneration] = useState(0);
   const [turnProgress, setTurnProgress] = useState<CharlieTurnProgress>();
@@ -471,19 +474,6 @@ function CharlieDrawer() {
     queryFn: getCharlieActiveThread,
     retry: false,
     refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
-  });
-  const sessionStatus = useQuery({
-    queryKey: queryKeys.charlie.sessionStatus(sessionId),
-    queryFn: () => getCharlieSession(sessionId!),
-    // Always reconcile the current server-owned session when the drawer opens.
-    // Closing the drawer intentionally unmounts the UI and its EventSource, but
-    // it does not abort Charlie. This status read lets a reopened drawer attach
-    // to work that continued while it was hidden.
-    enabled: !viewingThreadId && !!sessionId,
-    retry: false,
-    // The first read detects work that survived a closed drawer. Once that
-    // work is reattached, awaitingReply enables terminal-state polling.
-    refetchInterval: awaitingReply ? 1_500 : false,
   });
   const commands = useQuery({
     queryKey: queryKeys.charlie.commands,
@@ -635,6 +625,15 @@ function CharlieDrawer() {
       awaitingReplyRef.current = true;
       setAwaitingReply(true);
       activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = Number.POSITIVE_INFINITY;
+      if (sessionId) {
+        // Do not let an in-flight read of the preceding turn repopulate a
+        // terminal cache while this message is waiting for acceptance.
+        void qc.cancelQueries({
+          queryKey: queryKeys.charlie.sessionStatus(sessionId),
+          exact: true,
+        });
+      }
       assistantIdsBeforeTurnRef.current = new Set(
         (history.data ?? [])
           .filter((item) => item.role === "assistant")
@@ -653,15 +652,23 @@ function CharlieDrawer() {
     onError: () => {
       awaitingReplyRef.current = false;
       activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = 0;
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setTurnFailed(true);
     },
     onSuccess: (ids) => {
       if (ids.turnId) activeTurnIdRef.current = ids.turnId;
+      terminalStatusAfterRef.current = 0;
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
       if (ids.sessionId) {
+        // Drop, rather than refetch over, the prior turn's terminal snapshot.
+        // The enabled query below will establish a fresh post-receipt baseline.
+        qc.removeQueries({
+          queryKey: queryKeys.charlie.sessionStatus(ids.sessionId),
+          exact: true,
+        });
         void qc.invalidateQueries({
           queryKey: queryKeys.charlie.history(ids.sessionId),
         });
@@ -673,12 +680,27 @@ function CharlieDrawer() {
       }
     },
   });
+  const sessionStatus = useQuery({
+    queryKey: queryKeys.charlie.sessionStatus(sessionId),
+    queryFn: () => getCharlieSession(sessionId!),
+    // Always reconcile the current server-owned session when the drawer opens.
+    // Closing the drawer intentionally unmounts the UI and its EventSource, but
+    // it does not abort Charlie. This status read lets a reopened drawer attach
+    // to work that continued while it was hidden. While a new message is being
+    // accepted, the previous turn's status must remain out of consideration.
+    enabled: !viewingThreadId && !!sessionId && !send.isPending,
+    retry: false,
+    // The first read detects work that survived a closed drawer. Once that
+    // work is reattached, awaitingReply enables terminal-state polling.
+    refetchInterval: awaitingReply && !send.isPending ? 1_500 : false,
+  });
   const startNewChat = useMutation({
     mutationFn: newCharlieChat,
     onSuccess: (result) => {
       setLocal([]);
       awaitingReplyRef.current = false;
       activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = 0;
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setStreamUnavailable(false);
@@ -702,6 +724,7 @@ function CharlieDrawer() {
       // Keep transcript; only live authority ends. Next send continues the thread.
       awaitingReplyRef.current = false;
       activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = 0;
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setTurnFailed(false);
@@ -766,6 +789,7 @@ function CharlieDrawer() {
     const now = Date.now();
     awaitingReplyRef.current = true;
     activeTurnIdRef.current = undefined;
+    terminalStatusAfterRef.current = sessionStatus.dataUpdatedAt;
     assistantIdsBeforeTurnRef.current = new Set(
       (history.data ?? [])
         .filter((message) => message.role === "assistant")
@@ -788,6 +812,7 @@ function CharlieDrawer() {
     history.isError,
     sessionId,
     sessionStatus.data,
+    sessionStatus.dataUpdatedAt,
     viewingThreadId,
   ]);
   useEffect(() => {
@@ -820,9 +845,10 @@ function CharlieDrawer() {
   // stop through SSE or persisted history; failed/aborted turns may have no
   // assistant row, so local-only state is insufficient.
   useEffect(() => {
-    if (!awaitingReply || viewingThreadId) return;
-    const current = sessionStatus.data ?? activeThread.data?.current_session;
+    if (!awaitingReply || viewingThreadId || send.isPending) return;
+    const current = sessionStatus.data;
     if (!current || current.id !== sessionId) return;
+    if (sessionStatus.dataUpdatedAt <= terminalStatusAfterRef.current) return;
     if (
       current.state !== "completed" &&
       current.state !== "failed" &&
@@ -846,7 +872,7 @@ function CharlieDrawer() {
           lastEventAt: Date.now(),
         }
       : progress);
-  }, [activeThread.data?.current_session, awaitingReply, qc, sessionId, sessionStatus.data, threadId, viewingThreadId]);
+  }, [awaitingReply, qc, send.isPending, sessionId, sessionStatus.data, sessionStatus.dataUpdatedAt, threadId, viewingThreadId]);
   const showProgress = !viewingThreadId && (send.isPending || awaitingReply) && !send.isError;
   const historyReady =
     (!displayedThreadId && !sessionId) || history.data !== undefined;
