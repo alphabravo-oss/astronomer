@@ -429,6 +429,72 @@ export type CharlieActiveThread = {
   current_session?: CharlieSession | null;
 };
 
+type CharlieActiveThreadWire = {
+  thread?: {
+    id?: unknown;
+    title?: unknown;
+    state?: unknown;
+    currentSessionId?: unknown;
+    current_session_id?: unknown;
+    createdAt?: unknown;
+    created_at?: unknown;
+    updatedAt?: unknown;
+    updated_at?: unknown;
+  } | null;
+  messageable?: unknown;
+  needsContinue?: unknown;
+  needs_continue?: unknown;
+  sessionIds?: unknown;
+  session_ids?: unknown;
+  currentSession?: CharlieWireSession | null;
+  current_session?: CharlieWireSession | null;
+};
+
+/**
+ * Normalize the thread envelope after the shared Axios interceptor camelizes
+ * response keys. Keeping this boundary explicit prevents a successful turn
+ * from losing its local session ID, which would stop the browser from opening
+ * the authenticated lifecycle-event stream and leave progress stuck at the
+ * initial "Sending request" label.
+ */
+function mapCharlieActiveThread(value: CharlieActiveThreadWire | undefined): CharlieActiveThread {
+  const rawThread = value?.thread;
+  const currentSessionID = rawThread?.currentSessionId ?? rawThread?.current_session_id;
+  const rawSessionIDs = value?.sessionIds ?? value?.session_ids;
+  const rawCurrentSession = value?.currentSession ?? value?.current_session;
+  return {
+    thread:
+      rawThread &&
+      typeof rawThread.id === "string" &&
+      typeof rawThread.title === "string" &&
+      typeof rawThread.state === "string"
+        ? {
+            id: rawThread.id,
+            title: rawThread.title,
+            state: rawThread.state,
+            current_session_id:
+              typeof currentSessionID === "string" ? currentSessionID : null,
+            created_at:
+              typeof (rawThread.createdAt ?? rawThread.created_at) === "string"
+                ? ((rawThread.createdAt ?? rawThread.created_at) as string)
+                : undefined,
+            updated_at:
+              typeof (rawThread.updatedAt ?? rawThread.updated_at) === "string"
+                ? ((rawThread.updatedAt ?? rawThread.updated_at) as string)
+                : undefined,
+          }
+        : null,
+    messageable: Boolean(value?.messageable),
+    needs_continue: Boolean(value?.needsContinue ?? value?.needs_continue),
+    session_ids: Array.isArray(rawSessionIDs)
+      ? rawSessionIDs.filter((id): id is string => typeof id === "string")
+      : [],
+    current_session: rawCurrentSession
+      ? mapCharlieSession(rawCurrentSession)
+      : null,
+  };
+}
+
 export type CharlieTurnReceipt = {
   sessionId: string;
   turnId: string;
@@ -473,30 +539,12 @@ export async function getCharlieCommands(): Promise<CharlieCommandCatalog> {
 
 export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
   const { data } = await api.get("/charlie/threads/active/");
-  const value = data?.data ?? data;
-  return {
-    thread: value?.thread ?? null,
-    messageable: Boolean(value?.messageable),
-    needs_continue: Boolean(value?.needs_continue),
-    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
-    current_session: value?.current_session
-      ? mapCharlieSession(value.current_session)
-      : null,
-  };
+  return mapCharlieActiveThread(data?.data ?? data);
 }
 
 export async function newCharlieChat(): Promise<CharlieActiveThread> {
   const { data } = await api.post("/charlie/threads/new/", {});
-  const value = data?.data ?? data;
-  return {
-    thread: value?.thread ?? null,
-    messageable: Boolean(value?.messageable),
-    needs_continue: Boolean(value?.needs_continue),
-    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
-    current_session: value?.current_session
-      ? mapCharlieSession(value.current_session)
-      : null,
-  };
+  return mapCharlieActiveThread(data?.data ?? data);
 }
 
 export async function sendCharlieThreadMessage(
@@ -539,16 +587,7 @@ export async function sendCharlieThreadMessage(
             : {}),
         }
       : undefined;
-  return {
-    thread: value?.thread ?? null,
-    messageable: Boolean(value?.messageable),
-    needs_continue: Boolean(value?.needs_continue),
-    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
-    current_session: value?.current_session
-      ? mapCharlieSession(value.current_session)
-      : null,
-    receipt,
-  };
+  return { ...mapCharlieActiveThread(value), receipt };
 }
 
 export async function getCharlieThreadHistory(

@@ -185,6 +185,56 @@ describe("Charlie global shell accessibility", () => {
     expect(screen.queryByText("SENTINEL")).not.toBeInTheDocument();
   });
 
+  it("opens the progress stream for a session created by the first message", async () => {
+    let receiveEvent: ((event: MessageEvent<string>) => void) | undefined;
+    vi.mocked(subscribeCharlieSessionEvents).mockImplementation((id, onEvent) => {
+      if (id === "session-new") receiveEvent = onEvent;
+      return () => undefined;
+    });
+    vi.mocked(sendCharlieThreadMessage).mockResolvedValue({
+      thread: {
+        id: "thread-new",
+        title: "health",
+        state: "active",
+        current_session_id: "session-new",
+      },
+      current_session: { id: "session-new" },
+      messageable: true,
+      needs_continue: false,
+      session_ids: ["session-new"],
+      receipt: {
+        sessionId: "central-session-new",
+        turnId: "turn-new",
+      },
+    } as never);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    fireEvent.change(await screen.findByLabelText("Message Charlie"), {
+      target: { value: "/health" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect(subscribeCharlieSessionEvents).toHaveBeenCalledWith(
+        "session-new",
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+      ),
+    );
+    act(() => receiveEvent?.(new MessageEvent("turn.started", {
+      data: JSON.stringify({
+        id: "event-new-1",
+        turn_id: "turn-new",
+        type: "turn.started",
+        data: {},
+      }),
+      lastEventId: "event-new-1",
+    })));
+    expect(screen.getByText("Planning the investigation")).toBeInTheDocument();
+    expect(screen.getByText("1 live update")).toBeInTheDocument();
+  });
+
   it("sends via the interactive thread API and keeps session continuity", async () => {
     let receiveEvent: ((event: MessageEvent<string>) => void) | undefined;
     vi.mocked(subscribeCharlieSessionEvents).mockImplementation((_id, onEvent) => {

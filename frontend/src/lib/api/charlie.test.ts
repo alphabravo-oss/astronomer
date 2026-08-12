@@ -3,6 +3,7 @@ import api from "@/lib/api";
 vi.mock("@/lib/api", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 import {
   decideCharlieApproval,
+  getCharlieActiveThread,
   getCharlieCommands,
   getCharlieHistory,
   getCharlieFinding,
@@ -94,11 +95,29 @@ describe("Charlie browser gateway mapping", () => {
       "/charlie/sessions/session%2Fa/history/",
     );
   });
-  it("maps the accepted turn receipt used to correlate live progress", async () => {
+  it("maps the camelized thread session needed to open live progress", async () => {
     mockedApi.post.mockResolvedValue({
       data: {
-        thread: { id: "thread-1", title: "health", state: "active" },
-        currentSession: { id: "local-session-1" },
+        thread: {
+          id: "thread-1",
+          title: "health",
+          state: "active",
+          currentSessionId: "local-session-1",
+          createdAt: "2026-08-11T23:27:10Z",
+        },
+        currentSession: {
+          id: "local-session-1",
+          clientSessionId: "client-session-1",
+          intent: "assess health",
+          resourceScopeSummary: "installation/current",
+          state: "active",
+          visibility: "private",
+          centralRevision: 1,
+          source: "user",
+        },
+        sessionIds: ["local-session-1"],
+        needsContinue: false,
+        messageable: true,
         receipt: {
           sessionId: "central-session-1",
           turnId: "turn-1",
@@ -108,11 +127,55 @@ describe("Charlie browser gateway mapping", () => {
     });
     await expect(sendCharlieThreadMessage("assess health")).resolves.toEqual(
       expect.objectContaining({
+        thread: expect.objectContaining({
+          current_session_id: "local-session-1",
+          created_at: "2026-08-11T23:27:10Z",
+        }),
+        current_session: expect.objectContaining({
+          id: "local-session-1",
+          clientSessionId: "client-session-1",
+        }),
+        session_ids: ["local-session-1"],
+        messageable: true,
         receipt: {
           sessionId: "central-session-1",
           turnId: "turn-1",
           acceptedAt: "2026-08-11T23:27:12Z",
         },
+      }),
+    );
+  });
+  it("maps a camelized active-thread read consistently with message responses", async () => {
+    mockedApi.get.mockResolvedValue({
+      data: {
+        thread: {
+          id: "thread-2",
+          title: "queue health",
+          state: "active",
+          currentSessionId: "local-session-2",
+        },
+        currentSession: {
+          id: "local-session-2",
+          clientSessionId: "client-session-2",
+          intent: "inspect queues",
+          resourceScopeSummary: "installation/current",
+          state: "active",
+          visibility: "private",
+          centralRevision: 4,
+          source: "user",
+        },
+        sessionIds: ["local-session-1", "local-session-2"],
+        needsContinue: true,
+        messageable: false,
+      },
+    });
+    await expect(getCharlieActiveThread()).resolves.toEqual(
+      expect.objectContaining({
+        thread: expect.objectContaining({ current_session_id: "local-session-2" }),
+        current_session: expect.objectContaining({ id: "local-session-2" }),
+        session_ids: ["local-session-1", "local-session-2"],
+        needs_continue: true,
+        messageable: false,
       }),
     );
   });
