@@ -26,7 +26,7 @@ the Charlie RAG card for the **0.3.5 test run**.
 | DB / migrations | `astronomer.database.health` / `.performance` / `astronomer.migrations.status` | Fixed SQL projections only |
 | Redis / server | `astronomer.redis.health` / `astronomer.runtime.http_health` / `.process_health` | No keys, paths, headers, or bodies |
 | Key rotation | `astronomer.security.key_status` | Loaded-key counts and dev-sentinel names only; no key material |
-| Queue overview | `astronomer.queue.health` | Counts by queue and state |
+| Queue overview | `astronomer.queue.health` | Counts by queue and state plus materialization and active-consumer evidence |
 | Queued work | `astronomer.queue.tasks` then `.task_get` | Inspect pending/active/scheduled/retry/archived work without payload values |
 | Failed work | `astronomer.queue.failed_tasks` then `.task_get` | Includes purpose, timing, retry state, and a sanitized failure category |
 | Catalog sync | `astronomer.catalog.repositories` | Repository host, enabled/auth/sync state, last attempt/success, and sanitized failure category |
@@ -110,7 +110,12 @@ Users never name tools. Match natural language to tool **descriptions** in the d
 6. **Natural language** — pick tools from the disclosed catalog; do not require the operator to know tool names.
 7. **Queue diagnosis** — use `queue.tasks` to identify the affected task, then
    `queue.task_get` for safe detail. For `catalog:sync`, correlate with
-   `catalog.repositories`; do not infer that it is Charlie-specific.
+   `catalog.repositories`; do not infer that it is Charlie-specific. Interpret
+   queue health fields together: `available:true`, `materialized:false`, and
+   `consumer_ready:true` means the configured queue is idle and has never needed
+   a Redis queue key; it is not an outage. `consumer_ready:false` means no active
+   worker currently advertises that queue. Only `available:false` with
+   `inspection_code:queue_inspection_unavailable` means queue inspection failed.
 8. **Durable delivery diagnosis** — use `task_outbox` before the queue when work
    may never have reached Redis. Retry delivery only for a proven `failed` or
    `dead` row and only after exact approval.

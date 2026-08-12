@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -144,6 +145,10 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testing.T) {
 	emptyFleet, _ := NewFleetCapabilityAdapter(&fleetQueriesFake{})
 	emptyQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{}})
+	partialQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{
+		queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{},
+		queueErrors: map[string]error{"low": errors.New("inspection unavailable")},
+	})
 	emptyOperational := operationalAdapterFixture(t, &operationalQueriesFake{settings: map[string]json.RawMessage{}})
 	emptyOperational.databaseSnapshot = func(context.Context) (bool, int64, error) { return false, 0, nil }
 	emptyManagement := managementAdapterFixture(t)
@@ -160,7 +165,8 @@ func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testi
 		{"empty storage", emptyManagement, "astronomer.management.storage", `"items":[]`},
 		{"empty failed tasks", emptyQueue, "astronomer.queue.failed_tasks", `"items":[]`},
 		{"empty pending tasks", emptyQueue, "astronomer.queue.tasks", `"items":[]`},
-		{"partial queue outage", emptyQueue, "astronomer.queue.health", `"available":false`},
+		{"empty queue is configured idle", emptyQueue, "astronomer.queue.health", `"materialized":false`},
+		{"partial queue inspection outage", partialQueue, "astronomer.queue.health", `"available":false`},
 		{"empty backups", emptyOperational, "astronomer.backups.status", `"management_backups":[]`},
 		{"empty alerts", emptyOperational, "astronomer.alert.list", `"items":[]`},
 		{"empty catalog repositories", emptyOperational, "astronomer.catalog.repositories", `"items":[]`},

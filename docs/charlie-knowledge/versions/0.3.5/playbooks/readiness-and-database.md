@@ -25,6 +25,9 @@ restarts.
 | Observation | Next step |
 | --- | --- |
 | Schema **dirty** or version behind expected | Stop recommending app restarts; escalate to migration/operator runbooks |
+| Queue has `available:true`, `materialized:false`, `consumer_ready:true` | Treat it as configured, served, and idle. The Redis key is created only after work is enqueued; do not report the queue as unavailable. |
+| Queue has `consumer_ready:false` | Confirm the expected worker registration and queue weights; this is an unserved queue even if inspection itself is available. |
+| Queue has `available:false` and `inspection_code:queue_inspection_unavailable` | Report an inspection failure and correlate with Redis and worker health; do not describe it as an empty queue. |
 | Queue backlog or failed tasks | List the relevant state with `queue.tasks`, inspect one with `queue.task_get`, and use `failed_tasks` for the archived set; `queue.retry_task` is a **write** (approval/auto policy) |
 | `catalog:sync` pending or failed | Correlate the task with `catalog.repositories`; it synchronizes Astronomer Helm catalog repositories and is separate from `charlie:trigger_dispatch` |
 | Component unready with CrashLoop | Follow **crashloop-management-pod** playbook |

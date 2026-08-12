@@ -12,19 +12,41 @@ import (
 )
 
 type queueInspectorFake struct {
-	queues  map[string]*asynq.QueueInfo
-	tasks   map[string]map[string]*asynq.TaskInfo
-	runTask string
+	queues       map[string]*asynq.QueueInfo
+	queueErrors  map[string]error
+	tasks        map[string]map[string]*asynq.TaskInfo
+	taskErrors   map[string]error
+	servers      []*asynq.ServerInfo
+	serversError error
+	runTask      string
 }
 
 func (f *queueInspectorFake) Queues() ([]string, error) { return []string{"default"}, nil }
+func (f *queueInspectorFake) Servers() ([]*asynq.ServerInfo, error) {
+	if f.serversError != nil {
+		return nil, f.serversError
+	}
+	if f.servers != nil {
+		return f.servers, nil
+	}
+	return []*asynq.ServerInfo{{
+		ID: "worker-1", Status: "active", Concurrency: 10,
+		Queues: map[string]int{"critical": 6, "default": 3, "low": 1},
+	}}, nil
+}
 func (f *queueInspectorFake) GetQueueInfo(name string) (*asynq.QueueInfo, error) {
+	if err := f.queueErrors[name]; err != nil {
+		return nil, err
+	}
 	if info := f.queues[name]; info != nil {
 		return info, nil
 	}
-	return nil, errors.New("missing")
+	return nil, asynq.ErrQueueNotFound
 }
 func (f *queueInspectorFake) listTasks(name string, state asynq.TaskState) ([]*asynq.TaskInfo, error) {
+	if err := f.taskErrors[name]; err != nil {
+		return nil, err
+	}
 	items := []*asynq.TaskInfo{}
 	for _, item := range f.tasks[name] {
 		if item.State == state {
@@ -33,6 +55,92 @@ func (f *queueInspectorFake) listTasks(name string, state asynq.TaskState) ([]*a
 	}
 	return items, nil
 }
+
+func TestQueueCapabilityTreatsConfiguredUnmaterializedQueueAsHealthyAndIdle(t *testing.T) {
+	inspector := &queueInspectorFake{
+		queues: map[string]*asynq.QueueInfo{
+			"critical": {Queue: "critical", Completed: 20},
+			"default":  {Queue: "default", Pending: 1, Retry: 2},
+		},
+		queueErrors: map[string]error{"low": asynq.ErrQueueNotFound},
+	}
+	adapter, _ := NewQueueCapabilityAdapter(inspector)
+	descriptor, _ := capabilityByName("astronomer.queue.health")
+	result, err := adapter.Execute(context.Background(), descriptor, map[string]json.RawMessage{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	low := queueHealthItem(t, result, "low")
+	for field, wanted := range map[string]any{
+		"available": true, "materialized": false, "consumer_ready": true,
+		"consumer_servers": float64(1), "consumer_weight": float64(1),
+	} {
+		if got := low[field]; got != wanted {
+			t.Fatalf("idle configured queue field %s=%v, want %v; result=%s", field, got, wanted, result)
+		}
+	}
+}
+
+func TestQueueCapabilityDistinguishesRealInspectionFailureFromEmptyQueue(t *testing.T) {
+	inspector := &queueInspectorFake{
+		queues:      map[string]*asynq.QueueInfo{},
+		queueErrors: map[string]error{"default": errors.New("redis unavailable")},
+	}
+	adapter, _ := NewQueueCapabilityAdapter(inspector)
+	descriptor, _ := capabilityByName("astronomer.queue.health")
+	result, err := adapter.Execute(context.Background(), descriptor, map[string]json.RawMessage{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed := queueHealthItem(t, result, "default")
+	if failed["available"] != false || failed["inspection_code"] != "queue_inspection_unavailable" {
+		t.Fatalf("real queue inspection failure lost: %s", result)
+	}
+	low := queueHealthItem(t, result, "low")
+	if low["available"] != true || low["materialized"] != false {
+		t.Fatalf("empty queue was conflated with inspection failure: %s", result)
+	}
+}
+
+func TestQueueTaskListsTreatUnmaterializedQueueAsEmptyButRetainRealPartialFailure(t *testing.T) {
+	inspector := &queueInspectorFake{
+		tasks: map[string]map[string]*asynq.TaskInfo{},
+		taskErrors: map[string]error{
+			"low":      asynq.ErrQueueNotFound,
+			"critical": errors.New("redis unavailable"),
+		},
+	}
+	adapter, _ := NewQueueCapabilityAdapter(inspector)
+	for _, capabilityName := range []string{"astronomer.queue.tasks", "astronomer.queue.failed_tasks"} {
+		descriptor, _ := capabilityByName(capabilityName)
+		result, err := adapter.Execute(context.Background(), descriptor, map[string]json.RawMessage{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		value := string(result)
+		if !strings.Contains(value, `"partial":true`) || !strings.Contains(value, `"unavailable_queues":["critical"]`) || strings.Contains(value, `"unavailable_queues":["low"`) {
+			t.Fatalf("%s queue availability is incorrect: %s", capabilityName, value)
+		}
+	}
+}
+
+func queueHealthItem(t *testing.T, result json.RawMessage, queue string) map[string]any {
+	t.Helper()
+	var payload struct {
+		Queues []map[string]any `json:"queues"`
+	}
+	if err := json.Unmarshal(result, &payload); err != nil {
+		t.Fatalf("decode queue health: %v", err)
+	}
+	for _, item := range payload.Queues {
+		if item["queue"] == queue {
+			return item
+		}
+	}
+	t.Fatalf("queue %q missing from result: %s", queue, result)
+	return nil
+}
+
 func (f *queueInspectorFake) ListPendingTasks(name string, _ ...asynq.ListOption) ([]*asynq.TaskInfo, error) {
 	return f.listTasks(name, asynq.TaskStatePending)
 }
