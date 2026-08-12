@@ -228,6 +228,51 @@ func TestMCPRuntimeQuiescentStatesCreateNoTimerListenerOrReceiptConsumer(t *test
 	}
 }
 
+func TestMCPRuntimeRecoversListenerAfterTransientGateReadFailure(t *testing.T) {
+	runtime, _ := mcpRuntimeFixture(t)
+	features := &lifecycleFeature{}
+	features.enabled.Store(true)
+	runtime.features = features
+	ticker := &fakeRuntimeTicker{channel: make(chan time.Time, 1)}
+	runtime.ticker = func(time.Duration) runtimeTicker { return ticker }
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	waitForServing := func(want bool) {
+		t.Helper()
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			runtime.mu.Lock()
+			serving := runtime.listener != nil
+			runtime.mu.Unlock()
+			if serving == want {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Fatalf("MCP listener serving state did not become %v", want)
+	}
+
+	waitForServing(true)
+	features.enabled.Store(false)
+	ticker.channel <- time.Now()
+	waitForServing(false)
+	select {
+	case err := <-done:
+		t.Fatalf("transient gate failure stranded the MCP generation: %v", err)
+	default:
+	}
+
+	features.enabled.Store(true)
+	ticker.channel <- time.Now()
+	waitForServing(true)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMCPRuntimeRejectsSigningKeyThatDoesNotMatchOnboarding(t *testing.T) {
 	runtime, queries := mcpRuntimeFixture(t)
 	queries.connection.SigningKeyFingerprint = digestBytes([]byte("different"))

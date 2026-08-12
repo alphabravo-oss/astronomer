@@ -109,10 +109,14 @@ func (r *MCPRuntime) Run(ctx context.Context) error {
 			LogRuntimeEvent(ctx, r.logger, "inactive_reconciliation_failed")
 		}
 		activation := EvaluateActivation(ctx, r.features, r.queries)
-		if !configurationDiscoveryAllowed(activation) {
-			return nil
-		}
-		if activation.Runnable && r.receipts != nil {
+		// The owning RuntimeLifecycle observes durable authority loss and cancels
+		// this generation. Do not exit this inner loop on one unavailable feature
+		// or connection read: doing so leaves the outer generation published but
+		// with no MCP listener, so later Activate calls incorrectly see work as
+		// already running. reconcile has already closed the listener fail-safe;
+		// staying alive lets the next successful read restore it while a durable
+		// gate fall is still torn down by the outer lifecycle watcher.
+		if configurationDiscoveryAllowed(activation) && activation.Runnable && r.receipts != nil {
 			if err := r.receipts.RunOnce(ctx); err != nil {
 				LogRuntimeEvent(ctx, r.logger, "reconciliation_pending")
 			}
