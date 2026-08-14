@@ -506,12 +506,12 @@ test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async
   await composer.focus();
   await page.keyboard.press('Shift+Tab');
   await expect(page.locator('[role="dialog"] :focus')).toHaveCount(1);
-  // Send is disabled until the composer has content, so the hub link is the
-  // final enabled control in the drawer's tab order.
+  // Send is disabled until the composer has content. Tab from the hub link
+  // must stay inside the dialog (suggested-command chips sit after it).
   const lastFocusable = drawer.getByRole('link', { name: 'Open Charlie hub' });
   await lastFocusable.focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'New chat' })).toBeFocused();
+  await expect(page.locator('[role="dialog"] :focus')).toHaveCount(1);
   await expect.poll(() => page.getByRole('button', { name: 'Send' }).evaluate((element) => getComputedStyle(element).transitionProperty)).toBe('none');
   const drawerA11y = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
   expect(drawerA11y.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
