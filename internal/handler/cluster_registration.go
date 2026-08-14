@@ -234,6 +234,19 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
+	registrationRecord, err := h.queries.GetClusterRegistrationRecord(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load registration status")
+		return
+	}
+	if registrationRecord.InstallBaseline.Valid && registrationRecord.InstallBaseline.Bool && h.baselineTemplateID == uuid.Nil {
+		// Do not acknowledge an operator's explicit baseline choice when this
+		// deployment has no baseline configured. Historically this advanced the
+		// wizard while silently doing nothing, leaving a fresh user waiting for
+		// components that could never appear.
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Platform baseline is not configured")
+		return
+	}
 	record, advErr := h.service.Advance(r.Context(), id, registration.EventConfirm)
 	if advErr != nil {
 		if h.isIllegal(advErr) {
@@ -244,7 +257,7 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if record.InstallBaseline.Valid && record.InstallBaseline.Bool && h.baselineTemplateID != uuid.Nil {
+	if record.InstallBaseline.Valid && record.InstallBaseline.Bool {
 		// Auto-attach the platform-baseline template. The apply worker
 		// reads spec from the snapshot column, NOT from the template
 		// row (so a template edit doesn't retroactively change what
