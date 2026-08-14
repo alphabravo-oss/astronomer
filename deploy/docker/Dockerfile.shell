@@ -30,7 +30,7 @@
 
 # syntax=docker/dockerfile:1.7
 
-FROM golang:1.25-alpine@sha256:8d95af53d0d58e1759ddb4028285d9b1239067e4fbf4f544618cad0f60fbc354 AS dex-validator
+FROM golang:1.26.6-alpine@sha256:1a9c10cf505a9e6b1e96ea77ebdbfe79a0f10380181faf88bc3b51d7e4315fae AS dex-validator
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -38,7 +38,7 @@ COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
 COPY internal/dexconfig ./internal/dexconfig
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
-FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d AS base
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS base
 
 ARG VERSION=0.3.6
 ARG GIT_COMMIT=unknown
@@ -53,7 +53,9 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
 # minor. Bump in the same commit that bumps the k8s.io/* dependencies
 # in go.mod so the shell's kubectl version never lags the cluster's
 # server version far enough to be in the "skew unsupported" zone.
-ARG KUBECTL_VERSION=v1.31.0
+# The official binary is scanned separately from first-party code: it
+# ships Kubernetes' own Go stdlib and cannot be patched here.
+ARG KUBECTL_VERSION=v1.35.2
 ARG TARGETARCH=amd64
 
 RUN apk add --no-cache \

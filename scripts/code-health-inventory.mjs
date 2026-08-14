@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,24 @@ function exists(file) {
 }
 
 function walk(dir, include) {
+  // Prefer git-tracked files so CI and dirty worktrees produce the same
+  // inventory. Fall back to a directory walk when git is unavailable.
+  try {
+    const prefix = rel(dir) || '.';
+    const listed = execFileSync('git', ['ls-files', '-z', '--', prefix], {
+      cwd: repoRoot,
+      encoding: 'buffer',
+    })
+      .toString('utf8')
+      .split('\0')
+      .filter(Boolean)
+      .map((file) => path.join(repoRoot, file))
+      .filter((file) => exists(file) && (!include || include(file)))
+      .sort();
+    if (listed.length) return listed;
+  } catch {
+    // Not a git checkout; use the filesystem walk below.
+  }
   if (!exists(dir)) return [];
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

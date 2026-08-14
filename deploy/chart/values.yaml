@@ -381,7 +381,7 @@ preflight:
         - ALL
   image:
     # astronomer-shell is built from deploy/docker/Dockerfile.shell —
-    # alpine + kubectl pinned at v1.31.0, fetched from dl.k8s.io. It
+    # alpine + kubectl pinned at v1.35.2, fetched from dl.k8s.io. It
     # replaced the previous bitnami/kubectl default after Broadcom
     # 404'd docker.io/bitnami/kubectl during the Aug 2025 retag.
     # Same image runs the in-browser kubectl shell pods, so air-gapped
