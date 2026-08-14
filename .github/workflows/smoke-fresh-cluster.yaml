@@ -25,9 +25,11 @@ jobs:
   smoke:
     runs-on: ubuntu-22.04
     # Hard cap so a stuck wait never burns a full job-timeout budget.
-    # The script's own per-step timeouts add up to ~13 minutes worst
-    # case; 25 leaves slack for k3d provisioning + image pulls.
-    timeout-minutes: 25
+    # The script's own per-step timeouts add up to ~13 minutes and the
+    # one-time six-image build takes roughly 15 on a cold hosted runner.
+    # Keep an outer bound while allowing the inner, step-specific timeouts to
+    # identify the operation that failed.
+    timeout-minutes: 40
 
     env:
       CGO_ENABLED: "0"
@@ -67,6 +69,18 @@ jobs:
           echo "::add-mask::$password"
           echo "password=$password" >> "$GITHUB_OUTPUT"
 
+      - name: Reclaim build cache before adopted-cluster import
+        run: |
+          # The tagged images are already imported into management-cluster
+          # containerd and remain in Docker for the agent/shell import below.
+          # BuildKit's intermediate layers are not runtime artifacts; retaining
+          # them can push the one-node k3d management plane into DiskPressure
+          # as soon as the adopted cluster imports its own images.
+          docker builder prune --all --force
+          docker image prune --force
+          df -h /
+          docker system df
+
       - name: Run smoke test
         env:
           ASTRO_URL: http://astronomer.localtest.me:8080
@@ -84,6 +98,10 @@ jobs:
           for ctx in $(kubectl config get-contexts -o name); do
             kubectl --context "$ctx" get pods -A -o wide \
               > "/tmp/smoke-artifacts/${ctx}-pods.txt" 2>&1 || true
+            kubectl --context "$ctx" get events -A --sort-by=.lastTimestamp \
+              > "/tmp/smoke-artifacts/${ctx}-events.txt" 2>&1 || true
+            kubectl --context "$ctx" describe nodes \
+              > "/tmp/smoke-artifacts/${ctx}-nodes.txt" 2>&1 || true
             kubectl --context "$ctx" -n astronomer-system logs \
               --all-containers --tail=200 deploy/astronomer-agent \
               > "/tmp/smoke-artifacts/${ctx}-agent.log" 2>&1 || true
