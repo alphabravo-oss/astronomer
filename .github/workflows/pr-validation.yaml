@@ -204,7 +204,8 @@ jobs:
         run: |
           export SECRET_KEY="pr-validation-e2e-$(openssl rand -hex 16)"
           export ASTRONOMER_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
-          go run ./cmd/server >server.log 2>&1 &
+          go build -o /tmp/astronomer-server ./cmd/server
+          /tmp/astronomer-server >server.log 2>&1 &
         env:
           DATABASE_URL: postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
           REDIS_URL: redis://localhost:6380/0
@@ -217,7 +218,7 @@ jobs:
 
       - name: Wait for backend health
         run: |
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             if curl -fsS http://localhost:8000/health/ >/dev/null 2>&1; then
               exit 0
             fi
