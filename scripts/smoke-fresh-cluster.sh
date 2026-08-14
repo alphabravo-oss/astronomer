@@ -25,6 +25,7 @@
 #   SMOKE_KEEP         — set to 1 to leave the k3d cluster behind on success
 #   AGENT_IMAGE        — astronomer agent image to load (default: ghcr.io/alphabravo-oss/astronomer-go-agent:dev)
 #   SHELL_IMAGE        — astronomer-shell image to load (default: ghcr.io/alphabravo-oss/astronomer-shell:dev)
+#   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.32.8-k3s1)
 #   TIMEOUT_AGENT      — seconds to wait for agent connect (default: 90)
 #   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 300)
 #   TIMEOUT_SCANS      — seconds to wait for first vulnerability report (default: 240)
@@ -40,6 +41,7 @@ set -euo pipefail
 : "${SMOKE_KEEP:=0}"
 : "${AGENT_IMAGE:=ghcr.io/alphabravo-oss/astronomer-go-agent:dev}"
 : "${SHELL_IMAGE:=ghcr.io/alphabravo-oss/astronomer-shell:dev}"
+: "${K3S_IMAGE:=rancher/k3s:v1.32.8-k3s1}"
 : "${TIMEOUT_AGENT:=90}"
 : "${TIMEOUT_BASELINE:=300}"
 : "${TIMEOUT_SCANS:=240}"
@@ -124,6 +126,7 @@ if docker network inspect k3d-astronomer-mgmt >/dev/null 2>&1; then
   NETWORK_ARG="--network k3d-astronomer-mgmt"
 fi
 k3d cluster create "$SMOKE_CLUSTER" --no-lb \
+    --image "$K3S_IMAGE" \
     --k3s-arg "--disable=traefik@server:0" \
     $NETWORK_ARG \
     >/dev/null
