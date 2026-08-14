@@ -183,7 +183,12 @@ helm upgrade --install astronomer deploy/chart \
   --set ingress.enabled=false \
   --set "gateway.hosts={${HOST}}"
 
-SERVER_DEPLOY="$(kubectl -n "${NAMESPACE}" get deploy -l app.kubernetes.io/component=server -o name | head -n1)"
+SERVER_DEPLOY_NAME="$(kubectl -n "${NAMESPACE}" get deploy \
+  -l 'app.kubernetes.io/name=astronomer,app.kubernetes.io/instance=astronomer,app.kubernetes.io/component=server' \
+  -o jsonpath='{.items[0].metadata.name}')"
+[[ -n "${SERVER_DEPLOY_NAME}" ]] \
+  || fail "Astronomer server deployment was not rendered"
+SERVER_DEPLOY="deployment/${SERVER_DEPLOY_NAME}"
 
 # ── 6. Wait for server ───────────────────────────────────────────────────────
 step "Waiting for server deployment to be Available"
