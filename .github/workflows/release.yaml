@@ -25,8 +25,6 @@ on:
 
 permissions:
   contents: read
-  packages: write   # push to GHCR
-  id-token: write   # cosign keyless via OIDC
 
 env:
   REGISTRY: ghcr.io
@@ -36,6 +34,10 @@ jobs:
   build-sign:
     name: build · sign · attest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push to GHCR
+      id-token: write   # cosign keyless via OIDC
     strategy:
       fail-fast: false
       matrix:
@@ -48,30 +50,37 @@ jobs:
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              imageName: astronomer-frontend }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Derive image tag
         id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          if [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+            echo "tag=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
           fi
-          echo "buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -79,7 +88,7 @@ jobs:
 
       - name: Build & push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -125,7 +134,7 @@ jobs:
           rm -f manifest.json
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
         with:
           cosign-release: "v2.4.1"
 
@@ -139,7 +148,7 @@ jobs:
             "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           syft-version: "v1.16.0"
 
@@ -163,7 +172,7 @@ jobs:
             "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
 
       - name: Upload SBOM as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom-${{ matrix.component.name }}-${{ steps.tag.outputs.tag }}
           path: sbom-${{ matrix.component.name }}.spdx.json
@@ -178,25 +187,32 @@ jobs:
       packages: write   # push OCI chart to GHCR
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: v3.16.2
 
       - name: Derive versions
         id: ver
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           # imageTag must match what build-sign pushed (ref name on a tag,
           # the dispatch input, else the short SHA). chartVersion is the same
           # value normalised to semver (helm chart versions can't carry a 'v').
-          if [ -n "${{ inputs.tag }}" ]; then
-            IMG="${{ inputs.tag }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            IMG="${{ github.ref_name }}"
+          if [ -n "$INPUT_TAG" ]; then
+            IMG="$INPUT_TAG"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            IMG="$REF_NAME"
           else
-            IMG="$(echo ${{ github.sha }} | cut -c1-7)"
+            IMG="${COMMIT_SHA:0:7}"
           fi
           CHART="${IMG#v}"
           # A bare short-SHA isn't semver — wrap it as a 0.0.0 prerelease.
@@ -204,13 +220,16 @@ jobs:
             [0-9]*.[0-9]*.[0-9]*) : ;;
             *) CHART="0.0.0-${CHART}" ;;
           esac
-          echo "imageTag=$IMG" >> $GITHUB_OUTPUT
-          echo "chartVersion=$CHART" >> $GITHUB_OUTPUT
+          echo "imageTag=$IMG" >> "$GITHUB_OUTPUT"
+          echo "chartVersion=$CHART" >> "$GITHUB_OUTPUT"
 
       - name: Pin chart + first-party image tags to the release
+        env:
+          IMAGE_TAG: ${{ steps.ver.outputs.imageTag }}
+          CHART_VERSION: ${{ steps.ver.outputs.chartVersion }}
         run: |
-          IMG="${{ steps.ver.outputs.imageTag }}"
-          CHART="${{ steps.ver.outputs.chartVersion }}"
+          IMG="$IMAGE_TAG"
+          CHART="$CHART_VERSION"
           # Chart version (semver) + appVersion (human/image tag).
           sed -i "s/^version:.*/version: ${CHART}/" deploy/chart/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: \"${IMG}\"/" deploy/chart/Chart.yaml
@@ -237,8 +256,14 @@ jobs:
             --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
 
       - name: Login · package · push (OCI)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          IMAGE_TAG: ${{ steps.ver.outputs.imageTag }}
+          CHART_VERSION: ${{ steps.ver.outputs.chartVersion }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm package deploy/chart --version "${{ steps.ver.outputs.chartVersion }}" --app-version "${{ steps.ver.outputs.imageTag }}"
-          helm push "astronomer-${{ steps.ver.outputs.chartVersion }}.tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
-          echo "Pushed oci://ghcr.io/${{ github.repository_owner }}/charts/astronomer:${{ steps.ver.outputs.chartVersion }}"
+          echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          helm package deploy/chart --version "$CHART_VERSION" --app-version "$IMAGE_TAG"
+          helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/${REPOSITORY_OWNER}/charts"
+          echo "Pushed oci://ghcr.io/${REPOSITORY_OWNER}/charts/astronomer:${CHART_VERSION}"
