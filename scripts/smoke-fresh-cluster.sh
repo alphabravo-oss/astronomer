@@ -14,12 +14,12 @@
 #
 # Run locally (with the .247 stack already live):
 #   ASTRO_URL=http://astronomer.5.78.101.247.nip.io:8080 \
-#   ASTRO_USERNAME=admin ASTRO_PASSWORD=... \
+#   ASTRO_EMAIL=admin@astronomer.local ASTRO_PASSWORD=... \
 #   ./scripts/smoke-fresh-cluster.sh
 #
 # Env vars:
 #   ASTRO_URL          — management URL (default: http://astronomer.localtest.me:8080)
-#   ASTRO_USERNAME     — admin user (default: admin)
+#   ASTRO_EMAIL        — admin email (default: admin@astronomer.local)
 #   ASTRO_PASSWORD     — admin password (required)
 #   SMOKE_CLUSTER      — k3d cluster name to create (default: astronomer-smoke-$$)
 #   SMOKE_KEEP         — set to 1 to leave the k3d cluster behind on success
@@ -36,7 +36,7 @@ set -euo pipefail
 # ── config ────────────────────────────────────────────────────────────
 
 : "${ASTRO_URL:=http://astronomer.localtest.me:8080}"
-: "${ASTRO_USERNAME:=admin}"
+: "${ASTRO_EMAIL:=admin@astronomer.local}"
 : "${ASTRO_PASSWORD:?ASTRO_PASSWORD is required}"
 : "${SMOKE_CLUSTER:=astronomer-smoke-$$}"
 : "${SMOKE_KEEP:=0}"
@@ -121,11 +121,11 @@ ok "management API responds"
 
 step "Authenticate"
 LOGIN_BODY="$(curl -fsS -X POST -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$ASTRO_USERNAME\",\"password\":\"$ASTRO_PASSWORD\"}" \
+  -d "{\"email\":\"$ASTRO_EMAIL\",\"password\":\"$ASTRO_PASSWORD\"}" \
   "$ASTRO_URL/api/v1/auth/login/")"
 TOKEN="$(echo "$LOGIN_BODY" | jget "['data']['token']")"
 [[ -n "$TOKEN" ]] || fail "no token in login response"
-ok "authenticated as $ASTRO_USERNAME"
+ok "authenticated as $ASTRO_EMAIL"
 
 # ── 2. create k3d cluster ─────────────────────────────────────────────
 

@@ -242,6 +242,10 @@ func TestConfigurationRuntimeLifecycleReconcilesWhileOperationallyDisabled(t *te
 	case <-time.After(time.Second):
 		t.Fatal("emergency stop did not cancel the mode reconciler")
 	}
+	deadline := time.Now().Add(time.Second)
+	for work.stops.Load() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	if work.stops.Load() != 1 {
 		t.Fatalf("configuration stops=%d", work.stops.Load())
 	}

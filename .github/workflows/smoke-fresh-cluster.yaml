@@ -70,7 +70,7 @@ jobs:
       - name: Run smoke test
         env:
           ASTRO_URL: http://astronomer.localtest.me:8080
-          ASTRO_USERNAME: admin
+          ASTRO_EMAIL: admin@astronomer.local
           ASTRO_PASSWORD: ${{ steps.creds.outputs.password }}
           AGENT_IMAGE: ghcr.io/alphabravo-oss/astronomer-go-agent:ci
           SHELL_IMAGE: ghcr.io/alphabravo-oss/astronomer-shell:ci
