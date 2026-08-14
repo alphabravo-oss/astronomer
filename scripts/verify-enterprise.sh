@@ -193,6 +193,13 @@ render_helm() {
 
 verify_helm() {
   step "Helm dependencies from Chart.lock"
+  # helm dependency build looks up Chart.yaml repositories by URL. A clean
+  # runner has no repositories.yaml, so register the locked Argo Helm repo
+  # before rebuilding from Chart.lock. The committed tarball is still used
+  # when it matches the lock digest.
+  if ! helm repo list 2>/dev/null | awk 'NR>1 {print $2}' | grep -qx 'https://argoproj.github.io/argo-helm'; then
+    helm repo add astronomer-argo https://argoproj.github.io/argo-helm
+  fi
   run_logged helm-dependency-build helm dependency build deploy/chart
 
   # The chart ships no key material: secrets.secretKey / secrets.encryptionKey

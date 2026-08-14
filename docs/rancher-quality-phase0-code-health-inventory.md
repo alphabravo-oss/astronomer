@@ -11,7 +11,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 - Frontend source files: 416
 - Frontend source lines: 115884
 - Go source files under `internal/` excluding generated sqlc and tests: 576
-- Go source files scanned for sqlc query references excluding generated sqlc: 17109
+- Go source files scanned for sqlc query references excluding generated sqlc: 1369
 - sqlc query declarations: 1023
 - Component files scanned: 135
 - Helm top-level values scanned: 33
@@ -113,12 +113,19 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
+- `ArchiveAuditLogsForCluster` declared at [`internal/db/queries/cluster_decommission.sql:193`](internal/db/queries/cluster_decommission.sql:193) has no non-generated Go reference
 - `ClaimDueCharlieTriggerEvents` declared at [`internal/db/queries/charlie.sql:899`](internal/db/queries/charlie.sql:899) has no non-generated Go reference
 - `ClearCharlieEmergencyDisabled` declared at [`internal/db/queries/charlie.sql:342`](internal/db/queries/charlie.sql:342) has no non-generated Go reference
 - `CompareAndSetCharlieMode` declared at [`internal/db/queries/charlie.sql:318`](internal/db/queries/charlie.sql:318) has no non-generated Go reference
+- `CountBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:29`](internal/db/queries/catalog_blessed.sql:29) has no non-generated Go reference
 - `CreateCharlieTriggerEvent` declared at [`internal/db/queries/charlie.sql:832`](internal/db/queries/charlie.sql:832) has no non-generated Go reference
 - `DisconnectCharlieConnection` declared at [`internal/db/queries/charlie.sql:367`](internal/db/queries/charlie.sql:367) has no non-generated Go reference
+- `GetBlessedChart` declared at [`internal/db/queries/catalog_blessed.sql:26`](internal/db/queries/catalog_blessed.sql:26) has no non-generated Go reference
+- `GetXClusterAnomalyBaseline` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:11`](internal/db/queries/xcluster_anomaly_baselines.sql:11) has no non-generated Go reference
+- `ListBlessedCharts` declared at [`internal/db/queries/catalog_blessed.sql:23`](internal/db/queries/catalog_blessed.sql:23) has no non-generated Go reference
 - `ListCharlieAmbiguousReceipts` declared at [`internal/db/queries/charlie.sql:630`](internal/db/queries/charlie.sql:630) has no non-generated Go reference
+- `ListScansByClusterAndType` declared at [`internal/db/queries/security.sql:96`](internal/db/queries/security.sql:96) has no non-generated Go reference
+- `ListXClusterAnomalyBaselines` declared at [`internal/db/queries/xcluster_anomaly_baselines.sql:5`](internal/db/queries/xcluster_anomaly_baselines.sql:5) has no non-generated Go reference
 - `RecordTunnelLocatorEvent` declared at [`internal/db/queries/charlie.sql:71`](internal/db/queries/charlie.sql:71) has no non-generated Go reference
 - `RevokeCharlieDelegation` declared at [`internal/db/queries/charlie.sql:494`](internal/db/queries/charlie.sql:494) has no non-generated Go reference
 - `RevokeCharlieDelegationsForPrincipal` declared at [`internal/db/queries/charlie.sql:502`](internal/db/queries/charlie.sql:502) has no non-generated Go reference
@@ -153,7 +160,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 
 - Hard failures: 0
 - Duplicate-code candidates: 14
-- Dead-code candidates: 29
+- Dead-code candidates: 36
 
 ## Definition Of Done For Each Candidate
 
