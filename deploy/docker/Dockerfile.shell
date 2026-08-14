@@ -53,6 +53,8 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
 # minor. Bump in the same commit that bumps the k8s.io/* dependencies
 # in go.mod so the shell's kubectl version never lags the cluster's
 # server version far enough to be in the "skew unsupported" zone.
+# The official binary is scanned separately from first-party code: it
+# ships Kubernetes' own Go stdlib and cannot be patched here.
 ARG KUBECTL_VERSION=v1.35.2
 ARG TARGETARCH=amd64
 

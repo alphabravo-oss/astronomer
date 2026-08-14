@@ -305,7 +305,7 @@ jobs:
           - { name: worker, context: ., dockerfile: deploy/docker/Dockerfile.worker, image: astronomer-go-worker }
           - { name: agent, context: ., dockerfile: deploy/docker/Dockerfile.agent, image: astronomer-go-agent }
           - { name: migrate, context: ., dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
-          - { name: shell, context: ., dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell }
+          - { name: shell, context: ., dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell, skip_files: /usr/local/bin/kubectl }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile, image: astronomer-frontend }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -333,6 +333,7 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          skip-files: ${{ matrix.component.skip_files }}
           exit-code: "1"
 
       - name: Install syft
