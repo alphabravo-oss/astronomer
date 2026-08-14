@@ -36,6 +36,9 @@ jobs:
       DOCKER_BUILDKIT: "1"
       # NGF 2.6.0 requires Kubernetes >= 1.31. k3d 5.7 defaulted to 1.30.4.
       K3S_IMAGE: rancher/k3s:v1.32.8-k3s1
+      # Keep the failed adopted cluster until the diagnostic steps have read it.
+      SMOKE_CLUSTER: astronomer-smoke-${{ github.run_id }}
+      SMOKE_DELETE: "0"
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -53,6 +56,11 @@ jobs:
             | TAG=v5.8.3 bash
 
       - name: Bring up local Astronomer (k3d-bootstrap)
+        env:
+          # The workflow itself reaches the published host port through
+          # localtest.me. Agents run inside another k3d cluster, where that
+          # name is loopback; advertise Docker's host gateway to them instead.
+          SERVER_URL: http://host.k3d.internal:8080
         run: |
           # k3d-bootstrap builds every first-party image exactly once and
           # imports that exact set into the fresh cluster. Building a partial
@@ -117,3 +125,7 @@ jobs:
           name: smoke-debug-${{ github.run_id }}
           path: /tmp/smoke-artifacts/
           retention-days: 7
+
+      - name: Delete adopted test cluster
+        if: always()
+        run: k3d cluster delete "$SMOKE_CLUSTER"

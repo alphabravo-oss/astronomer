@@ -24,7 +24,7 @@
 #   NAMESPACE     Astronomer release namespace               (default: astronomer)
 #   HOST          External hostname for the dashboard        (default: astronomer.localtest.me)
 #   HTTP_PORT     Host port mapped to the gateway :80        (default: 8080)
-#   SERVER_URL    Override the externally-reachable URL      (default: http://${HOST}:${HTTP_PORT})
+#   SERVER_URL    URL advertised to agents and browser CORS  (default: http://${HOST}:${HTTP_PORT})
 #   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.5.1)
 #   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
 #                  The supported pair is NGF 2.6.0 + Gateway API v1.5.1.
@@ -181,7 +181,7 @@ helm upgrade --install astronomer deploy/chart \
   --set config.serverURL="${SERVER_URL}" \
   --set config.corsAllowedOrigins="${SERVER_URL}" \
   --set ingress.enabled=false \
-  --set "gateway.hosts={${HOST}}"
+  --set "gateway.hosts={${HOST},host.k3d.internal}"
 
 SERVER_DEPLOY_NAME="$(kubectl -n "${NAMESPACE}" get deploy \
   -l 'app.kubernetes.io/name=astronomer,app.kubernetes.io/instance=astronomer,app.kubernetes.io/component=server' \
