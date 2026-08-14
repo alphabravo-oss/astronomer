@@ -197,6 +197,26 @@ async function mockApi(page: Page, user = adminUser) {
     if (path === '/activity' || path === '/alerting/events' || path === '/tools') {
       return route.fulfill({ json: apiResponse([]) });
     }
+    if (path === '/charlie/threads' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({
+          threads: [{
+            id: 'session-private-user',
+            title: 'Inspect alert health',
+            state: 'active',
+            updated_at: new Date().toISOString(),
+          }],
+        }),
+      });
+    }
+    if (path === '/charlie/threads/session-private-user/history' && method === 'GET') {
+      return route.fulfill({
+        json: apiResponse({ messages: [{
+          itemId: 'message-charlie', kind: 'assistant_message',
+          redactedContent: 'The selected alert is under investigation.',
+        }] }),
+      });
+    }
     if (path === '/charlie/sessions' && method === 'GET') {
       return route.fulfill({
         json: apiResponse({
@@ -424,7 +444,7 @@ test('Charlie launcher exposes only bounded route context across product surface
     await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
     await expect(page.getByRole('dialog', { name: 'Charlie' })).toBeVisible();
     await expect(page.getByRole('button', { name: `Remove ${contextLabel}` })).toBeVisible();
-    await expect(page.getByText(/Logs, metrics, audit details, and broad resource data are never attached automatically/i)).toBeVisible();
+    await expect(page.getByText(/Charlie retrieves authorized diagnostics through audited read tools/i)).toBeVisible();
     await page.getByRole('button', { name: 'Close', exact: true }).click();
   }
 });
@@ -474,9 +494,9 @@ test('Charlie drawer and hub are mobile-safe and pass serious axe checks', async
   await page.getByRole('button', { name: 'Open Charlie assistant' }).click();
   const drawer = page.getByRole('dialog', { name: 'Charlie' });
   await expect(drawer).toBeVisible();
-  await expect(page.getByLabel('Current Charlie mode: approval_required')).toBeVisible();
-  await expect(drawer.getByText(/Hard ceiling: includes read_only/)).toBeVisible();
-  await expect(page.getByText('The selected alert is under investigation.')).toBeVisible();
+  await expect(page.getByLabel('Current Charlie mode: Approval mode')).toBeVisible();
+  await expect(drawer.getByText(/Every exact write is proposed for human review/)).toBeVisible();
+  await expect(drawer.getByText('Alerts')).toBeVisible();
   const viewportWidth = page.viewportSize()?.width ?? 0;
   const drawerBox = await drawer.boundingBox();
   expect(drawerBox).not.toBeNull();

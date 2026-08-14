@@ -1,5 +1,16 @@
 import api from "@/lib/api";
 import { API_BASE } from "@/lib/env";
+import type {
+  CharlieCommandCatalog,
+  CharlieCommandDescriptor,
+  CharlieCommandRequest,
+} from "@/types/openapi.generated";
+
+export type {
+  CharlieCommandCatalog,
+  CharlieCommandDescriptor,
+  CharlieCommandRequest,
+};
 export type CharlieResource = {
   type:
     | "installation"
@@ -515,37 +526,6 @@ export type CharlieTurnReceipt = {
   sessionId: string;
   turnId: string;
   acceptedAt?: string;
-};
-
-export type CharlieCommandDescriptor = {
-  id: string;
-  version: string;
-  name: string;
-  aliases?: string[];
-  label: string;
-  description: string;
-  category: string;
-  execution: "agent" | "client";
-  effect: "read" | "local";
-  required_mode: "read_only";
-  example: string;
-  argument?: {
-    name: string;
-    placeholder: string;
-    required: boolean;
-  };
-};
-
-export type CharlieCommandCatalog = {
-  schema: "astronomer.charlie-command-catalog/v1";
-  version: number;
-  commands: CharlieCommandDescriptor[];
-};
-
-export type CharlieCommandRequest = {
-  id: string;
-  version: string;
-  arguments: Record<string, string>;
 };
 
 export async function getCharlieCommands(): Promise<CharlieCommandCatalog> {

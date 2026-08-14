@@ -353,8 +353,13 @@ func releaseStepIndex(steps []struct {
 	With map[string]any `yaml:"with"`
 	Run  string         `yaml:"run"`
 }, uses string) int {
+	wantName, _, _ := strings.Cut(uses, "@")
 	for index, step := range steps {
 		if step.Uses == uses {
+			return index
+		}
+		// Digest-pinned actions keep the same name but replace the floating tag.
+		if wantName != "" && strings.HasPrefix(step.Uses, wantName+"@") {
 			return index
 		}
 	}

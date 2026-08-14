@@ -1,5 +1,10 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  Table,
+  TableCell,
+  TableHead,
+} from "@/components/ui/table";
 
 export function safeLink(href: string): string | null {
   const value = href.trim();
@@ -77,18 +82,18 @@ const markdownComponents: Components = {
   hr: () => <hr className="my-3 border-border" />,
   table: ({ children }) => (
     <div className="my-2 max-w-full overflow-x-auto">
-      <table className="w-full border-collapse text-left text-xs">
-        {children}
-      </table>
+      <Table className="border-collapse text-left text-xs">{children}</Table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-border bg-muted px-2 py-1 font-semibold">
+    <TableHead className="border border-border bg-muted px-2 py-1 font-semibold">
       {children}
-    </th>
+    </TableHead>
   ),
   td: ({ children }) => (
-    <td className="border border-border px-2 py-1 align-top">{children}</td>
+    <TableCell className="border border-border px-2 py-1 align-top">
+      {children}
+    </TableCell>
   ),
 };
 

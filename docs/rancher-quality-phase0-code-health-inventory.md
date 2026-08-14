@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 414
-- Frontend source lines: 114457
-- Go source files under `internal/` excluding generated sqlc and tests: 573
-- Go source files scanned for sqlc query references excluding generated sqlc: 17103
+- Frontend source files: 416
+- Frontend source lines: 115884
+- Go source files under `internal/` excluding generated sqlc and tests: 576
+- Go source files scanned for sqlc query references excluding generated sqlc: 17109
 - sqlc query declarations: 1023
-- Component files scanned: 134
+- Component files scanned: 135
 - Helm top-level values scanned: 33
 
 ## Hard Gates
@@ -94,7 +94,7 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2112`](internal/server/routes.go:2112)
+- `bearerToken` in [`internal/handler/scim.go:203`](internal/handler/scim.go:203), [`internal/server/routes.go:2151`](internal/server/routes.go:2151)
 - `copyStringMap` in [`internal/charlie/agent_installation.go:1467`](internal/charlie/agent_installation.go:1467), [`internal/crd/types.go:1248`](internal/crd/types.go:1248), [`internal/server/self_manage_credentials.go:324`](internal/server/self_manage_credentials.go:324)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac.go:1110`](internal/handler/rbac.go:1110), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
@@ -103,7 +103,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `isOwnedNamespace` in [`internal/agent/reconcile.go:485`](internal/agent/reconcile.go:485), [`internal/server/desired_state.go:46`](internal/server/desired_state.go:46)
 - `nullableTime` in [`internal/charlie/fleet_capability_adapter.go:198`](internal/charlie/fleet_capability_adapter.go:198), [`internal/handler/alerting.go:2144`](internal/handler/alerting.go:2144)
 - `objectMeta` in [`internal/charlie/agent_installation.go:783`](internal/charlie/agent_installation.go:783), [`internal/crd/ingest_v2.go:171`](internal/crd/ingest_v2.go:171)
-- `podReady` in [`internal/charlie/mode_ceiling_rollout.go:268`](internal/charlie/mode_ceiling_rollout.go:268), [`internal/handler/monitoring_operations.go:912`](internal/handler/monitoring_operations.go:912)
+- `podReady` in [`internal/charlie/mode_ceiling_rollout.go:301`](internal/charlie/mode_ceiling_rollout.go:301), [`internal/handler/monitoring_operations.go:912`](internal/handler/monitoring_operations.go:912)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `verbMatches` in [`internal/rbac/native.go:85`](internal/rbac/native.go:85), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
 - `writeError` in [`internal/charlie/contract/fakebridge/fake.go:314`](internal/charlie/contract/fakebridge/fake.go:314), [`internal/charliequalification/hook.go:221`](internal/charliequalification/hook.go:221)
