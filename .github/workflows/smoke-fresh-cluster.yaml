@@ -57,10 +57,6 @@ jobs:
           # set here first duplicated almost the entire build and exhausted
           # this job's 25-minute qualification budget.
           make k3d-bootstrap CLUSTER=astronomer-mgmt IMG_TAG=ci
-          # k3d-bootstrap waits for the helm install to finish; give
-          # the embedded local agent + chart-repo a few seconds to
-          # settle before driving the wizard.
-          sleep 10
 
       - name: Resolve admin password
         id: creds

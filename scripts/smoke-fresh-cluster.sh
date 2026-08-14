@@ -26,6 +26,7 @@
 #   AGENT_IMAGE        — astronomer agent image to load (default: ghcr.io/alphabravo-oss/astronomer-go-agent:dev)
 #   SHELL_IMAGE        — astronomer-shell image to load (default: ghcr.io/alphabravo-oss/astronomer-shell:dev)
 #   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.32.8-k3s1)
+#   TIMEOUT_API        — seconds to wait for the management API (default: 180)
 #   TIMEOUT_AGENT      — seconds to wait for agent connect (default: 90)
 #   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 300)
 #   TIMEOUT_SCANS      — seconds to wait for first vulnerability report (default: 240)
@@ -42,6 +43,7 @@ set -euo pipefail
 : "${AGENT_IMAGE:=ghcr.io/alphabravo-oss/astronomer-go-agent:dev}"
 : "${SHELL_IMAGE:=ghcr.io/alphabravo-oss/astronomer-shell:dev}"
 : "${K3S_IMAGE:=rancher/k3s:v1.32.8-k3s1}"
+: "${TIMEOUT_API:=180}"
 : "${TIMEOUT_AGENT:=90}"
 : "${TIMEOUT_BASELINE:=300}"
 : "${TIMEOUT_SCANS:=240}"
@@ -99,9 +101,20 @@ command -v python3 >/dev/null || fail "python3 not on PATH"
 ok "k3d $(k3d version | head -1)"
 ok "kubectl client present"
 
-step "Preflight: management API reachable"
-curl -fsS --max-time 5 "$ASTRO_URL/health" >/dev/null \
-  || fail "management API at $ASTRO_URL not reachable"
+step "Preflight: management API reachable (timeout ${TIMEOUT_API}s)"
+# Helm can briefly observe the first server rollout as Available immediately
+# before self-management applies the next revision. Treat that bounded 503
+# window as startup, while still failing a server that never becomes healthy.
+api_ready=0
+deadline=$(( $(date +%s) + TIMEOUT_API ))
+while (( $(date +%s) < deadline )); do
+  if curl -fsS --max-time 5 "$ASTRO_URL/health" >/dev/null 2>&1; then
+    api_ready=1
+    break
+  fi
+  sleep 2
+done
+[[ "$api_ready" == "1" ]] || fail "management API at $ASTRO_URL not reachable within ${TIMEOUT_API}s"
 ok "management API responds"
 
 # ── 1. authenticate ───────────────────────────────────────────────────
