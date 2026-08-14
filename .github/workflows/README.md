@@ -102,14 +102,16 @@ That scope verifies:
 `make verify` runs the same focused sequence locally. The broader
 `make verify-enterprise` remains the release-integrity answer.
 
-### `release.yaml` — signed release pipeline (T12)
+### `release.yaml` — qualified immutable release pipeline (T12)
 
-Fires on `v*.*.*` tag push (also dispatchable manually for hotfix tags from
-non-tag commits). For each first-party chart image (`server`, `worker`,
-`agent`, `migrate`, `shell`, `frontend`) it:
+Fires only on a stable `vX.Y.Z` tag in the public
+`alphabravo-oss/astronomer` repository. The tag must point at public `main`,
+and the tag, chart, binary, frontend, Dockerfile, and default image versions
+must agree. For each first-party chart image (`server`, `worker`, `agent`,
+`migrate`, `shell`, `frontend`) it:
 
-1. Builds the image with `docker buildx` and pushes to
-   `ghcr.io/<owner>/astronomer-go-<component>:<tag>` plus `:latest`.
+1. Builds the image with `docker buildx` and pushes only the immutable exact
+   tag under `ghcr.io/alphabravo-oss`.
 2. Signs the image by **digest** (not tag — signing by mutable tag is a
    forgery risk) with cosign keyless via the GitHub OIDC token →
    Sigstore Fulcio short-lived cert → Rekor transparency log.
@@ -120,6 +122,12 @@ non-tag commits). For each first-party chart image (`server`, `worker`,
    can `cosign verify-attestation` to retrieve it.
 6. Uploads the SBOM as a workflow artifact (90-day retention) for
    browsing without a registry pull.
+7. Pushes the exact OCI chart, then installs that published chart and its
+   remote images on a clean k3d cluster with the pinned Gateway API/NGF pair.
+8. Only after qualification, promotes the six images to the mutable `latest`
+   convenience channel and creates the GitHub Release with chart, SBOMs, and
+   checksums. Production upgrades always use the exact tag/version, not
+   `latest`.
 
 The verifier-side runbook at
 [`../../docs/verify-images.md`](../../docs/verify-images.md) documents how

@@ -16,44 +16,13 @@ shape of the chart (`deploy/chart/`).
 ## TL;DR
 
 ```bash
-# 1) Capture the live values FIRST so dry-run / upgrade preserve operator pins.
-helm get values astronomer -n astronomer > /tmp/astronomer-values.yaml
+# 1) Back up, resolve the exact OCI chart, and run a server-side dry run.
+./scripts/upgrade-release.sh v0.3.7
 
-# 2) Render-time preflight (catches missing/invalid values before anything is
-# applied). The chart also runs a pre-upgrade preflight Job on the real cluster
-# (see "Pre-upgrade checklist" and step 2 below).
-helm upgrade astronomer ./deploy/chart --dry-run \
-  -f deploy/chart/values.yaml \
-  -f deploy/chart/values-production.yaml \
-  -f /tmp/astronomer-values.yaml \
-  --set image.server.tag=<NEW_SHA> \
-  --set image.worker.tag=<NEW_SHA> \
-  --set image.agent.tag=<NEW_SHA> \
-  --set image.migrate.tag=<NEW_SHA> \
-  --set frontend.image.tag=<NEW_SHA>
+# 2) After reviewing the private backup/dry-run directory, upgrade atomically.
+./scripts/upgrade-release.sh --yes v0.3.7
 
-# 3) Diff, then upgrade
-helm diff upgrade astronomer ./deploy/chart \
-  -f deploy/chart/values.yaml \
-  -f deploy/chart/values-production.yaml \
-  -f /tmp/astronomer-values.yaml \
-  --set image.server.tag=<NEW_SHA> \
-  --set image.worker.tag=<NEW_SHA> \
-  --set image.agent.tag=<NEW_SHA> \
-  --set image.migrate.tag=<NEW_SHA> \
-  --set frontend.image.tag=<NEW_SHA>
-
-helm upgrade astronomer ./deploy/chart \
-  -f deploy/chart/values.yaml \
-  -f deploy/chart/values-production.yaml \
-  -f /tmp/astronomer-values.yaml \
-  --set image.server.tag=<NEW_SHA> \
-  --set image.worker.tag=<NEW_SHA> \
-  --set image.agent.tag=<NEW_SHA> \
-  --set image.migrate.tag=<NEW_SHA> \
-  --set frontend.image.tag=<NEW_SHA>
-
-# 4) Verify (see "Post-upgrade verification")
+# 3) Verify (see "Post-upgrade verification")
 curl -s $URL/health/                              # 200
 curl -s $URL/readyz                               # 200
 curl -s -H "Authorization: Bearer $TOKEN" $URL/api/v1/platform/health-summary/
@@ -62,6 +31,15 @@ curl -s -H "Authorization: Bearer $TOKEN" $URL/api/v1/platform/health-summary/
 helm history astronomer -n astronomer
 helm rollback astronomer <PREVIOUS_REV> -n astronomer
 ```
+
+The helper follows the same exact-version pattern used by Rancher upgrades. It
+resolves `oci://ghcr.io/alphabravo-oss/charts/astronomer:<version>`, captures
+Helm values/history/manifests and Secret recovery material with mode `0600`,
+backs up bundled Postgres (or requires confirmation of an external backup),
+uses `--reset-then-reuse-values` to merge new chart defaults with live operator
+overrides, replaces local/development first-party image pins with the exact
+release tag, and runs Helm with `--atomic --cleanup-on-fail`. It never follows
+the mutable `latest` image channel.
 
 ---
 
@@ -186,9 +164,11 @@ kubectl -n astronomer get pdb
 ### 5. Capture current values
 
 ```bash
-# These are the values currently rendered; copy them so the upgrade
-# preserves operator-set overrides.
-helm get values astronomer -n astronomer > /tmp/astronomer-values.yaml
+# The release helper captures both computed and user-supplied values with a
+# private umask. If inspecting manually, do not put literal Secret values in a
+# world-readable temporary file.
+umask 077
+helm get values astronomer -n astronomer --all > ./astronomer-values-before.yaml
 
 # Print which image tags are live:
 kubectl -n astronomer get deploy -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}'
@@ -198,27 +178,15 @@ kubectl -n astronomer get deploy -o jsonpath='{range .items[*]}{.metadata.name}=
 
 ## The upgrade itself
 
-### Step 1 — preview the diff
-
-`helm-diff` is not in core helm; install it once:
+### Step 1 — back up and preview
 
 ```bash
-helm plugin install https://github.com/databus23/helm-diff
+./scripts/upgrade-release.sh v0.3.7
 ```
 
-Then preview:
-
-```bash
-helm diff upgrade astronomer ./deploy/chart \
-  -f deploy/chart/values.yaml \
-  -f deploy/chart/values-production.yaml \
-  -f /tmp/astronomer-values.yaml \
-  --set image.server.tag=<NEW_SHA> \
-  --set image.worker.tag=<NEW_SHA> \
-  --set image.agent.tag=<NEW_SHA> \
-  --set image.migrate.tag=<NEW_SHA> \
-  --set frontend.image.tag=<NEW_SHA>
-```
+This resolves the exact OCI chart, captures state and recovery material, and
+writes the server-side dry-run render into the reported private backup
+directory. Review `target-chart.yaml`, `history.yaml`, and `dry-run.yaml` there.
 
 Read every change. Common surprises:
 
@@ -231,16 +199,7 @@ Read every change. Common surprises:
 ### Step 2 — run the upgrade
 
 ```bash
-helm upgrade astronomer ./deploy/chart \
-  -f deploy/chart/values.yaml \
-  -f deploy/chart/values-production.yaml \
-  -f /tmp/astronomer-values.yaml \
-  --set image.server.tag=<NEW_SHA> \
-  --set image.worker.tag=<NEW_SHA> \
-  --set image.agent.tag=<NEW_SHA> \
-  --set image.migrate.tag=<NEW_SHA> \
-  --set frontend.image.tag=<NEW_SHA> \
-  --timeout 10m
+./scripts/upgrade-release.sh --yes v0.3.7
 ```
 
 What happens:
@@ -301,7 +260,7 @@ What happens:
    - Gateway API standard CRDs pinned to the controller-supported bundle. The
      chart preflight verifies CRD and GatewayClass existence; it does not
      validate controller-owned status conditions. The supported local
-     bootstrap separately binds Gateway API `v1.4.1` to NGINX Gateway Fabric
+     bootstrap separately binds Gateway API `v1.5.1` to NGINX Gateway Fabric
      `2.6.0` and fails closed unless the `nginx` GatewayClass reports
      generation-current `Accepted=True` and `SupportedVersion=True`. Operators
      using an externally installed controller must perform that same status
@@ -430,11 +389,9 @@ enough.
 ## Agent version skew matrix
 
 The server and agent must speak a compatible wire protocol. We follow a
-strict policy: **agents support at most N-1 server versions**.
-
-| Server version | Agents supported |
-|---------------:|:-----------------|
-| `v0.1.0` (current) | `v0.1.0` |
+strict policy: **agents support at most N-1 server versions**. A release chart
+pins its management-plane images and the agent image to the same exact tag;
+do not mix independently chosen tags.
 
 When server adds a wire-protocol message (e.g. `MsgDecommission` in
 2026-05-11), the agent must be re-rolled at the same time. The agent's
@@ -452,25 +409,17 @@ kubectl --context <each-managed-cluster> -n astronomer \
 
 ---
 
-## Worked example: bumping image tags only
+## Worked example: exact patch-release upgrade
 
-The simplest upgrade path. No chart changes, no values changes — just
-new image SHAs.
+The supported simple path upgrades the chart and all first-party images as one
+versioned compatibility unit.
 
 ```bash
-# Capture current state
-helm history astronomer -n astronomer | head -5
-kubectl -n astronomer get deploy -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}'
+# Capture, resolve, and dry-run
+./scripts/upgrade-release.sh v0.3.7
 
-# Bump
-helm upgrade astronomer ./deploy/chart \
-  --reuse-values \
-  --set image.server.tag=$NEW_SHA \
-  --set image.worker.tag=$NEW_SHA \
-  --set image.agent.tag=$NEW_SHA \
-  --set image.migrate.tag=$NEW_SHA \
-  --set frontend.image.tag=$NEW_SHA \
-  --timeout 10m
+# Upgrade only after reviewing the generated backup directory
+./scripts/upgrade-release.sh --yes v0.3.7
 
 # Verify
 kubectl -n astronomer rollout status deploy/astronomer-server --timeout=5m

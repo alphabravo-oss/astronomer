@@ -25,9 +25,9 @@
 #   HOST          External hostname for the dashboard        (default: astronomer.localtest.me)
 #   HTTP_PORT     Host port mapped to the gateway :80        (default: 8080)
 #   SERVER_URL    Override the externally-reachable URL      (default: http://${HOST}:${HTTP_PORT})
-#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.4.1)
+#   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.5.1)
 #   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
-#                  The supported pair is NGF 2.6.0 + Gateway API v1.4.1.
+#                  The supported pair is NGF 2.6.0 + Gateway API v1.5.1.
 #   K3S_IMAGE     rancher/k3s image for the k3d cluster      (default: v1.32.8-k3s1)
 #                  NGF 2.6.0 requires kubeVersion >= 1.31; k3d 5.7's
 #                  default image is still 1.30.4 and helm-installs fail.
@@ -45,7 +45,7 @@ NAMESPACE="${NAMESPACE:-astronomer}"
 HOST="${HOST:-astronomer.localtest.me}"
 HTTP_PORT="${HTTP_PORT:-8080}"
 SERVER_URL="${SERVER_URL:-http://${HOST}:${HTTP_PORT}}"
-GW_API_VER="${GW_API_VER:-v1.4.1}"
+GW_API_VER="${GW_API_VER:-v1.5.1}"
 NGF_VERSION="${NGF_VERSION:-2.6.0}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.32.8-k3s1}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
@@ -86,8 +86,8 @@ require helm
 # This is a tested compatibility unit, not two independent latest-version
 # knobs. Add a new explicit pair here only after the bootstrap behavioral gate
 # and chart prerequisite contract have been validated together.
-if [[ "${NGF_VERSION}:${GW_API_VER}" != "2.6.0:v1.4.1" ]]; then
-  fail "unsupported Gateway stack ${NGF_VERSION}:${GW_API_VER}; supported pair is NGF 2.6.0 + Gateway API v1.4.1"
+if [[ "${NGF_VERSION}:${GW_API_VER}" != "2.6.0:v1.5.1" ]]; then
+  fail "unsupported Gateway stack ${NGF_VERSION}:${GW_API_VER}; supported pair is NGF 2.6.0 + Gateway API v1.5.1"
 fi
 
 IMG_SERVER="${IMG_REGISTRY}/astronomer-go-server:${IMG_TAG}"
@@ -147,11 +147,15 @@ else
   info "SKIP_BUILD=1, skipping docker build"
 fi
 
-# ── 4. Import images into k3d ────────────────────────────────────────────────
-step "Importing images into k3d cluster"
-k3d image import \
-  "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" "${IMG_SHELL}" \
-  -c "${CLUSTER}"
+# ── 4. Import locally-built images into k3d ─────────────────────────────────
+if [[ "${SKIP_BUILD}" != "1" ]]; then
+  step "Importing images into k3d cluster"
+  k3d image import \
+    "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" "${IMG_SHELL}" \
+    -c "${CLUSTER}"
+else
+  info "SKIP_BUILD=1, pulling exact images from ${IMG_REGISTRY} instead of importing local images"
+fi
 
 # ── 5. Deploy astronomer ─────────────────────────────────────────────────────
 step "Installing Helm chart into namespace '${NAMESPACE}'"

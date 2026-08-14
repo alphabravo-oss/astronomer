@@ -178,18 +178,31 @@ For local development:
 make dev
 ```
 
-For a Kubernetes install. The chart ships no key material in any profile, so
-generate the JWT signing key and the Fernet key once and keep them — losing the
-Fernet key makes every encrypted column undecryptable:
+For a Kubernetes install, use an exact published chart version. The chart ships
+no key material in any profile, so generate the JWT signing key and the Fernet
+key once and keep them — losing the Fernet key makes every encrypted column
+undecryptable:
 
 ```bash
 openssl rand -base64 32 > ./jwt-key
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ./fernet-key
 
-helm upgrade --install astronomer ./deploy/chart \
+# Astronomer uses Gateway API. Install the tested controller/CRD pair once per
+# cluster before installing the chart.
+kubectl apply -f \
+  https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+helm upgrade --install ngf \
+  oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+  --version 2.6.0 \
+  --namespace nginx-gateway \
+  --create-namespace \
+  --wait
+
+helm upgrade --install astronomer \
+  oci://ghcr.io/alphabravo-oss/charts/astronomer \
+  --version 0.3.7 \
   --namespace astronomer \
   --create-namespace \
-  -f deploy/chart/values.yaml \
   --set-file secrets.secretKey=./jwt-key \
   --set-file secrets.encryptionKey=./fernet-key
 ```
@@ -197,11 +210,15 @@ helm upgrade --install astronomer ./deploy/chart \
 For production, layer the production values file and provide external Postgres, external Redis, TLS, bootstrap credentials, encryption keys, and backup settings:
 
 ```bash
-helm upgrade --install astronomer ./deploy/chart \
+git clone --branch v0.3.7 --depth 1 \
+  https://github.com/alphabravo-oss/astronomer.git astronomer-release
+
+helm upgrade --install astronomer \
+  oci://ghcr.io/alphabravo-oss/charts/astronomer \
+  --version 0.3.7 \
   --namespace astronomer \
   --create-namespace \
-  -f deploy/chart/values.yaml \
-  -f deploy/chart/values-production.yaml \
+  -f astronomer-release/deploy/chart/values-production.yaml \
   --set-file secrets.secretKey=./jwt-key \
   --set-file secrets.encryptionKey=./fernet-key
 ```

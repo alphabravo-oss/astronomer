@@ -38,20 +38,20 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: dev
+    tag: "v0.3.7"
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: dev
+    tag: "v0.3.7"
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: dev
+    tag: "v0.3.7"
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: dev
+    tag: "v0.3.7"
 
 # =============================================================================
 # Utility images
@@ -88,7 +88,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: dev
+    tag: "v0.3.7"
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
   podSecurityContext:
@@ -387,7 +387,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: dev
+    tag: "v0.3.7"
     registry: ""    # T23 air-gapped override; falls back to image.registry
 
 # =============================================================================
