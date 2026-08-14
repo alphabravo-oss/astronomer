@@ -50,16 +50,12 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
             | TAG=v5.8.3 bash
 
-      - name: Build server + agent + shell + migrate images
-        run: |
-          make docker-build-server  IMG_TAG=ci
-          make docker-build-agent   IMG_TAG=ci
-          make docker-build-worker  IMG_TAG=ci
-          make docker-build-migrate IMG_TAG=ci
-          make docker-build-shell   IMG_TAG=ci
-
       - name: Bring up local Astronomer (k3d-bootstrap)
         run: |
+          # k3d-bootstrap builds every first-party image exactly once and
+          # imports that exact set into the fresh cluster. Building a partial
+          # set here first duplicated almost the entire build and exhausted
+          # this job's 25-minute qualification budget.
           make k3d-bootstrap CLUSTER=astronomer-mgmt IMG_TAG=ci
           # k3d-bootstrap waits for the helm install to finish; give
           # the embedded local agent + chart-repo a few seconds to
