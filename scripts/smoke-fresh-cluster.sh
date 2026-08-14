@@ -153,11 +153,11 @@ ok "images imported"
 
 step "Register cluster via wizard"
 CREATE_BODY="$(api POST /api/v1/clusters/ -d "$(cat <<EOF
-{"name":"$SMOKE_CLUSTER","display_name":"smoke test","environment":"dev","provider":"k3d","distribution":"k3s","region":"local"}
+{"name":"$SMOKE_CLUSTER","display_name":"smoke test","environment":"dev","provider":"k3d","distribution":"k3s","region":"local","annotations":{"astronomer.io/agent-privilege-profile":"admin"}}
 EOF
 )")"
 SMOKE_CLUSTER_ID="$(echo "$CREATE_BODY" | jget "['data']['id']")"
-ok "cluster created: $SMOKE_CLUSTER_ID"
+ok "cluster created with explicit admin agent profile: $SMOKE_CLUSTER_ID"
 
 api PUT "/api/v1/clusters/$SMOKE_CLUSTER_ID/registration/options/" \
   -d '{"install_baseline":true}' >/dev/null

@@ -198,6 +198,22 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 	}
 }
 
+func TestFreshClusterSmokeExplicitlyChoosesBaselineCapableAgentProfile(t *testing.T) {
+	raw, err := os.ReadFile("../scripts/smoke-fresh-cluster.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+	for _, required := range []string{
+		`"astronomer.io/agent-privilege-profile":"admin"`,
+		`{"install_baseline":true}`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("fresh-cluster smoke does not model the explicit baseline-capable wizard choice %q", required)
+		}
+	}
+}
+
 func TestSixImageReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
 	wantVars := []string{"IMG_AGENT", "IMG_FRONTEND", "IMG_MIGRATE", "IMG_SERVER", "IMG_SHELL", "IMG_WORKER"}
 
