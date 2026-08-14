@@ -32,6 +32,8 @@ jobs:
     env:
       CGO_ENABLED: "0"
       DOCKER_BUILDKIT: "1"
+      # NGF 2.6.0 requires Kubernetes >= 1.31. k3d 5.7 defaulted to 1.30.4.
+      K3S_IMAGE: rancher/k3s:v1.32.8-k3s1
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -46,7 +48,7 @@ jobs:
       - name: Install k3d
         run: |
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
-            | TAG=v5.7.4 bash
+            | TAG=v5.8.3 bash
 
       - name: Build server + agent + shell + migrate images
         run: |

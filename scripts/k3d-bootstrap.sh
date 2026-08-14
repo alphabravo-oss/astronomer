@@ -28,6 +28,9 @@
 #   GW_API_VER    Gateway API release tag for the CRDs       (default: v1.4.1)
 #   NGF_VERSION   NGINX Gateway Fabric chart version         (default: 2.6.0)
 #                  The supported pair is NGF 2.6.0 + Gateway API v1.4.1.
+#   K3S_IMAGE     rancher/k3s image for the k3d cluster      (default: v1.32.8-k3s1)
+#                  NGF 2.6.0 requires kubeVersion >= 1.31; k3d 5.7's
+#                  default image is still 1.30.4 and helm-installs fail.
 #   SKIP_BUILD    Skip docker build step                     (default: 0)
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
 #   SECRET_KEY    JWT signing key                            (default: a local-dev value)
@@ -44,6 +47,7 @@ HTTP_PORT="${HTTP_PORT:-8080}"
 SERVER_URL="${SERVER_URL:-http://${HOST}:${HTTP_PORT}}"
 GW_API_VER="${GW_API_VER:-v1.4.1}"
 NGF_VERSION="${NGF_VERSION:-2.6.0}"
+K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.32.8-k3s1}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PREREQS="${SKIP_PREREQS:-0}"
 # The chart ships no key material — it used to default to a JWT signing key and
@@ -103,7 +107,9 @@ else
   # both controllers fight for :80 via type=LoadBalancer Services and
   # whichever loses leaves the gateway routes returning 404 from outside
   # the cluster.
+  info "k3s image ${K3S_IMAGE} (NGF 2.6.0 needs Kubernetes >= 1.31)"
   k3d cluster create "${CLUSTER}" \
+    --image "${K3S_IMAGE}" \
     --port "${HTTP_PORT}:80@loadbalancer" \
     --port "8443:443@loadbalancer" \
     -p "8000:30080@loadbalancer" \
