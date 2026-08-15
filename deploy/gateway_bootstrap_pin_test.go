@@ -19,12 +19,12 @@ func TestK3DBootstrapPinsSupportedGatewayAPIBundle(t *testing.T) {
 	script := string(scriptBytes)
 
 	for _, want := range []string{
-		`GW_API_VER="${GW_API_VER:-v1.4.1}"`,
+		`GW_API_VER="${GW_API_VER:-v1.5.1}"`,
 		`NGF_VERSION="${NGF_VERSION:-2.6.0}"`,
-		`"${NGF_VERSION}:${GW_API_VER}" != "2.6.0:v1.4.1"`,
+		`"${NGF_VERSION}:${GW_API_VER}" != "2.6.0:v1.5.1"`,
 		`releases/download/${GW_API_VER}/standard-install.yaml`,
 		`wait_for_gatewayclass nginx 30 2`,
-		`default: v1.4.1`,
+		`default: v1.5.1`,
 		`default: 2.6.0`,
 	} {
 		if !strings.Contains(script, want) {
@@ -32,7 +32,7 @@ func TestK3DBootstrapPinsSupportedGatewayAPIBundle(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
-		"v1.3.0",
+		"v1.4.1",
 		"releases/latest/",
 		"/main/config/crd/",
 	} {
@@ -50,7 +50,7 @@ func TestK3DBootstrapPinsSupportedGatewayAPIBundle(t *testing.T) {
 			t.Fatalf("read %s: %v", relative, err)
 		}
 		text := string(contents)
-		if !strings.Contains(text, "v1.4.1") {
+		if !strings.Contains(text, "v1.5.1") {
 			t.Errorf("%s does not document the pinned Gateway API bundle", relative)
 		}
 		if !strings.Contains(text, "2.6.0") {
@@ -171,7 +171,7 @@ func TestK3DBootstrapRejectsUntestedGatewayStackBeforeClusterMutation(t *testing
 	cmd := exec.Command("bash", filepath.Join(root, "scripts", "k3d-bootstrap.sh"))
 	cmd.Env = append(os.Environ(),
 		"PATH="+tempDir+":"+os.Getenv("PATH"),
-		"GW_API_VER=v1.5.0",
+		"GW_API_VER=v1.4.1",
 		"NGF_VERSION=2.6.0",
 		"MUTATION_MARKER="+marker,
 	)
@@ -182,7 +182,7 @@ func TestK3DBootstrapRejectsUntestedGatewayStackBeforeClusterMutation(t *testing
 	if err == nil {
 		t.Fatalf("bootstrap accepted an untested Gateway stack:\n%s", output.String())
 	}
-	for _, want := range []string{"unsupported Gateway stack", "2.6.0:v1.5.0", "NGF 2.6.0 + Gateway API v1.4.1"} {
+	for _, want := range []string{"unsupported Gateway stack", "2.6.0:v1.4.1", "NGF 2.6.0 + Gateway API v1.5.1"} {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("bootstrap rejection missing %q:\n%s", want, output.String())
 		}

@@ -171,6 +171,22 @@ func (f *fakeQuerier) CloseRunningStepsForCluster(ctx context.Context, arg sqlc.
 	return nil
 }
 
+func (f *fakeQuerier) FinishRunningStepsForCluster(ctx context.Context, arg sqlc.FinishRunningStepsForClusterParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, s := range f.steps {
+		if s.ClusterID == arg.ClusterID && s.StepName == arg.StepName && s.Status == "running" {
+			f.steps[i].Status = arg.Status
+			if arg.Status == "success" {
+				f.steps[i].ProgressPct = 100
+			}
+			f.steps[i].CompletedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+			f.steps[i].ErrorMessage = arg.ErrorMessage
+		}
+	}
+	return nil
+}
+
 func (f *fakeQuerier) MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -358,6 +374,9 @@ func TestRegistrationWizard_TemplateApplyAdvancesPhase(t *testing.T) {
 			t.Errorf("step %d: name = %s, want %s", i, steps[i].StepName, w)
 		}
 	}
+	if steps[0].Status != "success" || !steps[0].CompletedAt.Valid || steps[0].ProgressPct != 100 {
+		t.Fatalf("template_applying step was not completed on success: %+v", steps[0])
+	}
 }
 
 // TestRegistrationWizard_TemplateApplyFailure exercises the failure
@@ -366,9 +385,12 @@ func TestRegistrationWizard_TemplateApplyFailureAdvancesToFailed(t *testing.T) {
 	q := newFakeQuerier()
 	id := uuid.New()
 	yes := true
-	q.seed(id, PhaseProvisioning, &yes)
+	q.seed(id, PhaseConnected, &yes)
 	svc := New(q, nil)
 
+	if err := svc.OnTemplateApplyStart(context.Background(), id); err != nil {
+		t.Fatalf("apply-start: %v", err)
+	}
 	if err := svc.OnTemplateApplyFailure(context.Background(), id, "ImagePullBackOff"); err != nil {
 		t.Fatalf("apply-failure: %v", err)
 	}
@@ -377,11 +399,14 @@ func TestRegistrationWizard_TemplateApplyFailureAdvancesToFailed(t *testing.T) {
 		t.Fatalf("want failed, got %s", rec.RegistrationPhase)
 	}
 	steps, _ := q.ListClusterRegistrationSteps(context.Background(), id)
-	if len(steps) != 1 || steps[0].StepName != "template_failed" {
-		t.Fatalf("expected one template_failed step, got %#v", steps)
+	if len(steps) != 2 || steps[0].StepName != "template_applying" || steps[1].StepName != "template_failed" {
+		t.Fatalf("expected completed template_applying + template_failed steps, got %#v", steps)
 	}
-	if steps[0].ErrorMessage != "ImagePullBackOff" {
-		t.Errorf("error_message lost in translation: %q", steps[0].ErrorMessage)
+	if steps[0].Status != "failed" || !steps[0].CompletedAt.Valid || steps[0].ErrorMessage != "ImagePullBackOff" {
+		t.Errorf("template_applying failure not finalized: %+v", steps[0])
+	}
+	if steps[1].ErrorMessage != "ImagePullBackOff" {
+		t.Errorf("error_message lost in translation: %q", steps[1].ErrorMessage)
 	}
 }
 

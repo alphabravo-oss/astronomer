@@ -1,43 +1,80 @@
 name: release
 
-# FEATURES-051126 T12: signed images + SBOMs.
-#
-# Fires on tag push (e.g. `v0.2.0`). Builds the six chart-published
-# first-party images, pushes them to GHCR, generates an SPDX SBOM per
-# image with syft, and signs both the image and the attestation with keyless
-# cosign (GitHub OIDC → Sigstore Fulcio).
-#
-# Verification runbook: docs/verify-images.md.
-#
-# Triggering manually (e.g. for a hotfix from a non-tag commit) is also
-# allowed via workflow_dispatch — the resulting tag in the registry is
-# the short SHA.
+# A release is an immutable compatibility unit: one vX.Y.Z tag, six exact image
+# tags, and one exact OCI chart. Nothing moves the mutable `latest` channel or
+# creates a visible GitHub Release until that OCI chart has installed on a clean
+# cluster and all first-party references have been verified.
 
 on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Override image tag (default: short SHA on dispatch, ref name on tag)"
-        required: false
 
 permissions:
   contents: read
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_OWNER: ${{ github.repository_owner }}
+  # Distribution is intentionally owned by the public repository. Do not derive
+  # this from github.repository_owner: the private upstream has a different,
+  # mixed-case owner and must never publish a second release identity.
+  IMAGE_OWNER: alphabravo-oss
 
 jobs:
+  preflight:
+    name: validate immutable release identity
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.identity.outputs.image_tag }}
+      chart-version: ${{ steps.identity.outputs.chart_version }}
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate public main tag and version surfaces
+        id: identity
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY" = "alphabravo-oss/astronomer"
+          test "$REF_TYPE" = "tag"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          chart_version="${TAG#v}"
+          test "$(awk '$1 == "version:" { print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
+          test "$(awk '$1 == "appVersion:" { gsub(/\"/, "", $2); print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$COMMIT_SHA" origin/main
+          for component in server worker agent migrate; do
+            grep -A4 "^  ${component}:" deploy/chart/values.yaml | grep -q "tag: \"${TAG}\""
+          done
+          grep -A20 '^frontend:' deploy/chart/values.yaml | grep -q "tag: \"${TAG}\""
+          grep -A25 '^preflight:' deploy/chart/values.yaml | grep -q "tag: \"${TAG}\""
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Verify release and Gateway compatibility contracts
+        run: go test ./deploy -run 'TestReleaseIdentity|TestReleasePublishes|TestK3DBootstrap' -count=1
+
   build-sign:
     name: build · sign · attest
+    needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # push to GHCR
-      id-token: write   # cosign keyless via OIDC
+      packages: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -54,23 +91,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Derive image tag
-        id: tag
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          if [ -n "$INPUT_TAG" ]; then
-            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-          elif [ "$REF_TYPE" = "tag" ]; then
-            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${COMMIT_SHA:0:7}" >> "$GITHUB_OUTPUT"
-          fi
-          echo "buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
@@ -86,7 +106,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push
+      - name: Derive deterministic build metadata
+        id: metadata
+        run: echo "build_date=$(git show -s --format=%cI '${{ github.sha }}')" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to overwrite an existing exact tag
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          image="${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}:${IMAGE_TAG}"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "refusing to overwrite immutable image tag $image" >&2
+            exit 1
+          fi
+
+      - name: Build & push exact tag
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -94,29 +128,19 @@ jobs:
           file: ${{ matrix.component.dockerfile }}
           push: true
           platforms: linux/amd64,linux/arm64
-          # Stamp version info into the binaries (Dockerfiles default these to
-          # 'dev'/'unknown'; without this the agent self-test compatibility
-          # check warns that the version isn't parseable semver).
           build-args: |
-            VERSION=${{ steps.tag.outputs.tag }}
+            VERSION=${{ needs.preflight.outputs.image-tag }}
             GIT_COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ steps.tag.outputs.buildDate }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}:${{ steps.tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}:latest
-          # The digest output is what we'll sign — signing by mutable
-          # tag is a forgery risk (the tag could change between push
-          # and sign).
+            BUILD_DATE=${{ steps.metadata.outputs.build_date }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}:${{ needs.preflight.outputs.image-tag }}
           provenance: mode=max
-          # We attach our own SBOM below; the build-push-action's
-          # default SBOM would duplicate it.
           sbom: false
 
       - name: Verify multi-platform manifest
         env:
           IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}
         run: |
-          docker buildx imagetools inspect "${IMAGE_REF}" --raw > manifest.json
+          docker buildx imagetools inspect "$IMAGE_REF" --raw > manifest.json
           python3 - <<'PY'
           import json
           with open("manifest.json", encoding="utf-8") as handle:
@@ -131,60 +155,54 @@ jobs:
           if missing:
               raise SystemExit(f"multi-platform manifest missing: {sorted(missing)}; actual={sorted(actual)}")
           PY
-          rm -f manifest.json
 
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
         with:
           cosign-release: "v2.4.1"
 
-      - name: Sign image (keyless via OIDC)
+      - name: Sign image by digest
         env:
-          # COSIGN_EXPERIMENTAL is no longer required with cosign v2 but
-          # the env var is harmless and makes the intent explicit.
           COSIGN_EXPERIMENTAL: "1"
-        run: |
-          cosign sign --yes \
-            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           syft-version: "v1.16.0"
 
-      - name: Generate SBOM (SPDX JSON)
-        run: |
-          syft \
-            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}" \
-            -o spdx-json \
-            > sbom-${{ matrix.component.name }}.spdx.json
-          # Sanity: the file is non-empty and valid JSON
-          test -s sbom-${{ matrix.component.name }}.spdx.json
-          python3 -c "import json,sys; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
-
-      - name: Attest SBOM with cosign
+      - name: Generate and attest SBOM
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
+          syft "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}" \
+            -o spdx-json > "sbom-${{ matrix.component.name }}.spdx.json"
+          python3 -c "import json; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
           cosign attest --yes \
-            --predicate sbom-${{ matrix.component.name }}.spdx.json \
+            --predicate "sbom-${{ matrix.component.name }}.spdx.json" \
             --type spdxjson \
             "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}@${{ steps.build.outputs.digest }}"
+          printf '%s@%s\n' \
+            "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.imageName }}" \
+            "${{ steps.build.outputs.digest }}" \
+            > "${{ matrix.component.name }}.digest"
 
-      - name: Upload SBOM as workflow artifact
+      - name: Upload SBOM
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: sbom-${{ matrix.component.name }}-${{ steps.tag.outputs.tag }}
-          path: sbom-${{ matrix.component.name }}.spdx.json
+          name: sbom-${{ matrix.component.name }}-${{ needs.preflight.outputs.image-tag }}
+          path: |
+            sbom-${{ matrix.component.name }}.spdx.json
+            ${{ matrix.component.name }}.digest
           retention-days: 90
 
   publish-chart:
-    name: package · push helm chart (OCI)
-    needs: build-sign
+    name: package · push exact OCI chart
+    needs: [preflight, build-sign]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # push OCI chart to GHCR
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -196,74 +214,157 @@ jobs:
         with:
           version: v3.16.2
 
-      - name: Derive versions
-        id: ver
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          # imageTag must match what build-sign pushed (ref name on a tag,
-          # the dispatch input, else the short SHA). chartVersion is the same
-          # value normalised to semver (helm chart versions can't carry a 'v').
-          if [ -n "$INPUT_TAG" ]; then
-            IMG="$INPUT_TAG"
-          elif [ "$REF_TYPE" = "tag" ]; then
-            IMG="$REF_NAME"
-          else
-            IMG="${COMMIT_SHA:0:7}"
-          fi
-          CHART="${IMG#v}"
-          # A bare short-SHA isn't semver — wrap it as a 0.0.0 prerelease.
-          case "$CHART" in
-            [0-9]*.[0-9]*.[0-9]*) : ;;
-            *) CHART="0.0.0-${CHART}" ;;
-          esac
-          echo "imageTag=$IMG" >> "$GITHUB_OUTPUT"
-          echo "chartVersion=$CHART" >> "$GITHUB_OUTPUT"
-
-      - name: Pin chart + first-party image tags to the release
-        env:
-          IMAGE_TAG: ${{ steps.ver.outputs.imageTag }}
-          CHART_VERSION: ${{ steps.ver.outputs.chartVersion }}
-        run: |
-          IMG="$IMAGE_TAG"
-          CHART="$CHART_VERSION"
-          # Chart version (semver) + appVersion (human/image tag).
-          sed -i "s/^version:.*/version: ${CHART}/" deploy/chart/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${IMG}\"/" deploy/chart/Chart.yaml
-          # Only first-party images use `tag: dev`; pin them to the image tag.
-          # Third-party tags (16-alpine, 1.36, …) are untouched.
-          sed -i "s/^\(\s*\)tag: dev$/\1tag: \"${IMG}\"/" deploy/chart/values.yaml
-          echo "Pinned chart ${CHART} / images ${IMG}:"
-          grep -nE "^version:|^appVersion:" deploy/chart/Chart.yaml
-
-      - name: Build chart dependencies
-        # The argo-cd subchart is vendored under charts/ locally but gitignored,
-        # so CI must fetch it before lint/package.
+      - name: Build locked dependencies and lint
         run: |
           helm repo add argo https://argoproj.github.io/argo-helm
           helm dependency build deploy/chart
-
-      - name: Lint
-        # The chart ships no key material — secrets.secretKey / secrets.encryptionKey
-        # are empty and the render fails without them, so lint gets throwaway values
-        # (they are never packaged; `helm package` copies values.yaml as-is).
-        run: |
           helm lint deploy/chart \
             --set secrets.secretKey=release-lint-render-only \
             --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
 
-      - name: Login · package · push (OCI)
+      - name: Package and push exact chart
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USERNAME: ${{ github.actor }}
-          IMAGE_TAG: ${{ steps.ver.outputs.imageTag }}
-          CHART_VERSION: ${{ steps.ver.outputs.chartVersion }}
-          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
         run: |
           echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           helm package deploy/chart --version "$CHART_VERSION" --app-version "$IMAGE_TAG"
-          helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/${REPOSITORY_OWNER}/charts"
-          echo "Pushed oci://ghcr.io/${REPOSITORY_OWNER}/charts/astronomer:${CHART_VERSION}"
+          helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts"
+
+      - name: Upload packaged chart
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: chart-${{ needs.preflight.outputs.image-tag }}
+          path: astronomer-${{ needs.preflight.outputs.chart-version }}.tgz
+          retention-days: 90
+
+  qualify:
+    name: install exact release on a clean cluster
+    needs: [preflight, publish-chart]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout tagged configuration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install checksum-verified k3d
+        env:
+          K3D_VERSION: v5.8.3
+        run: |
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
+          grep ' k3d-linux-amd64$' checksums.txt | sed 's#  _dist/#  #' | sha256sum --check
+          sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.16.2
+
+      - name: Create clean Kubernetes and install Gateway prerequisites
+        run: |
+          k3d cluster create astronomer-release \
+            --image rancher/k3s:v1.32.8-k3s1 \
+            --port '8080:80@loadbalancer' \
+            --k3s-arg '--disable=traefik@server:*' \
+            --wait
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+          helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+            --version 2.6.0 --namespace nginx-gateway --create-namespace \
+            --wait --timeout 5m
+          source scripts/lib/gatewayclass-readiness.sh
+          wait_for_gatewayclass nginx 30 2
+
+      - name: Install the published OCI chart as a new user would
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
+        run: |
+          helm upgrade --install astronomer \
+            oci://ghcr.io/alphabravo-oss/charts/astronomer \
+            --version "$CHART_VERSION" \
+            --namespace astronomer --create-namespace \
+            -f deploy/chart/values-k3d.yaml \
+            --set-string image.server.tag="$IMAGE_TAG" \
+            --set-string image.worker.tag="$IMAGE_TAG" \
+            --set-string image.agent.tag="$IMAGE_TAG" \
+            --set-string image.migrate.tag="$IMAGE_TAG" \
+            --set-string frontend.image.tag="$IMAGE_TAG" \
+            --set-string preflight.image.tag="$IMAGE_TAG" \
+            --set-string kubectlShell.image="ghcr.io/alphabravo-oss/astronomer-shell:${IMAGE_TAG}" \
+            --atomic --cleanup-on-fail --timeout 15m
+
+      - name: Verify health and exact first-party image identities
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          helm get manifest astronomer --namespace astronomer > /tmp/release-manifest.yaml
+          for image in astronomer-go-server astronomer-go-worker astronomer-go-migrate astronomer-frontend astronomer-shell; do
+            grep -q "ghcr.io/alphabravo-oss/${image}:${IMAGE_TAG}" /tmp/release-manifest.yaml
+          done
+          grep -q 'AGENT_IMAGE_REPOSITORY: "ghcr.io/alphabravo-oss/astronomer-go-agent"' /tmp/release-manifest.yaml
+          grep -q "AGENT_IMAGE_TAG: \"${IMAGE_TAG}\"" /tmp/release-manifest.yaml
+          for attempt in $(seq 1 90); do
+            if curl -fsS -H 'Host: astronomer.localtest.me' http://127.0.0.1:8080/readyz; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Dump failed qualification state
+        if: failure()
+        run: |
+          helm status astronomer --namespace astronomer || true
+          kubectl get pods,deploy,statefulset,job -A -o wide || true
+          kubectl get gatewayclass,gateway,httproute -A -o yaml || true
+          kubectl logs --namespace astronomer --all-containers --tail=300 \
+            -l app.kubernetes.io/instance=astronomer || true
+
+  promote:
+    name: promote latest channel and publish GitHub Release
+    needs: [preflight, qualify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: '*-${{ needs.preflight.outputs.image-tag }}'
+          merge-multiple: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote qualified images to latest
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          for image in astronomer-go-server astronomer-go-worker astronomer-go-agent astronomer-go-migrate astronomer-shell astronomer-frontend; do
+            docker buildx imagetools create \
+              --tag "${REGISTRY}/${IMAGE_OWNER}/${image}:latest" \
+              "${REGISTRY}/${IMAGE_OWNER}/${image}:${IMAGE_TAG}"
+          done
+
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          sort --unique ./*.digest > RELEASE_IMAGES
+          sha256sum astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES > SHA256SUMS
+          gh release create "$TAG" \
+            --verify-tag \
+            --generate-notes \
+            --title "Astronomer ${TAG}" \
+            astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES SHA256SUMS

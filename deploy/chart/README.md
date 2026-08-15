@@ -313,7 +313,7 @@ controller. That controller is treated as cluster infrastructure and should be
 bootstrapped separately.
 
 The supported local bootstrap treats NGINX Gateway Fabric `2.6.0` and the
-Gateway API standard CRD bundle `v1.4.1` as one tested compatibility unit; it
+Gateway API standard CRD bundle `v1.5.1` as one tested compatibility unit; it
 never follows a moving `latest` URL or permits one side of that pair to drift.
 After installation (and also when prerequisite installation is skipped),
 `scripts/k3d-bootstrap.sh` waits for the `nginx` `GatewayClass` to report both

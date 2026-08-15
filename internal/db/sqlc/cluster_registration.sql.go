@@ -42,6 +42,37 @@ func (q *Queries) CloseRunningStepsForCluster(ctx context.Context, arg CloseRunn
 	return err
 }
 
+const finishRunningStepsForCluster = `-- name: FinishRunningStepsForCluster :exec
+UPDATE cluster_registration_steps
+   SET status = $1::varchar,
+       progress_pct = CASE WHEN $1::varchar = 'success' THEN 100 ELSE progress_pct END,
+       completed_at = COALESCE(completed_at, now()),
+       error_message = $2
+ WHERE cluster_id = $3
+   AND step_name = $4
+   AND status = 'running'
+`
+
+type FinishRunningStepsForClusterParams struct {
+	Status       string    `json:"status"`
+	ErrorMessage string    `json:"error_message"`
+	ClusterID    uuid.UUID `json:"cluster_id"`
+	StepName     string    `json:"step_name"`
+}
+
+// Resolve the active timeline row when the template task reaches a terminal
+// state. Retry cleanup above is intentionally "superseded by retry"; normal
+// success/failure must record the task's real outcome instead.
+func (q *Queries) FinishRunningStepsForCluster(ctx context.Context, arg FinishRunningStepsForClusterParams) error {
+	_, err := q.db.Exec(ctx, finishRunningStepsForCluster,
+		arg.Status,
+		arg.ErrorMessage,
+		arg.ClusterID,
+		arg.StepName,
+	)
+	return err
+}
+
 const getClusterRegistrationRecord = `-- name: GetClusterRegistrationRecord :one
 
 SELECT id, registration_phase, registration_started_at, registration_completed_at, install_baseline

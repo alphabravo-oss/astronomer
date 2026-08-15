@@ -217,6 +217,10 @@ func (f *fakeRegistrationQuerier) CloseRunningStepsForCluster(ctx context.Contex
 	return nil
 }
 
+func (f *fakeRegistrationQuerier) FinishRunningStepsForCluster(ctx context.Context, arg sqlc.FinishRunningStepsForClusterParams) error {
+	return nil
+}
+
 func (f *fakeRegistrationQuerier) MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -323,6 +327,37 @@ func TestRegistrationWizard_ConfirmBaselineWritesTaskOutbox(t *testing.T) {
 	}
 	if _, ok := q.templApp[id]; !ok {
 		t.Fatalf("expected template application row to be upserted")
+	}
+}
+
+func TestRegistrationWizard_ConfirmRejectsUnavailableBaseline(t *testing.T) {
+	h, q, id := setupHandler(t)
+	router := routerForRegistration(h)
+
+	body := bytes.NewBufferString(`{"install_baseline": true}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/clusters/"+id.String()+"/registration/options/", body)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("options PUT: status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+id.String()+"/registration/confirm/", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("confirm POST: status=%d, want %d; body=%s", w.Code, http.StatusConflict, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Platform baseline is not configured") {
+		t.Fatalf("confirm POST did not explain the unavailable baseline: %s", w.Body.String())
+	}
+
+	rec, err := q.GetClusterRegistrationRecord(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.RegistrationPhase != string(registration.PhaseCreated) {
+		t.Fatalf("registration advanced despite unavailable baseline: got %s", rec.RegistrationPhase)
 	}
 }
 

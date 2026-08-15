@@ -89,3 +89,16 @@ UPDATE cluster_registration_steps
  WHERE cluster_id = $1
    AND step_name = $2
    AND status = 'running';
+
+-- name: FinishRunningStepsForCluster :exec
+-- Resolve the active timeline row when the template task reaches a terminal
+-- state. Retry cleanup above is intentionally "superseded by retry"; normal
+-- success/failure must record the task's real outcome instead.
+UPDATE cluster_registration_steps
+   SET status = sqlc.arg(status)::varchar,
+       progress_pct = CASE WHEN sqlc.arg(status)::varchar = 'success' THEN 100 ELSE progress_pct END,
+       completed_at = COALESCE(completed_at, now()),
+       error_message = sqlc.arg(error_message)
+ WHERE cluster_id = sqlc.arg(cluster_id)
+   AND step_name = sqlc.arg(step_name)
+   AND status = 'running';
