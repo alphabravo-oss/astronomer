@@ -241,6 +241,8 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 		`config.agentImageTag=${image_tag}`,
 		`--atomic --cleanup-on-fail`,
 		`helm rollback`,
+		`app.kubernetes.io/name=astronomer`,
+		`kill -0 "$port_forward_pid"`,
 		`/readyz`,
 	} {
 		if !strings.Contains(script, required) {
