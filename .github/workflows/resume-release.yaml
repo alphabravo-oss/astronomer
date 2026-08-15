@@ -131,7 +131,11 @@ jobs:
             expected_ref="$(cat "source-artifacts/${component}.digest")"
             expected_repository="${REGISTRY}/${IMAGE_OWNER}/${image}"
             test "${expected_ref%@*}" = "$expected_repository"
-            actual_digest="$(docker buildx imagetools inspect "$ref" | awk '$1 == "Digest:" { print $2; exit }')"
+            # Consume all Buildx output. Exiting awk on the first Digest line
+            # closes the pipe early and makes Buildx fail with SIGPIPE under
+            # `set -o pipefail`.
+            actual_digest="$(docker buildx imagetools inspect "$ref" \
+              | awk '$1 == "Digest:" && digest == "" { digest=$2 } END { if (digest != "") print digest }')"
             test -n "$actual_digest"
             test "${expected_ref#*@}" = "$actual_digest"
             jq -e '
