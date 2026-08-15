@@ -257,7 +257,8 @@ jobs:
         run: |
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
-          grep ' k3d-linux-amd64$' checksums.txt | sed 's#  _dist/#  #' | sha256sum --check
+          awk '$2 == "_dist/k3d-linux-amd64" { print $1 "  k3d-linux-amd64" }' checksums.txt \
+            | sha256sum --check
           sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
 
       - name: Install Helm

@@ -129,6 +129,13 @@ must agree. For each first-party chart image (`server`, `worker`, `agent`,
    checksums. Production upgrades always use the exact tag/version, not
    `latest`.
 
+If the tag workflow is interrupted after publishing its immutable images or
+chart, do not rerun it and do not move the tag. `resume-release.yaml` accepts
+the tag and original run ID, then revalidates the public-main commit, original
+run identity, unexpired artifact set, signed image digests, multi-platform
+indexes, and byte-identical OCI chart. It repeats the clean-cluster install and
+only then performs the withheld `latest` promotion and GitHub Release creation.
+
 The verifier-side runbook at
 [`../../docs/verify-images.md`](../../docs/verify-images.md) documents how
 procurement / supply-chain teams reproduce the cosign + syft verification

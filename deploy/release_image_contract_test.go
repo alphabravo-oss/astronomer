@@ -168,6 +168,46 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 	}
 }
 
+func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
+	releaseRaw, err := os.ReadFile("../.github/workflows/release.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(releaseRaw, []byte("grep ' k3d-linux-amd64$'")) {
+		t.Fatal("release k3d checksum selection ignores the upstream _dist/ path")
+	}
+	if !bytes.Contains(releaseRaw, []byte(`$2 == "_dist/k3d-linux-amd64"`)) {
+		t.Fatal("release does not select the checksum by its exact upstream path")
+	}
+
+	resumeRaw, err := os.ReadFile("../.github/workflows/resume-release.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resume := string(resumeRaw)
+	for _, required := range []string{
+		"workflow_dispatch:",
+		"source_run_id:",
+		`test "$REPOSITORY" = "alphabravo-oss/astronomer"`,
+		`test "$(jq -r .head_sha <<<"$run_json")" = "$tag_commit"`,
+		`test "$(jq -r .path <<<"$run_json")" = ".github/workflows/release.yaml"`,
+		`failure|cancelled`,
+		`release $TAG already exists; refusing duplicate promotion`,
+		`cosign verify`,
+		`source-artifacts/${component}.digest`,
+		`test "${expected_ref#*@}" = "$actual_digest"`,
+		`cmp`,
+		`install exact release on a clean cluster`,
+		`needs: [preflight, qualify]`,
+		`Promote qualified images to latest`,
+		`gh release create "$TAG"`,
+	} {
+		if !strings.Contains(resume, required) {
+			t.Errorf("interrupted release resume workflow is missing guard %q", required)
+		}
+	}
+}
+
 func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 	raw, err := os.ReadFile("../scripts/upgrade-release.sh")
 	if err != nil {
