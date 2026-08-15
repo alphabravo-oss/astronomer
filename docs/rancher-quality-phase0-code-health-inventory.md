@@ -12,7 +12,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 - Frontend source lines: 115884
 - Go source files under `internal/` excluding generated sqlc and tests: 576
 - Go source files scanned for sqlc query references excluding generated sqlc: 1370
-- sqlc query declarations: 1023
+- sqlc query declarations: 1024
 - Component files scanned: 135
 - Helm top-level values scanned: 33
 
