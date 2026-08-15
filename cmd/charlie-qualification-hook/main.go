@@ -147,20 +147,21 @@ func run() error {
 		return err
 	}
 	driver, err := charliequalification.NewLiveDriver(charliequalification.LiveConfig{
-		AstronomerURL:     strings.TrimSpace(os.Getenv(envPrefix + "ASTRONOMER_URL")),
-		AdminToken:        adminToken,
-		ApproverToken:     approverToken,
-		DeniedToken:       deniedToken,
-		MetricSources:     metricSources,
-		CounterMetrics:    counterMetrics,
-		Fixtures:          fixtures,
-		AllowHTTP:         os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
-		AgentScaler:       scaler,
-		IsolationObserver: isolationObserver,
-		LeaderFailover:    leaderFailover,
-		EventStimulus:     eventStimulus,
-		HTTPClient:        client,
-		NoCallDwell:       noCallDwell,
+		AstronomerURL:         strings.TrimSpace(os.Getenv(envPrefix + "ASTRONOMER_URL")),
+		AdminToken:            adminToken,
+		ApproverToken:         approverToken,
+		DeniedToken:           deniedToken,
+		MetricSources:         metricSources,
+		CounterMetrics:        counterMetrics,
+		Fixtures:              fixtures,
+		AllowHTTP:             os.Getenv(envPrefix+"ALLOW_HTTP_LOOPBACK") == "1",
+		AgentScaler:           scaler,
+		IsolationObserver:     isolationObserver,
+		LeaderFailover:        leaderFailover,
+		EventStimulus:         eventStimulus,
+		InfrastructureCommand: strings.TrimSpace(os.Getenv(envPrefix + "INFRASTRUCTURE_COMMAND")),
+		HTTPClient:            client,
+		NoCallDwell:           noCallDwell,
 	})
 	if err != nil {
 		return err

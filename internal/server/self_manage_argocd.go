@@ -85,7 +85,10 @@ type selfManagedSecretRef struct {
 
 var argocdApplicationGVR = kubeutil.ArgoApplicationGVR
 
-var containerImageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+var (
+	containerImageTagPattern    = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+	containerImageDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+)
 
 func startLocalArgoSelfManagement(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, toolHandler *handler.ToolHandler, encryptor *auth.Encryptor, localCluster *sqlc.Cluster) {
 	if logger == nil || cfg == nil || queries == nil || toolHandler == nil || localCluster == nil {
@@ -575,20 +578,28 @@ func parseImageRef(ref string) (map[string]any, error) {
 	if strings.ContainsAny(ref, " \t\r\n") || strings.Contains(ref, "://") {
 		return nil, fmt.Errorf("image reference %q is malformed", ref)
 	}
-	if strings.Contains(ref, "@") {
-		return nil, fmt.Errorf("image reference %q uses a digest; self-management currently supports tag references only", ref)
+	digest := ""
+	if at := strings.LastIndex(ref, "@"); at >= 0 {
+		if strings.Contains(ref[:at], "@") || !containerImageDigestPattern.MatchString(ref[at+1:]) {
+			return nil, fmt.Errorf("image reference %q has an invalid digest", ref)
+		}
+		digest = ref[at+1:]
+		ref = ref[:at]
 	}
 
 	lastSlash := strings.LastIndex(ref, "/")
 	lastColon := strings.LastIndex(ref, ":")
-	if lastColon <= lastSlash || lastColon == len(ref)-1 {
+	if digest == "" && (lastColon <= lastSlash || lastColon == len(ref)-1) {
 		return nil, fmt.Errorf("image reference %q must include an explicit tag", ref)
 	}
-	name, tag := ref[:lastColon], ref[lastColon+1:]
+	name, tag := ref, ""
+	if lastColon > lastSlash {
+		name, tag = ref[:lastColon], ref[lastColon+1:]
+	}
 	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, "//") || strings.HasSuffix(name, "/") {
 		return nil, fmt.Errorf("image reference %q has an invalid repository path", ref)
 	}
-	if !containerImageTagPattern.MatchString(tag) {
+	if tag != "" && !containerImageTagPattern.MatchString(tag) {
 		return nil, fmt.Errorf("image reference %q has invalid tag %q", ref, tag)
 	}
 
@@ -600,11 +611,17 @@ func parseImageRef(ref string) (map[string]any, error) {
 	if repository == "" {
 		return nil, fmt.Errorf("image reference %q has an invalid repository path", ref)
 	}
-	return map[string]any{
+	image := map[string]any{
 		"registry":   registry,
 		"repository": repository,
-		"tag":        tag,
-	}, nil
+	}
+	if tag != "" {
+		image["tag"] = tag
+	}
+	if digest != "" {
+		image["digest"] = digest
+	}
+	return image, nil
 }
 
 func loginToArgoCDWithInitialAdminSecret(ctx context.Context, k8s kubernetes.Interface, apiURL string) (string, error) {

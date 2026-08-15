@@ -101,7 +101,13 @@ and replica tuples while the new server is trying to adopt them.
 2. Scale `astro-argocd-application-controller` to zero and wait for the
    StatefulSet/Deployment status to reach zero and for every matching controller
    Pod, including terminating Pods, to disappear.
-3. Perform the external Helm/server rollout. Keep the controller stopped.
+3. Perform the external Helm/server rollout with the release upgrader's
+   `--quiesce-argo-controller` flag. It scales and verifies the exact controller,
+   post-renders only that StatefulSet at zero for both the dry run and real
+   upgrade, and deliberately leaves it stopped. In this mode a failed upgrade
+   restores the prior exact chart through the same post-renderer; it does not
+   use Helm's automatic rollback because that could momentarily restore the old
+   controller at one replica. Keep the controller stopped.
 4. Prove the new server rollout is complete with the Deployment, ReplicaSet,
    and Pod ownership checks below. No old or unowned server Pod may remain.
 5. Let the new server reconcile while the controller remains stopped. For an

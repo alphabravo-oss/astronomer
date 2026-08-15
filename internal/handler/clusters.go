@@ -395,7 +395,7 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 	if tag == "" {
 		tag = "latest"
 	}
-	h.agentImage = repository + ":" + tag
+	h.agentImage = targetAgentImage(repository, tag)
 }
 
 // SetPullReconcileEnabled records whether rendered agent manifests should carry

@@ -90,9 +90,18 @@ func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, 
 		RegistrationToken: agentToken,
 		CACert:            caPEM,
 		CAChecksum:        agenttemplate.CAChecksumFromPEM(caPEM),
-		AgentImage:        imageRepository + ":" + imageTag,
+		AgentImage:        agentImageReference(imageRepository, imageTag),
 		PrivilegeProfile:  profile,
 	})
+}
+
+func agentImageReference(repository, tag string) string {
+	repository = strings.TrimSpace(repository)
+	tag = strings.TrimSpace(tag)
+	if strings.Contains(repository, "@sha256:") || tag == "" {
+		return repository
+	}
+	return repository + ":" + tag
 }
 
 // registrationCABundleForTask reads platform_settings[registration.ca_bundle]

@@ -6,6 +6,25 @@ the Astronomer server, has no production route, binds only to an explicit
 loopback IP, requires TLS 1.3 and a strong bearer token, and serializes scenarios
 so two destructive qualification transitions cannot overlap.
 
+The companion `charlie-candidate-deploy-hook` owns the preceding immutable
+upgrade. It accepts only the validated tag, commit, and four OCI digests, then
+invokes one fixed root-owned executable with those values as arguments. Request
+data cannot choose a command, namespace, registry, chart, values file, URL, or
+credential. Identical requests are idempotent; a later tagged candidate runs a
+new serialized upgrade only after the earlier command has completed.
+
+```sh
+go build -o ./bin/charlie-candidate-deploy-hook ./cmd/charlie-candidate-deploy-hook
+ASTRONOMER_CHARLIE_DEPLOY_EFFECTS_ACK=I_UNDERSTAND_CHARLIE_LIVE_EFFECTS \
+ASTRONOMER_CHARLIE_DEPLOY_HOOK_TOKEN_FILE=/secure/deploy-hook.token \
+ASTRONOMER_CHARLIE_DEPLOY_COMMAND=/usr/local/libexec/charlie-qualification-deploy \
+./bin/charlie-candidate-deploy-hook
+```
+
+The deploy hook binds to `127.0.0.1:9444` by default and intentionally serves
+plain HTTP only on loopback. Publish exactly `/v1/candidate` through the
+operator's HTTPS reverse proxy; never bind this effects endpoint publicly.
+
 The hook can change the Charlie feature or authority mode and can scale the
 Charlie product-agent StatefulSet. Run it only in a dedicated qualification
 window. Every invocation requires the exact acknowledgement
@@ -43,6 +62,7 @@ only by their owner. Prefer the `_FILE` variants for secrets. Required settings:
 | `AGENT_NAMESPACE`, `AGENT_RELEASE`, `AGENT_STATEFULSET`, `AGENT_SERVICE` | Exact product-agent Helm release and workload targets used by fixed Kubernetes inventory queries. |
 | `ISOLATION_CAPTURE_INTERFACE` | Operator-selected interface at the Charlie agent network boundary. Enables the typed isolation observer; zero-runtime scenarios fail closed when it is absent. |
 | `LEADER_FAILOVER_ENABLED` | Exact value `1` explicitly enables the fixed Kubernetes leader failover target. Requires the owner-only kubeconfig, approver token, at least two ready agent replicas, and the dedicated fixture below. |
+| `INFRASTRUCTURE_COMMAND` | Absolute path to the fixed operator executable for clean-install, isolation, resilience, and upgrade/rollback observations. It must be executable and not group/world writable. The hook passes only a closed operation, scenario, and immutable candidate tuple; typed validators and mandatory restoration remain in the hook. |
 
 `DENIED_TOKEN_FILE`, `CA_FILE`, `KUBECTL`, `TCPDUMP`, and `COUNTER_METRICS_FILE` are
 optional. The counter mapping file is bounded JSON whose keys must match the

@@ -71,6 +71,38 @@ preflight:
 	}
 }
 
+func TestReleaseDigestsRenderForEveryFirstPartyImage(t *testing.T) {
+	digest := map[string]string{
+		"server":   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"worker":   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"agent":    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		"migrate":  "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		"frontend": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+		"shell":    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+	}
+	sets := []string{
+		"image.server.digest=" + digest["server"],
+		"image.worker.digest=" + digest["worker"],
+		"image.agent.digest=" + digest["agent"],
+		"image.migrate.digest=" + digest["migrate"],
+		"frontend.image.digest=" + digest["frontend"],
+		"preflight.image.digest=" + digest["shell"],
+	}
+	docs := parseRenderedDocs(t, helmTemplate(t, sets...))
+	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "ghcr.io/alphabravo-oss/astronomer-go-server@"+digest["server"])
+	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "initContainers", "migrate", "ghcr.io/alphabravo-oss/astronomer-go-migrate@"+digest["migrate"])
+	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "ghcr.io/alphabravo-oss/astronomer-go-worker@"+digest["worker"])
+	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "ghcr.io/alphabravo-oss/astronomer-frontend@"+digest["frontend"])
+
+	data := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
+	if got := stringValue(data["AGENT_IMAGE_REPOSITORY"]); got != "ghcr.io/alphabravo-oss/astronomer-go-agent@"+digest["agent"] {
+		t.Fatalf("AGENT_IMAGE_REPOSITORY = %q", got)
+	}
+	if got := stringValue(data["KUBECTL_SHELL_IMAGE"]); got != "ghcr.io/alphabravo-oss/astronomer-shell@"+digest["shell"] {
+		t.Fatalf("KUBECTL_SHELL_IMAGE = %q", got)
+	}
+}
+
 func assertRenderedContainerImage(t *testing.T, docs []renderedDoc, kind, workload, field, container, want string) {
 	t.Helper()
 	doc := findRenderedDoc(t, docs, kind, workload)

@@ -189,7 +189,7 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		if err != nil {
 			return "", fmt.Errorf("adopt migrate image: %w", err)
 		}
-		agentImage, err := parseSelfManagedFirstPartyImageRef(strings.TrimSpace(cfg.AgentImageRepository)+":"+strings.TrimSpace(cfg.AgentImageTag), globalRegistry)
+		agentImage, err := parseSelfManagedFirstPartyImageRef(configuredAgentImageRef(cfg.AgentImageRepository, cfg.AgentImageTag), globalRegistry)
 		if err != nil {
 			return "", fmt.Errorf("parse configured agent image: %w", err)
 		}
@@ -404,6 +404,14 @@ func buildSelfManagedAstronomerValuesCaptured(ctx context.Context, cfg *config.C
 		return "", err
 	}
 	return valuesYAML, nil
+}
+
+func configuredAgentImageRef(repository, tag string) string {
+	repository = strings.TrimSpace(repository)
+	if strings.Contains(repository, "@sha256:") || strings.TrimSpace(tag) == "" {
+		return repository
+	}
+	return repository + ":" + strings.TrimSpace(tag)
 }
 
 func deployedHelmFrontendIntent(values map[string]any) (bool, bool, error) {

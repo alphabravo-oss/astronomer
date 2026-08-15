@@ -38,20 +38,24 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v0.3.7"
+    tag: "v0.3.8"
+    digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v0.3.7"
+    tag: "v0.3.8"
+    digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v0.3.7"
+    tag: "v0.3.8"
+    digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v0.3.7"
+    tag: "v0.3.8"
+    digest: ""
 
 # =============================================================================
 # Utility images
@@ -88,7 +92,8 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v0.3.7"
+    tag: "v0.3.8"
+    digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
   podSecurityContext:
@@ -387,7 +392,8 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v0.3.7"
+    tag: "v0.3.8"
+    digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
 
 # =============================================================================
@@ -409,8 +415,8 @@ config:
   # self-manage HTTPRoute. Leave empty to skip the seed and set later via
   # /dashboard/settings.
   serverURL: ""
-  # Empty => derive from image.agent (registry-aware). Set explicitly only to
-  # override the agent image independently of the management-plane image set.
+  # Empty => derive from image.agent (registry-aware). This also accepts an
+  # exact repository@sha256:digest; agentImageTag remains the release version.
   agentImageRepository: ""
   agentImageTag: ""
   # Fleet-style PULL reconcile (sprint: pull-reconcile). OFF by default. When

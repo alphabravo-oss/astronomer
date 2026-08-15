@@ -17,10 +17,10 @@ shape of the chart (`deploy/chart/`).
 
 ```bash
 # 1) Back up, resolve the exact OCI chart, and run a server-side dry run.
-./scripts/upgrade-release.sh v0.3.7
+./scripts/upgrade-release.sh v0.3.8
 
 # 2) After reviewing the private backup/dry-run directory, upgrade atomically.
-./scripts/upgrade-release.sh --yes v0.3.7
+./scripts/upgrade-release.sh --yes v0.3.8
 
 # 3) Verify (see "Post-upgrade verification")
 curl -s $URL/health/                              # 200
@@ -33,13 +33,15 @@ helm rollback astronomer <PREVIOUS_REV> -n astronomer
 ```
 
 The helper follows the same exact-version pattern used by Rancher upgrades. It
-resolves `oci://ghcr.io/alphabravo-oss/charts/astronomer:<version>`, captures
+downloads the GitHub release manifest and checksum file, verifies the chart's
+GitHub provenance attestation and every image's keyless Sigstore signature,
+then proves the OCI chart is byte-for-byte the release asset. It captures
 Helm values/history/manifests and Secret recovery material with mode `0600`,
 backs up bundled Postgres (or requires confirmation of an external backup),
 uses `--reset-then-reuse-values` to merge new chart defaults with live operator
-overrides, replaces local/development first-party image pins with the exact
-release tag, and runs Helm with `--atomic --cleanup-on-fail`. It never follows
-the mutable `latest` image channel.
+overrides, replaces local/development first-party image pins with exact
+`repository@sha256:digest` identities, and runs Helm with
+`--atomic --cleanup-on-fail`. It never follows the mutable `latest` channel.
 
 ---
 
@@ -181,7 +183,7 @@ kubectl -n astronomer get deploy -o jsonpath='{range .items[*]}{.metadata.name}=
 ### Step 1 — back up and preview
 
 ```bash
-./scripts/upgrade-release.sh v0.3.7
+./scripts/upgrade-release.sh v0.3.8
 ```
 
 This resolves the exact OCI chart, captures state and recovery material, and
@@ -199,7 +201,7 @@ Read every change. Common surprises:
 ### Step 2 — run the upgrade
 
 ```bash
-./scripts/upgrade-release.sh --yes v0.3.7
+./scripts/upgrade-release.sh --yes v0.3.8
 ```
 
 What happens:
@@ -416,10 +418,10 @@ versioned compatibility unit.
 
 ```bash
 # Capture, resolve, and dry-run
-./scripts/upgrade-release.sh v0.3.7
+./scripts/upgrade-release.sh v0.3.8
 
 # Upgrade only after reviewing the generated backup directory
-./scripts/upgrade-release.sh --yes v0.3.7
+./scripts/upgrade-release.sh --yes v0.3.8
 
 # Verify
 kubectl -n astronomer rollout status deploy/astronomer-server --timeout=5m

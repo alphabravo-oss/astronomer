@@ -44,7 +44,7 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 	"frontend": {context: "frontend", dockerfile: "frontend/Dockerfile", imageName: "astronomer-frontend"},
 }
 
-const releaseVersion = "0.3.7"
+const releaseVersion = "0.3.8"
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {
 	files := map[string][]string{
@@ -153,6 +153,9 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 		"Promote qualified images to latest",
 		"Refuse to overwrite an existing exact tag",
 		"RELEASE_IMAGES",
+		"Load immutable image references",
+		`--set-string image.server.digest="$SERVER_DIGEST"`,
+		"actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
 		"gh release create \"$TAG\"",
 		`--repo "$REPOSITORY"`,
 	} {
@@ -201,6 +204,7 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		`source-artifacts/${component}.digest`,
 		`test "${expected_ref#*@}" = "$actual_digest"`,
 		`END { if (digest != "") print digest }`,
+		`gh attestation verify "source-artifacts/astronomer-${CHART_VERSION}.tgz"`,
 		`cmp`,
 		`$0 ~ /^version:[[:space:]]/`,
 		`test "$app_version" = "$CHART_VERSION" || test "$app_version" = "$IMAGE_TAG"`,
@@ -237,9 +241,22 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 		`--reset-then-reuse-values`,
 		`image.registry=`,
 		`image.migrate.repository=astronomer-go-migrate`,
-		`config.agentImageRepository=ghcr.io/alphabravo-oss/astronomer-go-agent`,
+		`gh release download "$image_tag"`,
+		`verify_release_asset RELEASE_IMAGES`,
+		`gh attestation verify "$backup_dir/release-assets/astronomer-${chart_version}.tgz"`,
+		`cosign verify`,
+		`config.agentImageRepository=${agent_ref}`,
 		`config.agentImageTag=${image_tag}`,
+		`image.server.digest=${server_ref##*@}`,
+		`published OCI chart does not match`,
 		`--atomic --cleanup-on-fail`,
+		`--quiesce-argo-controller`,
+		`__quiesce-argo-post-renderer`,
+		`astro-argocd-application-controller`,
+		`wait_for_argo_quiescence`,
+		`--reset-values`,
+		`values-user.yaml`,
+		`Prior chart restored; Argo controller remains stopped`,
 		`helm rollback`,
 		`app.kubernetes.io/name=astronomer`,
 		`kill -0 "$port_forward_pid"`,
@@ -251,6 +268,55 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 	}
 	if strings.Contains(script, ":latest") {
 		t.Fatal("exact release upgrade helper follows the mutable latest channel")
+	}
+}
+
+func TestUpgradePostRendererQuiescesOnlyExactArgoController(t *testing.T) {
+	input := `---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: astro-argocd-application-controller
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers: []
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astronomer-server
+spec:
+  replicas: 3
+`
+	cmd := exec.Command("bash", "../scripts/upgrade-release.sh", "__quiesce-argo-post-renderer")
+	cmd.Stdin = strings.NewReader(input)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("quiesce post-renderer failed: %v\n%s", err, output)
+	}
+	got := string(output)
+	if !strings.Contains(got, "name: astro-argocd-application-controller\nspec:\n  replicas: 0") {
+		t.Fatalf("target controller was not quiesced:\n%s", got)
+	}
+	if !strings.Contains(got, "name: astronomer-server\nspec:\n  replicas: 3") {
+		t.Fatalf("unrelated workload was changed:\n%s", got)
+	}
+}
+
+func TestUpgradePostRendererFailsClosedWithoutExactArgoController(t *testing.T) {
+	input := `apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: another-controller
+spec:
+  replicas: 1
+`
+	cmd := exec.Command("bash", "../scripts/upgrade-release.sh", "__quiesce-argo-post-renderer")
+	cmd.Stdin = strings.NewReader(input)
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("post-renderer accepted a manifest without the exact controller:\n%s", output)
 	}
 }
 
@@ -399,7 +465,8 @@ func renderedFirstPartyImageReferences(t *testing.T, docs []renderedDoc) []strin
 			for _, container := range containerList(podSpec, field) {
 				ref := stringValue(container["image"])
 				for _, repository := range firstPartyRepositories {
-					if strings.Contains(ref, "/"+repository+":") || strings.HasPrefix(ref, repository+":") {
+					if strings.Contains(ref, "/"+repository+":") || strings.HasPrefix(ref, repository+":") ||
+						strings.Contains(ref, "/"+repository+"@") || strings.HasPrefix(ref, repository+"@") {
 						seen[ref] = true
 					}
 				}
@@ -408,7 +475,11 @@ func renderedFirstPartyImageReferences(t *testing.T, docs []renderedDoc) []strin
 	}
 
 	config := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
-	seen[stringValue(config["AGENT_IMAGE_REPOSITORY"])+":"+stringValue(config["AGENT_IMAGE_TAG"])] = true
+	agentRef := stringValue(config["AGENT_IMAGE_REPOSITORY"])
+	if !strings.Contains(agentRef, "@sha256:") {
+		agentRef += ":" + stringValue(config["AGENT_IMAGE_TAG"])
+	}
+	seen[agentRef] = true
 	seen[stringValue(config["KUBECTL_SHELL_IMAGE"])] = true
 
 	refs := make([]string, 0, len(seen))
