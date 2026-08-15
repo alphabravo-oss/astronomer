@@ -230,7 +230,9 @@ jobs:
           CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
         run: |
           echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-          helm package deploy/chart --version "$CHART_VERSION" --app-version "$IMAGE_TAG"
+          # Preflight already proves Chart.yaml has the exact release version.
+          # Do not mutate appVersion while packaging the tagged source.
+          helm package deploy/chart --version "$CHART_VERSION"
           helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts"
 
       - name: Upload packaged chart
