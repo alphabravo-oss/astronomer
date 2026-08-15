@@ -40,7 +40,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./c
 
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS base
 
-ARG VERSION=0.3.8
+ARG VERSION=0.3.9
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 

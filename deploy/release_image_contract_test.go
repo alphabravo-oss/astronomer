@@ -44,7 +44,7 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 	"frontend": {context: "frontend", dockerfile: "frontend/Dockerfile", imageName: "astronomer-frontend"},
 }
 
-const releaseVersion = "0.3.8"
+const releaseVersion = "0.3.9"
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {
 	files := map[string][]string{

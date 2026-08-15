@@ -38,23 +38,23 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v0.3.8"
+    tag: "v0.3.9"
     digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v0.3.8"
+    tag: "v0.3.9"
     digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v0.3.8"
+    tag: "v0.3.9"
     digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v0.3.8"
+    tag: "v0.3.9"
     digest: ""
 
 # =============================================================================
@@ -92,7 +92,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v0.3.8"
+    tag: "v0.3.9"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
@@ -392,7 +392,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v0.3.8"
+    tag: "v0.3.9"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
 
