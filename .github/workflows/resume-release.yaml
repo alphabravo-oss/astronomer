@@ -1,0 +1,314 @@
+name: resume interrupted release
+
+# Exact artifacts are deliberately immutable, so a release that stops after
+# publishing them cannot safely rerun the tag workflow. This operator-only
+# path validates the original run and its artifacts, repeats clean-cluster
+# qualification, and performs only the withheld promotion steps.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable vX.Y.Z tag to qualify
+        required: true
+        type: string
+      source_run_id:
+        description: Failed or cancelled release workflow run that built the artifacts
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: alphabravo-oss
+
+jobs:
+  preflight:
+    name: verify interrupted release identity and artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.identity.outputs.image_tag }}
+      chart-version: ${{ steps.identity.outputs.chart_version }}
+      tag-commit: ${{ steps.identity.outputs.tag_commit }}
+    steps:
+      - name: Checkout immutable tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and original release run
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY" = "alphabravo-oss/astronomer"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+
+          tag_commit="$(git rev-parse 'HEAD^{commit}')"
+          test "$(git rev-parse "refs/tags/${TAG}^{commit}")" = "$tag_commit"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$tag_commit" origin/main
+
+          chart_version="${TAG#v}"
+          test "$(awk '$1 == "version:" { print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
+          test "$(awk '$1 == "appVersion:" { gsub(/\"/, "", $2); print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
+
+          run_json="$(gh api "repos/${REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")"
+          test "$(jq -r .event <<<"$run_json")" = "push"
+          test "$(jq -r .head_sha <<<"$run_json")" = "$tag_commit"
+          test "$(jq -r .head_branch <<<"$run_json")" = "$TAG"
+          test "$(jq -r .path <<<"$run_json")" = ".github/workflows/release.yaml"
+          test "$(jq -r .status <<<"$run_json")" = "completed"
+          case "$(jq -r .conclusion <<<"$run_json")" in
+            failure|cancelled) ;;
+            *) echo "source run is not an interrupted release" >&2; exit 1 ;;
+          esac
+
+          if gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            echo "release $TAG already exists; refusing duplicate promotion" >&2
+            exit 1
+          fi
+
+          artifacts="$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired == false) | .name')"
+          for name in chart server worker agent migrate shell frontend; do
+            if [[ "$name" = chart ]]; then
+              expected="chart-${TAG}"
+            else
+              expected="sbom-${name}-${TAG}"
+            fi
+            grep -Fxq "$expected" <<<"$artifacts"
+          done
+
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
+          echo "tag_commit=$tag_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Download original release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: '*-${{ steps.identity.outputs.image_tag }}'
+          path: source-artifacts
+          merge-multiple: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: "v2.4.1"
+
+      - name: Verify exact signed multi-platform images
+        env:
+          IMAGE_TAG: ${{ steps.identity.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          identity="https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}"
+          for pair in \
+            server:astronomer-go-server \
+            worker:astronomer-go-worker \
+            agent:astronomer-go-agent \
+            migrate:astronomer-go-migrate \
+            shell:astronomer-shell \
+            frontend:astronomer-frontend; do
+            component="${pair%%:*}"
+            image="${pair#*:}"
+            ref="${REGISTRY}/${IMAGE_OWNER}/${image}:${IMAGE_TAG}"
+            docker buildx imagetools inspect "$ref" --raw > manifest.json
+            expected_ref="$(cat "source-artifacts/${component}.digest")"
+            expected_repository="${REGISTRY}/${IMAGE_OWNER}/${image}"
+            test "${expected_ref%@*}" = "$expected_repository"
+            actual_digest="$(docker buildx imagetools inspect "$ref" | awk '$1 == "Digest:" { print $2; exit }')"
+            test -n "$actual_digest"
+            test "${expected_ref#*@}" = "$actual_digest"
+            jq -e '
+              [.manifests[].platform | (.os + "/" + .architecture)] as $platforms
+              | ($platforms | index("linux/amd64")) != null
+                and ($platforms | index("linux/arm64")) != null
+            ' manifest.json >/dev/null
+            cosign verify \
+              --certificate-identity "$identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$ref" >/dev/null
+          done
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.16.2
+
+      - name: Verify exact published chart
+        env:
+          CHART_VERSION: ${{ steps.identity.outputs.chart_version }}
+        run: |
+          set -euo pipefail
+          mkdir registry-chart
+          helm pull oci://ghcr.io/alphabravo-oss/charts/astronomer \
+            --version "$CHART_VERSION" --destination registry-chart
+          cmp \
+            "source-artifacts/astronomer-${CHART_VERSION}.tgz" \
+            "registry-chart/astronomer-${CHART_VERSION}.tgz"
+          helm show chart "registry-chart/astronomer-${CHART_VERSION}.tgz" > chart-metadata.yaml
+          test "$(awk '$1 == "version:" { print $2; exit }' chart-metadata.yaml)" = "$CHART_VERSION"
+          test "$(awk '$1 == "appVersion:" { gsub(/\"/, "", $2); print $2; exit }' chart-metadata.yaml)" = "$CHART_VERSION"
+
+  qualify:
+    name: install exact release on a clean cluster
+    needs: preflight
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout tagged configuration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Install checksum-verified k3d
+        env:
+          K3D_VERSION: v5.8.3
+        run: |
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
+          awk '$2 == "_dist/k3d-linux-amd64" { print $1 "  k3d-linux-amd64" }' checksums.txt \
+            | sha256sum --check
+          sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.16.2
+
+      - name: Create clean Kubernetes and install Gateway prerequisites
+        run: |
+          k3d cluster create astronomer-release \
+            --image rancher/k3s:v1.32.8-k3s1 \
+            --port '8080:80@loadbalancer' \
+            --k3s-arg '--disable=traefik@server:*' \
+            --wait
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+          helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+            --version 2.6.0 --namespace nginx-gateway --create-namespace \
+            --wait --timeout 5m
+          source scripts/lib/gatewayclass-readiness.sh
+          wait_for_gatewayclass nginx 30 2
+
+      - name: Install the published OCI chart as a new user would
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
+        run: |
+          helm upgrade --install astronomer \
+            oci://ghcr.io/alphabravo-oss/charts/astronomer \
+            --version "$CHART_VERSION" \
+            --namespace astronomer --create-namespace \
+            -f deploy/chart/values-k3d.yaml \
+            --set-string image.server.tag="$IMAGE_TAG" \
+            --set-string image.worker.tag="$IMAGE_TAG" \
+            --set-string image.agent.tag="$IMAGE_TAG" \
+            --set-string image.migrate.tag="$IMAGE_TAG" \
+            --set-string frontend.image.tag="$IMAGE_TAG" \
+            --set-string preflight.image.tag="$IMAGE_TAG" \
+            --set-string kubectlShell.image="ghcr.io/alphabravo-oss/astronomer-shell:${IMAGE_TAG}" \
+            --atomic --cleanup-on-fail --timeout 15m
+
+      - name: Verify health and exact first-party image identities
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          helm get manifest astronomer --namespace astronomer > /tmp/release-manifest.yaml
+          for image in astronomer-go-server astronomer-go-worker astronomer-go-migrate astronomer-frontend astronomer-shell; do
+            grep -q "ghcr.io/alphabravo-oss/${image}:${IMAGE_TAG}" /tmp/release-manifest.yaml
+          done
+          grep -q 'AGENT_IMAGE_REPOSITORY: "ghcr.io/alphabravo-oss/astronomer-go-agent"' /tmp/release-manifest.yaml
+          grep -q "AGENT_IMAGE_TAG: \"${IMAGE_TAG}\"" /tmp/release-manifest.yaml
+          for attempt in $(seq 1 90); do
+            if curl -fsS -H 'Host: astronomer.localtest.me' http://127.0.0.1:8080/readyz; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Dump failed qualification state
+        if: failure()
+        run: |
+          helm status astronomer --namespace astronomer || true
+          kubectl get pods,deploy,statefulset,job -A -o wide || true
+          kubectl get gatewayclass,gateway,httproute -A -o yaml || true
+          kubectl logs --namespace astronomer --all-containers --tail=300 \
+            -l app.kubernetes.io/instance=astronomer || true
+
+  promote:
+    name: promote recovered release and publish GitHub Release
+    needs: [preflight, qualify]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    steps:
+      - name: Download original release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: '*-${{ needs.preflight.outputs.image-tag }}'
+          merge-multiple: true
+
+      - name: Verify downloaded artifact set
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
+        run: |
+          set -euo pipefail
+          test -f "astronomer-${CHART_VERSION}.tgz"
+          for component in server worker agent migrate shell frontend; do
+            test -s "sbom-${component}.spdx.json"
+            jq -e . "sbom-${component}.spdx.json" >/dev/null
+            test -s "${component}.digest"
+            grep -Eq "^ghcr.io/alphabravo-oss/[^@]+@sha256:[0-9a-f]{64}$" "${component}.digest"
+          done
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote qualified images to latest
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          for image in astronomer-go-server astronomer-go-worker astronomer-go-agent astronomer-go-migrate astronomer-shell astronomer-frontend; do
+            docker buildx imagetools create \
+              --tag "${REGISTRY}/${IMAGE_OWNER}/${image}:latest" \
+              "${REGISTRY}/${IMAGE_OWNER}/${image}:${IMAGE_TAG}"
+          done
+
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          sort --unique ./*.digest > RELEASE_IMAGES
+          sha256sum astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES > SHA256SUMS
+          gh release create "$TAG" \
+            --verify-tag \
+            --generate-notes \
+            --title "Astronomer ${TAG}" \
+            astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES SHA256SUMS
