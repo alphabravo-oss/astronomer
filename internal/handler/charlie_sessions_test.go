@@ -53,7 +53,7 @@ func (f *charlieAccessFake) Get(context.Context, uuid.UUID, uuid.UUID) (charlie.
 func (f *charlieAccessFake) History(context.Context, uuid.UUID, uuid.UUID, string, int) (json.RawMessage, error) {
 	return f.result, nil
 }
-func (f *charlieAccessFake) Message(_ context.Context, actor, session, message uuid.UUID, body string) (json.RawMessage, error) {
+func (f *charlieAccessFake) Message(_ context.Context, actor, session, message uuid.UUID, body string, _ *charlie.ProductCommandInvocation) (json.RawMessage, error) {
 	f.actor, f.session, f.message, f.messageBody = actor, session, message, body
 	return f.result, nil
 }

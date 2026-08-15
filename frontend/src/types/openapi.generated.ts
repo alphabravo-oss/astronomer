@@ -655,6 +655,34 @@ export interface OpenAPIComponents {
           "reason"?: string;
           "review"?: OpenAPIComponents['schemas']['CharlieApprovalReviewSummary'];
         };
+    CharlieCommandCatalog: {
+          "schema": string;
+          "version": number;
+          "commands": OpenAPIComponents['schemas']['CharlieCommandDescriptor'][];
+        };
+    CharlieCommandDescriptor: {
+          "id": string;
+          "version": string;
+          "name": string;
+          "aliases"?: string[];
+          "label": string;
+          "description": string;
+          "category": string;
+          "execution": "agent" | "client";
+          "effect": "read" | "local";
+          "required_mode": string;
+          "example": string;
+          "argument"?: {
+            "name": string;
+            "placeholder": string;
+            "required": boolean;
+          };
+        };
+    CharlieCommandRequest: {
+          "id": string;
+          "version": string;
+          "arguments": Record<string, string>;
+        };
     CharlieContextSearchResult: {
           "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
           "id": string;
@@ -712,6 +740,34 @@ export interface OpenAPIComponents {
     CharlieFindingVerification: {
           "method": string;
           "steps": string[];
+        };
+    CharlieKubernetesVisibility: {
+          "schema": "charlie.kubernetes-visibility/v1";
+          "profile": "disabled" | "product_namespace" | "cluster_diagnostics";
+          "revision": number;
+          "state": "not_configured" | "disabled" | "enabled";
+          "instance_id": string;
+          "namespaces": string[];
+          "product_owned_only": true;
+          "cluster_scoped": boolean;
+          "pod_logs": boolean;
+          "downstream_targets": false;
+          "secret_values": false;
+          "exec": false;
+          "attach": false;
+          "port_forward": false;
+          "api_proxy": false;
+          "requires_rediscovery": boolean;
+          "requires_central_review": boolean;
+          "requires_product_acknowledgement": boolean;
+          "candidate_disclosure_digest"?: string;
+          "available_profiles": Array<"disabled" | "product_namespace" | "cluster_diagnostics">;
+          "scope_summary": string;
+        };
+    CharlieKubernetesVisibilityRequest: {
+          "profile": "disabled" | "product_namespace" | "cluster_diagnostics";
+          "pod_logs": boolean;
+          "revision": number;
         };
     CharlieMessageRequest: {
           "client_message_id": string;
@@ -793,6 +849,23 @@ export interface OpenAPIComponents {
           "type": "installation" | "management_component" | "alert" | "backup" | "self_management_application" | "agent_connection_record" | "agent_fleet" | "tunnel";
           "id": string;
           "required_verb": string;
+        };
+    CharlieThreadMessageRequest: {
+          "client_message_id": string;
+          "message": string;
+          "trigger"?: string;
+          "current_ui_context"?: string;
+          "resources"?: OpenAPIComponents['schemas']['CharlieSessionResource'][];
+          "command"?: OpenAPIComponents['schemas']['CharlieCommandRequest'];
+        };
+    CharlieThreadMetadata: {
+          "id": string;
+          "title": string;
+          "state": "active" | "archived";
+          "current_session_id"?: string | null;
+          "created_at": string;
+          "updated_at": string;
+          "archived_at"?: string | null;
         };
     CharlieTriggerRetryRequest: {
           "request_id": string;
@@ -2071,6 +2144,9 @@ export type CharlieAdminTriggerRule = OpenAPIComponents['schemas']['CharlieAdmin
 export type CharlieApprovalDecisionRequest = OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
 export type CharlieApprovalReviewSummary = OpenAPIComponents['schemas']['CharlieApprovalReviewSummary'];
 export type CharlieApprovalSummary = OpenAPIComponents['schemas']['CharlieApprovalSummary'];
+export type CharlieCommandCatalog = OpenAPIComponents['schemas']['CharlieCommandCatalog'];
+export type CharlieCommandDescriptor = OpenAPIComponents['schemas']['CharlieCommandDescriptor'];
+export type CharlieCommandRequest = OpenAPIComponents['schemas']['CharlieCommandRequest'];
 export type CharlieContextSearchResult = OpenAPIComponents['schemas']['CharlieContextSearchResult'];
 export type CharlieDiscoveryQualificationRequest = OpenAPIComponents['schemas']['CharlieDiscoveryQualificationRequest'];
 export type CharlieFindingAdvisoryDetail = OpenAPIComponents['schemas']['CharlieFindingAdvisoryDetail'];
@@ -2080,6 +2156,8 @@ export type CharlieFindingResource = OpenAPIComponents['schemas']['CharlieFindin
 export type CharlieFindingSummary = OpenAPIComponents['schemas']['CharlieFindingSummary'];
 export type CharlieFindingTransitionRequest = OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
 export type CharlieFindingVerification = OpenAPIComponents['schemas']['CharlieFindingVerification'];
+export type CharlieKubernetesVisibility = OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+export type CharlieKubernetesVisibilityRequest = OpenAPIComponents['schemas']['CharlieKubernetesVisibilityRequest'];
 export type CharlieMessageRequest = OpenAPIComponents['schemas']['CharlieMessageRequest'];
 export type CharlieModeRequest = OpenAPIComponents['schemas']['CharlieModeRequest'];
 export type CharlieOnboardingRequest = OpenAPIComponents['schemas']['CharlieOnboardingRequest'];
@@ -2088,6 +2166,8 @@ export type CharlieOperationStatus = OpenAPIComponents['schemas']['CharlieOperat
 export type CharlieSessionCreateRequest = OpenAPIComponents['schemas']['CharlieSessionCreateRequest'];
 export type CharlieSessionMetadata = OpenAPIComponents['schemas']['CharlieSessionMetadata'];
 export type CharlieSessionResource = OpenAPIComponents['schemas']['CharlieSessionResource'];
+export type CharlieThreadMessageRequest = OpenAPIComponents['schemas']['CharlieThreadMessageRequest'];
+export type CharlieThreadMetadata = OpenAPIComponents['schemas']['CharlieThreadMetadata'];
 export type CharlieTriggerRetryRequest = OpenAPIComponents['schemas']['CharlieTriggerRetryRequest'];
 export type CloudCredential = OpenAPIComponents['schemas']['CloudCredential'];
 export type CloudCredentialRequest = OpenAPIComponents['schemas']['CloudCredentialRequest'];

@@ -1,5 +1,16 @@
 import api from "@/lib/api";
 import { API_BASE } from "@/lib/env";
+import type {
+  CharlieCommandCatalog,
+  CharlieCommandDescriptor,
+  CharlieCommandRequest,
+} from "@/types/openapi.generated";
+
+export type {
+  CharlieCommandCatalog,
+  CharlieCommandDescriptor,
+  CharlieCommandRequest,
+};
 export type CharlieResource = {
   type:
     | "installation"
@@ -371,6 +382,22 @@ export async function createCharlieSession(input: {
   });
   return mapCharlieSession(data.session ?? data.data?.session ?? data);
 }
+export async function getCharlieSession(id: string): Promise<CharlieSession> {
+  const { data } = await api.get(
+    `/charlie/sessions/${encodeURIComponent(id)}/`,
+  );
+  const value = data.data ?? data;
+  const session = mapCharlieSession(value.session ?? value);
+  const remoteState = value.remote?.state;
+  const state =
+    remoteState === "completed" ||
+    remoteState === "failed" ||
+    remoteState === "aborted" ||
+    remoteState === "waiting_approval"
+      ? remoteState
+      : session.state;
+  return { ...session, state };
+}
 export async function getCharlieHistory(id: string): Promise<CharlieMessage[]> {
   const { data } = await api.get(
     `/charlie/sessions/${encodeURIComponent(id)}/history/`,
@@ -429,32 +456,91 @@ export type CharlieActiveThread = {
   current_session?: CharlieSession | null;
 };
 
-export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
-  const { data } = await api.get("/charlie/threads/active/");
-  const value = data?.data ?? data;
+type CharlieActiveThreadWire = {
+  thread?: {
+    id?: unknown;
+    title?: unknown;
+    state?: unknown;
+    currentSessionId?: unknown;
+    current_session_id?: unknown;
+    createdAt?: unknown;
+    created_at?: unknown;
+    updatedAt?: unknown;
+    updated_at?: unknown;
+  } | null;
+  messageable?: unknown;
+  needsContinue?: unknown;
+  needs_continue?: unknown;
+  sessionIds?: unknown;
+  session_ids?: unknown;
+  currentSession?: CharlieWireSession | null;
+  current_session?: CharlieWireSession | null;
+};
+
+/**
+ * Normalize the thread envelope after the shared Axios interceptor camelizes
+ * response keys. Keeping this boundary explicit prevents a successful turn
+ * from losing its local session ID, which would stop the browser from opening
+ * the authenticated lifecycle-event stream and leave progress stuck at the
+ * initial "Sending request" label.
+ */
+function mapCharlieActiveThread(value: CharlieActiveThreadWire | undefined): CharlieActiveThread {
+  const rawThread = value?.thread;
+  const currentSessionID = rawThread?.currentSessionId ?? rawThread?.current_session_id;
+  const rawSessionIDs = value?.sessionIds ?? value?.session_ids;
+  const rawCurrentSession = value?.currentSession ?? value?.current_session;
   return {
-    thread: value?.thread ?? null,
+    thread:
+      rawThread &&
+      typeof rawThread.id === "string" &&
+      typeof rawThread.title === "string" &&
+      typeof rawThread.state === "string"
+        ? {
+            id: rawThread.id,
+            title: rawThread.title,
+            state: rawThread.state,
+            current_session_id:
+              typeof currentSessionID === "string" ? currentSessionID : null,
+            created_at:
+              typeof (rawThread.createdAt ?? rawThread.created_at) === "string"
+                ? ((rawThread.createdAt ?? rawThread.created_at) as string)
+                : undefined,
+            updated_at:
+              typeof (rawThread.updatedAt ?? rawThread.updated_at) === "string"
+                ? ((rawThread.updatedAt ?? rawThread.updated_at) as string)
+                : undefined,
+          }
+        : null,
     messageable: Boolean(value?.messageable),
-    needs_continue: Boolean(value?.needs_continue),
-    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
-    current_session: value?.current_session
-      ? mapCharlieSession(value.current_session)
+    needs_continue: Boolean(value?.needsContinue ?? value?.needs_continue),
+    session_ids: Array.isArray(rawSessionIDs)
+      ? rawSessionIDs.filter((id): id is string => typeof id === "string")
+      : [],
+    current_session: rawCurrentSession
+      ? mapCharlieSession(rawCurrentSession)
       : null,
   };
 }
 
+export type CharlieTurnReceipt = {
+  sessionId: string;
+  turnId: string;
+  acceptedAt?: string;
+};
+
+export async function getCharlieCommands(): Promise<CharlieCommandCatalog> {
+  const { data } = await api.get("/charlie/commands/");
+  return (data?.data ?? data) as CharlieCommandCatalog;
+}
+
+export async function getCharlieActiveThread(): Promise<CharlieActiveThread> {
+  const { data } = await api.get("/charlie/threads/active/");
+  return mapCharlieActiveThread(data?.data ?? data);
+}
+
 export async function newCharlieChat(): Promise<CharlieActiveThread> {
   const { data } = await api.post("/charlie/threads/new/", {});
-  const value = data?.data ?? data;
-  return {
-    thread: value?.thread ?? null,
-    messageable: Boolean(value?.messageable),
-    needs_continue: Boolean(value?.needs_continue),
-    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
-    current_session: value?.current_session
-      ? mapCharlieSession(value.current_session)
-      : null,
-  };
+  return mapCharlieActiveThread(data?.data ?? data);
 }
 
 export async function sendCharlieThreadMessage(
@@ -463,8 +549,9 @@ export async function sendCharlieThreadMessage(
     trigger?: string;
     currentUiContext?: string;
     resources?: CharlieResource[];
+    command?: CharlieCommandRequest;
   },
-): Promise<CharlieActiveThread & { receipt?: unknown }> {
+): Promise<CharlieActiveThread & { receipt?: CharlieTurnReceipt }> {
   const { data } = await api.post("/charlie/threads/messages/", {
     client_message_id: crypto.randomUUID(),
     message,
@@ -475,18 +562,28 @@ export async function sendCharlieThreadMessage(
       id: r.id,
       required_verb: r.requiredVerb,
     })),
+    command: options?.command,
   });
   const value = data?.data ?? data;
-  return {
-    thread: value?.thread ?? null,
-    messageable: Boolean(value?.messageable),
-    needs_continue: Boolean(value?.needs_continue),
-    session_ids: Array.isArray(value?.session_ids) ? value.session_ids : [],
-    current_session: value?.current_session
-      ? mapCharlieSession(value.current_session)
-      : null,
-    receipt: value?.receipt,
-  };
+  const rawReceipt = value?.receipt;
+  const receiptSessionId = rawReceipt?.sessionId ?? rawReceipt?.session_id;
+  const receiptTurnId = rawReceipt?.turnId ?? rawReceipt?.turn_id;
+  const receiptAcceptedAt = rawReceipt?.acceptedAt ?? rawReceipt?.accepted_at;
+  const receipt =
+    rawReceipt &&
+    typeof receiptSessionId === "string" &&
+    receiptSessionId &&
+    typeof receiptTurnId === "string" &&
+    receiptTurnId
+      ? {
+          sessionId: receiptSessionId,
+          turnId: receiptTurnId,
+          ...(typeof receiptAcceptedAt === "string"
+            ? { acceptedAt: receiptAcceptedAt }
+            : {}),
+        }
+      : undefined;
+  return { ...mapCharlieActiveThread(value), receipt };
 }
 
 export async function getCharlieThreadHistory(
@@ -541,7 +638,11 @@ export async function listCharlieThreads(): Promise<
     title: String(row.title ?? ""),
     state: String(row.state ?? ""),
     updated_at:
-      typeof row.updated_at === "string" ? row.updated_at : undefined,
+      typeof row.updated_at === "string"
+        ? row.updated_at
+        : typeof row.updatedAt === "string"
+          ? row.updatedAt
+          : undefined,
   }));
 }
 
@@ -559,6 +660,13 @@ const charlieSessionEventTypes = [
   "turn.aborted",
   "charlie.error",
 ] as const;
+
+const charlieTerminalEventTypes = new Set<string>([
+  "turn.completed",
+  "turn.failed",
+  "turn.aborted",
+  "charlie.error",
+]);
 
 // EventSource keeps its last confirmed event ID and sends Last-Event-ID on an
 // automatic reconnect. Astronomer also persists the cursor after flushing each
@@ -580,7 +688,11 @@ export function subscribeCharlieSessionEvents(
   let source: EventSource | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let attempt = 0;
-  const listener = (event: Event) => onEvent(event as MessageEvent<string>);
+  let terminalSeen = false;
+  const listener = (event: Event) => {
+    onEvent(event as MessageEvent<string>);
+    if (charlieTerminalEventTypes.has(event.type)) terminalSeen = true;
+  };
 
   const clearRetry = () => {
     if (retryTimer !== undefined) {
@@ -611,6 +723,14 @@ export function subscribeCharlieSessionEvents(
       onOpen?.();
     };
     es.onerror = () => {
+      // Charlie closes a completed turn stream after the terminal event. That
+      // is a successful end, not a connectivity failure and must not produce a
+      // false reconnect warning. A later turn creates a fresh subscription.
+      if (terminalSeen) {
+        detach(es);
+        if (source === es) source = null;
+        return;
+      }
       onError();
       if (closed) return;
       // Stop the browser's immediate reconnect loop; we reopen with backoff.

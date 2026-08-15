@@ -16,6 +16,8 @@ export type CharlieTurnProgress = {
   lastEventAt: number;
   toolCallIds: string[];
   completedToolCallIds: string[];
+  failedToolCallIds: string[];
+  blockedToolCallIds: string[];
   eventCount: number;
   seenEventIds: string[];
 };
@@ -29,6 +31,7 @@ export type CharlieProgressEvent = {
 const MAX_TRACKED_IDS = 128;
 const SAFE_CAPABILITY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const SAFE_TOOL_CALL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const SAFE_TURN_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 export function initialCharlieTurnProgress(now = Date.now()): CharlieTurnProgress {
   return {
@@ -38,6 +41,8 @@ export function initialCharlieTurnProgress(now = Date.now()): CharlieTurnProgres
     lastEventAt: now,
     toolCallIds: [],
     completedToolCallIds: [],
+    failedToolCallIds: [],
+    blockedToolCallIds: [],
     eventCount: 0,
     seenEventIds: [],
   };
@@ -54,17 +59,28 @@ function appendUnique(values: string[], value?: string): string[] {
   return [...values, value].slice(-MAX_TRACKED_IDS);
 }
 
-function eventData(raw: string): Record<string, unknown> {
+function eventEnvelope(raw: string): Record<string, unknown> {
   try {
     const envelope = JSON.parse(raw) as unknown;
-    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return {};
-    const data = (envelope as Record<string, unknown>).data;
-    return data && typeof data === "object" && !Array.isArray(data)
-      ? (data as Record<string, unknown>)
+    return envelope && typeof envelope === "object" && !Array.isArray(envelope)
+      ? (envelope as Record<string, unknown>)
       : {};
   } catch {
     return {};
   }
+}
+
+function eventData(raw: string): Record<string, unknown> {
+  const data = eventEnvelope(raw).data;
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? (data as Record<string, unknown>)
+    : {};
+}
+
+/** Return only the bounded turn identity needed to correlate lifecycle events. */
+export function charlieProgressEventTurnId(raw: string): string | undefined {
+  const envelope = eventEnvelope(raw);
+  return boundedID(envelope.turn_id, SAFE_TURN_ID);
 }
 
 /**
@@ -117,15 +133,26 @@ export function updateCharlieTurnProgress(
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
         completedToolCallIds: appendUnique(current.completedToolCallIds, toolCallID),
       };
-    case "tool.failed":
+    case "tool.failed": {
+      const errorCode = boundedID(data.error_code, SAFE_CAPABILITY);
+      const blocked = errorCode?.startsWith("authority.") ?? false;
       return {
         ...next,
         stage: "analyzing",
-        label: capability ? `${capability} failed · Adjusting the investigation` : "Tool failed · Adjusting the investigation",
+        label: capability
+          ? `${capability} ${blocked ? "was blocked" : "failed"} · Adjusting the investigation`
+          : `Tool ${blocked ? "was blocked" : "failed"} · Adjusting the investigation`,
         capability,
         toolCallIds: appendUnique(current.toolCallIds, toolCallID),
         completedToolCallIds: appendUnique(current.completedToolCallIds, toolCallID),
+        failedToolCallIds: blocked
+          ? current.failedToolCallIds
+          : appendUnique(current.failedToolCallIds, toolCallID),
+        blockedToolCallIds: blocked
+          ? appendUnique(current.blockedToolCallIds, toolCallID)
+          : current.blockedToolCallIds,
       };
+    }
     case "permission.requested":
       return {
         ...next,

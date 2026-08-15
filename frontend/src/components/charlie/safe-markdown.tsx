@@ -1,43 +1,101 @@
-import type { ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  Table,
+  TableCell,
+  TableHead,
+} from "@/components/ui/table";
 
 export function safeLink(href: string): string | null {
   const value = href.trim();
-  if (value.startsWith("/") || /^https:\/\//i.test(value)) return value;
+  if (
+    value.startsWith("/") ||
+    value.startsWith("#") ||
+    /^https:\/\//i.test(value)
+  )
+    return value;
   return null;
 }
 
-function inline(text: string): ReactNode[] {
-  const clean = text.replace(/<[^>]*>/g, "");
-  const parts = clean.split(/(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) => {
-    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link) {
-      const href = safeLink(link[2]);
-      return href ? (
-        <a
-          key={i}
-          href={href}
-          target={href.startsWith("/") ? undefined : "_blank"}
-          rel="noopener noreferrer"
-          className="text-primary underline"
-        >
-          {link[1]}
-        </a>
-      ) : (
-        <span key={i}>{link[1]}</span>
-      );
-    }
-    if (part.startsWith("`") && part.endsWith("`"))
-      return (
-        <code key={i} className="rounded bg-muted px-1 font-mono text-xs">
-          {part.slice(1, -1)}
-        </code>
-      );
-    if (part.startsWith("**") && part.endsWith("**"))
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    return part;
-  });
-}
+const markdownComponents: Components = {
+  h1: ({ children }) => (
+    <h1 className="mt-4 text-base font-semibold first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mt-4 text-sm font-semibold first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mt-3 text-sm font-semibold first:mt-0">{children}</h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="mt-3 text-sm font-medium first:mt-0">{children}</h4>
+  ),
+  p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
+  ul: ({ children }) => (
+    <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>
+  ),
+  li: ({ children }) => <li className="pl-0.5">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 border-l-2 border-border pl-3 text-muted-foreground">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => {
+    const safe = typeof href === "string" ? safeLink(href) : null;
+    return safe ? (
+      <a
+        href={safe}
+        target={
+          safe.startsWith("/") || safe.startsWith("#") ? undefined : "_blank"
+        }
+        rel="noopener noreferrer"
+        className="text-primary underline underline-offset-2"
+      >
+        {children}
+      </a>
+    ) : (
+      <span>{children}</span>
+    );
+  },
+  // Model-authored Markdown must not create ambient network requests or tracking
+  // pixels. Product evidence is attached through the explicit citation surface.
+  img: ({ alt }) => (
+    <span className="text-muted-foreground">
+      {alt ? `[Image omitted: ${alt}]` : "[Image omitted]"}
+    </span>
+  ),
+  code: ({ children, className }) => (
+    <code
+      className={`${className ?? ""} rounded bg-muted px-1 py-0.5 font-mono text-xs`}
+    >
+      {children}
+    </code>
+  ),
+  pre: ({ children }) => (
+    <pre className="my-2 max-w-full overflow-x-auto rounded-md border bg-muted/50 p-3 text-xs [&>code]:bg-transparent [&>code]:p-0">
+      {children}
+    </pre>
+  ),
+  hr: () => <hr className="my-3 border-border" />,
+  table: ({ children }) => (
+    <div className="my-2 max-w-full overflow-x-auto">
+      <Table className="border-collapse text-left text-xs">{children}</Table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <TableHead className="border border-border bg-muted px-2 py-1 font-semibold">
+      {children}
+    </TableHead>
+  ),
+  td: ({ children }) => (
+    <TableCell className="border border-border px-2 py-1 align-top">
+      {children}
+    </TableCell>
+  ),
+};
 
 export function SafeMarkdown({
   children,
@@ -46,23 +104,20 @@ export function SafeMarkdown({
   children: string;
   streaming?: boolean;
 }) {
-  const lines = children.split("\n");
   return (
     <div
-      className="space-y-2 break-words text-sm select-text"
+      className="break-words text-sm select-text"
       aria-live={streaming ? "polite" : undefined}
       aria-busy={streaming}
     >
-      {lines.map((line, i) =>
-        line.startsWith("- ") ? (
-          <div key={i} className="flex gap-2">
-            <span aria-hidden>•</span>
-            <span>{inline(line.slice(2))}</span>
-          </div>
-        ) : (
-          <p key={i}>{inline(line)}</p>
-        ),
-      )}
+      <ReactMarkdown
+        skipHtml
+        remarkPlugins={[remarkGfm]}
+        components={markdownComponents}
+        urlTransform={(url) => safeLink(url) ?? ""}
+      >
+        {children}
+      </ReactMarkdown>
     </div>
   );
 }

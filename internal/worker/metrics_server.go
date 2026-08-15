@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -53,8 +54,9 @@ func StartMetricsServer(ctx context.Context, addr string, pinger HealthPinger, l
 	}
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: newWorkerMux(pinger, log),
+		Addr:              addr,
+		Handler:           newWorkerMux(pinger, log),
+		ReadHeaderTimeout: 15 * time.Second,
 	}
 
 	go func() {

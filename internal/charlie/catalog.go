@@ -42,6 +42,9 @@ type CapabilityDescriptor struct {
 func ReadCapabilityCatalog() []CapabilityDescriptor {
 	const max = 64 << 10
 	return []CapabilityDescriptor{
+		readDesc("astronomer.system.health",
+			"Bounded concurrent management-plane health assessment across installation, Kubernetes runtime, database, Redis, queues, agent fleet, tunnels, backups, TLS, alerting, Argo CD, Charlie, and security posture. Use this once as the first tool for broad health/status requests, then run only targeted follow-up tools for degraded checks.",
+			SourceAstronomerServer, "*", nil, max),
 		readDesc("astronomer.installation.summary",
 			"Installation identity: installation_id, platform name, astronomer_version, chart_version, namespace, release, kubernetes_version, kubernetes_distribution, and management component health. Use for 'what version of k8s/astronomer are we running'.",
 			SourceAstronomerServer, "settings", nil, max),
@@ -67,7 +70,7 @@ func ReadCapabilityCatalog() []CapabilityDescriptor {
 			"Recent Kubernetes Warning/Normal events for owned components. Filter by component name, since duration, and limit.",
 			SourceManagementKubernetes, "workloads", []string{"component", "since", "limit"}, max),
 		readDesc("astronomer.management.pod_logs",
-			"Bounded redacted log tail for one owned pod and container (default 200 lines, hard size bound). Requires pod and container names from pods/workloads tools first.",
+			"Bounded redacted log tail for one owned pod and container (default 200 lines, hard size bound). Returns requested/returned line counts and a truncation marker; newest evidence is retained when compaction is required. Requires pod and container names from pods/workloads tools first.",
 			SourceManagementKubernetes, "logging", []string{"pod", "container", "lines"}, max),
 		readDesc("astronomer.management.nodes",
 			"Management-plane nodes: server_version, kubelet_version, OS, architecture, capacity, and Ready/pressure conditions.",
@@ -94,7 +97,7 @@ func ReadCapabilityCatalog() []CapabilityDescriptor {
 			"Management-plane availability controls: HorizontalPodAutoscalers and PodDisruptionBudgets in the Astronomer namespace with safe scaling and disruption status.",
 			SourceManagementKubernetes, "workloads", nil, max),
 		readDesc("astronomer.management.ingress",
-			"Management-plane Ingress and EndpointSlice readiness metadata including hosts, TLS presence, addresses, endpoint readiness, ports, and fixed backend references; no secret material is returned.",
+			"Management-plane Ingress and EndpointSlice readiness metadata including hosts, TLS presence, addresses, endpoint readiness, ports, and fixed backend references; no secret material is returned. EndpointSlice permission/API failures are reported as a fixed partial-visibility code without discarding ingress inventory.",
 			SourceManagementKubernetes, "ingresses", nil, max),
 		readDesc("astronomer.database.health",
 			"Postgres health for the Astronomer database (connectivity, size, recovery state).",

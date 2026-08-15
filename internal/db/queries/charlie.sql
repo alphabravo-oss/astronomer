@@ -205,6 +205,42 @@ SELECT * FROM charlie_connections WHERE id = $1;
 -- name: GetCharlieConnectionByDeploymentID :one
 SELECT * FROM charlie_connections WHERE deployment_id = $1 AND active = true;
 
+-- name: UpdateCharlieKubernetesVisibility :one
+UPDATE charlie_connections
+SET kubernetes_visibility_profile = sqlc.arg(kubernetes_visibility_profile),
+    kubernetes_visibility_pod_logs = sqlc.arg(kubernetes_visibility_pod_logs),
+    kubernetes_visibility_rediscovery_state = 'required',
+    kubernetes_visibility_candidate_digest = '',
+    requested_mode = 'disabled',
+    verified_mode = 'disabled',
+    verified_mode_revision = verified_mode_revision + 1,
+    disclosure_digest = '',
+    acknowledged_disclosure_digest = '',
+    last_verified_at = NULL,
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND active = true
+  AND verified_mode_revision = sqlc.arg(expected_revision)
+RETURNING *;
+
+-- name: ConfirmCharlieKubernetesVisibilityRediscovery :one
+UPDATE charlie_connections
+SET kubernetes_visibility_rediscovery_state = 'review_required',
+    kubernetes_visibility_candidate_digest = sqlc.arg(candidate_digest),
+    requested_mode = 'disabled',
+    verified_mode = 'disabled',
+    verified_mode_revision = sqlc.arg(remote_revision),
+    disclosure_digest = '',
+    acknowledged_disclosure_digest = '',
+    last_verified_at = NULL,
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND active = true
+  AND kubernetes_visibility_rediscovery_state = 'required'
+  AND verified_mode_revision = sqlc.arg(expected_local_revision)
+  AND sqlc.arg(remote_revision)::bigint >= verified_mode_revision
+RETURNING *;
+
 -- name: CreateCharlieConnection :one
 INSERT INTO charlie_connections (
     installation_id, product_id, product_slug, deployment_id, route_id, central_url,

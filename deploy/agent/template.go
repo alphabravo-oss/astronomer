@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -80,6 +81,14 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if data.PullReconcileEnabled {
 		pullReconcile = "true"
 	}
+	insecure := "false"
+	if parsed, err := url.Parse(strings.TrimSpace(data.ServerURL)); err == nil &&
+		(parsed.Scheme == "http" || parsed.Scheme == "ws") {
+		// Production rejects a plaintext server URL during config validation.
+		// Development installs may intentionally use one; carry that explicit
+		// URL choice into the agent's separate fail-closed acknowledgement.
+		insecure = "true"
+	}
 	// The CA Secret uses a `data:` field, which is base64-encoded. An empty CA
 	// stays empty (the Secret's ca.crt is "", the volume mount is optional, and
 	// the agent falls back to OS trust). A configured PEM bundle is base64'd.
@@ -89,6 +98,7 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	}
 	return strings.NewReplacer(
 		"{{AGENT_PULL_RECONCILE_ENABLED}}", pullReconcile,
+		"{{AGENT_INSECURE}}", insecure,
 		// L7: every scalar below renders into a double-quoted YAML scalar in
 		// install.yaml.template (SERVER_URL/CLUSTER_ID/REGISTRATION_TOKEN/
 		// CA_CHECKSUM/AGENT_IMAGE). SERVER_URL and AGENT_IMAGE are

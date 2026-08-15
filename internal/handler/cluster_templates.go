@@ -762,7 +762,7 @@ func (h *ClusterTemplateHandler) upsertApplicationAndEnqueue(r *http.Request, pa
 			payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
 			task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(3))
 			app, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), h.queries, h.taskOutbox, params, task, tasks.TaskOutboxOptions{
-				DedupeKey:           fmt.Sprintf("cluster_template_apply:%s", params.ClusterID.String()),
+				DedupeKey:           clusterTemplateApplyDedupeKey(params.ClusterID),
 				QueueName:           tasks.ClusterTemplateApplyQueueName,
 				MaxRetry:            3,
 				MaxDeliveryAttempts: 20,

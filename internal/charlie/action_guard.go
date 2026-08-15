@@ -112,7 +112,7 @@ type CapabilityExecutor interface {
 }
 
 type CapabilityAvailability interface {
-	SupportsCapability(string) bool
+	SupportsCapability(context.Context, string) bool
 }
 
 type ActionResult struct {
@@ -190,7 +190,7 @@ func (g *ActionGuard) Execute(ctx context.Context, envelope ActionEnvelope) (res
 			Decision: AuthorityDecision{Allowed: result.Allowed, Code: result.Code},
 		})
 	}()
-	descriptor, arguments, code := g.validate(envelope)
+	descriptor, arguments, code := g.validate(ctx, envelope)
 	// Product operation identifiers are execution authority, not model input.
 	// The signed Charlie action ID and matching Idempotency-Key header are the
 	// canonical single-use identity. Replace the disclosed argument only after
@@ -707,7 +707,7 @@ func (g *ActionGuard) logPersistenceFailure(ctx context.Context, code string) {
 	LogOperationalFailure(ctx, g.logger, code, "")
 }
 
-func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, map[string]json.RawMessage, DenialCode) {
+func (g *ActionGuard) validate(ctx context.Context, envelope ActionEnvelope) (CapabilityDescriptor, map[string]json.RawMessage, DenialCode) {
 	if envelope.Version != "charlie-action/v1" || envelope.DeploymentID == "" || envelope.SessionID == "" || envelope.TurnID == "" || envelope.ActionID == "" || envelope.Capability == "" || envelope.AuthorizationRef == "" || envelope.DisclosureDigest == "" || envelope.ModeRevision < 1 || envelope.PolicyRevision < 1 || envelope.FencingEpoch < 1 || !envelope.ExpiresAt.After(g.now().UTC()) || envelope.ExpiresAt.After(g.now().UTC().Add(15*time.Minute)) {
 		return CapabilityDescriptor{}, nil, DeniedAuthorization
 	}
@@ -733,7 +733,7 @@ func (g *ActionGuard) validate(envelope ActionEnvelope) (CapabilityDescriptor, m
 	if validateV1CapabilityDescriptor(descriptor) != nil {
 		return CapabilityDescriptor{}, nil, DeniedDestructive
 	}
-	if availability, ok := g.executor.(CapabilityAvailability); ok && !availability.SupportsCapability(envelope.Capability) {
+	if availability, ok := g.executor.(CapabilityAvailability); ok && !availability.SupportsCapability(ctx, envelope.Capability) {
 		return CapabilityDescriptor{}, nil, DeniedScope
 	}
 	accepted := make(map[string]struct{}, len(descriptor.AcceptedFields))

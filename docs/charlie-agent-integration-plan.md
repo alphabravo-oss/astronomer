@@ -1126,6 +1126,8 @@ request to that cluster.
   Astronomer namespace and allowlisted supporting namespaces/components.
 - [x] **A7-006** `astronomer.management.pod_logs` — named management pod/container,
   maximum 200 lines and 64 KiB, shared redaction, and no downstream log path.
+  Encoded responses compact oldest lines first, retain newest evidence, and
+  expose requested/returned counts plus an explicit truncation marker.
 - [x] **A7-007** `astronomer.management.nodes`, `.storage`, and `.network` — bounded
   management-cluster capacity/pressure, PVC health, ingress/service/network-policy
   status, and no arbitrary resource-kind or GVR input.
@@ -2190,8 +2192,10 @@ unchecked qualification gates.
   lifecycle. A cold `feature.charlie=false` state constructs no bridge client,
   stream, dispatcher, scheduler, reconciler, timer, listener, or network path.
   Signed feature enable starts a fresh generation; feature disable, connection
-  deactivation, operational disable, emergency stop, or authority fall drains
-  and closes the permitted work plane without a server restart.
+  deactivation, emergency stop, or authority fall drains and closes the
+  permitted work plane without a server restart. Operational disable closes all
+  work but may retain the private configuration-only MCP discovery surface
+  described below.
 - Feature disable quiesces local admission before suspending the installed
   product agent. Operational wire mode `disabled` is a separate control-only
   state; `read_only`, `approval_required`, and `automation` remain cumulative
@@ -2250,7 +2254,7 @@ unchecked qualification gates.
 - The first live disable exposed a control-recovery defect: emergency disable had
   correctly closed work, but it also removed the transport needed to suspend the
   agent. Commit `0ddff69` keeps a control-only configuration transport while the
-  work transport, listeners, sessions, claims, triggers, findings, and MCP calls
+  work transport, sessions, claims, triggers, findings, and MCP `tools/call`
   remain closed. A managed-bridge regression proves the distinction.
 - Live ceiling checks allowed `read_only -> approval`, rejected
   `approval -> auto` with `409` while allowlist review and exact target grants
@@ -2420,9 +2424,10 @@ unchecked qualification gates.
   the UI distinguishes requested from verified central mode.
 - [x] Diagnostics state exactly which boundary failed and provide a safe next
   action without exposing secrets.
-- [x] Disabled administration is local-only and visibly reports the agent,
-  bridge, MCP listener, schedulers, and network paths as quiesced without polling
-  them.
+- [x] Feature-off or disconnected administration is local-only and visibly
+  reports the agent, bridge, MCP listener, schedulers, and network paths as
+  quiesced without polling them. Operational-disabled installed connections
+  distinguish the private `tools/list` configuration surface from stopped work.
 
 Acceptance evidence on 2026-08-06 is checked in with the implementation:
 `charlie-shell.test.tsx` covers the closed-fetch boundary, authorized private
@@ -2802,3 +2807,68 @@ widening Charlie's downstream-cluster boundary.
   action audit details, worker logs, and both agent logs contained no bearer,
   password, API-key, JWT, or raw queue-payload material in the qualification
   window.
+
+## 15. Charlie 1.0.54 bounded-turn and progress addendum — 2026-08-12
+
+- [x] Apply the lifecycle correction to every natural-language turn and every
+  product slash-command turn: a server-enforced 24-action ceiling, exact-turn
+  action accounting, bounded provider egress, abortable OpenCode prompts,
+  official OpenCode session abort, immediate `session.error` handling, and
+  terminal events for success, denial, failure, and timeout.
+- [x] Keep one failed or denied read local to that action. It must not poison
+  independent diagnostics in the same turn; write-side safety circuits remain
+  persistent and fail closed.
+- [x] Give each Astronomer command a smaller product-owned workflow budget and
+  no-repeat rule. `/health` publishes `astronomer.system.health`, which composes
+  existing authorized management-plane adapters concurrently; the command may
+  use targeted fallback/follow-up reads without gaining access or crossing the
+  downstream-cluster boundary.
+- [x] Render durable tool proposal/running/outcome counts, current capability,
+  elapsed time, quiet/delayed states, and terminal status. Do not invent token
+  counts or a completion percentage.
+- [x] Reconcile completion from three independent sources: terminal SSE,
+  persisted assistant history, and an authorized session read that merges
+  Charlie's remote terminal state when the local SSE cursor is stale. A missed
+  terminal frame must not leave a failed, aborted, or completed turn busy.
+- [x] Persist every action denial, including pre-dispatch rejections where no
+  trusted capability descriptor exists. Such records retain the content-free
+  action/capability/authorization digests and denial code while omitting, rather
+  than fabricating, an unknown read/write effect.
+- [x] Inject the authoritative Helm release and chart version into both the
+  product session context and installation capability. Stamp every successful
+  read capability with a bounded RFC 3339 `checked_at` value at the shared
+  catalog boundary, while preserving a source adapter's more precise snapshot
+  timestamp.
+- [x] Enable the bounded `cluster_diagnostics` Kubernetes visibility profile
+  without pod-log content, then require signed rediscovery, central review,
+  exact product acknowledgement, and an explicit read-only restoration before
+  the expanded catalog becomes usable.
+- [x] Live evidence: the product submitted and Charlie reviewed 99 capabilities
+  at disclosure
+  `f34af79588391dc81c19e9f2b46e4ff08c5aa4fe34bb66ccda0641d9ab32e863`.
+  Product readback reached revision 298 with `read_only/read_only`, an exact
+  acknowledgement, and a ready read-only workload ceiling. `/status` completed
+  in 18 seconds and reported chart 0.3.5, a precise UTC window, node capacity,
+  Kubernetes/kubelet identity, resource usage, and workload health. `/health`
+  completed in 15 seconds with 15/15 aggregate checks plus targeted reads; all
+  ten product actions were audited as successful reads with no scope denial or
+  persistence warning. Both agent replicas remained ready and Argo remained
+  `Synced/Healthy`. A focused `/investigate management-plane autoscaling and
+  disruption posture` then completed in 23 seconds and successfully read
+  workloads, nodes, resource usage, events, and availability controls; it found
+  the real single-replica/no-HPA/zero-disruption posture without querying a
+  downstream cluster.
+- [x] Pin Astronomer to Charlie source
+  `c63b7f066c2951ef5003c1fbb67272b862019ab2` and product-agent/chart `1.0.54`.
+  A fresh signed replacement package installed image
+  `sha256:007603ddec5a9884a8c7041f3517989ff0c8c436fff8fff47c5dbc8d7e90a427`
+  and chart
+  `sha256:9984eaa2624af6a9b88f0780cd69b320b6eac92aef919d5bcde78fe63691da6e`.
+  Both replicas became ready, Argo returned `Synced/Healthy`, and read-only was
+  restored through separate disclosure acknowledgement and revision-checked
+  mode selection.
+- [x] Live evidence: a normal management-plane chat completed in 8.1 seconds
+  with two successful capabilities; `/health` completed in 15.6 seconds with
+  seven bounded calls; `/queues` delivered `turn.started`, eight complete tool
+  lifecycles, and `turn.completed` over the authenticated product SSE path in
+  27 seconds. The hard global and smaller command budgets remained intact.

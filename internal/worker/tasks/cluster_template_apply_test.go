@@ -279,10 +279,10 @@ func TestClusterTemplate_Apply_EnqueuesToolInstalls(t *testing.T) {
 	}
 }
 
-func TestClusterTemplate_Apply_SkipsArgoCDManagedBaselineTools(t *testing.T) {
+func TestClusterTemplate_Apply_SkipsOnlyApplicationSetManagedBaselineTools(t *testing.T) {
 	clusterID := uuid.New()
 	tmplID := uuid.New()
-	spec := json.RawMessage(`{"tools":[{"slug":"argocd"},{"slug":"cert-manager"},{"slug":"fluent-bit"}]}`)
+	spec := json.RawMessage(`{"tools":[{"slug":"argocd"},{"slug":"cert-manager"},{"slug":"fluent-bit"},{"slug":"kube-state-metrics"},{"slug":"prometheus-node-exporter"}]}`)
 	q := newFakeApplyQuerier(
 		sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), IsLocal: false},
 		sqlc.ClusterTemplateApplication{ClusterID: clusterID, TemplateID: tmplID, SpecSnapshot: spec, Status: "pending"},
@@ -293,11 +293,17 @@ func TestClusterTemplate_Apply_SkipsArgoCDManagedBaselineTools(t *testing.T) {
 	if err := runClusterTemplateApply(context.Background(), deps, clusterID); err != nil {
 		t.Fatalf("runClusterTemplateApply: %v", err)
 	}
-	if len(installer.installs) != 1 {
-		t.Fatalf("installer received %d installs, want 1", len(installer.installs))
+	if len(installer.installs) != 3 {
+		t.Fatalf("installer received %d installs, want 3", len(installer.installs))
 	}
 	if installer.installs[0].Slug != "argocd" {
 		t.Fatalf("installed slug = %q, want argocd", installer.installs[0].Slug)
+	}
+	if installer.installs[1].Slug != "cert-manager" {
+		t.Fatalf("installed slug = %q, want cert-manager", installer.installs[1].Slug)
+	}
+	if installer.installs[2].Slug != "fluent-bit" {
+		t.Fatalf("installed slug = %q, want fluent-bit", installer.installs[2].Slug)
 	}
 }
 

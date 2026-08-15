@@ -32,6 +32,14 @@ func TestCharlieContextSearchRequiresBrowserAndReturnsBoundedItems(t *testing.T)
 		t.Fatalf("status=%d searcher=%#v body=%s", recorder.Code, searcher, recorder.Body.String())
 	}
 
+	suggestions := httptest.NewRecorder()
+	empty := authenticatedCharlieRequest(http.MethodGet, "/?q=", "", actor, "jwt")
+	empty.Header.Del("Content-Type")
+	NewCharlieContextHandler(searcher).Search(suggestions, empty)
+	if suggestions.Code != http.StatusOK || searcher.query != "" {
+		t.Fatalf("empty-query suggestions status=%d searcher=%#v body=%s", suggestions.Code, searcher, suggestions.Body.String())
+	}
+
 	apiToken := authenticatedCharlieRequest(http.MethodGet, "/?q=agent", "", actor, "api_token")
 	apiToken.Header.Del("Content-Type")
 	denied := httptest.NewRecorder()

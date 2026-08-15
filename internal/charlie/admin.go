@@ -226,14 +226,15 @@ type supersededAgentMaterialPruner interface {
 }
 
 type AdminService struct {
-	pool      *pgxpool.Pool
-	queries   *sqlc.Queries
-	installer AdminAgentInstaller
-	bridge    *ManagedBridge
-	mode      *ModeController
-	now       func() time.Time
-	triggers  *TriggerAdminService
-	auditor   AuthorityMutationAuditor
+	pool                  *pgxpool.Pool
+	queries               *sqlc.Queries
+	installer             AdminAgentInstaller
+	bridge                *ManagedBridge
+	visibilityRediscovery KubernetesVisibilityRediscoverer
+	mode                  *ModeController
+	now                   func() time.Time
+	triggers              *TriggerAdminService
+	auditor               AuthorityMutationAuditor
 }
 
 func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *ManagedBridge) (*AdminService, error) {
@@ -246,7 +247,7 @@ func NewAdminService(pool *pgxpool.Pool, installer AdminAgentInstaller, bridge *
 	if err != nil {
 		return nil, err
 	}
-	service := &AdminService{pool: pool, queries: queries, installer: installer, bridge: bridge, now: time.Now, triggers: triggerAdmin, auditor: auditor}
+	service := &AdminService{pool: pool, queries: queries, installer: installer, bridge: bridge, visibilityRediscovery: bridge, now: time.Now, triggers: triggerAdmin, auditor: auditor}
 	if bridge != nil {
 		controller, err := NewModeController(PGModeStore{Pool: pool}, NewManagedModeBridge(bridge), auditor)
 		if err != nil {
@@ -905,6 +906,9 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 			}
 			state, err = s.mode.ClearEmergencyDisable(ctx, actor.String())
 		} else {
+			if desired != ModeDisabled && kubernetesVisibilityAuthorityPending(connection) {
+				return AdminModeView{}, fmt.Errorf("%w: acknowledge the reviewed Kubernetes visibility disclosure before restoring Charlie authority", ErrAdminConflict)
+			}
 			prerequisites, prerequisitesErr := s.modePrerequisites(ctx)
 			if prerequisitesErr != nil {
 				return AdminModeView{}, prerequisitesErr
@@ -945,7 +949,12 @@ func (s *AdminService) AcknowledgeDisclosure(ctx context.Context, digest string)
 	if err := s.requireAuthorityAudit(ctx, AuthorityMutationAudit{Action: "admin.charlie.disclosure.acknowledge", ResourceType: "charlie_connection", ResourceID: connection.ID.String()}); err != nil {
 		return AdminModeView{}, err
 	}
-	result, err := s.pool.Exec(ctx, `UPDATE charlie_connections SET acknowledged_disclosure_digest=$1, updated_at=now() WHERE active=true AND disclosure_digest=$1`, digest)
+	result, err := s.pool.Exec(ctx, `UPDATE charlie_connections SET
+		acknowledged_disclosure_digest=$1,
+		kubernetes_visibility_candidate_digest=CASE WHEN kubernetes_visibility_rediscovery_state='review_required' THEN '' ELSE kubernetes_visibility_candidate_digest END,
+		kubernetes_visibility_rediscovery_state=CASE WHEN kubernetes_visibility_rediscovery_state='review_required' THEN 'ready' ELSE kubernetes_visibility_rediscovery_state END,
+		updated_at=now()
+		WHERE active=true AND disclosure_digest=$1`, digest)
 	if err != nil || result.RowsAffected() != 1 {
 		return AdminModeView{}, ErrAdminConflict
 	}

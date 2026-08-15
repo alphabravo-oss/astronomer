@@ -172,6 +172,77 @@ components:
       properties:
         client_message_id: {type: string, format: uuid}
         message: {type: string, minLength: 1, maxLength: 32768}
+    CharlieCommandRequest:
+      type: object
+      additionalProperties: false
+      required: [id, version, arguments]
+      description: Product-validated shortcut selection. It does not grant authority or bypass Charlie policy.
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        version: {type: string, pattern: '^[1-9][0-9]{0,8}$'}
+        arguments:
+          type: object
+          maxProperties: 4
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,31}$'}
+          additionalProperties: {type: string, maxLength: 512}
+    CharlieCommandDescriptor:
+      type: object
+      additionalProperties: false
+      required: [id, version, name, label, description, category, execution, effect, required_mode, example]
+      properties:
+        id: {type: string}
+        version: {type: string}
+        name: {type: string}
+        aliases: {type: array, uniqueItems: true, items: {type: string}}
+        label: {type: string}
+        description: {type: string}
+        category: {type: string}
+        execution: {type: string, enum: [agent, client]}
+        effect: {type: string, enum: [read, local]}
+        required_mode: {type: string, const: read_only}
+        example: {type: string}
+        argument:
+          type: object
+          additionalProperties: false
+          required: [name, placeholder, required]
+          properties:
+            name: {type: string}
+            placeholder: {type: string}
+            required: {type: boolean}
+    CharlieCommandCatalog:
+      type: object
+      additionalProperties: false
+      required: [schema, version, commands]
+      properties:
+        schema: {type: string, const: astronomer.charlie-command-catalog/v1}
+        version: {type: integer, const: 1}
+        commands: {type: array, items: {$ref: '#/components/schemas/CharlieCommandDescriptor'}}
+    CharlieThreadMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [client_message_id, message]
+      properties:
+        client_message_id: {type: string, format: uuid}
+        message: {type: string, minLength: 1, maxLength: 32768}
+        trigger: {type: string, maxLength: 128}
+        current_ui_context: {type: string, maxLength: 255}
+        resources:
+          type: array
+          maxItems: 25
+          items: {$ref: '#/components/schemas/CharlieSessionResource'}
+        command: {$ref: '#/components/schemas/CharlieCommandRequest'}
+    CharlieThreadMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, title, state, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, maxLength: 120}
+        state: {type: string, enum: [active, archived]}
+        current_session_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        archived_at: {type: [string, 'null'], format: date-time}
     CharlieAbortRequest:
       type: object
       additionalProperties: false
@@ -366,6 +437,40 @@ components:
         auto_readiness: {$ref: '#/components/schemas/CharlieAdminAutoReadiness'}
         workload_ceiling: {type: string, enum: [disabled, read_only, approval, auto], description: Product-owned ceiling currently rendered in the agent Argo workload.}
         workload_ceiling_ready: {type: boolean, description: True only after a non-pruning rollout and exact readback from both ready product-agent replicas.}
+    CharlieKubernetesVisibility:
+      type: object
+      additionalProperties: false
+      required: [schema, profile, revision, state, instance_id, namespaces, product_owned_only, cluster_scoped, pod_logs, downstream_targets, secret_values, exec, attach, port_forward, api_proxy, requires_rediscovery, requires_central_review, requires_product_acknowledgement, available_profiles, scope_summary]
+      properties:
+        schema: {type: string, enum: [charlie.kubernetes-visibility/v1]}
+        profile: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}
+        revision: {type: integer, format: int64, minimum: 0}
+        state: {type: string, enum: [not_configured, disabled, enabled]}
+        instance_id: {type: string, maxLength: 128}
+        namespaces: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, maxLength: 63}}
+        product_owned_only: {type: boolean, enum: [true]}
+        cluster_scoped: {type: boolean}
+        pod_logs: {type: boolean}
+        downstream_targets: {type: boolean, enum: [false]}
+        secret_values: {type: boolean, enum: [false]}
+        exec: {type: boolean, enum: [false]}
+        attach: {type: boolean, enum: [false]}
+        port_forward: {type: boolean, enum: [false]}
+        api_proxy: {type: boolean, enum: [false]}
+        requires_rediscovery: {type: boolean}
+        requires_central_review: {type: boolean}
+        requires_product_acknowledgement: {type: boolean}
+        candidate_disclosure_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+        available_profiles: {type: array, minItems: 3, maxItems: 3, uniqueItems: true, items: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}}
+        scope_summary: {type: string, maxLength: 512}
+    CharlieKubernetesVisibilityRequest:
+      type: object
+      additionalProperties: false
+      required: [profile, pod_logs, revision]
+      properties:
+        profile: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}
+        pod_logs: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 0}
     CharlieAdminAutoReadiness:
       type: object
       additionalProperties: false
@@ -17971,6 +18076,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/charlie/commands/:
+    get:
+      operationId: listCharlieCommands
+      summary: List versioned Astronomer-owned Charlie chat shortcuts
+      description: Commands are presentation and repeatable workflow metadata only. Every agent command still uses the active scope, mode, disclosed capabilities, approval rules, and audit boundary.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: The command catalog available to the authenticated user.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CharlieCommandCatalog'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/:
+    get:
+      operationId: listCharlieThreads
+      summary: List the authenticated user's current and archived Charlie conversations
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: Owner-scoped conversation metadata; content remains in Charlie.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [threads]
+                properties:
+                  threads: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieThreadMetadata'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/active/:
+    get:
+      operationId: getActiveCharlieThread
+      summary: Get the authenticated user's active Charlie conversation
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '200':
+          description: Active conversation metadata, or a null thread when none exists.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/new/:
+    post:
+      operationId: createCharlieThread
+      summary: Archive the current conversation and start a clean one
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      responses:
+        '201':
+          description: New owner-scoped active conversation metadata.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/charlie/threads/messages/:
+    post:
+      operationId: createCharlieThreadMessage
+      summary: Send natural language or a validated slash command on the active conversation
+      description: The server reparses visible slash text and rejects command identity, version, or argument drift before forwarding it through the Product Bridge.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CharlieThreadMessageRequest'}}}
+      responses:
+        '202':
+          description: Active thread metadata and the accepted Charlie turn receipt.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/charlie/threads/{thread_id}/history/:
+    get:
+      operationId: getCharlieThreadHistory
+      summary: Read stitched history for one owner-scoped Charlie conversation
+      description: Archived transcripts are read-only by default and are never silently injected into a new turn.
+      tags: [charlie]
+      security: [{bearerJWT: []}]
+      parameters:
+        - {name: thread_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Retention-bounded redacted items stitched across the conversation's Charlie sessions.
+          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/charlie/sessions/:
     get:
       operationId: listCharlieSessions
@@ -18118,11 +18312,11 @@ paths:
   /api/v1/charlie/context/search/:
     get:
       operationId: searchCharlieContext
-      summary: Search product-owned resources available for explicit Charlie disclosure
+      summary: Browse or search product-owned scopes available to Charlie
       tags: [charlie]
       security: [{bearerJWT: []}]
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 128}}
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 128}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 20, default: 20}}
       responses:
         '200':
@@ -18494,6 +18688,31 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {description: Revision or mode prerequisites changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/charlie/kubernetes-visibility/:
+    get:
+      operationId: adminCharlieKubernetesVisibilityGet
+      summary: Read the product-owned Kubernetes observation boundary
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      responses:
+        '200': {description: Current Kubernetes visibility profile and hard prohibitions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: adminCharlieKubernetesVisibilityUpdate
+      summary: Replace the product-owned Kubernetes observation boundary
+      description: A change closes admission, forces Charlie authority to disabled, clears capability acknowledgement, and never enables downstream targets or interactive Kubernetes transports.
+      tags: [platform-admin-settings]
+      security: [{bearerJWT: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibilityRequest'}}}}
+      responses:
+        '200': {description: Updated Kubernetes visibility profile., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Revision, connection, or visibility prerequisites changed., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/charlie/trigger-rules/:
     get:

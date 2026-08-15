@@ -42,6 +42,8 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, admin, manage).Post("/admin/charlie/agent/rotate/", deps.CharlieAdmin.ReplacementAction("rotate"))
 			r.With(admin, manage).Post("/admin/charlie/agent/uninstall/", deps.CharlieAdmin.Uninstall)
 			r.With(admin, manage).Patch("/admin/charlie/mode/", deps.CharlieAdmin.Mode)
+			r.With(gate, admin, manage).Get("/admin/charlie/kubernetes-visibility/", deps.CharlieAdmin.KubernetesVisibility)
+			r.With(gate, admin, manage).Put("/admin/charlie/kubernetes-visibility/", deps.CharlieAdmin.UpdateKubernetesVisibility)
 			r.With(gate, admin, manage).Get("/admin/charlie/trigger-rules/", deps.CharlieAdmin.ListTriggers)
 			r.With(gate, admin, manage).Get("/admin/charlie/alert-policy/", deps.CharlieAdmin.AlertPolicy)
 			r.With(gate, admin, manage).Put("/admin/charlie/alert-policy/", deps.CharlieAdmin.UpdateAlertPolicy)
@@ -73,6 +75,7 @@ func registerCharlieRoutes(r chi.Router, deps RouterDependencies, rateLimit func
 			r.With(gate, create).Post("/charlie/sessions/{session_id}/abort/", deps.CharlieSessions.Abort)
 		}
 		if deps.CharlieThreads != nil {
+			r.With(gate, read).Get("/charlie/commands/", deps.CharlieThreads.Commands)
 			r.With(gate, read).Get("/charlie/threads/active/", deps.CharlieThreads.Active)
 			r.With(gate, create).Post("/charlie/threads/new/", deps.CharlieThreads.NewChat)
 			r.With(gate, read).Get("/charlie/threads/", deps.CharlieThreads.List)

@@ -159,6 +159,7 @@ type (
 	CreateMessage                            = bridgewire.CreateMessage
 	CreateSession                            = bridgewire.CreateSession
 	CreateSessionActorType                   = bridgewire.CreateSessionActorType
+	PlatformAssertion                        = bridgewire.PlatformAssertion
 	CredentialRevocationReceipt              = bridgewire.CredentialRevocationReceipt
 	CredentialRevocationReceiptState         = bridgewire.CredentialRevocationReceiptState
 	CredentialRevocationRequest              = bridgewire.CredentialRevocationRequest
@@ -178,16 +179,30 @@ type (
 	HistoryItem                              = bridgewire.HistoryItem
 	InvestigationReceipt                     = bridgewire.InvestigationReceipt
 	IdempotentCommand                        = bridgewire.IdempotentCommand
+	ProductCommandInvocation                 = bridgewire.ProductCommandInvocation
+	ProductCommandInvocationAuthorityCeiling = bridgewire.ProductCommandInvocationAuthorityCeiling
 	Mode                                     = bridgewire.Mode
 	ModeRequest                              = bridgewire.ModeRequest
 	ModeResponse                             = bridgewire.ModeResponse
 	OpaqueId                                 = bridgewire.OpaqueId
+	IntegrationRediscoveryRequest            = bridgewire.RequestBridgeIntegrationRediscoveryJSONRequestBody
 	ResourceReference                        = bridgewire.ResourceReference
 	Session                                  = bridgewire.Session
 	SessionState                             = bridgewire.SessionState
 	TurnReceipt                              = bridgewire.TurnReceipt
 	UntrustedContext                         = bridgewire.UntrustedContext
 )
+
+// IntegrationRediscoveryReceipt is deliberately content-free. The product
+// learns that its exact installation catalog changed, but capability details
+// and all observed product content remain behind the bridge boundary.
+type IntegrationRediscoveryReceipt struct {
+	IntegrationID       string `json:"integration_id"`
+	IntegrationRevision string `json:"integration_revision"`
+	DisclosureDigest    string `json:"disclosure_digest"`
+	CapabilityCount     int    `json:"capability_count"`
+	State               string `json:"state"`
+}
 
 const (
 	ArtifactCredentialLeaseActive              = bridgewire.ArtifactCredentialLeaseStateActive

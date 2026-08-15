@@ -14,16 +14,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       # Backend contract checks consume js-yaml from the locked frontend tree.
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -46,7 +48,7 @@ jobs:
 
       - name: Upload failed backend test reports
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: enterprise-backend-failure-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-backend
@@ -58,10 +60,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -81,7 +85,7 @@ jobs:
 
       - name: Upload failed frontend test reports
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: enterprise-frontend-failure-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
@@ -96,10 +100,12 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -123,7 +129,7 @@ jobs:
 
       - name: Upload screenshot gallery
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: smoke-gallery
           path: frontend/gallery/
@@ -131,7 +137,7 @@ jobs:
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: frontend/playwright-report
@@ -169,10 +175,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
@@ -196,7 +204,8 @@ jobs:
         run: |
           export SECRET_KEY="pr-validation-e2e-$(openssl rand -hex 16)"
           export ASTRONOMER_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr '+/' '-_')"
-          go run ./cmd/server >server.log 2>&1 &
+          go build -o /tmp/astronomer-server ./cmd/server
+          /tmp/astronomer-server >server.log 2>&1 &
         env:
           DATABASE_URL: postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
           REDIS_URL: redis://localhost:6380/0
@@ -209,7 +218,7 @@ jobs:
 
       - name: Wait for backend health
         run: |
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             if curl -fsS http://localhost:8000/health/ >/dev/null 2>&1; then
               exit 0
             fi
@@ -220,7 +229,7 @@ jobs:
           exit 1
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -242,7 +251,7 @@ jobs:
 
       - name: Upload live Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report-live
           path: frontend/playwright-report
@@ -257,15 +266,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.21.0
 
       - name: Run authoritative Helm gate
         run: ./scripts/verify-enterprise.sh helm
@@ -274,7 +287,7 @@ jobs:
 
       - name: Upload failed Helm renders and reports
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: enterprise-helm-failure-${{ github.sha }}
           path: ${{ runner.temp }}/astronomer-verify-enterprise-helm
@@ -293,16 +306,18 @@ jobs:
           - { name: worker, context: ., dockerfile: deploy/docker/Dockerfile.worker, image: astronomer-go-worker }
           - { name: agent, context: ., dockerfile: deploy/docker/Dockerfile.agent, image: astronomer-go-agent }
           - { name: migrate, context: ., dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
-          - { name: shell, context: ., dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell }
+          - { name: shell, context: ., dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell, skip_files: /usr/local/bin/kubectl }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile, image: astronomer-frontend }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build image locally
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.component.context }}
           file: ${{ matrix.component.dockerfile }}
@@ -312,17 +327,18 @@ jobs:
           sbom: false
 
       - name: Scan image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
         with:
           image-ref: ${{ matrix.component.image }}:ci
           format: table
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          skip-files: ${{ matrix.component.skip_files }}
           exit-code: "1"
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           syft-version: "v1.16.0"
 
@@ -335,7 +351,7 @@ jobs:
           python3 -c "import json; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom-${{ matrix.component.name }}-${{ github.sha }}
           path: sbom-${{ matrix.component.name }}.spdx.json

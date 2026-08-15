@@ -56,8 +56,9 @@ type BridgeSessionRequest struct {
 	AuthorizationRef string     `json:"authorization_ref"`
 	Intent           string     `json:"intent"`
 	Objective        string     `json:"objective"`
-	ProductVersion   string     `json:"product_version"`
-	Context          SREContext `json:"context"`
+	ProductVersion   string               `json:"product_version"`
+	Context          SREContext           `json:"context"`
+	Platforms        []PlatformAssertion  `json:"platforms"`
 }
 
 type BridgeSessionReceipt struct {
@@ -84,10 +85,15 @@ type SessionService struct {
 	queries    sessionQueries
 	bridge     SessionBridge
 	context    SessionContextProvider
+	inventory  PlatformInventoryProvider
 	authorizer SessionAccessAuthorizer
 	auditor    AuthorityMutationAuditor
 	active     func() bool
 	now        func() time.Time
+}
+
+func (s *SessionService) SetPlatformInventory(provider PlatformInventoryProvider) {
+	s.inventory = provider
 }
 
 type CreateSessionInput struct {
@@ -202,6 +208,7 @@ func (s *SessionService) Create(ctx context.Context, input CreateSessionInput) (
 		ActorType: input.ActorType, ActorLabel: input.ActorLabel,
 		AuthorizationRef: delegation.Reference, Intent: sessionIntentSummary(input.Intent), Objective: input.Intent,
 		ProductVersion: currentProductDocumentationVersion(), Context: productContext,
+		Platforms: collectPlatforms(ctx, s.inventory),
 	}, input.ClientSessionID.String())
 	if err != nil {
 		_, _ = s.queries.RevokeCharlieDelegationsForSession(ctx, local.ID)

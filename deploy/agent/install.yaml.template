@@ -478,6 +478,9 @@ metadata:
     app.kubernetes.io/part-of: astronomer
 data:
   SERVER_URL: "{{SERVER_URL}}"
+  # The renderer sets this only when the configured development URL itself is
+  # plaintext. Production server configuration rejects http/ws before startup.
+  INSECURE: "{{AGENT_INSECURE}}"
   CLUSTER_ID: "{{CLUSTER_ID}}"
   HEALTH_ADDR: ":8081"
   HEARTBEAT_INTERVAL: "30"
@@ -598,6 +601,11 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: SERVER_URL
+            - name: ASTRONOMER_INSECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: astronomer-agent-config
+                  key: INSECURE
             - name: ASTRONOMER_CLUSTER_ID
               valueFrom:
                 configMapKeyRef:

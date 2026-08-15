@@ -11,10 +11,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+)
+
+var (
+	bridgeOpaqueIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	bridgeRevisionPattern = regexp.MustCompile(`^[0-9]+$`)
+	bridgeDigestPattern   = regexp.MustCompile(`^[a-f0-9]{64}$`)
 )
 
 const (
@@ -119,6 +126,25 @@ func (r *Runtime) record(err error) {
 // stable idempotency key. Only GET/HEAD or keyed requests are retried.
 func (r *Runtime) DoJSON(ctx context.Context, method, path, idempotencyKey string, input, output any) error {
 	return r.doJSONWithAuthorization(ctx, method, path, idempotencyKey, "", input, output)
+}
+
+// RequestIntegrationRediscovery asks the local, deployment-bound agent to
+// rediscover its current Product MCP catalog after a product-owned connector
+// scope changes. It cannot activate or acknowledge the returned catalog.
+func (r *Runtime) RequestIntegrationRediscovery(ctx context.Context, integrationID, revision, idempotencyKey string) (IntegrationRediscoveryReceipt, error) {
+	if !bridgeOpaqueIDPattern.MatchString(integrationID) || !bridgeRevisionPattern.MatchString(revision) {
+		return IntegrationRediscoveryReceipt{}, &StableError{Code: "invalid_request"}
+	}
+	input := IntegrationRediscoveryRequest{ExpectedIntegrationId: OpaqueId(integrationID), ExpectedRevision: revision}
+	var receipt IntegrationRediscoveryReceipt
+	if err := r.DoJSON(ctx, http.MethodPost, "/integration/rediscovery", idempotencyKey, input, &receipt); err != nil {
+		return IntegrationRediscoveryReceipt{}, err
+	}
+	if receipt.IntegrationID != integrationID || receipt.State != "disabled" || receipt.CapabilityCount < 1 || receipt.CapabilityCount > 256 ||
+		!bridgeRevisionPattern.MatchString(receipt.IntegrationRevision) || !bridgeDigestPattern.MatchString(receipt.DisclosureDigest) {
+		return IntegrationRediscoveryReceipt{}, &StableError{Code: "invalid_bridge_response"}
+	}
+	return receipt, nil
 }
 
 // DoJSONAuthorized performs a scoped bridge request with the short-lived,

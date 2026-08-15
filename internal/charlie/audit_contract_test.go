@@ -16,6 +16,8 @@ func validAuditFields(prefix, resourceType string) map[string]any {
 		return map[string]any{"outcome_code": "completed"}
 	case "admin.charlie.mode.":
 		return map[string]any{"outcome_code": "completed", "mode": "read_only", "revision": int64(2)}
+	case "admin.charlie.kubernetes_visibility.", "charlie.kubernetes_visibility.":
+		return map[string]any{"outcome_code": "completed", "profile": "product_namespace", "pod_logs": false, "revision": int64(2)}
 	case "admin.charlie.alert_policy.":
 		return map[string]any{"outcome_code": "completed", "enabled": true, "minimum_severity": "high", "dedupe_window_seconds": int32(900), "escalation_after_seconds": int32(3600), "quiet_hours_enabled": true, "channel_count": 2, "revision": int64(2)}
 	case "admin.charlie.alert_delivery.":
@@ -121,7 +123,8 @@ func TestCharlieCanonicalLifecycleVocabularyIsRepresentedInContract(t *testing.T
 	resources := map[string]string{
 		"connection": AuditResourceConnection, "certificate": AuditResourceCertificate,
 		"agent": AuditResourceAgent, "mode": AuditResourceMode, "session": AuditResourceSession,
-		"trigger": AuditResourceTrigger, "approval": AuditResourceApproval,
+		"kubernetes_visibility": AuditResourceConnection,
+		"trigger":               AuditResourceTrigger, "approval": AuditResourceApproval,
 		"mcp": AuditResourceMCPDecision, "finding": AuditResourceFinding, "feature": AuditResourceFeature, "delegation": AuditResourceDelegation,
 	}
 	contract, err := CharlieAuditContract()

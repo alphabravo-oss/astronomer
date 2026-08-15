@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/connector-capability-v1.schema.json",
+  "title": "ConnectorCapabilityReference",
+  "description": "Content-free connector provenance included in a capability disclosure and therefore in its acknowledgement digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "profile", "boundary", "instance_id", "scope_summary", "cluster_scoped", "content_access", "downstream_targets"],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.connector-capability/v1"},
+    "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "profile": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "boundary": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "instance_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "scope_summary": {"type": "string", "minLength": 1, "maxLength": 512},
+    "cluster_scoped": {"type": "boolean"},
+    "content_access": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"}
+    },
+    "downstream_targets": {"type": "boolean", "const": false}
+  }
+}

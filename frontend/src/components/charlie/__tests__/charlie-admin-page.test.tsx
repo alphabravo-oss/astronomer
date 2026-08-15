@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   getCharlieAutomation: vi.fn(),
   getCharlieConnection: vi.fn(),
   getCharlieDiagnostics: vi.fn(),
+  getCharlieKubernetesVisibility: vi.fn(),
   getCharlieMode: vi.fn(),
   listCharlieTriggerEvents: vi.fn(),
   retryCharlieTriggerEvent: vi.fn(),
@@ -25,6 +26,7 @@ const api = vi.hoisted(() => ({
   updateCharlieActionPolicy: vi.fn(),
   updateCharlieAlertPolicy: vi.fn(),
   updateCharlieMode: vi.fn(),
+  updateCharlieKubernetesVisibility: vi.fn(),
   validateCharlieOnboarding: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({
@@ -72,6 +74,7 @@ import {
   CharlieAdminContent,
   ConnectionTab,
   DiagnosticsTab,
+  KubernetesTab,
   ModeTab,
   agentActionsForState,
 } from "@/routes/dashboard/settings/charlie";
@@ -198,6 +201,28 @@ beforeEach(() => {
   api.getCharlieAccess.mockResolvedValue({ effectivePermissions: [], automationGrants: [] });
   api.listCharlieTriggerEvents.mockResolvedValue([]);
   api.getCharlieDiagnostics.mockResolvedValue({ overall: "healthy", checks: [], correlationId: "correlation-a" });
+  api.getCharlieKubernetesVisibility.mockResolvedValue({
+    schema: "charlie.kubernetes-visibility/v1",
+    profile: "cluster_diagnostics",
+    revision: 4,
+    state: "enabled",
+    instanceId: "astronomer-management-plane",
+    namespaces: ["astronomer"],
+    productOwnedOnly: true,
+    clusterScoped: true,
+    podLogs: false,
+    downstreamTargets: false,
+    secretValues: false,
+    exec: false,
+    attach: false,
+    portForward: false,
+    apiProxy: false,
+    requiresRediscovery: false,
+    requiresCentralReview: false,
+    requiresProductAcknowledgement: false,
+    availableProfiles: ["disabled", "product_namespace", "cluster_diagnostics"],
+    scopeSummary: "Product-owned management resources plus bounded cluster diagnostics; downstream clusters excluded",
+  });
   api.validateCharlieOnboarding.mockResolvedValue(safeReview);
   api.updateCharlieActionPolicy.mockImplementation(async (policy) => ({
     capability: policy.capability,
@@ -223,6 +248,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Charlie administration acceptance", () => {
+  it("configures Kubernetes observation independently while keeping hard prohibitions visible", async () => {
+    api.updateCharlieKubernetesVisibility.mockResolvedValue({
+      ...(await api.getCharlieKubernetesVisibility()),
+      profile: "product_namespace",
+      clusterScoped: false,
+      requiresRediscovery: false,
+      requiresCentralReview: true,
+      candidateDisclosureDigest: "d".repeat(64),
+    });
+    renderWithClient(<KubernetesTab />);
+    expect(await screen.findByText("Kubernetes API visibility")).toBeInTheDocument();
+    expect(screen.getByText(/Downstream clusters, Secret values, exec, attach/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Kubernetes visibility profile"), { target: { value: "product_namespace" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save visibility policy" }));
+    await waitFor(() => expect(api.updateCharlieKubernetesVisibility).toHaveBeenCalledWith({
+      profile: "product_namespace", podLogs: false, revision: 4,
+    }));
+  });
+
   it("configures product-owned alert routing without implying action authority", async () => {
     renderWithClient(<AlertsTab />);
     expect(await screen.findByText("Actionable finding alerts")).toBeInTheDocument();

@@ -106,6 +106,7 @@ type Querier interface {
 	CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error
 	CompareAndSetCharlieMode(ctx context.Context, arg CompareAndSetCharlieModeParams) (CharlieConnection, error)
 	CompleteArgoCDOperationWithResult(ctx context.Context, arg CompleteArgoCDOperationWithResultParams) (ArgocdOperation, error)
+	ConfirmCharlieKubernetesVisibilityRediscovery(ctx context.Context, arg ConfirmCharlieKubernetesVisibilityRediscoveryParams) (CharlieConnection, error)
 	ConsumeCharlieActionApproval(ctx context.Context, arg ConsumeCharlieActionApprovalParams) (CharlieActionApproval, error)
 	// One-shot disarm of the mass-decommission override (E3/H10). The worker
 	// calls this immediately after honoring an armed mass removal so a
@@ -674,6 +675,10 @@ type Querier interface {
 	ExpireCharlieFindings(ctx context.Context, asOf pgtype.Timestamptz) (int64, error)
 	FailArgoCDOperationWithResult(ctx context.Context, arg FailArgoCDOperationWithResultParams) (ArgocdOperation, error)
 	FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
+	// Resolve the active timeline row when the template task reaches a terminal
+	// state. Retry cleanup above is intentionally "superseded by retry"; normal
+	// success/failure must record the task's real outcome instead.
+	FinishRunningStepsForCluster(ctx context.Context, arg FinishRunningStepsForClusterParams) error
 	// API Tokens
 	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
 	// ArgoCD cluster-proxy service tokens. These are not user API tokens:
@@ -2075,6 +2080,7 @@ type Querier interface {
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
 	UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharlieAgentStatusParams) (CharlieConnection, error)
+	UpdateCharlieKubernetesVisibility(ctx context.Context, arg UpdateCharlieKubernetesVisibilityParams) (CharlieConnection, error)
 	UpdateCharlieSessionCursor(ctx context.Context, arg UpdateCharlieSessionCursorParams) (CharlieSession, error)
 	UpdateCharlieTriggerRule(ctx context.Context, arg UpdateCharlieTriggerRuleParams) (CharlieTriggerRule, error)
 	UpdateCloudCredential(ctx context.Context, arg UpdateCloudCredentialParams) (CloudCredential, error)

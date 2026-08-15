@@ -12,8 +12,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   Check,
+  Command,
   Copy,
   ExternalLink,
+  History as HistoryIcon,
   Loader2,
   Plus,
   Search,
@@ -33,6 +35,7 @@ import { contextForRoute } from "./context-registry";
 import { SafeMarkdown } from "./safe-markdown";
 import { CharlieMessageParts } from "./message-parts";
 import {
+  charlieProgressEventTurnId,
   initialCharlieTurnProgress,
   updateCharlieTurnProgress,
   type CharlieTurnProgress,
@@ -40,17 +43,27 @@ import {
 import {
   abortCharlieSession,
   getCharlieActiveThread,
+  getCharlieCommands,
   getCharlieOverview,
+  getCharlieSession,
   getCharlieHistory,
   getCharlieThreadHistory,
+  listCharlieThreads,
   newCharlieChat,
   searchCharlieContext,
   sendCharlieThreadMessage,
   subscribeCharlieSessionEvents,
   type CharlieContextOption,
+  type CharlieCommandRequest,
   type CharlieMessage,
 } from "@/lib/api/charlie";
 import { getCharlieMode } from "@/lib/api/charlie-admin";
+import {
+  commandInsertion,
+  commandSuggestions,
+  contextualCharlieCommands,
+  parseCharlieCommand,
+} from "./commands";
 
 type CharlieState = {
   open: boolean;
@@ -83,11 +96,29 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
   const elapsedSeconds = Math.max(0, Math.floor((now - progress.startedAt) / 1000));
   const toolCalls = progress.toolCallIds.length;
   const completedTools = progress.completedToolCallIds.length;
+  const failedTools = progress.failedToolCallIds.length;
+  const blockedTools = progress.blockedToolCallIds.length;
+  const pendingTools = Math.max(0, toolCalls - completedTools);
+  const quietSeconds = Math.max(0, Math.floor((now - progress.lastEventAt) / 1000));
+  const delayed = quietSeconds >= 30;
+  const stalled = quietSeconds >= 90;
+  let activity = progress.label;
+  if (delayed && progress.stage === "analyzing") {
+    activity = completedTools > 0
+      ? `Waiting for Charlie's model to analyze ${completedTools} tool ${completedTools === 1 ? "result" : "results"}`
+      : "Waiting for Charlie's model to analyze the available evidence";
+  } else if (delayed && (progress.stage === "queued" || progress.stage === "planning")) {
+    activity = "Waiting for Charlie's model to begin the investigation";
+  } else if (delayed && progress.stage === "running_tool") {
+    activity = progress.capability
+      ? `Waiting for ${progress.capability} to return`
+      : "Waiting for the diagnostic tool to return";
+  }
   return (
     <article
       role="status"
       aria-live="polite"
-      aria-label={`Charlie is working: ${progress.label}`}
+      aria-label={`Charlie is working: ${activity}`}
       className="mr-8 rounded-lg border bg-card p-3"
       data-testid="charlie-turn-progress"
     >
@@ -95,14 +126,14 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-muted-foreground">Charlie is working</p>
-          <p className="truncate text-sm" title={progress.label}>{progress.label}</p>
+          <p className="truncate text-sm" title={activity}>{activity}</p>
         </div>
       </div>
       <div
         className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-label="Charlie request progress"
-        aria-valuetext={progress.label}
+        aria-valuetext={activity}
       >
         <span
           className="block h-full w-1/3 rounded-full bg-primary motion-reduce:w-2/3"
@@ -111,12 +142,20 @@ function CharlieProgressIndicator({ progress }: { progress: CharlieTurnProgress 
       </div>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span>{elapsedSeconds}s elapsed</span>
-        {toolCalls > 0 ? <span>{toolCalls} tool {toolCalls === 1 ? "call" : "calls"}</span> : null}
-        {completedTools > 0 ? <span>{completedTools} completed</span> : null}
+        {toolCalls > 0 ? <span>{completedTools} of {toolCalls} tool {toolCalls === 1 ? "call" : "calls"} finished</span> : null}
+        {pendingTools > 0 ? <span>{pendingTools} active or pending</span> : null}
+        {failedTools > 0 ? <span>{failedTools} failed</span> : null}
+        {blockedTools > 0 ? <span>{blockedTools} safely blocked</span> : null}
         {progress.eventCount > 0 ? (
           <span>{progress.eventCount.toLocaleString()} live {progress.eventCount === 1 ? "update" : "updates"}</span>
         ) : null}
+        {delayed ? <span>Last update {quietSeconds}s ago</span> : null}
       </div>
+      {stalled ? (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+          This step is taking longer than expected. Charlie will stop it at the configured deadline; you can keep waiting or stop the request.
+        </p>
+      ) : null}
       <style>{`
         @keyframes charlie-progress-slide {
           0% { transform: translateX(-110%); }
@@ -296,38 +335,47 @@ export function CharlieShell({ children }: { children: ReactNode }) {
   );
 }
 
-function ContextPicker() {
+function ContextPicker({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { add } = useCharlie();
-  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const result = useQuery({
     queryKey: queryKeys.charlie.contextSearch(q),
     queryFn: () => searchCharlieContext(q),
-    enabled: open && q.trim().length >= 2,
+    enabled: open && (q.trim().length === 0 || q.trim().length >= 2),
     retry: false,
   });
   if (!open)
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => onOpenChange(true)}
         aria-expanded="false"
         className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
       >
         <Plus className="h-3 w-3" />
-        Add context
+        Narrow scope
       </button>
     );
   return (
-    <div className="rounded-md border p-2" role="search">
+    <div className="min-w-72 rounded-md border bg-background p-2 shadow-sm" role="search">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium">Choose a diagnostic scope</p>
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+        >
+          Done
+        </button>
+      </div>
       <label className="flex items-center gap-2">
         <Search className="h-4 w-4" />
-        <span className="sr-only">Search authorized context</span>
+        <span className="sr-only">Search components or agent connections</span>
         <input
-          aria-label="Search authorized context"
+          aria-label="Search components or agent connections"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search authorized resources"
+          placeholder="Search components or agent connections"
           className="w-full bg-transparent text-sm outline-none"
         />
       </label>
@@ -336,13 +384,18 @@ function ContextPicker() {
           Context search is unavailable for this installation.
         </p>
       )}
+      {result.isLoading && (
+        <p role="status" className="mt-2 text-xs text-muted-foreground">
+          Loading available scopes…
+        </p>
+      )}
       {result.data?.map((v) => (
         <button
           type="button"
           key={`${v.type}:${v.id}`}
           onClick={() => {
             add(v);
-            setOpen(false);
+            onOpenChange(false);
           }}
           className="mt-2 block w-full rounded p-2 text-left text-sm hover:bg-accent"
         >
@@ -352,21 +405,41 @@ function ContextPicker() {
           </span>
         </button>
       ))}
+      {!result.isLoading && result.data?.length === 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          No matching scope is available to your account.
+        </p>
+      )}
     </div>
   );
 }
 
 function CharlieDrawer() {
   const { open, setOpen, resources, remove } = useCharlie();
+  const pathname = usePathname();
   const qc = useQueryClient();
   const [threadId, setThreadId] = useState<string>();
   const [sessionId, setSessionId] = useState<string>();
+  const [viewingThreadId, setViewingThreadId] = useState<string>();
   const [text, setText] = useState("");
   const [local, setLocal] = useState<CharlieMessage[]>([]);
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  const [commandHelpOpen, setCommandHelpOpen] = useState(false);
+  const [conversationListOpen, setConversationListOpen] = useState(false);
+  const [commandNotice, setCommandNotice] = useState<string>();
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [streamUnavailable, setStreamUnavailable] = useState(false);
+  const [turnFailed, setTurnFailed] = useState(false);
   const [confirmAbort, setConfirmAbort] = useState(false);
   // True from user send until Charlie produces assistant content or the turn ends.
   const [awaitingReply, setAwaitingReply] = useState(false);
+  const awaitingReplyRef = useRef(false);
+  const activeTurnIdRef = useRef<string | undefined>(undefined);
+  // A terminal session status may be cached from the preceding turn. Only a
+  // status fetched after the current message receipt may terminate this turn.
+  const terminalStatusAfterRef = useRef(0);
+  const assistantIdsBeforeTurnRef = useRef<Set<string>>(new Set());
+  const [streamGeneration, setStreamGeneration] = useState(0);
   const [turnProgress, setTurnProgress] = useState<CharlieTurnProgress>();
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -400,6 +473,19 @@ function CharlieDrawer() {
     queryKey: queryKeys.charlie.activeThread,
     queryFn: getCharlieActiveThread,
     retry: false,
+    refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
+  });
+  const commands = useQuery({
+    queryKey: queryKeys.charlie.commands,
+    queryFn: getCharlieCommands,
+    enabled: open,
+    retry: false,
+  });
+  const threads = useQuery({
+    queryKey: queryKeys.charlie.threads,
+    queryFn: listCharlieThreads,
+    enabled: open && conversationListOpen,
+    retry: false,
   });
   useEffect(() => {
     const thread = activeThread.data?.thread;
@@ -414,17 +500,35 @@ function CharlieDrawer() {
       setSessionId(current);
     }
   }, [activeThread.data]);
+  const displayedThreadId = viewingThreadId ?? threadId;
   const history = useQuery({
-    queryKey: threadId
-      ? queryKeys.charlie.threadHistory(threadId)
+    queryKey: displayedThreadId
+      ? queryKeys.charlie.threadHistory(displayedThreadId)
       : queryKeys.charlie.history(sessionId),
     queryFn: () =>
-      threadId
-        ? getCharlieThreadHistory(threadId)
+      displayedThreadId
+        ? getCharlieThreadHistory(displayedThreadId)
         : getCharlieHistory(sessionId!),
-    enabled: !!threadId || !!sessionId,
+    enabled: !!displayedThreadId || !!sessionId,
     retry: false,
+    // SSE remains the low-latency path. Polling while one turn is outstanding
+    // is the authoritative fallback when a browser/proxy misses a terminal
+    // frame after Charlie has already persisted the assistant response.
+    refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
   });
+  const catalogCommands = useMemo(
+    () => commands.data?.commands ?? [],
+    [commands.data?.commands],
+  );
+  const slashSuggestions = useMemo(
+    () => commandSuggestions(text, catalogCommands),
+    [catalogCommands, text],
+  );
+  const suggestedCommands = useMemo(
+    () => contextualCharlieCommands(pathname, catalogCommands),
+    [catalogCommands, pathname],
+  );
+  useEffect(() => setSelectedCommandIndex(0), [text]);
   useEffect(() => {
     if (!sessionId) return;
     setStreamUnavailable(false);
@@ -448,6 +552,15 @@ function CharlieDrawer() {
       (event) => {
         setStreamUnavailable(false);
         scheduleHistoryRefresh();
+        if (!awaitingReplyRef.current) return;
+        const eventTurnId = charlieProgressEventTurnId(event.data);
+        const expectedTurnId = activeTurnIdRef.current;
+        if (expectedTurnId && eventTurnId && eventTurnId !== expectedTurnId) {
+          return;
+        }
+        if (!expectedTurnId && eventTurnId && event.type === "turn.started") {
+          activeTurnIdRef.current = eventTurnId;
+        }
         setTurnProgress((current) =>
           updateCharlieTurnProgress(
             current ?? initialCharlieTurnProgress(),
@@ -465,25 +578,32 @@ function CharlieDrawer() {
           event.type === "turn.aborted" ||
           event.type === "charlie.error"
         ) {
+          if (event.type === "turn.failed" || event.type === "charlie.error") {
+            setTurnFailed(true);
+          }
+          awaitingReplyRef.current = false;
           setAwaitingReply(false);
         }
       },
-      () => setStreamUnavailable(true),
+      () => {
+        if (awaitingReplyRef.current) setStreamUnavailable(true);
+      },
       () => setStreamUnavailable(false),
     );
     return () => {
       if (historyRefresh !== undefined) clearTimeout(historyRefresh);
       unsubscribe();
     };
-  }, [qc, sessionId, threadId]);
+  }, [qc, sessionId, streamGeneration, threadId]);
   const send = useMutation({
-    mutationFn: async (message: string) => {
+    mutationFn: async (input: { message: string; command?: CharlieCommandRequest }) => {
       // Thread API reattaches a messageable session or continues under the same
       // interactive thread when the prior session is terminal (no blank 409).
-      const result = await sendCharlieThreadMessage(message, {
-        trigger: "user_chat",
+      const result = await sendCharlieThreadMessage(input.message, {
+        trigger: input.command ? `slash_command:${input.command.id}` : "user_chat",
         currentUiContext: location.pathname.slice(0, 255),
         resources: resources.map(({ label: _, summary: __, ...r }) => r),
+        command: input.command,
       });
       if (result.thread?.id) {
         setThreadId(result.thread.id);
@@ -498,25 +618,57 @@ function CharlieDrawer() {
       return {
         threadId: result.thread?.id,
         sessionId: nextSession,
+        turnId: result.receipt?.turnId,
       };
     },
-    onMutate: (message) => {
+    onMutate: (input) => {
+      awaitingReplyRef.current = true;
       setAwaitingReply(true);
+      activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = Number.POSITIVE_INFINITY;
+      if (sessionId) {
+        // Do not let an in-flight read of the preceding turn repopulate a
+        // terminal cache while this message is waiting for acceptance.
+        void qc.cancelQueries({
+          queryKey: queryKeys.charlie.sessionStatus(sessionId),
+          exact: true,
+        });
+      }
+      assistantIdsBeforeTurnRef.current = new Set(
+        (history.data ?? [])
+          .filter((item) => item.role === "assistant")
+          .map((item) => item.id),
+      );
+      setStreamGeneration((value) => value + 1);
+      setStreamUnavailable(false);
+      setTurnFailed(false);
       setTurnProgress(initialCharlieTurnProgress());
       setLocal((v) => [
         ...v,
         // Prefixed id so optimistic rows are easy to drop once history arrives.
-        { id: `local:${crypto.randomUUID()}`, role: "user", content: message },
+        { id: `local:${crypto.randomUUID()}`, role: "user", content: input.message },
       ]);
     },
     onError: () => {
+      awaitingReplyRef.current = false;
+      activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = 0;
       setAwaitingReply(false);
       setTurnProgress(undefined);
+      setTurnFailed(true);
     },
     onSuccess: (ids) => {
+      if (ids.turnId) activeTurnIdRef.current = ids.turnId;
+      terminalStatusAfterRef.current = 0;
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
       if (ids.sessionId) {
+        // Drop, rather than refetch over, the prior turn's terminal snapshot.
+        // The enabled query below will establish a fresh post-receipt baseline.
+        qc.removeQueries({
+          queryKey: queryKeys.charlie.sessionStatus(ids.sessionId),
+          exact: true,
+        });
         void qc.invalidateQueries({
           queryKey: queryKeys.charlie.history(ids.sessionId),
         });
@@ -528,13 +680,35 @@ function CharlieDrawer() {
       }
     },
   });
+  const sessionStatus = useQuery({
+    queryKey: queryKeys.charlie.sessionStatus(sessionId),
+    queryFn: () => getCharlieSession(sessionId!),
+    // Always reconcile the current server-owned session when the drawer opens.
+    // Closing the drawer intentionally unmounts the UI and its EventSource, but
+    // it does not abort Charlie. This status read lets a reopened drawer attach
+    // to work that continued while it was hidden. While a new message is being
+    // accepted, the previous turn's status must remain out of consideration.
+    enabled: !viewingThreadId && !!sessionId && !send.isPending,
+    retry: false,
+    // The first read detects work that survived a closed drawer. Once that
+    // work is reattached, awaitingReply enables terminal-state polling.
+    refetchInterval: awaitingReply && !send.isPending ? 1_500 : false,
+  });
   const startNewChat = useMutation({
     mutationFn: newCharlieChat,
     onSuccess: (result) => {
       setLocal([]);
+      awaitingReplyRef.current = false;
+      activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = 0;
       setAwaitingReply(false);
       setTurnProgress(undefined);
       setStreamUnavailable(false);
+      setTurnFailed(false);
+      setViewingThreadId(undefined);
+      setConversationListOpen(false);
+      setCommandHelpOpen(false);
+      setCommandNotice(undefined);
       setThreadId(result.thread?.id);
       setSessionId(undefined);
       stickToBottomRef.current = true;
@@ -548,8 +722,12 @@ function CharlieDrawer() {
     onSuccess: () => {
       setConfirmAbort(false);
       // Keep transcript; only live authority ends. Next send continues the thread.
+      awaitingReplyRef.current = false;
+      activeTurnIdRef.current = undefined;
+      terminalStatusAfterRef.current = 0;
       setAwaitingReply(false);
       setTurnProgress(undefined);
+      setTurnFailed(false);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.sessions });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.activeThread });
@@ -566,6 +744,7 @@ function CharlieDrawer() {
   // does not render twice.
   const messages = useMemo(() => {
     const historyMessages = history.data ?? [];
+    if (viewingThreadId) return historyMessages;
     const historyUserContents = new Set(
       historyMessages
         .filter((m) => m.role === "user")
@@ -583,8 +762,120 @@ function CharlieDrawer() {
       ...historyMessages,
       ...optimistic.filter((m) => !historyMessages.some((h) => h.id === m.id)),
     ];
-  }, [history.data, local]);
-  const showProgress = (send.isPending || awaitingReply) && !send.isError;
+  }, [history.data, local, viewingThreadId]);
+  // Reattach UI progress after the drawer was closed during an in-flight turn.
+  // Remote active state alone is not enough: a locally active interactive
+  // session can have a completed answer. The transcript must also end in an
+  // unanswered user (or streaming assistant) message before we show work as
+  // pending and disable duplicate sends.
+  useEffect(() => {
+    if (viewingThreadId || awaitingReply || !sessionId) return;
+    const current = sessionStatus.data;
+    if (!current || current.id !== sessionId) return;
+    if (
+      current.state !== "creating" &&
+      current.state !== "active" &&
+      current.state !== "waiting_approval"
+    ) return;
+    if (history.data === undefined && !history.isError) return;
+    const lastConversationMessage = [...(history.data ?? [])]
+      .reverse()
+      .find((message) => message.role === "user" || message.role === "assistant");
+    const hasUnansweredTurn =
+      lastConversationMessage?.role === "user" ||
+      lastConversationMessage?.state === "streaming";
+    if (!hasUnansweredTurn) return;
+
+    const now = Date.now();
+    awaitingReplyRef.current = true;
+    activeTurnIdRef.current = undefined;
+    terminalStatusAfterRef.current = sessionStatus.dataUpdatedAt;
+    assistantIdsBeforeTurnRef.current = new Set(
+      (history.data ?? [])
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.id),
+    );
+    setAwaitingReply(true);
+    setStreamUnavailable(false);
+    setTurnFailed(false);
+    setTurnProgress({
+      ...initialCharlieTurnProgress(now),
+      stage: current.state === "waiting_approval" ? "waiting_approval" : "planning",
+      label:
+        current.state === "waiting_approval"
+          ? "Waiting for approval"
+          : "Reconnected to active Charlie work",
+    });
+  }, [
+    awaitingReply,
+    history.data,
+    history.isError,
+    sessionId,
+    sessionStatus.data,
+    sessionStatus.dataUpdatedAt,
+    viewingThreadId,
+  ]);
+  useEffect(() => {
+    if (!awaitingReply || !history.data || viewingThreadId) return;
+    const response = history.data.find(
+      (message) =>
+        message.role === "assistant" &&
+        !assistantIdsBeforeTurnRef.current.has(message.id),
+    );
+    if (!response) return;
+    // Persisted history is authoritative even when the terminal SSE frame was
+    // lost after a proxy/browser reconnect. Never leave a completed response
+    // next to an indefinite "Charlie is working" indicator.
+    awaitingReplyRef.current = false;
+    setAwaitingReply(false);
+    setStreamUnavailable(false);
+    setTurnProgress((current) =>
+      current
+        ? {
+            ...current,
+            stage: "completed",
+            label: "Response complete",
+            lastEventAt: Date.now(),
+          }
+        : current,
+    );
+  }, [awaitingReply, history.data, viewingThreadId]);
+  // Authoritative central-state polling is the final terminal fallback when an
+  // SSE connection dies before its terminal event. Successful turns normally
+  // stop through SSE or persisted history; failed/aborted turns may have no
+  // assistant row, so local-only state is insufficient.
+  useEffect(() => {
+    if (!awaitingReply || viewingThreadId || send.isPending) return;
+    const current = sessionStatus.data;
+    if (!current || current.id !== sessionId) return;
+    if (sessionStatus.dataUpdatedAt <= terminalStatusAfterRef.current) return;
+    if (
+      current.state !== "completed" &&
+      current.state !== "failed" &&
+      current.state !== "aborted"
+    ) return;
+    awaitingReplyRef.current = false;
+    setAwaitingReply(false);
+    if (current.state === "failed") setTurnFailed(true);
+    if (current.state === "completed") {
+      setStreamUnavailable(false);
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.history(sessionId) });
+      if (threadId) {
+        void qc.invalidateQueries({ queryKey: queryKeys.charlie.threadHistory(threadId) });
+      }
+    }
+    setTurnProgress((progress) => progress
+      ? {
+          ...progress,
+          stage: current.state === "completed" ? "completed" : current.state === "failed" ? "failed" : "aborted",
+          label: current.state === "completed" ? "Response complete" : current.state === "failed" ? "Charlie could not complete the response" : "Turn aborted",
+          lastEventAt: Date.now(),
+        }
+      : progress);
+  }, [awaitingReply, qc, send.isPending, sessionId, sessionStatus.data, sessionStatus.dataUpdatedAt, threadId, viewingThreadId]);
+  const showProgress = !viewingThreadId && (send.isPending || awaitingReply) && !send.isError;
+  const historyReady =
+    (!displayedThreadId && !sessionId) || history.data !== undefined;
   // Keep the latest turn visible above the fixed composer unless the user has
   // scrolled up to read earlier history.
   useLayoutEffect(() => {
@@ -600,6 +891,52 @@ function CharlieDrawer() {
     (adminMode.data.requested !== adminMode.data.authoritative ||
       !adminMode.data.workloadCeilingReady ||
       !!adminMode.data.disablePending);
+  const submitComposer = () => {
+    const value = text.trim();
+    if (!value || viewingThreadId || !historyReady || send.isPending || awaitingReply) return;
+    if (value.startsWith("/")) {
+      const parsed = parseCharlieCommand(value, catalogCommands);
+      if (!parsed) {
+        setCommandNotice(commands.isError
+          ? "The command catalog is unavailable. Natural-language chat is still available."
+          : "Unknown or incomplete command. Choose a suggestion or use /help.");
+        return;
+      }
+      if (parsed.descriptor.execution === "client") {
+        setText("");
+        setCommandNotice(undefined);
+        switch (parsed.descriptor.id) {
+          case "help":
+            setCommandHelpOpen(true);
+            break;
+          case "scope":
+            setScopePickerOpen(true);
+            break;
+          case "mode":
+            setCommandNotice(`Charlie is in ${mode.label}. ${mode.ceiling}`);
+            break;
+          case "new":
+            send.reset();
+            startNewChat.mutate();
+            break;
+          case "stop":
+            if (sessionId) setConfirmAbort(true);
+            else setCommandNotice("There is no active Charlie session to stop.");
+            break;
+        }
+        return;
+      }
+      setText("");
+      setCommandNotice(undefined);
+      stickToBottomRef.current = true;
+      send.mutate({ message: value, command: parsed.request });
+      return;
+    }
+    setText("");
+    setCommandNotice(undefined);
+    stickToBottomRef.current = true;
+    send.mutate({ message: value });
+  };
   return (
     <DrawerShell
       title="Charlie"
@@ -640,6 +977,14 @@ function CharlieDrawer() {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => setConversationListOpen((value) => !value)}
+            aria-expanded={conversationListOpen}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+          >
+            <HistoryIcon className="h-3 w-3" /> History
+          </button>
+          <button
+            type="button"
             onClick={() => {
               send.reset();
               startNewChat.mutate();
@@ -649,7 +994,7 @@ function CharlieDrawer() {
           >
             New chat
           </button>
-          {sessionId && (
+          {sessionId && !viewingThreadId && (
             <button
               type="button"
               onClick={() => setConfirmAbort(true)}
@@ -668,33 +1013,112 @@ function CharlieDrawer() {
         id="charlie-assistant-drawer"
         className="shrink-0 space-y-2 border-b border-border px-5 py-3"
       >
-        <div className="flex flex-wrap gap-2" role="list" aria-label="Attached context">
-          {resources.map((r) => (
-            <span
-              key={`${r.type}:${r.id}`}
-              role="listitem"
-              aria-label={`${r.label}: ${r.summary}`}
-              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
-            >
-              {r.label}
-              <button
-                type="button"
-                aria-label={`Remove ${r.label}`}
-                onClick={() => remove(`${r.type}:${r.id}`)}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          <div role="listitem">
-            <ContextPicker />
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Scope</p>
+            <div className="flex flex-wrap gap-2" role="list" aria-label="Conversation scope">
+              {resources.length === 0 ? (
+                <span
+                  role="listitem"
+                  className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs"
+                >
+                  This Astronomer deployment
+                </span>
+              ) : null}
+              {resources.map((r) => (
+                <span
+                  key={`${r.type}:${r.id}`}
+                  role="listitem"
+                  aria-label={`${r.label}: ${r.summary}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
+                >
+                  {r.label}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${r.label}`}
+                    onClick={() => remove(`${r.type}:${r.id}`)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="shrink-0">
+            <ContextPicker open={scopePickerOpen} onOpenChange={setScopePickerOpen} />
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Only the identifiers shown above are attached. Logs, metrics, audit
-          details, and broad resource data are never attached automatically.
+          Charlie retrieves authorized diagnostics through audited read tools
+          when needed. Choose a component or agent connection to narrow this
+          conversation.
         </p>
       </div>
+      {conversationListOpen && (
+        <section className="max-h-52 shrink-0 overflow-y-auto border-b border-border bg-card px-5 py-3" aria-label="Recent Charlie conversations">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold">Recent conversations</p>
+            <button type="button" aria-label="Close conversation history" onClick={() => setConversationListOpen(false)} className="text-xs text-muted-foreground">Close</button>
+          </div>
+          {threads.isLoading ? <p className="text-xs text-muted-foreground">Loading conversations…</p> : null}
+          {threads.isError ? <p role="alert" className="text-xs text-muted-foreground">Conversation history is unavailable.</p> : null}
+          <div className="space-y-1">
+            {threads.data?.map((thread) => {
+              const current = thread.id === threadId;
+              const selected = current ? !viewingThreadId : thread.id === viewingThreadId;
+              return (
+                <button
+                  type="button"
+                  key={thread.id}
+                  aria-current={selected ? "true" : undefined}
+                  onClick={() => {
+                    setViewingThreadId(current ? undefined : thread.id);
+                    setConversationListOpen(false);
+                    setCommandHelpOpen(false);
+                    setCommandNotice(undefined);
+                    stickToBottomRef.current = false;
+                  }}
+                  className={cn("block w-full rounded-md border px-3 py-2 text-left hover:bg-accent", selected && "border-primary bg-primary/5")}
+                >
+                  <span className="block truncate text-sm font-medium">{thread.title || "Untitled conversation"}</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {current ? "Current" : thread.state === "archived" ? "Previous" : thread.state}
+                    {thread.updated_at ? ` · ${new Date(thread.updated_at).toLocaleString()}` : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {!threads.isLoading && threads.data?.length === 0 ? <p className="text-xs text-muted-foreground">No previous conversations yet.</p> : null}
+        </section>
+      )}
+      {commandHelpOpen && (
+        <section className="max-h-64 shrink-0 overflow-y-auto border-b border-border bg-card px-5 py-3" aria-label="Charlie command help">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Charlie commands</p>
+              <p className="text-xs text-muted-foreground">Shortcuts use the same scope, mode, approvals, and audit controls as ordinary chat.</p>
+            </div>
+            <button type="button" aria-label="Close command help" onClick={() => setCommandHelpOpen(false)} className="text-xs text-muted-foreground">Close</button>
+          </div>
+          <div className="space-y-1">
+            {catalogCommands.map((command) => (
+              <button
+                type="button"
+                key={command.id}
+                onClick={() => {
+                  setText(commandInsertion(command));
+                  setCommandHelpOpen(false);
+                }}
+                className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <span className="font-mono text-xs">/{command.name}{command.argument ? ` <${command.argument.placeholder}>` : ""}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{command.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <div
         ref={messagesViewportRef}
         className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-3 select-text"
@@ -710,6 +1134,15 @@ function CharlieDrawer() {
           stickToBottomRef.current = distanceFromBottom < 80;
         }}
       >
+        {viewingThreadId ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/50 p-3" role="status">
+            <div>
+              <p className="text-sm font-medium">Viewing a previous conversation</p>
+              <p className="text-xs text-muted-foreground">This transcript is read-only and is not added to your current Charlie context.</p>
+            </div>
+            <button type="button" onClick={() => { setViewingThreadId(undefined); stickToBottomRef.current = true; }} className="shrink-0 rounded-md border px-2 py-1 text-xs">Back to current</button>
+          </div>
+        ) : null}
         {messages.length === 0 && !showProgress ? (
           <EmptyState
             icon={Bot}
@@ -718,36 +1151,63 @@ function CharlieDrawer() {
           />
         ) : (
           <>
-            {messages.map((m) => (
-              <article
-                key={m.id}
-                aria-label={m.role === "user" ? "Message from you" : "Message from Charlie"}
-                className={cn(
-                  "rounded-lg border p-3 select-text",
-                  m.role === "user" ? "ml-8 bg-primary/5" : "mr-8 bg-card",
-                )}
-              >
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {m.role === "user" ? "You" : "Charlie"}
-                  </p>
-                  {m.role === "assistant" && m.content?.trim() ? (
-                    <CopyMessageButton text={m.content} />
-                  ) : null}
-                </div>
-                <SafeMarkdown streaming={m.state === "streaming"}>
-                  {m.content}
-                </SafeMarkdown>
-                <CharlieMessageParts
-                  message={m}
-                  onApprovalChanged={() =>
-                    void qc.invalidateQueries({
-                      queryKey: queryKeys.charlie.history(sessionId),
-                    })
+            {messages.map((m) => {
+              const recognizedCommand =
+                m.role === "user"
+                  ? parseCharlieCommand(m.content, catalogCommands)
+                  : undefined;
+              return (
+                <article
+                  key={m.id}
+                  aria-label={
+                    m.role === "user" ? "Message from you" : "Message from Charlie"
                   }
-                />
-              </article>
-            ))}
+                  className={cn(
+                    "rounded-lg border p-3 select-text",
+                    m.role === "user" ? "ml-8 bg-primary/5" : "mr-8 bg-card",
+                    recognizedCommand && "border-primary/40 bg-primary/10",
+                  )}
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {m.role === "user" ? "You" : "Charlie"}
+                      </p>
+                      {recognizedCommand ? (
+                        <span
+                          aria-label="Recognized Charlie command"
+                          title={recognizedCommand.descriptor.label}
+                          className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                        >
+                          <Command className="h-2.5 w-2.5" aria-hidden="true" />
+                          Command
+                        </span>
+                      ) : null}
+                    </div>
+                    {m.role === "assistant" && m.content?.trim() ? (
+                      <CopyMessageButton text={m.content} />
+                    ) : null}
+                  </div>
+                  {recognizedCommand ? (
+                    <p className="break-words font-mono text-sm font-medium text-primary">
+                      {m.content}
+                    </p>
+                  ) : (
+                    <SafeMarkdown streaming={m.state === "streaming"}>
+                      {m.content}
+                    </SafeMarkdown>
+                  )}
+                  <CharlieMessageParts
+                    message={m}
+                    onApprovalChanged={() =>
+                      void qc.invalidateQueries({
+                        queryKey: queryKeys.charlie.history(sessionId),
+                      })
+                    }
+                  />
+                </article>
+              );
+            })}
             {showProgress && (
               <CharlieProgressIndicator
                 progress={turnProgress ?? initialCharlieTurnProgress()}
@@ -757,14 +1217,16 @@ function CharlieDrawer() {
         )}
       </div>
       <div className="shrink-0 space-y-2 border-t border-border bg-background px-5 py-3">
-        {(send.isError || history.isError || streamUnavailable) && (
+        {(send.isError || history.isError || streamUnavailable || turnFailed) && (
           <div
             role="alert"
             className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm"
           >
             <p>
-              {streamUnavailable
-                ? "The live Charlie stream is reconnecting. Confirmed history remains available, and your Astronomer data remains unchanged."
+              {turnFailed
+                ? "Charlie could not complete this request. Partial work was not presented as an answer, and your Astronomer data remains unchanged. You can retry or narrow the request."
+                : streamUnavailable
+                  ? "The live Charlie stream is reconnecting. Confirmed history remains available, and your Astronomer data remains unchanged."
                 : isCharlieRateLimitedError(send.error) ||
                     isCharlieRateLimitedError(history.error)
                   ? "Charlie is briefly rate-limited while the session catches up. Retry in a moment — your Astronomer data remains unchanged."
@@ -780,7 +1242,7 @@ function CharlieDrawer() {
                   Reconnect and retry history
                 </button>
               )}
-              {send.isError && send.variables && (
+              {(send.isError || turnFailed) && send.variables && (
                 <button
                   type="button"
                   onClick={() => send.mutate(send.variables!)}
@@ -802,62 +1264,107 @@ function CharlieDrawer() {
             Abort is pending or could not be confirmed. The product-side session remains locally closed.
           </p>
         )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const v = text.trim();
-            if (v && !send.isPending) {
-              setText("");
-              stickToBottomRef.current = true;
-              send.mutate(v);
-            }
-          }}
-          className="space-y-2"
-        >
-          <textarea
-            aria-label="Message Charlie"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter sends; Shift+Enter inserts a newline (standard chat UX).
-              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) {
-                return;
-              }
-              e.preventDefault();
-              const v = text.trim();
-              if (v && !send.isPending) {
-                setText("");
-                stickToBottomRef.current = true;
-                send.mutate(v);
-              }
-            }}
-            rows={3}
-            maxLength={sessionId ? 32768 : 4096}
-            className="w-full resize-none rounded-lg border bg-background p-3 text-sm"
-            placeholder="Ask Charlie… (Enter to send, Shift+Enter for newline)"
-          />
-          <div className="flex justify-between">
-            <Link
-              href={`/dashboard/charlie?tab=conversations${sessionId ? `&session=${sessionId}` : ""}`}
-              className="inline-flex items-center gap-1 text-xs text-primary"
-            >
-              Open Charlie hub
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-            <button
-              type="submit"
-              disabled={!text.trim() || send.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors motion-reduce:transition-none disabled:opacity-50"
-            >
-              {send.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              Send
-            </button>
+        {commandNotice ? <p role="status" className="rounded-md border bg-muted/50 p-2 text-xs">{commandNotice}</p> : null}
+        {viewingThreadId ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Previous conversations are read-only. Return to the current conversation to message Charlie.</p>
+            <button type="button" onClick={() => { setViewingThreadId(undefined); stickToBottomRef.current = true; }} className="shrink-0 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground">Return to current</button>
           </div>
-        </form>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitComposer();
+            }}
+            className="space-y-2"
+          >
+            {!text && suggestedCommands.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5" aria-label="Suggested Charlie commands">
+                {suggestedCommands.map((command) => (
+                  <button type="button" key={command.id} onClick={() => setText(commandInsertion(command))} className="rounded-full border px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+                    /{command.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {text.trimStart().startsWith("/") && slashSuggestions.length > 0 ? (
+              <div id="charlie-command-suggestions" role="listbox" aria-label="Charlie command suggestions" className="max-h-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                {slashSuggestions.map((command, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === selectedCommandIndex}
+                    key={command.id}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setText(commandInsertion(command))}
+                    className={cn("flex w-full items-start gap-2 rounded px-2 py-2 text-left", index === selectedCommandIndex ? "bg-accent" : "hover:bg-accent")}
+                  >
+                    <Command className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block font-mono text-xs">/{command.name}{command.argument ? ` <${command.argument.placeholder}>` : ""}</span>
+                      <span className="block text-[11px] text-muted-foreground">{command.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <textarea
+              aria-label="Message Charlie"
+              aria-controls={slashSuggestions.length ? "charlie-command-suggestions" : undefined}
+              value={text}
+              onChange={(e) => { setText(e.target.value); setCommandNotice(undefined); }}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (slashSuggestions.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                  e.preventDefault();
+                  setSelectedCommandIndex((current) => e.key === "ArrowDown"
+                    ? (current + 1) % slashSuggestions.length
+                    : (current - 1 + slashSuggestions.length) % slashSuggestions.length);
+                  return;
+                }
+                if (slashSuggestions.length > 0 && e.key === "Tab") {
+                  e.preventDefault();
+                  setText(commandInsertion(slashSuggestions[selectedCommandIndex] ?? slashSuggestions[0]));
+                  return;
+                }
+                // Enter sends a complete command/message; for a partial command
+                // it accepts the highlighted suggestion. Shift+Enter is newline.
+                if (e.key !== "Enter" || e.shiftKey) return;
+                e.preventDefault();
+                if (slashSuggestions.length > 0 && !parseCharlieCommand(text, catalogCommands)) {
+                  setText(commandInsertion(slashSuggestions[selectedCommandIndex] ?? slashSuggestions[0]));
+                  return;
+                }
+                submitComposer();
+              }}
+              rows={3}
+              maxLength={sessionId ? 32768 : 4096}
+              className="w-full resize-none rounded-lg border bg-background p-3 text-sm"
+              placeholder="Ask Charlie or type / for commands…"
+            />
+            <div className="flex justify-between">
+              <Link
+                href={`/dashboard/charlie?tab=conversations${sessionId ? `&session=${sessionId}` : ""}`}
+                className="inline-flex items-center gap-1 text-xs text-primary"
+              >
+                Open Charlie hub
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+              <button
+                type="submit"
+                disabled={!text.trim() || !historyReady || send.isPending || awaitingReply}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors motion-reduce:transition-none disabled:opacity-50"
+              >
+                {send.isPending || awaitingReply ? (
+                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {send.isPending ? "Sending" : awaitingReply ? "Working" : "Send"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
       <ConfirmDialog
         open={confirmAbort}

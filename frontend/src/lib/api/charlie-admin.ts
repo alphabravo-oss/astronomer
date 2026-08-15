@@ -227,6 +227,33 @@ export interface CharlieDiagnosticsView {
   checks: CharlieDiagnosticCheck[];
   correlationId?: string;
 }
+export type CharlieKubernetesVisibilityProfile =
+  | "disabled"
+  | "product_namespace"
+  | "cluster_diagnostics";
+export interface CharlieKubernetesVisibilityView {
+  schema: "charlie.kubernetes-visibility/v1";
+  profile: CharlieKubernetesVisibilityProfile;
+  revision: number;
+  state: "not_configured" | "disabled" | "enabled";
+  instanceId: string;
+  namespaces: string[];
+  productOwnedOnly: true;
+  clusterScoped: boolean;
+  podLogs: boolean;
+  downstreamTargets: false;
+  secretValues: false;
+  exec: false;
+  attach: false;
+  portForward: false;
+  apiProxy: false;
+  requiresRediscovery: boolean;
+  requiresCentralReview: boolean;
+  requiresProductAcknowledgement: boolean;
+  candidateDisclosureDigest?: string;
+  availableProfiles: CharlieKubernetesVisibilityProfile[];
+  scopeSummary: string;
+}
 interface CharlieAdminStatusView {
   connection: CharlieConnectionView;
   agent: CharlieAgentView;
@@ -294,6 +321,22 @@ export async function getCharlieAgent(): Promise<CharlieAgentView> {
 }
 export async function getCharlieMode(): Promise<CharlieModeView> {
   return (await getCharlieAdminStatus()).mode;
+}
+export async function getCharlieKubernetesVisibility(): Promise<CharlieKubernetesVisibilityView> {
+  const { data } = await api.get("/admin/charlie/kubernetes-visibility/");
+  return payload(data);
+}
+export async function updateCharlieKubernetesVisibility(input: {
+  profile: CharlieKubernetesVisibilityProfile;
+  podLogs: boolean;
+  revision: number;
+}): Promise<CharlieKubernetesVisibilityView> {
+  const { data } = await api.put("/admin/charlie/kubernetes-visibility/", {
+    profile: input.profile,
+    pod_logs: input.podLogs,
+    revision: input.revision,
+  });
+  return payload(data);
 }
 export async function updateCharlieMode(
   mode: CharlieMode,

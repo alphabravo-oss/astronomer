@@ -25,42 +25,62 @@ jobs:
   smoke:
     runs-on: ubuntu-22.04
     # Hard cap so a stuck wait never burns a full job-timeout budget.
-    # The script's own per-step timeouts add up to ~13 minutes worst
-    # case; 25 leaves slack for k3d provisioning + image pulls.
-    timeout-minutes: 25
+    # The one-time six-image build takes roughly 15 minutes on a cold hosted
+    # runner. Keep an outer bound while allowing clean-user baseline
+    # convergence up to the same ten-minute budget used by fleet
+    # qualification; inner timeouts still identify the operation that failed.
+    timeout-minutes: 40
 
     env:
       CGO_ENABLED: "0"
       DOCKER_BUILDKIT: "1"
+      # NGF 2.6.0 requires Kubernetes >= 1.31. k3d 5.7 defaulted to 1.30.4.
+      K3S_IMAGE: rancher/k3s:v1.32.8-k3s1
+      # Keep the failed adopted cluster until the diagnostic steps have read it.
+      SMOKE_CLUSTER: astronomer-smoke-${{ github.run_id }}
+      SMOKE_DELETE: "0"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       - name: Install k3d
         run: |
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
-            | TAG=v5.7.4 bash
+            | TAG=v5.8.3 bash
 
-      - name: Build server + agent + shell + migrate images
+      - name: Reclaim hosted-runner disk before image build
         run: |
-          make docker-build-server  IMG_TAG=ci
-          make docker-build-agent   IMG_TAG=ci
-          make docker-build-worker  IMG_TAG=ci
-          make docker-build-migrate IMG_TAG=ci
-          make docker-build-shell   IMG_TAG=ci
+          # The Ubuntu runner carries Android, .NET, and GHC toolchains that
+          # this Go/Node/Helm job never uses. A clean management build plus a
+          # second k3d cluster otherwise leaves kubelet below its 5% imagefs
+          # eviction threshold while the baseline charts pull their images.
+          for path in /usr/local/lib/android /usr/share/dotnet /opt/ghc; do
+            if [[ -d "$path" ]]; then
+              sudo rm -rf -- "$path"
+            fi
+          done
+          docker system prune --all --force --volumes
+          df -h /
 
       - name: Bring up local Astronomer (k3d-bootstrap)
+        env:
+          # The workflow itself reaches the published host port through
+          # localtest.me. Agents run inside another k3d cluster, where that
+          # name is loopback; advertise Docker's host gateway to them instead.
+          SERVER_URL: http://host.k3d.internal:8080
         run: |
+          # k3d-bootstrap builds every first-party image exactly once and
+          # imports that exact set into the fresh cluster. Building a partial
+          # set here first duplicated almost the entire build and exhausted
+          # this job's 25-minute qualification budget.
           make k3d-bootstrap CLUSTER=astronomer-mgmt IMG_TAG=ci
-          # k3d-bootstrap waits for the helm install to finish; give
-          # the embedded local agent + chart-repo a few seconds to
-          # settle before driving the wizard.
-          sleep 10
 
       - name: Resolve admin password
         id: creds
@@ -71,10 +91,30 @@ jobs:
           echo "::add-mask::$password"
           echo "password=$password" >> "$GITHUB_OUTPUT"
 
+      - name: Reclaim build cache before adopted-cluster import
+        run: |
+          # The tagged images are already imported into management-cluster
+          # containerd and remain in Docker for the agent/shell import below.
+          # BuildKit's intermediate layers are not runtime artifacts; retaining
+          # them can push the one-node k3d management plane into DiskPressure
+          # as soon as the adopted cluster imports its own images.
+          docker builder prune --all --force
+          # These four source images are already copied into the management
+          # cluster's containerd. Keep only agent and shell in Docker because
+          # the adopted cluster still needs to import those two exact images.
+          docker image rm \
+            ghcr.io/alphabravo-oss/astronomer-go-server:ci \
+            ghcr.io/alphabravo-oss/astronomer-go-worker:ci \
+            ghcr.io/alphabravo-oss/astronomer-go-migrate:ci \
+            ghcr.io/alphabravo-oss/astronomer-frontend:ci
+          docker image prune --force
+          df -h /
+          docker system df
+
       - name: Run smoke test
         env:
           ASTRO_URL: http://astronomer.localtest.me:8080
-          ASTRO_USERNAME: admin
+          ASTRO_EMAIL: admin@astronomer.local
           ASTRO_PASSWORD: ${{ steps.creds.outputs.password }}
           AGENT_IMAGE: ghcr.io/alphabravo-oss/astronomer-go-agent:ci
           SHELL_IMAGE: ghcr.io/alphabravo-oss/astronomer-shell:ci
@@ -88,6 +128,10 @@ jobs:
           for ctx in $(kubectl config get-contexts -o name); do
             kubectl --context "$ctx" get pods -A -o wide \
               > "/tmp/smoke-artifacts/${ctx}-pods.txt" 2>&1 || true
+            kubectl --context "$ctx" get events -A --sort-by=.lastTimestamp \
+              > "/tmp/smoke-artifacts/${ctx}-events.txt" 2>&1 || true
+            kubectl --context "$ctx" describe nodes \
+              > "/tmp/smoke-artifacts/${ctx}-nodes.txt" 2>&1 || true
             kubectl --context "$ctx" -n astronomer-system logs \
               --all-containers --tail=200 deploy/astronomer-agent \
               > "/tmp/smoke-artifacts/${ctx}-agent.log" 2>&1 || true
@@ -95,11 +139,24 @@ jobs:
           kubectl --context k3d-astronomer-mgmt -n astronomer logs \
             deploy/astronomer-server -c server --tail=400 \
             > /tmp/smoke-artifacts/server.log 2>&1 || true
+          kubectl --context k3d-astronomer-mgmt -n astronomer logs \
+            deploy/astronomer-worker -c worker --tail=400 \
+            > /tmp/smoke-artifacts/worker.log 2>&1 || true
+          kubectl --context k3d-astronomer-mgmt -n astronomer logs \
+            deploy/astronomer-worker -c worker --previous --tail=400 \
+            > /tmp/smoke-artifacts/worker-previous.log 2>&1 || true
+          kubectl --context k3d-astronomer-mgmt -n astronomer get \
+            applications.argoproj.io,applicationsets.argoproj.io -o yaml \
+            > /tmp/smoke-artifacts/argocd-baseline.yaml 2>&1 || true
 
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: smoke-debug-${{ github.run_id }}
           path: /tmp/smoke-artifacts/
           retention-days: 7
+
+      - name: Delete adopted test cluster
+        if: always()
+        run: k3d cluster delete "$SMOKE_CLUSTER"

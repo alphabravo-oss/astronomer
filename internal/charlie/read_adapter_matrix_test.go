@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -76,7 +77,7 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 	operational := operationalAdapterFixture(t, queries)
 	operational.databaseSnapshot = func(context.Context) (bool, int64, error) { return false, 1024, nil }
 
-	executor, err := NewCatalogExecutor(MergeCapabilityAdapters(
+	groups := []map[string]CapabilityExecutor{
 		FleetCapabilityAdapters(fleet),
 		ManagementKubernetesCapabilityAdapters(management),
 		QueueCapabilityAdapters(queue),
@@ -85,7 +86,17 @@ func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {
 		WorkPipelineCapabilityAdapters(staticCapabilityAdapter{}),
 		RuntimeCapabilityAdapters(staticCapabilityAdapter{}),
 		AdminVisibilityCapabilityAdapters(staticCapabilityAdapter{}),
-	))
+	}
+	base, err := NewCatalogExecutor(MergeCapabilityAdapters(groups...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	health, err := NewSystemHealthCapabilityAdapter(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups = append(groups, SystemHealthCapabilityAdapters(health))
+	executor, err := NewCatalogExecutor(MergeCapabilityAdapters(groups...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +127,7 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 	for _, descriptor := range ReadCapabilityCatalog() {
 		descriptor := descriptor
 		t.Run(descriptor.Name, func(t *testing.T) {
-			if !executor.SupportsCapability(descriptor.Name) {
+			if !executor.SupportsCapability(context.Background(), descriptor.Name) {
 				t.Fatal("production adapter is not registered")
 			}
 			arguments := rawArguments(t, validReadArguments(descriptor.Name))
@@ -144,6 +155,10 @@ func TestProductionReadAdaptersExecuteEntireCatalogWithSafeBoundedShapes(t *test
 func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testing.T) {
 	emptyFleet, _ := NewFleetCapabilityAdapter(&fleetQueriesFake{})
 	emptyQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{}})
+	partialQueue, _ := NewQueueCapabilityAdapter(&queueInspectorFake{
+		queues: map[string]*asynq.QueueInfo{}, tasks: map[string]map[string]*asynq.TaskInfo{},
+		listedQueues: []string{"low"}, queueErrors: map[string]error{"low": errors.New("inspection unavailable")},
+	})
 	emptyOperational := operationalAdapterFixture(t, &operationalQueriesFake{settings: map[string]json.RawMessage{}})
 	emptyOperational.databaseSnapshot = func(context.Context) (bool, int64, error) { return false, 0, nil }
 	emptyManagement := managementAdapterFixture(t)
@@ -160,7 +175,8 @@ func TestProductionReadAdaptersExposeEmptyAndPartialStateWithoutFailure(t *testi
 		{"empty storage", emptyManagement, "astronomer.management.storage", `"items":[]`},
 		{"empty failed tasks", emptyQueue, "astronomer.queue.failed_tasks", `"items":[]`},
 		{"empty pending tasks", emptyQueue, "astronomer.queue.tasks", `"items":[]`},
-		{"partial queue outage", emptyQueue, "astronomer.queue.health", `"available":false`},
+		{"empty queue is configured idle", emptyQueue, "astronomer.queue.health", `"materialized":false`},
+		{"partial queue inspection outage", partialQueue, "astronomer.queue.health", `"available":false`},
 		{"empty backups", emptyOperational, "astronomer.backups.status", `"management_backups":[]`},
 		{"empty alerts", emptyOperational, "astronomer.alert.list", `"items":[]`},
 		{"empty catalog repositories", emptyOperational, "astronomer.catalog.repositories", `"items":[]`},

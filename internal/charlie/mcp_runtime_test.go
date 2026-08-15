@@ -160,8 +160,9 @@ func TestMCPRuntimeBindsOnlyWhileLiveAndStopsOnEmergencyDisable(t *testing.T) {
 	}
 }
 
-func TestMCPRuntimeOperationalDisabledHasNoWorkListener(t *testing.T) {
+func TestMCPRuntimeOperationalDisabledServesDiscoveryWithWriteFenceClosed(t *testing.T) {
 	runtime, queries := mcpRuntimeFixture(t)
+	defer func() { _ = runtime.Shutdown(context.Background()) }()
 	queries.connection.RequestedMode = string(ModeDisabled)
 	queries.connection.VerifiedMode = string(ModeDisabled)
 	if err := runtime.reconcile(context.Background()); err != nil {
@@ -170,8 +171,8 @@ func TestMCPRuntimeOperationalDisabledHasNoWorkListener(t *testing.T) {
 	runtime.mu.Lock()
 	serving := runtime.listener != nil
 	runtime.mu.Unlock()
-	if serving {
-		t.Fatal("wire-disabled integration retained a Product MCP work listener")
+	if !serving {
+		t.Fatal("wire-disabled installed integration did not retain configuration discovery")
 	}
 	if state := runtime.config.WriteFence.State(); !state.Closed || !state.Drained {
 		t.Fatalf("disabled discovery opened product writes: %+v", state)
@@ -204,9 +205,6 @@ func TestMCPRuntimeQuiescentStatesCreateNoTimerListenerOrReceiptConsumer(t *test
 	}{
 		{name: "feature false", mutate: func(runtime *MCPRuntime, _ *mcpRuntimeFakeQueries) { runtime.features = gateFeature(false) }, wantConnectionReads: 0},
 		{name: "connection inactive", mutate: func(_ *MCPRuntime, queries *mcpRuntimeFakeQueries) { queries.connection.Active = false }, wantConnectionReads: 1},
-		{name: "operational disabled", mutate: func(_ *MCPRuntime, queries *mcpRuntimeFakeQueries) {
-			queries.connection.RequestedMode, queries.connection.VerifiedMode = string(ModeDisabled), string(ModeDisabled)
-		}, wantConnectionReads: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -227,6 +225,51 @@ func TestMCPRuntimeQuiescentStatesCreateNoTimerListenerOrReceiptConsumer(t *test
 				t.Fatalf("timer=%d listener=%v receipt_claims=%d connection_reads=%d", timerCalls, serving, queries.receiptClaims, queries.activeReads)
 			}
 		})
+	}
+}
+
+func TestMCPRuntimeRecoversListenerAfterTransientGateReadFailure(t *testing.T) {
+	runtime, _ := mcpRuntimeFixture(t)
+	features := &lifecycleFeature{}
+	features.enabled.Store(true)
+	runtime.features = features
+	ticker := &fakeRuntimeTicker{channel: make(chan time.Time, 1)}
+	runtime.ticker = func(time.Duration) runtimeTicker { return ticker }
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	waitForServing := func(want bool) {
+		t.Helper()
+		deadline := time.Now().Add(time.Second)
+		for time.Now().Before(deadline) {
+			runtime.mu.Lock()
+			serving := runtime.listener != nil
+			runtime.mu.Unlock()
+			if serving == want {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Fatalf("MCP listener serving state did not become %v", want)
+	}
+
+	waitForServing(true)
+	features.enabled.Store(false)
+	ticker.channel <- time.Now()
+	waitForServing(false)
+	select {
+	case err := <-done:
+		t.Fatalf("transient gate failure stranded the MCP generation: %v", err)
+	default:
+	}
+
+	features.enabled.Store(true)
+	ticker.channel <- time.Now()
+	waitForServing(true)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 

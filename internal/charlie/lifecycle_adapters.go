@@ -25,7 +25,12 @@ func NewDBLifecycleAuditor(writer lifecycleAuditWriter) *DBLifecycleAuditor {
 }
 
 func (a *DBLifecycleAuditor) RecordCharlieSessionLifecycle(ctx context.Context, event SessionLifecycleAudit) {
-	_ = a.record(ctx, event.Action, "charlie_session", event.SessionID, event.ActorID, event.OutcomeCode, map[string]any{"visibility": event.Visibility, "resource_count": event.ResourceCount})
+	detail := map[string]any{"visibility": event.Visibility, "resource_count": event.ResourceCount}
+	if event.CommandID != "" {
+		detail["command_id"] = event.CommandID
+		detail["command_version"] = event.CommandVersion
+	}
+	_ = a.record(ctx, event.Action, "charlie_session", event.SessionID, event.ActorID, event.OutcomeCode, detail)
 }
 
 func (a *DBLifecycleAuditor) RecordCharlieFindingLifecycle(ctx context.Context, event FindingLifecycleAudit) {

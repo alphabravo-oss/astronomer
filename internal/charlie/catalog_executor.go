@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type CatalogExecutor struct {
 	adapters    map[string]CapabilityExecutor
 	descriptors map[string]CapabilityDescriptor
+	now         func() time.Time
 }
 
 func NewCatalogExecutor(adapters map[string]CapabilityExecutor) (*CatalogExecutor, error) {
@@ -37,7 +39,7 @@ func newCatalogExecutor(adapters map[string]CapabilityExecutor, catalog []Capabi
 		}
 		copyAdapters[name] = adapter
 	}
-	return &CatalogExecutor{adapters: copyAdapters, descriptors: descriptors}, nil
+	return &CatalogExecutor{adapters: copyAdapters, descriptors: descriptors, now: time.Now}, nil
 }
 
 func (e *CatalogExecutor) Execute(ctx context.Context, capability CapabilityDescriptor, arguments map[string]json.RawMessage) (json.RawMessage, error) {
@@ -48,7 +50,35 @@ func (e *CatalogExecutor) Execute(ctx context.Context, capability CapabilityDesc
 	}
 	dispatch := registered
 	dispatch.AcceptedFields = append([]string(nil), registered.AcceptedFields...)
-	return adapter.Execute(ctx, dispatch, arguments)
+	result, err := adapter.Execute(ctx, dispatch, arguments)
+	if err != nil || registered.Effect != EffectRead {
+		return result, err
+	}
+	return addCapabilityCheckedAt(result, e.now().UTC(), registered.MaxResponseBytes)
+}
+
+// addCapabilityCheckedAt makes every successful read self-dating at the
+// product boundary. Adapters retain their existing response shapes and
+// verification behavior; the catalog executor adds one uniform field after
+// the source read completes. An adapter that already supplies a more precise
+// checked_at value (for example the concurrent system health snapshot) wins.
+func addCapabilityCheckedAt(result json.RawMessage, checkedAt time.Time, maxBytes int) (json.RawMessage, error) {
+	var object map[string]json.RawMessage
+	if len(result) == 0 || json.Unmarshal(result, &object) != nil || object == nil {
+		return nil, fmt.Errorf("Charlie read capability result must be a JSON object")
+	}
+	if _, exists := object["checked_at"]; !exists {
+		encoded, err := json.Marshal(checkedAt.Format(time.RFC3339Nano))
+		if err != nil {
+			return nil, fmt.Errorf("Charlie read capability timestamp is unavailable")
+		}
+		object["checked_at"] = encoded
+	}
+	annotated, err := json.Marshal(object)
+	if err != nil || len(annotated) > maxBytes {
+		return nil, fmt.Errorf("Charlie read capability result exceeds bound after timestamping")
+	}
+	return annotated, nil
 }
 
 func (e *CatalogExecutor) Verify(ctx context.Context, capability CapabilityDescriptor, arguments map[string]json.RawMessage, result json.RawMessage) (bool, error) {
@@ -64,7 +94,7 @@ func (e *CatalogExecutor) Verify(ctx context.Context, capability CapabilityDescr
 
 // SupportsCapability keeps discovery and dispatch on the same explicit
 // registration list. Missing adapters are not latent or partially available.
-func (e *CatalogExecutor) SupportsCapability(name string) bool {
+func (e *CatalogExecutor) SupportsCapability(_ context.Context, name string) bool {
 	if e == nil {
 		return false
 	}

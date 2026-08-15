@@ -23,11 +23,11 @@ const (
 )
 
 var (
-	ErrThreadNotFound         = errors.New("Charlie interactive thread was not found")
-	ErrThreadNotOwned         = errors.New("Charlie interactive thread access is denied")
-	ErrSessionNotMessageable  = errors.New("Charlie session is not messageable")
-	ErrThreadInactiveRuntime  = errors.New("Charlie runtime is inactive")
-	ErrEventCannotOwnThread   = errors.New("event sessions cannot bind interactive threads")
+	ErrThreadNotFound        = errors.New("Charlie interactive thread was not found")
+	ErrThreadNotOwned        = errors.New("Charlie interactive thread access is denied")
+	ErrSessionNotMessageable = errors.New("Charlie session is not messageable")
+	ErrThreadInactiveRuntime = errors.New("Charlie runtime is inactive")
+	ErrEventCannotOwnThread  = errors.New("event sessions cannot bind interactive threads")
 )
 
 // SessionIsMessageable reports whether a product session can accept another
@@ -109,7 +109,7 @@ type ThreadSessionCreator interface {
 
 // ThreadMessenger posts a message on an existing session.
 type ThreadMessenger interface {
-	Message(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (json.RawMessage, error)
+	Message(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, *ProductCommandInvocation) (json.RawMessage, error)
 	History(context.Context, uuid.UUID, uuid.UUID, string, int) (json.RawMessage, error)
 }
 
@@ -132,11 +132,11 @@ func NewThreadService(queries threadQueries, sessions ThreadSessionCreator, acce
 
 // ActiveThreadView is the drawer bootstrap payload (metadata only + flags).
 type ActiveThreadView struct {
-	Thread          sqlc.CharlieInteractiveThread `json:"thread"`
-	CurrentSession  *sqlc.CharlieSession          `json:"current_session,omitempty"`
-	Messageable     bool                          `json:"messageable"`
-	NeedsContinue   bool                          `json:"needs_continue"`
-	SessionIDs      []uuid.UUID                   `json:"session_ids"`
+	Thread         sqlc.CharlieInteractiveThread `json:"thread"`
+	CurrentSession *sqlc.CharlieSession          `json:"current_session,omitempty"`
+	Messageable    bool                          `json:"messageable"`
+	NeedsContinue  bool                          `json:"needs_continue"`
+	SessionIDs     []uuid.UUID                   `json:"session_ids"`
 }
 
 func (s *ThreadService) GetActive(ctx context.Context, ownerID uuid.UUID) (ActiveThreadView, error) {
@@ -273,7 +273,7 @@ func (s *ThreadService) AttachUserSession(ctx context.Context, ownerID, threadID
 }
 
 // SendOnThread creates/continues a session under the active thread and posts the message.
-func (s *ThreadService) SendOnThread(ctx context.Context, ownerID uuid.UUID, clientMessageID uuid.UUID, message string, create CreateSessionInput) (ActiveThreadView, json.RawMessage, error) {
+func (s *ThreadService) SendOnThread(ctx context.Context, ownerID uuid.UUID, clientMessageID uuid.UUID, message string, command *ProductCommandInvocation, create CreateSessionInput) (ActiveThreadView, json.RawMessage, error) {
 	if !s.active() {
 		return ActiveThreadView{}, nil, ErrThreadInactiveRuntime
 	}
@@ -313,7 +313,7 @@ func (s *ThreadService) SendOnThread(ctx context.Context, ownerID uuid.UUID, cli
 		}
 	}
 
-	receipt, err := s.access.Message(ctx, ownerID, sessionID, clientMessageID, message)
+	receipt, err := s.access.Message(ctx, ownerID, sessionID, clientMessageID, message, command)
 	if err != nil {
 		// Session became unmessageable mid-flight (product terminal state or
 		// bridge rejection wrapped as "message is unavailable"): one automatic
@@ -328,7 +328,7 @@ func (s *ThreadService) SendOnThread(ctx context.Context, ownerID uuid.UUID, cli
 			if _, attachErr := s.AttachUserSession(ctx, ownerID, view.Thread.ID, created.Local.ID, ""); attachErr != nil {
 				return ActiveThreadView{}, nil, attachErr
 			}
-			receipt, err = s.access.Message(ctx, ownerID, created.Local.ID, clientMessageID, message)
+			receipt, err = s.access.Message(ctx, ownerID, created.Local.ID, clientMessageID, message, command)
 			if err != nil {
 				return ActiveThreadView{}, nil, err
 			}

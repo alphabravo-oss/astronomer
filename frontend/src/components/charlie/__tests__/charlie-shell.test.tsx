@@ -4,9 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   abortCharlieSession,
   getCharlieActiveThread,
+  getCharlieCommands,
   getCharlieOverview,
+  getCharlieSession,
   getCharlieHistory,
   getCharlieThreadHistory,
+  listCharlieThreads,
   newCharlieChat,
   sendCharlieThreadMessage,
   subscribeCharlieSessionEvents,
@@ -17,9 +20,12 @@ import { CharlieShell } from "../charlie-shell";
 vi.mock("@/lib/api/charlie", () => ({
   abortCharlieSession: vi.fn(),
   getCharlieActiveThread: vi.fn(),
+  getCharlieCommands: vi.fn(),
   getCharlieOverview: vi.fn(),
+  getCharlieSession: vi.fn(),
   getCharlieHistory: vi.fn(),
   getCharlieThreadHistory: vi.fn(),
+  listCharlieThreads: vi.fn(),
   newCharlieChat: vi.fn(),
   searchCharlieContext: vi.fn().mockResolvedValue([
     {
@@ -85,6 +91,24 @@ describe("Charlie global shell accessibility", () => {
       workloadCeilingReady: true,
     } as never);
     vi.mocked(getCharlieActiveThread).mockResolvedValue({ thread: null } as never);
+    vi.mocked(getCharlieSession).mockResolvedValue({
+      id: "session-1",
+      state: "active",
+    } as never);
+    vi.mocked(getCharlieCommands).mockResolvedValue({
+      schema: "astronomer.charlie-command-catalog/v1",
+      version: 1,
+      commands: [
+        { id: "health", version: "1", name: "health", aliases: ["system-health"], label: "System health", description: "Assess management-plane health.", category: "Assess", execution: "agent", effect: "read", required_mode: "read_only", example: "/health" },
+        { id: "investigate", version: "1", name: "investigate", label: "Investigate", description: "Investigate one subject.", category: "Investigate", execution: "agent", effect: "read", required_mode: "read_only", example: "/investigate queues", argument: { name: "subject", placeholder: "subject", required: true } },
+        { id: "help", version: "1", name: "help", label: "Help", description: "Show commands.", category: "Chat", execution: "client", effect: "local", required_mode: "read_only", example: "/help" },
+        { id: "scope", version: "1", name: "scope", label: "Scope", description: "Choose context.", category: "Chat", execution: "client", effect: "local", required_mode: "read_only", example: "/scope" },
+        { id: "mode", version: "1", name: "mode", label: "Mode", description: "Show current mode.", category: "Chat", execution: "client", effect: "local", required_mode: "read_only", example: "/mode" },
+        { id: "new", version: "1", name: "new", label: "New", description: "Start a new chat.", category: "Chat", execution: "client", effect: "local", required_mode: "read_only", example: "/new" },
+        { id: "stop", version: "1", name: "stop", label: "Stop", description: "Stop current work.", category: "Chat", execution: "client", effect: "local", required_mode: "read_only", example: "/stop" },
+      ],
+    } as never);
+    vi.mocked(listCharlieThreads).mockResolvedValue([]);
     vi.mocked(getCharlieHistory).mockResolvedValue([]);
     vi.mocked(getCharlieThreadHistory).mockResolvedValue([]);
     vi.mocked(subscribeCharlieSessionEvents).mockReturnValue(() => undefined);
@@ -94,6 +118,11 @@ describe("Charlie global shell accessibility", () => {
       messageable: true,
       needs_continue: false,
       session_ids: ["session-1"],
+      receipt: {
+        sessionId: "central-session-1",
+        turnId: "turn-1",
+        acceptedAt: "2026-08-11T23:27:12Z",
+      },
     } as never);
     vi.mocked(newCharlieChat).mockResolvedValue({
       thread: { id: "thread-2", title: "", state: "active" },
@@ -147,6 +176,7 @@ describe("Charlie global shell accessibility", () => {
     act(() => receiveEvent?.(new MessageEvent("tool.running", {
       data: JSON.stringify({
         id: "event-1",
+        turn_id: "turn-1",
         type: "tool.running",
         data: {
           capability: "astronomer.queue.tasks",
@@ -157,11 +187,66 @@ describe("Charlie global shell accessibility", () => {
       lastEventId: "event-1",
     })));
     expect(screen.getByText("Calling astronomer.queue.tasks")).toBeInTheDocument();
-    expect(screen.getByText("1 tool call")).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 tool call finished")).toBeInTheDocument();
     expect(screen.queryByText("SENTINEL")).not.toBeInTheDocument();
   });
 
+  it("opens the progress stream for a session created by the first message", async () => {
+    let receiveEvent: ((event: MessageEvent<string>) => void) | undefined;
+    vi.mocked(subscribeCharlieSessionEvents).mockImplementation((id, onEvent) => {
+      if (id === "session-new") receiveEvent = onEvent;
+      return () => undefined;
+    });
+    vi.mocked(sendCharlieThreadMessage).mockResolvedValue({
+      thread: {
+        id: "thread-new",
+        title: "health",
+        state: "active",
+        current_session_id: "session-new",
+      },
+      current_session: { id: "session-new" },
+      messageable: true,
+      needs_continue: false,
+      session_ids: ["session-new"],
+      receipt: {
+        sessionId: "central-session-new",
+        turnId: "turn-new",
+      },
+    } as never);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    fireEvent.change(await screen.findByLabelText("Message Charlie"), {
+      target: { value: "/health" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect(subscribeCharlieSessionEvents).toHaveBeenCalledWith(
+        "session-new",
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+      ),
+    );
+    act(() => receiveEvent?.(new MessageEvent("turn.started", {
+      data: JSON.stringify({
+        id: "event-new-1",
+        turn_id: "turn-new",
+        type: "turn.started",
+        data: {},
+      }),
+      lastEventId: "event-new-1",
+    })));
+    expect(screen.getByText("Planning the investigation")).toBeInTheDocument();
+    expect(screen.getByText("1 live update")).toBeInTheDocument();
+  });
+
   it("sends via the interactive thread API and keeps session continuity", async () => {
+    let receiveEvent: ((event: MessageEvent<string>) => void) | undefined;
+    vi.mocked(subscribeCharlieSessionEvents).mockImplementation((_id, onEvent) => {
+      receiveEvent = onEvent;
+      return () => undefined;
+    });
     renderShell();
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
     const objective = "what version of k8s are we running";
@@ -174,6 +259,16 @@ describe("Charlie global shell accessibility", () => {
         expect.objectContaining({ trigger: "user_chat" }),
       ),
     );
+    await waitFor(() => expect(receiveEvent).toBeTypeOf("function"));
+    act(() => receiveEvent?.(new MessageEvent("turn.completed", {
+      data: JSON.stringify({
+        id: "event-terminal-1",
+        turn_id: "turn-1",
+        type: "turn.completed",
+        data: {},
+      }),
+      lastEventId: "event-terminal-1",
+    })));
     fireEvent.change(composer, { target: { value: "Now check tunnel health" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
@@ -182,6 +277,44 @@ describe("Charlie global shell accessibility", () => {
         expect.objectContaining({ trigger: "user_chat" }),
       ),
     );
+  });
+
+  it("keeps second-turn progress visible when the prior status cache is terminal", async () => {
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "health then status",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1", state: "active" },
+      messageable: true,
+      needs_continue: false,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(getCharlieSession)
+      .mockResolvedValueOnce({ id: "session-1", state: "completed" } as never)
+      .mockResolvedValue({ id: "session-1", state: "active" } as never);
+    vi.mocked(getCharlieThreadHistory).mockResolvedValue([
+      { id: "u1", role: "user", content: "/health" },
+      { id: "a1", role: "assistant", content: "The first assessment is complete." },
+    ] as never);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByText("The first assessment is complete.")).toBeInTheDocument();
+    await waitFor(() => expect(getCharlieSession).toHaveBeenCalledTimes(1));
+
+    const composer = screen.getByLabelText("Message Charlie");
+    fireEvent.change(composer, { target: { value: "check current status" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendCharlieThreadMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getCharlieSession).toHaveBeenCalledTimes(2));
+
+    expect(
+      screen.getByTestId("charlie-turn-progress"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Working" })).toBeDisabled();
   });
 
   it("restores active-thread history on open instead of starting blank", async () => {
@@ -205,6 +338,56 @@ describe("Charlie global shell accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
     expect(await screen.findByText("Kubernetes v1.36.2+k3s1")).toBeInTheDocument();
     expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1");
+  });
+
+  it("does not abort hidden work and restores its completed answer when reopened", async () => {
+    let completed = false;
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "slow health assessment",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1", state: "active" },
+      messageable: true,
+      needs_continue: false,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(getCharlieSession).mockImplementation(async () => ({
+      id: "session-1",
+      state: completed ? "completed" : "active",
+    }) as never);
+    vi.mocked(getCharlieThreadHistory).mockImplementation(async () => completed
+      ? [
+          { id: "u1", role: "user", content: "run a slow health assessment" },
+          { id: "a1", role: "assistant", content: "The background assessment is complete." },
+        ] as never
+      : [
+          { id: "u1", role: "user", content: "run a slow health assessment" },
+        ] as never);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(
+      await screen.findByRole("status", {
+        name: "Charlie is working: Reconnected to active Charlie work",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog", { name: "Charlie" })).not.toBeInTheDocument();
+    expect(abortCharlieSession).not.toHaveBeenCalled();
+
+    completed = true;
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(
+      await screen.findByText("The background assessment is complete."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument(),
+    );
+    expect(abortCharlieSession).not.toHaveBeenCalled();
   });
 
   it("New chat clears the transcript via the thread API", async () => {
@@ -246,6 +429,7 @@ describe("Charlie global shell accessibility", () => {
     ] as never);
     renderShell();
     fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByText("Hi. How can I help?")).toBeInTheDocument();
     fireEvent.change(await screen.findByLabelText("Message Charlie"), {
       target: { value: "hi" },
     });
@@ -296,6 +480,129 @@ describe("Charlie global shell accessibility", () => {
       messageable: true,
       session_ids: ["session-1"],
     });
+  });
+
+  it("clears working state when persisted assistant history arrives without a terminal event", async () => {
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "health",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1" },
+      messageable: true,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(getCharlieThreadHistory)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { id: "u-new", role: "user", content: "assess health" },
+        { id: "a-new", role: "assistant", content: "Everything is healthy." },
+      ] as never);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    await waitFor(() => expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1"));
+    fireEvent.change(composer, { target: { value: "assess health" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendCharlieThreadMessage).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("Everything is healthy.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument());
+  });
+
+  it("clears working state from remote failure when the terminal stream event is missed", async () => {
+    vi.mocked(getCharlieSession).mockResolvedValue({
+      id: "session-1",
+      state: "failed",
+    } as never);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    fireEvent.change(composer, { target: { value: "assess health" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(getCharlieSession).toHaveBeenCalledWith("session-1"));
+    expect(
+      await screen.findByText(/Charlie could not complete this request/),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("charlie-turn-progress")).not.toBeInTheDocument();
+  });
+
+  it("explains deployment scope and offers browsable narrowing choices", async () => {
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    expect(await screen.findByText("Scope")).toBeInTheDocument();
+    expect(screen.getByText(/retrieves authorized diagnostics through audited read tools/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Narrow scope" }));
+    expect(await screen.findByLabelText("Search components or agent connections")).toBeInTheDocument();
+    expect(screen.getByText("Choose a diagnostic scope")).toBeInTheDocument();
+  });
+
+  it("suggests slash commands and sends an operational command as a structured invocation", async () => {
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    await waitFor(() => expect(getCharlieCommands).toHaveBeenCalled());
+    fireEvent.change(composer, { target: { value: "/hea" } });
+    expect(await screen.findByRole("listbox", { name: "Charlie command suggestions" })).toBeInTheDocument();
+    fireEvent.keyDown(composer, { key: "Tab" });
+    expect(composer).toHaveValue("/health");
+    fireEvent.keyDown(composer, { key: "Enter" });
+    await waitFor(() => expect(sendCharlieThreadMessage).toHaveBeenCalledWith(
+      "/health",
+      expect.objectContaining({
+        trigger: "slash_command:health",
+        command: { id: "health", version: "1", arguments: {} },
+      }),
+    ));
+    expect(
+      await screen.findByLabelText("Recognized Charlie command"),
+    ).toHaveTextContent("Command");
+    expect(screen.getByLabelText("Message from you")).toHaveClass(
+      "border-primary/40",
+    );
+  });
+
+  it("handles help and scope commands locally without creating a model turn", async () => {
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    const composer = await screen.findByLabelText("Message Charlie");
+    await waitFor(() => expect(getCharlieCommands).toHaveBeenCalled());
+    fireEvent.change(composer, { target: { value: "/help" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(await screen.findByRole("region", { name: "Charlie command help" })).toBeInTheDocument();
+    expect(sendCharlieThreadMessage).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close command help" }));
+    fireEvent.change(composer, { target: { value: "/scope" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(await screen.findByText("Choose a diagnostic scope")).toBeInTheDocument();
+    expect(sendCharlieThreadMessage).not.toHaveBeenCalled();
+  });
+
+  it("browses previous conversations read-only without injecting them into current chat", async () => {
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: { id: "thread-current", title: "Current", state: "active", current_session_id: "session-1" },
+      current_session: { id: "session-1" },
+      messageable: true,
+      session_ids: ["session-1"],
+    } as never);
+    vi.mocked(listCharlieThreads).mockResolvedValue([
+      { id: "thread-current", title: "Current", state: "active" },
+      { id: "thread-old", title: "Prior queue incident", state: "archived", updated_at: "2026-08-10T12:00:00Z" },
+    ]);
+    vi.mocked(getCharlieThreadHistory).mockImplementation(async (id) => id === "thread-old"
+      ? [{ id: "old-answer", role: "assistant", content: "The prior queue diagnosis." }] as never
+      : []);
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open Charlie assistant" }));
+    fireEvent.click(await screen.findByRole("button", { name: /History/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Prior queue incident/ }));
+    expect(await screen.findByText("The prior queue diagnosis.")).toBeInTheDocument();
+    expect(screen.getByText(/not added to your current Charlie context/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Message Charlie")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Return to current" }));
+    expect(await screen.findByLabelText("Message Charlie")).toBeInTheDocument();
+    expect(sendCharlieThreadMessage).not.toHaveBeenCalled();
   });
 
   it("keeps abort from wiping the server conversation pointer (does not call new chat)", async () => {

@@ -49,6 +49,26 @@ type BridgeFindingScope struct {
 	FindingID, SessionID, BlockCode, ResourceDigest, RecommendedCapability string
 }
 
+func bridgePlatforms(in []PlatformAssertion) []contract.PlatformAssertion {
+	out := make([]contract.PlatformAssertion, 0, len(in))
+	for _, item := range in {
+		mapped := contract.PlatformAssertion{Pack: item.Pack, PackVersion: item.PackVersion}
+		if item.ObservedVersion != "" {
+			observed := item.ObservedVersion
+			mapped.ObservedVersion = &observed
+		}
+		if item.Variant != "" {
+			variant := item.Variant
+			mapped.Variant = &variant
+		}
+		out = append(out, mapped)
+	}
+	if out == nil {
+		return []contract.PlatformAssertion{}
+	}
+	return out
+}
+
 func NewRuntimeBridge(runtime *contract.Runtime) (*RuntimeBridge, error) {
 	if runtime == nil {
 		return nil, fmt.Errorf("Charlie Product Bridge runtime is unavailable")
@@ -82,7 +102,7 @@ func (b *RuntimeBridge) CreateSession(ctx context.Context, input BridgeSessionRe
 	request := contract.CreateSession{
 		AuthorizationRef: input.AuthorizationRef,
 		Intent:           input.Intent, Objective: input.Objective, ProductVersion: input.ProductVersion,
-		RequestId: key, Resources: resources,
+		RequestId: key, Resources: resources, Platforms: bridgePlatforms(input.Platforms),
 	}
 	request.Actor.Id = input.ActorID
 	request.Actor.Type = contract.CreateSessionActorType(input.ActorType)
@@ -131,7 +151,7 @@ func (b *RuntimeBridge) CreateInvestigation(ctx context.Context, input BridgeInv
 	if input.ResourceID != "local" {
 		resourceIDs = append(resourceIDs, "local")
 	}
-	request := contract.CreateInvestigation{AuthorizationRef: input.AuthorizationRef, RequestId: input.RequestID}
+	request := contract.CreateInvestigation{AuthorizationRef: input.AuthorizationRef, RequestId: input.RequestID, Platforms: bridgePlatforms(input.Platforms)}
 	request.Scope.Attributes = &attributes
 	request.Scope.ResourceIds = &resourceIDs
 	if summary := strings.TrimSpace(attributes["event_capability"]); summary != "" {
@@ -189,12 +209,17 @@ func (b *RuntimeBridge) GetHistory(ctx context.Context, sessionID, authorization
 	return json.Marshal(response)
 }
 
-func (b *RuntimeBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, clientMessageID uuid.UUID, message string) (json.RawMessage, error) {
+func (b *RuntimeBridge) CreateMessage(ctx context.Context, sessionID, authorizationRef string, clientMessageID uuid.UUID, message string, command *ProductCommandInvocation) (json.RawMessage, error) {
 	path, err := sessionPath(sessionID)
 	if err != nil {
 		return nil, err
 	}
 	request := contract.CreateMessage{AuthorizationRef: authorizationRef, RequestId: clientMessageID.String(), Message: message}
+	if command != nil {
+		request.Command = &contract.ProductCommandInvocation{Schema: command.Schema, Id: command.ID, Version: command.Version,
+			Arguments: command.Arguments, ExecutionPrompt: command.ExecutionPrompt,
+			AuthorityCeiling: contract.ProductCommandInvocationAuthorityCeiling(command.AuthorityCeiling)}
+	}
 	var response contract.TurnReceipt
 	if err := b.runtime.DoJSONAuthorized(ctx, http.MethodPost, path+"/messages", clientMessageID.String(), authorizationRef, request, &response); err != nil {
 		return nil, err

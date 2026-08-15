@@ -25,6 +25,7 @@ import {
 import { ConnectionTab } from "@/components/charlie/settings/connection-tab";
 import { AgentTab } from "@/components/charlie/settings/agent-tab";
 import { ModeTab } from "@/components/charlie/settings/mode-tab";
+import { KubernetesTab } from "@/components/charlie/settings/kubernetes-tab";
 import { AlertsTab } from "@/components/charlie/settings/alerts-tab";
 import { AutomationTab } from "@/components/charlie/settings/automation-tab";
 import { AccessTab } from "@/components/charlie/settings/access-tab";
@@ -33,6 +34,7 @@ import { Unavailable } from "@/components/charlie/settings/shared";
 
 export { agentActionsForState, AgentTab } from "@/components/charlie/settings/agent-tab";
 export { charlieModeWorkReady, ModeTab } from "@/components/charlie/settings/mode-tab";
+export { KubernetesTab } from "@/components/charlie/settings/kubernetes-tab";
 export { ConnectionTab } from "@/components/charlie/settings/connection-tab";
 export { AlertsTab } from "@/components/charlie/settings/alerts-tab";
 export { AutomationTab } from "@/components/charlie/settings/automation-tab";
@@ -47,6 +49,7 @@ const tabLabels: Record<CharlieAdminTab, string> = {
   connection: "Connection",
   agent: "Agent",
   mode: "Mode",
+  kubernetes: "Kubernetes",
   alerts: "Alerts",
   automation: "Automation",
   access: "Access",
@@ -162,6 +165,7 @@ export function CharlieAdminContent() {
         {tab === "connection" && <ConnectionTab localOnly={!featureEnabled} />}
         {tab === "agent" && <AgentTab />}
         {tab === "mode" && <ModeTab />}
+        {tab === "kubernetes" && <KubernetesTab />}
         {tab === "alerts" && <AlertsTab />}
         {tab === "automation" && <AutomationTab />}
         {tab === "access" && <AccessTab />}

@@ -42,6 +42,11 @@ type charlieAdminLocalBackend interface {
 	LocalDiagnostics(context.Context, string) (charlie.AdminDiagnosticsView, error)
 }
 
+type charlieKubernetesVisibilityBackend interface {
+	KubernetesVisibility(context.Context) (charlie.AdminKubernetesVisibilityView, error)
+	UpdateKubernetesVisibility(context.Context, charlie.AdminKubernetesVisibilityInput, uuid.UUID) (charlie.AdminKubernetesVisibilityView, error)
+}
+
 type CharlieAdminHandler struct {
 	backend  CharlieAdminBackend
 	audit    any
@@ -255,6 +260,50 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 		action = "admin.charlie.mode.emergency_disable"
 	}
 	recordCharlieAdminAudit(r, h.audit, action, "charlie_connection", "current", fields)
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) KubernetesVisibility(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.actor(w, r); !ok {
+		return
+	}
+	backend, ok := h.backend.(charlieKubernetesVisibilityBackend)
+	if !ok {
+		h.respondError(w, r, charlie.ErrAdminUnavailable)
+		return
+	}
+	view, err := backend.KubernetesVisibility(r.Context())
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, view)
+}
+
+func (h *CharlieAdminHandler) UpdateKubernetesVisibility(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actor(w, r)
+	if !ok {
+		return
+	}
+	backend, ok := h.backend.(charlieKubernetesVisibilityBackend)
+	if !ok {
+		h.respondError(w, r, charlie.ErrAdminUnavailable)
+		return
+	}
+	var request charlie.AdminKubernetesVisibilityInput
+	if !decodeCharlieJSON(w, r, &request) {
+		return
+	}
+	fields := map[string]any{"profile": string(request.Profile), "pod_logs": request.PodLogs, "revision": request.Revision}
+	if !h.requireAuthorityAudit(w, r, "admin.charlie.kubernetes_visibility.update", "charlie_connection", "current", fields) {
+		return
+	}
+	view, err := backend.UpdateKubernetesVisibility(r.Context(), request, mustUserID(actor))
+	if err != nil {
+		h.respondError(w, r, err)
+		return
+	}
+	recordCharlieAdminAudit(r, h.audit, "admin.charlie.kubernetes_visibility.update", "charlie_connection", "current", fields)
 	RespondJSON(w, http.StatusOK, view)
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"k8s.io/apimachinery/pkg/version"
 )
 
 type sessionQueriesFake struct {
@@ -124,6 +125,37 @@ func TestSessionCreateDefaultsEmptyResourcesToInstallationLocal(t *testing.T) {
 	}
 	if len(bridge.request.Context.Resources) != 1 || bridge.request.Context.Resources[0].ID != DefaultInstallationResourceID {
 		t.Fatalf("bridge context missing default resource: %#v", bridge.request.Context.Resources)
+	}
+	if bridge.request.Platforms == nil {
+		t.Fatal("human session omitted platforms instead of sending an explicit empty list")
+	}
+	if len(bridge.request.Platforms) != 0 {
+		t.Fatalf("platforms leaked without inventory: %#v", bridge.request.Platforms)
+	}
+}
+
+func TestSessionPlatformsCannotBecomeResources(t *testing.T) {
+	connection := readySessionConnection()
+	queries := &sessionQueriesFake{connection: connection, lookupErr: pgx.ErrNoRows}
+	bridge := &sessionBridgeFake{receipt: BridgeSessionReceipt{SessionID: "central-session", Revision: 3}}
+	provider := contextProviderFake{value: SREContext{Schema: SREContextSchema, InstallationID: connection.InstallationID.String(), CorrelationRef: "corr"}}
+	service, err := NewSessionService(queries, bridge, provider, &sessionAuthorizerFake{use: true, incident: true}, &authorityAuditFake{}, func() bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetPlatformInventory(&ManagementPlatformInventory{
+		Discovery: versionOnlyDiscovery{info: &version.Info{GitVersion: "v1.36.2+k3s1"}},
+	})
+	if _, err = service.Create(context.Background(), validSessionInput()); err != nil {
+		t.Fatal(err)
+	}
+	if len(bridge.request.Platforms) != 1 || bridge.request.Platforms[0].Pack != "kubernetes" {
+		t.Fatalf("expected kubernetes assertion, got %#v", bridge.request.Platforms)
+	}
+	for _, resource := range bridge.request.Context.Resources {
+		if resource.ID == "kubernetes" || resource.Type == "kubernetes" {
+			t.Fatal("platform assertion became a session resource")
+		}
 	}
 }
 

@@ -19,6 +19,11 @@ service never run in the Astronomer release.
   Configuration with `runtime.enabled=false` renders no workload or listener.
   The agent has no Kubernetes service-account token or RBAC. Either product or
   Charlie deployment disablement wins immediately.
+- For an installed non-emergency connection, operational `disabled` mode keeps
+  one private mTLS Product MCP configuration surface for initialization and
+  `tools/list` so an administrator can review a changed connector catalog.
+  `tools/call`, events, triggers, receipts, and writes remain stopped. Emergency
+  disable and feature/connection disable remove this listener too.
 - Effective authority is the least privilege of current product feature state,
   connection state, emergency latch, Charlie-verified mode, current Astronomer
   RBAC, affected-resource scope, disclosure digest, action classification,
@@ -31,6 +36,10 @@ service never run in the Astronomer release.
 - Charlie never opens an Astronomer downstream-cluster tunnel. Downstream-agent
   connection metadata is Astronomer management-plane state and is readable;
   downstream Kubernetes objects and all downstream mutations are prohibited.
+- Optional management-cluster Kubernetes diagnostics are configured separately
+  under **Settings → Charlie → Kubernetes** and execute only inside Astronomer's
+  existing Product MCP adapter. The generic product agent still has no service
+  account. See [Charlie Kubernetes visibility](charlie-kubernetes-visibility.md).
 
 Emergency response always starts with **Settings → Charlie → Mode → Emergency
 Disable**. The local latch commits first, stops new sessions/triggers/MCP calls,
@@ -59,6 +68,32 @@ Audit records are required before a write can dispatch. They record proposed,
 denied, approved/committed, dispatched, verified, succeeded, failed, ambiguous,
 and replayed lifecycle metadata without arguments or content. If the durable
 audit or receipt cannot be committed, the action fails closed.
+
+## Chat commands and conversation history
+
+The drawer loads the authenticated `astronomer.charlie-command-catalog/v1`
+catalog from `/api/v1/charlie/commands/`. Type `/` for autocomplete. V1 includes
+repeatable read workflows for health, status, issues, queues, the downstream
+agent connection fleet, backups, alerts, recent changes, Charlie findings,
+pending approvals, and a bounded `/investigate <subject>` workflow. `/help`,
+`/scope`, `/mode`, `/new`, and `/stop` are local controls and do not consume a
+model turn.
+
+Astronomer reparses each visible slash command and verifies the structured ID,
+workflow version, and arguments before it reaches the Product Bridge. Commands
+grant no authority: the effective mode, current user/resource permissions,
+disclosed capability catalog, approval/automation policy, action ticket,
+budgets, cooldowns, and verification requirements remain unchanged. Lifecycle
+audit records include only command ID and version, never its arguments or
+expanded workflow.
+
+The History button lists the current user's active and archived interactive
+threads. Opening an archive loads its retention-bounded Charlie transcript in a
+read-only view. It does not attach the archive to the active thread or add its
+content to a new model request. The user must explicitly return to the current
+conversation; **New chat** archives the current thread and creates a clean one.
+This separation keeps prior incident evidence referenceable without causing
+stale context or permissions to bleed into new work.
 
 ## Management-plane diagnostic coverage
 
@@ -137,14 +172,22 @@ task payload or become auto-eligible.
 
 ### Disclosure digest changed
 
-1. Leave the effective mode at `read_only` or `disabled`; changed disclosure
-   invalidates prior automation acknowledgement.
-2. Review the exact added, removed, and changed capability schemas, effects,
-   target bounds, preconditions, verification, and auto eligibility.
-3. Confirm no shell, exec, arbitrary HTTP/SQL/Kubernetes operation, Secret read,
-   downstream operation, destructive action, or open-ended selector appears.
-4. Acknowledge the new digest explicitly. Rebuild automation allowlists rather
-   than carrying unknown entries forward.
+1. Leave the effective mode at `disabled`; a connector scope change closes the
+   write fence, clears prior acknowledgements, and triggers signed catalog
+   rediscovery through the local Product Bridge.
+2. Confirm the Kubernetes tab distinguishes rediscovery, Charlie central review,
+   and Astronomer acknowledgement instead of treating them as one state.
+3. Leave the new, safer product profile in force if rediscovery is unavailable;
+   save the unchanged profile to retry after bridge health is restored.
+4. Review the exact added, removed, and changed capability schemas, effects,
+   connector provenance, target bounds, preconditions, verification, and auto
+   eligibility in Charlie.
+5. Confirm no shell, exec, attach, port-forward, arbitrary HTTP/SQL/Kubernetes
+   proxy, Secret read, downstream operation, destructive action, or open-ended
+   selector appears.
+6. Acknowledge the candidate in Charlie, wait for Astronomer to import the exact
+   active digest, then acknowledge the same digest in Astronomer. Rebuild
+   automation allowlists rather than carrying unknown entries forward.
 
 ### Requested and verified mode drift
 

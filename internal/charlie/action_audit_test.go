@@ -2,6 +2,7 @@ package charlie
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -13,6 +14,37 @@ type actionAuditQueriesFake struct{ rows []sqlc.CreateAuditLogV1Params }
 func (f *actionAuditQueriesFake) CreateAuditLogV1(_ context.Context, row sqlc.CreateAuditLogV1Params) error {
 	f.rows = append(f.rows, row)
 	return nil
+}
+
+func TestDBActionAuditorPersistsPreDispatchDenialWithoutDescriptorEffect(t *testing.T) {
+	queries := &actionAuditQueriesFake{}
+	auditor, err := NewDBActionAuditor(queries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope := ActionEnvelope{
+		ActionID: "action-a", AuthorizationRef: "authorization-a",
+		Capability: "astronomer.management.kubernetes.workloads", ArgumentDigest: "arguments-a",
+		ModeRevision: 2, PolicyRevision: 3, FencingEpoch: 4,
+	}
+	result := ActionResult{State: "denied", Code: DeniedScope}
+	if err := auditor.Record(context.Background(), "denied", envelope, CapabilityDescriptor{}, result); err != nil {
+		t.Fatal(err)
+	}
+	if len(queries.rows) != 1 {
+		t.Fatalf("audit rows=%d", len(queries.rows))
+	}
+	row := queries.rows[0]
+	var detail map[string]any
+	if err := json.Unmarshal(row.Detail, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := detail["effect"]; ok {
+		t.Fatalf("pre-dispatch denial invented an effect: %s", row.Detail)
+	}
+	if detail["denial_code"] != string(DeniedScope) || row.StatusCode != 403 || row.ActionClass != "mutation" {
+		t.Fatalf("pre-dispatch denial audit is incomplete: row=%+v detail=%s", row, row.Detail)
+	}
 }
 
 func TestDBActionAuditorPersistsContentFreeDigests(t *testing.T) {

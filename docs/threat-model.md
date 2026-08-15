@@ -107,6 +107,12 @@ Controls:
 - The sole runtime path is a fixed cluster-local mTLS Product Bridge with exact
   DNS/SPIFFE identities. Browser clients never receive bridge, central, MCP, or
   enrollment credentials; server/worker direct central egress is prohibited.
+- An installed, non-emergency connection may retain a private configuration-only
+  Product MCP listener while operational mode is disabled so signed catalog
+  rediscovery cannot deadlock. That surface accepts only MCP initialization and
+  `tools/list`; `tools/call`, event/trigger consumers, receipt processing, and
+  write admission still require live authority. Feature disable, disconnect,
+  installation incompleteness, and emergency stop remove the listener.
 - The generic agent has `automountServiceAccountToken: false`, no Role/Binding,
   no Astronomer API credential, and exact NetworkPolicy paths only.
 - MCP discovery is the complete allowlist. Schemas reject unknown/unbounded
@@ -129,6 +135,13 @@ Controls:
 - Charlie may read Astronomer-owned downstream-agent connection telemetry but
   no capability proxies through an agent tunnel or queries downstream
   Kubernetes. Instrumented tunnel-spy tests enforce the boundary.
+- Optional management-cluster Kubernetes visibility is owned and executed by
+  the Product MCP, not the product agent. Profile and content-scope changes
+  lower verified authority to disabled, change the disclosure digest, and
+  require signed installation-bound rediscovery plus independent Charlie and
+  Astronomer acknowledgement. Secret values, downstream targets, exec, attach,
+  port-forward, generic API proxying, and unrestricted selectors remain hard
+  prohibitions.
 
 Review checks:
 

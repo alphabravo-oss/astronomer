@@ -232,7 +232,7 @@ type threadMessengerFake struct {
 	err            error
 }
 
-func (f *threadMessengerFake) Message(_ context.Context, _, sessionID, _ uuid.UUID, message string) (json.RawMessage, error) {
+func (f *threadMessengerFake) Message(_ context.Context, _, sessionID, _ uuid.UUID, message string, _ *ProductCommandInvocation) (json.RawMessage, error) {
 	if f.messageErrOnce != nil {
 		err := f.messageErrOnce
 		f.messageErrOnce = nil
@@ -350,7 +350,7 @@ func TestThreadServiceNewChatArchivesPreviousActive(t *testing.T) {
 func TestThreadServiceSendCreatesSessionAndContinueWhenNotMessageable(t *testing.T) {
 	svc, queries, sessions, messenger, owner := newThreadServiceFixture(t)
 	// First send creates session under thread.
-	view, receipt, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "what version of k8s", CreateSessionInput{
+	view, receipt, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "what version of k8s", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "what version of k8s",
 	})
 	if err != nil {
@@ -369,7 +369,7 @@ func TestThreadServiceSendCreatesSessionAndContinueWhenNotMessageable(t *testing
 	sess := *view.CurrentSession
 	sess.State = "aborted"
 	queries.sessions[sess.ID] = sess
-	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "follow up", CreateSessionInput{
+	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "follow up", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "follow up",
 	})
 	if err != nil {
@@ -410,7 +410,7 @@ func TestThreadServiceGetActiveNotFound(t *testing.T) {
 
 func TestThreadServiceContinuePreservesTitle(t *testing.T) {
 	svc, queries, sessions, _, owner := newThreadServiceFixture(t)
-	view, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "what version of k8s", CreateSessionInput{
+	view, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "what version of k8s", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "what version of k8s",
 	})
 	if err != nil {
@@ -424,7 +424,7 @@ func TestThreadServiceContinuePreservesTitle(t *testing.T) {
 	sess := *view.CurrentSession
 	sess.State = "aborted"
 	queries.sessions[sess.ID] = sess
-	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "follow up", CreateSessionInput{
+	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "follow up", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "follow up",
 	})
 	if err != nil {
@@ -444,7 +444,7 @@ func TestThreadServiceContinuePreservesTitle(t *testing.T) {
 
 func TestThreadServiceStitchedHistoryAcrossAbortedAndActive(t *testing.T) {
 	svc, queries, _, messenger, owner := newThreadServiceFixture(t)
-	view, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "first", CreateSessionInput{
+	view, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "first", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "first",
 	})
 	if err != nil {
@@ -455,7 +455,7 @@ func TestThreadServiceStitchedHistoryAcrossAbortedAndActive(t *testing.T) {
 	aborted := *view.CurrentSession
 	aborted.State = "aborted"
 	queries.sessions[abortedID] = aborted
-	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "second", CreateSessionInput{
+	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "second", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "second",
 	})
 	if err != nil {
@@ -503,7 +503,7 @@ func TestThreadServiceStitchedHistoryAcrossAbortedAndActive(t *testing.T) {
 
 func TestThreadServiceMidFlightBridgeFailureContinues(t *testing.T) {
 	svc, _, sessions, messenger, owner := newThreadServiceFixture(t)
-	view, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "open", CreateSessionInput{
+	view, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "open", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "open",
 	})
 	if err != nil {
@@ -514,7 +514,7 @@ func TestThreadServiceMidFlightBridgeFailureContinues(t *testing.T) {
 	}
 	// Product still thinks messageable, but bridge rejects (desync / central closed).
 	messenger.messageErrOnce = fmt.Errorf("Charlie message is unavailable")
-	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "retry", CreateSessionInput{
+	view2, _, err := svc.SendOnThread(context.Background(), owner, uuid.New(), "retry", nil, CreateSessionInput{
 		ActorType: "user", ActorLabel: "admin", Intent: "retry",
 	})
 	if err != nil {

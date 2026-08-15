@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -19,8 +20,9 @@ func StartMetricsServer(ctx context.Context, addr string, log *slog.Logger) erro
 	}
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: appmiddleware.MetricsHandler(),
+		Addr:              addr,
+		Handler:           appmiddleware.MetricsHandler(),
+		ReadHeaderTimeout: 15 * time.Second,
 	}
 
 	go func() {

@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,6 +164,57 @@ func TestModeCeilingRolloutFailsClosedOnPartialOrMismatchedReplicas(t *testing.T
 				t.Fatal("incomplete all-replica readback was accepted")
 			}
 		})
+	}
+}
+
+func TestModeCeilingRolloutReleasesFenceWhenLifecycleSupersedesApplication(t *testing.T) {
+	installer, kube, _, _ := testAgentInstaller(t)
+	installer.pollInterval = time.Millisecond
+	spec := testAgentInstallSpec(t)
+	receipt, err := installer.Install(t.Context(), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applicationResource := installer.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace("astronomer")
+	application, err := applicationResource.Get(t.Context(), receipt.Names.Application, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = unstructured.SetNestedField(application.Object, "Synced", "status", "sync", "status")
+	_ = unstructured.SetNestedField(application.Object, "Healthy", "status", "health", "status")
+	if _, err = applicationResource.Update(t.Context(), application, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	createReadyModeCeilingWorkload(t, kube, ModeDisabled, true)
+
+	done := make(chan error, 1)
+	go func() { done <- installer.ReconcileModeCeiling(t.Context(), spec, ModeReadOnly) }()
+	for attempt := 0; attempt < 100; attempt++ {
+		application, err = applicationResource.Get(t.Context(), receipt.Names.Application, metav1.GetOptions{})
+		if err == nil && application.GetAnnotations()["astronomer.io/charlie-mode-ceiling"] == string(ModeReadOnly) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if application.GetAnnotations()["astronomer.io/charlie-mode-ceiling"] != string(ModeReadOnly) {
+		t.Fatal("mode-ceiling rollout never entered its wait phase")
+	}
+	annotations := application.GetAnnotations()
+	annotations["astronomer.io/charlie-mode-ceiling"] = string(ModeDisabled)
+	application.SetAnnotations(annotations)
+	if err = unstructured.SetNestedField(application.Object, "sha256:"+strings.Repeat("f", 64), "spec", "source", "targetRevision"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = applicationResource.Update(t.Context(), application, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err = <-done:
+		if err == nil || !strings.Contains(err.Error(), "superseded") {
+			t.Fatalf("superseded lifecycle error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("superseded lifecycle left the mode-ceiling rollout waiting")
 	}
 }
 

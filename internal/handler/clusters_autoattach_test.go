@@ -533,9 +533,7 @@ func TestPlatformDefaultTemplate_ClusterCreateAutoAttachWritesTaskOutbox(t *test
 	if arg.TaskType != tasks.ClusterTemplateApplyType {
 		t.Fatalf("TaskType = %q, want %q", arg.TaskType, tasks.ClusterTemplateApplyType)
 	}
-	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_template_apply:"+clusterID.String() {
-		t.Fatalf("DedupeKey = %+v", arg.DedupeKey)
-	}
+	assertClusterTemplateApplyDedupeKey(t, arg.DedupeKey, clusterID)
 	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
 		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
 	}

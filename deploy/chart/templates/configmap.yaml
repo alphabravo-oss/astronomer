@@ -15,6 +15,10 @@ metadata:
   labels:
     {{- include "astronomer.labels" . | nindent 4 }}
 data:
+  # Authoritative Helm release identity for management-plane diagnostics and
+  # Charlie's product context. These are chart metadata, not operator input.
+  RELEASE_NAME: {{ .Release.Name | quote }}
+  CHART_VERSION: {{ .Chart.Version | quote }}
   DATABASE_URL: {{ include "astronomer.databaseURL" . | quote }}
   REDIS_URL: {{ include "astronomer.redisURL" . | quote }}
   ENV: {{ .Values.config.env | quote }}

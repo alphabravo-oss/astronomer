@@ -68,6 +68,12 @@ migrate:
   # The server pod runs migrations via initContainer, so the standalone Job is redundant.
   enabled: false
 
+# The fresh-cluster acceptance path exercises the browser kubectl shell and its
+# pinned first-party image. Production keeps this privileged feature opt-in;
+# the disposable k3d profile enables it deliberately.
+kubectlShell:
+  enabled: true
+
 postgres:
   bundled:
     enabled: true

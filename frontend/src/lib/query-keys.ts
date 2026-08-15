@@ -14,6 +14,8 @@ export const queryKeys = {
     sessions: ['charlie', 'sessions'] as const,
     overview: ['charlie', 'overview'] as const,
     activeThread: ['charlie', 'threads', 'active'] as const,
+    sessionStatus: (id?: string | null) => ['charlie', 'session', 'status', id] as const,
+    commands: ['charlie', 'commands'] as const,
     threads: ['charlie', 'threads'] as const,
     threadHistory: (id?: string | null) => ['charlie', 'threads', 'history', id] as const,
     history: (id?: string | null) => ['charlie', 'history', id] as const,
@@ -24,6 +26,7 @@ export const queryKeys = {
     adminConnection: ['charlie', 'admin', 'connection'] as const,
     adminAgent: ['charlie', 'admin', 'agent'] as const,
     adminMode: ['charlie', 'admin', 'mode'] as const,
+    adminKubernetesVisibility: ['charlie', 'admin', 'kubernetes-visibility'] as const,
     adminAlertPolicy: ['charlie', 'admin', 'alert-policy'] as const,
     adminAutomation: ['charlie', 'admin', 'automation'] as const,
     adminTriggerEvents: (state: string = 'dead') =>

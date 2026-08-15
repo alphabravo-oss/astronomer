@@ -23,7 +23,7 @@ func testMCPHandler(t *testing.T, facts AuthorityInput) (*MCPHandler, *fakeCapab
 	receipts := &fakeReceipts{}
 	executor := &fakeCapabilityExecutor{verified: true}
 	guard, privateKey := newTestActionGuard(t, authority, receipts, executor)
-	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, testMCPClientURI)
+	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, func(context.Context) bool { return true }, testMCPClientURI)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,6 +46,7 @@ func authenticatedMCPRequest(t *testing.T, body string) *http.Request {
 func TestMCPInactiveRejectsInitializeDiscoveryAndCalls(t *testing.T) {
 	facts := allowedWriteFacts(ModeAuto)
 	handler, executor, _ := testMCPHandler(t, facts)
+	handler.discoverable = func(context.Context) bool { return false }
 	handler.active = func(context.Context) bool { return false }
 	for _, method := range []string{"initialize", "notifications/initialized", "tools/list", "tools/call"} {
 		t.Run(method, func(t *testing.T) {
@@ -60,6 +61,33 @@ func TestMCPInactiveRejectsInitializeDiscoveryAndCalls(t *testing.T) {
 				t.Fatalf("inactive MCP operation escaped: method=%s status=%d calls=%d body=%s", method, recorder.Code, executor.calls, recorder.Body.String())
 			}
 		})
+	}
+}
+
+func TestMCPConfigurationOnlyAllowsDiscoveryAndRejectsCalls(t *testing.T) {
+	facts := allowedWriteFacts(ModeAuto)
+	handler, executor, _ := testMCPHandler(t, facts)
+	handler.discoverable = func(context.Context) bool { return true }
+	handler.active = func(context.Context) bool { return false }
+
+	for _, requestBody := range []string{
+		`{"jsonrpc":"2.0","id":"initialize","method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`,
+		`{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}`,
+	} {
+		request := authenticatedMCPRequest(t, requestBody)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK && recorder.Code != http.StatusAccepted {
+			t.Fatalf("configuration discovery failed closed unexpectedly: status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	}
+
+	request := authenticatedMCPRequest(t, `{"jsonrpc":"2.0","id":"call","method":"tools/call","params":{}}`)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable || executor.calls != 0 || !strings.Contains(recorder.Body.String(), "integration_inactive") {
+		t.Fatalf("configuration-only MCP admitted work: status=%d calls=%d body=%s", recorder.Code, executor.calls, recorder.Body.String())
 	}
 }
 
@@ -250,7 +278,7 @@ func TestMCPToolsCallContentIncludesSucceededPayload(t *testing.T) {
 	authority := &fakeLiveAuthority{facts: []AuthorityInput{facts, facts}}
 	executor := &fakeCapabilityExecutor{result: payload, verified: true}
 	guard, privateKey := newTestActionGuard(t, authority, &fakeReceipts{}, executor)
-	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, testMCPClientURI)
+	handler, err := NewMCPHandler(guard, func(context.Context) bool { return true }, func(context.Context) bool { return true }, testMCPClientURI)
 	if err != nil {
 		t.Fatal(err)
 	}

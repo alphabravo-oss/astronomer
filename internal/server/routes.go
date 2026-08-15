@@ -362,14 +362,53 @@ type RouterDependencies struct {
 	SCIMTokenAdmin *handler.SCIMTokenAdminHandler
 }
 
+const charlieAdminReconciliationTimeout = 7 * time.Minute
+
+func longRunningCharlieAdminMutation(method, path string) bool {
+	path = strings.TrimSuffix(path, "/")
+	if method == http.MethodPut && path == "/api/v1/admin/charlie/kubernetes-visibility" {
+		return true
+	}
+	if method != http.MethodPost && method != http.MethodPatch {
+		return false
+	}
+	switch path {
+	case "/api/v1/admin/charlie/onboarding/consume",
+		"/api/v1/admin/charlie/disconnect",
+		"/api/v1/admin/charlie/agent/install",
+		"/api/v1/admin/charlie/agent/upgrade",
+		"/api/v1/admin/charlie/agent/rollback",
+		"/api/v1/admin/charlie/agent/rotate",
+		"/api/v1/admin/charlie/agent/uninstall",
+		"/api/v1/admin/charlie/mode":
+		return true
+	default:
+		return false
+	}
+}
+
 func apiRequestTimeout(duration time.Duration) func(http.Handler) http.Handler {
 	bounded := chimiddleware.Timeout(duration)
+	reconciliation := chimiddleware.Timeout(charlieAdminReconciliationTimeout)
 	return func(next http.Handler) http.Handler {
 		timed := bounded(next)
+		longTimed := reconciliation(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			path := strings.TrimSuffix(r.URL.Path, "/")
 			if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/v1/charlie/sessions/") && strings.HasSuffix(path, "/events") {
 				next.ServeHTTP(w, r)
+				return
+			}
+			// Charlie installation, replacement, Kubernetes visibility, and mode
+			// transitions synchronously verify an Argo reconciliation and a
+			// two-replica StatefulSet rollout. The ordinary REST deadline can
+			// expire after Kubernetes accepted the least-authority ceiling but
+			// before the audited database transition commits. Keep these exact
+			// administrator mutations bounded, but give the configured five-minute
+			// rollout enough time plus a final bridge readback. Every operation is
+			// revision-checked and idempotent, so a disconnected client can retry.
+			if longRunningCharlieAdminMutation(r.Method, path) {
+				longTimed.ServeHTTP(w, r)
 				return
 			}
 			timed.ServeHTTP(w, r)

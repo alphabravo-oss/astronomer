@@ -80,6 +80,14 @@
     "pattern": "/api/v1/admin/charlie/disconnect"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/admin/charlie/kubernetes-visibility"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/charlie/kubernetes-visibility"
+  },
+  {
     "method": "PATCH",
     "pattern": "/api/v1/admin/charlie/mode"
   },
@@ -1013,6 +1021,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/charlie/commands"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/charlie/context/search"
   },
   {
@@ -1074,6 +1086,26 @@
   {
     "method": "POST",
     "pattern": "/api/v1/charlie/sessions/{session_id}/messages"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/threads"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/threads/active"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/threads/messages"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/charlie/threads/new"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/charlie/threads/{thread_id}/history"
   },
   {
     "method": "GET",

@@ -179,6 +179,29 @@ const (
 	CharlieAdminAlertChannelTypeWebhook   CharlieAdminAlertChannelType = "webhook"
 )
 
+// Defines values for CharlieAdminAlertDeliveryProofDeliveryKind.
+const (
+	CharlieAdminAlertDeliveryProofDeliveryKindEscalation CharlieAdminAlertDeliveryProofDeliveryKind = "escalation"
+	CharlieAdminAlertDeliveryProofDeliveryKindInitial    CharlieAdminAlertDeliveryProofDeliveryKind = "initial"
+)
+
+// Defines values for CharlieAdminAlertDeliveryProofStatus.
+const (
+	CharlieAdminAlertDeliveryProofStatusDead       CharlieAdminAlertDeliveryProofStatus = "dead"
+	CharlieAdminAlertDeliveryProofStatusDelivered  CharlieAdminAlertDeliveryProofStatus = "delivered"
+	CharlieAdminAlertDeliveryProofStatusDelivering CharlieAdminAlertDeliveryProofStatus = "delivering"
+	CharlieAdminAlertDeliveryProofStatusQueued     CharlieAdminAlertDeliveryProofStatus = "queued"
+	CharlieAdminAlertDeliveryProofStatusRetry      CharlieAdminAlertDeliveryProofStatus = "retry"
+	CharlieAdminAlertDeliveryProofStatusSuppressed CharlieAdminAlertDeliveryProofStatus = "suppressed"
+)
+
+// Defines values for CharlieAdminAlertDeliveryProofTemplateIdentity.
+const (
+	CharlieAdminAlertDeliveryProofTemplateIdentityCharlieFindingEscalationv1 CharlieAdminAlertDeliveryProofTemplateIdentity = "charlie.finding.escalation/v1"
+	CharlieAdminAlertDeliveryProofTemplateIdentityCharlieFindingInitialv1    CharlieAdminAlertDeliveryProofTemplateIdentity = "charlie.finding.initial/v1"
+	CharlieAdminAlertDeliveryProofTemplateIdentityUnrecognized               CharlieAdminAlertDeliveryProofTemplateIdentity = "unrecognized"
+)
+
 // Defines values for CharlieAdminAlertPolicyMinimumSeverity.
 const (
 	CharlieAdminAlertPolicyMinimumSeverityCritical CharlieAdminAlertPolicyMinimumSeverity = "critical"
@@ -219,6 +242,12 @@ const (
 	CharlieAdminDiagnosticsOverallUnknown     CharlieAdminDiagnosticsOverall = "unknown"
 )
 
+// Defines values for CharlieAdminDiscoveryQualificationScenario.
+const (
+	CharlieAdminDiscoveryQualificationScenarioMalformedCatalog CharlieAdminDiscoveryQualificationScenario = "malformed_catalog"
+	CharlieAdminDiscoveryQualificationScenarioMixedCatalog     CharlieAdminDiscoveryQualificationScenario = "mixed_catalog"
+)
+
 // Defines values for CharlieAdminModeAuthoritative.
 const (
 	CharlieAdminModeAuthoritativeApproval CharlieAdminModeAuthoritative = "approval"
@@ -235,6 +264,14 @@ const (
 	CharlieAdminModeRequestedReadOnly CharlieAdminModeRequested = "read_only"
 )
 
+// Defines values for CharlieAdminModeWorkloadCeiling.
+const (
+	CharlieAdminModeWorkloadCeilingApproval CharlieAdminModeWorkloadCeiling = "approval"
+	CharlieAdminModeWorkloadCeilingAuto     CharlieAdminModeWorkloadCeiling = "auto"
+	CharlieAdminModeWorkloadCeilingDisabled CharlieAdminModeWorkloadCeiling = "disabled"
+	CharlieAdminModeWorkloadCeilingReadOnly CharlieAdminModeWorkloadCeiling = "read_only"
+)
+
 // Defines values for CharlieAdminTriggerEventState.
 const (
 	CharlieAdminTriggerEventStateCompleted   CharlieAdminTriggerEventState = "completed"
@@ -244,6 +281,13 @@ const (
 	CharlieAdminTriggerEventStatePending     CharlieAdminTriggerEventState = "pending"
 	CharlieAdminTriggerEventStateRetry       CharlieAdminTriggerEventState = "retry"
 	CharlieAdminTriggerEventStateSuppressed  CharlieAdminTriggerEventState = "suppressed"
+)
+
+// Defines values for CharlieAdminTriggerRuleModeCeiling.
+const (
+	CharlieAdminTriggerRuleModeCeilingApproval CharlieAdminTriggerRuleModeCeiling = "approval"
+	CharlieAdminTriggerRuleModeCeilingAuto     CharlieAdminTriggerRuleModeCeiling = "auto"
+	CharlieAdminTriggerRuleModeCeilingReadOnly CharlieAdminTriggerRuleModeCeiling = "read_only"
 )
 
 // Defines values for CharlieAdminTriggerRuleSeverities.
@@ -260,6 +304,11 @@ const (
 	CharlieApprovalDecisionRequestDecisionApprove CharlieApprovalDecisionRequestDecision = "approve"
 	CharlieApprovalDecisionRequestDecisionDeny    CharlieApprovalDecisionRequestDecision = "deny"
 	CharlieApprovalDecisionRequestDecisionReject  CharlieApprovalDecisionRequestDecision = "reject"
+)
+
+// Defines values for CharlieApprovalSummaryEffect.
+const (
+	CharlieApprovalSummaryEffectWrite CharlieApprovalSummaryEffect = "write"
 )
 
 // Defines values for CharlieApprovalSummaryState.
@@ -280,6 +329,12 @@ const (
 	CharlieContextSearchResultTypeManagementComponent       CharlieContextSearchResultType = "management_component"
 	CharlieContextSearchResultTypeSelfManagementApplication CharlieContextSearchResultType = "self_management_application"
 	CharlieContextSearchResultTypeTunnel                    CharlieContextSearchResultType = "tunnel"
+)
+
+// Defines values for CharlieDiscoveryQualificationRequestScenario.
+const (
+	CharlieDiscoveryQualificationRequestScenarioMalformedCatalog CharlieDiscoveryQualificationRequestScenario = "malformed_catalog"
+	CharlieDiscoveryQualificationRequestScenarioMixedCatalog     CharlieDiscoveryQualificationRequestScenario = "mixed_catalog"
 )
 
 // Defines values for CharlieFindingDetailAvailableDecisions.
@@ -375,6 +430,74 @@ const (
 	CharlieFindingSummaryWorkflowStateRemediationInProgress     CharlieFindingSummaryWorkflowState = "remediation_in_progress"
 	CharlieFindingSummaryWorkflowStateResolved                  CharlieFindingSummaryWorkflowState = "resolved"
 	CharlieFindingSummaryWorkflowStateVerificationPending       CharlieFindingSummaryWorkflowState = "verification_pending"
+)
+
+// Defines values for CharlieKubernetesVisibilityApiProxy.
+const (
+	CharlieKubernetesVisibilityApiProxyFalse CharlieKubernetesVisibilityApiProxy = false
+)
+
+// Defines values for CharlieKubernetesVisibilityAttach.
+const (
+	CharlieKubernetesVisibilityAttachFalse CharlieKubernetesVisibilityAttach = false
+)
+
+// Defines values for CharlieKubernetesVisibilityAvailableProfiles.
+const (
+	CharlieKubernetesVisibilityAvailableProfilesClusterDiagnostics CharlieKubernetesVisibilityAvailableProfiles = "cluster_diagnostics"
+	CharlieKubernetesVisibilityAvailableProfilesDisabled           CharlieKubernetesVisibilityAvailableProfiles = "disabled"
+	CharlieKubernetesVisibilityAvailableProfilesProductNamespace   CharlieKubernetesVisibilityAvailableProfiles = "product_namespace"
+)
+
+// Defines values for CharlieKubernetesVisibilityDownstreamTargets.
+const (
+	CharlieKubernetesVisibilityDownstreamTargetsFalse CharlieKubernetesVisibilityDownstreamTargets = false
+)
+
+// Defines values for CharlieKubernetesVisibilityExec.
+const (
+	CharlieKubernetesVisibilityExecFalse CharlieKubernetesVisibilityExec = false
+)
+
+// Defines values for CharlieKubernetesVisibilityPortForward.
+const (
+	CharlieKubernetesVisibilityPortForwardFalse CharlieKubernetesVisibilityPortForward = false
+)
+
+// Defines values for CharlieKubernetesVisibilityProductOwnedOnly.
+const (
+	CharlieKubernetesVisibilityProductOwnedOnlyTrue CharlieKubernetesVisibilityProductOwnedOnly = true
+)
+
+// Defines values for CharlieKubernetesVisibilityProfile.
+const (
+	CharlieKubernetesVisibilityProfileClusterDiagnostics CharlieKubernetesVisibilityProfile = "cluster_diagnostics"
+	CharlieKubernetesVisibilityProfileDisabled           CharlieKubernetesVisibilityProfile = "disabled"
+	CharlieKubernetesVisibilityProfileProductNamespace   CharlieKubernetesVisibilityProfile = "product_namespace"
+)
+
+// Defines values for CharlieKubernetesVisibilitySchema.
+const (
+	CharlieKubernetesVisibilitySchemaCharlieKubernetesVisibilityv1 CharlieKubernetesVisibilitySchema = "charlie.kubernetes-visibility/v1"
+)
+
+// Defines values for CharlieKubernetesVisibilitySecretValues.
+const (
+	CharlieKubernetesVisibilitySecretValuesFalse CharlieKubernetesVisibilitySecretValues = false
+)
+
+// Defines values for CharlieKubernetesVisibilityState.
+const (
+	CharlieKubernetesVisibilityStateDisabled      CharlieKubernetesVisibilityState = "disabled"
+	CharlieKubernetesVisibilityStateEnabled       CharlieKubernetesVisibilityState = "enabled"
+	CharlieKubernetesVisibilityStateNotConfigured CharlieKubernetesVisibilityState = "not_configured"
+)
+
+// Defines values for CharlieKubernetesVisibilityRequestProfile.
+const (
+	CharlieKubernetesVisibilityRequestProfileClusterDiagnostics CharlieKubernetesVisibilityRequestProfile = "cluster_diagnostics"
+	CharlieKubernetesVisibilityRequestProfileDisabled           CharlieKubernetesVisibilityRequestProfile = "disabled"
+	CharlieKubernetesVisibilityRequestProfileProductNamespace   CharlieKubernetesVisibilityRequestProfile = "product_namespace"
 )
 
 // Defines values for CharlieModeRequestMode.
@@ -1447,6 +1570,43 @@ type CharlieAdminAlertChannel struct {
 // CharlieAdminAlertChannelType defines model for CharlieAdminAlertChannel.Type.
 type CharlieAdminAlertChannelType string
 
+// CharlieAdminAlertDeliveryProof Metadata-only proof. Notification subject, body, destination, channel identity, dedupe bucket, and provider errors are never returned.
+type CharlieAdminAlertDeliveryProof struct {
+	AttemptCount int32 `json:"attempt_count"`
+
+	// ContentFree True only when the persisted subject/body exactly match Astronomer's fixed content-free template and finding-bound deep link.
+	ContentFree      bool                                           `json:"content_free"`
+	CreatedAt        time.Time                                      `json:"created_at"`
+	DeepLinkValid    bool                                           `json:"deep_link_valid"`
+	DeliveredAt      *time.Time                                     `json:"delivered_at,omitempty"`
+	DeliveryId       openapi_types.UUID                             `json:"delivery_id"`
+	DeliveryKind     CharlieAdminAlertDeliveryProofDeliveryKind     `json:"delivery_kind"`
+	FindingId        openapi_types.UUID                             `json:"finding_id"`
+	MaximumAttempts  int32                                          `json:"maximum_attempts"`
+	Status           CharlieAdminAlertDeliveryProofStatus           `json:"status"`
+	TemplateIdentity CharlieAdminAlertDeliveryProofTemplateIdentity `json:"template_identity"`
+	UpdatedAt        time.Time                                      `json:"updated_at"`
+}
+
+// CharlieAdminAlertDeliveryProofDeliveryKind defines model for CharlieAdminAlertDeliveryProof.DeliveryKind.
+type CharlieAdminAlertDeliveryProofDeliveryKind string
+
+// CharlieAdminAlertDeliveryProofStatus defines model for CharlieAdminAlertDeliveryProof.Status.
+type CharlieAdminAlertDeliveryProofStatus string
+
+// CharlieAdminAlertDeliveryProofTemplateIdentity defines model for CharlieAdminAlertDeliveryProof.TemplateIdentity.
+type CharlieAdminAlertDeliveryProofTemplateIdentity string
+
+// CharlieAdminAlertDeliveryProofView defines model for CharlieAdminAlertDeliveryProofView.
+type CharlieAdminAlertDeliveryProofView struct {
+	DedupeValid          bool                             `json:"dedupe_valid"`
+	Deliveries           []CharlieAdminAlertDeliveryProof `json:"deliveries"`
+	DeliveryCount        int                              `json:"delivery_count"`
+	FindingBlockCode     string                           `json:"finding_block_code"`
+	FindingId            openapi_types.UUID               `json:"finding_id"`
+	FindingWorkflowState string                           `json:"finding_workflow_state"`
+}
+
 // CharlieAdminAlertPolicy defines model for CharlieAdminAlertPolicy.
 type CharlieAdminAlertPolicy struct {
 	AvailableChannels      []CharlieAdminAlertChannel `json:"available_channels"`
@@ -1545,6 +1705,23 @@ type CharlieAdminDiagnostics struct {
 // CharlieAdminDiagnosticsOverall defines model for CharlieAdminDiagnostics.Overall.
 type CharlieAdminDiagnosticsOverall string
 
+// CharlieAdminDiscoveryQualification defines model for CharlieAdminDiscoveryQualification.
+type CharlieAdminDiscoveryQualification struct {
+	AcceptedCount int      `json:"accepted_count"`
+	AcceptedNames []string `json:"accepted_names"`
+
+	// CandidateEnabled Whether this fixed candidate generation is eligible to activate; it does not report or modify current integration activation.
+	CandidateEnabled  bool                                       `json:"candidate_enabled"`
+	CatalogBound      bool                                       `json:"catalog_bound"`
+	DisclosureDigest  *string                                    `json:"disclosure_digest,omitempty"`
+	MalformedRejected bool                                       `json:"malformed_rejected"`
+	RejectedCount     int                                        `json:"rejected_count"`
+	Scenario          CharlieAdminDiscoveryQualificationScenario `json:"scenario"`
+}
+
+// CharlieAdminDiscoveryQualificationScenario defines model for CharlieAdminDiscoveryQualification.Scenario.
+type CharlieAdminDiscoveryQualificationScenario string
+
 // CharlieAdminMode defines model for CharlieAdminMode.
 type CharlieAdminMode struct {
 	AcknowledgedDisclosureDigest *string                       `json:"acknowledged_disclosure_digest,omitempty"`
@@ -1556,6 +1733,12 @@ type CharlieAdminMode struct {
 	EmergencyDisabled            bool                          `json:"emergency_disabled"`
 	Requested                    CharlieAdminModeRequested     `json:"requested"`
 	Revision                     int64                         `json:"revision"`
+
+	// WorkloadCeiling Product-owned ceiling currently rendered in the agent Argo workload.
+	WorkloadCeiling CharlieAdminModeWorkloadCeiling `json:"workload_ceiling"`
+
+	// WorkloadCeilingReady True only after a non-pruning rollout and exact readback from both ready product-agent replicas.
+	WorkloadCeilingReady bool `json:"workload_ceiling_ready"`
 }
 
 // CharlieAdminModeAuthoritative defines model for CharlieAdminMode.Authoritative.
@@ -1563,6 +1746,9 @@ type CharlieAdminModeAuthoritative string
 
 // CharlieAdminModeRequested defines model for CharlieAdminMode.Requested.
 type CharlieAdminModeRequested string
+
+// CharlieAdminModeWorkloadCeiling Product-owned ceiling currently rendered in the agent Argo workload.
+type CharlieAdminModeWorkloadCeiling string
 
 // CharlieAdminPermission defines model for CharlieAdminPermission.
 type CharlieAdminPermission struct {
@@ -1611,6 +1797,7 @@ type CharlieAdminTriggerRule struct {
 	Id                    *openapi_types.UUID                 `json:"id,omitempty"`
 	MaximumAttempts       int32                               `json:"maximum_attempts"`
 	MinimumAgentVersion   *string                             `json:"minimum_agent_version,omitempty"`
+	ModeCeiling           CharlieAdminTriggerRuleModeCeiling  `json:"mode_ceiling"`
 	Name                  string                              `json:"name"`
 	Scopes                []string                            `json:"scopes"`
 	ServiceIdentity       *string                             `json:"service_identity,omitempty"`
@@ -1618,6 +1805,9 @@ type CharlieAdminTriggerRule struct {
 	SourceType            string                              `json:"source_type"`
 	Suppressed            bool                                `json:"suppressed"`
 }
+
+// CharlieAdminTriggerRuleModeCeiling defines model for CharlieAdminTriggerRule.ModeCeiling.
+type CharlieAdminTriggerRuleModeCeiling string
 
 // CharlieAdminTriggerRuleSeverities defines model for CharlieAdminTriggerRule.Severities.
 type CharlieAdminTriggerRuleSeverities string
@@ -1632,18 +1822,36 @@ type CharlieApprovalDecisionRequest struct {
 // CharlieApprovalDecisionRequestDecision defines model for CharlieApprovalDecisionRequest.Decision.
 type CharlieApprovalDecisionRequestDecision string
 
+// CharlieApprovalReviewSummary Product-projected human review content; raw action arguments and authority material are excluded.
+type CharlieApprovalReviewSummary struct {
+	ArgumentsWithheld bool    `json:"argumentsWithheld"`
+	Description       *string `json:"description,omitempty"`
+	Destructive       *bool   `json:"destructive,omitempty"`
+	ExpectedImpact    *string `json:"expectedImpact,omitempty"`
+	Reversible        *bool   `json:"reversible,omitempty"`
+	Rollback          *string `json:"rollback,omitempty"`
+}
+
 // CharlieApprovalSummary Bounded display metadata only; signed authority material never crosses the browser boundary.
 type CharlieApprovalSummary struct {
-	Capability string                      `json:"capability"`
-	Eligible   bool                        `json:"eligible"`
-	ExpiresAt  time.Time                   `json:"expiresAt"`
-	Id         string                      `json:"id"`
-	Reason     *string                     `json:"reason,omitempty"`
-	Risk       string                      `json:"risk"`
-	State      CharlieApprovalSummaryState `json:"state"`
-	Target     string                      `json:"target"`
-	Title      string                      `json:"title"`
+	Capability         string                       `json:"capability"`
+	Effect             CharlieApprovalSummaryEffect `json:"effect"`
+	Eligible           bool                         `json:"eligible"`
+	ExpiresAt          time.Time                    `json:"expiresAt"`
+	Id                 string                       `json:"id"`
+	Reason             *string                      `json:"reason,omitempty"`
+	RequiredPermission string                       `json:"requiredPermission"`
+
+	// Review Product-projected human review content; raw action arguments and authority material are excluded.
+	Review *CharlieApprovalReviewSummary `json:"review,omitempty"`
+	Risk   string                        `json:"risk"`
+	State  CharlieApprovalSummaryState   `json:"state"`
+	Target string                        `json:"target"`
+	Title  string                        `json:"title"`
 }
+
+// CharlieApprovalSummaryEffect defines model for CharlieApprovalSummary.Effect.
+type CharlieApprovalSummaryEffect string
 
 // CharlieApprovalSummaryState defines model for CharlieApprovalSummary.State.
 type CharlieApprovalSummaryState string
@@ -1659,6 +1867,14 @@ type CharlieContextSearchResult struct {
 
 // CharlieContextSearchResultType defines model for CharlieContextSearchResult.Type.
 type CharlieContextSearchResultType string
+
+// CharlieDiscoveryQualificationRequest defines model for CharlieDiscoveryQualificationRequest.
+type CharlieDiscoveryQualificationRequest struct {
+	Scenario CharlieDiscoveryQualificationRequestScenario `json:"scenario"`
+}
+
+// CharlieDiscoveryQualificationRequestScenario defines model for CharlieDiscoveryQualificationRequest.Scenario.
+type CharlieDiscoveryQualificationRequestScenario string
 
 // CharlieFindingAdvisoryDetail defines model for CharlieFindingAdvisoryDetail.
 type CharlieFindingAdvisoryDetail struct {
@@ -1772,6 +1988,74 @@ type CharlieFindingVerification struct {
 	Method string   `json:"method"`
 	Steps  []string `json:"steps"`
 }
+
+// CharlieKubernetesVisibility defines model for CharlieKubernetesVisibility.
+type CharlieKubernetesVisibility struct {
+	ApiProxy                       CharlieKubernetesVisibilityApiProxy            `json:"api_proxy"`
+	Attach                         CharlieKubernetesVisibilityAttach              `json:"attach"`
+	AvailableProfiles              []CharlieKubernetesVisibilityAvailableProfiles `json:"available_profiles"`
+	CandidateDisclosureDigest      *string                                        `json:"candidate_disclosure_digest,omitempty"`
+	ClusterScoped                  bool                                           `json:"cluster_scoped"`
+	DownstreamTargets              CharlieKubernetesVisibilityDownstreamTargets   `json:"downstream_targets"`
+	Exec                           CharlieKubernetesVisibilityExec                `json:"exec"`
+	InstanceId                     string                                         `json:"instance_id"`
+	Namespaces                     []string                                       `json:"namespaces"`
+	PodLogs                        bool                                           `json:"pod_logs"`
+	PortForward                    CharlieKubernetesVisibilityPortForward         `json:"port_forward"`
+	ProductOwnedOnly               CharlieKubernetesVisibilityProductOwnedOnly    `json:"product_owned_only"`
+	Profile                        CharlieKubernetesVisibilityProfile             `json:"profile"`
+	RequiresCentralReview          bool                                           `json:"requires_central_review"`
+	RequiresProductAcknowledgement bool                                           `json:"requires_product_acknowledgement"`
+	RequiresRediscovery            bool                                           `json:"requires_rediscovery"`
+	Revision                       int64                                          `json:"revision"`
+	Schema                         CharlieKubernetesVisibilitySchema              `json:"schema"`
+	ScopeSummary                   string                                         `json:"scope_summary"`
+	SecretValues                   CharlieKubernetesVisibilitySecretValues        `json:"secret_values"`
+	State                          CharlieKubernetesVisibilityState               `json:"state"`
+}
+
+// CharlieKubernetesVisibilityApiProxy defines model for CharlieKubernetesVisibility.ApiProxy.
+type CharlieKubernetesVisibilityApiProxy bool
+
+// CharlieKubernetesVisibilityAttach defines model for CharlieKubernetesVisibility.Attach.
+type CharlieKubernetesVisibilityAttach bool
+
+// CharlieKubernetesVisibilityAvailableProfiles defines model for CharlieKubernetesVisibility.AvailableProfiles.
+type CharlieKubernetesVisibilityAvailableProfiles string
+
+// CharlieKubernetesVisibilityDownstreamTargets defines model for CharlieKubernetesVisibility.DownstreamTargets.
+type CharlieKubernetesVisibilityDownstreamTargets bool
+
+// CharlieKubernetesVisibilityExec defines model for CharlieKubernetesVisibility.Exec.
+type CharlieKubernetesVisibilityExec bool
+
+// CharlieKubernetesVisibilityPortForward defines model for CharlieKubernetesVisibility.PortForward.
+type CharlieKubernetesVisibilityPortForward bool
+
+// CharlieKubernetesVisibilityProductOwnedOnly defines model for CharlieKubernetesVisibility.ProductOwnedOnly.
+type CharlieKubernetesVisibilityProductOwnedOnly bool
+
+// CharlieKubernetesVisibilityProfile defines model for CharlieKubernetesVisibility.Profile.
+type CharlieKubernetesVisibilityProfile string
+
+// CharlieKubernetesVisibilitySchema defines model for CharlieKubernetesVisibility.Schema.
+type CharlieKubernetesVisibilitySchema string
+
+// CharlieKubernetesVisibilitySecretValues defines model for CharlieKubernetesVisibility.SecretValues.
+type CharlieKubernetesVisibilitySecretValues bool
+
+// CharlieKubernetesVisibilityState defines model for CharlieKubernetesVisibility.State.
+type CharlieKubernetesVisibilityState string
+
+// CharlieKubernetesVisibilityRequest defines model for CharlieKubernetesVisibilityRequest.
+type CharlieKubernetesVisibilityRequest struct {
+	PodLogs  bool                                      `json:"pod_logs"`
+	Profile  CharlieKubernetesVisibilityRequestProfile `json:"profile"`
+	Revision int64                                     `json:"revision"`
+}
+
+// CharlieKubernetesVisibilityRequestProfile defines model for CharlieKubernetesVisibilityRequest.Profile.
+type CharlieKubernetesVisibilityRequestProfile string
 
 // CharlieMessageRequest defines model for CharlieMessageRequest.
 type CharlieMessageRequest struct {
@@ -3639,6 +3923,11 @@ type GetApiV1ActivityParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// AdminCharlieAlertDeliveryProofsParams defines parameters for AdminCharlieAlertDeliveryProofs.
+type AdminCharlieAlertDeliveryProofsParams struct {
+	FindingId openapi_types.UUID `form:"finding_id" json:"finding_id"`
+}
+
 // AdminCharlieTriggerEventsListParams defines parameters for AdminCharlieTriggerEventsList.
 type AdminCharlieTriggerEventsListParams struct {
 	State  *AdminCharlieTriggerEventsListParamsState `form:"state,omitempty" json:"state,omitempty"`
@@ -4787,6 +5076,9 @@ type AdminCharlieAlertPolicyUpdateJSONRequestBody = CharlieAdminAlertPolicyInput
 // AdminCharlieDisconnectJSONRequestBody defines body for AdminCharlieDisconnect for application/json ContentType.
 type AdminCharlieDisconnectJSONRequestBody = CharlieAdminActionRequest
 
+// AdminCharlieKubernetesVisibilityUpdateJSONRequestBody defines body for AdminCharlieKubernetesVisibilityUpdate for application/json ContentType.
+type AdminCharlieKubernetesVisibilityUpdateJSONRequestBody = CharlieKubernetesVisibilityRequest
+
 // AdminCharlieModeUpdateJSONRequestBody defines body for AdminCharlieModeUpdate for application/json ContentType.
 type AdminCharlieModeUpdateJSONRequestBody = CharlieModeRequest
 
@@ -4795,6 +5087,9 @@ type AdminCharlieOnboardingConsumeJSONRequestBody = CharlieOnboardingRequest
 
 // AdminCharlieOnboardingValidateJSONRequestBody defines body for AdminCharlieOnboardingValidate for application/json ContentType.
 type AdminCharlieOnboardingValidateJSONRequestBody = CharlieOnboardingRequest
+
+// AdminCharlieDiscoveryQualificationJSONRequestBody defines body for AdminCharlieDiscoveryQualification for application/json ContentType.
+type AdminCharlieDiscoveryQualificationJSONRequestBody = CharlieDiscoveryQualificationRequest
 
 // AdminCharlieTriggerEventRetryJSONRequestBody defines body for AdminCharlieTriggerEventRetry for application/json ContentType.
 type AdminCharlieTriggerEventRetryJSONRequestBody = CharlieTriggerRetryRequest
@@ -10076,6 +10371,9 @@ type ClientInterface interface {
 	// AdminCharlieAgentUpgrade request
 	AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminCharlieAlertDeliveryProofs request
+	AdminCharlieAlertDeliveryProofs(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminCharlieAlertPolicyGet request
 	AdminCharlieAlertPolicyGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -10092,6 +10390,14 @@ type ClientInterface interface {
 
 	AdminCharlieDisconnect(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AdminCharlieKubernetesVisibilityGet request
+	AdminCharlieKubernetesVisibilityGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieKubernetesVisibilityUpdateWithBody request with any body
+	AdminCharlieKubernetesVisibilityUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieKubernetesVisibilityUpdate(ctx context.Context, body AdminCharlieKubernetesVisibilityUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminCharlieModeUpdateWithBody request with any body
 	AdminCharlieModeUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -10106,6 +10412,11 @@ type ClientInterface interface {
 	AdminCharlieOnboardingValidateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	AdminCharlieOnboardingValidate(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AdminCharlieDiscoveryQualificationWithBody request with any body
+	AdminCharlieDiscoveryQualificationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AdminCharlieDiscoveryQualification(ctx context.Context, body AdminCharlieDiscoveryQualificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminCharlieStatus request
 	AdminCharlieStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -12089,6 +12400,18 @@ func (c *Client) AdminCharlieAgentUpgrade(ctx context.Context, reqEditors ...Req
 	return c.Client.Do(req)
 }
 
+func (c *Client) AdminCharlieAlertDeliveryProofs(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieAlertDeliveryProofsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) AdminCharlieAlertPolicyGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieAlertPolicyGetRequest(c.Server)
 	if err != nil {
@@ -12161,6 +12484,42 @@ func (c *Client) AdminCharlieDisconnect(ctx context.Context, body AdminCharlieDi
 	return c.Client.Do(req)
 }
 
+func (c *Client) AdminCharlieKubernetesVisibilityGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieKubernetesVisibilityGetRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieKubernetesVisibilityUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieKubernetesVisibilityUpdateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieKubernetesVisibilityUpdate(ctx context.Context, body AdminCharlieKubernetesVisibilityUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieKubernetesVisibilityUpdateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) AdminCharlieModeUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieModeUpdateRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -12223,6 +12582,30 @@ func (c *Client) AdminCharlieOnboardingValidateWithBody(ctx context.Context, con
 
 func (c *Client) AdminCharlieOnboardingValidate(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminCharlieOnboardingValidateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieDiscoveryQualificationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieDiscoveryQualificationRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AdminCharlieDiscoveryQualification(ctx context.Context, body AdminCharlieDiscoveryQualificationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminCharlieDiscoveryQualificationRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -20319,6 +20702,51 @@ func NewAdminCharlieAgentUpgradeRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewAdminCharlieAlertDeliveryProofsRequest generates requests for AdminCharlieAlertDeliveryProofs
+func NewAdminCharlieAlertDeliveryProofsRequest(server string, params *AdminCharlieAlertDeliveryProofsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/alert-deliveries/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "finding_id", runtime.ParamLocationQuery, params.FindingId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAdminCharlieAlertPolicyGetRequest generates requests for AdminCharlieAlertPolicyGet
 func NewAdminCharlieAlertPolicyGetRequest(server string) (*http.Request, error) {
 	var err error
@@ -20453,6 +20881,73 @@ func NewAdminCharlieDisconnectRequestWithBody(server string, contentType string,
 	return req, nil
 }
 
+// NewAdminCharlieKubernetesVisibilityGetRequest generates requests for AdminCharlieKubernetesVisibilityGet
+func NewAdminCharlieKubernetesVisibilityGetRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/kubernetes-visibility/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAdminCharlieKubernetesVisibilityUpdateRequest calls the generic AdminCharlieKubernetesVisibilityUpdate builder with application/json body
+func NewAdminCharlieKubernetesVisibilityUpdateRequest(server string, body AdminCharlieKubernetesVisibilityUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieKubernetesVisibilityUpdateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieKubernetesVisibilityUpdateRequestWithBody generates requests for AdminCharlieKubernetesVisibilityUpdate with any type of body
+func NewAdminCharlieKubernetesVisibilityUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/kubernetes-visibility/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewAdminCharlieModeUpdateRequest calls the generic AdminCharlieModeUpdate builder with application/json body
 func NewAdminCharlieModeUpdateRequest(server string, body AdminCharlieModeUpdateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -20554,6 +21049,46 @@ func NewAdminCharlieOnboardingValidateRequestWithBody(server string, contentType
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/admin/charlie/onboarding/validate/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAdminCharlieDiscoveryQualificationRequest calls the generic AdminCharlieDiscoveryQualification builder with application/json body
+func NewAdminCharlieDiscoveryQualificationRequest(server string, body AdminCharlieDiscoveryQualificationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAdminCharlieDiscoveryQualificationRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAdminCharlieDiscoveryQualificationRequestWithBody generates requests for AdminCharlieDiscoveryQualification with any type of body
+func NewAdminCharlieDiscoveryQualificationRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/charlie/qualification/discovery/")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -42100,6 +42635,9 @@ type ClientWithResponsesInterface interface {
 	// AdminCharlieAgentUpgradeWithResponse request
 	AdminCharlieAgentUpgradeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAgentUpgradeResponse, error)
 
+	// AdminCharlieAlertDeliveryProofsWithResponse request
+	AdminCharlieAlertDeliveryProofsWithResponse(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*AdminCharlieAlertDeliveryProofsResponse, error)
+
 	// AdminCharlieAlertPolicyGetWithResponse request
 	AdminCharlieAlertPolicyGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyGetResponse, error)
 
@@ -42116,6 +42654,14 @@ type ClientWithResponsesInterface interface {
 
 	AdminCharlieDisconnectWithResponse(ctx context.Context, body AdminCharlieDisconnectJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDisconnectResponse, error)
 
+	// AdminCharlieKubernetesVisibilityGetWithResponse request
+	AdminCharlieKubernetesVisibilityGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityGetResponse, error)
+
+	// AdminCharlieKubernetesVisibilityUpdateWithBodyWithResponse request with any body
+	AdminCharlieKubernetesVisibilityUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityUpdateResponse, error)
+
+	AdminCharlieKubernetesVisibilityUpdateWithResponse(ctx context.Context, body AdminCharlieKubernetesVisibilityUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityUpdateResponse, error)
+
 	// AdminCharlieModeUpdateWithBodyWithResponse request with any body
 	AdminCharlieModeUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieModeUpdateResponse, error)
 
@@ -42130,6 +42676,11 @@ type ClientWithResponsesInterface interface {
 	AdminCharlieOnboardingValidateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingValidateResponse, error)
 
 	AdminCharlieOnboardingValidateWithResponse(ctx context.Context, body AdminCharlieOnboardingValidateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieOnboardingValidateResponse, error)
+
+	// AdminCharlieDiscoveryQualificationWithBodyWithResponse request with any body
+	AdminCharlieDiscoveryQualificationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieDiscoveryQualificationResponse, error)
+
+	AdminCharlieDiscoveryQualificationWithResponse(ctx context.Context, body AdminCharlieDiscoveryQualificationJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDiscoveryQualificationResponse, error)
 
 	// AdminCharlieStatusWithResponse request
 	AdminCharlieStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieStatusResponse, error)
@@ -44270,6 +44821,33 @@ func (r AdminCharlieAgentUpgradeResponse) StatusCode() int {
 	return 0
 }
 
+type AdminCharlieAlertDeliveryProofsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminAlertDeliveryProofView
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieAlertDeliveryProofsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieAlertDeliveryProofsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AdminCharlieAlertPolicyGetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -44373,6 +44951,58 @@ func (r AdminCharlieDisconnectResponse) StatusCode() int {
 	return 0
 }
 
+type AdminCharlieKubernetesVisibilityGetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieKubernetesVisibility
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieKubernetesVisibilityGetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieKubernetesVisibilityGetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieKubernetesVisibilityUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieKubernetesVisibility
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieKubernetesVisibilityUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieKubernetesVisibilityUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AdminCharlieModeUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -44444,6 +45074,33 @@ func (r AdminCharlieOnboardingValidateResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminCharlieOnboardingValidateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AdminCharlieDiscoveryQualificationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CharlieAdminDiscoveryQualification
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *ErrorEnvelope
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r AdminCharlieDiscoveryQualificationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AdminCharlieDiscoveryQualificationResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -57126,6 +57783,15 @@ func (c *ClientWithResponses) AdminCharlieAgentUpgradeWithResponse(ctx context.C
 	return ParseAdminCharlieAgentUpgradeResponse(rsp)
 }
 
+// AdminCharlieAlertDeliveryProofsWithResponse request returning *AdminCharlieAlertDeliveryProofsResponse
+func (c *ClientWithResponses) AdminCharlieAlertDeliveryProofsWithResponse(ctx context.Context, params *AdminCharlieAlertDeliveryProofsParams, reqEditors ...RequestEditorFn) (*AdminCharlieAlertDeliveryProofsResponse, error) {
+	rsp, err := c.AdminCharlieAlertDeliveryProofs(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieAlertDeliveryProofsResponse(rsp)
+}
+
 // AdminCharlieAlertPolicyGetWithResponse request returning *AdminCharlieAlertPolicyGetResponse
 func (c *ClientWithResponses) AdminCharlieAlertPolicyGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieAlertPolicyGetResponse, error) {
 	rsp, err := c.AdminCharlieAlertPolicyGet(ctx, reqEditors...)
@@ -57178,6 +57844,32 @@ func (c *ClientWithResponses) AdminCharlieDisconnectWithResponse(ctx context.Con
 	return ParseAdminCharlieDisconnectResponse(rsp)
 }
 
+// AdminCharlieKubernetesVisibilityGetWithResponse request returning *AdminCharlieKubernetesVisibilityGetResponse
+func (c *ClientWithResponses) AdminCharlieKubernetesVisibilityGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityGetResponse, error) {
+	rsp, err := c.AdminCharlieKubernetesVisibilityGet(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieKubernetesVisibilityGetResponse(rsp)
+}
+
+// AdminCharlieKubernetesVisibilityUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieKubernetesVisibilityUpdateResponse
+func (c *ClientWithResponses) AdminCharlieKubernetesVisibilityUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityUpdateResponse, error) {
+	rsp, err := c.AdminCharlieKubernetesVisibilityUpdateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieKubernetesVisibilityUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieKubernetesVisibilityUpdateWithResponse(ctx context.Context, body AdminCharlieKubernetesVisibilityUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieKubernetesVisibilityUpdateResponse, error) {
+	rsp, err := c.AdminCharlieKubernetesVisibilityUpdate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieKubernetesVisibilityUpdateResponse(rsp)
+}
+
 // AdminCharlieModeUpdateWithBodyWithResponse request with arbitrary body returning *AdminCharlieModeUpdateResponse
 func (c *ClientWithResponses) AdminCharlieModeUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieModeUpdateResponse, error) {
 	rsp, err := c.AdminCharlieModeUpdateWithBody(ctx, contentType, body, reqEditors...)
@@ -57227,6 +57919,23 @@ func (c *ClientWithResponses) AdminCharlieOnboardingValidateWithResponse(ctx con
 		return nil, err
 	}
 	return ParseAdminCharlieOnboardingValidateResponse(rsp)
+}
+
+// AdminCharlieDiscoveryQualificationWithBodyWithResponse request with arbitrary body returning *AdminCharlieDiscoveryQualificationResponse
+func (c *ClientWithResponses) AdminCharlieDiscoveryQualificationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminCharlieDiscoveryQualificationResponse, error) {
+	rsp, err := c.AdminCharlieDiscoveryQualificationWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieDiscoveryQualificationResponse(rsp)
+}
+
+func (c *ClientWithResponses) AdminCharlieDiscoveryQualificationWithResponse(ctx context.Context, body AdminCharlieDiscoveryQualificationJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminCharlieDiscoveryQualificationResponse, error) {
+	rsp, err := c.AdminCharlieDiscoveryQualification(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAdminCharlieDiscoveryQualificationResponse(rsp)
 }
 
 // AdminCharlieStatusWithResponse request returning *AdminCharlieStatusResponse
@@ -63344,6 +64053,67 @@ func ParseAdminCharlieAgentUpgradeResponse(rsp *http.Response) (*AdminCharlieAge
 	return response, nil
 }
 
+// ParseAdminCharlieAlertDeliveryProofsResponse parses an HTTP response from a AdminCharlieAlertDeliveryProofsWithResponse call
+func ParseAdminCharlieAlertDeliveryProofsResponse(rsp *http.Response) (*AdminCharlieAlertDeliveryProofsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieAlertDeliveryProofsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminAlertDeliveryProofView
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAdminCharlieAlertPolicyGetResponse parses an HTTP response from a AdminCharlieAlertPolicyGetWithResponse call
 func ParseAdminCharlieAlertPolicyGetResponse(rsp *http.Response) (*AdminCharlieAlertPolicyGetResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -63553,6 +64323,114 @@ func ParseAdminCharlieDisconnectResponse(rsp *http.Response) (*AdminCharlieDisco
 	return response, nil
 }
 
+// ParseAdminCharlieKubernetesVisibilityGetResponse parses an HTTP response from a AdminCharlieKubernetesVisibilityGetWithResponse call
+func ParseAdminCharlieKubernetesVisibilityGetResponse(rsp *http.Response) (*AdminCharlieKubernetesVisibilityGetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieKubernetesVisibilityGetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieKubernetesVisibility
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieKubernetesVisibilityUpdateResponse parses an HTTP response from a AdminCharlieKubernetesVisibilityUpdateWithResponse call
+func ParseAdminCharlieKubernetesVisibilityUpdateResponse(rsp *http.Response) (*AdminCharlieKubernetesVisibilityUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieKubernetesVisibilityUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieKubernetesVisibility
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAdminCharlieModeUpdateResponse parses an HTTP response from a AdminCharlieModeUpdateWithResponse call
 func ParseAdminCharlieModeUpdateResponse(rsp *http.Response) (*AdminCharlieModeUpdateResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -63702,6 +64580,67 @@ func ParseAdminCharlieOnboardingValidateResponse(rsp *http.Response) (*AdminChar
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAdminCharlieDiscoveryQualificationResponse parses an HTTP response from a AdminCharlieDiscoveryQualificationWithResponse call
+func ParseAdminCharlieDiscoveryQualificationResponse(rsp *http.Response) (*AdminCharlieDiscoveryQualificationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AdminCharlieDiscoveryQualificationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CharlieAdminDiscoveryQualification
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

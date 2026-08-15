@@ -52,6 +52,12 @@
     "resource_count": {
       "kind": "count"
     },
+    "command_id": {
+      "kind": "code"
+    },
+    "command_version": {
+      "kind": "code"
+    },
     "approval_digest": {
       "kind": "digest"
     },
@@ -240,6 +246,13 @@
     },
     "overall": {
       "kind": "code"
+    },
+    "profile": {
+      "kind": "enum",
+      "values": ["disabled", "product_namespace", "cluster_diagnostics"]
+    },
+    "pod_logs": {
+      "kind": "bool"
     }
   },
   "events": [
@@ -352,6 +365,28 @@
       "not_applicable": [
         "replay"
       ],
+      "correlation": "request_context"
+    },
+    {
+      "prefix": "admin.charlie.kubernetes_visibility.",
+      "actions": [
+        "admin.charlie.kubernetes_visibility.update"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code",
+        "profile",
+        "pod_logs",
+        "revision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
       "correlation": "request_context"
     },
     {
@@ -551,7 +586,9 @@
       "allowed_fields": [
         "outcome_code",
         "visibility",
-        "resource_count"
+        "resource_count",
+        "command_id",
+        "command_version"
       ],
       "coverage": [
         "success",
@@ -760,6 +797,28 @@
       "allowed_fields": [
         "outcome_code",
         "mode",
+        "revision"
+      ],
+      "coverage": [
+        "success",
+        "denial",
+        "failure",
+        "replay",
+        "redaction"
+      ],
+      "not_applicable": [],
+      "correlation": "resource_id"
+    },
+    {
+      "prefix": "charlie.kubernetes_visibility.",
+      "actions": [
+        "charlie.kubernetes_visibility.update"
+      ],
+      "resource_type": "charlie_connection",
+      "allowed_fields": [
+        "outcome_code",
+        "profile",
+        "pod_logs",
         "revision"
       ],
       "coverage": [

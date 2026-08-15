@@ -46,7 +46,7 @@ func NewContextSearchService(queries contextSearchQueries, authorizer SessionAcc
 
 func (s *ContextSearchService) Search(ctx context.Context, actorID uuid.UUID, query string, limit int32) ([]ContextSearchResult, error) {
 	query = strings.ToLower(strings.TrimSpace(query))
-	if s == nil || !s.active() || actorID == uuid.Nil || len(query) < 2 || len(query) > 128 || limit < 1 || limit > MaxContextSearchResults {
+	if s == nil || !s.active() || actorID == uuid.Nil || len(query) > 128 || limit < 1 || limit > MaxContextSearchResults {
 		return nil, fmt.Errorf("Charlie context search is unavailable")
 	}
 	allowed, err := s.authorizer.CanUseCharlie(ctx, actorID)
@@ -59,6 +59,16 @@ func (s *ContextSearchService) Search(ctx context.Context, actorID uuid.UUID, qu
 			continue
 		}
 		results = append(results, candidate)
+	}
+	// Opening the picker presents a compact, useful set of management-plane
+	// scopes. Individual agent connections are searched only after the operator
+	// types a query so a large fleet cannot bury the standard choices.
+	if query == "" {
+		sort.SliceStable(results, func(i, j int) bool { return results[i].Label < results[j].Label })
+		if len(results) > int(limit) {
+			results = results[:limit]
+		}
+		return results, nil
 	}
 	rows, err := s.queries.CharlieAgentFleetList(ctx, sqlc.CharlieAgentFleetListParams{
 		Environment: pgtype.Text{}, Region: pgtype.Text{}, ConnectionState: pgtype.Text{},
@@ -109,6 +119,9 @@ func staticContextCandidates() []ContextSearchResult {
 }
 
 func contextMatches(candidate ContextSearchResult, query string) bool {
+	if query == "" {
+		return true
+	}
 	return strings.Contains(strings.ToLower(candidate.ID+" "+candidate.Label+" "+candidate.Summary), query)
 }
 

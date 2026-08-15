@@ -15,7 +15,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-const maxCharlieArgoValuesBytes = 256 << 10
+const (
+	maxCharlieArgoValuesBytes = 256 << 10
+	maxModeCeilingRolloutWait = 5 * time.Minute
+)
 
 // ModeCeilingInstaller owns the Kubernetes/Argo rollout gate that must close
 // before the local Product Bridge is allowed to synchronize Charlie central.
@@ -171,18 +174,48 @@ func exactJSONInteger(value any) int64 {
 }
 
 func (i *AgentInstaller) waitModeCeiling(ctx context.Context, spec AgentInstallSpec, desired Mode) error {
+	waitCtx, cancel := context.WithTimeout(ctx, maxModeCeilingRolloutWait)
+	defer cancel()
 	ticker := time.NewTicker(i.pollInterval)
 	defer ticker.Stop()
 	for {
-		if i.modeCeilingReady(ctx, spec, desired) {
+		if i.modeCeilingSuperseded(waitCtx, spec, desired) {
+			return fmt.Errorf("wait for Charlie mode-ceiling rollout: lifecycle snapshot was superseded")
+		}
+		if i.modeCeilingReady(waitCtx, spec, desired) {
 			return nil
 		}
 		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for Charlie mode-ceiling rollout: %w", ctx.Err())
+		case <-waitCtx.Done():
+			return fmt.Errorf("wait for Charlie mode-ceiling rollout: %w", waitCtx.Err())
 		case <-ticker.C:
 		}
 	}
+}
+
+// modeCeilingSuperseded distinguishes an ordinary in-progress rollout from a
+// different lifecycle operation replacing the workload beneath it. Without
+// this check a background reconciliation could hold the distributed write
+// fence forever after onboarding replacement reset the agent to disabled.
+func (i *AgentInstaller) modeCeilingSuperseded(ctx context.Context, spec AgentInstallSpec, desired Mode) bool {
+	if i == nil || i.dynamic == nil {
+		return false
+	}
+	names := agentResourceNames(spec, i.agentNamespace)
+	application, err := i.dynamic.Resource(kubeutil.ArgoApplicationGVR).Namespace(i.argoNamespace).Get(ctx, names.Application, metav1.GetOptions{})
+	if err != nil {
+		return false
+	}
+	if application.GetLabels()[installationOwnerLabel] != spec.InstallationID.String() {
+		return true
+	}
+	revision, _, _ := unstructured.NestedString(application.Object, "spec", "source", "targetRevision")
+	repository, _, _ := unstructured.NestedString(application.Object, "spec", "source", "repoURL")
+	if revision != spec.ChartDigest || repository != spec.ChartReference {
+		return true
+	}
+	ceiling, present := application.GetAnnotations()["astronomer.io/charlie-mode-ceiling"]
+	return present && ceiling != string(desired)
 }
 
 func (i *AgentInstaller) modeCeilingReady(ctx context.Context, spec AgentInstallSpec, desired Mode) bool {

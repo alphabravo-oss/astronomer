@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.charlie.local/kubernetes-visibility-v1.schema.json",
+  "title": "KubernetesVisibilityConfig",
+  "description": "Product-owned Kubernetes observation policy. Charlie agents never receive Kubernetes credentials; the product adapter enforces this policy at its MCP boundary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "profile", "target", "content_access", "limits"],
+  "properties": {
+    "schema": {"type": "string", "const": "charlie.kubernetes-visibility/v1"},
+    "profile": {"type": "string", "enum": ["disabled", "product_namespace", "cluster_diagnostics", "extended_diagnostics"]},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary", "instance_id", "namespaces", "product_owned_only", "include_cluster_scoped", "include_downstream_targets"],
+      "properties": {
+        "boundary": {"type": "string", "const": "product_runtime"},
+        "instance_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "namespaces": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 63}},
+        "product_owned_only": {"type": "boolean", "const": true},
+        "include_cluster_scoped": {"type": "boolean"},
+        "include_downstream_targets": {"type": "boolean", "const": false}
+      }
+    },
+    "content_access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pod_logs", "configmap_values", "custom_resource_spec", "secret_values", "exec", "attach", "port_forward", "api_proxy"],
+      "properties": {
+        "pod_logs": {"type": "boolean"},
+        "configmap_values": {"type": "boolean"},
+        "custom_resource_spec": {"type": "boolean"},
+        "secret_values": {"type": "boolean", "const": false},
+        "exec": {"type": "boolean", "const": false},
+        "attach": {"type": "boolean", "const": false},
+        "port_forward": {"type": "boolean", "const": false},
+        "api_proxy": {"type": "boolean", "const": false}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["list_items", "log_tail_lines", "response_bytes", "timeout_ms"],
+      "properties": {
+        "list_items": {"type": "integer", "minimum": 1, "maximum": 200},
+        "log_tail_lines": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "response_bytes": {"type": "integer", "minimum": 1024, "maximum": 262144},
+        "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 30000}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"profile": {"const": "disabled"}}, "required": ["profile"]},
+      "then": {"properties": {
+        "target": {"properties": {"namespaces": {"maxItems": 0}, "include_cluster_scoped": {"const": false}}},
+        "content_access": {"properties": {"pod_logs": {"const": false}, "configmap_values": {"const": false}, "custom_resource_spec": {"const": false}}}
+      }},
+      "else": {"properties": {"target": {"properties": {"namespaces": {"minItems": 1}}}}}
+    },
+    {
+      "if": {"properties": {"profile": {"const": "product_namespace"}}, "required": ["profile"]},
+      "then": {"properties": {
+        "target": {"properties": {"include_cluster_scoped": {"const": false}}},
+        "content_access": {"properties": {"configmap_values": {"const": false}, "custom_resource_spec": {"const": false}}}
+      }}
+    },
+    {
+      "if": {"properties": {"profile": {"const": "cluster_diagnostics"}}, "required": ["profile"]},
+      "then": {"properties": {
+        "target": {"properties": {"include_cluster_scoped": {"const": true}}},
+        "content_access": {"properties": {"configmap_values": {"const": false}, "custom_resource_spec": {"const": false}}}
+      }}
+    },
+    {
+      "if": {"properties": {"profile": {"const": "extended_diagnostics"}}, "required": ["profile"]},
+      "then": {"properties": {"target": {"properties": {"include_cluster_scoped": {"const": true}}}}}
+    }
+  ]
+}

@@ -467,6 +467,8 @@ func TestRenderInstallYAMLUsesPrivilegeProfile(t *testing.T) {
 	})
 	for _, want := range []string{
 		`SERVER_URL: "https://astro.example.com"`,
+		`INSECURE: "false"`,
+		`name: ASTRONOMER_INSECURE`,
 		`image: "example.com/agent:v1"`,
 		`PRIVILEGE_PROFILE: "viewer"`,
 		`verbs: ["get", "list", "watch"]`,
@@ -479,6 +481,18 @@ func TestRenderInstallYAMLUsesPrivilegeProfile(t *testing.T) {
 		if strings.Contains(manifest, unwanted) {
 			t.Fatalf("manifest unexpectedly contains %q", unwanted)
 		}
+	}
+}
+
+func TestRenderInstallYAMLPlaintextDevelopmentURLAcknowledgesAgentInsecureMode(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL:         "http://host.k3d.internal:8080",
+		ClusterID:         "c1",
+		RegistrationToken: "token",
+		AgentImage:        "example.com/agent:v1",
+	})
+	if !strings.Contains(manifest, `INSECURE: "true"`) {
+		t.Fatalf("plaintext development manifest did not acknowledge agent insecure mode:\n%s", manifest)
 	}
 }
 

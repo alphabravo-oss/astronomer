@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -535,9 +536,7 @@ func TestClusterTemplateApplyWritesTaskOutbox(t *testing.T) {
 	if arg.TaskType != tasks.ClusterTemplateApplyType {
 		t.Fatalf("task type = %q, want %q", arg.TaskType, tasks.ClusterTemplateApplyType)
 	}
-	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_template_apply:"+clusterID.String() {
-		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
-	}
+	assertClusterTemplateApplyDedupeKey(t, arg.DedupeKey, clusterID)
 	if arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
 		t.Fatalf("outbox options queue/max_retry/max_delivery = %s/%d/%d", arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
 	}
@@ -582,9 +581,7 @@ func TestClusterTemplateApplyWritesApplicationAndTaskOutboxAtomically(t *testing
 		t.Fatalf("direct enqueues = %d, want 0", cap.count)
 	}
 	arg := q.atomicApps[0]
-	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_template_apply:"+clusterID.String() {
-		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
-	}
+	assertClusterTemplateApplyDedupeKey(t, arg.DedupeKey, clusterID)
 	if arg.TaskType != tasks.ClusterTemplateApplyType || arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
 		t.Fatalf("task metadata = %s/%s/%d/%d", arg.TaskType, arg.QueueName, arg.MaxRetry, arg.MaxDeliveryAttempts)
 	}
@@ -595,6 +592,28 @@ func TestClusterTemplateApplyWritesApplicationAndTaskOutboxAtomically(t *testing
 	if payload.ClusterID != clusterID.String() {
 		t.Fatalf("payload cluster_id = %q, want %s", payload.ClusterID, clusterID)
 	}
+}
+
+func assertClusterTemplateApplyDedupeKey(t *testing.T, key pgtype.Text, clusterID uuid.UUID) {
+	t.Helper()
+	prefix := "cluster_template_apply:" + clusterID.String() + ":"
+	if !key.Valid || !strings.HasPrefix(key.String, prefix) {
+		t.Fatalf("dedupe key = %+v, want prefix %q", key, prefix)
+	}
+	if _, err := uuid.Parse(strings.TrimPrefix(key.String, prefix)); err != nil {
+		t.Fatalf("dedupe key generation suffix is not a UUID: %+v", key)
+	}
+}
+
+func TestClusterTemplateApplyDedupeKeyCreatesANewIntentGeneration(t *testing.T) {
+	clusterID := uuid.New()
+	first := clusterTemplateApplyDedupeKey(clusterID)
+	second := clusterTemplateApplyDedupeKey(clusterID)
+	if first == second {
+		t.Fatalf("two apply intents reused dedupe key %q", first)
+	}
+	assertClusterTemplateApplyDedupeKey(t, pgtype.Text{String: first, Valid: true}, clusterID)
+	assertClusterTemplateApplyDedupeKey(t, pgtype.Text{String: second, Valid: true}, clusterID)
 }
 
 // TestClusterTemplate_Apply_RejectsUnknownTemplate is the validation

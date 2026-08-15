@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +12,27 @@ import (
 	"testing"
 	"time"
 )
+
+func TestRuntimeRequestsContentFreeInstallationBoundRediscovery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost || request.URL.Path != "/integration/rediscovery" || request.Header.Get("Idempotency-Key") != "rediscovery-1" {
+			t.Fatalf("unexpected rediscovery request: %s %s", request.Method, request.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil || body["expected_integration_id"] != "integration-1" || body["expected_revision"] != "7" || len(body) != 2 {
+			t.Fatalf("unexpected rediscovery binding: %#v err=%v", body, err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"integration_id":"integration-1","integration_revision":"8","disclosure_digest":"`+strings.Repeat("d", 64)+`","capability_count":42,"state":"disabled"}`)
+	}))
+	defer server.Close()
+	var active atomic.Bool
+	active.Store(true)
+	receipt, err := testRuntime(server, &active).RequestIntegrationRediscovery(t.Context(), "integration-1", "7", "rediscovery-1")
+	if err != nil || receipt.IntegrationRevision != "8" || receipt.CapabilityCount != 42 || receipt.State != "disabled" {
+		t.Fatalf("rediscovery receipt=%+v err=%v", receipt, err)
+	}
+}
 
 type runtimeAvailability bool
 

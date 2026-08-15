@@ -44,11 +44,12 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 	"frontend": {context: "frontend", dockerfile: "frontend/Dockerfile", imageName: "astronomer-frontend"},
 }
 
-const releaseVersion = "0.3.5"
+const releaseVersion = "0.3.7"
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {
 	files := map[string][]string{
 		"chart/Chart.yaml":              {"version: " + releaseVersion, `appVersion: "` + releaseVersion + `"`},
+		"chart/values.yaml":             {`tag: "v` + releaseVersion + `"`},
 		"../pkg/version/version.go":     {`Version   = "` + releaseVersion + `"`},
 		"../frontend/package.json":      {`"version": "` + releaseVersion + `"`},
 		"../frontend/package-lock.json": {`"version": "` + releaseVersion + `"`},
@@ -131,6 +132,84 @@ func TestReleasePublishesSixTrueMultiPlatformImages(t *testing.T) {
 		}
 		if !strings.Contains(text, required) {
 			t.Fatalf("manifest verification missing %q", required)
+		}
+	}
+}
+
+func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
+	raw, err := os.ReadFile("../.github/workflows/release.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(raw)
+	for _, required := range []string{
+		"IMAGE_OWNER: alphabravo-oss",
+		"test \"$REPOSITORY\" = \"alphabravo-oss/astronomer\"",
+		"git merge-base --is-ancestor",
+		"oci://ghcr.io/alphabravo-oss/charts/astronomer",
+		"install exact release on a clean cluster",
+		"--version \"$CHART_VERSION\"",
+		"needs: [preflight, qualify]",
+		"Promote qualified images to latest",
+		"Refuse to overwrite an existing exact tag",
+		"RELEASE_IMAGES",
+		"gh release create \"$TAG\"",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release workflow is missing qualified-promotion contract %q", required)
+		}
+	}
+
+	buildJob := readReleaseWorkflow(t).Jobs["build-sign"]
+	build := releaseNamedStep(t, buildJob.Steps, "Build & push exact tag")
+	tags := stringValue(build.With["tags"])
+	if strings.Contains(tags, ":latest") {
+		t.Fatal("build job moves latest before qualification")
+	}
+}
+
+func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
+	raw, err := os.ReadFile("../scripts/upgrade-release.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+	for _, required := range []string{
+		"oci://ghcr.io/alphabravo-oss/charts/astronomer",
+		`helm get values "$release" --namespace "$namespace" --all`,
+		`release-secrets.yaml`,
+		`pg_dump --format=custom`,
+		`EXTERNAL_DB_BACKUP_CONFIRMED`,
+		`--reset-then-reuse-values`,
+		`image.registry=`,
+		`image.migrate.repository=astronomer-go-migrate`,
+		`config.agentImageRepository=ghcr.io/alphabravo-oss/astronomer-go-agent`,
+		`config.agentImageTag=${image_tag}`,
+		`--atomic --cleanup-on-fail`,
+		`helm rollback`,
+		`/readyz`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("exact release upgrade helper is missing %q", required)
+		}
+	}
+	if strings.Contains(script, ":latest") {
+		t.Fatal("exact release upgrade helper follows the mutable latest channel")
+	}
+}
+
+func TestFreshClusterSmokeExplicitlyChoosesBaselineCapableAgentProfile(t *testing.T) {
+	raw, err := os.ReadFile("../scripts/smoke-fresh-cluster.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+	for _, required := range []string{
+		`"astronomer.io/agent-privilege-profile":"admin"`,
+		`{"install_baseline":true}`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("fresh-cluster smoke does not model the explicit baseline-capable wizard choice %q", required)
 		}
 	}
 }
@@ -353,8 +432,13 @@ func releaseStepIndex(steps []struct {
 	With map[string]any `yaml:"with"`
 	Run  string         `yaml:"run"`
 }, uses string) int {
+	wantName, _, _ := strings.Cut(uses, "@")
 	for index, step := range steps {
 		if step.Uses == uses {
+			return index
+		}
+		// Digest-pinned actions keep the same name but replace the floating tag.
+		if wantName != "" && strings.HasPrefix(step.Uses, wantName+"@") {
 			return index
 		}
 	}

@@ -48,18 +48,20 @@ type SessionAccessAuthorizer interface {
 type SessionContentBridge interface {
 	GetSession(context.Context, string, string) (json.RawMessage, error)
 	GetHistory(context.Context, string, string, string, int) (json.RawMessage, error)
-	CreateMessage(context.Context, string, string, uuid.UUID, string) (json.RawMessage, error)
+	CreateMessage(context.Context, string, string, uuid.UUID, string, *ProductCommandInvocation) (json.RawMessage, error)
 	AbortSession(context.Context, string, string, uuid.UUID) error
 	StreamSessionEvents(context.Context, string, string, string, func(contract.Event) error) error
 }
 
 type SessionLifecycleAudit struct {
-	Action        string
-	SessionID     uuid.UUID
-	ActorID       uuid.UUID
-	Visibility    string
-	OutcomeCode   string
-	ResourceCount int
+	Action         string
+	SessionID      uuid.UUID
+	ActorID        uuid.UUID
+	Visibility     string
+	OutcomeCode    string
+	ResourceCount  int
+	CommandID      string
+	CommandVersion string
 }
 
 type SessionLifecycleAuditor interface {
@@ -220,9 +222,12 @@ func (s *SessionAccessService) History(ctx context.Context, actorID, sessionID u
 	return history, nil
 }
 
-func (s *SessionAccessService) Message(ctx context.Context, actorID, sessionID, clientMessageID uuid.UUID, message string) (json.RawMessage, error) {
+func (s *SessionAccessService) Message(ctx context.Context, actorID, sessionID, clientMessageID uuid.UUID, message string, command *ProductCommandInvocation) (json.RawMessage, error) {
 	if clientMessageID == uuid.Nil || strings.TrimSpace(message) == "" || len([]byte(message)) > MaxCharlieMessageBytes {
 		return nil, fmt.Errorf("Charlie message request is invalid")
+	}
+	if command != nil && !validProductCommandInvocation(command) {
+		return nil, fmt.Errorf("Charlie command request is invalid")
 	}
 	local, resources, authorizationRef, err := s.authorize(ctx, actorID, sessionID)
 	if err != nil {
@@ -231,11 +236,11 @@ func (s *SessionAccessService) Message(ctx context.Context, actorID, sessionID, 
 	if local.State != "active" && local.State != "waiting_approval" {
 		return nil, fmt.Errorf("Charlie session does not accept messages")
 	}
-	receipt, err := s.bridge.CreateMessage(ctx, local.CharlieSessionID, authorizationRef, clientMessageID, message)
+	receipt, err := s.bridge.CreateMessage(ctx, local.CharlieSessionID, authorizationRef, clientMessageID, message, command)
 	if err != nil {
 		return nil, fmt.Errorf("Charlie message is unavailable")
 	}
-	s.audit(ctx, "charlie.session.message_accepted", local.ID, actorID, local.Visibility, "accepted", len(resources))
+	s.auditCommand(ctx, "charlie.session.message_accepted", local.ID, actorID, local.Visibility, "accepted", len(resources), command)
 	return receipt, nil
 }
 
@@ -431,7 +436,15 @@ func (s *SessionAccessService) guardActive() error {
 }
 
 func (s *SessionAccessService) audit(ctx context.Context, action string, sessionID, actorID uuid.UUID, visibility, outcome string, resources int) {
+	s.auditCommand(ctx, action, sessionID, actorID, visibility, outcome, resources, nil)
+}
+
+func (s *SessionAccessService) auditCommand(ctx context.Context, action string, sessionID, actorID uuid.UUID, visibility, outcome string, resources int, command *ProductCommandInvocation) {
 	if s != nil && s.auditor != nil {
-		s.auditor.RecordCharlieSessionLifecycle(ctx, SessionLifecycleAudit{Action: action, SessionID: sessionID, ActorID: actorID, Visibility: visibility, OutcomeCode: outcome, ResourceCount: resources})
+		event := SessionLifecycleAudit{Action: action, SessionID: sessionID, ActorID: actorID, Visibility: visibility, OutcomeCode: outcome, ResourceCount: resources}
+		if command != nil {
+			event.CommandID, event.CommandVersion = command.ID, command.Version
+		}
+		s.auditor.RecordCharlieSessionLifecycle(ctx, event)
 	}
 }

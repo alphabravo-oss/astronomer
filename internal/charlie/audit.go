@@ -26,6 +26,7 @@ var AuditActions = []string{
 	"charlie.mode.requested",
 	"charlie.mode.verified",
 	"charlie.mode.emergency_disabled",
+	"charlie.kubernetes_visibility.update",
 	"charlie.feature.enabled",
 	"charlie.feature.disabled",
 	"charlie.delegation.issued",

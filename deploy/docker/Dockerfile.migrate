@@ -1,11 +1,16 @@
 # syntax=docker/dockerfile:1.6
 # ── Migrate image ─────────────────────────────────────────────────────────────
-# Uses the upstream golang-migrate binary baked with our SQL migration files.
-# Run as: docker run ... astronomer-go-migrate \
-#   -database "$DATABASE_URL" -path /migrations up
-FROM migrate/migrate:v4.18.1@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539
+# Build golang-migrate from source on the same Go toolchain as the other
+# first-party images. The upstream migrate image lags stdlib and library
+# patches and fails the HIGH/CRITICAL image-scan gate.
+FROM golang:1.26.6-alpine@sha256:1a9c10cf505a9e6b1e96ea77ebdbfe79a0f10380181faf88bc3b51d7e4315fae AS builder
+RUN apk add --no-cache git
+RUN GOBIN=/out CGO_ENABLED=0 go install -trimpath -ldflags="-s -w" -tags 'postgres' \
+    github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 
-ARG VERSION=0.3.5
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+
+ARG VERSION=0.3.7
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
@@ -14,11 +19,9 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-# /migrations is the conventional path used by the migrate binary.
+COPY --from=builder /out/migrate /usr/local/bin/migrate
 COPY internal/db/migrations /migrations
-RUN chmod 0644 /migrations/*.sql
+RUN chmod 0755 /usr/local/bin/migrate && chmod 0644 /migrations/*.sql
 
-# The base image entrypoint is /usr/local/bin/migrate, so callers only need
-# to pass migrate-style args (e.g. -database <url> -path /migrations up).
 ENTRYPOINT ["migrate"]
 CMD ["-help"]

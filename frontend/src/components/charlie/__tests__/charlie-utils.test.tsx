@@ -47,7 +47,9 @@ describe("Charlie safe UI boundary", () => {
     expect(safeLink("javascript:alert(1)")).toBeNull();
     render(
       <SafeMarkdown>
-        {"<img src=x> [safe](https://example.com) [bad](javascript:x)"}
+        {
+          "<img src=x> ![remote](https://example.com/pixel.png) [safe](https://example.com) [bad](javascript:x)"
+        }
       </SafeMarkdown>,
     );
     expect(screen.queryByRole("img")).toBeNull();
@@ -55,6 +57,23 @@ describe("Charlie safe UI boundary", () => {
       "href",
       "https://example.com",
     );
+    expect(screen.getByText("[Image omitted: remote]")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
+  });
+  it("renders structured GitHub-flavored Markdown", () => {
+    const { container } = render(
+      <SafeMarkdown>
+        {
+          "## Installation\n\nCurrent status is **healthy**.\n\n1. Check the server\n2. Review `events`\n\n| Component | State |\n| --- | --- |\n| API | Ready |"
+        }
+      </SafeMarkdown>,
+    );
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Installation" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("list")).toHaveClass("list-decimal");
+    expect(screen.getByText("healthy").tagName).toBe("STRONG");
+    expect(screen.getByText("events").tagName).toBe("CODE");
+    expect(container.querySelector("table")).not.toBeNull();
   });
 });

@@ -1,0 +1,9 @@
+version: 2
+# GitHub Actions only. Go, npm, and Docker upgrades stay manual so scanner
+# bots cannot land majors (Go 1.26, date-fns 4, Argo 9.7, postgres 18) the
+# way the discarded wolf-fix branches did.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

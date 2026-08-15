@@ -20,12 +20,33 @@ import (
 // AdminBridgeStatus is bounded health/configuration metadata reported by the
 // fixed product-local bridge. It contains no central credentials or evidence.
 type AdminBridgeStatus struct {
-	CentralHealth, LogicalAgentID, InstanceID, LeaderInstanceID string
-	IntegrationRevision, DisclosureDigest, EffectiveMode        string
-	RouteID, ArtifactVersion                                    string
-	Epoch, ReplicaCount, ReplicaOrdinal                         int64
-	ProductEnabled, DeploymentEnabled, EffectiveEnabled         bool
-	AutoAllowlist                                               []string
+	CentralHealth, LogicalAgentID, DeploymentID, IntegrationID, InstanceID, LeaderInstanceID string
+	IntegrationRevision, DisclosureDigest, CentralMode, ProductModeCeiling, EffectiveMode    string
+	RouteID, ArtifactVersion                                                                 string
+	Epoch, ReplicaCount, ReplicaOrdinal                                                      int64
+	ProductEnabled, DeploymentEnabled, EffectiveEnabled, EmergencyDisabled                   bool
+	AutoAllowlist                                                                            []string
+}
+
+func (m *ManagedBridge) RequestCapabilityRediscovery(ctx context.Context) (contract.IntegrationRediscoveryReceipt, error) {
+	bridge, err := m.configurationRuntimeBridge(ctx)
+	if err != nil {
+		return contract.IntegrationRediscoveryReceipt{}, err
+	}
+	var status contract.BridgeStatus
+	if err := bridge.runtime.DoJSON(ctx, http.MethodGet, "/status", "", nil, &status); err != nil {
+		return contract.IntegrationRediscoveryReceipt{}, err
+	}
+	integrationID, revision := string(status.IntegrationId), string(status.IntegrationRevision)
+	receipt, err := bridge.runtime.RequestIntegrationRediscovery(ctx, integrationID, revision, uuid.NewString())
+	if err != nil {
+		return contract.IntegrationRediscoveryReceipt{}, err
+	}
+	if receipt.IntegrationID != integrationID {
+		return contract.IntegrationRediscoveryReceipt{}, fmt.Errorf("Charlie rediscovery installation changed")
+	}
+	m.notifyActivationChanged(ctx)
+	return receipt, nil
 }
 
 type adminBridgeStatusReader interface {
@@ -89,11 +110,14 @@ func (m *ManagedBridge) SetAdminMode(ctx context.Context, desired Mode) (AdminBr
 func adminBridgeStatus(status contract.BridgeStatus) AdminBridgeStatus {
 	return AdminBridgeStatus{
 		CentralHealth: string(status.CentralHealth), LogicalAgentID: string(status.LogicalAgentId),
+		DeploymentID: string(status.DeploymentId), IntegrationID: string(status.IntegrationId),
 		InstanceID: string(status.InstanceId), LeaderInstanceID: string(status.LeaderInstanceId),
 		IntegrationRevision: string(status.IntegrationRevision), DisclosureDigest: status.DisclosureDigest,
+		CentralMode: string(status.CentralMode), ProductModeCeiling: string(status.ProductModeCeiling),
 		EffectiveMode: string(status.EffectiveMode), RouteID: string(status.RouteId), ArtifactVersion: status.ArtifactVersion,
 		Epoch: status.Epoch, ReplicaCount: int64(status.ReplicaCount), ReplicaOrdinal: int64(status.ReplicaOrdinal),
-		ProductEnabled: status.ProductEnabled, DeploymentEnabled: status.DeploymentEnabled, EffectiveEnabled: status.EffectiveEnabled,
+		ProductEnabled: status.ProductEnabled, DeploymentEnabled: status.DeploymentEnabled,
+		EffectiveEnabled: status.EffectiveEnabled, EmergencyDisabled: status.EmergencyDisabled,
 		AutoAllowlist: append([]string(nil), status.AutoAllowlist...),
 	}
 }
@@ -124,9 +148,16 @@ func (b *managedModeBridge) Status(ctx context.Context) (ModeState, error) {
 }
 
 func modeStateFromBridge(status AdminBridgeStatus, revision int64) ModeState {
-	mode := Mode(status.EffectiveMode)
-	if !status.EffectiveEnabled || !validMode(mode) {
+	// CentralMode is Charlie's reviewed authority. EffectiveMode additionally
+	// intersects the immutable product-agent rollout ceiling, so using it here
+	// would erase a reviewed disclosure whenever the product deliberately keeps
+	// work disabled while importing and acknowledging a new catalog.
+	active := status.ProductEnabled && status.DeploymentEnabled
+	mode := Mode(status.CentralMode)
+	disclosure := status.DisclosureDigest
+	if !active || !validMode(mode) {
 		mode = ModeDisabled
+		disclosure = ""
 	}
 	// Charlie's integration revision is the authority revision signed into
 	// every action envelope. It may advance for catalog/disclosure changes as
@@ -134,7 +165,7 @@ func modeStateFromBridge(status AdminBridgeStatus, revision int64) ModeState {
 	if remoteRevision, err := strconv.ParseInt(strings.TrimSpace(status.IntegrationRevision), 10, 64); err == nil && remoteRevision > 0 {
 		revision = remoteRevision
 	}
-	return ModeState{Requested: mode, Verified: mode, Revision: revision, DisclosureDigest: status.DisclosureDigest, Active: status.EffectiveEnabled}
+	return ModeState{Requested: mode, Verified: mode, Revision: revision, DisclosureDigest: disclosure, Active: active}
 }
 
 type managedAgentLifecycleBridge struct{ bridge *ManagedBridge }

@@ -161,6 +161,17 @@
       "reason": "The product-owned Charlie notification policy is feature-gated and requires authenticated admin scope plus charlie:manage at the router. Browser mutations inherit CSRF protection, the handler enforces optimistic revisions, and the mutation is recorded through the bounded Charlie audit contract without exposing recipients, channel configuration, or credentials."
     },
     {
+      "id": "charlie-kubernetes-visibility-admin",
+      "methods": [
+        "PUT"
+      ],
+      "patterns": [
+        "/api/v1/admin/charlie/kubernetes-visibility"
+      ],
+      "classification": "covered-rbac-charlie-admin-fail-closed",
+      "reason": "The product-owned Kubernetes visibility policy is feature-gated and requires authenticated admin scope plus charlie:manage at the router. Browser mutations inherit CSRF protection; the handler enforces optimistic revisions; every scope change closes Charlie authority to disabled, clears capability acknowledgement, drains active work, and emits a bounded audit event before rediscovery can be reviewed and acknowledged on both sides."
+    },
+    {
       "id": "control-plane-controllers-superuser",
       "methods": [
         "POST",

@@ -276,6 +276,7 @@ export function ModeTab() {
     onSuccess: (v) => {
       qc.setQueryData(queryKeys.charlie.adminMode, v);
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
+      void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminKubernetesVisibility });
       toastSuccess("Disclosure digest acknowledged");
     },
     onError: (e) => toastApiError("Disclosure acknowledgement failed", e),

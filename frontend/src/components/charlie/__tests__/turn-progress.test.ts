@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  charlieProgressEventTurnId,
   initialCharlieTurnProgress,
   updateCharlieTurnProgress,
 } from "../turn-progress";
@@ -10,6 +11,7 @@ function event(type: string, data: Record<string, unknown>, lastEventId: string)
     lastEventId,
     data: JSON.stringify({
       id: lastEventId,
+      turn_id: "turn-1",
       type,
       data,
     }),
@@ -17,6 +19,11 @@ function event(type: string, data: Record<string, unknown>, lastEventId: string)
 }
 
 describe("Charlie turn progress", () => {
+  it("extracts the bounded turn identity from the public event envelope", () => {
+    expect(charlieProgressEventTurnId(event("turn.started", {}, "1").data)).toBe("turn-1");
+    expect(charlieProgressEventTurnId(JSON.stringify({ turn_id: "<unsafe>" }))).toBeUndefined();
+  });
+
   it("shows real tool lifecycle and live updates without retaining content", () => {
     let progress = initialCharlieTurnProgress(1000);
     progress = updateCharlieTurnProgress(progress, event("turn.started", {}, "1"), 1100);
@@ -57,5 +64,26 @@ describe("Charlie turn progress", () => {
     const replay = updateCharlieTurnProgress(once, event("text.delta", { text: "duplicate" }, "2"), 1300);
     expect(replay).toBe(once);
     expect(replay.eventCount).toBe(1);
+  });
+
+  it("tracks failed and policy-blocked tools as distinct terminal outcomes", () => {
+    let progress = initialCharlieTurnProgress(1000);
+    progress = updateCharlieTurnProgress(progress, event("tool.failed", {
+      capability: "astronomer.queue.tasks",
+      tool_call_id: "call-failed",
+      error_code: "capability.failed",
+      message: "SENTINEL must not be retained",
+    }, "1"), 1100);
+    progress = updateCharlieTurnProgress(progress, event("tool.failed", {
+      capability: "astronomer.management.workload_restart",
+      tool_call_id: "call-blocked",
+      error_code: "authority.approval_required",
+    }, "2"), 1200);
+
+    expect(progress.completedToolCallIds).toEqual(["call-failed", "call-blocked"]);
+    expect(progress.failedToolCallIds).toEqual(["call-failed"]);
+    expect(progress.blockedToolCallIds).toEqual(["call-blocked"]);
+    expect(progress.label).toContain("was blocked");
+    expect(JSON.stringify(progress)).not.toContain("SENTINEL");
   });
 });

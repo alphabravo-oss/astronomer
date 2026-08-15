@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 type queueCapabilityInspector interface {
 	Queues() ([]string, error)
+	Servers() ([]*asynq.ServerInfo, error)
 	GetQueueInfo(string) (*asynq.QueueInfo, error)
 	ListPendingTasks(string, ...asynq.ListOption) ([]*asynq.TaskInfo, error)
 	ListActiveTasks(string, ...asynq.ListOption) ([]*asynq.TaskInfo, error)
@@ -64,23 +66,42 @@ func QueueCapabilityAdapters(adapter CapabilityExecutor) map[string]CapabilityEx
 func (a *QueueCapabilityAdapter) Execute(_ context.Context, capability CapabilityDescriptor, arguments map[string]json.RawMessage) (json.RawMessage, error) {
 	switch capability.Name {
 	case "astronomer.queue.health":
+		consumers, consumersAvailable := a.queueConsumers()
+		materialized, materializationAvailable := a.materializedQueues()
 		items := []map[string]any{}
 		for _, queue := range charlieQueueNames {
-			info, err := a.inspector.GetQueueInfo(queue)
-			if err != nil {
-				items = append(items, map[string]any{"queue": queue, "available": false})
+			consumer := consumers[queue]
+			if materializationAvailable && !materialized[queue] {
+				items = append(items, emptyQueueSummary(queue, consumer, consumersAvailable))
 				continue
 			}
-			items = append(items, queueSummary(info))
+			info, err := a.inspector.GetQueueInfo(queue)
+			if errors.Is(err, asynq.ErrQueueNotFound) {
+				items = append(items, emptyQueueSummary(queue, consumer, consumersAvailable))
+				continue
+			}
+			if err != nil {
+				items = append(items, unavailableQueueSummary(queue, consumer, consumersAvailable))
+				continue
+			}
+			items = append(items, queueSummary(info, consumer, consumersAvailable))
 		}
-		return marshalBounded(map[string]any{"queues": items}, capability.MaxResponseBytes)
+		return marshalBounded(map[string]any{
+			"queues": items, "consumer_inspection_available": consumersAvailable,
+			"materialization_inspection_available": materializationAvailable,
+		}, capability.MaxResponseBytes)
 	case "astronomer.queue.failed_tasks":
 		page, size := pagination(arguments, 50)
 		wantedType := stringArgument(arguments, "task_type")
 		items := []map[string]any{}
+		unavailable := []string{}
 		for _, queue := range charlieQueueNames {
 			tasks, err := a.inspector.ListArchivedTasks(queue, asynq.Page(int(page)), asynq.PageSize(int(size)))
+			if errors.Is(err, asynq.ErrQueueNotFound) {
+				continue
+			}
 			if err != nil {
+				unavailable = append(unavailable, queue)
 				continue
 			}
 			for _, task := range tasks {
@@ -97,7 +118,10 @@ func (a *QueueCapabilityAdapter) Execute(_ context.Context, capability Capabilit
 			}
 		}
 		sort.Slice(items, func(i, j int) bool { return fmt.Sprint(items[i]["task_id"]) < fmt.Sprint(items[j]["task_id"]) })
-		return marshalBounded(map[string]any{"items": items, "page": page, "page_size": size}, capability.MaxResponseBytes)
+		return marshalBounded(map[string]any{
+			"items": items, "page": page, "page_size": size,
+			"partial": len(unavailable) > 0, "unavailable_queues": unavailable,
+		}, capability.MaxResponseBytes)
 	case "astronomer.queue.tasks":
 		page, size := pagination(arguments, 50)
 		state := stringArgument(arguments, "state")
@@ -113,6 +137,9 @@ func (a *QueueCapabilityAdapter) Execute(_ context.Context, capability Capabilit
 				continue
 			}
 			tasks, err := a.listTasks(queue, state, asynq.Page(int(page)), asynq.PageSize(int(size)))
+			if errors.Is(err, asynq.ErrQueueNotFound) {
+				continue
+			}
 			if err != nil {
 				unavailable = append(unavailable, queue)
 				continue
@@ -206,13 +233,85 @@ func (a *QueueCapabilityAdapter) findTask(taskID string) (string, *asynq.TaskInf
 	return "", nil, fmt.Errorf("management task was not found in an allowlisted queue")
 }
 
-func queueSummary(info *asynq.QueueInfo) map[string]any {
-	return map[string]any{
-		"queue": info.Queue, "available": true, "size": info.Size, "active": info.Active,
+type queueConsumerSummary struct {
+	Servers     int
+	Concurrency int
+	Weight      int
+}
+
+func (a *QueueCapabilityAdapter) materializedQueues() (map[string]bool, bool) {
+	queues, err := a.inspector.Queues()
+	if err != nil {
+		return map[string]bool{}, false
+	}
+	result := make(map[string]bool, len(queues))
+	for _, queue := range queues {
+		result[queue] = true
+	}
+	return result, true
+}
+
+func (a *QueueCapabilityAdapter) queueConsumers() (map[string]queueConsumerSummary, bool) {
+	servers, err := a.inspector.Servers()
+	if err != nil {
+		return map[string]queueConsumerSummary{}, false
+	}
+	result := make(map[string]queueConsumerSummary, len(charlieQueueNames))
+	for _, server := range servers {
+		if server == nil || !strings.EqualFold(strings.TrimSpace(server.Status), "active") {
+			continue
+		}
+		for queue, weight := range server.Queues {
+			if weight <= 0 {
+				continue
+			}
+			value := result[queue]
+			value.Servers++
+			value.Concurrency += server.Concurrency
+			value.Weight += weight
+			result[queue] = value
+		}
+	}
+	return result, true
+}
+
+func queueSummary(info *asynq.QueueInfo, consumer queueConsumerSummary, consumersAvailable bool) map[string]any {
+	value := map[string]any{
+		"queue": info.Queue, "available": true, "materialized": true,
+		"size": info.Size, "active": info.Active,
 		"pending": info.Pending, "scheduled": info.Scheduled, "retry": info.Retry,
 		"archived": info.Archived, "completed": info.Completed, "paused": info.Paused,
 		"latency_seconds": info.Latency.Seconds(),
 	}
+	addQueueConsumerSummary(value, consumer, consumersAvailable)
+	return value
+}
+
+func emptyQueueSummary(queue string, consumer queueConsumerSummary, consumersAvailable bool) map[string]any {
+	value := map[string]any{
+		"queue": queue, "available": true, "materialized": false,
+		"size": 0, "active": 0, "pending": 0, "scheduled": 0, "retry": 0,
+		"archived": 0, "completed": 0, "paused": false, "latency_seconds": 0,
+	}
+	addQueueConsumerSummary(value, consumer, consumersAvailable)
+	return value
+}
+
+func unavailableQueueSummary(queue string, consumer queueConsumerSummary, consumersAvailable bool) map[string]any {
+	value := map[string]any{"queue": queue, "available": false, "materialized": false, "inspection_code": "queue_inspection_unavailable"}
+	addQueueConsumerSummary(value, consumer, consumersAvailable)
+	return value
+}
+
+func addQueueConsumerSummary(value map[string]any, consumer queueConsumerSummary, available bool) {
+	value["consumer_inspection_available"] = available
+	if !available {
+		return
+	}
+	value["consumer_ready"] = consumer.Servers > 0
+	value["consumer_servers"] = consumer.Servers
+	value["consumer_concurrency"] = consumer.Concurrency
+	value["consumer_weight"] = consumer.Weight
 }
 
 func safeTaskSummary(queue string, task *asynq.TaskInfo) map[string]any {

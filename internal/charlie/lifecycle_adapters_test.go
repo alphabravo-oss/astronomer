@@ -84,6 +84,18 @@ func TestDBLifecycleAuditorPersistsApprovalIntentAsMutation(t *testing.T) {
 	}
 }
 
+func TestDBLifecycleAuditorPersistsOnlyCommandIdentity(t *testing.T) {
+	writer := &capturingLifecycleAuditWriter{}
+	NewDBLifecycleAuditor(writer).RecordCharlieSessionLifecycle(context.Background(), SessionLifecycleAudit{
+		Action: "charlie.session.message_accepted", SessionID: uuid.New(), ActorID: uuid.New(),
+		Visibility: "private", OutcomeCode: "accepted", ResourceCount: 1, CommandID: "health", CommandVersion: "1",
+	})
+	detail := string(writer.row.Detail)
+	if !strings.Contains(detail, `"command_id":"health"`) || !strings.Contains(detail, `"command_version":"1"`) {
+		t.Fatalf("command identity missing from audit: %s", detail)
+	}
+}
+
 func TestDBLifecycleAuditorPersistsGenericAuthorityIntent(t *testing.T) {
 	writer := &capturingLifecycleAuditWriter{}
 	auditor := NewDBLifecycleAuditor(writer)
