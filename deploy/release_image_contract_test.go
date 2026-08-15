@@ -166,6 +166,9 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 	if strings.Contains(tags, ":latest") {
 		t.Fatal("build job moves latest before qualification")
 	}
+	if strings.Contains(workflow, `helm package deploy/chart --version "$CHART_VERSION" --app-version "$IMAGE_TAG"`) {
+		t.Fatal("release packaging silently changes the preflight-validated chart appVersion")
+	}
 }
 
 func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
@@ -198,6 +201,7 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		`test "${expected_ref#*@}" = "$actual_digest"`,
 		`END { if (digest != "") print digest }`,
 		`cmp`,
+		`test "$app_version" = "$CHART_VERSION" || test "$app_version" = "$IMAGE_TAG"`,
 		`install exact release on a clean cluster`,
 		`needs: [preflight, qualify]`,
 		`Promote qualified images to latest`,
