@@ -201,6 +201,7 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		`test "${expected_ref#*@}" = "$actual_digest"`,
 		`END { if (digest != "") print digest }`,
 		`cmp`,
+		`$0 ~ /^version:[[:space:]]/`,
 		`test "$app_version" = "$CHART_VERSION" || test "$app_version" = "$IMAGE_TAG"`,
 		`install exact release on a clean cluster`,
 		`needs: [preflight, qualify]`,
@@ -213,6 +214,9 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 	}
 	if strings.Contains(resume, `$1 == "Digest:" { print $2; exit }`) {
 		t.Fatal("Buildx digest parser exits early and can fail under pipefail with SIGPIPE")
+	}
+	if strings.Contains(resume, `$1 == "version:"`) {
+		t.Fatal("chart version parser can mistake a dependency version for the top-level version")
 	}
 }
 

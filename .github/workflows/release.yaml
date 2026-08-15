@@ -47,8 +47,8 @@ jobs:
           test "$REF_TYPE" = "tag"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           chart_version="${TAG#v}"
-          test "$(awk '$1 == "version:" { print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
-          test "$(awk '$1 == "appVersion:" { gsub(/\"/, "", $2); print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
+          test "$(awk '$0 ~ /^version:[[:space:]]/ { print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
+          test "$(awk '$0 ~ /^appVersion:[[:space:]]/ { gsub(/\"/, "", $2); print $2; exit }' deploy/chart/Chart.yaml)" = "$chart_version"
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$COMMIT_SHA" origin/main
           for component in server worker agent migrate; do
