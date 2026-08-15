@@ -170,9 +170,15 @@ if ! grep -q 'AGENT_IMAGE_REPOSITORY: "ghcr.io/alphabravo-oss/astronomer-go-agen
   exit 1
 fi
 
-server_service="$(kubectl get service --namespace "$namespace" \
-  -l "app.kubernetes.io/instance=${release},app.kubernetes.io/component=server" \
-  -o jsonpath='{.items[0].metadata.name}')"
+mapfile -t server_services < <(kubectl get service --namespace "$namespace" \
+  -l "app.kubernetes.io/instance=${release},app.kubernetes.io/name=astronomer,app.kubernetes.io/component=server" \
+  -o go-template='{{range .items}}{{$name := .metadata.name}}{{range .spec.ports}}{{if eq .port 8000}}{{$name}}{{"\n"}}{{end}}{{end}}{{end}}')
+if ((${#server_services[@]} != 1)); then
+  printf 'expected one Astronomer application server Service exposing port 8000, found %d\n' \
+    "${#server_services[@]}" >&2
+  exit 1
+fi
+server_service="${server_services[0]}"
 kubectl port-forward --namespace "$namespace" "service/${server_service}" "${health_port}:8000" \
   >"$backup_dir/port-forward.log" 2>&1 &
 port_forward_pid=$!
@@ -180,6 +186,10 @@ cleanup() { kill "$port_forward_pid" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 ready=0
 for _ in $(seq 1 60); do
+  if ! kill -0 "$port_forward_pid" >/dev/null 2>&1; then
+    printf 'server port-forward exited before readiness; see %s/port-forward.log\n' "$backup_dir" >&2
+    exit 1
+  fi
   if curl --fail --silent --show-error "http://127.0.0.1:${health_port}/readyz" \
     >"$backup_dir/readyz.json" 2>"$backup_dir/readyz.stderr"; then
     ready=1
