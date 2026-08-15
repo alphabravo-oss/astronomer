@@ -1,21 +1,23 @@
 package charliequalification
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 )
 
-// infrastructureQualificationOperator is deliberately package-private and is
-// not accepted by LiveConfig. The production hook therefore cannot inject an
-// observation provider and the remaining infrastructure scenarios stay
-// fail-closed until concrete fixed operators exist. leader_kill_failover uses
-// its separate Kubernetes-only target. Keeping the typed boundary here lets an
-// operator be implemented without adding command, URL, or arbitrary evidence
-// inputs to the hook. Tests use it only to prove validation and mandatory
-// cleanup semantics.
+// infrastructureQualificationOperator remains package-private. LiveConfig can
+// select only one pre-installed executable; requests cannot supply a command,
+// URL, namespace, values, observation, or credential.
 type infrastructureQualificationOperator interface {
 	LeaderKillFailover(context.Context, Candidate) (LeaderFailoverObservation, error)
 	CleanInstall(context.Context, Candidate) (CleanInstallObservation, error)
@@ -23,6 +25,70 @@ type infrastructureQualificationOperator interface {
 	ResilienceMatrix(context.Context, Candidate) (ResilienceObservation, error)
 	UpgradeRollback(context.Context, Candidate) (UpgradeRollbackObservation, error)
 	Restore(context.Context, string, Candidate) (RestorationObservation, error)
+}
+
+type CommandInfrastructureOperator struct{ path string }
+
+func NewCommandInfrastructureOperator(path string) (*CommandInfrastructureOperator, error) {
+	if !filepath.IsAbs(path) {
+		return nil, errors.New("infrastructure qualification command must use an absolute path")
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 || info.Mode().Perm()&0o022 != 0 {
+		return nil, errors.New("infrastructure qualification command must be executable and not writable by group or other")
+	}
+	return &CommandInfrastructureOperator{path: path}, nil
+}
+
+func (o *CommandInfrastructureOperator) run(ctx context.Context, operation, scenario string, candidate Candidate, destination any) error {
+	command := exec.CommandContext(ctx, o.path,
+		"--operation", operation, "--scenario", scenario,
+		"--ref", candidate.Ref, "--commit", candidate.Commit, "--version", candidate.Version,
+		"--central-image-digest", candidate.CentralImageDigest, "--agent-image-digest", candidate.AgentImageDigest,
+		"--central-chart-digest", candidate.CentralChartDigest, "--agent-chart-digest", candidate.AgentChartDigest,
+	)
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = io.Discard
+	if err := command.Run(); err != nil || output.Len() == 0 || output.Len() > maxRequestBytes {
+		return errors.New("fixed infrastructure qualification command failed")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("fixed infrastructure qualification command returned an invalid observation")
+	}
+	return nil
+}
+
+func (o *CommandInfrastructureOperator) LeaderKillFailover(ctx context.Context, candidate Candidate) (value LeaderFailoverObservation, err error) {
+	err = o.run(ctx, "observe", "leader_kill_failover", candidate, &value)
+	return
+}
+
+func (o *CommandInfrastructureOperator) CleanInstall(ctx context.Context, candidate Candidate) (value CleanInstallObservation, err error) {
+	err = o.run(ctx, "observe", "clean_install", candidate, &value)
+	return
+}
+
+func (o *CommandInfrastructureOperator) IsolationMatrix(ctx context.Context, candidate Candidate) (value TenantIsolationObservation, err error) {
+	err = o.run(ctx, "observe", "isolation_matrix", candidate, &value)
+	return
+}
+
+func (o *CommandInfrastructureOperator) ResilienceMatrix(ctx context.Context, candidate Candidate) (value ResilienceObservation, err error) {
+	err = o.run(ctx, "observe", "resilience_matrix", candidate, &value)
+	return
+}
+
+func (o *CommandInfrastructureOperator) UpgradeRollback(ctx context.Context, candidate Candidate) (value UpgradeRollbackObservation, err error) {
+	err = o.run(ctx, "observe", "upgrade_rollback", candidate, &value)
+	return
+}
+
+func (o *CommandInfrastructureOperator) Restore(ctx context.Context, scenario string, candidate Candidate) (value RestorationObservation, err error) {
+	err = o.run(ctx, "restore", scenario, candidate, &value)
+	return
 }
 
 type CandidateObservation struct {

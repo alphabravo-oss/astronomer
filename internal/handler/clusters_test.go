@@ -53,6 +53,17 @@ func TestRenderAgentInstallManifestUsesTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderAgentInstallManifestPreservesReleaseDigest(t *testing.T) {
+	digestRef := "example.com/astronomer-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	h := NewClusterHandler(nil)
+	h.SetAgentImage(digestRef, "v1.2.3")
+	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
+	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	if !strings.Contains(manifest, `image: "`+digestRef+`"`) {
+		t.Fatalf("manifest does not preserve agent digest")
+	}
+}
+
 func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T) {
 	h := NewClusterHandler(nil)
 	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")

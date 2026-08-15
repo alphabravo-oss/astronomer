@@ -44,6 +44,17 @@ func TestRenderAgentManifestUsesSharedTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderAgentManifestPreservesReleaseDigest(t *testing.T) {
+	digestRef := "example.com/astronomer-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	manifest := renderAgentManifest(context.Background(), "cluster", "token", "https://astro.example.com", digestRef, "v1.2.3")
+	if !strings.Contains(manifest, `image: "`+digestRef+`"`) {
+		t.Fatalf("manifest does not preserve agent digest")
+	}
+	if strings.Contains(manifest, digestRef+":v1.2.3") {
+		t.Fatal("manifest appended the display version after an immutable digest")
+	}
+}
+
 func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
 	manifest := renderAgentManifest(
 		context.Background(),

@@ -166,6 +166,8 @@ jobs:
           cmp \
             "source-artifacts/astronomer-${CHART_VERSION}.tgz" \
             "registry-chart/astronomer-${CHART_VERSION}.tgz"
+          gh attestation verify "source-artifacts/astronomer-${CHART_VERSION}.tgz" \
+            --repo "$GITHUB_REPOSITORY" >/dev/null
           helm show chart "registry-chart/astronomer-${CHART_VERSION}.tgz" > chart-metadata.yaml
           test "$(awk '$0 ~ /^version:[[:space:]]/ { print $2; exit }' chart-metadata.yaml)" = "$CHART_VERSION"
           app_version="$(awk '$0 ~ /^appVersion:[[:space:]]/ { gsub(/\"/, "", $2); print $2; exit }' chart-metadata.yaml)"
@@ -201,6 +203,35 @@ jobs:
         with:
           version: v3.16.2
 
+      - name: Download original image identities
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: sbom-*-${{ needs.preflight.outputs.image-tag }}
+          path: release-images
+          merge-multiple: true
+
+      - name: Load immutable image references
+        run: |
+          set -euo pipefail
+          for pair in \
+            SERVER:server:astronomer-go-server \
+            WORKER:worker:astronomer-go-worker \
+            AGENT:agent:astronomer-go-agent \
+            MIGRATE:migrate:astronomer-go-migrate \
+            FRONTEND:frontend:astronomer-frontend \
+            SHELL:shell:astronomer-shell; do
+            key="${pair%%:*}"
+            rest="${pair#*:}"
+            component="${rest%%:*}"
+            repository="${rest#*:}"
+            ref="$(cat "release-images/${component}.digest")"
+            [[ "$ref" =~ ^ghcr\.io/alphabravo-oss/${repository}@sha256:[a-f0-9]{64}$ ]]
+            echo "${key}_REF=${ref}" >> "$GITHUB_ENV"
+            echo "${key}_DIGEST=${ref#*@}" >> "$GITHUB_ENV"
+          done
+
       - name: Create clean Kubernetes and install Gateway prerequisites
         run: |
           k3d cluster create astronomer-release \
@@ -231,7 +262,15 @@ jobs:
             --set-string image.migrate.tag="$IMAGE_TAG" \
             --set-string frontend.image.tag="$IMAGE_TAG" \
             --set-string preflight.image.tag="$IMAGE_TAG" \
-            --set-string kubectlShell.image="ghcr.io/alphabravo-oss/astronomer-shell:${IMAGE_TAG}" \
+            --set-string image.server.digest="$SERVER_DIGEST" \
+            --set-string image.worker.digest="$WORKER_DIGEST" \
+            --set-string image.agent.digest="$AGENT_DIGEST" \
+            --set-string image.migrate.digest="$MIGRATE_DIGEST" \
+            --set-string frontend.image.digest="$FRONTEND_DIGEST" \
+            --set-string preflight.image.digest="$SHELL_DIGEST" \
+            --set-string config.agentImageRepository="$AGENT_REF" \
+            --set-string config.agentImageTag="$IMAGE_TAG" \
+            --set-string kubectlShell.image="$SHELL_REF" \
             --atomic --cleanup-on-fail --timeout 15m
 
       - name: Verify health and exact first-party image identities
@@ -239,10 +278,11 @@ jobs:
           IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
           helm get manifest astronomer --namespace astronomer > /tmp/release-manifest.yaml
-          for image in astronomer-go-server astronomer-go-worker astronomer-go-migrate astronomer-frontend astronomer-shell; do
-            grep -q "ghcr.io/alphabravo-oss/${image}:${IMAGE_TAG}" /tmp/release-manifest.yaml
+          for key in SERVER WORKER MIGRATE FRONTEND SHELL; do
+            ref_var="${key}_REF"
+            grep -q "${!ref_var}" /tmp/release-manifest.yaml
           done
-          grep -q 'AGENT_IMAGE_REPOSITORY: "ghcr.io/alphabravo-oss/astronomer-go-agent"' /tmp/release-manifest.yaml
+          grep -q "AGENT_IMAGE_REPOSITORY: \"${AGENT_REF}\"" /tmp/release-manifest.yaml
           grep -q "AGENT_IMAGE_TAG: \"${IMAGE_TAG}\"" /tmp/release-manifest.yaml
           for attempt in $(seq 1 90); do
             if curl -fsS -H 'Host: astronomer.localtest.me' http://127.0.0.1:8080/readyz; then

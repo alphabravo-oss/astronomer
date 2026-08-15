@@ -86,10 +86,33 @@ Honours .Values.image.registry as an optional global prefix.
 {{- /* Global image.registry (air-gap mirror) wins; else this image's own
        registry default (GHCR for first-party); else bare (local dev). */ -}}
 {{- $reg := .context.Values.image.registry | default $img.registry | default "" -}}
+{{- $name := $img.repository -}}
 {{- if $reg -}}
-{{ printf "%s/%s:%s" $reg $img.repository $img.tag }}
+{{- $name = printf "%s/%s" $reg $img.repository -}}
+{{- end -}}
+{{- if $img.digest -}}
+{{ printf "%s@%s" $name $img.digest }}
 {{- else -}}
-{{ printf "%s:%s" $img.repository $img.tag }}
+{{ printf "%s:%s" $name $img.tag }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Repository value consumed by the server's agent-manifest renderer. A release
+digest is carried on the repository field because AGENT_IMAGE_TAG remains the
+human-readable target version used by fleet upgrade status.
+*/}}
+{{- define "astronomer.agentImageRepository" -}}
+{{- $img := .Values.image.agent -}}
+{{- $reg := .Values.image.registry | default $img.registry | default "" -}}
+{{- $name := $img.repository -}}
+{{- if $reg -}}
+{{- $name = printf "%s/%s" $reg $img.repository -}}
+{{- end -}}
+{{- if $img.digest -}}
+{{ printf "%s@%s" $name $img.digest }}
+{{- else -}}
+{{ $name }}
 {{- end -}}
 {{- end }}
 
@@ -99,7 +122,8 @@ mirror third-party images (postgres, redis, kubectl, busybox, pgdump-s3
 sidecar, frontend) into the operator's internal registry. Each image
 config supports an optional .registry override; when unset, falls back
 to .Values.image.registry; when that's also unset, the image is left
-unprefixed. Pass dict { repository: $repo, tag: $tag, registry: $reg, fallback: $.Values.image.registry }.
+unprefixed. Pass dict { repository: $repo, tag: $tag, digest: $digest,
+registry: $reg, fallback: $.Values.image.registry }. digest is optional.
 
 Usage:
   {{ include "astronomer.thirdPartyImage" (dict
@@ -110,10 +134,15 @@ Usage:
 */}}
 {{- define "astronomer.thirdPartyImage" -}}
 {{- $reg := .registry | default .fallback | default "" -}}
+{{- $name := .repository -}}
 {{- if $reg -}}
-{{ printf "%s/%s:%s" $reg .repository .tag }}
+{{- $name = printf "%s/%s" $reg .repository -}}
+{{- end -}}
+{{- $digest := get . "digest" | default "" -}}
+{{- if $digest -}}
+{{ printf "%s@%s" $name $digest }}
 {{- else -}}
-{{ printf "%s:%s" .repository .tag }}
+{{ printf "%s:%s" $name .tag }}
 {{- end -}}
 {{- end }}
 

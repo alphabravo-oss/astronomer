@@ -399,11 +399,14 @@ func TestParseImageRefForSelfManagedHelmValues(t *testing.T) {
 		registry   string
 		repository string
 		tag        string
+		digest     string
 	}{
 		{name: "local registry name", ref: "localastro/server:v1", registry: "localastro", repository: "server", tag: "v1"},
 		{name: "host and namespace", ref: "ghcr.io/org/server:v2", registry: "ghcr.io/org", repository: "server", tag: "v2"},
 		{name: "registry port and nested path", ref: "registry.example:5000/team/platform/server:v3", registry: "registry.example:5000/team/platform", repository: "server", tag: "v3"},
 		{name: "bare repository", ref: "server:v4", registry: "", repository: "server", tag: "v4"},
+		{name: "digest", ref: "ghcr.io/org/server@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", registry: "ghcr.io/org", repository: "server", digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+		{name: "tag and digest", ref: "ghcr.io/org/server:v1@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", registry: "ghcr.io/org", repository: "server", tag: "v1", digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -411,8 +414,10 @@ func TestParseImageRefForSelfManagedHelmValues(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseImageRef(%q): %v", tc.ref, err)
 			}
-			if got["registry"] != tc.registry || got["repository"] != tc.repository || got["tag"] != tc.tag {
-				t.Fatalf("parseImageRef(%q) = %#v, want registry=%q repository=%q tag=%q", tc.ref, got, tc.registry, tc.repository, tc.tag)
+			gotTag, _ := got["tag"].(string)
+			gotDigest, _ := got["digest"].(string)
+			if got["registry"] != tc.registry || got["repository"] != tc.repository || gotTag != tc.tag || gotDigest != tc.digest {
+				t.Fatalf("parseImageRef(%q) = %#v, want registry=%q repository=%q tag=%q digest=%q", tc.ref, got, tc.registry, tc.repository, tc.tag, tc.digest)
 			}
 		})
 	}
@@ -420,9 +425,9 @@ func TestParseImageRefForSelfManagedHelmValues(t *testing.T) {
 
 func TestParseImageRefRejectsLossyReferences(t *testing.T) {
 	for _, ref := range []string{
-		"ghcr.io/org/server@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"ghcr.io/org/server:v1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"ghcr.io/org/server",
+		"ghcr.io/org/server@sha256:short",
+		"ghcr.io/org/server@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"registry.example:5000/team/server:",
 		"/server:v1",
 		"ghcr.io//server:v1",

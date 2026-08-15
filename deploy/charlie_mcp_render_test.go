@@ -15,7 +15,7 @@ import (
 func TestCharlieMCPListenerScaffoldingIsDormantUntilAgentInstall(t *testing.T) {
 	out := helmTemplate(t)
 	for _, expected := range []string{
-		`RELEASE_NAME: "astronomer"`, `CHART_VERSION: "0.3.7"`,
+		`RELEASE_NAME: "astronomer"`, `CHART_VERSION: "0.3.8"`,
 		"secretName: astronomer-charlie-mcp-tls", "optional: true",
 		"mountPath: /var/run/secrets/astronomer/charlie-mcp",
 		"name: CHARLIE_MCP_TLS_CERT_FILE", "name: CHARLIE_MCP_TLS_KEY_FILE", "name: CHARLIE_MCP_CLIENT_CA_FILE",

@@ -9,7 +9,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/upgrade-release.sh [--yes] [--dry-run-only] <version>
 
-  version             Exact release, for example v0.3.7 or 0.3.7
+  version             Exact release, for example v0.3.8 or 0.3.8
   --yes               Perform the upgrade after the server-side dry run
   --dry-run-only      Stop after backup and server-side Helm dry run
 
@@ -17,6 +17,7 @@ Environment:
   RELEASE             Helm release name (default: astronomer)
   NAMESPACE           Helm namespace (default: astronomer)
   CHART_REF           OCI chart reference
+  RELEASE_REPO        GitHub release repository (default: alphabravo-oss/astronomer)
   BACKUP_ROOT         Private backup parent (default: ./astronomer-upgrade-backups)
   TIMEOUT             Helm timeout (default: 15m)
   HEALTH_PORT         Temporary localhost port (default: 18080)
@@ -54,11 +55,12 @@ chart_version="${image_tag#v}"
 release="${RELEASE:-astronomer}"
 namespace="${NAMESPACE:-astronomer}"
 chart_ref="${CHART_REF:-oci://ghcr.io/alphabravo-oss/charts/astronomer}"
+release_repo="${RELEASE_REPO:-alphabravo-oss/astronomer}"
 backup_root="${BACKUP_ROOT:-./astronomer-upgrade-backups}"
 timeout="${TIMEOUT:-15m}"
 health_port="${HEALTH_PORT:-18080}"
 
-for tool in helm kubectl curl; do
+for tool in helm kubectl curl gh cosign sha256sum cmp; do
   command -v "$tool" >/dev/null 2>&1 || { printf 'missing required tool: %s\n' "$tool" >&2; exit 1; }
 done
 helm upgrade --help | grep -q -- '--reset-then-reuse-values' || {
@@ -76,10 +78,70 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="${backup_root%/}/${release}-${timestamp}"
 mkdir -p "$backup_dir"
 
+printf 'Downloading and verifying published release %s from %s\n' "$image_tag" "$release_repo"
+mkdir -p "$backup_dir/release-assets" "$backup_dir/oci-chart"
+gh release download "$image_tag" --repo "$release_repo" \
+  --dir "$backup_dir/release-assets" \
+  --pattern RELEASE_IMAGES --pattern SHA256SUMS \
+  --pattern "astronomer-${chart_version}.tgz"
+
+verify_release_asset() {
+  local name="$1" expected actual
+  expected="$(awk -v name="$name" '$2 == name {print $1}' "$backup_dir/release-assets/SHA256SUMS")"
+  [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || {
+    printf 'SHA256SUMS has no unique valid entry for %s\n' "$name" >&2
+    exit 1
+  }
+  actual="$(sha256sum "$backup_dir/release-assets/$name" | awk '{print $1}')"
+  [[ "$actual" == "$expected" ]] || {
+    printf 'release checksum mismatch for %s\n' "$name" >&2
+    exit 1
+  }
+}
+verify_release_asset RELEASE_IMAGES
+verify_release_asset "astronomer-${chart_version}.tgz"
+gh attestation verify "$backup_dir/release-assets/astronomer-${chart_version}.tgz" \
+  --repo "$release_repo" >/dev/null
+
+release_image_ref() {
+  local repository="$1" ref count
+  count="$(grep -Ec "^ghcr\\.io/alphabravo-oss/${repository}@sha256:[a-f0-9]{64}$" "$backup_dir/release-assets/RELEASE_IMAGES" || true)"
+  [[ "$count" == 1 ]] || {
+    printf 'RELEASE_IMAGES must contain exactly one immutable reference for %s\n' "$repository" >&2
+    exit 1
+  }
+  ref="$(grep -E "^ghcr\\.io/alphabravo-oss/${repository}@sha256:[a-f0-9]{64}$" "$backup_dir/release-assets/RELEASE_IMAGES")"
+  printf '%s' "$ref"
+}
+server_ref="$(release_image_ref astronomer-go-server)"
+worker_ref="$(release_image_ref astronomer-go-worker)"
+agent_ref="$(release_image_ref astronomer-go-agent)"
+migrate_ref="$(release_image_ref astronomer-go-migrate)"
+frontend_ref="$(release_image_ref astronomer-frontend)"
+shell_ref="$(release_image_ref astronomer-shell)"
+[[ "$(wc -l <"$backup_dir/release-assets/RELEASE_IMAGES")" == 6 ]] || {
+  printf 'RELEASE_IMAGES must contain exactly the six Astronomer first-party images\n' >&2
+  exit 1
+}
+release_identity="https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${image_tag}"
+for ref in "$server_ref" "$worker_ref" "$agent_ref" "$migrate_ref" "$frontend_ref" "$shell_ref"; do
+  cosign verify \
+    --certificate-identity "$release_identity" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    "$ref" >/dev/null
+done
+
 printf 'Resolving exact chart %s:%s\n' "$chart_ref" "$chart_version"
 helm show chart "$chart_ref" --version "$chart_version" >"$backup_dir/target-chart.yaml"
 grep -qx "version: ${chart_version}" "$backup_dir/target-chart.yaml" || {
   printf 'registry returned a chart whose version does not match %s\n' "$chart_version" >&2
+  exit 1
+}
+helm pull "$chart_ref" --version "$chart_version" --destination "$backup_dir/oci-chart"
+cmp --silent \
+  "$backup_dir/release-assets/astronomer-${chart_version}.tgz" \
+  "$backup_dir/oci-chart/astronomer-${chart_version}.tgz" || {
+  printf 'published OCI chart does not match the checksum-verified GitHub release chart\n' >&2
   exit 1
 }
 
@@ -132,9 +194,15 @@ release_args=(
   --set-string "image.migrate.tag=${image_tag}"
   --set-string "frontend.image.tag=${image_tag}"
   --set-string "preflight.image.tag=${image_tag}"
-  --set-string "config.agentImageRepository=ghcr.io/alphabravo-oss/astronomer-go-agent"
+  --set-string "image.server.digest=${server_ref##*@}"
+  --set-string "image.worker.digest=${worker_ref##*@}"
+  --set-string "image.agent.digest=${agent_ref##*@}"
+  --set-string "image.migrate.digest=${migrate_ref##*@}"
+  --set-string "frontend.image.digest=${frontend_ref##*@}"
+  --set-string "preflight.image.digest=${shell_ref##*@}"
+  --set-string "config.agentImageRepository=${agent_ref}"
   --set-string "config.agentImageTag=${image_tag}"
-  --set-string "kubectlShell.image=ghcr.io/alphabravo-oss/astronomer-shell:${image_tag}"
+  --set-string "kubectlShell.image=${shell_ref}"
   --timeout "$timeout"
 )
 
@@ -154,15 +222,15 @@ printf 'Upgrading %s/%s to %s (Helm will roll back atomically on failure)\n' "$n
 helm upgrade "${release_args[@]}" --atomic --cleanup-on-fail
 
 helm get manifest "$release" --namespace "$namespace" >"$backup_dir/manifest-after.yaml"
-for image in astronomer-go-server astronomer-go-worker astronomer-go-migrate astronomer-frontend astronomer-shell; do
-  grep -q "ghcr.io/alphabravo-oss/${image}:${image_tag}" "$backup_dir/manifest-after.yaml" || {
-    printf 'post-upgrade manifest does not pin %s to %s; rolling back\n' "$image" "$image_tag" >&2
+for ref in "$server_ref" "$worker_ref" "$migrate_ref" "$frontend_ref" "$shell_ref"; do
+  grep -q "$ref" "$backup_dir/manifest-after.yaml" || {
+    printf 'post-upgrade manifest does not pin %s; rolling back\n' "$ref" >&2
     previous_revision="$(awk '/revision:/ { revision=$2 } END { print revision }' "$backup_dir/history.yaml")"
     helm rollback "$release" "$previous_revision" --namespace "$namespace" --wait --timeout "$timeout"
     exit 1
   }
 done
-if ! grep -q 'AGENT_IMAGE_REPOSITORY: "ghcr.io/alphabravo-oss/astronomer-go-agent"' "$backup_dir/manifest-after.yaml" ||
+if ! grep -q "AGENT_IMAGE_REPOSITORY: \"${agent_ref}\"" "$backup_dir/manifest-after.yaml" ||
    ! grep -q "AGENT_IMAGE_TAG: \"${image_tag}\"" "$backup_dir/manifest-after.yaml"; then
   printf 'post-upgrade manifest does not pin the managed-cluster agent to %s; rolling back\n' "$image_tag" >&2
   previous_revision="$(awk '/revision:/ { revision=$2 } END { print revision }' "$backup_dir/history.yaml")"

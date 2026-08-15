@@ -127,22 +127,23 @@ type LiveFixtures struct {
 }
 
 type LiveConfig struct {
-	AstronomerURL     string
-	AdminToken        string
-	ApproverToken     string
-	DeniedToken       string
-	MetricSources     []MetricSource
-	CounterMetrics    map[string]string
-	Fixtures          LiveFixtures
-	AllowHTTP         bool
-	HTTPClient        *http.Client
-	AgentScaler       AgentScaler
-	IsolationObserver IsolationObserver
-	LeaderFailover    *KubernetesLeaderFailoverTarget
-	EventStimulus     EventStimulus
-	ProofTimeout      time.Duration
-	ProofPoll         time.Duration
-	NoCallDwell       time.Duration
+	AstronomerURL         string
+	AdminToken            string
+	ApproverToken         string
+	DeniedToken           string
+	MetricSources         []MetricSource
+	CounterMetrics        map[string]string
+	Fixtures              LiveFixtures
+	AllowHTTP             bool
+	HTTPClient            *http.Client
+	AgentScaler           AgentScaler
+	IsolationObserver     IsolationObserver
+	LeaderFailover        *KubernetesLeaderFailoverTarget
+	EventStimulus         EventStimulus
+	InfrastructureCommand string
+	ProofTimeout          time.Duration
+	ProofPoll             time.Duration
+	NoCallDwell           time.Duration
 }
 
 // MetricSource binds one scrape endpoint to only its own optional bearer.
@@ -228,10 +229,17 @@ func NewLiveDriver(config LiveConfig) (*LiveDriver, error) {
 	if config.LeaderFailover != nil {
 		leaderFailover = config.LeaderFailover
 	}
+	var infrastructure infrastructureQualificationOperator
+	if strings.TrimSpace(config.InfrastructureCommand) != "" {
+		infrastructure, err = NewCommandInfrastructureOperator(config.InfrastructureCommand)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &LiveDriver{
 		base: base, adminToken: strings.TrimSpace(config.AdminToken), approverToken: strings.TrimSpace(config.ApproverToken), deniedToken: strings.TrimSpace(config.DeniedToken),
 		metricSources: metrics, counterMetrics: mapping, fixtures: config.Fixtures,
-		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver, leaderFailover: leaderFailover, eventStimulus: config.EventStimulus,
+		client: client, agentScaler: config.AgentScaler, isolationObserver: config.IsolationObserver, leaderFailover: leaderFailover, eventStimulus: config.EventStimulus, infrastructure: infrastructure,
 		proofTimeout: proofTimeout, proofPoll: proofPoll, noCallDwell: noCallDwell,
 	}, nil
 }
