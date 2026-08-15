@@ -25,10 +25,10 @@ jobs:
   smoke:
     runs-on: ubuntu-22.04
     # Hard cap so a stuck wait never burns a full job-timeout budget.
-    # The script's own per-step timeouts add up to ~13 minutes and the
-    # one-time six-image build takes roughly 15 on a cold hosted runner.
-    # Keep an outer bound while allowing the inner, step-specific timeouts to
-    # identify the operation that failed.
+    # The one-time six-image build takes roughly 15 minutes on a cold hosted
+    # runner. Keep an outer bound while allowing clean-user baseline
+    # convergence up to the same ten-minute budget used by fleet
+    # qualification; inner timeouts still identify the operation that failed.
     timeout-minutes: 40
 
     env:

@@ -29,7 +29,7 @@
 #   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.32.8-k3s1)
 #   TIMEOUT_API        — seconds to wait for the management API (default: 180)
 #   TIMEOUT_AGENT      — seconds to wait for agent connect (default: 90)
-#   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 300)
+#   TIMEOUT_BASELINE   — seconds to wait for baseline tools install (default: 600)
 #   TIMEOUT_SCANS      — seconds to wait for first vulnerability report (default: 240)
 
 set -euo pipefail
@@ -46,7 +46,7 @@ set -euo pipefail
 : "${K3S_IMAGE:=rancher/k3s:v1.32.8-k3s1}"
 : "${TIMEOUT_API:=180}"
 : "${TIMEOUT_AGENT:=90}"
-: "${TIMEOUT_BASELINE:=300}"
+: "${TIMEOUT_BASELINE:=600}"
 : "${TIMEOUT_SCANS:=240}"
 
 KUBECONFIG_FILE="$(mktemp -t smoke-kubeconfig.XXXXXX)"
