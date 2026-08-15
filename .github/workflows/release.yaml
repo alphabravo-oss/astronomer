@@ -362,11 +362,13 @@ jobs:
       - name: Publish immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
           sort --unique ./*.digest > RELEASE_IMAGES
           sha256sum astronomer-*.tgz sbom-*.spdx.json RELEASE_IMAGES > SHA256SUMS
           gh release create "$TAG" \
+            --repo "$REPOSITORY" \
             --verify-tag \
             --generate-notes \
             --title "Astronomer ${TAG}" \

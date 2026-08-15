@@ -154,6 +154,7 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 		"Refuse to overwrite an existing exact tag",
 		"RELEASE_IMAGES",
 		"gh release create \"$TAG\"",
+		`--repo "$REPOSITORY"`,
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("release workflow is missing qualified-promotion contract %q", required)
@@ -207,6 +208,7 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		`needs: [preflight, qualify]`,
 		`Promote qualified images to latest`,
 		`gh release create "$TAG"`,
+		`--repo "$REPOSITORY"`,
 	} {
 		if !strings.Contains(resume, required) {
 			t.Errorf("interrupted release resume workflow is missing guard %q", required)
