@@ -250,6 +250,13 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 		`image.server.digest=${server_ref##*@}`,
 		`published OCI chart does not match`,
 		`--atomic --cleanup-on-fail`,
+		`--quiesce-argo-controller`,
+		`__quiesce-argo-post-renderer`,
+		`astro-argocd-application-controller`,
+		`wait_for_argo_quiescence`,
+		`--reset-values`,
+		`values-user.yaml`,
+		`Prior chart restored; Argo controller remains stopped`,
 		`helm rollback`,
 		`app.kubernetes.io/name=astronomer`,
 		`kill -0 "$port_forward_pid"`,
@@ -261,6 +268,55 @@ func TestExactReleaseUpgradeHelperPreservesStateAndRollback(t *testing.T) {
 	}
 	if strings.Contains(script, ":latest") {
 		t.Fatal("exact release upgrade helper follows the mutable latest channel")
+	}
+}
+
+func TestUpgradePostRendererQuiescesOnlyExactArgoController(t *testing.T) {
+	input := `---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: astro-argocd-application-controller
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers: []
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astronomer-server
+spec:
+  replicas: 3
+`
+	cmd := exec.Command("bash", "../scripts/upgrade-release.sh", "__quiesce-argo-post-renderer")
+	cmd.Stdin = strings.NewReader(input)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("quiesce post-renderer failed: %v\n%s", err, output)
+	}
+	got := string(output)
+	if !strings.Contains(got, "name: astro-argocd-application-controller\nspec:\n  replicas: 0") {
+		t.Fatalf("target controller was not quiesced:\n%s", got)
+	}
+	if !strings.Contains(got, "name: astronomer-server\nspec:\n  replicas: 3") {
+		t.Fatalf("unrelated workload was changed:\n%s", got)
+	}
+}
+
+func TestUpgradePostRendererFailsClosedWithoutExactArgoController(t *testing.T) {
+	input := `apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: another-controller
+spec:
+  replicas: 1
+`
+	cmd := exec.Command("bash", "../scripts/upgrade-release.sh", "__quiesce-argo-post-renderer")
+	cmd.Stdin = strings.NewReader(input)
+	if output, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("post-renderer accepted a manifest without the exact controller:\n%s", output)
 	}
 }
 
