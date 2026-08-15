@@ -27,6 +27,7 @@ type Querier interface {
 	GetClusterRegistrationStep(ctx context.Context, id uuid.UUID) (sqlc.ClusterRegistrationStep, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
 	CloseRunningStepsForCluster(ctx context.Context, arg sqlc.CloseRunningStepsForClusterParams) error
+	FinishRunningStepsForCluster(ctx context.Context, arg sqlc.FinishRunningStepsForClusterParams) error
 }
 
 func recordFromPhaseRow(row sqlc.UpdateClusterRegistrationPhaseRow) sqlc.ClusterRegistrationRecord {
@@ -549,6 +550,14 @@ func (s *Service) OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUI
 	if s == nil || s.q == nil {
 		return nil
 	}
+	if err := s.q.FinishRunningStepsForCluster(ctx, sqlc.FinishRunningStepsForClusterParams{
+		ClusterID:    clusterID,
+		StepName:     "template_applying",
+		Status:       "success",
+		ErrorMessage: "",
+	}); err != nil {
+		return fmt.Errorf("finish template_applying timeline step: %w", err)
+	}
 	_, _ = s.WriteStep(ctx, clusterID, StepInput{
 		StepName: "template_applied",
 		Status:   "success",
@@ -570,6 +579,14 @@ func (s *Service) OnTemplateApplySuccess(ctx context.Context, clusterID uuid.UUI
 func (s *Service) OnTemplateApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error {
 	if s == nil || s.q == nil {
 		return nil
+	}
+	if err := s.q.FinishRunningStepsForCluster(ctx, sqlc.FinishRunningStepsForClusterParams{
+		ClusterID:    clusterID,
+		StepName:     "template_applying",
+		Status:       "failed",
+		ErrorMessage: errMsg,
+	}); err != nil {
+		return fmt.Errorf("finish failed template_applying timeline step: %w", err)
 	}
 	_, _ = s.WriteStep(ctx, clusterID, StepInput{
 		StepName:     "template_failed",

@@ -6,12 +6,9 @@
 #   2. Install the Gateway API standard CRDs.
 #   3. Install NGINX Gateway Fabric (provides the `nginx` GatewayClass).
 #   4. Build the astronomer Docker images and import them into k3d.
-#   5. helm install astronomer with the right host + server URL.
-#
-# Argo CD is NOT installed here — the astronomer-server self-management loop
-# (internal/server/self_manage_argocd.go) installs Argo and registers the
-# astronomer-self-manage Application automatically about 30s after the
-# server pod is ready.
+#   5. Helm-install Astronomer with the right host + server URL.
+#   6. Quiesce bundled Argo CD long enough to stage the reference-only
+#      self-management Application, then restore its original replica count.
 #
 # Usage:
 #   ./scripts/k3d-bootstrap.sh
@@ -33,6 +30,8 @@
 #                  default image is still 1.30.4 and helm-installs fail.
 #   SKIP_BUILD    Skip docker build step                     (default: 0)
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
+#   AUTO_STAGE_SELF_MANAGEMENT
+#                  Perform the safe first-takeover staging     (default: 1)
 #   SECRET_KEY    JWT signing key                            (default: a local-dev value)
 #   ENCRYPTION_KEY Fernet key wrapping stored credentials     (default: a local-dev value)
 
@@ -50,6 +49,7 @@ NGF_VERSION="${NGF_VERSION:-2.6.0}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.32.8-k3s1}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_PREREQS="${SKIP_PREREQS:-0}"
+AUTO_STAGE_SELF_MANAGEMENT="${AUTO_STAGE_SELF_MANAGEMENT:-1}"
 # The chart ships no key material — it used to default to a JWT signing key and
 # Fernet key published in this repository, so any default install was forgeable.
 # These throwaway LOCAL-DEV values are stable across runs so a re-bootstrap can
@@ -161,7 +161,6 @@ fi
 step "Installing Helm chart into namespace '${NAMESPACE}'"
 helm upgrade --install astronomer deploy/chart \
   --namespace "${NAMESPACE}" --create-namespace \
-  -f deploy/chart/values.yaml \
   -f deploy/chart/values-k3d.yaml \
   --set image.server.registry="${IMG_REGISTRY}" \
   --set image.worker.registry="${IMG_REGISTRY}" \
@@ -191,12 +190,69 @@ SERVER_DEPLOY_NAME="$(kubectl -n "${NAMESPACE}" get deploy \
 SERVER_DEPLOY="deployment/${SERVER_DEPLOY_NAME}"
 
 # ── 6. Wait for server ───────────────────────────────────────────────────────
-step "Waiting for server deployment to be Available"
-kubectl -n "${NAMESPACE}" wait --for=condition=available --timeout=300s "${SERVER_DEPLOY}" \
+step "Waiting for server deployment to complete its rollout"
+kubectl -n "${NAMESPACE}" rollout status --timeout=300s "${SERVER_DEPLOY}" \
   || warn "server did not become Available in 5 minutes; check 'kubectl -n ${NAMESPACE} get pods'"
 
-# ── 7. Print access info ─────────────────────────────────────────────────────
-BOOTSTRAP_PW=$(kubectl -n "${NAMESPACE}" get secret astronomer-bootstrap -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
+# ── 7. Stage the operator-gated first Argo self-management takeover ──────────
+# The server deliberately never scales Argo CD on an operator's behalf. This
+# local bootstrap script *is* the operator, so it performs the documented safe
+# staging fence: current server rollout, controller quiesced, reference-only
+# Application created, then the controller restored. It does not approve the
+# self-management hash or enable pruning; those remain explicit operator acts.
+if [[ "${AUTO_STAGE_SELF_MANAGEMENT}" == "1" ]] && \
+   ! kubectl -n "${NAMESPACE}" get application.argoproj.io astronomer-self-manage >/dev/null 2>&1; then
+  step "Staging the reference-only Argo self-management takeover"
+  ARGO_CONTROLLER_NAME="$(kubectl -n "${NAMESPACE}" get statefulset \
+    -l 'app.kubernetes.io/name=argocd-application-controller,app.kubernetes.io/instance=astronomer' \
+    -o jsonpath='{.items[0].metadata.name}')"
+  [[ -n "${ARGO_CONTROLLER_NAME}" ]] || fail "bundled Argo application-controller StatefulSet was not found"
+  ARGO_CONTROLLER_REPLICAS="$(kubectl -n "${NAMESPACE}" get statefulset "${ARGO_CONTROLLER_NAME}" -o jsonpath='{.spec.replicas}')"
+  ARGO_CONTROLLER_REPLICAS="${ARGO_CONTROLLER_REPLICAS:-1}"
+  ARGO_CONTROLLER_NEEDS_RESTORE=1
+  restore_argo_controller() {
+    local rc=$?
+    if [[ "${ARGO_CONTROLLER_NEEDS_RESTORE:-0}" == "1" ]]; then
+      kubectl -n "${NAMESPACE}" scale statefulset "${ARGO_CONTROLLER_NAME}" \
+        --replicas="${ARGO_CONTROLLER_REPLICAS}" >/dev/null 2>&1 || true
+    fi
+    return "${rc}"
+  }
+  trap restore_argo_controller EXIT
+
+  kubectl -n "${NAMESPACE}" scale statefulset "${ARGO_CONTROLLER_NAME}" --replicas=0 >/dev/null
+  deadline=$(( $(date +%s) + 120 ))
+  while (( $(date +%s) < deadline )); do
+    remaining="$(kubectl -n "${NAMESPACE}" get pods \
+      -l 'app.kubernetes.io/name=argocd-application-controller,app.kubernetes.io/instance=astronomer' \
+      --no-headers 2>/dev/null | wc -l)"
+    [[ "${remaining}" == "0" ]] && break
+    sleep 2
+  done
+  [[ "${remaining:-1}" == "0" ]] || fail "Argo application-controller did not quiesce within 120 seconds"
+
+  deadline=$(( $(date +%s) + 180 ))
+  while (( $(date +%s) < deadline )); do
+    if kubectl -n "${NAMESPACE}" get application.argoproj.io astronomer-self-manage >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+  kubectl -n "${NAMESPACE}" get application.argoproj.io astronomer-self-manage >/dev/null 2>&1 \
+    || fail "reference-only self-management Application was not staged within 180 seconds"
+
+  kubectl -n "${NAMESPACE}" scale statefulset "${ARGO_CONTROLLER_NAME}" \
+    --replicas="${ARGO_CONTROLLER_REPLICAS}" >/dev/null
+  if [[ "${ARGO_CONTROLLER_REPLICAS}" -gt 0 ]]; then
+    kubectl -n "${NAMESPACE}" rollout status statefulset/"${ARGO_CONTROLLER_NAME}" --timeout=120s \
+      || fail "Argo application-controller did not recover after self-management staging"
+  fi
+  ARGO_CONTROLLER_NEEDS_RESTORE=0
+  trap - EXIT
+  info "self-management is staged awaiting explicit non-pruning acceptance and hash approval"
+fi
+
+# ── 8. Print access info ─────────────────────────────────────────────────────
 
 cat <<EOF
 
@@ -206,10 +262,11 @@ cat <<EOF
   Health:         ${SERVER_URL}/health/
 
   Bootstrap user: admin
-  Bootstrap pw:   ${BOOTSTRAP_PW:-<see kubectl logs OR get secret>}
+  Bootstrap pw:   kubectl -n ${NAMESPACE} get secret astronomer-bootstrap -o jsonpath='{.data.password}' | base64 -d
 
   Watch pods:     kubectl -n ${NAMESPACE} get pods -w
   Server logs:    kubectl -n ${NAMESPACE} logs -l app.kubernetes.io/component=server -f
-  Argo self-mgr:  kubectl -n argocd get application astronomer-self-manage -w  # appears ~30s after server is Ready
+  Argo self-mgr:  kubectl -n ${NAMESPACE} get application astronomer-self-manage -w
+  Acceptance:     docs/runbooks/self-manage-secret-migration.md
 
 EOF

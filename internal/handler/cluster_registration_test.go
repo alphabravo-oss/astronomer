@@ -217,6 +217,10 @@ func (f *fakeRegistrationQuerier) CloseRunningStepsForCluster(ctx context.Contex
 	return nil
 }
 
+func (f *fakeRegistrationQuerier) FinishRunningStepsForCluster(ctx context.Context, arg sqlc.FinishRunningStepsForClusterParams) error {
+	return nil
+}
+
 func (f *fakeRegistrationQuerier) MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

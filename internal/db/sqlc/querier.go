@@ -675,6 +675,10 @@ type Querier interface {
 	ExpireCharlieFindings(ctx context.Context, asOf pgtype.Timestamptz) (int64, error)
 	FailArgoCDOperationWithResult(ctx context.Context, arg FailArgoCDOperationWithResultParams) (ArgocdOperation, error)
 	FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
+	// Resolve the active timeline row when the template task reaches a terminal
+	// state. Retry cleanup above is intentionally "superseded by retry"; normal
+	// success/failure must record the task's real outcome instead.
+	FinishRunningStepsForCluster(ctx context.Context, arg FinishRunningStepsForClusterParams) error
 	// API Tokens
 	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
 	// ArgoCD cluster-proxy service tokens. These are not user API tokens:

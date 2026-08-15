@@ -117,6 +117,15 @@ jobs:
           kubectl --context k3d-astronomer-mgmt -n astronomer logs \
             deploy/astronomer-server -c server --tail=400 \
             > /tmp/smoke-artifacts/server.log 2>&1 || true
+          kubectl --context k3d-astronomer-mgmt -n astronomer logs \
+            deploy/astronomer-worker -c worker --tail=400 \
+            > /tmp/smoke-artifacts/worker.log 2>&1 || true
+          kubectl --context k3d-astronomer-mgmt -n astronomer logs \
+            deploy/astronomer-worker -c worker --previous --tail=400 \
+            > /tmp/smoke-artifacts/worker-previous.log 2>&1 || true
+          kubectl --context k3d-astronomer-mgmt -n astronomer get \
+            applications.argoproj.io,applicationsets.argoproj.io -o yaml \
+            > /tmp/smoke-artifacts/argocd-baseline.yaml 2>&1 || true
 
       - name: Upload failure artifacts
         if: failure()

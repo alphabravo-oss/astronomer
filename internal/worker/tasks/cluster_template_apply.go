@@ -53,6 +53,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 )
@@ -89,15 +90,6 @@ const ClusterTemplateApplyQueueName = "tunnel"
 const ClusterTemplateDriftCheckType = "cluster_template:drift_check"
 
 const platformSettingArgoCDManageBaselineKey = "argocd.manage_platform_baseline"
-
-var argoCDManagedBaselineToolSlugs = map[string]struct{}{
-	"trivy-operator":           {},
-	"kube-state-metrics":       {},
-	"prometheus-node-exporter": {},
-	"fluent-bit":               {},
-	"ingress-nginx":            {},
-	"cert-manager":             {},
-}
 
 // clusterTemplateDriftCheckLimit caps how many applications the drift
 // sweep evaluates per tick. The sweep is meant to surface drift as a UI
@@ -511,8 +503,8 @@ func applyTools(ctx context.Context, deps ClusterTemplateApplyDeps, cluster sqlc
 }
 
 func isArgoCDManagedBaselineTool(slug string) bool {
-	_, ok := argoCDManagedBaselineToolSlugs[strings.TrimSpace(slug)]
-	return ok
+	component, ok := baseline.ComponentBySlug(strings.TrimSpace(slug))
+	return ok && component.DeliveryPath() == baseline.PathApplicationSet
 }
 
 func argoCDManagePlatformBaselineSetting(ctx context.Context, q ClusterTemplateApplyQuerier) bool {

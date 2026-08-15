@@ -23,6 +23,7 @@
 #   ASTRO_PASSWORD     — admin password (required)
 #   SMOKE_CLUSTER      — k3d cluster name to create (default: astronomer-smoke-$$)
 #   SMOKE_KEEP         — set to 1 to leave the k3d cluster behind on success
+#   MGMT_CONTEXT       — management-plane kube context (default: current context)
 #   AGENT_IMAGE        — astronomer agent image to load (default: ghcr.io/alphabravo-oss/astronomer-go-agent:dev)
 #   SHELL_IMAGE        — astronomer-shell image to load (default: ghcr.io/alphabravo-oss/astronomer-shell:dev)
 #   K3S_IMAGE          — rancher/k3s image for the adopted cluster (default: v1.32.8-k3s1)
@@ -49,14 +50,16 @@ set -euo pipefail
 : "${TIMEOUT_SCANS:=240}"
 
 KUBECONFIG_FILE="$(mktemp -t smoke-kubeconfig.XXXXXX)"
-trap cleanup EXIT
+trap 'cleanup "$?"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 step()  { printf "\n\033[1;36m▸ %s\033[0m\n" "$*"; }
 ok()    { printf "\033[1;32m✓ %s\033[0m\n" "$*"; }
 fail()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 
 cleanup() {
-  local rc=$?
+  local rc="${1:-1}"
   if [[ "$SMOKE_KEEP" != "1" || $rc -ne 0 ]]; then
     if [[ "${SMOKE_DELETE:-1}" == "1" ]]; then
       step "Cleanup: deleting k3d cluster $SMOKE_CLUSTER"
@@ -98,6 +101,7 @@ command -v k3d >/dev/null    || fail "k3d not on PATH"
 command -v kubectl >/dev/null || fail "kubectl not on PATH"
 command -v curl >/dev/null   || fail "curl not on PATH"
 command -v python3 >/dev/null || fail "python3 not on PATH"
+MGMT_CONTEXT="${MGMT_CONTEXT:-$(kubectl config current-context)}"
 ok "k3d $(k3d version | head -1)"
 ok "kubectl client present"
 
@@ -198,16 +202,15 @@ ok "confirm posted"
 
 step "Wait for baseline operators to install (timeout ${TIMEOUT_BASELINE}s)"
 deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
-expected_tools="trivy-operator kube-state-metrics prometheus-node-exporter fluent-bit cert-manager"
+expected_tools="trivy-operator fluent-bit cert-manager"
 while (( $(date +%s) < deadline )); do
-  # tools/status returns an array of {slug,status,...}; we accept any
-  # status that's not "not_installed" as success — installing/installed/upgrading
-  # all mean the apply task is doing work, and the polling loop catches
-  # the final state when it settles.
+  # Per-cluster tool operations own the opt-in components. The endpoint is
+  # paginated ({data:[...]}); retain array compatibility for older releases.
   installed="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/tools/status/" 2>/dev/null \
     | python3 -c 'import sys,json
 d=json.load(sys.stdin)
-print(" ".join(r["slug"] for r in d if r.get("status") in ("installed","installing","upgrading")))' 2>/dev/null || true)"
+rows=d.get("data", d) if isinstance(d, dict) else d
+print(" ".join(r["slug"] for r in rows if r.get("status") in ("installed","installing","upgrading")))' 2>/dev/null || true)"
   missing=""
   for t in $expected_tools; do
     if ! echo " $installed " | grep -q " $t "; then
@@ -221,6 +224,37 @@ print(" ".join(r["slug"] for r in d if r.get("status") in ("installed","installi
   sleep 5
 done
 [[ -z "$missing" ]] || fail "baseline tools not installed after ${TIMEOUT_BASELINE}s: missing$missing"
+
+step "Wait for Argo-owned baseline applications (timeout ${TIMEOUT_BASELINE}s)"
+deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
+expected_argocd_tools="kube-state-metrics prometheus-node-exporter"
+while (( $(date +%s) < deadline )); do
+  ready_argocd_tools="$(kubectl --context "${MGMT_CONTEXT}" -n astronomer \
+    get applications.argoproj.io -o json 2>/dev/null \
+    | python3 -c 'import json,sys
+cluster_id=sys.argv[1]
+payload=json.load(sys.stdin)
+ready=[]
+for app in payload.get("items", []):
+    labels=app.get("metadata", {}).get("labels", {})
+    destination=app.get("spec", {}).get("destination", {}).get("server", "")
+    status=app.get("status", {})
+    if cluster_id in destination and status.get("sync", {}).get("status") == "Synced" and status.get("health", {}).get("status") == "Healthy":
+        ready.append(labels.get("astronomer.io/tool-slug", ""))
+print(" ".join(ready))' "${SMOKE_CLUSTER_ID}" 2>/dev/null || true)"
+  missing_argocd=""
+  for t in $expected_argocd_tools; do
+    if ! echo " $ready_argocd_tools " | grep -q " $t "; then
+      missing_argocd="$missing_argocd $t"
+    fi
+  done
+  if [[ -z "$missing_argocd" ]]; then
+    ok "Argo baseline applications are Synced/Healthy: $ready_argocd_tools"
+    break
+  fi
+  sleep 5
+done
+[[ -z "$missing_argocd" ]] || fail "Argo baseline applications not healthy after ${TIMEOUT_BASELINE}s: missing$missing_argocd"
 
 # ── 6. open kubectl shell ─────────────────────────────────────────────
 
@@ -261,18 +295,24 @@ done
 # cluster on staging.
 
 step "Assert registration_phase=ready (T5.1)"
-phase="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/" \
-  | jget "['data']['registrationPhase']" 2>/dev/null || true)"
+deadline=$(( $(date +%s) + TIMEOUT_BASELINE ))
+phase=""
+while (( $(date +%s) < deadline )); do
+  phase="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/" \
+    | jget "['data']['registration_phase']" 2>/dev/null || true)"
+  [[ "$phase" == "ready" ]] && break
+  sleep 2
+done
 [[ "$phase" == "ready" ]] || fail "registration_phase=$phase, expected 'ready'"
 ok "registration_phase=ready"
 
 # Also confirm no orphan 'template_applying running' rows survived —
 # migration 087 backfills these on upgrade, but a regression on the
 # self-heal path would leave them in flight on a fresh registration.
-orphan_count="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/registration/steps/" \
+orphan_count="$(api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/registration/status/" \
   | python3 -c 'import sys,json
-d=json.load(sys.stdin).get("data",[])
-print(sum(1 for s in d if s.get("stepName")=="template_applying" and s.get("status")=="running"))' \
+d=json.load(sys.stdin).get("data",{})
+print(sum(1 for s in d.get("steps",[]) if s.get("step_name")=="template_applying" and s.get("status")=="running"))' \
   2>/dev/null || echo 0)"
 [[ "$orphan_count" -eq 0 ]] || fail "found $orphan_count orphan template_applying running rows"
 ok "no orphan template_applying rows"

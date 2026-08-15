@@ -17,12 +17,20 @@ type clusterTemplateApplicationTaskOutboxQuerier interface {
 	UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error)
 }
 
+// A template reapply is a new convergence intent even when the cluster and
+// template body are unchanged (the point may be to repair runtime drift).
+// Give each intent its own outbox identity; reusing one permanent per-cluster
+// key turns every reapply after the first delivered task into a silent no-op.
+func clusterTemplateApplyDedupeKey(clusterID uuid.UUID) string {
+	return fmt.Sprintf("cluster_template_apply:%s:%s", clusterID.String(), uuid.NewString())
+}
+
 func enqueueClusterTemplateApplyOutbox(ctx context.Context, outbox tasks.TaskOutboxWriter, task *asynq.Task, clusterID uuid.UUID) bool {
 	if outbox == nil || task == nil {
 		return false
 	}
 	_, err := tasks.EnqueueTaskOutbox(ctx, outbox, task, tasks.TaskOutboxOptions{
-		DedupeKey:           fmt.Sprintf("cluster_template_apply:%s", clusterID.String()),
+		DedupeKey:           clusterTemplateApplyDedupeKey(clusterID),
 		QueueName:           tasks.ClusterTemplateApplyQueueName,
 		MaxRetry:            3,
 		MaxDeliveryAttempts: 20,
