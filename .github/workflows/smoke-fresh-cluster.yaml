@@ -55,6 +55,20 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
             | TAG=v5.8.3 bash
 
+      - name: Reclaim hosted-runner disk before image build
+        run: |
+          # The Ubuntu runner carries Android, .NET, and GHC toolchains that
+          # this Go/Node/Helm job never uses. A clean management build plus a
+          # second k3d cluster otherwise leaves kubelet below its 5% imagefs
+          # eviction threshold while the baseline charts pull their images.
+          for path in /usr/local/lib/android /usr/share/dotnet /opt/ghc; do
+            if [[ -d "$path" ]]; then
+              sudo rm -rf -- "$path"
+            fi
+          done
+          docker system prune --all --force --volumes
+          df -h /
+
       - name: Bring up local Astronomer (k3d-bootstrap)
         env:
           # The workflow itself reaches the published host port through
@@ -85,6 +99,14 @@ jobs:
           # them can push the one-node k3d management plane into DiskPressure
           # as soon as the adopted cluster imports its own images.
           docker builder prune --all --force
+          # These four source images are already copied into the management
+          # cluster's containerd. Keep only agent and shell in Docker because
+          # the adopted cluster still needs to import those two exact images.
+          docker image rm \
+            ghcr.io/alphabravo-oss/astronomer-go-server:ci \
+            ghcr.io/alphabravo-oss/astronomer-go-worker:ci \
+            ghcr.io/alphabravo-oss/astronomer-go-migrate:ci \
+            ghcr.io/alphabravo-oss/astronomer-frontend:ci
           docker image prune --force
           df -h /
           docker system df
