@@ -196,6 +196,7 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		`cosign verify`,
 		`source-artifacts/${component}.digest`,
 		`test "${expected_ref#*@}" = "$actual_digest"`,
+		`END { if (digest != "") print digest }`,
 		`cmp`,
 		`install exact release on a clean cluster`,
 		`needs: [preflight, qualify]`,
@@ -205,6 +206,9 @@ func TestInterruptedReleaseResumeRevalidatesBeforePromotion(t *testing.T) {
 		if !strings.Contains(resume, required) {
 			t.Errorf("interrupted release resume workflow is missing guard %q", required)
 		}
+	}
+	if strings.Contains(resume, `$1 == "Digest:" { print $2; exit }`) {
+		t.Fatal("Buildx digest parser exits early and can fail under pipefail with SIGPIPE")
 	}
 }
 
