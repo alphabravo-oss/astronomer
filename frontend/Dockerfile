@@ -11,7 +11,7 @@ COPY . .
 
 # Baked into the bundle via the Vite `define` (__APP_VERSION__); the release
 # workflow passes VERSION to every component build.
-ARG VERSION=0.3.8
+ARG VERSION=0.3.9
 ENV VERSION=$VERSION
 
 # The trailing grep verifies the version string was actually baked into the
@@ -23,7 +23,7 @@ RUN npm run build \
 # bump both digests in lockstep (D16).
 FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
 
-ARG VERSION=0.3.8
+ARG VERSION=0.3.9
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="astronomer-frontend" \

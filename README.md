@@ -200,7 +200,7 @@ helm upgrade --install ngf \
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 0.3.8 \
+  --version 0.3.9 \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \
@@ -210,12 +210,12 @@ helm upgrade --install astronomer \
 For production, layer the production values file and provide external Postgres, external Redis, TLS, bootstrap credentials, encryption keys, and backup settings:
 
 ```bash
-git clone --branch v0.3.8 --depth 1 \
+git clone --branch v0.3.9 --depth 1 \
   https://github.com/alphabravo-oss/astronomer.git astronomer-release
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 0.3.8 \
+  --version 0.3.9 \
   --namespace astronomer \
   --create-namespace \
   -f astronomer-release/deploy/chart/values-production.yaml \

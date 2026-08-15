@@ -452,7 +452,16 @@ func selfManagedOperationPayloadSafe(operation map[string]any, stagedSpec map[st
 		return false
 	}
 	for key := range operation {
-		if key != "sync" && key != "initiatedBy" {
+		if key != "sync" && key != "initiatedBy" && key != "retry" {
+			return false
+		}
+	}
+	// Argo CD 3.4 persists retry: {} even when the operator did not request
+	// retries. Accept only that empty serialization; a configured retry policy
+	// is outside the single-attempt acceptance contract.
+	if rawRetry, exists := operation["retry"]; exists {
+		retry, ok := rawRetry.(map[string]any)
+		if !ok || len(retry) != 0 {
 			return false
 		}
 	}
@@ -462,8 +471,18 @@ func selfManagedOperationPayloadSafe(operation map[string]any, stagedSpec map[st
 	}
 	for key := range syncOperation {
 		switch key {
-		case "revision", "prune", "dryRun", "syncOptions", "syncStrategy":
+		case "revision", "source", "prune", "dryRun", "syncOptions", "syncStrategy":
 		default:
+			return false
+		}
+	}
+	// The CLI also persists the resolved source alongside revision. It is safe
+	// only when it is the exact staged source; accepting any other copy would
+	// permit a source override to bypass the reviewed spec hash.
+	if rawSource, exists := syncOperation["source"]; exists {
+		source, ok := rawSource.(map[string]any)
+		desiredSource, found, err := unstructured.NestedMap(stagedSpec, "source")
+		if !ok || err != nil || !found || !reflect.DeepEqual(source, desiredSource) {
 			return false
 		}
 	}

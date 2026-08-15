@@ -71,7 +71,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/upgrade-release.sh [--yes] [--dry-run-only] [--quiesce-argo-controller] <version>
 
-  version             Exact release, for example v0.3.8 or 0.3.8
+  version             Exact release, for example v0.3.9 or 0.3.9
   --yes               Perform the upgrade after the server-side dry run
   --dry-run-only      Stop after backup and server-side Helm dry run
   --quiesce-argo-controller

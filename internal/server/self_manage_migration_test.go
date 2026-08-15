@@ -222,7 +222,8 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 	if pending.GetAnnotations()[selfManagedPhaseAnnotation] != selfManagedPhaseAwaiting {
 		t.Fatal("approval before acceptance sync activated prune")
 	}
-	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
+	pendingSource, _, _ := unstructured.NestedMap(pending.Object, "spec", "source")
+	pending.Object["operation"] = map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "source": pendingSource, "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "retry": map[string]any{}, "initiatedBy": map[string]any{"username": "operator@example.com"}}
 	if _, err := resource.Update(ctx, pending, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -239,8 +240,9 @@ func TestSelfManagedApplicationRequiresMatchingApprovalAndThenIsNoOp(t *testing.
 		t.Fatal(err)
 	}
 	for name, completedOperation := range map[string]map[string]any{
-		"completed prune": {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
-		"completed force": {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed prune":            {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": true}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed force":            {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"apply": map[string]any{"force": true}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}},
+		"completed configured retry": {"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "source": pendingSource, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "retry": map[string]any{"limit": int64(1)}, "initiatedBy": map[string]any{}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate, _ := resource.Get(ctx, localArgoApplicationName, metav1.GetOptions{})
@@ -607,6 +609,39 @@ func TestSelfManagedOperationConflictRequiresFreshReconcileNotBlindRetry(t *test
 	}
 }
 
+func TestSelfManagedOperationPayloadSafeAcceptsOnlyExactArgo34Defaults(t *testing.T) {
+	source := map[string]any{
+		"repoURL":        localArgoRepoURL,
+		"chart":          "astronomer",
+		"targetRevision": embeddedSelfManagedChartRevisionForTest,
+	}
+	stagedSpec := map[string]any{"source": source}
+	safe := map[string]any{
+		"sync": map[string]any{
+			"revision":     embeddedSelfManagedChartRevisionForTest,
+			"source":       source,
+			"syncStrategy": map[string]any{"hook": map[string]any{}},
+		},
+		"retry":       map[string]any{},
+		"initiatedBy": map[string]any{},
+	}
+	if !selfManagedOperationPayloadSafe(safe, stagedSpec) {
+		t.Fatal("exact Argo CD 3.4 default operation shape was rejected")
+	}
+
+	sourceOverride := runtime.DeepCopyJSONValue(safe).(map[string]any)
+	sourceOverride["sync"].(map[string]any)["source"] = map[string]any{"repoURL": "https://unreviewed.example.invalid/chart"}
+	if selfManagedOperationPayloadSafe(sourceOverride, stagedSpec) {
+		t.Fatal("source override passed acceptance validation")
+	}
+
+	configuredRetry := runtime.DeepCopyJSONValue(safe).(map[string]any)
+	configuredRetry["retry"] = map[string]any{"limit": int64(1)}
+	if selfManagedOperationPayloadSafe(configuredRetry, stagedSpec) {
+		t.Fatal("configured retry passed single-attempt acceptance validation")
+	}
+}
+
 func successfulSelfManagedAcceptanceStatus(t *testing.T, application *unstructured.Unstructured) map[string]any {
 	t.Helper()
 	source, found, err := unstructured.NestedMap(application.Object, "spec", "source")
@@ -620,7 +655,7 @@ func successfulSelfManagedAcceptanceStatus(t *testing.T, application *unstructur
 	return map[string]any{
 		"sync":           map[string]any{"status": "Synced", "comparedTo": map[string]any{"source": source, "destination": destination}},
 		"health":         map[string]any{"status": "Healthy"},
-		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
+		"operationState": map[string]any{"phase": "Succeeded", "operation": map[string]any{"sync": map[string]any{"revision": embeddedSelfManagedChartRevisionForTest, "source": source, "prune": false, "syncStrategy": map[string]any{"hook": map[string]any{}}}, "retry": map[string]any{}, "initiatedBy": map[string]any{"username": "operator@example.com"}}, "syncResult": map[string]any{"source": source}},
 	}
 }
 
