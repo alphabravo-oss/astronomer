@@ -34,6 +34,8 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 
 	r.Route("/delivery", func(r chi.Router) {
 		if deps.DeliveryInventory != nil {
+			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryInventory, rbac.VerbRead)).
+				Get("/fleet/", deps.DeliveryInventory.Fleet)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbRead)).
 				Get("/system/compatibility/", deps.DeliveryInventory.SystemCompatibility)
 		}

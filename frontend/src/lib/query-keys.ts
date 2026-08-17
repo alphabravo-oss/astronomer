@@ -306,6 +306,7 @@ export const queryKeys = {
   delivery: {
     all: ["delivery"] as const,
     system: ["delivery", "system"] as const,
+    fleet: ["delivery", "fleet"] as const,
     sources: (projectId: string, params?: Record<string, unknown>) =>
       ["delivery", projectId, "sources", params] as const,
     sourcesAll: (projectId: string) =>

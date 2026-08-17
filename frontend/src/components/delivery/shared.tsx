@@ -100,11 +100,13 @@ export function DeliveryShell({
   projectId,
   projects,
   setProjectId,
+  showProjectSelect = true,
   children,
 }: {
   projectId: string;
   projects: Array<{ id: string; displayName: string; name: string }>;
   setProjectId: (id: string) => void;
+  showProjectSelect?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -134,26 +136,28 @@ export function DeliveryShell({
             );
           })}
         </nav>
-        <label className="flex min-w-64 items-center gap-2 text-sm">
-          <FolderKanban
-            className="h-4 w-4 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <span className="sr-only">Delivery project</span>
-          <select
-            aria-label="Delivery project"
-            value={projectId}
-            onChange={(event) => setProjectId(event.target.value)}
-            className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
-          >
-            <option value="">Select a project</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.displayName || project.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showProjectSelect ? (
+          <label className="flex min-w-64 items-center gap-2 text-sm">
+            <FolderKanban
+              className="h-4 w-4 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <span className="sr-only">Delivery project</span>
+            <select
+              aria-label="Delivery project"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
+            >
+              <option value="">Select a project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.displayName || project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
       {children}
     </div>
@@ -226,6 +230,7 @@ export function DeliveryPhaseBadge({ value }: { value: string }) {
           "incompatible",
           "rejected",
           "revoked",
+          "disconnected",
         ].includes(normalized)
       ? "failed"
       : [
@@ -234,6 +239,8 @@ export function DeliveryPhaseBadge({ value }: { value: string }) {
             "paused",
             "timed_out",
             "upgrade_required",
+            "stale",
+            "inventory_missing",
           ].includes(normalized)
         ? "warning"
         : [

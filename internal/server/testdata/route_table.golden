@@ -277,6 +277,7 @@ GET /api/v1/delivery/clusters/{clusterId}/inventory
 GET /api/v1/delivery/deployments
 GET /api/v1/delivery/deployments/{id}
 GET /api/v1/delivery/deployments/{id}/events
+GET /api/v1/delivery/fleet
 GET /api/v1/delivery/rollouts
 GET /api/v1/delivery/rollouts/{id}
 GET /api/v1/delivery/rollouts/{id}/clusters

@@ -671,6 +671,69 @@ export interface DeliverySystemCompatibility {
   }>;
 }
 
+export interface DeliveryFleetCount {
+  key: string;
+  count: number;
+}
+
+export interface DeliveryFleetSummary {
+  adoptedClusters: number;
+  fluxReady: number;
+  incompatible: number;
+  disconnected: number;
+  stale: number;
+  assignments: number;
+  drifted: number;
+  failed: number;
+  degraded: number;
+  activeRollouts: number;
+}
+
+export interface DeliveryFleetCluster {
+  id: string;
+  name: string;
+  displayName: string;
+  isLocal: boolean;
+  connected: boolean;
+  stale: boolean;
+  privilegeProfile: string;
+  kubernetesVersion: string;
+  agentVersion: string;
+  fluxVersion: string;
+  compatibilityStatus: string;
+  inventoryReady: boolean;
+  inventoryErrorCode: string;
+  assignmentCount: number;
+  readyCount: number;
+  failedCount: number;
+  degradedCount: number;
+  driftedCount: number;
+  lastHeartbeat: string | null;
+  inventoryObservedAt: string | null;
+  lastObservedAt: string | null;
+}
+
+export interface DeliveryFleetAttention {
+  clusterId: string;
+  clusterName: string;
+  severity: "error" | "warning";
+  reason: string;
+  detail: string;
+}
+
+export interface DeliveryFleetDistributions {
+  compatibility: DeliveryFleetCount[];
+  privilege: DeliveryFleetCount[];
+  assignmentPhases: DeliveryFleetCount[];
+}
+
+export interface DeliveryFleet {
+  summary: DeliveryFleetSummary;
+  clusters: DeliveryFleetCluster[];
+  attention: DeliveryFleetAttention[];
+  distributions: DeliveryFleetDistributions;
+}
+
 export interface PageParams {
   limit?: number;
   offset?: number;
@@ -1163,6 +1226,13 @@ export async function getDeliverySystemCompatibility() {
   return response.data.data;
 }
 
+export async function getDeliveryFleet() {
+  const response = await api.get<DataEnvelope<DeliveryFleet>>(
+    "/delivery/fleet/",
+  );
+  return response.data.data;
+}
+
 export function rolloutIsTerminal(state: RolloutState): boolean {
   return [
     "rejected",
@@ -1225,6 +1295,10 @@ const systemCompatibilityMatchesWire: AssertNoPhantomWireKeys<
   DeliverySystemCompatibility,
   DeliveryContracts["DeliverySystemCompatibility"]
 > = true;
+const deliveryFleetMatchesWire: AssertNoPhantomWireKeys<
+  DeliveryFleet,
+  DeliveryContracts["DeliveryFleet"]
+> = true;
 
 void [
   deliveryTargetMatchesWire,
@@ -1239,4 +1313,5 @@ void [
   controllerInventoryMatchesWire,
   clusterInventoryMatchesWire,
   systemCompatibilityMatchesWire,
+  deliveryFleetMatchesWire,
 ];

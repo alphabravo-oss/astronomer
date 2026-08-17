@@ -708,18 +708,18 @@ WITH seeded AS (
     FOR UPDATE
 ), updated AS (
     UPDATE delivery_system_cluster_assignments a
-    SET observed_distribution_digest = $2,
-        observed_agent_version = $3,
+    SET observed_distribution_digest = $2::text,
+        observed_agent_version = $3::text,
         last_observed_at = $4,
         acknowledged_at = COALESCE(acknowledged_at, $4),
         phase = CASE
             WHEN $5::boolean
-             AND $2 = r.distribution_digest
-             AND $3 = r.agent_version
+             AND $2::text = r.distribution_digest
+             AND $3::text = r.agent_version
              AND a.phase IN ('rolling_back','rolled_back') THEN 'rolled_back'
             WHEN $5::boolean
-             AND $2 = r.distribution_digest
-             AND $3 = r.agent_version THEN 'ready'
+             AND $2::text = r.distribution_digest
+             AND $3::text = r.agent_version THEN 'ready'
             WHEN $6::text = 'incompatible'
              AND a.phase IN ('rolling_back','rolled_back') THEN 'rollback_failed'
             WHEN $6::text = 'incompatible' THEN 'failed'
@@ -728,14 +728,14 @@ WITH seeded AS (
         END,
         ready_at = CASE
             WHEN $5::boolean
-             AND $2 = r.distribution_digest
-             AND $3 = r.agent_version
+             AND $2::text = r.distribution_digest
+             AND $3::text = r.agent_version
             THEN COALESCE(ready_at, $4) ELSE NULL END,
         last_error_code = CASE
             WHEN $5::boolean
-             AND $2 = r.distribution_digest
-             AND $3 = r.agent_version THEN ''
-            ELSE $7 END
+             AND $2::text = r.distribution_digest
+             AND $3::text = r.agent_version THEN ''
+            ELSE $7::text END
     FROM delivery_system_releases r
     WHERE a.cluster_id = $1 AND r.id = a.desired_release_id
     RETURNING a.cluster_id, a.desired_release_id, a.previous_release_id, a.rollout_id, a.generation, a.cohort, a.release_order, a.phase, a.fence, a.released_at, a.acknowledged_at, a.ready_at, a.deadline, a.observed_distribution_digest, a.observed_agent_version, a.last_error_code, a.last_observed_at, a.created_at, a.updated_at

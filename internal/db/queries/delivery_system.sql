@@ -134,18 +134,18 @@ WITH seeded AS (
     FOR UPDATE
 ), updated AS (
     UPDATE delivery_system_cluster_assignments a
-    SET observed_distribution_digest = sqlc.arg(observed_distribution_digest),
-        observed_agent_version = sqlc.arg(observed_agent_version),
+    SET observed_distribution_digest = sqlc.arg(observed_distribution_digest)::text,
+        observed_agent_version = sqlc.arg(observed_agent_version)::text,
         last_observed_at = sqlc.arg(observed_at),
         acknowledged_at = COALESCE(acknowledged_at, sqlc.arg(observed_at)),
         phase = CASE
             WHEN sqlc.arg(inventory_ready)::boolean
-             AND sqlc.arg(observed_distribution_digest) = r.distribution_digest
-             AND sqlc.arg(observed_agent_version) = r.agent_version
+             AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
+             AND sqlc.arg(observed_agent_version)::text = r.agent_version
              AND a.phase IN ('rolling_back','rolled_back') THEN 'rolled_back'
             WHEN sqlc.arg(inventory_ready)::boolean
-             AND sqlc.arg(observed_distribution_digest) = r.distribution_digest
-             AND sqlc.arg(observed_agent_version) = r.agent_version THEN 'ready'
+             AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
+             AND sqlc.arg(observed_agent_version)::text = r.agent_version THEN 'ready'
             WHEN sqlc.arg(compatibility_status)::text = 'incompatible'
              AND a.phase IN ('rolling_back','rolled_back') THEN 'rollback_failed'
             WHEN sqlc.arg(compatibility_status)::text = 'incompatible' THEN 'failed'
@@ -154,14 +154,14 @@ WITH seeded AS (
         END,
         ready_at = CASE
             WHEN sqlc.arg(inventory_ready)::boolean
-             AND sqlc.arg(observed_distribution_digest) = r.distribution_digest
-             AND sqlc.arg(observed_agent_version) = r.agent_version
+             AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
+             AND sqlc.arg(observed_agent_version)::text = r.agent_version
             THEN COALESCE(ready_at, sqlc.arg(observed_at)) ELSE NULL END,
         last_error_code = CASE
             WHEN sqlc.arg(inventory_ready)::boolean
-             AND sqlc.arg(observed_distribution_digest) = r.distribution_digest
-             AND sqlc.arg(observed_agent_version) = r.agent_version THEN ''
-            ELSE sqlc.arg(error_code) END
+             AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
+             AND sqlc.arg(observed_agent_version)::text = r.agent_version THEN ''
+            ELSE sqlc.arg(error_code)::text END
     FROM delivery_system_releases r
     WHERE a.cluster_id = sqlc.arg(cluster_id) AND r.id = a.desired_release_id
     RETURNING a.*

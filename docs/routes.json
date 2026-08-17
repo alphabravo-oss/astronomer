@@ -1769,6 +1769,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/delivery/fleet"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/delivery/rollouts"
   },
   {

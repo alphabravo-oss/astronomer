@@ -73,6 +73,7 @@ const livenessKeys = [
   qk.agents.all,
   qk.clusters.detail(CID),
 ];
+const fleetLivenessKeys = [...livenessKeys, qk.delivery.fleet];
 const conditionsKeys = [
   qk.clusters.conditions(CID),
   qk.clusters.conditionRemediation(CID),
@@ -80,8 +81,8 @@ const conditionsKeys = [
 
 /** Expected keys per event type, built exclusively from the factory. */
 const EVENT_CASES: Record<string, QueryKey[]> = {
-  "cluster.connected": livenessKeys,
-  "cluster.disconnected": livenessKeys,
+  "cluster.connected": fleetLivenessKeys,
+  "cluster.disconnected": fleetLivenessKeys,
   // Heartbeat also refreshes the conditions surface (P4.9).
   "cluster.heartbeat": [...livenessKeys, ...conditionsKeys],
   // Merger-owned for list/detail rows (patched in place); conditions +
@@ -90,9 +91,9 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   "cluster.metrics": [qk.clusters.metricsAll(CID)],
   "cluster.created": [qk.clusters.listAll],
   "cluster.updated": [qk.clusters.listAll, qk.clusters.detail(CID)],
-  "cluster.deleted": livenessKeys,
+  "cluster.deleted": fleetLivenessKeys,
   "agent.reconnecting": livenessKeys,
-  "agent.failed": livenessKeys,
+  "agent.failed": fleetLivenessKeys,
   "cluster.k8s_changed": [
     qk.clusters.podsAll(CID),
     qk.workloads.byCluster(CID),
@@ -118,16 +119,22 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
     qk.adminOperations.dlq(EID),
   ],
   "siem_forwarder.changed": [qk.siemForwarders.all],
-  "cluster_agents.changed": [qk.agents.all, qk.agents.operations(CID)],
+  "cluster_agents.changed": [
+    qk.agents.all,
+    qk.delivery.fleet,
+    qk.agents.operations(CID),
+  ],
   "delivery_source.changed": [qk.delivery.sourcesAll(PID)],
   "component_bundle.changed": [qk.delivery.bundlesAll(PID)],
   "delivery_target.changed": [qk.delivery.targetsAll(PID)],
   "delivery_rollout.changed": [
     qk.delivery.rolloutsAll(PID),
     qk.delivery.deploymentsAll(PID),
+    qk.delivery.fleet,
   ],
   "cluster_deployment.changed": [
     qk.delivery.deploymentsAll(PID),
+    qk.delivery.fleet,
     qk.delivery.clusterInventory(PID, CID),
   ],
   "template_binding.changed": [qk.clusterPages.templateBinding(CID)],

@@ -973,6 +973,78 @@ FROM delivery_controller_inventory
 GROUP BY compatibility_status
 ORDER BY compatibility_status;
 
+-- Fleet scoreboard: one row per live cluster. Local host-only clusters stay
+-- in the table so operators can see them, but the handler excludes is_local
+-- from Flux-managed tiles. Removed assignments are omitted; Drifted is the
+-- normalized condition the observer persists.
+-- name: ListDeliveryFleetClusters :many
+SELECT
+    c.id,
+    c.name,
+    c.display_name,
+    c.is_local,
+    c.status,
+    c.kubernetes_version,
+    c.agent_version,
+    c.last_heartbeat,
+    c.annotations,
+    EXISTS (
+        SELECT 1 FROM agent_connections ac
+        WHERE ac.cluster_id = c.id AND ac.status = 'connected'
+          AND ac.disconnected_at IS NULL
+    ) AS connected,
+    COALESCE(i.compatibility_status, 'unknown')::text AS compatibility_status,
+    COALESCE(i.ready, false) AS inventory_ready,
+    COALESCE(i.flux_version, '')::text AS flux_version,
+    COALESCE(i.error_code, '')::text AS inventory_error_code,
+    i.observed_at AS inventory_observed_at,
+    COALESCE(d.assignment_count, 0)::bigint AS assignment_count,
+    COALESCE(d.ready_count, 0)::bigint AS ready_count,
+    COALESCE(d.failed_count, 0)::bigint AS failed_count,
+    COALESCE(d.degraded_count, 0)::bigint AS degraded_count,
+    COALESCE(d.unknown_count, 0)::bigint AS unknown_count,
+    COALESCE(d.applying_count, 0)::bigint AS applying_count,
+    COALESCE(d.suspended_count, 0)::bigint AS suspended_count,
+    COALESCE(d.pending_count, 0)::bigint AS pending_count,
+    COALESCE(d.blocked_count, 0)::bigint AS blocked_count,
+    COALESCE(d.deleting_count, 0)::bigint AS deleting_count,
+    COALESCE(d.drifted_count, 0)::bigint AS drifted_count,
+    d.last_observed_at
+FROM clusters c
+LEFT JOIN delivery_controller_inventory i ON i.cluster_id = c.id
+LEFT JOIN LATERAL (
+    SELECT
+        count(*) AS assignment_count,
+        count(*) FILTER (WHERE phase = 'ready') AS ready_count,
+        count(*) FILTER (WHERE phase = 'failed') AS failed_count,
+        count(*) FILTER (WHERE phase = 'degraded') AS degraded_count,
+        count(*) FILTER (WHERE phase = 'unknown') AS unknown_count,
+        count(*) FILTER (WHERE phase = 'applying') AS applying_count,
+        count(*) FILTER (WHERE phase = 'suspended') AS suspended_count,
+        count(*) FILTER (WHERE phase = 'pending') AS pending_count,
+        count(*) FILTER (WHERE phase = 'blocked') AS blocked_count,
+        count(*) FILTER (WHERE phase = 'deleting') AS deleting_count,
+        count(*) FILTER (WHERE conditions @> '[{"type":"Drifted","status":"True"}]'::jsonb) AS drifted_count,
+        max(last_observed_at) AS last_observed_at
+    FROM cluster_deployments
+    WHERE cluster_id = c.id
+      AND phase <> 'removed'
+) d ON true
+WHERE c.decommissioned_at IS NULL
+ORDER BY c.is_local ASC, c.display_name ASC, c.name ASC, c.id ASC;
+
+-- name: CountActiveDeliveryRollouts :one
+SELECT count(*)
+FROM delivery_rollouts
+WHERE state IN (
+    'resolving',
+    'awaiting_approval',
+    'queued',
+    'progressing',
+    'paused',
+    'rolling_back'
+);
+
 -- name: GetCurrentDeliverySystemRollout :one
 SELECT * FROM delivery_system_rollouts
 WHERE state IN ('awaiting_approval','queued','progressing','paused','rolling_back')

@@ -5,6 +5,7 @@ import {
   approveDeliveryRollout,
   createDeliverySource,
   createDeliveryTarget,
+  getDeliveryFleet,
   listDeliverySources,
   previewDeliveryTarget,
   startDeliveryRollout,
@@ -248,5 +249,37 @@ describe("delivery API client", () => {
       { project_id: "project-1", reason_code: "manual_reconcile" },
       { headers: { "If-Match": '"10"', "Idempotency-Key": "request-5" } },
     );
+  });
+
+  it("loads the fleet scoreboard without a project scope", async () => {
+    mockedApi.get.mockResolvedValueOnce({
+      data: {
+        data: {
+          summary: {
+            adoptedClusters: 2,
+            fluxReady: 2,
+            incompatible: 0,
+            disconnected: 0,
+            stale: 0,
+            assignments: 4,
+            drifted: 0,
+            failed: 0,
+            degraded: 0,
+            activeRollouts: 0,
+          },
+          clusters: [],
+          attention: [],
+          distributions: {
+            compatibility: [],
+            privilege: [],
+            assignmentPhases: [],
+          },
+        },
+      },
+    });
+
+    await getDeliveryFleet();
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/delivery/fleet/");
   });
 });

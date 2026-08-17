@@ -110,7 +110,9 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 		} else if version != fluxVersion {
 			controllerReady = false
 		}
-		if !containsArgument(args, "--no-cross-namespace-refs=true") {
+		// source-controller has no cross-namespace-refs flag. Helm and
+		// kustomize are the reconcilers that must refuse foreign-namespace refs.
+		if name != "source-controller" && !containsArgument(args, "--no-cross-namespace-refs=true") {
 			hardeningReady = false
 		}
 		if name == "kustomize-controller" && !containsArgument(args, "--no-remote-bases=true") {

@@ -92,7 +92,7 @@ The persisted token is used for every subsequent astro command.`,
 			client := astrocli.NewClient(server, "")
 			var resp loginResponse
 			err = client.Do(cmd.Context(), "POST", "/api/v1/auth/login/", map[string]any{
-				"username": username,
+				"email":    username,
 				"password": password,
 			}, &resp)
 			if err != nil {

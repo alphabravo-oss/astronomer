@@ -259,6 +259,31 @@ async function mockApi(page: Page, user = adminUser) {
         },
       });
     }
+    if (path === "/delivery/fleet" && method === "GET") {
+      return route.fulfill({
+        json: apiResponse({
+          summary: {
+            adoptedClusters: 2,
+            fluxReady: 2,
+            incompatible: 0,
+            disconnected: 0,
+            stale: 0,
+            assignments: 4,
+            drifted: 0,
+            failed: 0,
+            degraded: 0,
+            activeRollouts: 0,
+          },
+          clusters: [],
+          attention: [],
+          distributions: {
+            compatibility: [{ key: "compatible", count: 2 }],
+            privilege: [{ key: "admin", count: 2 }],
+            assignmentPhases: [{ key: "ready", count: 4 }],
+          },
+        }),
+      });
+    }
     if (path === "/delivery/system/compatibility" && method === "GET") {
       return route.fulfill({
         json: apiResponse({

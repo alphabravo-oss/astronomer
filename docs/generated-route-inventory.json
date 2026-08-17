@@ -5095,6 +5095,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/delivery/fleet/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/delivery/rollouts/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",

@@ -276,17 +276,17 @@ func reconcilerObject(assignment protocol.DeliveryAssignmentV2, names ObjectName
 		"test":               map[string]any{"enable": config.EnableTests},
 		"driftDetection":     map[string]any{"mode": config.DriftMode},
 	}
-	if assignment.Policy.RetryInterval != "" {
-		spec["retryInterval"] = assignment.Policy.RetryInterval
-	}
 	if assignment.Source.Kind == protocol.DeliverySourceHelmOCI {
 		spec["chartRef"] = map[string]any{"kind": "OCIRepository", "name": names.Source}
 	} else {
-		spec["chart"] = map[string]any{"spec": map[string]any{
-			"chart":     config.Chart,
-			"version":   config.Version,
-			"sourceRef": map[string]any{"kind": "HelmRepository", "name": names.Source},
-		}}
+		spec["chart"] = map[string]any{
+			"metadata": map[string]any{"labels": map[string]any{ManagedByLabel: ManagedByValue}},
+			"spec": map[string]any{
+				"chart":     config.Chart,
+				"version":   config.Version,
+				"sourceRef": map[string]any{"kind": "HelmRepository", "name": names.Source},
+			},
+		}
 	}
 	if len(config.Values) != 0 {
 		var values any

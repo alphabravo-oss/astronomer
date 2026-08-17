@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -92,6 +93,16 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 		return false, fmt.Errorf("running agent version %q does not match desired %q", m.config.CurrentAgentVersion, release.AgentVersion)
 	}
 
+	// Enrollment already materializes the exact reviewed controller set.
+	// Treat that as complete so the first released generation does not wait
+	// on a still-reconciling system OCIRepository, and so a disconnected
+	// official flux-manifests artifact is not applied over the overlay.
+	if match, err := m.liveControllersMatch(ctx); err != nil {
+		return false, err
+	} else if match {
+		return true, nil
+	}
+
 	objects := systemObjects(release)
 	for _, object := range objects {
 		if err := m.applyOwned(ctx, object); err != nil {
@@ -147,6 +158,28 @@ func (m *SystemManager) validateRelease(release protocol.DeliverySystemReleaseV2
 		}
 	}
 	return nil
+}
+
+func (m *SystemManager) liveControllersMatch(ctx context.Context) (bool, error) {
+	expected, err := fluxdistribution.ControllerImages()
+	if err != nil {
+		return false, err
+	}
+	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller"} {
+		deployment, err := m.client.AppsV1().Deployments(DeliverySystemNamespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		image, _ := controllerImageAndArgs(deployment, name)
+		want := expected[name]
+		if image == "" || !strings.HasSuffix(image, "@"+want.Digest) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (m *SystemManager) reconcileAgentImage(ctx context.Context, desired string) (bool, error) {
@@ -205,7 +238,8 @@ func (m *SystemManager) applyOwned(ctx context.Context, object *unstructured.Uns
 	if err != nil {
 		return err
 	}
-	_, err = resource.Patch(ctx, object.GetName(), types.ApplyPatchType, payload, metav1.PatchOptions{FieldManager: systemFieldManager})
+	force := true
+	_, err = resource.Patch(ctx, object.GetName(), types.ApplyPatchType, payload, metav1.PatchOptions{FieldManager: systemFieldManager, Force: &force})
 	if err != nil {
 		return fmt.Errorf("apply system %s: %w", object.GetKind(), err)
 	}

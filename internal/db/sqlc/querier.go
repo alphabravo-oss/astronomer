@@ -132,6 +132,7 @@ type Querier interface {
 	// set of rules in a single query, replacing the per-rule 200-event fetch
 	// the rule list used to COUNT active alerts in Go.
 	CountActiveAlertsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]CountActiveAlertsByRulesRow, error)
+	CountActiveDeliveryRollouts(ctx context.Context) (int64, error)
 	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Drives the startup-time deprecation warning (migration 045). Counts
 	// enabled sso_configurations rows that have NOT been stamped as migrated
@@ -1298,6 +1299,11 @@ type Querier interface {
 	// a future `sqlc generate` picks them up by name.
 	ListDashboardWidgets(ctx context.Context) ([]DashboardWidget, error)
 	ListDeferredOperations(ctx context.Context, arg ListDeferredOperationsParams) ([]DeferredOperation, error)
+	// Fleet scoreboard: one row per live cluster. Local host-only clusters stay
+	// in the table so operators can see them, but the handler excludes is_local
+	// from Flux-managed tiles. Removed assignments are omitted; Drifted is the
+	// normalized condition the observer persists.
+	ListDeliveryFleetClusters(ctx context.Context) ([]ListDeliveryFleetClustersRow, error)
 	ListDeliveryPlanningCandidates(ctx context.Context, arg ListDeliveryPlanningCandidatesParams) ([]ListDeliveryPlanningCandidatesRow, error)
 	ListDeliveryRolloutApprovals(ctx context.Context, rolloutID uuid.UUID) ([]DeliveryRolloutApproval, error)
 	ListDeliveryRolloutClusters(ctx context.Context, arg ListDeliveryRolloutClustersParams) ([]DeliveryRolloutCluster, error)

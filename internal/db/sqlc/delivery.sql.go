@@ -680,6 +680,26 @@ func (q *Queries) CompleteDeliverySourceResolution(ctx context.Context, arg Comp
 	return i, err
 }
 
+const countActiveDeliveryRollouts = `-- name: CountActiveDeliveryRollouts :one
+SELECT count(*)
+FROM delivery_rollouts
+WHERE state IN (
+    'resolving',
+    'awaiting_approval',
+    'queued',
+    'progressing',
+    'paused',
+    'rolling_back'
+)
+`
+
+func (q *Queries) CountActiveDeliveryRollouts(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveDeliveryRollouts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countClusterDeploymentEvents = `-- name: CountClusterDeploymentEvents :one
 SELECT count(*)
 FROM cluster_deployment_events e
@@ -2976,6 +2996,145 @@ func (q *Queries) ListComponentBundles(ctx context.Context, arg ListComponentBun
 			&i.UpdatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeliveryFleetClusters = `-- name: ListDeliveryFleetClusters :many
+SELECT
+    c.id,
+    c.name,
+    c.display_name,
+    c.is_local,
+    c.status,
+    c.kubernetes_version,
+    c.agent_version,
+    c.last_heartbeat,
+    c.annotations,
+    EXISTS (
+        SELECT 1 FROM agent_connections ac
+        WHERE ac.cluster_id = c.id AND ac.status = 'connected'
+          AND ac.disconnected_at IS NULL
+    ) AS connected,
+    COALESCE(i.compatibility_status, 'unknown')::text AS compatibility_status,
+    COALESCE(i.ready, false) AS inventory_ready,
+    COALESCE(i.flux_version, '')::text AS flux_version,
+    COALESCE(i.error_code, '')::text AS inventory_error_code,
+    i.observed_at AS inventory_observed_at,
+    COALESCE(d.assignment_count, 0)::bigint AS assignment_count,
+    COALESCE(d.ready_count, 0)::bigint AS ready_count,
+    COALESCE(d.failed_count, 0)::bigint AS failed_count,
+    COALESCE(d.degraded_count, 0)::bigint AS degraded_count,
+    COALESCE(d.unknown_count, 0)::bigint AS unknown_count,
+    COALESCE(d.applying_count, 0)::bigint AS applying_count,
+    COALESCE(d.suspended_count, 0)::bigint AS suspended_count,
+    COALESCE(d.pending_count, 0)::bigint AS pending_count,
+    COALESCE(d.blocked_count, 0)::bigint AS blocked_count,
+    COALESCE(d.deleting_count, 0)::bigint AS deleting_count,
+    COALESCE(d.drifted_count, 0)::bigint AS drifted_count,
+    d.last_observed_at
+FROM clusters c
+LEFT JOIN delivery_controller_inventory i ON i.cluster_id = c.id
+LEFT JOIN LATERAL (
+    SELECT
+        count(*) AS assignment_count,
+        count(*) FILTER (WHERE phase = 'ready') AS ready_count,
+        count(*) FILTER (WHERE phase = 'failed') AS failed_count,
+        count(*) FILTER (WHERE phase = 'degraded') AS degraded_count,
+        count(*) FILTER (WHERE phase = 'unknown') AS unknown_count,
+        count(*) FILTER (WHERE phase = 'applying') AS applying_count,
+        count(*) FILTER (WHERE phase = 'suspended') AS suspended_count,
+        count(*) FILTER (WHERE phase = 'pending') AS pending_count,
+        count(*) FILTER (WHERE phase = 'blocked') AS blocked_count,
+        count(*) FILTER (WHERE phase = 'deleting') AS deleting_count,
+        count(*) FILTER (WHERE conditions @> '[{"type":"Drifted","status":"True"}]'::jsonb) AS drifted_count,
+        max(last_observed_at) AS last_observed_at
+    FROM cluster_deployments
+    WHERE cluster_id = c.id
+      AND phase <> 'removed'
+) d ON true
+WHERE c.decommissioned_at IS NULL
+ORDER BY c.is_local ASC, c.display_name ASC, c.name ASC, c.id ASC
+`
+
+type ListDeliveryFleetClustersRow struct {
+	ID                  uuid.UUID          `json:"id"`
+	Name                string             `json:"name"`
+	DisplayName         string             `json:"display_name"`
+	IsLocal             bool               `json:"is_local"`
+	Status              string             `json:"status"`
+	KubernetesVersion   string             `json:"kubernetes_version"`
+	AgentVersion        string             `json:"agent_version"`
+	LastHeartbeat       pgtype.Timestamptz `json:"last_heartbeat"`
+	Annotations         json.RawMessage    `json:"annotations"`
+	Connected           bool               `json:"connected"`
+	CompatibilityStatus string             `json:"compatibility_status"`
+	InventoryReady      bool               `json:"inventory_ready"`
+	FluxVersion         string             `json:"flux_version"`
+	InventoryErrorCode  string             `json:"inventory_error_code"`
+	InventoryObservedAt pgtype.Timestamptz `json:"inventory_observed_at"`
+	AssignmentCount     int64              `json:"assignment_count"`
+	ReadyCount          int64              `json:"ready_count"`
+	FailedCount         int64              `json:"failed_count"`
+	DegradedCount       int64              `json:"degraded_count"`
+	UnknownCount        int64              `json:"unknown_count"`
+	ApplyingCount       int64              `json:"applying_count"`
+	SuspendedCount      int64              `json:"suspended_count"`
+	PendingCount        int64              `json:"pending_count"`
+	BlockedCount        int64              `json:"blocked_count"`
+	DeletingCount       int64              `json:"deleting_count"`
+	DriftedCount        int64              `json:"drifted_count"`
+	LastObservedAt      interface{}        `json:"last_observed_at"`
+}
+
+// Fleet scoreboard: one row per live cluster. Local host-only clusters stay
+// in the table so operators can see them, but the handler excludes is_local
+// from Flux-managed tiles. Removed assignments are omitted; Drifted is the
+// normalized condition the observer persists.
+func (q *Queries) ListDeliveryFleetClusters(ctx context.Context) ([]ListDeliveryFleetClustersRow, error) {
+	rows, err := q.db.Query(ctx, listDeliveryFleetClusters)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDeliveryFleetClustersRow{}
+	for rows.Next() {
+		var i ListDeliveryFleetClustersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.IsLocal,
+			&i.Status,
+			&i.KubernetesVersion,
+			&i.AgentVersion,
+			&i.LastHeartbeat,
+			&i.Annotations,
+			&i.Connected,
+			&i.CompatibilityStatus,
+			&i.InventoryReady,
+			&i.FluxVersion,
+			&i.InventoryErrorCode,
+			&i.InventoryObservedAt,
+			&i.AssignmentCount,
+			&i.ReadyCount,
+			&i.FailedCount,
+			&i.DegradedCount,
+			&i.UnknownCount,
+			&i.ApplyingCount,
+			&i.SuspendedCount,
+			&i.PendingCount,
+			&i.BlockedCount,
+			&i.DeletingCount,
+			&i.DriftedCount,
+			&i.LastObservedAt,
 		); err != nil {
 			return nil, err
 		}

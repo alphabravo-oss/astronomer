@@ -129,8 +129,8 @@ func TestBuildAssignmentGoldenVariants(t *testing.T) {
 	}{
 		{name: "git-kustomize-auth-trust", assignment: gitAssignment(), wantSource: "GitRepository", wantRender: "Kustomization", wantCount: 8, wantHash: "8733bbfb0fe1f50c6bd05c29f0366b7b31f4eeaaf5b2f1772ea46fa6a4a8e09a"},
 		{name: "oci-kustomize-keyless", assignment: ociAssignment(), wantSource: "OCIRepository", wantRender: "Kustomization", wantCount: 6, wantHash: "21072323c036cb95d15d2891ca5f73c65a15bbad5a5c573d1bf087a2d5992ab3"},
-		{name: "helm-http-auth", assignment: helmHTTPAssignment(), wantSource: "HelmRepository", wantRender: "HelmRelease", wantCount: 7, wantHash: "b9bce4170c7b7a6994740c324d65c07d70c19dd11d0f157dbe4517cbcb49527f"},
-		{name: "helm-oci-platform-trust", assignment: helmOCIAssignment(), wantSource: "OCIRepository", wantRender: "HelmRelease", wantCount: 6, wantHash: "4f0d4075c6f92289c516cf01a6c2e13c86eb75feb33cb419f8596fc8cdf8c9eb"},
+		{name: "helm-http-auth", assignment: helmHTTPAssignment(), wantSource: "HelmRepository", wantRender: "HelmRelease", wantCount: 7, wantHash: "20378af400822bdb954c71ee1cd004f9dde142e39b95196ac85b8ca4a5f6a125"},
+		{name: "helm-oci-platform-trust", assignment: helmOCIAssignment(), wantSource: "OCIRepository", wantRender: "HelmRelease", wantCount: 6, wantHash: "b611a91e51347d3bbae5027d05fd6ee1765702b15e30aa497a15c4b994f76ccc"},
 	}
 	for _, test := range tests {
 		test := test
@@ -148,6 +148,11 @@ func TestBuildAssignmentGoldenVariants(t *testing.T) {
 			}
 			if got := materialization.Objects[len(materialization.Objects)-1].GetKind(); got != test.wantRender {
 				t.Errorf("renderer kind = %q, want %q", got, test.wantRender)
+			}
+			if test.wantRender == "HelmRelease" {
+				if _, found, _ := unstructured.NestedFieldNoCopy(materialization.Objects[len(materialization.Objects)-1].Object, "spec", "retryInterval"); found {
+					t.Fatal("HelmRelease must not set spec.retryInterval; Flux v2 rejects that field")
+				}
 			}
 			encoded, err := json.Marshal(materialization.Objects)
 			if err != nil {

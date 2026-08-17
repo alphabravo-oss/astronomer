@@ -1093,6 +1093,66 @@ export interface OpenAPIComponents {
           "observed_at"?: string | null;
           "updated_at": string;
         };
+    DeliveryFleet: {
+          "summary": OpenAPIComponents['schemas']['DeliveryFleetSummary'];
+          "clusters": OpenAPIComponents['schemas']['DeliveryFleetCluster'][];
+          "attention": OpenAPIComponents['schemas']['DeliveryFleetAttention'][];
+          "distributions": OpenAPIComponents['schemas']['DeliveryFleetDistributions'];
+        };
+    DeliveryFleetAttention: {
+          "cluster_id": string;
+          "cluster_name": string;
+          "severity": "error" | "warning";
+          "reason": string;
+          "detail": string;
+        };
+    DeliveryFleetCluster: {
+          "id": string;
+          "name": string;
+          "display_name": string;
+          "is_local": boolean;
+          "connected": boolean;
+          "stale": boolean;
+          "privilege_profile": string;
+          "kubernetes_version": string;
+          "agent_version": string;
+          "flux_version": string;
+          "compatibility_status": string;
+          "inventory_ready": boolean;
+          "inventory_error_code": string;
+          "assignment_count": number;
+          "ready_count": number;
+          "failed_count": number;
+          "degraded_count": number;
+          "drifted_count": number;
+          "last_heartbeat": string | null;
+          "inventory_observed_at": string | null;
+          "last_observed_at": string | null;
+        };
+    DeliveryFleetCount: {
+          "key": string;
+          "count": number;
+        };
+    DeliveryFleetDistributions: {
+          "compatibility": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
+          "privilege": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
+          "assignment_phases": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
+        };
+    DeliveryFleetEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryFleet'];
+        };
+    DeliveryFleetSummary: {
+          "adopted_clusters": number;
+          "flux_ready": number;
+          "incompatible": number;
+          "disconnected": number;
+          "stale": number;
+          "assignments": number;
+          "drifted": number;
+          "failed": number;
+          "degraded": number;
+          "active_rollouts": number;
+        };
     DeliveryFrozenRollout: {
           "id": string;
           "target_id": string;
@@ -2667,6 +2727,13 @@ export type DeliveryClusterInventoryEnvelope = OpenAPIComponents['schemas']['Del
 export type DeliveryCompatibilityContract = OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
 export type DeliveryCompatibilityCount = OpenAPIComponents['schemas']['DeliveryCompatibilityCount'];
 export type DeliveryControllerInventory = OpenAPIComponents['schemas']['DeliveryControllerInventory'];
+export type DeliveryFleet = OpenAPIComponents['schemas']['DeliveryFleet'];
+export type DeliveryFleetAttention = OpenAPIComponents['schemas']['DeliveryFleetAttention'];
+export type DeliveryFleetCluster = OpenAPIComponents['schemas']['DeliveryFleetCluster'];
+export type DeliveryFleetCount = OpenAPIComponents['schemas']['DeliveryFleetCount'];
+export type DeliveryFleetDistributions = OpenAPIComponents['schemas']['DeliveryFleetDistributions'];
+export type DeliveryFleetEnvelope = OpenAPIComponents['schemas']['DeliveryFleetEnvelope'];
+export type DeliveryFleetSummary = OpenAPIComponents['schemas']['DeliveryFleetSummary'];
 export type DeliveryFrozenRollout = OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
 export type DeliveryFrozenRolloutEnvelope = OpenAPIComponents['schemas']['DeliveryFrozenRolloutEnvelope'];
 export type DeliveryPreviewDecision = OpenAPIComponents['schemas']['DeliveryPreviewDecision'];

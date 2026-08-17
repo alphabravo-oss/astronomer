@@ -5541,6 +5541,87 @@ components:
       required: [data]
       properties:
         data: {$ref: '#/components/schemas/DeliverySystemCompatibility'}
+    DeliveryFleetCount:
+      type: object
+      additionalProperties: false
+      required: [key, count]
+      properties:
+        key: {type: string}
+        count: {type: integer, format: int64, minimum: 0}
+    DeliveryFleetSummary:
+      type: object
+      additionalProperties: false
+      required: [adopted_clusters, flux_ready, incompatible, disconnected, stale, assignments, drifted, failed, degraded, active_rollouts]
+      properties:
+        adopted_clusters: {type: integer, format: int64, minimum: 0}
+        flux_ready: {type: integer, format: int64, minimum: 0}
+        incompatible: {type: integer, format: int64, minimum: 0}
+        disconnected: {type: integer, format: int64, minimum: 0}
+        stale: {type: integer, format: int64, minimum: 0}
+        assignments: {type: integer, format: int64, minimum: 0}
+        drifted: {type: integer, format: int64, minimum: 0}
+        failed: {type: integer, format: int64, minimum: 0}
+        degraded: {type: integer, format: int64, minimum: 0}
+        active_rollouts: {type: integer, format: int64, minimum: 0}
+    DeliveryFleetCluster:
+      type: object
+      additionalProperties: false
+      required: [id, name, display_name, is_local, connected, stale, privilege_profile, kubernetes_version, agent_version, flux_version, compatibility_status, inventory_ready, inventory_error_code, assignment_count, ready_count, failed_count, degraded_count, drifted_count, last_heartbeat, inventory_observed_at, last_observed_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        display_name: {type: string}
+        is_local: {type: boolean}
+        connected: {type: boolean}
+        stale: {type: boolean}
+        privilege_profile: {type: string}
+        kubernetes_version: {type: string}
+        agent_version: {type: string}
+        flux_version: {type: string}
+        compatibility_status: {type: string}
+        inventory_ready: {type: boolean}
+        inventory_error_code: {type: string}
+        assignment_count: {type: integer, format: int64, minimum: 0}
+        ready_count: {type: integer, format: int64, minimum: 0}
+        failed_count: {type: integer, format: int64, minimum: 0}
+        degraded_count: {type: integer, format: int64, minimum: 0}
+        drifted_count: {type: integer, format: int64, minimum: 0}
+        last_heartbeat: {type: string, format: date-time, nullable: true}
+        inventory_observed_at: {type: string, format: date-time, nullable: true}
+        last_observed_at: {type: string, format: date-time, nullable: true}
+    DeliveryFleetAttention:
+      type: object
+      additionalProperties: false
+      required: [cluster_id, cluster_name, severity, reason, detail]
+      properties:
+        cluster_id: {type: string, format: uuid}
+        cluster_name: {type: string}
+        severity: {type: string, enum: [error, warning]}
+        reason: {type: string}
+        detail: {type: string}
+    DeliveryFleetDistributions:
+      type: object
+      additionalProperties: false
+      required: [compatibility, privilege, assignment_phases]
+      properties:
+        compatibility: {type: array, items: {$ref: '#/components/schemas/DeliveryFleetCount'}}
+        privilege: {type: array, items: {$ref: '#/components/schemas/DeliveryFleetCount'}}
+        assignment_phases: {type: array, items: {$ref: '#/components/schemas/DeliveryFleetCount'}}
+    DeliveryFleet:
+      type: object
+      additionalProperties: false
+      required: [summary, clusters, attention, distributions]
+      properties:
+        summary: {$ref: '#/components/schemas/DeliveryFleetSummary'}
+        clusters: {type: array, items: {$ref: '#/components/schemas/DeliveryFleetCluster'}}
+        attention: {type: array, items: {$ref: '#/components/schemas/DeliveryFleetAttention'}}
+        distributions: {$ref: '#/components/schemas/DeliveryFleetDistributions'}
+    DeliveryFleetEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/DeliveryFleet'}
   x-delivery-rollout-action:
     tags: [Delivery]
     summary: Apply a CAS-protected typed rollout transition
@@ -6116,6 +6197,22 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySystemCompatibilityEnvelope'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/delivery/fleet/:
+    get:
+      tags: [Delivery]
+      summary: Get the fleet-wide Flux delivery scoreboard
+      description: |
+        Cross-project summary of adopted Flux-managed clusters. The local
+        host-only cluster is included in the table and excluded from
+        adopted/Flux tiles. Requires a global delivery_inventory:read grant.
+      x-rbac: delivery_inventory:read
+      responses:
+        '200':
+          description: Fleet tiles, per-cluster rows, attention, and distributions
+          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryFleetEnvelope'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /scim/v2/Users:
     post:
       tags:

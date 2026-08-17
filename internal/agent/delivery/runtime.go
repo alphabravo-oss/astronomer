@@ -160,7 +160,7 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 	for {
 		if request && r.config.Connected() {
 			if err := r.requestAndReconcile(ctx, send); err != nil && ctx.Err() == nil {
-				r.config.Logger.Warn("delivery reconciliation did not complete", "error_code", stableRuntimeError(err))
+				r.config.Logger.Warn("delivery reconciliation did not complete", "error_code", stableRuntimeError(err), "error", err)
 			}
 			request = false
 		}

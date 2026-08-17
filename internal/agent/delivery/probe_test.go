@@ -22,7 +22,11 @@ func readyController(t *testing.T, name string, remoteBases bool) *appsv1.Deploy
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"--no-cross-namespace-refs=true"}
+	var args []string
+	// source-controller does not implement --no-cross-namespace-refs.
+	if name != "source-controller" {
+		args = append(args, "--no-cross-namespace-refs=true")
+	}
 	if remoteBases {
 		args = append(args, "--no-remote-bases=true")
 	}
